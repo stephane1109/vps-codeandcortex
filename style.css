@@ -1,0 +1,73 @@
+:root {
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  color: #111111;
+  background: #f4f4f2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f4f4f2;
+}
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.carte {
+  width: min(680px, 100%);
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  padding: 48px;
+}
+
+.sur-titre {
+  margin: 0 0 32px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #666666;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(34px, 6vw, 64px);
+  line-height: 0.95;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  color: #111111;
+}
+
+.texte {
+  margin: 32px 0 0 0;
+  max-width: 560px;
+  font-size: 18px;
+  line-height: 1.55;
+  color: #333333;
+}
+
+.note {
+  margin: 36px 0 0 0;
+  max-width: 560px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #777777;
+}
+
+@media (max-width: 640px) {
+  .carte {
+    padding: 32px;
+  }
+
+  .texte {
+    font-size: 16px;
+  }
+}
