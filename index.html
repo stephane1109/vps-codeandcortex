@@ -1,28 +1,362 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Code & Cortex — En construction</title>
-  <meta name="description" content="Code & Cortex — interface d'analyse textuelle en cours de déploiement.">
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appli VPS Code & Cortex</title>
+
+    <meta name="description" content="Tableau de bord des applications hébergées sur le VPS Code & Cortex.">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --couleur-principale: #111111;
+            --couleur-accent: #FF4B4B;
+            --couleur-fond: #f4f4f2;
+            --couleur-carte: #ffffff;
+            --couleur-texte: #1f1f1f;
+            --couleur-secondaire: #666666;
+            --couleur-bordure: #dddddd;
+            --couleur-inactive: #aaaaaa;
+            --ombre-carte: 0 14px 34px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 48px 22px;
+            font-family: "Inter", Arial, sans-serif;
+            background: var(--couleur-fond);
+            color: var(--couleur-texte);
+        }
+
+        .page {
+            width: 100%;
+            max-width: 1180px;
+            margin: 0 auto;
+        }
+
+        .entete {
+            margin-bottom: 46px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 24px;
+            border-bottom: 1px solid var(--couleur-bordure);
+            padding-bottom: 28px;
+        }
+
+        .bloc-titre {
+            max-width: 720px;
+        }
+
+        .sur-titre {
+            margin: 0 0 14px 0;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.10em;
+            text-transform: uppercase;
+            color: var(--couleur-accent);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(38px, 6vw, 72px);
+            line-height: 0.95;
+            font-weight: 600;
+            letter-spacing: -0.055em;
+            color: var(--couleur-principale);
+        }
+
+        .description {
+            margin: 22px 0 0 0;
+            max-width: 620px;
+            font-size: 17px;
+            line-height: 1.55;
+            color: var(--couleur-secondaire);
+        }
+
+        .lien-site {
+            color: var(--couleur-principale);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 700;
+            border: 1px solid var(--couleur-bordure);
+            background: #ffffff;
+            padding: 12px 16px;
+            white-space: nowrap;
+            transition: all 0.25s ease;
+        }
+
+        .lien-site:hover {
+            border-color: var(--couleur-accent);
+            color: var(--couleur-accent);
+        }
+
+        .etat-serveur {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .indicateur {
+            background: #ffffff;
+            border: 1px solid var(--couleur-bordure);
+            padding: 18px;
+        }
+
+        .indicateur .label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--couleur-secondaire);
+        }
+
+        .indicateur .valeur {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--couleur-principale);
+        }
+
+        .grille-applications {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+        }
+
+        .carte-application {
+            aspect-ratio: 1 / 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+            background: var(--couleur-carte);
+            border: 1px solid var(--couleur-bordure);
+            color: var(--couleur-texte);
+            text-decoration: none;
+            transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+        }
+
+        .carte-application:hover {
+            transform: translateY(-6px);
+            border-color: var(--couleur-accent);
+            box-shadow: var(--ombre-carte);
+        }
+
+        .icone {
+            font-size: 28px;
+            color: var(--couleur-accent);
+        }
+
+        .contenu-carte {
+            margin-top: auto;
+        }
+
+        .titre-application {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+        }
+
+        .description-application {
+            display: block;
+            font-size: 13px;
+            line-height: 1.45;
+            color: var(--couleur-secondaire);
+        }
+
+        .statut {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--couleur-accent);
+        }
+
+        .inactif {
+            pointer-events: none;
+            color: var(--couleur-inactive);
+            background: #f7f7f7;
+        }
+
+        .inactif .icone,
+        .inactif .statut {
+            color: var(--couleur-inactive);
+        }
+
+        .pied {
+            margin-top: 34px;
+            font-size: 13px;
+            color: var(--couleur-secondaire);
+            line-height: 1.5;
+        }
+
+        @media (max-width: 1050px) {
+            .grille-applications {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .etat-serveur {
+                grid-template-columns: 1fr;
+            }
+
+            .entete {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 620px) {
+            body {
+                padding: 32px 16px;
+            }
+
+            .grille-applications {
+                grid-template-columns: 1fr;
+            }
+
+            .carte-application {
+                aspect-ratio: auto;
+                min-height: 210px;
+            }
+
+            .lien-site {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
 </head>
 
 <body>
-  <main class="page">
-    <section class="carte">
-      <p class="sur-titre">Code & Cortex</p>
+    <main class="page">
 
-      <h1>Application en construction</h1>
+        <header class="entete">
+            <div class="bloc-titre">
+                <p class="sur-titre">Serveur VPS</p>
+                <h1>Appli VPS Code & Cortex</h1>
+                <p class="description">
+                    Tableau de bord des applications d’analyse textuelle, statistique et documentaire hébergées sur le serveur Code & Cortex.
+                </p>
+            </div>
 
-      <p class="texte">
-        Cette interface d’analyse textuelle est en cours de déploiement.
-      </p>
+            <a href="https://www.codeandcortex.fr" class="lien-site" target="_blank">
+                www.codeandcortex.fr
+            </a>
+        </header>
 
-      <p class="note">
-        Modules prévus : AFC, CHD, LDA, corpus, tableaux, graphiques et exports statistiques.
-      </p>
-    </section>
-  </main>
+        <section class="etat-serveur" aria-label="État du serveur">
+            <div class="indicateur">
+                <span class="label">Utilisateurs actifs</span>
+                <span class="valeur">0 / 3</span>
+            </div>
+
+            <div class="indicateur">
+                <span class="label">File d’attente</span>
+                <span class="valeur">0</span>
+            </div>
+
+            <div class="indicateur">
+                <span class="label">Serveur de calcul</span>
+                <span class="valeur">Disponible</span>
+            </div>
+        </section>
+
+        <section class="grille-applications" aria-label="Applications disponibles">
+
+            <a href="https://analyse.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-layer-group"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Analyse textuelle</span>
+                    <span class="description-application">Interface générale pour importer, nettoyer et structurer un corpus.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr/afc" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-chart-pie"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">AFC</span>
+                    <span class="description-application">Analyse factorielle des correspondances sur tableaux lexicaux.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr/chd" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-sitemap"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">CHD</span>
+                    <span class="description-application">Classification hiérarchique descendante inspirée des usages IRaMuTeQ.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr/lda" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-diagram-project"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">LDA</span>
+                    <span class="description-application">Modélisation thématique et exploration des distributions lexicales.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr/corpus" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-database"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Corpus</span>
+                    <span class="description-application">Gestion des fichiers importés, corpus nettoyés et variables textuelles.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr/exports" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-file-export"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Exports</span>
+                    <span class="description-application">Téléchargement des résultats, tableaux, graphiques et fichiers CSV.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr/tickets" class="carte-application" target="_blank">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-ticket"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Tickets</span>
+                    <span class="description-application">File d’attente des traitements lourds et suivi des analyses en cours.</span>
+                </span>
+            </a>
+
+            <a href="https://vps.codeandcortex.fr" class="carte-application">
+                <span class="statut">Actif</span>
+                <i class="icone fas fa-server"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">VPS</span>
+                    <span class="description-application">Page d’accueil du serveur applicatif Code & Cortex.</span>
+                </span>
+            </a>
+
+        </section>
+
+        <p class="pied">
+            Les indicateurs d’utilisateurs actifs, de file d’attente et de disponibilité du serveur sont statiques pour cette première version. Ils seront rendus dynamiques lors du déploiement de l’application FastAPI.
+        </p>
+
+    </main>
 </body>
 </html>
