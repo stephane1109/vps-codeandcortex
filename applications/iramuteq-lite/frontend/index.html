@@ -1,0 +1,2394 @@
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IRaMuTeQ Lite</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-block">
+          <p class="eyebrow">IRAMUTEQ LITE</p>
+          <h1>IRAMUTEQ LITE</h1>
+          <p class="brand-copy">
+            Tentative de reproduction de la CHD du (vrai !) 
+            <a href="https://pratinaud.gitpages.huma-num.fr/iramuteq-website/" target="_blank" rel="noopener noreferrer">logiciel IRaMuTeQ (IRaMuTeQ - Pierre Ratinaud - LERASS)</a>
+          </p>
+          <p class="brand-copy">
+            En développement : Analyse Discriminante Linéaire (LDA), analyse de similitude de Vergès
+          </p>
+          <p class="brand-copy">
+            Pour d'autres scripts/appli, vous pouvez consulter mon site :
+            <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
+          </p>
+          <p class="brand-copy">v0_3beta - 09-04-2026</p>
+        </div>
+
+        <nav class="top-nav" aria-label="Navigation principale">
+          <button class="nav-link is-active" data-tab-target="analyse" type="button">Analyse</button>
+          <button class="nav-link" data-tab-target="corpus" type="button">Corpus</button>
+          <button class="nav-link" data-tab-target="annotation_expressions" type="button">Annotation</button>
+          <button class="nav-link" data-tab-target="resultats_chd" type="button">CHD</button>
+          <button class="nav-link" data-tab-target="afc" type="button">AFC</button>
+          <button class="nav-link" data-tab-target="lda" type="button">LDA</button>
+          <button class="nav-link" data-tab-target="similitudes" type="button">Similitudes</button>
+          <button class="nav-link" data-tab-target="suivi_longitudinal" type="button">Trajectoire lexicale</button>
+          <button class="nav-link" data-tab-target="multimodale" type="button">Analyse Multimodale</button>
+          <button class="nav-link" data-tab-target="aide" type="button">Aide</button>
+          <details class="nav-menu">
+            <summary class="nav-link nav-link--menu">Outils</summary>
+            <div class="nav-menu-panel">
+              <a
+                class="nav-menu-item"
+                href="https://europresse-to-iramuteq-v4.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Europresse to Iramuteq
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://youtube-mp4-25fps-mp3.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Extraction multimedia
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://segmentation-locuteurs.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Diarization
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://whisper-isthia-cloud.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                mp3 to text
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://scraper-commentaires-youtube.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Scraper les commentaires YouTube
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://symbolicconnectors.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Symbolic commector
+              </a>
+            </div>
+          </details>
+        </nav>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <section class="sidebar-card">
+            <button id="importCorpusBtn" class="primary-button" type="button">
+              Importer un fichier texte
+            </button>
+            <input id="corpusFile" type="file" accept=".txt,.csv,.tsv" hidden />
+            <p class="muted sidebar-import-help">
+              Le corpus doit être au format IRaMuTeQ, avec une première ligne
+              commençant par <code>****</code>.
+            </p>
+            <p id="fileInfo" class="muted sidebar-file-info">Aucun fichier sélectionné.</p>
+            <p id="downloadResultsStatus" class="muted sidebar-note"></p>
+            <section class="sidebar-history-block" aria-labelledby="analysisHistoryTitle">
+              <p id="analysisHistoryTitle" class="sidebar-kicker">Analyses lancées</p>
+              <div id="analysisHistory" class="analysis-history">
+                <p class="muted analysis-history-empty">Les analyses lancées s'afficheront ici.</p>
+              </div>
+            </section>
+            <div class="status-pill">
+              <span class="status-dot"></span>
+              <span id="sidebarStatus"></span>
+            </div>
+          </section>
+        </aside>
+
+        <main class="content">
+          <section class="panel is-active" data-panel="analyse">
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Analyse</p>
+                <h2>Analyse du corpus</h2>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>Synthèse du corpus</h3>
+                <div id="analysisSummary" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3 class="zipf-card-title">Loi de Zipf</h3>
+                <div id="zipfChart" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Étapes de l'analyse</h3>
+                <div id="analysisSteps" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Journal debug</h3>
+                <div class="progress-wrap">
+                  <progress id="progress" max="100" value="0"></progress>
+                  <span id="progressLabel">0%</span>
+                </div>
+                <pre id="logs" class="logs">[info] Prêt.</pre>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="corpus" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Corpus</p>
+                <h2>Corpus importé</h2>
+              </div>
+            </div>
+
+            <article class="card">
+              <h3>Prévisualisation</h3>
+              <pre id="corpusPreview" class="preview-box">Importez un fichier texte pour afficher un extrait ici.</pre>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="annotation_expressions" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Annotation</p>
+                <h2>Annotation du corpus</h2>
+              </div>
+            </div>
+
+            <article class="card">
+              <p>
+                Import de <code>add_expression_fr.csv</code>, prévisualisation annotée
+                et gestion du dictionnaire d'expressions de session.
+              </p>
+              <p class="field-help">
+                Aide : le plus simple est de surligner, copier puis coller les expressions à transformer dans le dictionnaire. Par exemple, <code>intelligence artificielle</code> deviendra <code>intelligence_artificielle</code>.
+              </p>
+              <p class="field-help">
+                Vous pouvez enregistrer votre dictionnaire d'expressions, mais vous pouvez également ajuster (supprimer) et enrichir (ajouter) un dictionnaire déjà annoté.
+              </p>
+              <p class="field-help annotation-import-help">
+                Vous pouvez réimporter un fichier d'expressions déjà annoté ; il doit
+                impérativement être nommé add_expression_fr.csv.
+              </p>
+              <div class="toolbar">
+                <button id="annotationImportBtn" class="primary-button" type="button">Charger un dictionnaire d'expression</button>
+                <input id="annotationImportCsv" type="file" accept=".csv" hidden />
+              </div>
+              <textarea id="annotationCorpusText" class="large-textarea" placeholder="Texte à annoter"></textarea>
+              <div id="annotationCorpusColored" class="annotation-preview"></div>
+              <div class="form-grid">
+                <label>
+                  Texte sélectionné (dic_mot)
+                  <input id="annotationSelection" type="text" placeholder="Expression source" />
+                </label>
+                <label>
+                  Normalisation (dic_norm)
+                  <input id="annotationNorm" type="text" placeholder="Expression normalisée" />
+                </label>
+                <label>
+                  Type morpho (dic_morpho)
+                  <select id="annotationMorpho">
+                    <option value="">Choisir une catégorie (optionnel)</option>
+                  </select>
+                  <span class="field-help">
+                    Si vous n'ajoutez pas de catégorie morphosyntaxique, le champ restera
+                    vide et l'expression sera interprétée comme « autre forme ».
+                  </span>
+                </label>
+              </div>
+              <div class="toolbar annotation-add-actions">
+                <button id="annotationAddEntryBtn" class="primary-button" type="button">Ajouter / mettre à jour</button>
+              </div>
+              <div class="form-grid">
+                <label>
+                  Supprimer une entrée (dic_mot)
+                  <input id="annotationRemoveKey" type="text" placeholder="Expression à supprimer" />
+                </label>
+              </div>
+              <div class="toolbar annotation-danger-actions">
+                <button id="annotationRemoveEntryBtn" class="primary-button" type="button">Supprimer</button>
+              </div>
+              <div class="toolbar annotation-danger-actions">
+                <button id="annotationDownloadCsvBtn" class="primary-button" type="button">Enregistrer add_expression_fr.csv</button>
+              </div>
+              <p id="annotationSaveStatus" class="muted"></p>
+              <div id="annotationDictTable" class="result-pane"></div>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="resultats_chd" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">CHD</p>
+                <h2>Résultats CHD</h2>
+              </div>
+            </div>
+
+            <nav class="sub-nav" aria-label="Sous-navigation CHD">
+              <button class="sub-nav-link is-active" data-subtab-target="dendrogramme" type="button">Dendrogramme</button>
+              <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
+              <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
+              <button class="sub-nav-link" data-subtab-target="nuage_de_mots" type="button">Nuage de mots</button>
+            </nav>
+
+            <section class="subpanel is-active" data-subpanel="dendrogramme">
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Dendrogramme CHD</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                </article>
+
+                <article class="card">
+                  <h3>Résultat</h3>
+                  <div class="field">
+                    <label for="chdDendrogramSelect">Type de dendrogramme</label>
+                    <select id="chdDendrogramSelect">
+                      <option value="iramuteq">Dendrogramme IRaMuTeQ</option>
+                      <option value="factoextra">Dendrogramme factoextra</option>
+                    </select>
+                  </div>
+                  <div id="chdDendrogramme" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="stats_chd" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Stats CHD</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">Les tableaux sont organisés par classe, comme dans l'UI R.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Tableaux statistiques CHD par classe</h3>
+                  <div id="chdStatsTable" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="concordancier" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Concordancier</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">Affichage des segments classés et du concordancier HTML exporté.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultat</h3>
+                  <div id="chdConcordancier" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="nuage_de_mots" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Nuages de mots CHD</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">Le nombre de mots affichés suit le réglage des nuages de mots de l'analyse.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultat</h3>
+                  <div id="chdWordclouds" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+          </section>
+
+          <section class="panel" data-panel="afc" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">AFC</p>
+                <h2>Analyse factorielle des correspondances</h2>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>AFC des classes</h3>
+                <div id="afcClassesPlot" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>AFC des termes</h3>
+                <div class="toolbar">
+                  <button id="afcTermsZoomInBtn" class="secondary-button" type="button">Zoom +</button>
+                  <button id="afcTermsZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
+                  <button id="afcTermsZoomResetBtn" class="secondary-button" type="button">Réinitialiser</button>
+                </div>
+                <div id="afcTermsPlot" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Modalités et valeurs propres</h3>
+                <div id="afcVarsPlot" class="result-pane"></div>
+                <div id="afcVarsTable" class="result-pane result-pane--spaced"></div>
+                <div id="afcEigTable" class="result-pane result-pane--spaced"></div>
+              </article>
+
+              <article class="card">
+                <h3>Table des mots projetés</h3>
+                <div id="afcTermsTable" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="suivi_longitudinal" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Trajectoire</p>
+                <h2>Trajectoire lexicale</h2>
+                <p class="section-copy">
+                  Il n'est pas nécessaire de lancer une CHD avant ce test. La trajectoire lexicale est indépendante et compare
+                  des entretiens ordonnés dans le temps, soit dans leur forme lexicale brute, soit via une couche émotionnelle issue d'un lexique dédié.
+                </p>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card section-card">
+                <div class="toolbar toolbar--end">
+                  <button class="primary-button" type="button" data-open-suivi-dialog>Paramètres de la trajectoire lexicale</button>
+                </div>
+                <p class="field-help field-help--pvalue-note suivi-help-note">
+                  Paramètres principaux : la <code>variable étoilée de la trajectoire</code> ordonne les entretiens, le
+                  <code>filtre</code> restreint le sous-corpus, l'<code>ordre chronologique</code> définit le sens
+                  de lecture, et le nombre de <code>termes évolutifs</code> règle combien de mots sont affichés par comparaison.
+                </p>
+                <p class="field-help field-help--pvalue-note suivi-help-note">
+                  Ce test est indépendant de la CHD. Il réutilise le nettoyage courant de l'application et le dictionnaire
+                  <code>lexique_fr</code>.
+                </p>
+                <p class="field-help field-help--pvalue-note suivi-help-note">
+                  Principe du test : chaque entretien est transformé en distribution lexicale sur un vocabulaire commun.
+                  La divergence de Jensen-Shannon mesure ensuite l'écart entre deux distributions. La comparaison à la première
+                  séance prend pour référence la première modalité dans l'ordre choisi.
+                </p>
+                <p class="field-help field-help--pvalue-note suivi-help-note">
+                  Le filtrage morphosyntaxique réellement utilisé par la trajectoire lexicale est rappelé ci-dessus et réexporté dans le cadre
+                  de la trajectoire lexicale.
+                </p>
+                <p id="suiviModeNotice" class="field-help field-help--pvalue-note suivi-help-note">
+                  Couche active par défaut : <strong>trajectoire lexicale brute</strong>. En mode émotionnel, la divergence porte sur des distributions d'émotions reconnues par FEEL ou NRC, et non plus directement sur les mots.
+                </p>
+              </article>
+
+              <div class="local-tabs" role="tablist" aria-label="Sous-onglets Trajectoire lexicale">
+                <button class="local-tab-button is-active" data-suivi-subtab-target="suivi_indicateurs" type="button">Indicateurs</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_profils_emotionnels" type="button" id="suiviEmotionProfilesTabBtn">Profils émotionnels</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_divergences" type="button">Divergences</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_ruptures" type="button">Détection des ruptures</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_termes" type="button">Termes</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_frise_emergences" type="button">Frise des émergences</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_barres_divergentes" type="button">Barres divergentes</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_waterfall" type="button">Waterfall</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_matrice" type="button">Matrice</button>
+                <button class="local-tab-button" data-suivi-subtab-target="suivi_nuages" type="button">Nuages de mots</button>
+              </div>
+
+              <section class="local-tab-panel is-active" data-suivi-subpanel="suivi_indicateurs">
+                <article class="card">
+                  <h3>Cadre de la trajectoire lexicale</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    Le tableau rappelle le cadre réel du calcul : variable de la trajectoire, ordre choisi, prétraitement,
+                    filtrage morphosyntaxique, filtre éventuel, nombre d'entretiens retenus, taille du vocabulaire commun
+                    et note exploratoire si le corpus est faible.
+                  </div>
+                  <div id="suiviMeta" class="result-pane result-pane--spaced"></div>
+                </article>
+                <article class="card">
+                  <h3>Indicateurs par entretien</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p><code>Ordre</code> indique la position de l'entretien dans la série. <code>Unite</code> correspond à la modalité suivie : séance, date, mois, année ou phase.</p>
+                    <p><code>Tokens_total</code> est le nombre total de mots observés après prétraitement. <code>Types_total</code> est le nombre de mots différents.</p>
+                    <p><code>Entropie_lexicale</code> mesure la dispersion interne du vocabulaire de la séance. <code>Entropie_normalisee</code> ramène cette dispersion entre 0 et 1 pour comparer plus facilement les entretiens. <code>Redondance_relative</code> vaut <code>1 - entropie normalisée</code> : plus elle est élevée, plus le discours est concentré sur un lexique resserré et répétitif.</p>
+                  </div>
+                  <div id="suiviIndicatorsTable" class="result-pane result-pane--spaced"></div>
+                </article>
+                <article class="card">
+                  <h3>Courbe de l'entropie lexicale</h3>
+                  <div id="suiviEntropyPlot" class="result-pane"></div>
+                </article>
+                <article class="card">
+                  <h3>Courbe de la redondance relative</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>La redondance relative mesure le degré de concentration du discours. Plus elle est élevée, plus le vocabulaire est resserré autour d'un nombre limité de mots ou de formes récurrentes.</p>
+                  </div>
+                  <div id="suiviRedundancyPlot" class="result-pane"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_profils_emotionnels" hidden>
+                <article class="card">
+                  <h3 id="suiviEmotionProfilesTitle">Profils émotionnels</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p id="suiviEmotionProfilesHelp">Ce sous-onglet est activé par la trajectoire émotionnelle. Il résume, pour chaque entretien, la répartition relative des émotions reconnues par le lexique choisi.</p>
+                  </div>
+                  <div id="suiviEmotionProfilesPlot" class="result-pane"></div>
+                  <div id="suiviEmotionProfilesTable" class="result-pane result-pane--spaced"></div>
+                </article>
+                <article class="card">
+                  <h3 id="suiviValenceProfilesTitle">Résumé de valence positive / négative</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p id="suiviValenceProfilesHelp">Ce résumé reste secondaire : il synthétise les émotions reconnues en deux pôles de valence quand le lexique émotionnel le permet.</p>
+                  </div>
+                  <div id="suiviValenceProfilesPlot" class="result-pane"></div>
+                  <div id="suiviValenceProfilesTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_divergences" hidden>
+                <article class="card">
+                  <h3>Divergence de Jensen-Shannon entre séances successives</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>La divergence de Jensen-Shannon mesure l'écart entre deux distributions lexicales. Ici, elle compare chaque séance à la précédente. Dans le tableau, <code>Unite_depart</code> est la séance de départ, <code>Unite_arrivee</code> la séance suivante, et <code>Divergence_Jensen_Shannon</code> la force de l'écart lexical entre les deux.</p>
+                  </div>
+                  <div id="suiviJsdSuccessivePlot" class="result-pane"></div>
+                  <div id="suiviJsdSuccessiveTable" class="result-pane result-pane--spaced"></div>
+                </article>
+                <article class="card">
+                  <h3>Divergence de Jensen-Shannon par rapport à la première séance</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Cette lecture compare chaque entretien à la première séance de l'ordre choisi, qui sert de référence.</p>
+                    <p>Dans le tableau, <code>Unite_reference</code> est la première séance, <code>Unite_comparee</code> la séance comparée, et <code>Divergence_Jensen_Shannon</code> l'écart lexical entre les deux.</p>
+                    <p>Elle aide à repérer une évolution progressive, un retour vers le point de départ ou une rupture plus durable.</p>
+                  </div>
+                  <div id="suiviJsdReferencePlot" class="result-pane"></div>
+                  <div id="suiviJsdReferenceTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_ruptures" hidden>
+                <article class="card">
+                  <h3>Détection explicite des ruptures discursives</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Cette lecture part des divergences de Jensen-Shannon entre périodes successives et cherche les <strong>pics de rupture</strong>.</p>
+                    <p>Une rupture détectée correspond ici à un <code>pic local</code> dont le niveau est suffisamment au-dessus du profil moyen de la série. Ce n'est pas une preuve absolue, mais un signal interprétatif pour repérer les moments de bascule.</p>
+                    <p>Le tableau indique les périodes comparées, la divergence observée, un <code>Score_standardise</code>, la présence d'un <code>Pic_local</code>, le statut <code>Rupture_detectee</code>, un <code>Niveau_rupture</code> et les <code>Termes_explicatifs</code> les plus contributifs.</p>
+                  </div>
+                  <div id="suiviRupturesPlot" class="result-pane"></div>
+                  <div id="suiviRupturesTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_termes" hidden>
+                <article class="card">
+                  <h3>Termes qui évoluent entre les séances</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p><strong>Ce tableau mesure le sens du changement lexical.</strong> Il sert à voir ce qui apparaît, disparaît, monte ou recule entre deux entretiens. Les termes sont classés en <code>hausse</code>, <code>baisse</code>, <code>nouveau</code> ou <code>disparu</code> à partir des fréquences relatives comparées entre deux entretiens. <code>Mode_comparaison</code> indique si la lecture porte sur la séance précédente ou sur la première séance. <code>Unite_depart</code> et <code>Unite_arrivee</code> donnent les deux entretiens comparés. <code>Frequence_relative_depart</code> et <code>Frequence_relative_arrivee</code> donnent le poids lexical du terme dans chaque entretien. <code>Difference_relative</code> résume le sens et l'ampleur du déplacement.</p>
+                  </div>
+                  <div id="suiviTermsTable" class="result-pane result-pane--spaced"></div>
+                </article>
+                <article class="card">
+                  <h3>Contribution des termes à la divergence</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p><strong>Ce tableau mesure la contribution explicative des mots au score global.</strong> Il sert à comprendre pourquoi la divergence de Jensen-Shannon est forte ou faible entre deux entretiens.</p>
+                    <p>Cette table ne montre pas seulement les mots en hausse ou en baisse. Elle isole les termes qui expliquent le plus la différence globale entre deux distributions lexicales.</p>
+                    <p><code>Contribution_Jensen_Shannon</code> indique la part relative du terme dans l'écart entre les deux entretiens comparés. Plus la valeur est élevée, plus le terme contribue au score global.</p>
+                    <p>Il n'y a donc pas doublon : le premier tableau décrit la direction du changement lexical, tandis que celui-ci identifie les mots qui portent le plus l'écart global mesuré.</p>
+                    <p>Un clic sur un <code>Terme</code> ouvre le concordancier JSD et affiche les segments de texte contenant ce terme dans les deux entretiens comparés.</p>
+                  </div>
+                  <div id="suiviContributionsTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_matrice" hidden>
+                <article class="card">
+                  <h3>Matrice de divergence de Jensen-Shannon</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Cette matrice compare toutes les paires d'entretiens. Les lignes et les colonnes correspondent aux entretiens. Chaque cellule contient la divergence de Jensen-Shannon entre les deux séances croisées. Une valeur faible indique des profils lexicaux proches, une valeur forte signale un écart lexical plus net.</p>
+                  </div>
+                  <div id="suiviMatrixPlot" class="result-pane"></div>
+                  <div id="suiviMatrixTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_frise_emergences" hidden>
+                <article class="card">
+                  <h3>Frise des émergences</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Cette frise temporelle relit la trajectoire des termes les plus changeants à travers les transitions entre entretiens. Chaque ligne correspond à un terme, chaque colonne à une transition, et la couleur indique s'il s'agit d'un <code>nouveau</code>, d'une <code>hausse</code>, d'une <code>baisse</code> ou d'un terme <code>disparu</code>. Le premier graphe compare la <strong>première séance à toutes les suivantes</strong>. Le second compare les <strong>séances successives entre elles</strong>. Ce rendu aide à voir, sur l'ensemble de la série, comment les émergences et les reculs se distribuent dans le temps.</p>
+                  </div>
+                  <div id="suiviFrisesEmergences" class="result-pane"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_barres_divergentes" hidden>
+                <article class="card">
+                  <h3>Barres divergentes des termes évolutifs</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Chaque graphe compare deux entretiens et place les termes en recul à gauche de zéro, les termes en hausse à droite. La longueur de la barre correspond à la <code>Difference_relative</code> du terme entre les deux entretiens. Ce rendu aide à voir très vite quels mots tirent le discours vers un déplacement positif ou négatif.</p>
+                  </div>
+                  <div id="suiviDivergentBars" class="result-pane"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_waterfall" hidden>
+                <article class="card">
+                  <h3>Waterfall des contributions</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Chaque waterfall montre, pour une comparaison donnée, les termes qui fabriquent le plus l'écart global mesuré par la divergence de Jensen-Shannon. Chaque barre ajoute la contribution d'un mot au cumul total. La dernière barre rappelle le total de divergence expliqué par les termes affichés. Ce rendu complète le tableau de contribution : il hiérarchise visuellement les mots qui portent le plus la différence entre deux entretiens.</p>
+                  </div>
+                  <div id="suiviWaterfalls" class="result-pane"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-suivi-subpanel="suivi_nuages" hidden>
+                <article class="card">
+                  <h3>Nuages de mots par entretien</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    Chaque nuage résume les termes les plus présents dans l'entretien correspondant.
+                    Il ne remplace pas les divergences, mais aide à lire concrètement les déplacements lexicaux.
+                  </div>
+                  <div id="suiviWordclouds" class="result-pane"></div>
+                </article>
+              </section>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="lda" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">LDA</p>
+                <h2>Analyse LDA</h2>
+                <p class="section-copy">
+                  L'analyse LDA est particulièrement adaptée aux corpus très volumineux. Un de ses atouts ici est le paramétrage sur les bigrammes.
+                </p>
+              </div>
+              <button class="primary-button" type="button" data-open-lda-dialog>Paramètres LDA</button>
+            </div>
+
+            <div class="local-tabs" role="tablist" aria-label="Sous-onglets LDA">
+              <button class="local-tab-button is-active" data-lda-subtab-target="lda_tables" type="button">Tableau des probabilités</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_segments" type="button">Segments de texte</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_vis" type="button">Visualisation pyLDAvis</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_heatmap" type="button">Heatmap mots × topics</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_network" type="button">Réseau topics × mots</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_wordclouds" type="button">Nuages de mots par topic</button>
+            </div>
+
+            <section class="local-tab-panel is-active" data-lda-subpanel="lda_tables">
+              <p class="field-help">
+                `P(mot | topic)` décrit les mots caractéristiques d'un topic. `P(topic | segment)` indique à quel topic un segment de texte est le plus rattaché.
+              </p>
+              <div class="section-stack">
+                <article class="card">
+                  <h3>Tableau général des probabilités par mot</h3>
+                  <div id="ldaTopTerms" class="result-pane result-pane--spaced"></div>
+                </article>
+
+                <article class="card">
+                  <h3>Tableaux par topic</h3>
+                  <div id="ldaDocTopics" class="result-pane result-pane--spaced"></div>
+                </article>
+
+                <article class="card" hidden>
+                  <h3>Détail par topic</h3>
+                  <div id="ldaTopicWords" class="result-pane result-pane--spaced"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_segments" hidden>
+              <article class="card">
+                <h3>Segments de texte par topic</h3>
+                <div id="ldaSegments" class="result-pane result-pane--spaced"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_vis" hidden>
+              <article class="card">
+                <h3>Visualisation pyLDAvis</h3>
+                <div id="ldaBubblePlot" class="result-pane"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_heatmap" hidden>
+              <article class="card">
+                <h3>Heatmap mots × topics</h3>
+                <div id="ldaHeatmap" class="result-pane"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_network" hidden>
+              <article class="card">
+                <h3>Réseau topics × mots</h3>
+                <div id="ldaNetwork" class="result-pane"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_wordclouds" hidden>
+              <article class="card">
+                <h3>Nuages de mots par topic</h3>
+                <div id="ldaWordclouds" class="result-pane result-pane--spaced"></div>
+              </article>
+            </section>
+          </section>
+
+          <section class="panel" data-panel="similitudes" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Similitudes</p>
+                <h2>Analyse de similitudes</h2>
+              </div>
+              <button class="primary-button" type="button" data-open-simi-dialog>Paramétrer l'analyse de similitudes</button>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <p class="field-help field-help--alert">
+                  Réalisez d'abord une CHD. L'analyse de similitudes réutilise ensuite les termes les plus fréquents issus de la CHD.
+                </p>
+                <h3>Résultat</h3>
+                <div class="toolbar">
+                  <button id="simiZoomInBtn" class="secondary-button" type="button">Zoom +</button>
+                  <button id="simiZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
+                  <button id="simiZoomResetBtn" class="secondary-button" type="button">Réinitialiser le zoom</button>
+                  <span id="simiZoomValue" class="toolbar-meta">100%</span>
+                </div>
+                <div id="simiGraph" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="multimodale" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Multimodale</p>
+                <h2>Analyse Multimodale</h2>
+                <p class="section-copy">
+                  Préparation d'une chaîne multimodale synchronisant texte, audio et vidéo. Le téléchargement YouTube
+                  repose sur <code>yt-dlp</code> et peut utiliser un fichier <code>cookies.txt</code> ou
+                  <code>.cookies</code> exporté depuis l'extension Cookies.
+                </p>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <div class="local-tabs local-tabs--multimodal" role="tablist" aria-label="Sous-onglets Analyse Multimodale">
+                <button class="local-tab-button local-tab-button--multimodal is-active" data-multimodal-subtab-target="multimodale_sources" type="button">Extraction des sources</button>
+                <button class="local-tab-button local-tab-button--multimodal" data-multimodal-subtab-target="multimodale_audio" type="button">Analyse audio</button>
+                <button class="local-tab-button local-tab-button--multimodal" data-multimodal-subtab-target="multimodale_mouvements" type="button">Analyse mouvements</button>
+                <button class="local-tab-button local-tab-button--multimodal" data-multimodal-subtab-target="multimodale_alignement" type="button">Alignement</button>
+                <button class="local-tab-button local-tab-button--multimodal" data-multimodal-subtab-target="multimodale_noeuds" type="button">Noeuds</button>
+                <button class="local-tab-button local-tab-button--multimodal" data-multimodal-subtab-target="multimodale_comparaison_ab" type="button">Comparaison A/B</button>
+              </div>
+
+              <section class="local-tab-panel is-active" data-multimodal-subpanel="multimodale_sources">
+                <div class="multimodal-grid">
+                  <article class="card">
+                    <h3>Téléchargement de la vidéo YouTube</h3>
+                    <label>
+                      URL YouTube
+                      <input
+                        id="multimodalYoutubeUrl"
+                        type="text"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                      />
+                    </label>
+                    <p class="field-help">
+                      Si la vidéo a besoin d'une session connectée, ajoutez un fichier exporté par l'extension Cookies au
+                      format <code>cookies.txt</code> ou <code>.cookies</code>.
+                    </p>
+                    <div class="toolbar toolbar--compact">
+                      <button id="multimodalPickCookiesBtn" class="secondary-button" type="button">Choisir le fichier cookies</button>
+                      <input id="multimodalCookiesFile" type="file" accept=".cookies,.txt" hidden />
+                    </div>
+                    <p id="multimodalYoutubeStatus" class="readonly-field">Aucune URL YouTube renseignée.</p>
+                    <p id="multimodalCookiesStatus" class="readonly-field">Aucun fichier cookies sélectionné.</p>
+                    <div id="multimodalYoutubePreview" class="result-pane multimodal-youtube-preview"></div>
+                  </article>
+
+                  <article class="card">
+                    <h3>Importer un fichier vidéo</h3>
+                    <p class="field-help">
+                      Formats conseillés : <code>mp4</code>, <code>mov</code>, <code>mkv</code>, <code>avi</code> ou
+                      <code>webm</code>.
+                    </p>
+                    <div class="toolbar toolbar--compact">
+                      <button id="multimodalPickVideoBtn" class="secondary-button" type="button">Choisir un fichier vidéo</button>
+                      <input id="multimodalVideoFile" type="file" accept=".mp4,.mov,.mkv,.avi,.webm,.m4v,video/*" hidden />
+                    </div>
+                    <p id="multimodalVideoStatus" class="readonly-field">Aucun fichier vidéo sélectionné.</p>
+                  </article>
+                </div>
+
+                <article class="card">
+                  <h3>Dossier de sortie multimodal</h3>
+                  <p class="field-help">
+                    Choisissez ici le dossier où seront écrits les exports multimodaux. Chaque traitement créera ensuite
+                    ses sous-dossiers <code>alignement</code>, <code>audio</code> ou <code>mouvements</code>.
+                  </p>
+                  <div class="toolbar toolbar--compact">
+                    <button id="multimodalPickOutputDirBtn" class="secondary-button" type="button">Choisir le dossier de sortie</button>
+                  </div>
+                  <p id="multimodalOutputDirStatus" class="readonly-field">Dossier par défaut : <code>multimodale/exports</code>.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Fichiers à préparer</h3>
+                  <div class="form-grid">
+                    <label class="checkbox-field">
+                      <input id="multimodalExtractMp4" type="checkbox" checked />
+                      <span>Vidéo MP4</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="multimodalExtractMp3" type="checkbox" checked />
+                      <span>Piste MP3</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="multimodalExtractWav" type="checkbox" />
+                      <span>Piste WAV</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="multimodalExtractSegments" type="checkbox" checked />
+                      <span>Segments de texte avec timestamp</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="multimodalExtractImages" type="checkbox" checked />
+                      <span>Images extraites</span>
+                    </label>
+                  </div>
+                  <p class="field-help">
+                    Les images utilisent la cadence choisie ci-dessous : <code>1 fps</code> ou <code>25 fps</code>.
+                  </p>
+                  <p class="field-help">
+                    L’option <strong>segments de texte avec timestamp</strong> lance automatiquement la transcription
+                    Whisper et exporte un fichier de segments horodatés réutilisable ensuite dans l’onglet
+                    <strong>Alignement</strong>.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <h3>Paramètres d'extraction des images</h3>
+                  <div class="form-grid multimodal-extract-params-grid">
+                    <div>
+                      <span class="field-label">Cadence d'extraction</span>
+                      <div class="form-grid">
+                        <label class="checkbox-field">
+                          <input id="multimodalFrameRate1" type="checkbox" checked />
+                          <span>1 image par seconde</span>
+                        </label>
+                        <label class="checkbox-field">
+                          <input id="multimodalFrameRate25" type="checkbox" />
+                          <span>25 images par seconde</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="field-label">Qualité des images</span>
+                      <div class="form-grid">
+                        <label class="checkbox-field">
+                          <input id="multimodalFrameQualityLow" type="checkbox" checked />
+                          <span>Définition standard (1024 px de large)</span>
+                        </label>
+                        <label class="checkbox-field">
+                          <input id="multimodalFrameQualityHigh" type="checkbox" />
+                          <span>Très haute définition (1920 px de large)</span>
+                        </label>
+                      </div>
+                    </div>
+                    <label>
+                      Périmètre d'extraction
+                      <select id="multimodalIntervalMode">
+                        <option value="full">Toute la vidéo</option>
+                        <option value="custom">Intervalle personnalisé</option>
+                      </select>
+                    </label>
+                    <div>
+                      <span class="field-label">Début de l'extraction</span>
+                      <div class="form-grid multimodal-time-grid">
+                        <label>
+                          Heure
+                          <input id="multimodalExtractStartHours" type="number" min="0" step="1" value="0" />
+                        </label>
+                        <label>
+                          Minutes
+                          <input id="multimodalExtractStartMinutes" type="number" min="0" max="59" step="1" value="0" />
+                        </label>
+                        <label>
+                          Secondes
+                          <input id="multimodalExtractStartSeconds" type="number" min="0" max="59" step="1" value="0" />
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="field-label">Fin de l'extraction</span>
+                      <div class="form-grid multimodal-time-grid">
+                        <label>
+                          Heure
+                          <input id="multimodalExtractEndHours" type="number" min="0" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Minutes
+                          <input id="multimodalExtractEndMinutes" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Secondes
+                          <input id="multimodalExtractEndSeconds" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <p id="multimodalExtractStatus" class="readonly-field">Extraction configurée sur toute la vidéo, en 1 image par seconde, en définition standard (1024 px).</p>
+                </article>
+
+                <article class="card">
+                  <h3>Préparation des sources multimodales</h3>
+                  <div class="toolbar toolbar--end">
+                    <button id="runMultimodalYtdlpBtn" class="primary-button" type="button">Exporter les fichiers</button>
+                  </div>
+                  <p id="multimodalYtdlpRunStatus" class="readonly-field">Prêt.</p>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-multimodal-subpanel="multimodale_audio" hidden>
+                <article class="card">
+                  <h3>Analyse audio</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Si tu es déjà passé par <strong>Extraction des sources</strong>, l’audio extrait est repris automatiquement. Sinon, tu peux charger un fichier audio ici puis lancer l’analyse.</p>
+                    <p>L’analyse produit des <strong>segments horodatés</strong>, des <strong>temps de pause</strong>, un <strong>débit de parole</strong> et des <strong>anomalies d’amplitude</strong>. Les résultats s’affichent <strong>juste en dessous</strong>.</p>
+                  </div>
+                </article>
+
+                <article class="card">
+                  <h3>Importer un fichier audio</h3>
+                  <p class="field-help">
+                    Formats conseillés : <code>mp3</code>, <code>wav</code>, <code>m4a</code>, <code>flac</code>,
+                    <code>ogg</code> ou <code>opus</code>.
+                  </p>
+                  <p class="field-help">
+                    Si l’audio vient déjà de <strong>Extraction des sources</strong>, laisse ce champ vide.
+                  </p>
+                  <div class="toolbar toolbar--compact">
+                    <button id="multimodalPickAudioBtn" class="secondary-button" type="button">Choisir un fichier audio</button>
+                    <input id="multimodalAudioFile" type="file" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,audio/*" hidden />
+                  </div>
+                  <p id="multimodalAudioStatus" class="readonly-field">Aucun fichier audio sélectionné.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Filtrage des amplitudes atypiques</h3>
+                  <div class="form-grid">
+                    <label>
+                      Facteur k
+                      <input id="multimodalAudioAmplitudeFilterK" type="number" min="0" step="0.1" value="2.0" />
+                    </label>
+                  </div>
+                  <p class="field-help">
+                    Le filtre travaille sur des observations d'une seconde. Pour chaque seconde, on calcule la moyenne
+                    <code>μ</code> et l'écart-type <code>σ</code> des amplitudes, puis on conserve les valeurs dans
+                    l'intervalle <code>[μ - k·σ ; μ + k·σ]</code>. En augmentant <code>k</code>, le filtre devient moins
+                    sensible ; en le réduisant, il élimine davantage d'observations atypiques.
+                  </p>
+                  <p class="field-help">
+                    La piste est standardisée en <strong>WAV mono 16 kHz</strong>. Le signal complet contient donc
+                    environ <code>16&nbsp;000</code> observations par seconde. Pour garder un rendu exploitable, le
+                    graphe d'anomalies regroupe ensuite le signal par <strong>bins d'une seconde</strong> et affiche
+                    pour chaque bin le minimum, le maximum, la moyenne et les bornes <code>μ ± k·σ</code>.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <h3>Lancement de l'analyse audio</h3>
+                  <div class="toolbar toolbar--end">
+                    <button id="runMultimodalAudioBtn" class="primary-button" type="button">Lancer l'analyse audio</button>
+                  </div>
+                  <p class="field-help">
+                    Après le lancement, les graphiques et les tableaux apparaissent juste en dessous.
+                  </p>
+                  <p id="multimodalAudioRunStatus" class="readonly-field">Prêt.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultats audio affichés ci-dessous</h3>
+                  <div class="multimodal-audio-results">
+                    <section class="multimodal-audio-result-block">
+                      <h4>1. Silences détectés</h4>
+                      <p class="field-help">Durée des silences détectés directement dans le signal audio, en secondes, pour repérer les pauses acoustiques réelles.</p>
+                      <div id="multimodalAudioPausesPlot" class="result-pane"></div>
+                    </section>
+
+                    <section class="multimodal-audio-result-block">
+                      <h4>2. Débit de parole</h4>
+                      <p class="field-help">Nombre de mots par seconde pour chaque segment, afin de suivre les accélérations et ralentissements du débit.</p>
+                      <div id="multimodalAudioSpeechRatePlot" class="result-pane"></div>
+                    </section>
+
+                    <section class="multimodal-audio-result-block">
+                      <h4>3. Anomalies d'amplitude</h4>
+                      <p class="field-help">Signal regroupé par bins d'une seconde, avec les bornes du filtre <code>μ ± k·σ</code> et les observations atypiques.</p>
+                      <div id="multimodalAudioAnomaliesPlot" class="result-pane"></div>
+                    </section>
+
+                    <section class="multimodal-audio-result-block">
+                      <h4>4. Concordancier synchronisé</h4>
+                      <p class="field-help">Segments de texte recouvrant les fenêtres audio atypiques, pour relier l'anomalie sonore au contenu verbal.</p>
+                      <div id="multimodalAudioAnomaliesConcordancier" class="result-pane"></div>
+                    </section>
+
+                    <section class="multimodal-audio-result-block">
+                      <h4>Segments transcrits</h4>
+                      <p class="field-help">Tableau complet des segments horodatés et des indicateurs audio calculés pour chaque segment.</p>
+                      <div id="multimodalAudioTable" class="result-pane"></div>
+                    </section>
+                  </div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-multimodal-subpanel="multimodale_mouvements" hidden>
+                <article class="card">
+                  <h3>Analyse des images</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>Ce sous-onglet travaille à partir d’une <strong>séquence d’images</strong>. Si tu es déjà passé par <strong>Extraction des sources</strong>, les images extraites peuvent être réutilisées ici automatiquement ; sinon, importe ta séquence manuellement.</p>
+                    <p>L’analyse calcule le <strong>mouvement</strong> entre images successives et produit plusieurs rendus visuels. Les résultats s’affichent <strong>juste en dessous</strong>.</p>
+                  </div>
+                </article>
+
+                <article class="card">
+                  <h3>Séquence d'images</h3>
+                  <div class="toolbar toolbar--end">
+                    <button id="multimodalImagesImportShortcutBtn" class="secondary-button secondary-button--danger" type="button">Importer les images</button>
+                    <input id="multimodalImagesFiles" type="file" accept="image/*,.jpg,.jpeg,.png,.bmp,.webp" multiple hidden />
+                  </div>
+                  <p class="field-help">
+                    Importe ici les vignettes à analyser. L'optical flow est calculé entre images successives dans l'ordre de la séquence.
+                  </p>
+                  <p class="field-help">
+                    Si les images ont déjà été extraites dans <strong>Extraction des sources</strong>, tu n’as pas besoin de les recharger ici.
+                  </p>
+                  <p id="multimodalImagesStatus" class="readonly-field">Aucune image sélectionnée.</p>
+                  <div id="multimodalImagesGallery" class="result-pane result-pane--spaced"></div>
+                </article>
+
+                <article class="card">
+                  <h3>Mode anatomique</h3>
+                  <div class="form-grid">
+                    <label class="field">
+                      <span>Backend anatomique</span>
+                      <select id="multimodalMotionAnatomyBackend">
+                        <option value="opencv" selected>OpenCV</option>
+                        <option value="mediapipe">MediaPipe</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Zone d'analyse</span>
+                      <select id="multimodalMotionAnatomyMode">
+                        <option value="visage" selected>visage</option>
+                        <option value="corps_entier">corps_entier</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Analyse des visages</span>
+                      <select id="multimodalMotionFaceAnalysisMode">
+                        <option value="principal" selected>visage principal</option>
+                        <option value="multivisage">multivisage</option>
+                        <option value="manuel">sélection à la souris</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p class="field-help">
+                    Le pipeline conserve les vues <code>magnitude</code>, <code>HSV</code>, <code>vecteurs</code> et <code>superposition</code>, puis ajoute une couche anatomique sur la zone choisie.
+                  </p>
+                  <p class="field-help">
+                    <strong>OpenCV</strong> est plus léger et robuste pour une ROI simple. <strong>MediaPipe</strong> apporte des landmarks plus fins pour le visage et le corps, donc une lecture anatomique plus détaillée, mais il est un peu plus exigeant.
+                  </p>
+                  <p class="field-help">
+                    <strong>Visage principal</strong> calcule les métriques sur un seul visage de référence. <strong>Multivisage</strong> prépare en plus un suivi par <code>face_id</code> et un export dédié par visage quand la zone d'analyse est réglée sur <code>visage</code>.
+                  </p>
+                  <p class="field-help">
+                    En mode <strong>sélection à la souris</strong>, l'application essaie d'utiliser <strong>ArcFace</strong> pour ré-identifier la personne choisie. Si aucun modèle ArcFace n'est disponible localement, le pipeline retombe sur le suivi local existant et l'indique dans le statut.
+                  </p>
+                  <div class="toolbar toolbar--end">
+                    <button id="multimodalSelectFaceBtn" class="secondary-button" type="button">Sélectionner le visage à la souris</button>
+                    <button id="multimodalClearFaceSelectionBtn" class="secondary-button" type="button">Effacer la sélection</button>
+                  </div>
+                  <p id="multimodalFaceSelectionStatus" class="readonly-field">Aucune sélection manuelle de visage.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Lancement de l'analyse des mouvements</h3>
+                  <div class="toolbar toolbar--end">
+                    <button id="runMultimodalMotionBtn" class="primary-button" type="button">Lancer l'analyse mouvements</button>
+                  </div>
+                  <p class="field-help">
+                    Après le lancement, la courbe, les galeries d’images et les tableaux apparaissent juste en dessous.
+                  </p>
+                  <p id="multimodalMotionRunStatus" class="readonly-field">Prêt.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultats de l'analyse des images</h3>
+                  <div id="multimodalMotionTimelinePlot" class="result-pane"></div>
+                  <div class="local-tabs local-tabs--compact" role="tablist" aria-label="Vues résultats mouvements">
+                    <button class="local-tab-button is-active" data-motion-result-target="brutes" type="button">Images brutes</button>
+                    <button class="local-tab-button" data-motion-result-target="magnitude" type="button">Magnitude</button>
+                    <button class="local-tab-button" data-motion-result-target="entropie" type="button">Entropie directionnelle</button>
+                    <button class="local-tab-button" data-motion-result-target="hsv" type="button">HSV</button>
+                    <button class="local-tab-button" data-motion-result-target="vecteurs" type="button">Vecteurs</button>
+                    <button class="local-tab-button" data-motion-result-target="superposition" type="button">Superposition</button>
+                    <button class="local-tab-button" data-motion-result-target="anatomie" type="button">Annotée</button>
+                  </div>
+                  <section class="motion-result-panel is-active" data-motion-result-panel="brutes">
+                    <div id="multimodalMotionRawGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <section class="motion-result-panel" data-motion-result-panel="magnitude" hidden>
+                    <div id="multimodalMotionMagnitudeGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <section class="motion-result-panel" data-motion-result-panel="entropie" hidden>
+                    <p class="field-help">
+                      Cette vue combine <strong>deux lectures</strong> :
+                      à gauche, l'image avec les vecteurs de déplacement ;
+                      à droite, un <strong>histogramme des directions</strong> qui montre si le mouvement part dans une direction dominante ou dans de nombreuses directions différentes.
+                      Si l'histogramme est concentré, l'entropie est plus faible ; s'il est dispersé, l'entropie est plus élevée.
+                      Les <strong>barres bleues</strong> montrent la répartition des directions et la <strong>barre orange</strong> signale le <strong>secteur de direction dominant</strong>.
+                      L'image affiche aussi le calcul : <code>entropie observée / entropie maximale</code>, puis le <code>ratio normalisé</code> en pourcentage, ce qui permet de comprendre pourquoi la lecture est classée <code>faible</code>, <code>moyenne</code> ou <code>élevée</code>.
+                      Le cercle des directions est découpé en <strong>12 secteurs de 30°</strong> :
+                      <code>1 = 0°-30°</code>, <code>2 = 30°-60°</code>, ..., <code>12 = 330°-360°</code>.
+                      Repères utiles : <code>1 ≈ droite</code>, <code>4 ≈ bas</code>, <code>7 ≈ gauche</code>, <code>10 ≈ haut</code>.
+                    </p>
+                    <div id="multimodalMotionEntropyGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <section class="motion-result-panel" data-motion-result-panel="hsv" hidden>
+                    <div id="multimodalMotionHsvGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <section class="motion-result-panel" data-motion-result-panel="vecteurs" hidden>
+                    <div id="multimodalMotionVectorsGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <section class="motion-result-panel" data-motion-result-panel="superposition" hidden>
+                    <div id="multimodalMotionOverlayGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <section class="motion-result-panel" data-motion-result-panel="anatomie" hidden>
+                    <div id="multimodalMotionAnatomyGallery" class="result-pane result-pane--spaced"></div>
+                  </section>
+                  <div id="multimodalMotionWindowsTable" class="result-pane result-pane--spaced"></div>
+                  <div id="multimodalMotionFramesTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-multimodal-subpanel="multimodale_alignement" hidden>
+                <article class="card">
+                  <h3>Alignement automatique</h3>
+                  <p class="field-help field-help--pvalue-note suivi-help-note">
+                    Si tu es passé par <strong>Extraction des sources</strong>, puis par <strong>Analyse audio</strong> et <strong>Analyse des images</strong>, l’alignement récupère <strong>automatiquement</strong> les fichiers déjà produits. Tu n’as rien à recharger dans le cas normal.
+                  </p>
+                  <p class="field-help">
+                    Le chargement manuel d’un CSV n’est utile que si tu veux <strong>remplacer</strong> les segments repris automatiquement.
+                  </p>
+                  <p id="multimodalAlignSourcesStatus" class="readonly-field">Aucune source multimodale préparée pour l'alignement.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Raccourcis d'alignement</h3>
+                  <div class="toolbar toolbar--compact">
+                    <button id="multimodalAlignAudioShortcutBtn" class="secondary-button" type="button">Analyse audio</button>
+                    <button id="multimodalAlignImageShortcutBtn" class="secondary-button" type="button">Analyse image</button>
+                  </div>
+                  <p class="field-help">
+                    Ces boutons servent de raccourcis vers les étapes qui alimentent l'alignement : transcription audio et source visuelle.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <h3>Indicateurs à superposer</h3>
+                  <div class="form-grid">
+                    <label class="checkbox-field">
+                      <input id="multimodalAlignOverlayImages" type="checkbox" checked />
+                      <span>Images</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="multimodalAlignOverlaySegments" type="checkbox" checked />
+                      <span>Segments de texte</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="multimodalAlignOverlayAudio" type="checkbox" />
+                      <span>Audio</span>
+                    </label>
+                  </div>
+                  <p id="multimodalAlignOverlayStatus" class="readonly-field">Superposition courante : images, segments de texte.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Alignement images, texte et horodatage</h3>
+                  <div class="field-help field-help--pvalue-note suivi-help-note">
+                    <p>L’alignement prend les résultats déjà calculés et les synchronise par <strong>timestamp</strong>.</p>
+                    <p>Le fichier final regroupe : <strong>texte</strong>, <strong>images</strong>, <strong>horodatage</strong>, <strong>indicateurs de mouvement</strong> et <strong>présence ou absence d’anomalie audio</strong>.</p>
+                  </div>
+                </article>
+
+                <article class="card">
+                  <h3>CSV des segments (optionnel)</h3>
+                  <p class="field-help">
+                    Fichier à charger seulement si tu veux forcer une entrée manuelle :
+                    <strong><code>segments_texte_global_complet.csv</code></strong>.
+                    Sinon, laisse ce champ vide : le CSV déjà produit par <strong>Analyse audio</strong> est repris automatiquement.
+                  </p>
+                  <p class="field-help">
+                    <strong><code>segments_texte_global_complet.csv</code></strong> = tous les segments de texte transcrits.<br />
+                    <strong><code>segments_texte_anomalies_complet.csv</code></strong> = seulement les segments touchés par une anomalie audio.<br />
+                    Pour l’alignement, il faut utiliser le fichier <strong>global</strong>.
+                  </p>
+                  <div class="toolbar toolbar--compact">
+                    <button id="multimodalPickSegmentsBtn" class="secondary-button" type="button">Choisir un autre CSV</button>
+                    <input id="multimodalSegmentsFile" type="file" accept=".csv,text/csv" hidden />
+                  </div>
+                  <p id="multimodalSegmentsStatus" class="readonly-field">Aucun CSV de segments sélectionné.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Synchronisation multimodale</h3>
+                  <p class="field-help">
+                    Si tu es déjà passé par <strong>Extraction des sources</strong>, <strong>Analyse audio</strong> et <strong>Analyse des images</strong>, ce bouton aligne automatiquement les fichiers déjà produits pour générer <code>segments_texte_sync.csv</code>.
+                  </p>
+                  <div class="toolbar toolbar--end">
+                    <button id="runMultimodalAlignBtn" class="primary-button" type="button">Lancer l'alignement</button>
+                  </div>
+                  <p id="multimodalAlignRunStatus" class="readonly-field">Prêt.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultats d'alignement</h3>
+                  <div class="form-grid">
+                    <label class="field">
+                      <span>Images à afficher</span>
+                      <select id="multimodalAlignImageView">
+                        <option value="brute" selected>Image brute</option>
+                        <option value="magnitude">Magnitude</option>
+                        <option value="entropie">Entropie directionnelle</option>
+                        <option value="hsv">HSV</option>
+                        <option value="vecteurs">Vecteurs</option>
+                        <option value="superposition">Superposition</option>
+                        <option value="anatomie">Annotée</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Zoom timeline</span>
+                      <select id="multimodalAlignTimelineScale">
+                        <option value="90">compact</option>
+                        <option value="130" selected>standard</option>
+                        <option value="180">large</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p class="field-help">
+                    La vue d'alignement devient une <strong>timeline multimodale</strong> : une règle de temps en haut, puis des <strong>pistes superposées</strong> comme dans un logiciel de montage. Tu peux afficher soit l'image brute, soit une vue issue de <strong>Analyse mouvements</strong> : magnitude, entropie directionnelle, HSV, vecteurs, superposition ou annotée.
+                  </p>
+                  <p class="field-help">
+                    Pistes affichées : <strong>Images</strong>, <strong>Texte</strong>, <strong>Anomalies audio</strong> si elles existent, <strong>Mouvement moyen</strong> et <strong>Entropie directionnelle</strong>. Le vrai fichier de sortie attendu ici reste le <strong>CSV multimodal synchronisé</strong>. Si ce fichier final n'a pas encore été généré, l'interface construit une timeline immédiate à partir du CSV brut des segments et des images déjà analysées.
+                  </p>
+                  <p class="field-help">
+                    Les indicateurs continus sont affichés en <strong>courbes</strong> avec les <strong>points réels</strong>.
+                  </p>
+                  <div id="multimodalAlignPreview" class="result-pane result-pane--spaced"></div>
+                </article>
+
+              </section>
+
+              <section class="local-tab-panel" data-multimodal-subpanel="multimodale_comparaison_ab" hidden>
+                <article class="card">
+                  <div class="card-header-row">
+                    <h3>Comparaison de deux vidéos</h3>
+                    <div class="toolbar toolbar--end">
+                      <button id="multimodalCompareAbToggleSettingsBtn" class="primary-button" type="button">Paramètres</button>
+                    </div>
+                  </div>
+                  <p class="field-help field-help--pvalue-note suivi-help-note">
+                    Ce sous-onglet lance un pipeline complet pour deux séries distinctes :
+                    <strong>extraction</strong>, <strong>audio</strong>, <strong>mouvements</strong>, <strong>alignement</strong>,
+                    puis une <strong>comparaison A/B</strong> sur les séries synchronisées. La comparaison est faite sur des
+                    <strong>séries temporelles alignées</strong>, pas sur les fichiers bruts.
+                  </p>
+                  <p class="field-help">
+                    Tu peux renseigner soit <strong>deux URLs YouTube différentes</strong>, soit <strong>deux vidéos locales</strong>.
+                    Si une vidéo locale est sélectionnée pour une série, elle est prioritaire sur l’URL.
+                    Le fichier <code>cookies</code> défini dans <strong>Extraction des sources</strong> est réutilisé si nécessaire.
+                  </p>
+                </article>
+
+                <div class="multimodal-grid">
+                  <article class="card">
+                    <h3>Vidéo A</h3>
+                    <label>
+                      URL YouTube A
+                      <input
+                        id="multimodalCompareYoutubeUrlA"
+                        type="text"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                      />
+                    </label>
+                    <div id="multimodalComparePreviewA" class="result-pane multimodal-youtube-preview"></div>
+                    <div class="toolbar toolbar--compact">
+                      <button id="multimodalComparePickVideoABtn" class="secondary-button" type="button">Choisir une vidéo A</button>
+                      <input id="multimodalCompareVideoFileA" type="file" accept=".mp4,.mov,.mkv,.avi,.webm,.m4v,video/*" hidden />
+                    </div>
+                    <div class="toolbar toolbar--compact">
+                      <button id="multimodalCompareSelectFaceABtn" class="primary-button" type="button">Sélectionner le visage A</button>
+                      <button id="multimodalCompareClearFaceABtn" class="secondary-button" type="button">Effacer la sélection A</button>
+                    </div>
+                    <p id="multimodalCompareFaceStatusA" class="readonly-field">Aucune sélection manuelle pour A.</p>
+                    <label>
+                      Intervalle A : début
+                      <div class="form-grid multimodal-time-grid">
+                        <label>
+                          Heure
+                          <input id="multimodalCompareStartHoursA" type="number" min="0" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Minutes
+                          <input id="multimodalCompareStartMinutesA" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Secondes
+                          <input id="multimodalCompareStartSecondsA" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                      </div>
+                    </label>
+                    <label>
+                      Intervalle A : fin
+                      <div class="form-grid multimodal-time-grid">
+                        <label>
+                          Heure
+                          <input id="multimodalCompareEndHoursA" type="number" min="0" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Minutes
+                          <input id="multimodalCompareEndMinutesA" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Secondes
+                          <input id="multimodalCompareEndSecondsA" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                      </div>
+                    </label>
+                    <p class="field-help">Laisser vide pour comparer toute la vidéo A.</p>
+                    <p id="multimodalCompareSourceStatusA" class="readonly-field">Aucune source A sélectionnée.</p>
+                  </article>
+
+                  <article class="card">
+                    <h3>Vidéo B</h3>
+                    <label>
+                      URL YouTube B
+                      <input
+                        id="multimodalCompareYoutubeUrlB"
+                        type="text"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                      />
+                    </label>
+                    <div id="multimodalComparePreviewB" class="result-pane multimodal-youtube-preview"></div>
+                    <div class="toolbar toolbar--compact">
+                      <button id="multimodalComparePickVideoBBtn" class="secondary-button" type="button">Choisir une vidéo B</button>
+                      <input id="multimodalCompareVideoFileB" type="file" accept=".mp4,.mov,.mkv,.avi,.webm,.m4v,video/*" hidden />
+                    </div>
+                    <div class="toolbar toolbar--compact">
+                      <button id="multimodalCompareSelectFaceBBtn" class="primary-button" type="button">Sélectionner le visage B</button>
+                      <button id="multimodalCompareClearFaceBBtn" class="secondary-button" type="button">Effacer la sélection B</button>
+                    </div>
+                    <p id="multimodalCompareFaceStatusB" class="readonly-field">Aucune sélection manuelle pour B.</p>
+                    <label>
+                      Intervalle B : début
+                      <div class="form-grid multimodal-time-grid">
+                        <label>
+                          Heure
+                          <input id="multimodalCompareStartHoursB" type="number" min="0" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Minutes
+                          <input id="multimodalCompareStartMinutesB" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Secondes
+                          <input id="multimodalCompareStartSecondsB" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                      </div>
+                    </label>
+                    <label>
+                      Intervalle B : fin
+                      <div class="form-grid multimodal-time-grid">
+                        <label>
+                          Heure
+                          <input id="multimodalCompareEndHoursB" type="number" min="0" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Minutes
+                          <input id="multimodalCompareEndMinutesB" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                        <label>
+                          Secondes
+                          <input id="multimodalCompareEndSecondsB" type="number" min="0" max="59" step="1" value="" placeholder="0" />
+                        </label>
+                      </div>
+                    </label>
+                    <p class="field-help">Laisser vide pour comparer toute la vidéo B.</p>
+                    <p id="multimodalCompareSourceStatusB" class="readonly-field">Aucune source B sélectionnée.</p>
+                  </article>
+                </div>
+
+                <article class="card">
+                  <h3>Pipeline A/B</h3>
+                  <p class="field-help">
+                    Pour chaque série, le pipeline produit :
+                    <code>extraction</code>, <code>audio</code>, <code>mouvements</code>, <code>alignement</code>.
+                    Ensuite le module <code>comparaison_ab.py</code> écrit :
+                    <code>comparaison_ab_summary.json</code>,
+                    <code>comparaison_ab_timeline.csv</code>,
+                    <code>comparaison_ab_indicateurs.csv</code>.
+                  </p>
+                  <div class="comparison-ab-hidden-source" aria-hidden="true">
+                    <label>
+                      Cadence A/B
+                      <select id="multimodalCompareFrameRate">
+                        <option value="1" selected>1 image/seconde</option>
+                        <option value="25">25 images/seconde</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="multimodal-grid multimodal-grid--compact">
+                    <div>
+                      <div class="toolbar toolbar--compact">
+                        <button id="multimodalComparePickOutputDirBtn" class="primary-button" type="button">Choisir le dossier A/B</button>
+                      </div>
+                      <p id="multimodalCompareOutputDirStatus" class="readonly-field">Dossier A/B par défaut : <code>multimodale/exports/comparaison_ab</code>.</p>
+                    </div>
+                  </div>
+                  <div class="toolbar toolbar--end">
+                    <button id="runMultimodalCompareAbBtn" class="primary-button" type="button">Lancer la comparaison A/B</button>
+                  </div>
+                  <p id="multimodalCompareAbRunStatus" class="readonly-field"></p>
+                </article>
+
+                <article id="multimodalCompareAbResultsCard" class="card comparison-ab-results-card">
+                  <div class="comparison-ab-results-header">
+                    <h3>Résultats de comparaison</h3>
+                  </div>
+                  <div class="comparison-ab-results-layout">
+                    <div class="comparison-ab-results-main">
+                      <div id="multimodalCompareAbSummary" class="result-pane result-pane--spaced"></div>
+                      <div id="multimodalCompareAbAlignedView" class="result-pane result-pane--spaced"></div>
+                      <div id="multimodalCompareAbTimelineTable" class="result-pane result-pane--spaced"></div>
+                      <div id="multimodalCompareAbIndicatorsTable" class="result-pane result-pane--spaced"></div>
+                    </div>
+                    <aside id="multimodalCompareAbSettingsPanel" class="comparison-ab-settings-panel" hidden>
+                      <h4>Paramètres utilisés</h4>
+                      <div id="multimodalCompareAbSettingsContent" class="result-pane result-pane--spaced"></div>
+                    </aside>
+                  </div>
+                </article>
+              </section>
+
+              <section class="local-tab-panel" data-multimodal-subpanel="multimodale_noeuds" hidden>
+                <article class="card">
+                  <h3>Carte réseau multimodale</h3>
+                  <p class="field-help field-help--pvalue-note suivi-help-note">
+                    Ce sous-onglet part de l’<strong>alignement</strong> et de l’<strong>entropie directionnelle</strong> pour construire une carte de nœuds.
+                  </p>
+                  <p class="field-help">
+                    Le calcul regroupe les images voisines à forte entropie en <strong>événements visuels</strong>, puis les relie aux <strong>segments de texte</strong> synchronisés.
+                    Les liens distinguent :
+                    <strong>coïncidence temporelle</strong>,
+                    <strong>proximité visuelle</strong>,
+                    <strong>proximité lexicale</strong>.
+                  </p>
+                  <p class="field-help">
+                    Clique sur un nœud pour voir son image, son extrait texte et son horodatage.
+                  </p>
+                  <div class="field-grid field-grid--compact">
+                    <label for="multimodalNodesEventMode">Mode de sélection des événements</label>
+                    <select id="multimodalNodesEventMode">
+                      <option value="threshold">Moyenne + k × écart-type</option>
+                      <option value="local-peaks">Pics locaux</option>
+                    </select>
+                    <label for="multimodalNodesEntropyK">Seuil des noeuds : moyenne + k × écart-type</label>
+                    <input id="multimodalNodesEntropyK" type="number" min="0" max="5" step="0.1" value="1.0">
+                  </div>
+                  <div class="toolbar toolbar--end">
+                    <button id="runMultimodalNodesBtn" class="primary-button" type="button">Construire les noeuds</button>
+                  </div>
+                  <p id="multimodalNodesRunStatus" class="readonly-field">Prêt.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultats du graphe</h3>
+                  <p id="multimodalNodesSourcesStatus" class="readonly-field">Aucun graphe de nœuds n'est disponible pour le moment.</p>
+                  <div id="multimodalNodesSummary" class="result-pane result-pane--spaced"></div>
+                  <div class="multimodal-nodes-layout">
+                    <div id="multimodalNodesGraph" class="result-pane result-pane--spaced"></div>
+                    <aside id="multimodalNodesDetail" class="result-pane result-pane--spaced"></aside>
+                  </div>
+                  <div id="multimodalNodesTable" class="result-pane result-pane--spaced"></div>
+                  <div id="multimodalEdgesTable" class="result-pane result-pane--spaced"></div>
+                </article>
+              </section>
+
+            </div>
+          </section>
+
+          <section class="panel" data-panel="aide" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Aide</p>
+                <h2>Documentation</h2>
+              </div>
+            </div>
+
+            <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
+              <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
+              <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
+              <button class="local-tab-button" data-help-subtab-target="help_lda" type="button">Aide LDA</button>
+              <button class="local-tab-button" data-help-subtab-target="help_jsd" type="button">Aide JSD</button>
+              <button class="local-tab-button" data-help-subtab-target="help_suivi" type="button">Aide Trajectoire</button>
+              <button class="local-tab-button" data-help-subtab-target="help_multimodale" type="button">Aide multimodale</button>
+            </div>
+
+            <section class="local-tab-panel is-active" data-help-subpanel="help_general">
+              <article class="card prose-card">
+                <div id="helpMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/help.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_morpho" hidden>
+              <article class="card prose-card">
+                <div id="helpMorphoMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/pos_lexique.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_lda" hidden>
+              <article class="card prose-card">
+                <div id="helpLdaMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/lda.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_jsd" hidden>
+              <article class="card prose-card">
+                <div id="helpJsdMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/jsd.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_suivi" hidden>
+              <article class="card prose-card">
+                <div id="helpSuiviMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/suivi.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_multimodale" hidden>
+              <article class="card prose-card">
+                <div id="helpMultimodaleMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/multimodale.md</code>...
+                </div>
+              </article>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <section class="visually-hidden" aria-hidden="true">
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">CHD</p>
+            <h3>Paramètres CHD</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label for="analysisType">Méthode Iramuteq-lite</label>
+            <select id="analysisType">
+              <option value="iramuteq">IRaMuTeQ-lite</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="segmentSize">segment_size</label>
+            <input id="segmentSize" type="number" min="5" value="40" />
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useStrongPunctuation">
+              <input id="useStrongPunctuation" type="checkbox" checked />
+              <span>Tenir compte de la ponctuation forte (. ! ?) dans le découpage</span>
+            </label>
+            <p class="field-help">
+              Si activé, le découpage recherche la meilleure frontière autour de
+              segment_size avec priorité . ! ?, puis ; :, puis , puis espace ;
+              un retour à la ligne clôture aussi le segment.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="minFreq">Fréquence minimale des termes (min_docfreq)</label>
+            <input id="minFreq" type="number" min="1" value="3" />
+          </div>
+
+          <div class="field">
+            <label for="maxP">max_p (p-value)</label>
+            <input id="maxP" type="number" min="0" max="1" step="0.01" value="0.05" />
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="filterPvalue">
+              <input id="filterPvalue" type="checkbox" checked />
+              <span>Filtrer l'affichage des résultats par p-value (p ≤ max_p)</span>
+            </label>
+            <p class="field-help field-help--pvalue-note">
+              Ce filtre sert à l'affichage de l'AFC, AFC des variables étoilées,
+              du concordancier, des nuages de mots, mais dans les stats les formes
+              supérieures à votre p-value définie seront affichées en rouge dans le tableau.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">CHD</p>
+            <h3>Paramètres CHD (IRaMuTeQ-lite)</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label for="kIramuteq">Nombre de classes terminales de la phase 1</label>
+            <input id="kIramuteq" type="number" min="2" value="10" />
+          </div>
+
+          <div class="field">
+            <label for="iramuteqMaxFormes">Nombre maximum de formes analysées</label>
+            <input id="iramuteqMaxFormes" type="number" min="1" step="100" value="20000" />
+          </div>
+
+          <div class="field">
+            <label for="minclMode">Nombre minimum d'UCE par classe terminale (mincl)</label>
+            <select id="minclMode">
+              <option value="auto">Automatique</option>
+              <option value="manuel">Manuel</option>
+            </select>
+            <p class="field-help">
+              Ce paramètre définit le seuil minimal d'UCE pour conserver une classe terminale.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="minclManual">mincl (manuel)</label>
+            <input id="minclManual" type="number" min="1" value="5" />
+          </div>
+
+          <div class="field field--full" data-classification-mode-card>
+            <label for="classificationMode">Type de classification terminale</label>
+            <input id="classificationMode" type="hidden" value="simple" />
+            <div class="radio-group">
+              <label class="radio-option">
+                <input
+                  id="classificationModeSimple"
+                  type="radio"
+                  name="classificationModeChoice"
+                  value="simple"
+                  data-classification-radio
+                />
+                <span>Simple</span>
+              </label>
+              <label class="radio-option">
+                <input
+                  id="classificationModeDouble"
+                  type="radio"
+                  name="classificationModeChoice"
+                  value="double"
+                  data-classification-radio
+                />
+                <span>Double</span>
+              </label>
+            </div>
+            <div class="fields-grid field-inline" data-rst-fields hidden>
+              <div>
+                <label for="rst1">Taille de rst1</label>
+                <input id="rst1" type="number" min="2" value="12" />
+              </div>
+              <div>
+                <label for="rst2">Taille de rst2</label>
+                <input id="rst2" type="number" min="2" value="14" />
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="svdMethod">Méthode SVD</label>
+            <select id="svdMethod">
+              <option value="irlba">irlba</option>
+              <option value="svdR">svdR</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="statsMode">Calcul des statistiques CHD</label>
+            <select id="statsMode">
+              <option value="vectorise">Mode optimisé (vectorisé, recommandé)</option>
+              <option value="classique">Mode classique (chisq.test par terme)</option>
+            </select>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source data-suivi-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Lexique</p>
+            <h3>Dictionnaire</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label for="dictionarySource">Source de lemmatisation</label>
+            <select id="dictionarySource">
+              <option value="lexique_fr">Lexique (fr)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useLemmas">
+              <input id="useLemmas" type="checkbox" checked />
+              <span>Lemmatisation via les lemmes de lexique_fr (forme vers c_lemme)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useExpressions">
+              <input id="useExpressions" type="checkbox" />
+              <span>Utiliser le dictionnaire d'expression (dic_mot vers dic_norm)</span>
+            </label>
+            <p class="field-help">Import du dictionnaire dans l'onglet Annotation.</p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useAnnotationExpressions">
+              <input id="useAnnotationExpressions" type="checkbox" />
+              <span>Ajouter le dictionnaire utilisateur add_expression_fr.csv</span>
+            </label>
+            <p class="field-help">Fusionne les entrées de l'onglet Annotation avec le dictionnaire d'expressions de base pendant la CHD.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source data-suivi-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Nettoyage</p>
+            <h3>Nettoyage</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label class="check-option" for="cleanChars">
+              <input id="cleanChars" type="checkbox" checked />
+              <span>Nettoyage caractères (regex)</span>
+            </label>
+            <p class="field-help mono-help">[^a-zA-Z0-9àÀâÂäÄáÁåÅãéÉèÈêÊëËìÌîÎïÏíÍóÓòÒôÔöÖõÕøØùÙûÛüÜúÚçÇßœŒ’ñÑ_\\.:,;!\\?']</p>
+            <p class="field-help">
+              Les caractères présents dans la liste entre crochets sont conservés
+              (dont _ pour les expressions normalisées) ; tous les autres sont
+              remplacés par des espaces.
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removePunctuation">
+              <input id="removePunctuation" type="checkbox" />
+              <span>Supprimer la ponctuation</span>
+            </label>
+            <p class="field-help">
+              Supprime la ponctuation à la tokenisation quanteda (remove_punct), par ex.
+              . , ; : ! ? ' ’ " - ( ) [ ] …
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removeDigits">
+              <input id="removeDigits" type="checkbox" />
+              <span>Supprimer les chiffres (0-9)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removeApostrophes">
+              <input id="removeApostrophes" type="checkbox" checked />
+              <span>Traiter les élisions FR (c'est vers est, m'écrire vers écrire)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="replaceHyphen">
+              <input id="replaceHyphen" type="checkbox" />
+              <span>Remplacer les tirets (-) par des espaces</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removeStopwords">
+              <input id="removeStopwords" type="checkbox" />
+              <span>Retirer les stopwords (liste française quanteda)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="morphoFilter">
+              <input id="morphoFilter" type="checkbox" />
+              <span>Filtrage morphosyntaxique</span>
+            </label>
+          </div>
+
+          <div class="field field--full" data-chd-morpho-card>
+            <label for="posKeep">Catégories c_morpho à conserver</label>
+            <input id="posKeep" type="hidden" value="NOM, VER, ADJ" data-morpho-selected-input />
+            <div class="chip-picker">
+              <div class="chip-picker-controls">
+                <select id="posKeepAvailable" data-morpho-available-select>
+                  <option value="">Choisir une catégorie</option>
+                </select>
+                <button class="secondary-button" type="button" data-morpho-add-btn>Ajouter</button>
+              </div>
+              <div class="chip-picker-list" data-morpho-selected-list></div>
+            </div>
+            <p class="field-help">Utilisé si le filtrage morphosyntaxique est actif.</p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="excludeEtre">
+              <input id="excludeEtre" type="checkbox" />
+              <span>Filtrer le terme « être » dans la catégorie VERB</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="keepUnknownForms">
+              <input id="keepUnknownForms" type="checkbox" checked />
+              <span>Conserver les formes non reconnues par le lexique (AUTRE_FORME)</span>
+            </label>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">AFC</p>
+            <h3>Paramètres AFC complémentaires</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid fields-grid--compact">
+          <div class="field">
+            <label class="check-option" for="reduceOverlap">
+              <input id="reduceOverlap" type="checkbox" checked />
+              <span>Réduire les chevauchements des mots (AFC)</span>
+            </label>
+          </div>
+          <div class="field">
+            <label for="wordSizeMode">Taille des mots (AFC termes)</label>
+            <select id="wordSizeMode">
+              <option value="frequency">Fréquence</option>
+              <option value="chi2">Chi2</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="topNWords">Top N mots par classe (nuages)</label>
+            <input id="topNWords" type="number" min="5" value="20" />
+          </div>
+          <div class="field field--full" data-afc-starred-variables-card>
+            <label for="afcStarredVariables">Variables étoilées à projeter (AFC variables)</label>
+            <input
+              id="afcStarredVariables"
+              type="hidden"
+              value=""
+              data-afc-starred-selected-input
+            />
+            <div class="chip-picker">
+              <div class="chip-picker-controls">
+                <select id="afcStarredVariablesAvailable" data-afc-starred-available-select>
+                  <option value="">Choisir une variable</option>
+                </select>
+                <button class="secondary-button" type="button" data-afc-starred-add-btn>Ajouter</button>
+              </div>
+              <div class="chip-picker-list" data-afc-starred-selected-list></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-simi-config-source data-simi-config-card>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Réseau</p>
+            <h3>Paramètres</h3>
+          </div>
+          <p class="section-copy">
+            Ces options préparent la matrice et l'affichage du graphe de similitude.
+          </p>
+        </div>
+        <div class="fields-grid">
+          <div class="field">
+            <label for="simiMethod">Méthode de calcul</label>
+            <select id="simiMethod">
+              <option value="cooc">Cooccurrence</option>
+              <option value="Braun-Blanquet">Braun-Blanquet</option>
+              <option value="Chi-squared">Chi-squared</option>
+              <option value="correlation">Correlation</option>
+              <option value="cosine">Cosine</option>
+              <option value="jaccard">Jaccard</option>
+              <option value="Pearson">Pearson</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="simiThreshold">Seuil minimal des arêtes</label>
+            <input id="simiThreshold" type="number" min="0" value="0" />
+            <p class="field-help">Le seuil supprime les arêtes trop faibles.</p>
+          </div>
+
+          <div class="field">
+            <label for="simiTopTerms">Nombre de termes à conserver (plus fréquents)</label>
+            <input id="simiTopTerms" type="number" min="5" value="100" data-simi-top-terms-input />
+            <p class="field-help">
+              On conserve les N mots les plus fréquents, puis on calcule les liens selon l'indice choisi.
+            </p>
+          </div>
+
+          <div class="field field--full">
+            <label for="simiTermsSelected">Mots les plus fréquents retenus pour l'analyse</label>
+            <input id="simiTermsSelected" type="hidden" value="" data-simi-terms-input />
+            <p class="field-help">
+              La liste est peuplée par fréquence. Cliquez sur la croix d'un mot pour l'exclure de l'analyse.
+            </p>
+            <div class="selected-terms-picker" data-simi-terms-picker>
+              <p class="selected-terms-meta" data-simi-terms-meta></p>
+              <div class="selected-terms-list" data-simi-terms-list></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiMaxTree">
+              <input id="simiMaxTree" type="checkbox" checked />
+              <span>Limiter au graphe couvrant maximal (arbre de poids max)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="simiLayout">Type de layout</label>
+            <select id="simiLayout">
+              <option value="frutch">Fruchterman-Reingold</option>
+              <option value="kawa">Kamada-Kawai</option>
+              <option value="circle">Circulaire</option>
+              <option value="random">Aléatoire</option>
+              <option value="spirale">Spirale</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="simiEngine">Moteur de rendu du graphe</label>
+            <select id="simiEngine">
+              <option value="igraph">igraph (statique)</option>
+              <option value="visnetwork">visNetwork (interactif)</option>
+            </select>
+            <p class="field-help">
+              En mode visNetwork, ouvrez le panneau config pour adapter le rendu du graphe
+              (nœuds, arêtes, physique, layout, interactions, etc.).
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiEdgeLabels">
+              <input id="simiEdgeLabels" type="checkbox" checked />
+              <span>Afficher le score de l'indice (arêtes / info-bulles)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiEdgeWidth">
+              <input id="simiEdgeWidth" type="checkbox" checked />
+              <span>Largeur des arêtes proportionnelle à l'indice</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiVertexText">
+              <input id="simiVertexText" type="checkbox" checked />
+              <span>Taille du texte des sommets proportionnelle aux fréquences</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiCommunities">
+              <input id="simiCommunities" type="checkbox" checked />
+              <span>Communautés</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="simiCommunityMethod">Méthode de communautés</label>
+            <select id="simiCommunityMethod">
+              <option value="edge_betweenness">edge.betweenness.community</option>
+              <option value="fast_greedy">fastgreedy.community</option>
+              <option value="label_propagation">label.propagation.community</option>
+              <option value="leading_eigen">leading.eigenvector.community</option>
+              <option value="multilevel">multilevel.community</option>
+              <option value="walktrap">walktrap.community</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiHalo">
+              <input id="simiHalo" type="checkbox" checked />
+              <span>Halo</span>
+            </label>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-lda-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Paramétrage LDA</p>
+            <h3>Options de l'analyse LDA</h3>
+          </div>
+        </div>
+        <div class="section-stack">
+          <div class="field">
+            <label for="language">Unité d'analyse</label>
+            <select id="language">
+              <option value="segment">Segment de texte</option>
+              <option value="document">Document (chaque entrée commence par ****)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="ldaK">Nombre de topics</label>
+            <input id="ldaK" type="number" min="2" value="6" />
+          </div>
+
+          <div class="field">
+            <label for="ldaTerms">Nombre de termes affichés par topic</label>
+            <input id="ldaTerms" type="number" min="3" value="10" />
+          </div>
+
+          <div class="field">
+            <label for="ldaSegmentSize">Taille des segments LDA (en mots)</label>
+            <input id="ldaSegmentSize" type="number" min="5" value="40" />
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="ldaStrongPunctuation">
+              <input id="ldaStrongPunctuation" type="checkbox" checked />
+              <span>Segmenter à partir de la ponctuation forte (. ! ?)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="ldaStopwords">
+              <input id="ldaStopwords" type="checkbox" />
+              <span>Retirer les stopwords</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="ldaMorpho">
+              <input id="ldaMorpho" type="checkbox" checked />
+              <span>Filtrer par catégories morphosyntaxiques</span>
+            </label>
+            <p class="field-help">
+              Filtrage morphosyntaxique = conservation des termes dont c_morpho du lexique_fr.csv
+              appartient aux catégories sélectionnées.
+            </p>
+          </div>
+
+          <div class="field field--full" data-lda-morpho-card>
+            <label for="ldaPosKeep">Catégories à conserver</label>
+            <input id="ldaPosKeep" type="hidden" value="NOM, VER, ADJ" data-lda-morpho-selected-input />
+            <div class="chip-picker">
+              <div class="chip-picker-controls">
+                <select id="ldaPosKeepAvailable" data-lda-morpho-available-select>
+                  <option value="">Choisir une catégorie</option>
+                </select>
+                <button class="secondary-button" type="button" data-lda-morpho-add-btn>Ajouter</button>
+              </div>
+              <div class="chip-picker-list" data-lda-morpho-selected-list></div>
+            </div>
+            <p class="field-help">
+              Les catégories sont lues dans dictionnaires/lexique_fr.csv
+              (colonnes c_mot, c_lemme, c_morpho).
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="ldaMinDf">Fréquence documentaire minimale (min_df)</label>
+            <input id="ldaMinDf" type="number" min="1" value="2" />
+          </div>
+
+          <div class="field">
+            <label for="ldaMaxDf">Fréquence documentaire maximale (max_df)</label>
+            <input id="ldaMaxDf" type="number" min="0" max="1" step="0.01" value="0.9" />
+          </div>
+
+          <div class="field">
+            <label for="ldaMaxIter">Nombre maximal d'itérations (max_iter)</label>
+            <input id="ldaMaxIter" type="number" min="5" value="100" />
+          </div>
+
+          <div class="field">
+            <label for="ldaNgramRange">N-grammes retenus (ngram_range)</label>
+            <select id="ldaNgramRange">
+              <option value="1,1">Unigramme</option>
+              <option value="2,2">Bigramme</option>
+            </select>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-suivi-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Trajectoire</p>
+            <h3>Paramètres de la trajectoire lexicale</h3>
+          </div>
+        </div>
+
+        <p class="section-copy">
+          Il n'est pas nécessaire de lancer une CHD avant ce test. La trajectoire lexicale est indépendante et compare
+          lexicalement des entretiens ordonnés dans le temps.
+        </p>
+
+        <div class="form-grid">
+          <div class="field">
+            <label>Corpus chargé</label>
+            <p id="suiviCorpusDisplay" class="readonly-field">Aucun corpus chargé.</p>
+          </div>
+          <div class="field">
+            <label for="suiviAnalysisLayer">Couche d'analyse</label>
+            <select id="suiviAnalysisLayer">
+              <option value="lexicale_brute">Trajectoire lexicale brute</option>
+              <option value="emotionnelle">Trajectoire émotionnelle</option>
+            </select>
+            <p class="field-help">
+              La couche lexicale brute reste la plus fidèle au discours réel. La couche émotionnelle construit une distribution d'émotions avant le calcul de divergence.
+            </p>
+          </div>
+          <div class="field">
+            <label for="suiviEmotionLexicon">Lexique émotionnel</label>
+            <select id="suiviEmotionLexicon">
+              <option value="feel">FEEL (français)</option>
+              <option value="nrc">NRC Emotion Lexicon (français)</option>
+            </select>
+            <p class="field-help">
+              Nécessite un fichier placé dans <code>dictionnaires/</code> : <code>feel_fr.csv</code> ou <code>nrc_emotions_fr.csv</code>.
+            </p>
+          </div>
+          <div class="field">
+            <label for="suiviVariable">Variable étoilée de la trajectoire</label>
+            <select id="suiviVariable">
+              <option value="">Détection auto (priorité : *seance, *date, *mois, *annee, *phase)</option>
+            </select>
+            <p class="field-help">
+              Variables de trajectoire recommandées : <code>*seance</code>, <code>*date</code>, <code>*mois</code>,
+              <code>*annee</code>, <code>*phase</code>.
+            </p>
+          </div>
+          <div class="field">
+            <label for="suiviFilterVariable">Variable de filtre</label>
+            <select id="suiviFilterVariable">
+              <option value="">Aucun filtre</option>
+            </select>
+            <p class="field-help">
+              Filtres de sous-corpus recommandés : <code>*journal</code>, <code>*source</code>, <code>*locuteur</code>,
+              <code>*patient</code>, <code>*service</code>.
+            </p>
+          </div>
+          <div class="field">
+            <label for="suiviFilterModalite">Sous-corpus</label>
+            <select id="suiviFilterModalite">
+              <option value="">Tous les sous-corpus</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="suiviChronologyOrder">Ordre chronologique</label>
+            <select id="suiviChronologyOrder">
+              <option value="asc">Croissant</option>
+              <option value="desc">Décroissant</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="suiviLexicalUnit">Unité lexicale</label>
+            <select id="suiviLexicalUnit">
+              <option value="unigramme">Grammes / unigrammes</option>
+              <option value="bigramme">Bigrammes</option>
+            </select>
+            <p id="suiviLexicalUnitHelp" class="field-help">
+              Les bigrammes sont utiles pour la trajectoire lexicale brute. La trajectoire émotionnelle repose sur les mots/lemmes simples.
+            </p>
+          </div>
+          <div class="field">
+            <label for="suiviTopTerms">Termes évolutifs par comparaison</label>
+            <input id="suiviTopTerms" type="number" min="3" max="30" value="20" />
+          </div>
+          <div class="field">
+            <label for="suiviSignalAmplification">Amplification visuelle du signal</label>
+            <select id="suiviSignalAmplification">
+              <option value="1">Normale (x1)</option>
+              <option value="2">Renforcée (x2)</option>
+              <option value="4">Forte (x4)</option>
+            </select>
+            <p class="field-help">
+              Cette option agit seulement sur l'affichage des graphes de divergence et de rupture. Les tableaux et les exports CSV gardent les valeurs brutes.
+            </p>
+          </div>
+          <div class="field field--full">
+            <label for="suiviInterviewsSelect">Entretiens retenus</label>
+            <select id="suiviInterviewsSelect" class="multi-select" multiple size="8"></select>
+            <div class="toolbar toolbar--compact">
+              <button id="suiviSelectAllBtn" class="secondary-button" type="button">Tout sélectionner</button>
+              <button id="suiviClearAllBtn" class="secondary-button" type="button">Tout vider</button>
+            </div>
+          </div>
+        </div>
+
+      </article>
+    </section>
+
+    <dialog id="chdConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse CHD</h2>
+          </div>
+        </header>
+        <div id="chdConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeChdDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchChdDialogBtn" class="primary-button" type="button">Lancer la CHD</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="simiConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse de similitudes</h2>
+          </div>
+        </header>
+        <div id="simiConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeSimiDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchSimiDialogBtn" class="primary-button" type="button">Lancer l'analyse</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="ldaConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse LDA</h2>
+          </div>
+        </header>
+        <div id="ldaConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeLdaDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchLdaDialogBtn" class="primary-button" type="button">Lancer l'analyse LDA</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="suiviConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de la trajectoire lexicale</h2>
+          </div>
+        </header>
+        <div id="suiviConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeSuiviDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchSuiviDialogBtn" class="primary-button" type="button">Calculer la trajectoire lexicale</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="multimodalCompareAbConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de la comparaison A/B</h2>
+          </div>
+        </header>
+        <div id="multimodalCompareAbConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeMultimodalCompareAbDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="applyMultimodalCompareAbDialogBtn" class="primary-button" type="button">Appliquer</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="runProgressDialog" class="progress-dialog">
+      <div class="progress-dialog-card">
+        <p id="runProgressTitle" class="dialog-kicker">Analyse en cours</p>
+        <h2>Traitement</h2>
+        <p id="runProgressMessage" class="muted">Initialisation...</p>
+        <progress id="runProgressBar" max="100" value="0"></progress>
+        <p id="runProgressValue" class="progress-value">0%</p>
+      </div>
+    </dialog>
+
+    <dialog id="startupBootstrapDialog" class="progress-dialog">
+      <div class="progress-dialog-card">
+        <p id="startupBootstrapTitle" class="dialog-kicker">Vérification de l'environnement</p>
+        <h2>Démarrage de l'application</h2>
+        <p id="startupBootstrapMessage" class="muted">Préparation des dépendances...</p>
+        <progress id="startupBootstrapBar" max="100" value="0"></progress>
+        <p id="startupBootstrapValue" class="progress-value">0%</p>
+      </div>
+    </dialog>
+
+    <dialog id="multimodalProgressDialog" class="progress-dialog">
+      <div class="progress-dialog-card">
+        <p id="multimodalProgressTitle" class="dialog-kicker">Analyse multimodale</p>
+        <h2>Préparation et traitement</h2>
+        <p id="multimodalProgressMessage" class="muted">Initialisation...</p>
+        <progress id="multimodalProgressBar" max="100" value="0"></progress>
+        <p id="multimodalProgressValue" class="progress-value">0%</p>
+      </div>
+    </dialog>
+
+    <div id="chdTermContextMenu" class="context-menu" hidden>
+      <button type="button" class="context-menu-item" data-chd-term-action="chi2-class">χ² par classe</button>
+      <button type="button" class="context-menu-item" data-chd-term-action="segments-class">Segments de texte dans la classe</button>
+      <button type="button" class="context-menu-item" data-chd-term-action="segments-all-classes">Segments de texte dans les classes</button>
+    </div>
+
+    <dialog id="imagePreviewDialog" class="dialog-panel image-preview-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p id="imagePreviewKicker" class="dialog-kicker">Prévisualisation</p>
+            <h2 id="imagePreviewTitle">Image</h2>
+          </div>
+          <div class="image-preview-header-actions">
+            <p id="imagePreviewCounter" class="readonly-field image-preview-counter">Image 1 / 1</p>
+            <button id="closeImagePreviewBtn" class="secondary-button" type="button">Fermer</button>
+          </div>
+        </header>
+        <div class="image-preview-stage">
+          <button id="imagePreviewPrevBtn" class="secondary-button image-preview-nav" type="button" aria-label="Image précédente">←</button>
+          <div id="imagePreviewContent" class="image-preview-content"></div>
+          <button id="imagePreviewNextBtn" class="secondary-button image-preview-nav" type="button" aria-label="Image suivante">→</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="multimodalFaceSelectionDialog" class="dialog-panel image-preview-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Analyse mouvements</p>
+            <h2>Sélection du visage</h2>
+          </div>
+          <button id="closeMultimodalFaceSelectionBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+        <div class="dialog-body">
+          <p class="field-help">Trace un rectangle sur le visage à suivre. Cette sélection sera utilisée comme cible principale pendant l'analyse.</p>
+          <label class="field field--full">
+            <span>Image de référence</span>
+            <select id="multimodalFaceSelectionSource"></select>
+          </label>
+          <div id="multimodalFaceSelectionStage" class="multimodal-face-selection-stage"></div>
+          <p id="multimodalFaceSelectionCoords" class="readonly-field">Aucune zone dessinée.</p>
+        </div>
+        <footer class="dialog-footer">
+          <button id="resetMultimodalFaceSelectionBtn" class="secondary-button" type="button">Réinitialiser</button>
+          <button id="saveMultimodalFaceSelectionBtn" class="primary-button" type="button">Valider la sélection</button>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog id="termSegmentsDialog" class="dialog-panel term-segments-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p id="termSegmentsKicker" class="dialog-kicker">Segments trouvés</p>
+            <h2 id="termSegmentsTitle">Occurrences d'une forme</h2>
+            <p id="termSegmentsMeta" class="muted"></p>
+          </div>
+          <button id="closeTermSegmentsBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+        <div id="termSegmentsList" class="term-segments-list"></div>
+        <footer id="termSegmentsFooter" class="dialog-footer" hidden>
+          <p id="termSegmentsStatus" class="term-segments-status muted"></p>
+          <div class="dialog-footer-actions">
+            <button id="saveChi2PngBtn" class="secondary-button" type="button" hidden>Enregistrer en PNG</button>
+            <button id="buildSubcorpusBtn" class="primary-button" type="button">Construire un sous-corpus</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

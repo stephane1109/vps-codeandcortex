@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">Principe de la vectorisation pour le suivi longitudinal</title>
+  <desc id="desc">Deux séances sont découpées en termes puis transformées en fréquences relatives pour être comparées.</desc>
+  <rect width="1200" height="640" fill="#f7f4ef"/>
+  <rect x="40" y="40" width="1120" height="560" rx="26" fill="#fffaf2" stroke="#d7c9af" stroke-width="2"/>
+  <text x="600" y="88" text-anchor="middle" font-family="Georgia, serif" font-size="32" fill="#3a3128">Principe de la vectorisation</text>
+  <text x="600" y="122" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#6a5745">Chaque séance est transformée en profil lexical avant comparaison.</text>
+
+  <rect x="75" y="180" width="260" height="150" rx="18" fill="#fbefe5" stroke="#d79f74" stroke-width="2"/>
+  <text x="205" y="212" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#8d4f22">Séance 1</text>
+  <text x="205" y="252" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#4d4032">angoisse sommeil travail</text>
+  <text x="205" y="284" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#4d4032">angoisse fatigue</text>
+
+  <rect x="75" y="380" width="260" height="150" rx="18" fill="#e8f2fb" stroke="#78a9d6" stroke-width="2"/>
+  <text x="205" y="412" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1f5d8e">Séance 2</text>
+  <text x="205" y="452" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#33485b">sommeil travail sortie</text>
+  <text x="205" y="484" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#33485b">mieux apaisement</text>
+
+  <path d="M355 255 C410 255, 430 255, 485 255" fill="none" stroke="#8f816d" stroke-width="5" stroke-linecap="round"/>
+  <polygon points="485,255 463,243 463,267" fill="#8f816d"/>
+  <path d="M355 455 C410 455, 430 455, 485 455" fill="none" stroke="#8f816d" stroke-width="5" stroke-linecap="round"/>
+  <polygon points="485,455 463,443 463,467" fill="#8f816d"/>
+
+  <rect x="505" y="150" width="300" height="390" rx="20" fill="#fff" stroke="#c9beb0" stroke-width="2"/>
+  <text x="655" y="188" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#45392f">Vecteur lexical</text>
+  <text x="655" y="220" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" fill="#6a5745">Fréquences relatives des termes</text>
+
+  <line x1="545" y1="252" x2="765" y2="252" stroke="#b9ab97" stroke-width="1.5"/>
+  <line x1="545" y1="304" x2="765" y2="304" stroke="#b9ab97" stroke-width="1.5"/>
+  <line x1="545" y1="356" x2="765" y2="356" stroke="#b9ab97" stroke-width="1.5"/>
+  <line x1="545" y1="408" x2="765" y2="408" stroke="#b9ab97" stroke-width="1.5"/>
+  <line x1="545" y1="460" x2="765" y2="460" stroke="#b9ab97" stroke-width="1.5"/>
+  <line x1="545" y1="512" x2="765" y2="512" stroke="#b9ab97" stroke-width="1.5"/>
+
+  <text x="585" y="240" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#4c4035">Terme</text>
+  <text x="690" y="240" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#4c4035">Séance 1</text>
+  <text x="770" y="240" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#4c4035">Séance 2</text>
+
+  <text x="585" y="285" font-family="Arial, sans-serif" font-size="19" fill="#4c4035">angoisse</text>
+  <text x="698" y="285" font-family="Arial, sans-serif" font-size="19" fill="#8d4f22">0.18</text>
+  <text x="778" y="285" font-family="Arial, sans-serif" font-size="19" fill="#1f5d8e">0.03</text>
+
+  <text x="585" y="337" font-family="Arial, sans-serif" font-size="19" fill="#4c4035">sommeil</text>
+  <text x="698" y="337" font-family="Arial, sans-serif" font-size="19" fill="#8d4f22">0.10</text>
+  <text x="778" y="337" font-family="Arial, sans-serif" font-size="19" fill="#1f5d8e">0.16</text>
+
+  <text x="585" y="389" font-family="Arial, sans-serif" font-size="19" fill="#4c4035">travail</text>
+  <text x="698" y="389" font-family="Arial, sans-serif" font-size="19" fill="#8d4f22">0.08</text>
+  <text x="778" y="389" font-family="Arial, sans-serif" font-size="19" fill="#1f5d8e">0.14</text>
+
+  <text x="585" y="441" font-family="Arial, sans-serif" font-size="19" fill="#4c4035">fatigue</text>
+  <text x="698" y="441" font-family="Arial, sans-serif" font-size="19" fill="#8d4f22">0.07</text>
+  <text x="778" y="441" font-family="Arial, sans-serif" font-size="19" fill="#1f5d8e">0.01</text>
+
+  <text x="585" y="493" font-family="Arial, sans-serif" font-size="19" fill="#4c4035">sortie</text>
+  <text x="698" y="493" font-family="Arial, sans-serif" font-size="19" fill="#8d4f22">0.00</text>
+  <text x="778" y="493" font-family="Arial, sans-serif" font-size="19" fill="#1f5d8e">0.11</text>
+
+  <path d="M826 345 C875 345, 900 345, 948 345" fill="none" stroke="#8f816d" stroke-width="5" stroke-linecap="round"/>
+  <polygon points="948,345 926,333 926,357" fill="#8f816d"/>
+
+  <rect x="968" y="180" width="155" height="290" rx="18" fill="#f5f0e9" stroke="#c9beb0" stroke-width="2"/>
+  <text x="1045" y="220" text-anchor="middle" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#45392f">Comparaison</text>
+  <text x="1045" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#4c4035">Cosinus</text>
+  <text x="1045" y="302" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#1f5d8e">0.74</text>
+  <text x="1045" y="352" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#4c4035">Distance</text>
+  <text x="1045" y="382" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#b04b15">0.31</text>
+  <text x="1045" y="430" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#6a5745">Les deux scores sont</text>
+  <text x="1045" y="452" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#6a5745">calculés sur les profils</text>
+  <text x="1045" y="474" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#6a5745">lexicaux normalisés.</text>
+</svg>
