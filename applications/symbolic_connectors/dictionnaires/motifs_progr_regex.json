@@ -1,0 +1,100 @@
+{
+  "name": "motifs_progr_regex",
+  "description": "Motifs regex minimalistes pour détecter des structures de type programmation (condition, branchement, séquence) dans un corpus en minuscules, une fois le texte déjà découpé en segments.",
+  "patterns": [
+    {
+      "interpretation": "si X, alors je fais Z",
+      "label": "si … alors - si X, alors je fais Z",
+      "category": "IF_THEN",
+      "regex": "\\bsi\\b.*?\\balors\\b"
+    },
+    {
+      "interpretation": "si X, alors je fais Z",
+      "label": "si … alors - si X, alors je fais Z",
+      "category": "IF_THEN",
+      "regex": "\\bsi\\b.*?\\balors\\b"
+    },
+    {
+      "interpretation": "si X, tu peux faire Z (alors implicite)",
+      "label": "si … tu peux - si X, tu peux faire Z",
+      "category": "IF_THEN_IMPLICITE",
+      "regex": "\\bsi\\b.*?\\btu\\s+peux\\b"
+    },
+    {
+      "interpretation": "si X, tu dois faire Z (alors implicite)",
+      "label": "si … tu dois - si X, tu dois faire Z",
+      "category": "IF_THEN_IMPLICITE",
+      "regex": "\\bsi\\b.*?\\btu\\s+dois\\b"
+    },
+    {
+      "interpretation": "si X, tu fais Z (alors implicite)",
+      "label": "si … tu fais - si X, tu fais Z",
+      "category": "IF_THEN_IMPLICITE",
+      "regex": "\\bsi\\b.*?\\btu\\s+fais\\b"
+    },
+    {
+      "interpretation": "si X, il faut faire Z (alors implicite)",
+      "label": "si … il faut - si X, il faut faire Z",
+      "category": "IF_THEN_IMPLICITE",
+      "regex": "\\bsi\\b.*?\\bil\\s+faut\\b"
+    },
+    {
+      "interpretation": "si X, je vais faire Z (alors implicite)",
+      "label": "si … je vais - si X, je vais faire Z",
+      "category": "IF_THEN_IMPLICITE",
+      "regex": "\\bsi\\b.*?\\bje\\s+vais\\b"
+    },
+    {
+      "interpretation": "si X, on va faire Z (alors implicite)",
+      "label": "si … on va - si X, on va faire Z",
+      "category": "IF_THEN_IMPLICITE",
+      "regex": "\\bsi\\b.*?\\bon\\s+va\\b"
+    },
+    {
+      "interpretation": "si X ou Y, (alors) je fais Z",
+      "label": "si … ou … (alors) - si X ou Y, (alors) je fais Z",
+      "category": "IF_OR",
+      "regex": "\\bsi\\b.*?\\bou\\b.*?(?:\\balors\\b)?"
+    },
+    {
+      "interpretation": "si X, alors je fais Z, sinon je fais W",
+      "label": "si … alors … sinon - si X, alors je fais Z, sinon je fais W",
+      "category": "IF_THEN_ELSE",
+      "regex": "\\bsi\\b.*?\\balors\\b.*?\\bsinon\\b"
+    },
+    {
+      "interpretation": "d’abord je fais X, puis je fais Y, (ensuite je fais Z)",
+      "label": "d’abord … puis … (ensuite) - d’abord je fais X, puis je fais Y, (ensuite je fais Z)",
+      "category": "PROCEDURE",
+      "regex": "\\bd[’']?\\s*abord\\b.*?\\bpuis\\b(?:.*?\\bensuite\\b)?"
+    },
+    {
+      "interpretation": "si X ou Y ou (si) Z, (alors) je fais W",
+      "label": "si … ou … ou - si X ou Y ou (si) Z, (alors) je fais W",
+      "category": "IF_OR_OR",
+      "regex": "\\bsi\\b[^.!?;:\\n]*?\\bou\\b[^.!?;:\\n]*?\\bou\\b(?:\\s*\\bsi\\b)?[^.!?;:\\n]*?(?:\\balors\\b)?",
+      "notes": "Deux alternatives OU successives. La seconde peut être de la forme « ou si … ». « alors » reste optionnel."
+    },
+    {
+      "interpretation": "si X, ou si Y, je fais Z",
+      "label": "si … ou si - si X, ou si Y, je fais Z",
+      "category": "IF_OR_IF",
+      "regex": "\\bsi\\b[^.!?;:\\n]*?\\bou\\b\\s*\\bsi\\b[^.!?;:\\n]*?",
+      "notes": "Détecte « si … ou si … » sans traverser la ponctuation."
+    },
+    {
+      "label": "si … et … alors - si X et Y, alors je fais Z",
+      "category": "IF_AND_THEN",
+      "regex": "\\bsi\\b[^.!?;:\\n]*?\\bet\\b[^.!?;:\\n]*?\\balors\\b",
+      "scope": "sentence",
+      "notes": "Cumul de conditions (AND) avec marqueur de conséquence explicite."
+    },
+    {
+      "label": "si … et … (sans alors) - si X et Y, je fais Z",
+      "category": "IF_AND_NO_THEN",
+      "regex": "\\bsi\\b(?![^.!?;:\\n]*?\\balors\\b)[^.!?;:\\n]*?\\bet\\b[^.!?;:\\n]*?",
+      "scope": "sentence",
+      "notes": "Cumul de conditions (AND) sans « alors » dans la même phrase/segment."
+    }
+  ]
+}

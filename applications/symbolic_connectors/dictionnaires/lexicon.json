@@ -1,0 +1,46 @@
+{
+  "entries": [
+    {
+      "ortho": "alors",
+      "Lexique3__cgram": "ADV",
+      "Lexique3__freqfilms2": 1777.65,
+      "Lexique3__freqlivres": 1033.78,
+      "WorldLex_FR__BlogFreq": 42441
+    },
+    {
+      "ortho": "et",
+      "Lexique3__cgram": "CON",
+      "Lexique3__freqfilms2": 12909.08,
+      "Lexique3__freqlivres": 20879.73,
+      "WorldLex_FR__BlogFreq": 739116
+    },
+    {
+      "ortho": "ou",
+      "Lexique3__cgram": "CON",
+      "Lexique3__freqfilms2": 1583.95,
+      "Lexique3__freqlivres": 2429.86,
+      "WorldLex_FR__BlogFreq": 104334
+    },
+    {
+      "ortho": "ou",
+      "Lexique3__cgram": "PRO:per",
+      "Lexique3__freqfilms2": 0.14,
+      "Lexique3__freqlivres": 0,
+      "WorldLex_FR__BlogFreq": 104334
+    },
+    {
+      "ortho": "si",
+      "Lexique3__cgram": "CON",
+      "Lexique3__freqfilms2": 1374.43,
+      "Lexique3__freqlivres": 933.99,
+      "WorldLex_FR__BlogFreq": 84190
+    },
+    {
+      "ortho": "sinon",
+      "Lexique3__cgram": "CON",
+      "Lexique3__freqfilms2": 164.85,
+      "Lexique3__freqlivres": 89.26,
+      "WorldLex_FR__BlogFreq": 4266
+    }
+  ]
+}
