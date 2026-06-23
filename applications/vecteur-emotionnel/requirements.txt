@@ -1,0 +1,14 @@
+streamlit>=1.34
+numpy<2
+pandas
+matplotlib
+seaborn
+altair>=5,<6
+vl-convert-python
+opencv-python-headless<5
+scikit-learn
+fer
+tensorflow-cpu==2.15.*
+yt-dlp
+youtube-transcript-api
+XlsxWriter
