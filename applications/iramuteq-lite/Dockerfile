@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     IRAMUTEQ_APP_DATA_DIR=/data/app \
     IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library \
+    IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1 \
     RGL_USE_NULL=TRUE \
     PORT=8000
 
@@ -45,9 +46,6 @@ RUN useradd --create-home --shell /bin/bash app
 
 COPY docker/requirements-python.txt /tmp/requirements-python.txt
 RUN pip install --upgrade pip setuptools wheel && pip install -r /tmp/requirements-python.txt
-
-COPY docker/install-r-packages.R /tmp/install-r-packages.R
-RUN Rscript /tmp/install-r-packages.R
 
 WORKDIR /app
 

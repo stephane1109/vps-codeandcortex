@@ -24,3 +24,9 @@ Version **web/VPS uniquement** de `iramuteq-lite`, prévue pour Coolify sur le V
 - Base Directory : `/applications/iramuteq-lite`
 - Port : `8000`
 - Domaine conseillé : `iramuteqlite.codeandcortex.fr`
+
+## Note build VPS
+
+- le conteneur n'installe plus tous les packages R pendant le `docker build`
+- le bootstrap applicatif installe les dependances texte essentielles au premier usage
+- les dependances multimodales Python restent optionnelles par defaut

@@ -355,6 +355,8 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         "wordcloud": "wordcloud",
         "altair": "altair",
         "vl_convert": "vl-convert-python",
+    }
+    python_optional = {
         "yt_dlp": "yt-dlp",
         "imageio_ffmpeg": "imageio-ffmpeg",
         "librosa": "librosa",
@@ -362,6 +364,7 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         "faster_whisper": "faster-whisper",
         "mediapipe": "mediapipe",
     }
+    python_all = {**python_required, **python_optional}
     python_install_targets = {
         "numpy": "numpy<2",
         "sklearn": "scikit-learn",
@@ -398,23 +401,23 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
             if importlib.util.find_spec(import_name) is None:
                 continue
             try:
-                installed = importlib_metadata.version(python_required[import_name])
+                installed = importlib_metadata.version(python_all[import_name])
             except Exception:
                 continue
             if parse_version_token(installed) < parse_version_token(minimum):
                 outdated.append(import_name)
         if importlib.util.find_spec("numpy") is not None:
             try:
-                installed_numpy = importlib_metadata.version(python_required["numpy"])
+                installed_numpy = importlib_metadata.version(python_all["numpy"])
             except Exception:
                 installed_numpy = ""
             if parse_version_token(installed_numpy) >= (2,):
                 outdated.append("numpy")
         return outdated
 
-    def detect_missing_python_packages() -> list[str]:
+    def detect_missing_python_packages(package_map: dict[str, str] | None = None) -> list[str]:
         missing: list[str] = []
-        for import_name in python_required:
+        for import_name in (package_map or python_all):
             if importlib.util.find_spec(import_name) is None:
                 missing.append(import_name)
         return missing
@@ -535,7 +538,17 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
     missing_python_before = detect_missing_python_packages()
     broken_python_before = detect_broken_python_packages()
     outdated_python_before = detect_outdated_python_packages()
-    repair_python_before = sorted(set(missing_python_before + broken_python_before + outdated_python_before))
+    install_optional_python = str(os.environ.get("IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    repair_python_before = sorted(
+        set(detect_missing_python_packages(python_required) + [name for name in broken_python_before if name in python_required] + [name for name in outdated_python_before if name in python_required])
+    )
+    if install_optional_python:
+        repair_python_before = sorted(set(repair_python_before + [name for name in missing_python_before if name in python_optional] + [name for name in broken_python_before if name in python_optional] + [name for name in outdated_python_before if name in python_optional]))
     installed_python_now: list[str] = []
     python_install_error: str | None = None
     missing_python_after = sorted(set(missing_python_before + broken_python_before))

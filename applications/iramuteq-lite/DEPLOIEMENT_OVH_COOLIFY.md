@@ -44,15 +44,24 @@ PORT=8000
 IRAMUTEQ_APP_DATA_DIR=/data/app
 IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library
 RGL_USE_NULL=TRUE
+IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
 ```
 
 Optionnel en environnement non conteneurisé :
 
 ```env
 IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
+IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1
 ```
 
-Par défaut, le bootstrap vérifie les dépendances sans faire d'installation dynamique au démarrage.
+Par défaut dans cette image VPS, le bootstrap applicatif est autorisé a installer les dependances texte manquantes au premier usage.
+Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1` est defini.
+
+## Pourquoi ce choix
+
+- le build Coolify echouait parce que l'image compilait trop de packages R et Python pendant la construction
+- l'image est maintenant beaucoup plus rapide a construire
+- les dependances coeur texte sont installees a la demande par l'application
 
 ## Domaine et sous-domaine
 

@@ -8,8 +8,3 @@ matplotlib
 altair
 vl-convert-python
 pillow
-yt-dlp
-imageio-ffmpeg
-librosa
-opencv-python-headless
-faster-whisper
