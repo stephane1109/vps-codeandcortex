@@ -6,7 +6,6 @@
     --couleur-texte: #1f1f1f;
     --couleur-secondaire: #666666;
     --couleur-bordure: #dddddd;
-    --couleur-inactive: #aaaaaa;
     --ombre-carte: 0 12px 28px rgba(0, 0, 0, 0.08);
 }
 
@@ -173,17 +172,6 @@ h1 {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--couleur-accent);
-}
-
-.inactif {
-    pointer-events: none;
-    color: var(--couleur-inactive);
-    background: #f7f7f7;
-}
-
-.inactif .icone,
-.inactif .statut {
-    color: var(--couleur-inactive);
 }
 
 .pied {
