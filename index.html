@@ -9,6 +9,7 @@
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-HRHJCYTP4N"></script>
@@ -19,243 +20,6 @@
 
       gtag('config', 'G-HRHJCYTP4N');
     </script>
-
-    <style>
-        ...
-    </style>
-</head>
-
-    <style>
-        :root {
-            --couleur-principale: #111111;
-            --couleur-accent: #FF4B4B;
-            --couleur-fond: #f4f4f2;
-            --couleur-carte: #ffffff;
-            --couleur-texte: #1f1f1f;
-            --couleur-secondaire: #666666;
-            --couleur-bordure: #dddddd;
-            --couleur-inactive: #aaaaaa;
-            --ombre-carte: 0 14px 34px rgba(0, 0, 0, 0.08);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            padding: 48px 22px;
-            font-family: "Inter", Arial, sans-serif;
-            background: var(--couleur-fond);
-            color: var(--couleur-texte);
-        }
-
-        .page {
-            width: 100%;
-            max-width: 1180px;
-            margin: 0 auto;
-        }
-
-        .entete {
-            margin-bottom: 46px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            gap: 24px;
-            border-bottom: 1px solid var(--couleur-bordure);
-            padding-bottom: 28px;
-        }
-
-        .bloc-titre {
-            max-width: 720px;
-        }
-
-        .sur-titre {
-            margin: 0 0 14px 0;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.10em;
-            text-transform: uppercase;
-            color: var(--couleur-accent);
-        }
-
-        h1 {
-            margin: 0;
-            font-size: clamp(38px, 6vw, 72px);
-            line-height: 0.95;
-            font-weight: 600;
-            letter-spacing: -0.055em;
-            color: var(--couleur-principale);
-        }
-
-        .description {
-            margin: 22px 0 0 0;
-            max-width: 620px;
-            font-size: 17px;
-            line-height: 1.55;
-            color: var(--couleur-secondaire);
-        }
-
-        .lien-site {
-            color: var(--couleur-principale);
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 700;
-            border: 1px solid var(--couleur-bordure);
-            background: #ffffff;
-            padding: 12px 16px;
-            white-space: nowrap;
-            transition: all 0.25s ease;
-        }
-
-        .lien-site:hover {
-            border-color: var(--couleur-accent);
-            color: var(--couleur-accent);
-        }
-
-        .etat-serveur {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 28px;
-        }
-
-        .indicateur {
-            background: #ffffff;
-            border: 1px solid var(--couleur-bordure);
-            padding: 18px;
-        }
-
-        .indicateur .label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--couleur-secondaire);
-        }
-
-        .indicateur .valeur {
-            font-size: 22px;
-            font-weight: 700;
-            color: var(--couleur-principale);
-        }
-
-        .grille-applications {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 18px;
-        }
-
-        .carte-application {
-            aspect-ratio: 1 / 1;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 24px;
-            background: var(--couleur-carte);
-            border: 1px solid var(--couleur-bordure);
-            color: var(--couleur-texte);
-            text-decoration: none;
-            transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-        }
-
-        .carte-application:hover {
-            transform: translateY(-6px);
-            border-color: var(--couleur-accent);
-            box-shadow: var(--ombre-carte);
-        }
-
-        .icone {
-            font-size: 28px;
-            color: var(--couleur-accent);
-        }
-
-        .contenu-carte {
-            margin-top: auto;
-        }
-
-        .titre-application {
-            display: block;
-            margin-bottom: 10px;
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.03em;
-        }
-
-        .description-application {
-            display: block;
-            font-size: 13px;
-            line-height: 1.45;
-            color: var(--couleur-secondaire);
-        }
-
-        .statut {
-            position: absolute;
-            top: 18px;
-            right: 18px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: var(--couleur-accent);
-        }
-
-        .inactif {
-            pointer-events: none;
-            color: var(--couleur-inactive);
-            background: #f7f7f7;
-        }
-
-        .inactif .icone,
-        .inactif .statut {
-            color: var(--couleur-inactive);
-        }
-
-        .pied {
-            margin-top: 34px;
-            font-size: 13px;
-            color: var(--couleur-secondaire);
-            line-height: 1.5;
-        }
-
-        @media (max-width: 1050px) {
-            .grille-applications {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .etat-serveur {
-                grid-template-columns: 1fr;
-            }
-
-            .entete {
-                align-items: flex-start;
-                flex-direction: column;
-            }
-        }
-
-        @media (max-width: 620px) {
-            body {
-                padding: 32px 16px;
-            }
-
-            .grille-applications {
-                grid-template-columns: 1fr;
-            }
-
-            .carte-application {
-                aspect-ratio: auto;
-                min-height: 210px;
-            }
-
-            .lien-site {
-                width: 100%;
-                text-align: center;
-            }
-        }
-    </style>
 </head>
 
 <body>
@@ -294,48 +58,48 @@
 
         <section class="grille-applications" aria-label="Applications disponibles">
 
-        <a href="https://europresse.codeandcortex.fr" class="carte-application" target="_blank">
-            <span class="statut">Actif</span>
-            <i class="icone fas fa-file-import"></i>
-            <span class="contenu-carte">
-                <span class="titre-application">Europresse → IRaMuTeQ</span>
-                <span class="description-application">Conversion d’exports Europresse vers un corpus compatible avec IRaMuTeQ.</span>
-        </span>
+            <a href="https://europresse.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut">Actif</span>
+                <i class="icone fas fa-file-import"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Europresse → IRaMuTeQ</span>
+                    <span class="description-application">Conversion d’exports Europresse vers un corpus compatible avec IRaMuTeQ.</span>
+                </span>
             </a>
 
-            <a href="https://analyse.codeandcortex.fr/afc" class="carte-application" target="_blank">
-                <span class="statut">Bientôt</span>
+            <a href="https://multimedia.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut"></span>
                 <i class="icone fas fa-chart-pie"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">AFC</span>
-                    <span class="description-application">Analyse factorielle des correspondances sur tableaux lexicaux.</span>
+                    <span class="description-application">Pour extraire des fichiers images, mp4, mp3 depuis une vidéo YouTube</span>
                 </span>
             </a>
 
-            <a href="https://analyse.codeandcortex.fr/chd" class="carte-application" target="_blank">
-                <span class="statut">Bientôt</span>
+            <a href="https://extractcommentyoutube.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut"></span>
                 <i class="icone fas fa-sitemap"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">CHD</span>
-                    <span class="description-application">Classification hiérarchique descendante inspirée des usages IRaMuTeQ.</span>
+                    <span class="description-application">Extraire les commentaires YouTube - clé Google obligatoire</span>
                 </span>
             </a>
 
-            <a href="https://analyse.codeandcortex.fr/lda" class="carte-application" target="_blank">
-                <span class="statut">Bientôt</span>
+            <a href="https://scrapingreddit.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut"></span>
                 <i class="icone fas fa-diagram-project"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">LDA</span>
-                    <span class="description-application">Modélisation thématique et exploration des distributions lexicales.</span>
+                    <span class="description-application">Scraper les posts Reddit</span>
                 </span>
             </a>
 
-            <a href="https://analyse.codeandcortex.fr/corpus" class="carte-application" target="_blank">
-                <span class="statut">Bientôt</span>
+            <a href="https://infosyoutube.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut"></span>
                 <i class="icone fas fa-database"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Corpus</span>
-                    <span class="description-application">Gestion des fichiers importés, corpus nettoyés et variables textuelles.</span>
+                    <span class="description-application">Scraper les infos d'une chaines YouTube</span>
                 </span>
             </a>
 
@@ -348,12 +112,12 @@
                 </span>
             </a>
 
-            <a href="https://analyse.codeandcortex.fr/tickets" class="carte-application" target="_blank">
-                <span class="statut">Bientôt</span>
+            <a href="https://cooccurrences.codeandcortex.fr" class="carte-application" target="_blank">
+                <span class="statut"></span>
                 <i class="icone fas fa-ticket"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Tickets</span>
-                    <span class="description-application">File d’attente des traitements lourds et suivi des analyses en cours.</span>
+                    <span class="description-application">Cooccurences à partir d'un mot clé</span>
                 </span>
             </a>
 
@@ -363,6 +127,42 @@
                 <span class="contenu-carte">
                     <span class="titre-application">VPS</span>
                     <span class="description-application">Page d’accueil du serveur applicatif Code & Cortex.</span>
+                </span>
+            </a>
+
+            <a href="https://analyse.codeandcortex.fr" class="carte-application inactif">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-layer-group"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Analyse</span>
+                    <span class="description-application">Interface générale pour les traitements textuels et statistiques.</span>
+                </span>
+            </a>
+
+            <a href="https://iramuteqlite.codeandcortex.fr" class="carte-application inactif">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-project-diagram"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">IRaMuTeQ Lite</span>
+                    <span class="description-application">Préparation de corpus et analyses lexicales en environnement léger.</span>
+                </span>
+            </a>
+
+            <a href="https://extractionmultimedia.codeandcortex.fr" class="carte-application inactif">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-photo-film"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Extraction multimédia</span>
+                    <span class="description-application">Extraction et préparation de ressources image, audio et vidéo.</span>
+                </span>
+            </a>
+
+            <a href="https://tickets.codeandcortex.fr" class="carte-application inactif">
+                <span class="statut">Bientôt</span>
+                <i class="icone fas fa-list-check"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">File d’attente</span>
+                    <span class="description-application">Gestion des tickets d’entrée et limitation des traitements lourds.</span>
                 </span>
             </a>
 
