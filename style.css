@@ -120,16 +120,17 @@ h1 {
 }
 
 .carte-application {
-    min-height: 168px;
+    min-height: 160px;
     position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 18px;
+    display: grid;
+    grid-template-rows: 34px 1fr;
+    row-gap: 12px;
+    padding: 18px 14px 16px 14px;
     background: var(--couleur-carte);
     border: 1px solid var(--couleur-bordure);
     color: var(--couleur-texte);
     text-decoration: none;
+    text-align: center;
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
@@ -140,33 +141,47 @@ h1 {
 }
 
 .icone {
+    height: 34px;
+    line-height: 34px;
     font-size: 24px;
     color: var(--couleur-accent);
+    justify-self: center;
+    align-self: start;
 }
 
 .contenu-carte {
-    margin-top: auto;
+    display: grid;
+    grid-template-rows: 46px auto;
+    align-items: start;
 }
 
 .titre-application {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    margin: 0;
+    font-size: 15px;
     font-weight: 700;
+    line-height: 1.15;
     letter-spacing: -0.03em;
+    text-align: center;
 }
 
 .description-application {
     display: block;
+    max-width: 190px;
+    margin: 0 auto;
     font-size: 12px;
     line-height: 1.35;
     color: var(--couleur-secondaire);
+    text-align: center;
 }
 
 .statut {
     position: absolute;
-    top: 14px;
-    right: 14px;
+    top: 12px;
+    right: 12px;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.06em;
