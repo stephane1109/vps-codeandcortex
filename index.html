@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 
-    <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-HRHJCYTP4N"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -22,7 +21,7 @@
     </script>
 </head>
 
-<body>
+<body data-dashboard-endpoint="/api/tickets/dashboard">
     <main class="page">
 
         <header class="entete">
@@ -41,129 +40,265 @@
 
         <section class="etat-serveur" aria-label="État du serveur">
             <div class="indicateur">
-                <span class="label">Utilisateurs actifs</span>
-                <span class="valeur">0 / 3</span>
+                <span class="label">Sessions actives</span>
+                <span class="valeur" id="global-active">0 · charge 0/0</span>
             </div>
 
             <div class="indicateur">
                 <span class="label">File d’attente</span>
-                <span class="valeur">0</span>
+                <span class="valeur" id="global-queue">0</span>
             </div>
 
             <div class="indicateur">
                 <span class="label">Serveur de calcul</span>
-                <span class="valeur">Disponible</span>
+                <span class="valeur" id="global-server">Initialisation</span>
             </div>
         </section>
 
         <section class="grille-applications" aria-label="Applications disponibles">
 
-            <a href="https://europresse.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+            <a href="https://europresse.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="europress-to-iramuteq">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-file-import"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Europresse → IRaMuTeQ</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
                     <span class="description-application">Conversion d’exports Europresse vers un corpus compatible avec IRaMuTeQ.</span>
                 </span>
             </a>
 
-            <a href="https://multimedia.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut"></span>
+            <a href="https://multimedia.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="extraction-multimedia">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-chart-pie"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Extraction Multimédia</span>
-                    <span class="description-application">Pour extraire des fichiers images, mp4, mp3 depuis une vidéo YouTube</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Pour extraire des fichiers images, mp4, mp3 depuis une vidéo YouTube.</span>
                 </span>
             </a>
 
-            <a href="https://extractcommentyoutube.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut"></span>
+            <a href="https://extractcommentyoutube.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="extract_comments_youtube">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-sitemap"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Extraction YouTube</span>
-                    <span class="description-application">Extraire les commentaires YouTube - clé Google obligatoire</span>
+                    <span class="meta-application" data-status-meta>0 / 3 actif · 0 attente</span>
+                    <span class="description-application">Extraire les commentaires YouTube avec clé Google obligatoire.</span>
                 </span>
             </a>
 
-            <a href="https://scrapingreddit.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut"></span>
+            <a href="https://scrapingreddit.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="scraping_reddit">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-diagram-project"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">Scrapper Reddit</span>
-                    <span class="description-application">Scraper les posts Reddit</span>
+                    <span class="titre-application">Scraper Reddit</span>
+                    <span class="meta-application" data-status-meta>0 / 3 actif · 0 attente</span>
+                    <span class="description-application">Scraper les posts Reddit.</span>
                 </span>
             </a>
 
-            <a href="https://infosyoutube.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+            <a href="https://infosyoutube.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="extraction_infos_youtube">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-database"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">Reseau de vidéo YouTube</span>
-                    <span class="description-application">Scraper les infos d'une chaines YouTube</span>
+                    <span class="titre-application">Réseau de vidéo YouTube</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Scraper les informations d’une chaîne YouTube.</span>
                 </span>
             </a>
 
             <a href="https://analyse.codeandcortex.fr/exports" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" aria-hidden="true"></span>
+                    <span class="statut">Service</span>
+                </span>
                 <i class="icone fas fa-file-export"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Exports</span>
+                    <span class="meta-application">Accès direct</span>
                     <span class="description-application">Téléchargement des résultats, tableaux, graphiques et fichiers CSV.</span>
                 </span>
             </a>
 
-            <a href="https://cooccurrences.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+            <a href="https://cooccurrences.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="analyse_cooccurrences">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-ticket"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Cooccurrences</span>
-                    <span class="description-application">Cooccurences à partir d'un mot clé</span>
+                    <span class="meta-application" data-status-meta>0 / 3 actif · 0 attente</span>
+                    <span class="description-application">Cooccurrences à partir d’un mot clé.</span>
                 </span>
             </a>
 
             <a href="https://vps.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" aria-hidden="true"></span>
+                    <span class="statut">Vitrine</span>
+                </span>
                 <i class="icone fas fa-server"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">VPS</span>
+                    <span class="meta-application">Page d’accueil</span>
                     <span class="description-application">Page d’accueil du serveur applicatif Code & Cortex.</span>
                 </span>
             </a>
 
-            <a href="https://vecteuremotionnel.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+            <a href="https://vecteuremotionnel.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="vecteur-emotionnel">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-layer-group"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">Vecteurs Emotionnel</span>
-                    <span class="description-application">Vecteur emmotionnel</span>
+                    <span class="titre-application">Vecteur émotionnel</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Analyse émotionnelle multimodale à forte charge serveur.</span>
                 </span>
             </a>
 
-            <a href="https://iramuteqlite.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+            <a href="https://iramuteqlite.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="iramuteq-lite">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-project-diagram"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">IRaMuTeQ Lite</span>
-                    <span class="description-application">CHD, AFC et test LDA</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">CHD, AFC et test LDA avec limitation recommandée à un calcul lourd simultané.</span>
                 </span>
             </a>
 
-            <a href="https://stopmotion.codeandcortex.fr" class="carte-application" target="_blank">
-                <span class="statut">Actif</span>
+            <a href="https://stopmotion.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="stopmotion-opticalflow">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
                 <i class="icone fas fa-photo-film"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">StopMotion</span>
-                    <span class="description-application">Extraction et génération stopmotion</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Extraction et génération stopmotion avec traitement vidéo coûteux.</span>
                 </span>
             </a>
 
-
         </section>
 
-        <p class="pied">
-            Les indicateurs d’utilisateurs actifs, de file d’attente et de disponibilité du serveur sont statiques pour cette première version. Ils seront rendus dynamiques lors du déploiement de l’application FastAPI.
+        <p class="pied" id="dashboard-note">
+            Les états se rafraîchissent automatiquement dès qu’une API `/api/tickets/dashboard` est branchée sur Redis et `gestion_tickets.py`.
         </p>
 
     </main>
+
+    <script>
+        (function () {
+            const body = document.body;
+            const endpoint = body.dataset.dashboardEndpoint || "/api/tickets/dashboard";
+            const cards = Array.from(document.querySelectorAll("[data-app-id]"));
+            const appIds = cards.map((card) => card.dataset.appId).filter(Boolean);
+            const note = document.getElementById("dashboard-note");
+            const globalActive = document.getElementById("global-active");
+            const globalQueue = document.getElementById("global-queue");
+            const globalServer = document.getElementById("global-server");
+
+            function badgeClassFromState(state, queued) {
+                if (state === "offline") return "hors-ligne";
+                if (queued > 0 || state === "queued" || state === "full") return "attente";
+                if (state === "busy" || state === "active") return "occupee";
+                return "libre";
+            }
+
+            function labelFromState(state, queued) {
+                if (state === "offline") return "Hors ligne";
+                if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
+                if (state === "busy" || state === "active") return "Occupée";
+                return "Libre";
+            }
+
+            function decorateCard(card, payload) {
+                const dot = card.querySelector("[data-status-dot]");
+                const label = card.querySelector("[data-status-label]");
+                const meta = card.querySelector("[data-status-meta]");
+                if (!dot || !label || !meta || !payload) return;
+
+                const stateClass = badgeClassFromState(payload.state, payload.queued || 0);
+                dot.className = "pastille-etat " + stateClass;
+                label.textContent = payload.stateLabel || labelFromState(payload.state, payload.queued || 0);
+                meta.textContent = `${payload.active || 0} / ${payload.maxActive || 0} actif · ${payload.queued || 0} attente`;
+
+                card.classList.remove("libre", "occupee", "attente", "hors-ligne");
+                card.classList.add(stateClass);
+            }
+
+            function decorateGlobal(payload) {
+                if (!payload) return;
+
+                globalActive.textContent = `${payload.activeUsers || 0} · charge ${payload.activeLoad || 0}/${payload.maxLoad || 0}`;
+                globalQueue.textContent = `${payload.totalQueued || 0}`;
+                globalServer.textContent = payload.serverLabel || "Disponible";
+            }
+
+            function applyDashboard(payload) {
+                if (!payload || typeof payload !== "object") return;
+                decorateGlobal(payload.global || null);
+
+                cards.forEach((card) => {
+                    const appId = card.dataset.appId;
+                    const appPayload = payload.apps && payload.apps[appId];
+                    if (appPayload) decorateCard(card, appPayload);
+                });
+
+                if (note) {
+                    note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
+                }
+            }
+
+            async function refreshDashboard() {
+                if (!appIds.length) return;
+
+                const url = new URL(endpoint, window.location.origin);
+                url.searchParams.set("applications", appIds.join(","));
+
+                try {
+                    const response = await fetch(url.toString(), {
+                        headers: { "Accept": "application/json" },
+                        cache: "no-store",
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    applyDashboard(payload);
+                } catch (error) {
+                    if (note) {
+                        note.textContent = "Mode statique actif en attendant l’endpoint FastAPI `/api/tickets/dashboard`.";
+                    }
+                }
+            }
+
+            refreshDashboard();
+            window.setInterval(refreshDashboard, 10000);
+        })();
+    </script>
 </body>
 </html>
