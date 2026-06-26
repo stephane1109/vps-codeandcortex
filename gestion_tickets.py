@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import time
 import uuid
 from typing import Any
@@ -20,8 +19,12 @@ MAX_FILE_ATTENTE_DEFAUT = 20
 APPLICATION_PAR_DEFAUT = "application"
 APPLICATIONS_TICKETS_JSON = "APPLICATIONS_TICKETS_JSON"
 
+# #### NOMS EXACTS DES APPLICATIONS
+# Ici on utilise uniquement les noms exacts des dossiers du dépôt GitHub
+# `applications/`. Aucun alias, aucune faute tolérée, aucune normalisation
+# implicite ne doit transformer le nom d'une application.
 APPLICATIONS_PAR_DEFAUT = {
-    "europress-to-iramuteq": {
+    "europresse-to-iramuteq": {
         "label": "Europresse → IRaMuTeQ",
         "max_active": 2,
         "cout": 1,
@@ -33,23 +36,33 @@ APPLICATIONS_PAR_DEFAUT = {
     },
     "extract_comments_youtube": {
         "label": "Extraction YouTube",
-        "max_active": 3,
-        "cout": 1,
+        "max_active": 2,
+        "cout": 2,
     },
     "scraping_reddit": {
         "label": "Scraping Reddit",
         "max_active": 3,
         "cout": 1,
     },
-    "extraction_infos_youtube": {
+    "Extraction_infos_YouTube": {
         "label": "Réseau de vidéo YouTube",
         "max_active": 2,
         "cout": 1,
     },
     "analyse_cooccurrences": {
         "label": "Cooccurrences",
-        "max_active": 3,
-        "cout": 1,
+        "max_active": 2,
+        "cout": 2,
+    },
+    "symbolic_connectors": {
+        "label": "Symbolic Connectors",
+        "max_active": 1,
+        "cout": 4,
+    },
+    "mp3_to_text": {
+        "label": "MP3 to Text",
+        "max_active": 1,
+        "cout": 4,
     },
     "vecteur-emotionnel": {
         "label": "Vecteur émotionnel",
@@ -61,13 +74,18 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 1,
         "cout": 4,
     },
-    "stopmotion-opticalflow": {
+    "stopmotion_opticalflow": {
         "label": "StopMotion",
         "max_active": 1,
         "cout": 4,
     },
-    "analyses_multi_modales": {
+    "Analyses_multi_modales": {
         "label": "Analyses multi-modales",
+        "max_active": 1,
+        "cout": 4,
+    },
+    "divergence-jensen-shannon": {
+        "label": "Divergence Jensen-Shannon",
         "max_active": 1,
         "cout": 4,
     },
@@ -78,8 +96,18 @@ def connecter_redis():
     """Créer une connexion Redis à partir de la variable d’environnement REDIS_URL."""
     if redis is None:
         raise RuntimeError("Le paquet Python 'redis' doit être installé pour utiliser la file d'attente.")
-    url_redis = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    return redis.from_url(url_redis, decode_responses=True)
+    # #### URL REDIS
+    # Priorite :
+    # 1. REDIS_URL
+    # 2. APP_TICKET_DEFAULT_REDIS_URL
+    # 3. valeur par defaut Coolify : redis://redis:6379/0
+    url_redis = (
+        os.getenv("REDIS_URL", "").strip()
+        or os.getenv("APP_TICKET_DEFAULT_REDIS_URL", "redis://redis:6379/0").strip()
+    )
+    client = redis.from_url(url_redis, decode_responses=True)
+    client.ping()
+    return client
 
 
 def _env_int(name: str, default: int) -> int:
@@ -90,9 +118,11 @@ def _env_int(name: str, default: int) -> int:
 
 
 def normaliser_identifiant_application(application_id: str | None) -> str:
-    value = (application_id or os.getenv("NOM_APPLICATION") or APPLICATION_PAR_DEFAUT).strip().lower()
-    slug = re.sub(r"[^a-z0-9_-]+", "-", value).strip("-")
-    return slug or APPLICATION_PAR_DEFAUT
+    # #### NOM STRICT
+    # On conserve uniquement le nom exact fourni par l'application ou par le
+    # dashboard. Aucun alias n'est appliqué ici.
+    value = (application_id or os.getenv("NOM_APPLICATION") or APPLICATION_PAR_DEFAUT).strip()
+    return value or APPLICATION_PAR_DEFAUT
 
 
 def _configuration_globale() -> dict[str, int]:
@@ -523,6 +553,46 @@ def construire_tableau_de_bord(client_redis, application_ids: list[str] | None =
             "totalQueued": total_queued,
             "serverState": server_state,
             "serverLabel": server_label,
+            "updatedAt": int(time.time()),
+        },
+        "apps": applications,
+    }
+
+
+def construire_tableau_de_bord_indisponible(
+    application_ids: list[str] | None = None,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """Retourner un JSON exploitable meme quand Redis est indisponible."""
+    configuration_globale = _configuration_globale()
+    ids = [normaliser_identifiant_application(item) for item in application_ids] if application_ids else _application_ids_configures()
+    erreur = message or "Redis indisponible pour le tableau de bord."
+
+    applications: dict[str, dict[str, Any]] = {}
+    for application_id in ids:
+        configuration = lire_configuration_tickets(application_id)
+        applications[application_id] = {
+            "applicationId": configuration["application_id"],
+            "label": configuration["label"],
+            "active": 0,
+            "maxActive": configuration["max_active"],
+            "queued": 0,
+            "cost": configuration["cout"],
+            "state": "offline",
+            "stateLabel": "Hors ligne",
+            "message": erreur,
+        }
+
+    return {
+        "global": {
+            "activeUsers": 0,
+            "maxActiveUsers": configuration_globale["capacite_serveur"],
+            "activeLoad": 0,
+            "maxLoad": configuration_globale["capacite_serveur"],
+            "totalQueued": 0,
+            "serverState": "offline",
+            "serverLabel": "Redis hors ligne",
+            "message": erreur,
             "updatedAt": int(time.time()),
         },
         "apps": applications,
