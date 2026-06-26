@@ -22,8 +22,13 @@ Controle d'acces Redis pour les applications Streamlit.
 Variables d'environnement a modifier si besoin :
 
 - REDIS_URL
-  URL de connexion Redis. Sans cette variable, le controle d'acces est desactive.
+  URL de connexion Redis prioritaire.
   Exemple : redis://:motdepasse@redis-tickets:6379/0
+
+- APP_TICKET_DEFAULT_REDIS_URL
+  URL Redis de secours si REDIS_URL n'est pas renseignee.
+  Si ton service Coolify s'appelle simplement "redis", tu peux laisser :
+  redis://redis:6379/0
 
 - APP_TICKET_ID
   Identifiant technique de l'application dans Redis.
@@ -148,13 +153,15 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
 def _redis_client():
     if redis is None:
         return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
-    redis_url = os.getenv("REDIS_URL", "").strip()
-    if not redis_url:
-        return None, "REDIS_URL absent : le controle d'acces est desactive."
+    redis_url_env = os.getenv("REDIS_URL", "").strip()
+    redis_url = redis_url_env or os.getenv("APP_TICKET_DEFAULT_REDIS_URL", "redis://redis:6379/0").strip()
+    redis_source = "REDIS_URL" if redis_url_env else "APP_TICKET_DEFAULT_REDIS_URL / redis://redis:6379/0"
     try:
-        return redis.from_url(redis_url, decode_responses=True), None
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.ping()
+        return client, None
     except Exception as exc:  # pragma: no cover - depend du runtime Redis
-        return None, f"Connexion Redis impossible : {exc}"
+        return None, f"Connexion Redis impossible via {redis_source} : {exc}"
 
 
 def _keys(app_id: str) -> dict[str, str]:
@@ -278,9 +285,28 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
     }
 
 
+def _bypass_snapshot(cfg: dict[str, Any], message: str) -> dict[str, Any]:
+    return _snapshot(None, cfg, None, bypass_message=message)
+
+
+def _error_snapshot(cfg: dict[str, Any], message: str) -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "ticket_id": None,
+        "statut": "erreur",
+        "position": None,
+        "active": 0,
+        "queued": 0,
+        "max_active": cfg["max_active"],
+        "wait_refresh_ms": cfg["wait_refresh_ms"],
+        "heartbeat_ms": cfg["heartbeat_ms"],
+        "message": message,
+    }
+
+
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _snapshot(client, cfg, None, bypass_message="Controle d'acces desactive faute de Redis.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -366,11 +392,11 @@ def release_ticket_for_session(default_app_id: str, app_label: str) -> None:
 def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     if not cfg["enabled"]:
-        return _snapshot(None, cfg, None, bypass_message="Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _bypass_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
-    return _claim_or_refresh(client, cfg, session_id) if client else _snapshot(None, cfg, None, bypass_message=message)
+    return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
 
 
 def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
