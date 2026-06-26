@@ -21,8 +21,13 @@ Controle d'acces Redis pour IRaMuTeQ Lite.
 Variables d'environnement a regler dans Coolify si besoin :
 
 - REDIS_URL
-  URL Redis du VPS. Sans elle, le controle d'acces reste desactive.
+  URL Redis prioritaire du VPS.
   Exemple : redis://:motdepasse@redis:6379/0
+
+- APP_TICKET_DEFAULT_REDIS_URL
+  URL Redis de secours si REDIS_URL n'est pas renseignee.
+  Si ton service Coolify s'appelle "redis", tu peux laisser :
+  redis://redis:6379/0
 
 - APP_TICKET_ID
   Identifiant Redis de l'application. Laisse "iramuteq-lite" par defaut.
@@ -89,13 +94,15 @@ def _config(default_app_id: str = "iramuteq-lite", app_label: str = "IRaMuTeQ Li
 def _redis_client():
     if redis is None:
         return None, "Le paquet Python 'redis' n'est pas installe dans IRaMuTeQ Lite."
-    redis_url = os.getenv("REDIS_URL", "").strip()
-    if not redis_url:
-        return None, "REDIS_URL absent : la file d'attente est desactivee."
+    redis_url_env = os.getenv("REDIS_URL", "").strip()
+    redis_url = redis_url_env or os.getenv("APP_TICKET_DEFAULT_REDIS_URL", "redis://redis:6379/0").strip()
+    redis_source = "REDIS_URL" if redis_url_env else "APP_TICKET_DEFAULT_REDIS_URL / redis://redis:6379/0"
     try:
-        return redis.from_url(redis_url, decode_responses=True), None
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.ping()
+        return client, None
     except Exception as exc:  # pragma: no cover - depend du runtime Redis
-        return None, f"Connexion Redis impossible : {exc}"
+        return None, f"Connexion Redis impossible via {redis_source} : {exc}"
 
 
 def _keys(app_id: str) -> dict[str, str]:
@@ -198,16 +205,31 @@ def _build_snapshot(
     }
 
 
+def _disabled_snapshot(cfg: dict[str, Any], message: str) -> dict[str, Any]:
+    return _build_snapshot(
+        cfg,
+        enabled=False,
+        statut="actif",
+        active=0,
+        queued=0,
+        message=message,
+    )
+
+
+def _error_snapshot(cfg: dict[str, Any], message: str) -> dict[str, Any]:
+    return _build_snapshot(
+        cfg,
+        enabled=True,
+        statut="erreur",
+        active=0,
+        queued=0,
+        message=message,
+    )
+
+
 def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message: str | None = None) -> dict[str, Any]:
     if client is None:
-        return _build_snapshot(
-            cfg,
-            enabled=False,
-            statut="actif",
-            active=0,
-            queued=0,
-            message=bypass_message or "Controle d'acces desactive.",
-        )
+        return _disabled_snapshot(cfg, bypass_message or "Controle d'acces desactive.")
 
     active = _active_count(client, cfg)
     queued = _waiting_count(client, cfg)
@@ -236,14 +258,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
 
 def _public_status(client, cfg: dict[str, Any], bypass_message: str | None = None) -> dict[str, Any]:
     if client is None:
-        return _build_snapshot(
-            cfg,
-            enabled=False,
-            statut="actif",
-            active=0,
-            queued=0,
-            message=bypass_message or "Controle d'acces desactive.",
-        )
+        return _disabled_snapshot(cfg, bypass_message or "Controle d'acces desactive.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -256,7 +271,7 @@ def _public_status(client, cfg: dict[str, Any], bypass_message: str | None = Non
 
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _snapshot(client, cfg, None, bypass_message="Controle d'acces desactive faute de Redis.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -317,7 +332,7 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
 
 def _refresh_existing_ticket(client, cfg: dict[str, Any], session_id: str | None) -> dict[str, Any]:
     if client is None:
-        return _snapshot(client, cfg, None, bypass_message="Controle d'acces desactive faute de Redis.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de verifier le ticket.")
     if not session_id:
         return _public_status(client, cfg)
 
@@ -348,12 +363,12 @@ def _session_id_from_request(request: Request) -> str | None:
 def status_for_request(request: Request) -> tuple[dict[str, Any], str | None]:
     cfg = _config()
     if not cfg["enabled"]:
-        return _snapshot(None, cfg, None, bypass_message="Controle d'acces desactive par APP_TICKET_ENFORCED=0."), None
+        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."), None
 
     client, message = _redis_client()
     session_id = _session_id_from_request(request)
     if client is None:
-        return _snapshot(None, cfg, None, bypass_message=message), session_id
+        return _error_snapshot(cfg, message or "Redis indisponible."), session_id
     return _refresh_existing_ticket(client, cfg, session_id), session_id
 
 
@@ -361,11 +376,11 @@ def claim_ticket_for_request(request: Request) -> tuple[dict[str, Any], str]:
     cfg = _config()
     session_id = _session_id_from_request(request) or uuid.uuid4().hex
     if not cfg["enabled"]:
-        return _snapshot(None, cfg, None, bypass_message="Controle d'acces desactive par APP_TICKET_ENFORCED=0."), session_id
+        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."), session_id
 
     client, message = _redis_client()
     if client is None:
-        return _snapshot(None, cfg, None, bypass_message=message), session_id
+        return _error_snapshot(cfg, message or "Redis indisponible."), session_id
     return _claim_or_refresh(client, cfg, session_id), session_id
 
 
@@ -373,11 +388,11 @@ def heartbeat_ticket_for_request(request: Request) -> tuple[dict[str, Any], str 
     cfg = _config()
     session_id = _session_id_from_request(request)
     if not cfg["enabled"]:
-        return _snapshot(None, cfg, None, bypass_message="Controle d'acces desactive par APP_TICKET_ENFORCED=0."), session_id
+        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."), session_id
 
     client, message = _redis_client()
     if client is None:
-        return _snapshot(None, cfg, None, bypass_message=message), session_id
+        return _error_snapshot(cfg, message or "Redis indisponible."), session_id
     return _refresh_existing_ticket(client, cfg, session_id), session_id
 
 
@@ -385,11 +400,11 @@ def release_ticket_for_request(request: Request) -> dict[str, Any]:
     cfg = _config()
     session_id = _session_id_from_request(request)
     if not cfg["enabled"]:
-        return _snapshot(None, cfg, None, bypass_message="Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     if client is None:
-        return _snapshot(None, cfg, None, bypass_message=message)
+        return _error_snapshot(cfg, message or "Redis indisponible.")
 
     if not session_id:
         return _public_status(client, cfg)
@@ -427,11 +442,11 @@ def clear_session_cookie_headers(response) -> None:
 def require_active_ticket(request: Request) -> dict[str, Any]:
     cfg = _config()
     if not cfg["enabled"]:
-        return _snapshot(None, cfg, None, bypass_message="Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     if client is None:
-        return _snapshot(None, cfg, None, bypass_message=message)
+        raise PermissionError(message or "Redis indisponible pour verifier le ticket actif.")
 
     session_id = _session_id_from_request(request)
     snapshot = _refresh_existing_ticket(client, cfg, session_id)
