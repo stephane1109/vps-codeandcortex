@@ -26,10 +26,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    cmake \
     gfortran \
     git \
     curl \
     wget \
+    pkg-config \
     python3 \
     python3-pip \
     ffmpeg \
@@ -52,6 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglu1-mesa-dev \
     libglib2.0-0 \
     libgsl-dev \
+    libudunits2-dev \
     libsm6 \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
