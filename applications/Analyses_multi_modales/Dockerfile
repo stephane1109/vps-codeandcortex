@@ -12,7 +12,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XDG_CACHE_HOME=/home/app/.cache \
     HF_HOME=/home/app/.cache/huggingface \
     TRANSFORMERS_CACHE=/home/app/.cache/huggingface \
-    ULTRALYTICS_HOME=/home/app/.cache/ultralytics
+    ULTRALYTICS_HOME=/home/app/.cache/ultralytics \
+    APP_TICKET_ID=analyses_multi_modales \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_ENFORCED=1
+
+# #### VARIABLES D'ENVIRONNEMENT A MODIFIER DANS COOLIFY
+# - REDIS_URL
+# - APP_TICKET_MAX_ACTIVE=1 pour garder l'exclusivite
+# - APP_TICKET_COST selon la charge observee
+# - APP_TICKET_TTL_SECONDS si l'analyse dure longtemps
+# - CAPACITE_SERVEUR pour piloter la charge globale du VPS
 
 WORKDIR /app
 

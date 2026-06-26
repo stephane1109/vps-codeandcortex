@@ -8,3 +8,4 @@ matplotlib
 altair
 vl-convert-python
 pillow
+redis>=5,<6

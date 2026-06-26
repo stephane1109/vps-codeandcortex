@@ -7,6 +7,8 @@ const fileInfo = document.getElementById("fileInfo");
 const downloadResultsStatus = document.getElementById("downloadResultsStatus");
 const analysisHistory = document.getElementById("analysisHistory");
 const sidebarStatus = document.getElementById("sidebarStatus");
+const sidebarStatusPill = document.querySelector(".status-pill");
+const sidebarStatusDot = document.querySelector(".status-dot");
 const progress = document.getElementById("progress");
 const progressLabel = document.getElementById("progressLabel");
 const runProgressDialog = document.getElementById("runProgressDialog");
@@ -491,6 +493,141 @@ function getTauriInvoke() {
   return window.__TAURI__?.core?.invoke ?? null;
 }
 
+function waitMs(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function setSidebarTicketStatus(message, state = "idle") {
+  if (sidebarStatus) {
+    sidebarStatus.textContent = message;
+  }
+  if (sidebarStatusDot) {
+    sidebarStatusDot.classList.remove("is-idle", "is-active", "is-waiting", "is-error");
+    sidebarStatusDot.classList.add(`is-${state}`);
+  }
+  if (sidebarStatusPill) {
+    sidebarStatusPill.dataset.state = state;
+  }
+}
+
+function normalizeTicketSnapshot(snapshot) {
+  return {
+    enabled: Boolean(snapshot?.enabled),
+    statut: String(snapshot?.statut || "inconnu"),
+    position: snapshot?.position ?? null,
+    active: Number(snapshot?.active || 0),
+    queued: Number(snapshot?.queued || 0),
+    maxActive: Number(snapshot?.max_active || 0),
+    waitRefreshMs: Number(snapshot?.wait_refresh_ms || 10000),
+    heartbeatMs: Number(snapshot?.heartbeat_ms || 30000),
+    message: String(snapshot?.message || "")
+  };
+}
+
+async function callTicketApi(path, { method = "GET", body = null } = {}) {
+  const response = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (_error) {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const detail = payload?.detail || payload?.message || `Erreur HTTP ${response.status}`;
+    throw new Error(String(detail));
+  }
+  return normalizeTicketSnapshot(payload);
+}
+
+async function refreshTicketSidebarStatus() {
+  try {
+    const snapshot = await callTicketApi("/api/tickets/status");
+    if (!snapshot.enabled) {
+      setSidebarTicketStatus("Acces libre (Redis desactive)", "idle");
+      return snapshot;
+    }
+    if (snapshot.statut === "actif") {
+      setSidebarTicketStatus("Votre ticket est actif", "active");
+      return snapshot;
+    }
+    if (snapshot.statut === "attente") {
+      setSidebarTicketStatus(`File d'attente : position ${snapshot.position || "?"}`, "waiting");
+      return snapshot;
+    }
+    if (snapshot.statut === "occupee") {
+      setSidebarTicketStatus("Application occupee", "waiting");
+      return snapshot;
+    }
+    setSidebarTicketStatus("Application disponible", "idle");
+    return snapshot;
+  } catch (error) {
+    setSidebarTicketStatus("Statut utilisateur indisponible", "error");
+    return normalizeTicketSnapshot({ enabled: false, message: error?.message || String(error) });
+  }
+}
+
+async function claimAnalysisTicket() {
+  return callTicketApi("/api/tickets/claim", { method: "POST" });
+}
+
+async function heartbeatAnalysisTicket() {
+  return callTicketApi("/api/tickets/heartbeat", { method: "POST" });
+}
+
+async function releaseAnalysisTicket({ silent = false } = {}) {
+  try {
+    const snapshot = await callTicketApi("/api/tickets/release", { method: "POST" });
+    if (!silent) {
+      await refreshTicketSidebarStatus();
+    }
+    return snapshot;
+  } catch (error) {
+    if (!silent) {
+      setSidebarTicketStatus("Liberation du ticket impossible", "error");
+    }
+    return null;
+  }
+}
+
+async function waitForAnalysisTicket(progressionController, logger) {
+  let snapshot = await claimAnalysisTicket();
+  if (!snapshot.enabled) {
+    setSidebarTicketStatus("Acces libre (Redis desactive)", "idle");
+    logger("[info] Controle d'acces Redis inactif pour cette application.");
+    return snapshot;
+  }
+
+  let lastWaitingMessage = "";
+  while (snapshot.statut === "attente") {
+    const waitingMessage = `Application occupee. Position dans la file : ${snapshot.position || "?"}.`;
+    setSidebarTicketStatus(waitingMessage, "waiting");
+    progressionController.set(8, waitingMessage);
+    if (waitingMessage !== lastWaitingMessage) {
+      logger(`[info] ${waitingMessage}`);
+      lastWaitingMessage = waitingMessage;
+    }
+    await waitMs(snapshot.waitRefreshMs);
+    snapshot = await claimAnalysisTicket();
+  }
+
+  if (snapshot.statut !== "actif") {
+    throw new Error(snapshot.message || "Impossible d'obtenir un ticket actif pour lancer l'analyse.");
+  }
+
+  setSidebarTicketStatus("Ticket actif : analyse en cours", "active");
+  progressionController.set(10, "Acces serveur obtenu. Lancement de l'analyse...");
+  logger("[info] Ticket utilisateur actif. Lancement du job IRaMuTeQ Lite.");
+  return snapshot;
+}
+
 async function openExternalUrl(url) {
   const safeUrl = String(url || "").trim();
   if (!safeUrl) return;
@@ -770,7 +907,7 @@ async function activateAnalysisHistoryEntry(entryId) {
     activateTopTab("multimodale");
     activateMultimodalSubTab(getMultimodalSubtabForHistoryKind(entry.analysisKind));
     renderMultimodalWorkspace();
-    if (sidebarStatus) sidebarStatus.textContent = "";
+    void refreshTicketSidebarStatus();
     log(`[info] Résultats rechargés : ${getAnalysisHistoryLabel(entry)}.`);
     renderAnalysisHistory();
     return;
@@ -781,7 +918,7 @@ async function activateAnalysisHistoryEntry(entryId) {
   renderAnalysisSummary(entry.summary || null);
   renderZipfChart(entry.summary || null);
 
-  if (sidebarStatus) sidebarStatus.textContent = "";
+  void refreshTicketSidebarStatus();
   log(`[info] Résultats rechargés : ${getAnalysisHistoryLabel(entry)}.`);
   renderAnalysisHistory();
 }
@@ -1957,7 +2094,7 @@ async function ensureDependenciesReady() {
         if (payload.python) {
           log(`[info] Python détecté : ${payload.python}`);
         }
-        if (sidebarStatus) sidebarStatus.textContent = "";
+        void refreshTicketSidebarStatus();
         bootstrapProgression.set(100, "Environnement prêt.");
       } else {
         appState.bootstrapReady = false;
@@ -15056,7 +15193,7 @@ async function startAnalysis(analysisKind = "chd") {
         ? "Préparation de la trajectoire lexicale..."
         : "Préparation de la CHD...";
 
-  if (sidebarStatus) sidebarStatus.textContent = "";
+  setSidebarTicketStatus("Verification de l'acces serveur...", "idle");
   activateTopTab("analyse");
   progression.open(progressTitle, progressStartMessage);
   await waitForNextPaint();
@@ -15117,16 +15254,17 @@ async function startAnalysis(analysisKind = "chd") {
     renderAnalysisSteps(checkpoints.map(([, message]) => message));
     renderAnalysisSummary(null);
     renderZipfChart(null);
-    if (sidebarStatus) sidebarStatus.textContent = "";
+    await refreshTicketSidebarStatus();
     log("[info] Le pipeline R n'est pas disponible hors environnement Tauri.");
     progression.close();
     return;
   }
 
+  let analysisTicket = null;
   try {
     const bootstrap = await ensureDependenciesReady();
     if (!bootstrap?.success) {
-      if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets";
+      setSidebarTicketStatus("Packages incomplets", "error");
       progression.set(0);
       log("[error] L'analyse est bloquée tant que les packages requis ne sont pas installés.");
       progression.close();
@@ -15138,6 +15276,9 @@ async function startAnalysis(analysisKind = "chd") {
       : await selectedFile.text();
     const config = buildJobConfig(analysisKind);
     let streamedLogCount = 0;
+    let lastTicketHeartbeatAt = 0;
+
+    analysisTicket = await waitForAnalysisTicket(progression, log);
 
     progression.set(12, "Envoi du corpus au backend...");
     log("[info] Envoi du corpus à Python pour orchestration du job R.");
@@ -15174,6 +15315,17 @@ async function startAnalysis(analysisKind = "chd") {
         }
         payload = snapshot;
         break;
+      }
+
+      if (analysisTicket?.enabled) {
+        const now = Date.now();
+        if (!lastTicketHeartbeatAt || now - lastTicketHeartbeatAt >= analysisTicket.heartbeatMs) {
+          analysisTicket = await heartbeatAnalysisTicket();
+          lastTicketHeartbeatAt = now;
+          if (analysisTicket?.enabled && analysisTicket.statut !== "actif") {
+            throw new Error(analysisTicket.message || "Le ticket actif a ete perdu pendant l'analyse.");
+          }
+        }
       }
 
       await wait(350);
@@ -15239,7 +15391,7 @@ async function startAnalysis(analysisKind = "chd") {
     }
 
     progression.set(100, "Analyse terminée.");
-    if (sidebarStatus) sidebarStatus.textContent = "";
+    setSidebarTicketStatus("Analyse terminee, liberation du ticket...", "active");
     const summary = payload.summary || {};
     log(
       isLdaMode
@@ -15253,7 +15405,7 @@ async function startAnalysis(analysisKind = "chd") {
     log(`[info] Exports backend: ${payload.outputDir}`);
     progression.close();
   } catch (error) {
-    if (sidebarStatus) sidebarStatus.textContent = "Échec de l'analyse";
+    setSidebarTicketStatus("Echec de l'analyse", "error");
     progression.set(0, "Échec de l'analyse.");
     const message = error?.message || String(error);
     const lines = String(message)
@@ -15268,6 +15420,9 @@ async function startAnalysis(analysisKind = "chd") {
       });
     }
     progression.close();
+  } finally {
+    await releaseAnalysisTicket({ silent: true });
+    await refreshTicketSidebarStatus();
   }
 }
 
@@ -15298,3 +15453,10 @@ void loadHelpMarkdown(helpLdaMarkdownContent, "lda.md");
 void loadHelpMarkdown(helpJsdMarkdownContent, "jsd.md");
 void loadHelpMarkdown(helpSuiviMarkdownContent, "suivi.md");
 void loadHelpMarkdown(helpMultimodaleMarkdownContent, "multimodale.md");
+void refreshTicketSidebarStatus();
+window.setInterval(() => {
+  void refreshTicketSidebarStatus();
+}, 15000);
+window.addEventListener("beforeunload", () => {
+  void releaseAnalysisTicket({ silent: true });
+});

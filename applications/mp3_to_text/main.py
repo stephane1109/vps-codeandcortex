@@ -12,6 +12,8 @@ import whisper
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+from ticket_gate import enforce_streamlit_access, keep_ticket_alive
+
 
 APP_NAME = "MP3 to Text"
 DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=WDQqDOXAUIM"
@@ -132,11 +134,17 @@ def run_transcription_with_progress(audio_path: Path, model_size: str, language_
         progress_bar = st.progress(0)
         progress_text = st.empty()
         progress = 0
+        heartbeat_tick = 0
 
         while not future.done():
             time.sleep(0.2)
             progress = min(95, progress + 1)
             progress_bar.progress(progress)
+            heartbeat_tick += 1
+            if heartbeat_tick % 20 == 0:
+                # Si le traitement devient long, augmente APP_TICKET_TTL_SECONDS
+                # dans Coolify ou garde ce heartbeat actif pour ne pas perdre le ticket.
+                keep_ticket_alive("mp3_to_text", APP_NAME)
             if debug_mode:
                 progress_text.text(f"Progression estimee : {progress}%")
 
@@ -164,6 +172,14 @@ def build_sidebar_notes() -> None:
 
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, page_icon="🎙️", layout="centered")
+    # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
+    # Variables a modifier dans Coolify si besoin :
+    # - REDIS_URL
+    # - APP_TICKET_MAX_ACTIVE (laisser 1 pour une application lourde)
+    # - APP_TICKET_COST
+    # - CAPACITE_SERVEUR
+    # - APP_TICKET_TTL_SECONDS
+    enforce_streamlit_access("mp3_to_text", APP_NAME)
     st.title("Speech to text avec Whisper - OpenAI")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
     st.markdown(

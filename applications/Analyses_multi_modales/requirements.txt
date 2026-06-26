@@ -2,11 +2,13 @@
 
 # Core dependencies
 streamlit>=1.36.0
+streamlit-autorefresh>=1,<2
 altair>=5.2.0
 pandas>=2.2.0
 numpy>=1.26.0,<2.0.0  # Numerical computing - IMPORTANT: numpy<2.0 for TensorFlow compatibility
 scipy>=1.11.0
 statsmodels>=0.14.0
+redis>=5,<6  # File d'attente Redis / limitation du nombre d'utilisateurs
 
 # NLP and text processing
 spacy[transformers]>=3.7.0,<3.8.0

@@ -9,7 +9,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MPLBACKEND=Agg \
     APP_DATA_DIR=/tmp/appdata \
     APP_SESSION_TTL_HOURS=24 \
-    NLTK_DATA=/usr/local/share/nltk_data
+    NLTK_DATA=/usr/local/share/nltk_data \
+    APP_TICKET_ID=symbolic_connectors \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_ENFORCED=1
+
+# #### VARIABLES D'ENVIRONNEMENT A AJUSTER DANS COOLIFY
+# - REDIS_URL
+# - APP_TICKET_MAX_ACTIVE pour garder l'exclusivite ou l'ouvrir
+# - APP_TICKET_COST pour la charge globale du VPS
+# - APP_TICKET_TTL_SECONDS si tu observes des expirations trop rapides
 
 WORKDIR /app
 

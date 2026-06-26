@@ -4,10 +4,11 @@ import json
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import runtime
+from . import ticket_gate
 
 
 app = FastAPI(title="IRaMuTeQ Lite Web", docs_url=None, redoc_url=None)
@@ -127,6 +128,38 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/tickets/status")
+def ticket_status(request: Request) -> JSONResponse:
+    snapshot, session_id = ticket_gate.status_for_request(request)
+    response = JSONResponse(snapshot)
+    ticket_gate.apply_session_cookie_headers(response, session_id)
+    return response
+
+
+@app.post("/api/tickets/claim")
+def ticket_claim(request: Request) -> JSONResponse:
+    snapshot, session_id = ticket_gate.claim_ticket_for_request(request)
+    response = JSONResponse(snapshot)
+    ticket_gate.apply_session_cookie_headers(response, session_id)
+    return response
+
+
+@app.post("/api/tickets/heartbeat")
+def ticket_heartbeat(request: Request) -> JSONResponse:
+    snapshot, session_id = ticket_gate.heartbeat_ticket_for_request(request)
+    response = JSONResponse(snapshot)
+    ticket_gate.apply_session_cookie_headers(response, session_id)
+    return response
+
+
+@app.post("/api/tickets/release")
+def ticket_release(request: Request) -> JSONResponse:
+    snapshot = ticket_gate.release_ticket_for_request(request)
+    response = JSONResponse(snapshot)
+    ticket_gate.clear_session_cookie_headers(response)
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 def index() -> HTMLResponse:
@@ -164,6 +197,11 @@ async def tauri_invoke(command: str, request: Request) -> Any:
             raise HTTPException(status_code=400, detail="Le corps JSON doit être un objet.")
 
     try:
+        if command == "start_python_analysis":
+            try:
+                ticket_gate.require_active_ticket(request)
+            except PermissionError as error:
+                raise HTTPException(status_code=423, detail=str(error)) from error
         return dispatch_tauri_command(command, payload)
     except KeyError as error:
         missing = error.args[0] if error.args else command

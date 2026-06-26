@@ -8,7 +8,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     APP_WORKDIR=/tmp/mp3-to-text \
     XDG_CACHE_HOME=/home/app/.cache \
-    WHISPER_CACHE_DIR=/home/app/.cache/whisper
+    WHISPER_CACHE_DIR=/home/app/.cache/whisper \
+    APP_TICKET_ID=mp3_to_text \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_ENFORCED=1
+
+# #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
+# - REDIS_URL=redis://:motdepasse@redis:6379/0
+# - APP_TICKET_MAX_ACTIVE pour autoriser plus d'un utilisateur
+# - APP_TICKET_COST pour ajuster la charge serveur
+# - APP_TICKET_TTL_SECONDS si une transcription peut durer longtemps
 
 WORKDIR /app
 

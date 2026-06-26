@@ -21,6 +21,7 @@ if str(APP_DIR) not in sys.path:
 
 from connecteurs import get_selected_connectors  # noqa: E402
 from addannotations import render_manual_annotations  # noqa: E402
+from ticket_gate import enforce_streamlit_access  # noqa: E402
 from onglets import (  # noqa: E402
     parse_upload,
     rendu_connecteurs,
@@ -142,6 +143,14 @@ def _load_uploaded_content(
 
 def main() -> None:
     st.set_page_config(page_title="Symbolic Connectors", layout="wide")
+    # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
+    # Variables a ajuster dans Coolify :
+    # - REDIS_URL
+    # - APP_TICKET_MAX_ACTIVE=1 pour garder l'application exclusive
+    # - APP_TICKET_COST
+    # - CAPACITE_SERVEUR
+    # - APP_TICKET_TTL_SECONDS
+    enforce_streamlit_access("symbolic_connectors", "Symbolic Connectors")
 
     session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
     session_dir = _ensure_directory(SESSIONS_DIR / session_id)

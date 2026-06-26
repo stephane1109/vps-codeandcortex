@@ -145,6 +145,56 @@ textarea {
   font-size: 0.9rem;
 }
 
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+}
+
+.status-dot {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: #94a3b8;
+  flex: 0 0 auto;
+}
+
+.status-dot.is-idle {
+  background: #94a3b8;
+}
+
+.status-dot.is-active {
+  background: #16a34a;
+  animation: sidebar-status-pulse-green 1.2s infinite;
+}
+
+.status-dot.is-waiting {
+  background: #f59e0b;
+  animation: sidebar-status-pulse-orange 1.2s infinite;
+}
+
+.status-dot.is-error {
+  background: #dc2626;
+}
+
+@keyframes sidebar-status-pulse-green {
+  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.42); }
+  70% { box-shadow: 0 0 0 11px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+@keyframes sidebar-status-pulse-orange {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.42); }
+  70% { box-shadow: 0 0 0 11px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
 .nav-link,
 .sub-nav-link,
 .primary-button,

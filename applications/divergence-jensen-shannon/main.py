@@ -11,6 +11,8 @@ import pandas as pd
 import streamlit as st
 from nltk.corpus import stopwords
 
+from ticket_gate import enforce_streamlit_access
+
 
 DEFAULT_TEXT_A = """
 Je me réveille souvent avec une sensation d’angoisse. J’ai l’impression que quelque chose va mal se passer. Je pense immédiatement à tout ce que je dois faire. Je sens une tension dans ma poitrine dès le matin. J’ai parfois du mal à respirer calmement. Je réfléchis beaucoup avant de prendre une décision. J’ai peur de me tromper. Je vérifie souvent plusieurs fois les mêmes choses. Je me sens épuisé mentalement. Je pense constamment au travail. Je crains de ne pas être à la hauteur. Je me mets facilement la pression. Je ressasse souvent des conversations anciennes. Je me demande si les autres me jugent. J’évite parfois de répondre au téléphone. Je préfère rester seul quand l’anxiété augmente. Je dors mal depuis plusieurs mois. Je me réveille souvent pendant la nuit. Je pense immédiatement aux problèmes du lendemain. J’ai du mal à arrêter mes pensées. Je sens mon corps tendu presque toute la journée. J’ai parfois l’impression de perdre le contrôle. Je me sens fragile émotionnellement. Je me fatigue rapidement dans les situations sociales. Je redoute les imprévus. Je supporte mal l’incertitude. Je voudrais retrouver un peu de calme. Je voudrais comprendre pourquoi cette anxiété revient sans arrêt. Je fais beaucoup d’efforts pour paraître normal devant les autres. Je me sens souvent seul avec mes pensées.
@@ -255,6 +257,14 @@ def lire_stopwords_personnalises(value: str) -> set[str]:
 
 def main() -> None:
     st.set_page_config(page_title="Divergence Jensen-Shannon", page_icon="📊", layout="wide")
+    # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
+    # Variables a personnaliser dans Coolify :
+    # - REDIS_URL
+    # - APP_TICKET_MAX_ACTIVE=1 pour limiter cette grosse application
+    # - APP_TICKET_COST
+    # - CAPACITE_SERVEUR
+    # - APP_TICKET_TTL_SECONDS
+    enforce_streamlit_access("divergence-jensen-shannon", "Divergence Jensen-Shannon")
     st.title("Divergence de Jensen-Shannon")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
     st.markdown(
