@@ -50,7 +50,11 @@ install_missing_packages <- function(packages, repo, lib) {
       utils::install.packages(
         packages,
         repos = repo,
-        dependencies = TRUE,
+        # #### IMPORTANT VPS / COOLIFY
+        # On installe uniquement les dependances strictement necessaires
+        # (Depends / Imports / LinkingTo) pour eviter de tirer des Suggests
+        # lourdes ou non indispensables comme certaines briques geospatiales.
+        dependencies = c("Depends", "Imports", "LinkingTo"),
         lib = lib
       )
       character(0)
