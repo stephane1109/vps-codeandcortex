@@ -44,24 +44,43 @@ PORT=8000
 IRAMUTEQ_APP_DATA_DIR=/data/app
 IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library
 RGL_USE_NULL=TRUE
-IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
+IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0
+REDIS_URL=redis://redis:6379/0
+APP_TICKET_ENFORCED=1
+APP_TICKET_ID=iramuteq-lite
+APP_TICKET_MAX_ACTIVE=1
+APP_TICKET_COST=4
+CAPACITE_SERVEUR=6
+APP_TICKET_TTL_SECONDS=3600
+APP_TICKET_MAX_WAITING=20
+APP_TICKET_WAIT_REFRESH_MS=10000
+APP_TICKET_HEARTBEAT_MS=30000
 ```
 
-Optionnel en environnement non conteneurisé :
+Optionnel en environnement non conteneurisé ou pour du debug local :
 
 ```env
 IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
 IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1
 ```
 
-Par défaut dans cette image VPS, le bootstrap applicatif est autorisé a installer les dependances texte manquantes au premier usage.
-Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1` est defini.
+Dans l'image Docker VPS a deployer sur Coolify, les dependances R/Python du coeur applicatif doivent etre preinstallees pendant le build.
+Le conteneur en production doit donc rester en `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0` pour eviter qu'un utilisateur declenche une installation longue au premier lancement.
+Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1` est defini pour un contexte local specifique.
 
 ## Pourquoi ce choix
 
-- le build Coolify echouait parce que l'image compilait trop de packages R et Python pendant la construction
-- l'image est maintenant beaucoup plus rapide a construire
-- les dependances coeur texte sont installees a la demande par l'application
+- le premier utilisateur ne doit plus rester bloque sur `Installation des dependances manquantes si necessaire`
+- si l'interface affiche `Packages incomplets`, cela signifie en pratique que l'image construite ne contient pas toutes les dependances attendues
+- dans ce cas il faut verifier les logs de build Coolify et relancer un redeploiement complet de l'application, idealement sans cache de build
+
+## Que faire si `Packages incomplets` apparait
+
+1. Verifier que Coolify rebuild bien l'application a partir du dernier code.
+2. Forcer un nouveau build de l'image Docker, si possible sans cache.
+3. Confirmer que le `Base Directory` est bien `/applications/iramuteq-lite`.
+4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `0` en production.
+5. Regarder les logs de build : si un package R echoue pendant la construction, l'image doit etre corrigee au build et non au premier lancement utilisateur.
 
 ## Domaine et sous-domaine
 
