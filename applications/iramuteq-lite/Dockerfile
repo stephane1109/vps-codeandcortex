@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     IRAMUTEQ_APP_DATA_DIR=/data/app \
     IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library \
-    IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1 \
+    IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0 \
     RGL_USE_NULL=TRUE \
     PORT=8000 \
     APP_TICKET_ID=iramuteq-lite \
@@ -64,6 +64,12 @@ RUN pip install --upgrade pip setuptools wheel && pip install -r /tmp/requiremen
 WORKDIR /app
 
 COPY --chown=app:app . /app
+
+# #### PREINSTALLATION DES DEPENDANCES R
+# On installe les packages R necessaires pendant le build Docker pour eviter
+# que le premier utilisateur bloque sur un bootstrap long ou incomplet.
+RUN Rscript /app/backend/r/bootstrap_iramuteq_env.R --mode install \
+    && python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, vl_convert"
 
 RUN chmod +x /app/docker-entrypoint.sh \
     && mkdir -p /data/app /opt/iramuteq-r-library /tmp/iramuteq-lite \
