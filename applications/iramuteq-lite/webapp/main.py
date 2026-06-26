@@ -162,8 +162,15 @@ def ticket_release(request: Request) -> JSONResponse:
 
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
-def index() -> HTMLResponse:
-    return HTMLResponse(build_web_index())
+def index(request: Request) -> HTMLResponse:
+    # #### RESERVATION DU TICKET DES L'OUVERTURE DE LA PAGE
+    # Pour les grosses applications, on reserve le ticket des le chargement
+    # de l'interface afin que le dashboard affiche immediatement "Occupee".
+    snapshot, session_id = ticket_gate.claim_ticket_for_request(request)
+    response = HTMLResponse(build_web_index())
+    ticket_gate.apply_session_cookie_headers(response, session_id)
+    response.headers["X-Ticket-Status"] = str(snapshot.get("statut") or "")
+    return response
 
 
 @app.get("/api/local-file")
