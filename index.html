@@ -148,16 +148,16 @@
                 </span>
             </a>
 
-            <a href="https://vps.codeandcortex.fr" class="carte-application" target="_blank">
+            <a href="https://connectors.codeandcortex.fr" class="carte-application" target="_blank">
                 <span class="ruban-statut">
                     <span class="pastille-etat libre" aria-hidden="true"></span>
                     <span class="statut">Vitrine</span>
                 </span>
-                <i class="icone fas fa-server"></i>
+                <i class="icone fas fa-chart-pie"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">VPS</span>
-                    <span class="meta-application">Page d’accueil</span>
-                    <span class="description-application">Page d’accueil du serveur applicatif Code & Cortex.</span>
+                    <span class="titre-application">Symbolic connectors/span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Pour tester les dicours algorithmique des ia génératives.</span>
                 </span>
             </a>
 
@@ -171,6 +171,19 @@
                     <span class="titre-application">Vecteur émotionnel</span>
                     <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
                     <span class="description-application">Analyse émotionnelle multimodale à forte charge serveur.</span>
+                </span>
+            </a>
+
+            <a href="https://multimodales.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="Analyses_multi_modales">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-pie"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Analyses multi-modales</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Analyse multimodale de la temporalité à partir de texte, audio et images.</span>
                 </span>
             </a>
 
@@ -203,7 +216,7 @@
         </section>
 
         <p class="pied" id="dashboard-note">
-            Les états se rafraîchissent automatiquement dès qu’une API `/api/tickets/dashboard` est branchée sur Redis et `gestion_tickets.py`.
+            Les états se rafraîchissent automatiquement dès que le conteneur FastAPI du dashboard répond sur `/api/tickets/dashboard`.
         </p>
 
     </main>
@@ -267,7 +280,11 @@
                 });
 
                 if (note) {
-                    note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
+                    if (payload.global && payload.global.serverState === "offline") {
+                        note.textContent = payload.global.message || "Redis est hors ligne : le dashboard reste visible mais les tickets ne sont pas synchronisés.";
+                    } else {
+                        note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
+                    }
                 }
             }
 
@@ -291,7 +308,7 @@
                     applyDashboard(payload);
                 } catch (error) {
                     if (note) {
-                        note.textContent = "Mode statique actif en attendant l’endpoint FastAPI `/api/tickets/dashboard`.";
+                        note.textContent = "API dashboard indisponible : vérifie le conteneur FastAPI et l’endpoint `/api/tickets/dashboard`.";
                     }
                 }
             }
