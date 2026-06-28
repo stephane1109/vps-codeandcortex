@@ -33,7 +33,6 @@
           <button class="nav-link" data-tab-target="afc" type="button">AFC</button>
           <button class="nav-link" data-tab-target="lda" type="button">LDA</button>
           <button class="nav-link" data-tab-target="similitudes" type="button">Similitudes</button>
-          <button class="nav-link" data-tab-target="suivi_longitudinal" type="button">Trajectoire lexicale</button>
           <button class="nav-link" data-tab-target="aide" type="button">Aide</button>
           <details class="nav-menu">
             <summary class="nav-link nav-link--menu">Outils</summary>
@@ -376,219 +375,6 @@
             </div>
           </section>
 
-          <section class="panel" data-panel="suivi_longitudinal" hidden>
-            <div class="page-heading">
-              <div>
-                <p class="section-kicker">Trajectoire</p>
-                <h2>Trajectoire lexicale</h2>
-                <p class="section-copy">
-                  Il n'est pas nécessaire de lancer une CHD avant ce test. La trajectoire lexicale est indépendante et compare
-                  des entretiens ordonnés dans le temps, soit dans leur forme lexicale brute, soit via une couche émotionnelle issue d'un lexique dédié.
-                </p>
-              </div>
-            </div>
-
-            <div class="section-stack">
-              <article class="card section-card">
-                <div class="toolbar toolbar--end">
-                  <button class="primary-button" type="button" data-open-suivi-dialog>Paramètres de la trajectoire lexicale</button>
-                </div>
-                <p class="field-help field-help--pvalue-note suivi-help-note">
-                  Paramètres principaux : la <code>variable étoilée de la trajectoire</code> ordonne les entretiens, le
-                  <code>filtre</code> restreint le sous-corpus, l'<code>ordre chronologique</code> définit le sens
-                  de lecture, et le nombre de <code>termes évolutifs</code> règle combien de mots sont affichés par comparaison.
-                </p>
-                <p class="field-help field-help--pvalue-note suivi-help-note">
-                  Ce test est indépendant de la CHD. Il réutilise le nettoyage courant de l'application et le dictionnaire
-                  <code>lexique_fr</code>.
-                </p>
-                <p class="field-help field-help--pvalue-note suivi-help-note">
-                  Principe du test : chaque entretien est transformé en distribution lexicale sur un vocabulaire commun.
-                  La divergence de Jensen-Shannon mesure ensuite l'écart entre deux distributions. La comparaison à la première
-                  séance prend pour référence la première modalité dans l'ordre choisi.
-                </p>
-                <p class="field-help field-help--pvalue-note suivi-help-note">
-                  Le filtrage morphosyntaxique réellement utilisé par la trajectoire lexicale est rappelé ci-dessus et réexporté dans le cadre
-                  de la trajectoire lexicale.
-                </p>
-                <p id="suiviModeNotice" class="field-help field-help--pvalue-note suivi-help-note">
-                  Couche active par défaut : <strong>trajectoire lexicale brute</strong>. En mode émotionnel, la divergence porte sur des distributions d'émotions reconnues par FEEL ou NRC, et non plus directement sur les mots.
-                </p>
-              </article>
-
-              <div class="local-tabs" role="tablist" aria-label="Sous-onglets Trajectoire lexicale">
-                <button class="local-tab-button is-active" data-suivi-subtab-target="suivi_indicateurs" type="button">Indicateurs</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_profils_emotionnels" type="button" id="suiviEmotionProfilesTabBtn">Profils émotionnels</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_divergences" type="button">Divergences</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_ruptures" type="button">Détection des ruptures</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_termes" type="button">Termes</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_frise_emergences" type="button">Frise des émergences</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_barres_divergentes" type="button">Barres divergentes</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_waterfall" type="button">Waterfall</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_matrice" type="button">Matrice</button>
-                <button class="local-tab-button" data-suivi-subtab-target="suivi_nuages" type="button">Nuages de mots</button>
-              </div>
-
-              <section class="local-tab-panel is-active" data-suivi-subpanel="suivi_indicateurs">
-                <article class="card">
-                  <h3>Cadre de la trajectoire lexicale</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    Le tableau rappelle le cadre réel du calcul : variable de la trajectoire, ordre choisi, prétraitement,
-                    filtrage morphosyntaxique, filtre éventuel, nombre d'entretiens retenus, taille du vocabulaire commun
-                    et note exploratoire si le corpus est faible.
-                  </div>
-                  <div id="suiviMeta" class="result-pane result-pane--spaced"></div>
-                </article>
-                <article class="card">
-                  <h3>Indicateurs par entretien</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p><code>Ordre</code> indique la position de l'entretien dans la série. <code>Unite</code> correspond à la modalité suivie : séance, date, mois, année ou phase.</p>
-                    <p><code>Tokens_total</code> est le nombre total de mots observés après prétraitement. <code>Types_total</code> est le nombre de mots différents.</p>
-                    <p><code>Entropie_lexicale</code> mesure la dispersion interne du vocabulaire de la séance. <code>Entropie_normalisee</code> ramène cette dispersion entre 0 et 1 pour comparer plus facilement les entretiens. <code>Redondance_relative</code> vaut <code>1 - entropie normalisée</code> : plus elle est élevée, plus le discours est concentré sur un lexique resserré et répétitif.</p>
-                  </div>
-                  <div id="suiviIndicatorsTable" class="result-pane result-pane--spaced"></div>
-                </article>
-                <article class="card">
-                  <h3>Courbe de l'entropie lexicale</h3>
-                  <div id="suiviEntropyPlot" class="result-pane"></div>
-                </article>
-                <article class="card">
-                  <h3>Courbe de la redondance relative</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>La redondance relative mesure le degré de concentration du discours. Plus elle est élevée, plus le vocabulaire est resserré autour d'un nombre limité de mots ou de formes récurrentes.</p>
-                  </div>
-                  <div id="suiviRedundancyPlot" class="result-pane"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_profils_emotionnels" hidden>
-                <article class="card">
-                  <h3 id="suiviEmotionProfilesTitle">Profils émotionnels</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p id="suiviEmotionProfilesHelp">Ce sous-onglet est activé par la trajectoire émotionnelle. Il résume, pour chaque entretien, la répartition relative des émotions reconnues par le lexique choisi.</p>
-                  </div>
-                  <div id="suiviEmotionProfilesPlot" class="result-pane"></div>
-                  <div id="suiviEmotionProfilesTable" class="result-pane result-pane--spaced"></div>
-                </article>
-                <article class="card">
-                  <h3 id="suiviValenceProfilesTitle">Résumé de valence positive / négative</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p id="suiviValenceProfilesHelp">Ce résumé reste secondaire : il synthétise les émotions reconnues en deux pôles de valence quand le lexique émotionnel le permet.</p>
-                  </div>
-                  <div id="suiviValenceProfilesPlot" class="result-pane"></div>
-                  <div id="suiviValenceProfilesTable" class="result-pane result-pane--spaced"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_divergences" hidden>
-                <article class="card">
-                  <h3>Divergence de Jensen-Shannon entre séances successives</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>La divergence de Jensen-Shannon mesure l'écart entre deux distributions lexicales. Ici, elle compare chaque séance à la précédente. Dans le tableau, <code>Unite_depart</code> est la séance de départ, <code>Unite_arrivee</code> la séance suivante, et <code>Divergence_Jensen_Shannon</code> la force de l'écart lexical entre les deux.</p>
-                  </div>
-                  <div id="suiviJsdSuccessivePlot" class="result-pane"></div>
-                  <div id="suiviJsdSuccessiveTable" class="result-pane result-pane--spaced"></div>
-                </article>
-                <article class="card">
-                  <h3>Divergence de Jensen-Shannon par rapport à la première séance</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>Cette lecture compare chaque entretien à la première séance de l'ordre choisi, qui sert de référence.</p>
-                    <p>Dans le tableau, <code>Unite_reference</code> est la première séance, <code>Unite_comparee</code> la séance comparée, et <code>Divergence_Jensen_Shannon</code> l'écart lexical entre les deux.</p>
-                    <p>Elle aide à repérer une évolution progressive, un retour vers le point de départ ou une rupture plus durable.</p>
-                  </div>
-                  <div id="suiviJsdReferencePlot" class="result-pane"></div>
-                  <div id="suiviJsdReferenceTable" class="result-pane result-pane--spaced"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_ruptures" hidden>
-                <article class="card">
-                  <h3>Détection explicite des ruptures discursives</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>Cette lecture part des divergences de Jensen-Shannon entre périodes successives et cherche les <strong>pics de rupture</strong>.</p>
-                    <p>Une rupture détectée correspond ici à un <code>pic local</code> dont le niveau est suffisamment au-dessus du profil moyen de la série. Ce n'est pas une preuve absolue, mais un signal interprétatif pour repérer les moments de bascule.</p>
-                    <p>Le tableau indique les périodes comparées, la divergence observée, un <code>Score_standardise</code>, la présence d'un <code>Pic_local</code>, le statut <code>Rupture_detectee</code>, un <code>Niveau_rupture</code> et les <code>Termes_explicatifs</code> les plus contributifs.</p>
-                  </div>
-                  <div id="suiviRupturesPlot" class="result-pane"></div>
-                  <div id="suiviRupturesTable" class="result-pane result-pane--spaced"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_termes" hidden>
-                <article class="card">
-                  <h3>Termes qui évoluent entre les séances</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p><strong>Ce tableau mesure le sens du changement lexical.</strong> Il sert à voir ce qui apparaît, disparaît, monte ou recule entre deux entretiens. Les termes sont classés en <code>hausse</code>, <code>baisse</code>, <code>nouveau</code> ou <code>disparu</code> à partir des fréquences relatives comparées entre deux entretiens. <code>Mode_comparaison</code> indique si la lecture porte sur la séance précédente ou sur la première séance. <code>Unite_depart</code> et <code>Unite_arrivee</code> donnent les deux entretiens comparés. <code>Frequence_relative_depart</code> et <code>Frequence_relative_arrivee</code> donnent le poids lexical du terme dans chaque entretien. <code>Difference_relative</code> résume le sens et l'ampleur du déplacement.</p>
-                  </div>
-                  <div id="suiviTermsTable" class="result-pane result-pane--spaced"></div>
-                </article>
-                <article class="card">
-                  <h3>Contribution des termes à la divergence</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p><strong>Ce tableau mesure la contribution explicative des mots au score global.</strong> Il sert à comprendre pourquoi la divergence de Jensen-Shannon est forte ou faible entre deux entretiens.</p>
-                    <p>Cette table ne montre pas seulement les mots en hausse ou en baisse. Elle isole les termes qui expliquent le plus la différence globale entre deux distributions lexicales.</p>
-                    <p><code>Contribution_Jensen_Shannon</code> indique la part relative du terme dans l'écart entre les deux entretiens comparés. Plus la valeur est élevée, plus le terme contribue au score global.</p>
-                    <p>Il n'y a donc pas doublon : le premier tableau décrit la direction du changement lexical, tandis que celui-ci identifie les mots qui portent le plus l'écart global mesuré.</p>
-                    <p>Un clic sur un <code>Terme</code> ouvre le concordancier JSD et affiche les segments de texte contenant ce terme dans les deux entretiens comparés.</p>
-                  </div>
-                  <div id="suiviContributionsTable" class="result-pane result-pane--spaced"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_matrice" hidden>
-                <article class="card">
-                  <h3>Matrice de divergence de Jensen-Shannon</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>Cette matrice compare toutes les paires d'entretiens. Les lignes et les colonnes correspondent aux entretiens. Chaque cellule contient la divergence de Jensen-Shannon entre les deux séances croisées. Une valeur faible indique des profils lexicaux proches, une valeur forte signale un écart lexical plus net.</p>
-                  </div>
-                  <div id="suiviMatrixPlot" class="result-pane"></div>
-                  <div id="suiviMatrixTable" class="result-pane result-pane--spaced"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_frise_emergences" hidden>
-                <article class="card">
-                  <h3>Frise des émergences</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>Cette frise temporelle relit la trajectoire des termes les plus changeants à travers les transitions entre entretiens. Chaque ligne correspond à un terme, chaque colonne à une transition, et la couleur indique s'il s'agit d'un <code>nouveau</code>, d'une <code>hausse</code>, d'une <code>baisse</code> ou d'un terme <code>disparu</code>. Le premier graphe compare la <strong>première séance à toutes les suivantes</strong>. Le second compare les <strong>séances successives entre elles</strong>. Ce rendu aide à voir, sur l'ensemble de la série, comment les émergences et les reculs se distribuent dans le temps.</p>
-                  </div>
-                  <div id="suiviFrisesEmergences" class="result-pane"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_barres_divergentes" hidden>
-                <article class="card">
-                  <h3>Barres divergentes des termes évolutifs</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>Chaque graphe compare deux entretiens et place les termes en recul à gauche de zéro, les termes en hausse à droite. La longueur de la barre correspond à la <code>Difference_relative</code> du terme entre les deux entretiens. Ce rendu aide à voir très vite quels mots tirent le discours vers un déplacement positif ou négatif.</p>
-                  </div>
-                  <div id="suiviDivergentBars" class="result-pane"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_waterfall" hidden>
-                <article class="card">
-                  <h3>Waterfall des contributions</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    <p>Chaque waterfall montre, pour une comparaison donnée, les termes qui fabriquent le plus l'écart global mesuré par la divergence de Jensen-Shannon. Chaque barre ajoute la contribution d'un mot au cumul total. La dernière barre rappelle le total de divergence expliqué par les termes affichés. Ce rendu complète le tableau de contribution : il hiérarchise visuellement les mots qui portent le plus la différence entre deux entretiens.</p>
-                  </div>
-                  <div id="suiviWaterfalls" class="result-pane"></div>
-                </article>
-              </section>
-
-              <section class="local-tab-panel" data-suivi-subpanel="suivi_nuages" hidden>
-                <article class="card">
-                  <h3>Nuages de mots par entretien</h3>
-                  <div class="field-help field-help--pvalue-note suivi-help-note">
-                    Chaque nuage résume les termes les plus présents dans l'entretien correspondant.
-                    Il ne remplace pas les divergences, mais aide à lire concrètement les déplacements lexicaux.
-                  </div>
-                  <div id="suiviWordclouds" class="result-pane"></div>
-                </article>
-              </section>
-            </div>
-          </section>
-
           <section class="panel" data-panel="lda" hidden>
             <div class="page-heading">
               <div>
@@ -706,8 +492,6 @@
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
               <button class="local-tab-button" data-help-subtab-target="help_lda" type="button">Aide LDA</button>
-              <button class="local-tab-button" data-help-subtab-target="help_jsd" type="button">Aide JSD</button>
-              <button class="local-tab-button" data-help-subtab-target="help_suivi" type="button">Aide Trajectoire</button>
             </div>
 
             <section class="local-tab-panel is-active" data-help-subpanel="help_general">
@@ -730,22 +514,6 @@
               <article class="card prose-card">
                 <div id="helpLdaMarkdownContent" class="markdown-content">
                   Chargement de <code>help/lda.md</code>...
-                </div>
-              </article>
-            </section>
-
-            <section class="local-tab-panel" data-help-subpanel="help_jsd" hidden>
-              <article class="card prose-card">
-                <div id="helpJsdMarkdownContent" class="markdown-content">
-                  Chargement de <code>help/jsd.md</code>...
-                </div>
-              </article>
-            </section>
-
-            <section class="local-tab-panel" data-help-subpanel="help_suivi" hidden>
-              <article class="card prose-card">
-                <div id="helpSuiviMarkdownContent" class="markdown-content">
-                  Chargement de <code>help/suivi.md</code>...
                 </div>
               </article>
             </section>
@@ -903,7 +671,7 @@
         </div>
       </article>
 
-      <article class="card section-card" data-chd-config-source data-suivi-config-source>
+      <article class="card section-card" data-chd-config-source>
         <div class="section-head">
           <div>
             <p class="card-kicker">Lexique</p>
@@ -944,7 +712,7 @@
         </div>
       </article>
 
-      <article class="card section-card" data-chd-config-source data-suivi-config-source>
+      <article class="card section-card" data-chd-config-source>
         <div class="section-head">
           <div>
             <p class="card-kicker">Nettoyage</p>
@@ -1318,113 +1086,6 @@
         </div>
       </article>
 
-      <article class="card section-card" data-suivi-config-source>
-        <div class="section-head">
-          <div>
-            <p class="card-kicker">Trajectoire</p>
-            <h3>Paramètres de la trajectoire lexicale</h3>
-          </div>
-        </div>
-
-        <p class="section-copy">
-          Il n'est pas nécessaire de lancer une CHD avant ce test. La trajectoire lexicale est indépendante et compare
-          lexicalement des entretiens ordonnés dans le temps.
-        </p>
-
-        <div class="form-grid">
-          <div class="field">
-            <label>Corpus chargé</label>
-            <p id="suiviCorpusDisplay" class="readonly-field">Aucun corpus chargé.</p>
-          </div>
-          <div class="field">
-            <label for="suiviAnalysisLayer">Couche d'analyse</label>
-            <select id="suiviAnalysisLayer">
-              <option value="lexicale_brute">Trajectoire lexicale brute</option>
-              <option value="emotionnelle">Trajectoire émotionnelle</option>
-            </select>
-            <p class="field-help">
-              La couche lexicale brute reste la plus fidèle au discours réel. La couche émotionnelle construit une distribution d'émotions avant le calcul de divergence.
-            </p>
-          </div>
-          <div class="field">
-            <label for="suiviEmotionLexicon">Lexique émotionnel</label>
-            <select id="suiviEmotionLexicon">
-              <option value="feel">FEEL (français)</option>
-              <option value="nrc">NRC Emotion Lexicon (français)</option>
-            </select>
-            <p class="field-help">
-              Nécessite un fichier placé dans <code>dictionnaires/</code> : <code>feel_fr.csv</code> ou <code>nrc_emotions_fr.csv</code>.
-            </p>
-          </div>
-          <div class="field">
-            <label for="suiviVariable">Variable étoilée de la trajectoire</label>
-            <select id="suiviVariable">
-              <option value="">Détection auto (priorité : *seance, *date, *mois, *annee, *phase)</option>
-            </select>
-            <p class="field-help">
-              Variables de trajectoire recommandées : <code>*seance</code>, <code>*date</code>, <code>*mois</code>,
-              <code>*annee</code>, <code>*phase</code>.
-            </p>
-          </div>
-          <div class="field">
-            <label for="suiviFilterVariable">Variable de filtre</label>
-            <select id="suiviFilterVariable">
-              <option value="">Aucun filtre</option>
-            </select>
-            <p class="field-help">
-              Filtres de sous-corpus recommandés : <code>*journal</code>, <code>*source</code>, <code>*locuteur</code>,
-              <code>*patient</code>, <code>*service</code>.
-            </p>
-          </div>
-          <div class="field">
-            <label for="suiviFilterModalite">Sous-corpus</label>
-            <select id="suiviFilterModalite">
-              <option value="">Tous les sous-corpus</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="suiviChronologyOrder">Ordre chronologique</label>
-            <select id="suiviChronologyOrder">
-              <option value="asc">Croissant</option>
-              <option value="desc">Décroissant</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="suiviLexicalUnit">Unité lexicale</label>
-            <select id="suiviLexicalUnit">
-              <option value="unigramme">Grammes / unigrammes</option>
-              <option value="bigramme">Bigrammes</option>
-            </select>
-            <p id="suiviLexicalUnitHelp" class="field-help">
-              Les bigrammes sont utiles pour la trajectoire lexicale brute. La trajectoire émotionnelle repose sur les mots/lemmes simples.
-            </p>
-          </div>
-          <div class="field">
-            <label for="suiviTopTerms">Termes évolutifs par comparaison</label>
-            <input id="suiviTopTerms" type="number" min="3" max="30" value="20" />
-          </div>
-          <div class="field">
-            <label for="suiviSignalAmplification">Amplification visuelle du signal</label>
-            <select id="suiviSignalAmplification">
-              <option value="1">Normale (x1)</option>
-              <option value="2">Renforcée (x2)</option>
-              <option value="4">Forte (x4)</option>
-            </select>
-            <p class="field-help">
-              Cette option agit seulement sur l'affichage des graphes de divergence et de rupture. Les tableaux et les exports CSV gardent les valeurs brutes.
-            </p>
-          </div>
-          <div class="field field--full">
-            <label for="suiviInterviewsSelect">Entretiens retenus</label>
-            <select id="suiviInterviewsSelect" class="multi-select" multiple size="8"></select>
-            <div class="toolbar toolbar--compact">
-              <button id="suiviSelectAllBtn" class="secondary-button" type="button">Tout sélectionner</button>
-              <button id="suiviClearAllBtn" class="secondary-button" type="button">Tout vider</button>
-            </div>
-          </div>
-        </div>
-
-      </article>
     </section>
 
     <dialog id="chdConfigDialog" class="dialog-panel">
@@ -1471,22 +1132,6 @@
         <footer class="dialog-footer">
           <button id="closeLdaDialogBtn" class="secondary-button" type="button">Fermer</button>
           <button id="launchLdaDialogBtn" class="primary-button" type="button">Lancer l'analyse LDA</button>
-        </footer>
-      </form>
-    </dialog>
-
-    <dialog id="suiviConfigDialog" class="dialog-panel">
-      <form method="dialog" class="dialog-card">
-        <header class="dialog-header">
-          <div>
-            <p class="dialog-kicker">Paramétrage</p>
-            <h2>Paramètres de la trajectoire lexicale</h2>
-          </div>
-        </header>
-        <div id="suiviConfigDialogContent" class="dialog-body"></div>
-        <footer class="dialog-footer">
-          <button id="closeSuiviDialogBtn" class="secondary-button" type="button">Fermer</button>
-          <button id="launchSuiviDialogBtn" class="primary-button" type="button">Calculer la trajectoire lexicale</button>
         </footer>
       </form>
     </dialog>

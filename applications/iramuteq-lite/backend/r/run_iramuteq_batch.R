@@ -191,7 +191,6 @@ source(file.path(repo_root, "iramuteqlite", "simi_graph.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "simi_igraph.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "stats_chd.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "ui_chd_stats_mode_iramuteq.R"), local = TRUE)
-source(file.path(repo_root, "sante", "suivi_longitudinal_chd.R"), local = TRUE)
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 input_path <- normalizePath(scalar_chr(args$input), winslash = "/", mustWork = TRUE)
 config_path <- normalizePath(scalar_chr(args$config), winslash = "/", mustWork = TRUE)
@@ -1422,12 +1421,11 @@ executer_lda_python_batch <- function(corpus_texte, config, lda_dir) {
 
 run_batch <- function() {
   config <- jsonlite::fromJSON(config_path, simplifyVector = FALSE)
-  analyses <- config$analyses %||% list(chd = TRUE, afc = TRUE, simi = TRUE, lda = TRUE, suivi = FALSE)
+  analyses <- config$analyses %||% list(chd = TRUE, afc = TRUE, simi = TRUE, lda = TRUE)
   run_chd <- scalar_bool(analyses$chd, TRUE) || scalar_bool(analyses$afc, TRUE)
   run_afc <- scalar_bool(analyses$afc, TRUE)
   run_simi <- scalar_bool(analyses$simi, TRUE)
   run_lda <- scalar_bool(analyses$lda, TRUE)
-  run_suivi <- scalar_bool(analyses$suivi, FALSE)
 
   artifacts <- list()
 
@@ -1475,8 +1473,6 @@ run_batch <- function() {
   pipeline <- preparer_pipeline_chd(segmented_corpus, config)
   filtered_corpus <- pipeline$filtered_corpus
   dfm_obj <- pipeline$dfm_obj
-  filtered_corpus_suivi <- filtered_corpus
-  dfm_suivi <- dfm_obj
   tok <- pipeline$tok
   textes_indexation <- pipeline$textes_indexation
   lexique_fr_df <- pipeline$lexique_fr_df
@@ -1860,137 +1856,6 @@ run_batch <- function() {
     log_info("Mode IRaMuTeQ-lite : nuages de mots générés via wordcloud_iramuteq.R.", progress = 67)
 
     log_info("Exports CHD générés.", progress = 68)
-  }
-
-  if (run_suivi) {
-    suivi_progress <- 54
-    suivi_longitudinal <- tryCatch(
-      generer_exports_suivi_longitudinal_chd(
-        filtered_corpus_ok = filtered_corpus_suivi,
-        dfm_ok = dfm_suivi,
-        tok_ok = tok,
-        classes_ok = classes_ok,
-        output_dir = output_dir,
-        textes_indexation = textes_indexation,
-        variable_suivi = scalar_chr(config$suivi_variable_etoilee, ""),
-        variable_filtre = scalar_chr(config$suivi_filtre_variable_etoilee, ""),
-        modalite_filtre = scalar_chr(config$suivi_filtre_modalite, ""),
-        modalites_selectionnees = as_char_vec(config$suivi_modalites_selectionnees, character(0)),
-        ordre_chronologique = scalar_chr(config$suivi_ordre_chronologique, "asc"),
-        unite_lexicale = scalar_chr(config$suivi_unite_lexicale, "unigramme"),
-        couche_analyse = scalar_chr(config$suivi_couche_analyse, "lexicale_brute"),
-        lexique_emotionnel = scalar_chr(config$suivi_lexique_emotionnel, "feel"),
-        top_n_terms = scalar_int(config$suivi_top_terms, 12L, 3L),
-        amplification_signal = scalar_num(config$suivi_amplification_signal, 1),
-        pretraitement_label = if (scalar_bool(config$lexique_utiliser_lemmes, TRUE)) "lemmes" else "formes",
-        source_dictionnaire = scalar_chr(config$source_dictionnaire, "lexique_fr"),
-        filtrage_morpho = scalar_bool(config$filtrage_morpho, FALSE),
-        pos_lexique_a_conserver = as_char_vec(config$pos_lexique_a_conserver, character(0)),
-        morpho_exclure_etre = scalar_bool(config$morpho_exclure_etre, FALSE),
-        morpho_conserver_hors_lexique = scalar_bool(config$morpho_conserver_hors_lexique, TRUE),
-        logger = function(message) log_info(message, progress = suivi_progress)
-      ),
-      error = function(e) {
-        log_info(paste0("Suivi longitudinal : calcul ignoré (", e$message, ")."), progress = suivi_progress)
-        NULL
-      }
-    )
-
-    if (!is.null(suivi_longitudinal) && is.list(suivi_longitudinal$files)) {
-      artifacts$sante <- list(
-        suivi_meta_csv = relative_to_output(suivi_longitudinal$files$meta),
-        indicateurs_entretiens_csv = relative_to_output(suivi_longitudinal$files$indicators),
-        divergence_jensen_shannon_successive_csv = relative_to_output(suivi_longitudinal$files$jsd_successive),
-        divergence_jensen_shannon_reference_csv = relative_to_output(suivi_longitudinal$files$jsd_reference),
-        detection_ruptures_discursives_csv = relative_to_output(suivi_longitudinal$files$ruptures),
-        termes_evolution_csv = relative_to_output(suivi_longitudinal$files$terms),
-        contributions_divergence_jensen_shannon_csv = relative_to_output(suivi_longitudinal$files$contributions),
-        matrice_divergence_jensen_shannon_csv = relative_to_output(suivi_longitudinal$files$matrix),
-        concordancier_jsd_csv = relative_to_output(suivi_longitudinal$files$concordancier),
-        profils_emotionnels_csv = relative_to_output(suivi_longitudinal$files$emotion_profiles),
-        profils_valence_csv = relative_to_output(suivi_longitudinal$files$valence_profiles),
-        entropie_lexicale_png = if (!is.null(suivi_longitudinal$files$entropy_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$entropy_plot)) &&
-          file.exists(suivi_longitudinal$files$entropy_plot)) {
-          relative_to_output(suivi_longitudinal$files$entropy_plot)
-        } else {
-          NULL
-        },
-        redondance_relative_png = if (!is.null(suivi_longitudinal$files$redundancy_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$redundancy_plot)) &&
-          file.exists(suivi_longitudinal$files$redundancy_plot)) {
-          relative_to_output(suivi_longitudinal$files$redundancy_plot)
-        } else {
-          NULL
-        },
-        divergence_jensen_shannon_successive_png = if (!is.null(suivi_longitudinal$files$jsd_successive_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$jsd_successive_plot)) &&
-          file.exists(suivi_longitudinal$files$jsd_successive_plot)) {
-          relative_to_output(suivi_longitudinal$files$jsd_successive_plot)
-        } else {
-          NULL
-        },
-        divergence_jensen_shannon_reference_png = if (!is.null(suivi_longitudinal$files$jsd_reference_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$jsd_reference_plot)) &&
-          file.exists(suivi_longitudinal$files$jsd_reference_plot)) {
-          relative_to_output(suivi_longitudinal$files$jsd_reference_plot)
-        } else {
-          NULL
-        },
-        detection_ruptures_discursives_png = if (!is.null(suivi_longitudinal$files$ruptures_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$ruptures_plot)) &&
-          file.exists(suivi_longitudinal$files$ruptures_plot)) {
-          relative_to_output(suivi_longitudinal$files$ruptures_plot)
-        } else {
-          NULL
-        },
-        matrice_divergence_jensen_shannon_png = if (!is.null(suivi_longitudinal$files$matrix_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$matrix_plot)) &&
-          file.exists(suivi_longitudinal$files$matrix_plot)) {
-          relative_to_output(suivi_longitudinal$files$matrix_plot)
-        } else {
-          NULL
-        },
-        profils_emotionnels_png = if (!is.null(suivi_longitudinal$files$emotion_profiles_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$emotion_profiles_plot)) &&
-          file.exists(suivi_longitudinal$files$emotion_profiles_plot)) {
-          relative_to_output(suivi_longitudinal$files$emotion_profiles_plot)
-        } else {
-          NULL
-        },
-        profils_valence_png = if (!is.null(suivi_longitudinal$files$valence_profiles_plot) &&
-          nzchar(as.character(suivi_longitudinal$files$valence_profiles_plot)) &&
-          file.exists(suivi_longitudinal$files$valence_profiles_plot)) {
-          relative_to_output(suivi_longitudinal$files$valence_profiles_plot)
-        } else {
-          NULL
-        },
-        frises_emergences = if (!is.null(suivi_longitudinal$files$frises_emergences) &&
-          length(suivi_longitudinal$files$frises_emergences)) {
-          unname(vapply(suivi_longitudinal$files$frises_emergences, relative_to_output, character(1)))
-        } else {
-          NULL
-        },
-        barres_divergentes = if (!is.null(suivi_longitudinal$files$divergent_bars) &&
-          length(suivi_longitudinal$files$divergent_bars)) {
-          unname(vapply(suivi_longitudinal$files$divergent_bars, relative_to_output, character(1)))
-        } else {
-          NULL
-        },
-        waterfalls = if (!is.null(suivi_longitudinal$files$waterfalls) &&
-          length(suivi_longitudinal$files$waterfalls)) {
-          unname(vapply(suivi_longitudinal$files$waterfalls, relative_to_output, character(1)))
-        } else {
-          NULL
-        },
-        wordclouds = if (!is.null(suivi_longitudinal$files$wordclouds) &&
-          length(suivi_longitudinal$files$wordclouds)) {
-          unname(vapply(suivi_longitudinal$files$wordclouds, relative_to_output, character(1)))
-        } else {
-          NULL
-        }
-      )
-    }
   }
 
   if (run_afc && !is.null(classes)) {

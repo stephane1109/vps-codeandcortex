@@ -945,6 +945,12 @@ async function activateAnalysisHistoryEntry(entryId) {
     return;
   }
 
+  if (entry.navigationTarget === "suivi_longitudinal") {
+    log("[error] Cet historique provient de l'ancien module de trajectoire longitudinale, retire de cette version d'IRaMuTeQ Lite.");
+    renderAnalysisHistory();
+    return;
+  }
+
   await handleExportsFolderSelection(virtualFiles, entry.navigationTarget || "resultats_chd");
   renderAnalysisSteps(Array.isArray(entry.logs) ? entry.logs : []);
   renderAnalysisSummary(entry.summary || null);
@@ -15231,6 +15237,12 @@ async function startAnalysis(analysisKind = "chd") {
   const isLdaMode = analysisKind === "lda";
   const isSimiMode = analysisKind === "simi";
   const isSuiviMode = analysisKind === "suivi";
+
+  if (isSuiviMode) {
+    log("[error] Le module de trajectoire longitudinale a été retiré de cette version d'IRaMuTeQ Lite.");
+    return;
+  }
+
   const navigationTarget = getNavigationTargetForAnalysisKind({ isLdaMode, isSimiMode, isSuiviMode });
   const suiviSelectedUnits = isSuiviMode ? getSelectedMultiSelectValues(suiviInterviewsSelect) : [];
   const suiviAvailableUnits = isSuiviMode ? getSuiviAvailableUnits(document) : [];
@@ -15523,15 +15535,12 @@ async function startAnalysis(analysisKind = "chd") {
 
 activateTopTab("analyse");
 activateChdSubTab("dendrogramme");
-activateSuiviSubTab("suivi_indicateurs");
 activateHelpSubTab("help_general");
 resetResultPanes();
 renderResults([]);
 syncDendrogramSizing();
 renderMorphoPickers(document);
 renderAfcStarredVariablesPickers(document, { resetSelection: true });
-renderSuiviControls(document, { resetSelection: true });
-applySuiviPresentation();
 renderLdaMorphoPickers(document);
 renderClassificationModeCards(document);
 renderSimiTermsPickers(document);
@@ -15542,8 +15551,6 @@ void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void loadHelpMarkdown(helpLdaMarkdownContent, "lda.md");
-void loadHelpMarkdown(helpJsdMarkdownContent, "jsd.md");
-void loadHelpMarkdown(helpSuiviMarkdownContent, "suivi.md");
 void claimPageTicketOnOpen();
 window.setInterval(() => {
   void refreshTicketSidebarStatus();

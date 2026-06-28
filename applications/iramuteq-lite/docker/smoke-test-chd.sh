@@ -10,7 +10,7 @@ JOB_ID="build-smoke"
 rm -rf "$OUTPUT_ROOT/$JOB_ID"
 
 python3 /app/backend/run_job.py run \
-  --input /app/sante/santementale.txt \
+  --input /app/docker/smoke-corpus.txt \
   --config /app/docker/smoke-chd-config.json \
   --output-root "$OUTPUT_ROOT" \
   --job-id "$JOB_ID" \
