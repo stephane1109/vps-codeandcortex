@@ -91,7 +91,7 @@
                 <i class="icone fas fa-file-export"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Extraction commentaires YouTube</span>
-                    <span class="meta-application" data-status-meta>0 / 3 actif · 0 attente</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
                     <span class="description-application">Extraire les commentaires YouTube avec clé API Google obligatoire.</span>
                 </span>
             </a>
@@ -122,7 +122,7 @@
                 </span>
             </a>
 
-            <a href="https://speechtotext.codeandcortex.fr" class="carte-application" target="_blank">
+            <a href="https://speechtotext.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="mp3_to_text">
                 <span class="ruban-statut">
                     <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
                     <span class="statut" data-status-label>Libre</span>
@@ -131,7 +131,7 @@
                 <span class="contenu-carte">
                     <span class="titre-application">Speech to text</span>
                     <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
-                    <span class="description-application">Cobversion de fichier mp3 en texte avec Whisper.</span>
+                    <span class="description-application">Conversion de fichier mp3 en texte avec Whisper.</span>
                 </span>
             </a>
 
@@ -143,21 +143,34 @@
                 <i class="icone fas fa-ticket"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Cooccurrences</span>
-                    <span class="meta-application" data-status-meta>0 / 3 actif · 0 attente</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
                     <span class="description-application">Cooccurrences à partir d’un mot clé.</span>
                 </span>
             </a>
 
-            <a href="https://connectors.codeandcortex.fr" class="carte-application" target="_blank">
+            <a href="https://vps.codeandcortex.fr" class="carte-application" target="_blank">
                 <span class="ruban-statut">
-                    <span class="pastille-etat libre" aria-hidden="true"></span>
-                    <span class="statut">Vitrine</span>
+                    <span class="pastille-etat hors-ligne" aria-hidden="true"></span>
+                    <span class="statut">Portail</span>
+                </span>
+                <i class="icone fas fa-server"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">VPS</span>
+                    <span class="meta-application">Page d’accueil</span>
+                    <span class="description-application">Page d’accueil du serveur applicatif Code & Cortex.</span>
+                </span>
+            </a>
+
+            <a href="https://connectors.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="symbolic_connectors">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
                 </span>
                 <i class="icone fas fa-chart-pie"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">Symbolic connectors/span>
+                    <span class="titre-application">Symbolic connectors</span>
                     <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
-                    <span class="description-application">Pour tester les dicours algorithmique des ia génératives.</span>
+                    <span class="description-application">Pour tester les discours algorithmiques des IA génératives.</span>
                 </span>
             </a>
 
@@ -213,6 +226,19 @@
                 </span>
             </a>
 
+            <a href="https://divergence-jensen-shannon.codeandcortex.fr" class="carte-application" target="_blank" data-app-id="divergence-jensen-shannon">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-area"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Divergence Jensen-Shannon</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Comparer deux textes à partir de la divergence de Jensen-Shannon.</span>
+                </span>
+            </a>
+
         </section>
 
         <p class="pied" id="dashboard-note">
@@ -261,6 +287,17 @@
                 card.classList.add(stateClass);
             }
 
+            function markCardOffline(card, message) {
+                decorateCard(card, {
+                    state: "offline",
+                    stateLabel: "Hors ligne",
+                    active: 0,
+                    maxActive: 0,
+                    queued: 0,
+                    message: message || "",
+                });
+            }
+
             function decorateGlobal(payload) {
                 if (!payload) return;
 
@@ -276,7 +313,11 @@
                 cards.forEach((card) => {
                     const appId = card.dataset.appId;
                     const appPayload = payload.apps && payload.apps[appId];
-                    if (appPayload) decorateCard(card, appPayload);
+                    if (appPayload) {
+                        decorateCard(card, appPayload);
+                    } else {
+                        markCardOffline(card, "Aucune donnee recue pour cette application.");
+                    }
                 });
 
                 if (note) {
@@ -285,6 +326,16 @@
                     } else {
                         note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
                     }
+                }
+            }
+
+            function markDashboardOffline(message) {
+                cards.forEach((card) => markCardOffline(card, message));
+                globalActive.textContent = "0 · charge 0/0";
+                globalQueue.textContent = "0";
+                globalServer.textContent = "Hors ligne";
+                if (note) {
+                    note.textContent = message || "API dashboard indisponible.";
                 }
             }
 
@@ -307,9 +358,7 @@
                     const payload = await response.json();
                     applyDashboard(payload);
                 } catch (error) {
-                    if (note) {
-                        note.textContent = "API dashboard indisponible : vérifie le conteneur FastAPI et l’endpoint `/api/tickets/dashboard`.";
-                    }
+                    markDashboardOffline("API dashboard indisponible : verifie le conteneur FastAPI et l'endpoint `/api/tickets/dashboard`.");
                 }
             }
 
