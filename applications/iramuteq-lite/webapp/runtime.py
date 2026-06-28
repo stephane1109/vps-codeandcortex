@@ -26,22 +26,6 @@ TEXT_EXTENSIONS = {
     ".txt",
     ".xml",
 }
-OPTIONAL_PYTHON_DEPENDENCIES = {
-    "cv2",
-    "faster_whisper",
-    "imageio_ffmpeg",
-    "librosa",
-    "mediapipe",
-    "yt_dlp",
-}
-ALLOWED_MULTIMODAL_SCRIPTS = {
-    "alignement.py",
-    "audio.py",
-    "comparaison_ab.py",
-    "mouvements.py",
-    "noeuds.py",
-    "synchronisation.py",
-}
 
 
 def env_truthy(name: str) -> bool:
@@ -69,14 +53,6 @@ def jobs_root() -> Path:
 
 def downloads_root() -> Path:
     return ensure_directory(app_data_root() / "downloads")
-
-
-def multimodal_inputs_root() -> Path:
-    return ensure_directory(app_data_root() / "multimodale-inputs")
-
-
-def multimodal_outputs_root() -> Path:
-    return ensure_directory(app_data_root() / "multimodale-outputs")
 
 
 def mplconfig_dir() -> Path:
@@ -266,13 +242,6 @@ def missing_artifacts_message(
     return "\n".join(lines)
 
 
-def is_optional_missing(item: Any) -> bool:
-    value = str(item or "").strip()
-    if not value.startswith("python:"):
-        return False
-    return value.split(":", 1)[1] in OPTIONAL_PYTHON_DEPENDENCIES
-
-
 def mime_type_for_path(path: Path) -> str:
     guessed, _encoding = mimetypes.guess_type(str(path))
     return guessed or "application/octet-stream"
@@ -377,8 +346,8 @@ def bootstrap_dependencies() -> dict[str, Any]:
 
     installed_now = [str(item) for item in payload.get("installed_now") or []]
     missing_after = [str(item) for item in payload.get("missing_after") or []]
-    optional_missing = [item for item in missing_after if is_optional_missing(item)]
-    blocking_missing = [item for item in missing_after if item not in optional_missing]
+    optional_missing: list[str] = []
+    blocking_missing = missing_after
     blocking_labels = [
         item.split(":", 1)[1] if str(item).startswith("python:") else str(item)
         for item in blocking_missing
@@ -388,11 +357,7 @@ def bootstrap_dependencies() -> dict[str, Any]:
     success = bool(payload.get("success")) or not blocking_missing
     original_message = str(payload.get("message") or "").strip()
     message = original_message
-    if success and optional_missing:
-        optional_names = ", ".join(optional_labels)
-        prefix = f"{original_message} " if original_message else ""
-        message = f"{prefix}L'application texte est prête. Dépendances multimodales optionnelles absentes : {optional_names}."
-    elif success and not message:
+    if success and not message:
         if installed_now:
             message = f"Dépendances prêtes : {', '.join(installed_now)}"
         else:
@@ -410,11 +375,7 @@ def bootstrap_dependencies() -> dict[str, Any]:
         "missingAfter": blocking_missing,
         "blockingMessage": message if not success else "",
         "optionalMissing": optional_missing,
-        "optionalMessage": (
-            f"Dépendances multimodales optionnelles absentes : {', '.join(optional_labels)}."
-            if optional_labels
-            else ""
-        ),
+        "optionalMessage": "",
         "library": payload.get("library"),
         "rscript": payload.get("rscript") or resolve_rscript(),
         "python": payload.get("python") or sys.executable,
@@ -845,122 +806,6 @@ def save_annotation_dictionary_export(content: str, filename: str | None = None)
     return {
         "filename": target_path.name,
         "savedPath": str(target_path),
-    }
-
-
-def persist_multimodal_input(slot: str, filename: str, data: str) -> dict[str, Any]:
-    normalized_slot = str(slot or "").strip()
-    if normalized_slot not in {"audio", "cookies", "segments", "video"}:
-        raise ValueError("Type de fichier multimodal non autorisé.")
-
-    base_dir = ensure_directory(multimodal_inputs_root() / normalized_slot)
-    safe_name = safe_input_name(filename)
-    target_path = base_dir / f"{next_job_id()}-{safe_name}"
-    payload = base64.b64decode(str(data or "").encode("ascii"))
-    target_path.write_bytes(payload)
-    return {
-        "savedPath": str(target_path),
-        "filename": safe_name,
-        "bytesWritten": len(payload),
-    }
-
-
-def persist_multimodal_image_batch(files: list[dict[str, Any]]) -> dict[str, Any]:
-    if not files:
-        raise ValueError("Aucune image à préparer.")
-
-    batch_dir = ensure_directory(multimodal_inputs_root() / "images" / next_job_id())
-    saved_paths: list[str] = []
-    for index, item in enumerate(files, start=1):
-        safe_name = f"{index:04d}_{safe_input_name(str(item.get('filename') or 'image.png'))}"
-        target_path = batch_dir / safe_name
-        target_path.write_bytes(base64.b64decode(str(item.get("data") or "").encode("ascii")))
-        saved_paths.append(str(target_path))
-
-    return {
-        "savedDir": str(batch_dir),
-        "savedPaths": saved_paths,
-        "fileCount": len(saved_paths),
-    }
-
-
-def pick_output_directory() -> str:
-    target_dir = ensure_directory(multimodal_outputs_root() / next_job_id("sortie"))
-    return str(target_dir)
-
-
-def resolve_runtime_output_dir(output_dir: str) -> Path:
-    raw_path = str(output_dir or "").strip()
-    if not raw_path:
-        raise ValueError("Le dossier de sortie est vide.")
-    candidate = Path(raw_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = PROJECT_ROOT / candidate
-    return candidate.resolve()
-
-
-def run_multimodal_script(script_name: str, args: list[str], output_dir: str) -> dict[str, Any]:
-    normalized_name = str(script_name or "").strip()
-    if normalized_name not in ALLOWED_MULTIMODAL_SCRIPTS:
-        raise ValueError("Script multimodal non autorisé.")
-
-    script_path = PROJECT_ROOT / "multimodale" / normalized_name
-    if not script_path.is_file():
-        raise FileNotFoundError(f"Script multimodal introuvable : multimodale/{normalized_name}")
-
-    process = subprocess.run(
-        [sys.executable, str(script_path), *[str(item) for item in args or []]],
-        cwd=PROJECT_ROOT,
-        env=build_command_env(),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    stdout = process.stdout or ""
-    stderr = process.stderr or ""
-    if process.returncode != 0:
-        raise RuntimeError(
-            f"Le script multimodal {normalized_name} a échoué.\nstdout={stdout.strip()}\nstderr={stderr.strip()}"
-        )
-
-    output_dir_path = resolve_runtime_output_dir(output_dir)
-    files = collect_artifact_files(output_dir_path) if output_dir_path.is_dir() else []
-    logs = [
-        line.strip()
-        for line in [*stdout.splitlines(), *stderr.splitlines()]
-        if line.strip()
-    ]
-    return {
-        "success": True,
-        "outputDir": str(output_dir_path),
-        "logs": logs,
-        "files": files,
-        "stdout": stdout,
-        "stderr": stderr,
-    }
-
-
-def read_multimodal_progress(output_dir: str, analysis_key: str) -> dict[str, Any]:
-    output_dir_path = resolve_runtime_output_dir(output_dir)
-    progress_path = output_dir_path / f"progression_{str(analysis_key or '').strip()}.json"
-    if not progress_path.is_file():
-        return {
-            "exists": False,
-            "progress": 0,
-            "stage": "",
-            "message": "",
-            "payload": None,
-        }
-
-    payload = read_json_file(progress_path)
-    return {
-        "exists": True,
-        "progress": max(0, min(100, int(payload.get("progress") or 0))),
-        "stage": str(payload.get("stage") or ""),
-        "message": str(payload.get("message") or ""),
-        "payload": payload,
     }
 
 

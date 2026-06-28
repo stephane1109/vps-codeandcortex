@@ -356,14 +356,7 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         "altair": "altair",
         "vl_convert": "vl-convert-python",
     }
-    python_optional = {
-        "yt_dlp": "yt-dlp",
-        "imageio_ffmpeg": "imageio-ffmpeg",
-        "librosa": "librosa",
-        "cv2": "opencv-python",
-        "faster_whisper": "faster-whisper",
-        "mediapipe": "mediapipe",
-    }
+    python_optional = {}
     python_all = {**python_required, **python_optional}
     python_install_targets = {
         "numpy": "numpy<2",
@@ -373,16 +366,8 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         "wordcloud": "wordcloud",
         "altair": "altair",
         "vl_convert": "vl-convert-python",
-        "yt_dlp": "yt-dlp",
-        "imageio_ffmpeg": "imageio-ffmpeg",
-        "librosa": "librosa",
-        "cv2": "opencv-python",
-        "faster_whisper": "faster-whisper",
-        "mediapipe": "mediapipe==0.10.9",
     }
-    python_min_versions = {
-        "yt_dlp": "2025.01.15",
-    }
+    python_min_versions = {}
 
     def parse_version_token(version: str) -> tuple[int, ...]:
         raw = str(version or "").strip()
@@ -423,7 +408,7 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         return missing
 
     def detect_broken_python_packages() -> list[str]:
-        packages_to_check = ["mediapipe"]
+        packages_to_check: list[str] = []
         broken: list[str] = []
         for import_name in packages_to_check:
             if importlib.util.find_spec(import_name) is None:
@@ -538,17 +523,9 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
     missing_python_before = detect_missing_python_packages()
     broken_python_before = detect_broken_python_packages()
     outdated_python_before = detect_outdated_python_packages()
-    install_optional_python = str(os.environ.get("IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
     repair_python_before = sorted(
         set(detect_missing_python_packages(python_required) + [name for name in broken_python_before if name in python_required] + [name for name in outdated_python_before if name in python_required])
     )
-    if install_optional_python:
-        repair_python_before = sorted(set(repair_python_before + [name for name in missing_python_before if name in python_optional] + [name for name in broken_python_before if name in python_optional] + [name for name in outdated_python_before if name in python_optional]))
     installed_python_now: list[str] = []
     python_install_error: str | None = None
     missing_python_after = sorted(set(missing_python_before + broken_python_before))

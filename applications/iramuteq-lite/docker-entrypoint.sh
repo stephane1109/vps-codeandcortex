@@ -9,8 +9,6 @@ mkdir -p "$APP_DATA_DIR"
 mkdir -p "$APP_DATA_DIR/jobs"
 mkdir -p "$APP_DATA_DIR/downloads"
 mkdir -p "$APP_DATA_DIR/dictionnaires"
-mkdir -p "$APP_DATA_DIR/multimodale-inputs"
-mkdir -p "$APP_DATA_DIR/multimodale-outputs"
 mkdir -p "$MPLCONFIG_PATH"
 mkdir -p "${IRAMUTEQ_R_LIBS_USER:-/opt/iramuteq-r-library}"
 mkdir -p /tmp/iramuteq-lite

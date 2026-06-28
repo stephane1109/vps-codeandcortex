@@ -75,12 +75,10 @@ Optionnel en environnement non conteneurisé ou pour du debug local :
 
 ```env
 IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
-IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1
 ```
 
 Dans l'image Docker VPS a deployer sur Coolify, les dependances R/Python du coeur applicatif doivent etre preinstallees pendant le build.
 Le conteneur en production doit donc rester en `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0` pour eviter qu'un utilisateur declenche une installation longue au premier lancement.
-Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1` est defini pour un contexte local specifique.
 Le build Docker lance aussi un test de fumee CHD sur `sante/santementale.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
 
 ## Pourquoi ce choix
@@ -123,4 +121,3 @@ Dans la zone DNS de `codeandcortex.fr`, créer par exemple :
 - Le conteneur installe l'environnement applicatif complet en interne.
 - Le frontend reprend l'esthétique de la version Tauri, mais fonctionne dans le navigateur.
 - Les sorties utilisateurs, dictionnaires d'annotation et jobs sont stockés dans `IRAMUTEQ_APP_DATA_DIR`.
-- Certaines dépendances multimodales très spécifiques peuvent rester optionnelles selon l'image finale ; le coeur texte CHD/LDA/similitudes reste prioritaire.

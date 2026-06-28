@@ -940,19 +940,7 @@ async function activateAnalysisHistoryEntry(entryId) {
   );
 
   if (entry.navigationTarget === "multimodale") {
-    renderResults(virtualFiles);
-    const scriptName = getMultimodalScriptNameForHistoryKind(entry.analysisKind);
-    if (scriptName) {
-      hydrateGeneratedMultimodalAssets(scriptName, {
-        outputDir: entry.outputDir || null,
-        files: entry.artifacts,
-      });
-    }
-    activateTopTab("multimodale");
-    activateMultimodalSubTab(getMultimodalSubtabForHistoryKind(entry.analysisKind));
-    renderMultimodalWorkspace();
-    void refreshTicketSidebarStatus();
-    log(`[info] Résultats rechargés : ${getAnalysisHistoryLabel(entry)}.`);
+    log("[error] Cet historique provient de l'ancien module multimodal, retiré de cette version d'IRaMuTeQ Lite.");
     renderAnalysisHistory();
     return;
   }
@@ -15536,13 +15524,10 @@ async function startAnalysis(analysisKind = "chd") {
 activateTopTab("analyse");
 activateChdSubTab("dendrogramme");
 activateSuiviSubTab("suivi_indicateurs");
-activateMultimodalSubTab("multimodale_sources");
-activateMotionResultTab("brutes");
 activateHelpSubTab("help_general");
 resetResultPanes();
 renderResults([]);
 syncDendrogramSizing();
-renderMultimodalWorkspace();
 renderMorphoPickers(document);
 renderAfcStarredVariablesPickers(document, { resetSelection: true });
 renderSuiviControls(document, { resetSelection: true });
@@ -15559,7 +15544,6 @@ void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void loadHelpMarkdown(helpLdaMarkdownContent, "lda.md");
 void loadHelpMarkdown(helpJsdMarkdownContent, "jsd.md");
 void loadHelpMarkdown(helpSuiviMarkdownContent, "suivi.md");
-void loadHelpMarkdown(helpMultimodaleMarkdownContent, "multimodale.md");
 void claimPageTicketOnOpen();
 window.setInterval(() => {
   void refreshTicketSidebarStatus();

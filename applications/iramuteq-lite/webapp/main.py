@@ -99,27 +99,6 @@ def dispatch_tauri_command(command: str, payload: dict[str, Any]) -> Any:
             get_payload_arg(payload, "data"),
             get_payload_arg(payload, "filename", default=None),
         )
-    if command == "persist_multimodal_input":
-        return runtime.persist_multimodal_input(
-            get_payload_arg(payload, "slot"),
-            get_payload_arg(payload, "filename"),
-            get_payload_arg(payload, "data"),
-        )
-    if command == "persist_multimodal_image_batch":
-        return runtime.persist_multimodal_image_batch(get_payload_arg(payload, "files"))
-    if command == "pick_output_directory":
-        return runtime.pick_output_directory()
-    if command == "run_multimodal_script":
-        return runtime.run_multimodal_script(
-            get_payload_arg(payload, "scriptName", "script_name"),
-            get_payload_arg(payload, "args", default=[]),
-            get_payload_arg(payload, "outputDir", "output_dir"),
-        )
-    if command == "read_multimodal_progress":
-        return runtime.read_multimodal_progress(
-            get_payload_arg(payload, "outputDir", "output_dir"),
-            get_payload_arg(payload, "analysisKey", "analysis_key"),
-        )
     raise KeyError(command)
 
 
