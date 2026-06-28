@@ -76,8 +76,12 @@ COPY --chown=app:app . /app
 # #### PREINSTALLATION DES DEPENDANCES R
 # On installe les packages R necessaires pendant le build Docker pour eviter
 # que le premier utilisateur bloque sur un bootstrap long ou incomplet.
+# #### TEST DE FUMEE CHD
+# Une vraie analyse CHD est lancee pendant le build afin d'eviter
+# de deployer une image qui demarre mais ne produit aucun resultat exploitable.
 RUN Rscript /app/backend/r/bootstrap_iramuteq_env.R --mode install \
-    && python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, vl_convert"
+    && python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, vl_convert" \
+    && sh /app/docker/smoke-test-chd.sh
 
 RUN chmod +x /app/docker-entrypoint.sh \
     && mkdir -p /data/app /opt/iramuteq-r-library /tmp/iramuteq-lite \

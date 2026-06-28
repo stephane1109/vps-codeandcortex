@@ -81,6 +81,7 @@ IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1
 Dans l'image Docker VPS a deployer sur Coolify, les dependances R/Python du coeur applicatif doivent etre preinstallees pendant le build.
 Le conteneur en production doit donc rester en `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0` pour eviter qu'un utilisateur declenche une installation longue au premier lancement.
 Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUTEQ_BOOTSTRAP_INSTALL_OPTIONAL=1` est defini pour un contexte local specifique.
+Le build Docker lance aussi un test de fumee CHD sur `sante/santementale.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
 
 ## Pourquoi ce choix
 
@@ -96,6 +97,7 @@ Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUT
 4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `0` en production.
 5. Regarder les logs de build : si un package R echoue pendant la construction, l'image doit etre corrigee au build et non au premier lancement utilisateur.
 6. Si les logs mentionnent `fs`, `libuv` ou `FactoMineR`, le probleme est dans l'environnement R de l'image Docker, pas dans l'import du corpus texte.
+7. Si le nouveau test de fumee CHD casse pendant le build, le probleme est confirme dans l'image Docker elle-meme, avant meme l'ouverture de l'application dans le navigateur.
 
 ## Domaine et sous-domaine
 
