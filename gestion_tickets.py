@@ -97,14 +97,12 @@ def connecter_redis():
     if redis is None:
         raise RuntimeError("Le paquet Python 'redis' doit être installé pour utiliser la file d'attente.")
     # #### URL REDIS
-    # Priorite :
-    # 1. REDIS_URL
-    # 2. APP_TICKET_DEFAULT_REDIS_URL
-    # 3. valeur par defaut Coolify : redis://redis:6379/0
-    url_redis = (
-        os.getenv("REDIS_URL", "").strip()
-        or os.getenv("APP_TICKET_DEFAULT_REDIS_URL", "redis://redis:6379/0").strip()
-    )
+    # Le dashboard doit utiliser explicitement la meme variable REDIS_URL
+    # que les applications a tickets. Aucun fallback implicite n'est autorise
+    # ici pour eviter les faux diagnostics "hors ligne".
+    url_redis = os.getenv("REDIS_URL", "").strip()
+    if not url_redis:
+        raise RuntimeError("REDIS_URL absent sur le service dashboard : configure la meme URL Redis que sur les applications a tickets.")
     client = redis.from_url(url_redis, decode_responses=True)
     client.ping()
     return client

@@ -13,7 +13,7 @@ COPY dashboard_api.py gestion_tickets.py index.html style.css /app/
 
 # #### VARIABLES D'ENVIRONNEMENT IMPORTANTES
 # - REDIS_URL=redis://:motdepasse@redis:6379/0
-# - APP_TICKET_DEFAULT_REDIS_URL=redis://redis:6379/0
+# - ne pas utiliser APP_TICKET_DEFAULT_REDIS_URL sur ce dashboard
 # - CAPACITE_SERVEUR=6
 # - APPLICATIONS_TICKETS_JSON={...}
 

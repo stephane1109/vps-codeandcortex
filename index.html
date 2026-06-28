@@ -358,7 +358,7 @@
                     const payload = await response.json();
                     applyDashboard(payload);
                 } catch (error) {
-                    markDashboardOffline("API dashboard indisponible : verifie le conteneur FastAPI et l'endpoint `/api/tickets/dashboard`.");
+                    markDashboardOffline("API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.");
                 }
             }
 
