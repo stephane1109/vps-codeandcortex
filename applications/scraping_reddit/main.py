@@ -8,6 +8,7 @@ from __future__ import annotations
 import calendar
 import os
 from datetime import date, datetime, time, timezone
+from pathlib import Path
 
 import praw
 import streamlit as st
@@ -15,12 +16,21 @@ from langdetect import DetectorFactory, LangDetectException, detect
 
 DetectorFactory.seed = 0
 
+APP_DIR = Path(__file__).resolve().parent
+HELP_PATH = APP_DIR / "aide.md"
 DEFAULT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
 DEFAULT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
 DEFAULT_USER_AGENT = os.environ.get(
     "REDDIT_USER_AGENT",
     "api_streamlit/1.0 (by u/Accurate-Command-285)",
 )
+
+
+def load_help_markdown() -> str:
+    try:
+        return HELP_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return "Le fichier `aide.md` est introuvable pour cette application."
 
 
 def initialiser_etat() -> None:
@@ -130,6 +140,8 @@ initialiser_etat()
 
 st.title("Scraper Reddit : posts et commentaires en français")
 st.markdown("www.codeandcortex.fr")
+with st.expander("Aide"):
+    st.markdown(load_help_markdown())
 
 st.markdown("Identifiants API Reddit")
 client_id = st.text_input("Client ID", value=DEFAULT_CLIENT_ID, type="password")

@@ -20,6 +20,7 @@ from yt_dlp import YoutubeDL
 
 
 APP_DIR = Path(__file__).resolve().parent
+HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -59,6 +60,13 @@ def _env_int(nom: str, valeur_defaut: int) -> int:
         return int(os.environ.get(nom, str(valeur_defaut)))
     except Exception:
         return valeur_defaut
+
+
+def load_help_markdown() -> str:
+    try:
+        return HELP_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return "Le fichier `aide.md` est introuvable pour cette application."
 
 
 def initialiser_repertoires_session() -> None:
@@ -584,6 +592,8 @@ st.caption(
     "Si YouTube affiche un blocage anti-bot, il faut en pratique un cookies.txt recent, "
     "exporte depuis le navigateur qui vient d'ouvrir la video, avec un User-Agent coherent."
 )
+with st.expander("Aide"):
+    st.markdown(load_help_markdown())
 
 with st.expander("Diagnostic systeme"):
     try:
