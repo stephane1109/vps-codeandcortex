@@ -7,8 +7,10 @@ altair>=5,<6
 vl-convert-python
 opencv-python-headless<5
 scikit-learn
-fer
 tensorflow-cpu==2.15.*
+requests
+tqdm>=4.62.1
+Pillow
 yt-dlp
 youtube-transcript-api
 XlsxWriter
