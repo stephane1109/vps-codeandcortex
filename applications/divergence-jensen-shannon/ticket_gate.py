@@ -22,13 +22,8 @@ Controle d'acces Redis pour les applications Streamlit.
 Variables d'environnement a modifier si besoin :
 
 - REDIS_URL
-  URL de connexion Redis prioritaire.
+  URL de connexion Redis obligatoire.
   Exemple : redis://:motdepasse@redis-tickets:6379/0
-
-- APP_TICKET_DEFAULT_REDIS_URL
-  URL Redis de secours si REDIS_URL n'est pas renseignee.
-  Si ton service Coolify s'appelle simplement "redis", tu peux laisser :
-  redis://redis:6379/0
 
 - APP_TICKET_ID
   Identifiant technique de l'application dans Redis.
@@ -154,14 +149,14 @@ def _redis_client():
     if redis is None:
         return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
     redis_url_env = os.getenv("REDIS_URL", "").strip()
-    redis_url = redis_url_env or os.getenv("APP_TICKET_DEFAULT_REDIS_URL", "redis://redis:6379/0").strip()
-    redis_source = "REDIS_URL" if redis_url_env else "APP_TICKET_DEFAULT_REDIS_URL / redis://redis:6379/0"
+    if not redis_url_env:
+        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
     try:
-        client = redis.from_url(redis_url, decode_responses=True)
+        client = redis.from_url(redis_url_env, decode_responses=True)
         client.ping()
         return client, None
     except Exception as exc:  # pragma: no cover - depend du runtime Redis
-        return None, f"Connexion Redis impossible via {redis_source} : {exc}"
+        return None, f"Connexion Redis impossible via REDIS_URL : {exc}"
 
 
 def _keys(app_id: str) -> dict[str, str]:
@@ -457,6 +452,8 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 unsafe_allow_html=True,
             )
             st.error("Controle d'acces temporairement indisponible.")
+            if snapshot["message"]:
+                st.error(snapshot["message"])
 
     if snapshot["statut"] == "actif":
         st_autorefresh(interval=snapshot["heartbeat_ms"], key=f"{default_app_id}-heartbeat")
@@ -474,4 +471,6 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.error("File d'attente pleine pour cette application.")
     else:
         st.error("Controle d'acces temporairement indisponible.")
+        if snapshot["message"]:
+            st.error(snapshot["message"])
     st.stop()

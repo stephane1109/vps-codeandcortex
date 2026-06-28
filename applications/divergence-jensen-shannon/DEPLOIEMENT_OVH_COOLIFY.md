@@ -26,7 +26,23 @@ Dans Coolify :
 ```env
 PORT=8501
 STREAMLIT_SERVER_BASE_URL_PATH=
+REDIS_URL=redis://:motdepasse@nom-exact-du-service-redis:6379/0
+APP_TICKET_ID=divergence-jensen-shannon
+APP_TICKET_MAX_ACTIVE=1
+APP_TICKET_COST=4
+CAPACITE_SERVEUR=6
+APP_TICKET_TTL_SECONDS=3600
+APP_TICKET_MAX_WAITING=20
+APP_TICKET_WAIT_REFRESH_MS=10000
+APP_TICKET_HEARTBEAT_MS=300000
+APP_TICKET_ENFORCED=1
 ```
+
+### Commentaires utiles
+
+- `REDIS_URL` doit contenir le nom exact du service Redis visible dans Coolify.
+- Si Redis exige un utilisateur ACL, utilise `redis://default:motdepasse@nom-exact-du-service-redis:6379/0`
+- Si l'application affiche `Controle d'acces temporairement indisponible`, la cause Redis exacte doit maintenant s'afficher juste en dessous dans l'interface.
 
 ## 3. Healthcheck recommande
 
