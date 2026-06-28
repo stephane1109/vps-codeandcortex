@@ -45,30 +45,55 @@ configure_user_library <- function() {
 
 install_missing_packages <- function(packages, repo, lib) {
   if (!length(packages)) return(character(0))
-  tryCatch(
-    {
-      # #### VPS / COOLIFY
-      # Certains paquets CRAN (notamment fs, dependance indirecte de FactoMineR/factoextra)
-      # echouent sur certains builds Docker si libuv n'est pas detecte correctement.
-      # On force ici l'utilisation de la version embarquee de libuv pour rendre
-      # le bootstrap plus robuste, meme si libuv1-dev n'est pas visible.
-      Sys.setenv(USE_BUNDLED_LIBUV = "1")
-      utils::install.packages(
-        packages,
-        repos = repo,
-        # #### IMPORTANT VPS / COOLIFY
-        # On installe uniquement les dependances strictement necessaires
-        # (Depends / Imports / LinkingTo) pour eviter de tirer des Suggests
-        # lourdes ou non indispensables comme certaines briques geospatiales.
-        dependencies = c("Depends", "Imports", "LinkingTo"),
-        lib = lib
-      )
-      character(0)
-    },
-    error = function(e) {
-      paste0("install.packages: ", conditionMessage(e))
+  install_errors <- character(0)
+  # #### VPS / COOLIFY
+  # Certains paquets CRAN (notamment fs, dependance indirecte de FactoMineR/factoextra)
+  # echouent sur certains builds Docker si libuv n'est pas detecte correctement.
+  # On force ici l'utilisation de la version embarquee de libuv pour rendre
+  # le bootstrap plus robuste, meme si libuv1-dev n'est pas visible.
+  # #### VPS / COOLIFY
+  # `MAKEFLAGS=-j1` limite la compilation a un seul coeur pour reduire les pointes
+  # memoire qui peuvent faire echouer les builds Coolify sur des VPS modestes.
+  Sys.setenv(USE_BUNDLED_LIBUV = "1", MAKEFLAGS = "-j1")
+
+  install_opts <- c("--no-html", "--no-help", "--no-demo", "--no-docs")
+  dependency_scope <- c("Depends", "Imports", "LinkingTo")
+
+  for (pkg in packages) {
+    installed_now <- rownames(installed.packages())
+    if (pkg %in% installed_now) {
+      next
     }
-  )
+
+    message("Installation package R requis: ", pkg)
+
+    install_error <- tryCatch(
+      {
+        utils::install.packages(
+          pkg,
+          repos = repo,
+          # #### IMPORTANT VPS / COOLIFY
+          # On installe uniquement les dependances strictement necessaires
+          # (Depends / Imports / LinkingTo) pour eviter de tirer des Suggests
+          # lourdes ou non indispensables comme certaines briques geospatiales.
+          dependencies = dependency_scope,
+          lib = lib,
+          Ncpus = 1L,
+          INSTALL_opts = install_opts
+        )
+        NULL
+      },
+      error = function(e) {
+        conditionMessage(e)
+      }
+    )
+
+    if (!is.null(install_error) && nzchar(install_error)) {
+      install_errors <- c(install_errors, paste0(pkg, ": ", install_error))
+    }
+  }
+
+  install_errors
 }
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
