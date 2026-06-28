@@ -20,6 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
 # - REDIS_URL=redis://:motdepasse@redis:6379/0
+# - ne pas definir APP_TICKET_DEFAULT_REDIS_URL dans cette application
 # - APP_TICKET_MAX_ACTIVE pour autoriser plus d'un utilisateur
 # - APP_TICKET_COST pour ajuster la charge serveur
 # - APP_TICKET_TTL_SECONDS si une transcription peut durer longtemps
