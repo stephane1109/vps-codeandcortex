@@ -379,27 +379,42 @@ def bootstrap_dependencies() -> dict[str, Any]:
     missing_after = [str(item) for item in payload.get("missing_after") or []]
     optional_missing = [item for item in missing_after if is_optional_missing(item)]
     blocking_missing = [item for item in missing_after if item not in optional_missing]
+    blocking_labels = [
+        item.split(":", 1)[1] if str(item).startswith("python:") else str(item)
+        for item in blocking_missing
+    ]
+    optional_labels = [item.split(":", 1)[1] for item in optional_missing]
 
     success = bool(payload.get("success")) or not blocking_missing
-    message = str(payload.get("message") or "").strip()
+    original_message = str(payload.get("message") or "").strip()
+    message = original_message
     if success and optional_missing:
-        optional_names = ", ".join(item.split(":", 1)[1] for item in optional_missing)
-        prefix = f"{message} " if message else ""
+        optional_names = ", ".join(optional_labels)
+        prefix = f"{original_message} " if original_message else ""
         message = f"{prefix}L'application texte est prête. Dépendances multimodales optionnelles absentes : {optional_names}."
     elif success and not message:
         if installed_now:
             message = f"Dépendances prêtes : {', '.join(installed_now)}"
         else:
             message = "Dépendances R/Python déjà disponibles."
+    elif not success and blocking_labels:
+        message = f"Dépendances requises encore manquantes : {', '.join(blocking_labels)}."
     elif not success and not message:
-        message = "Certaines dépendances restent manquantes."
+        message = "Certaines dépendances requises restent manquantes."
 
     return {
         "success": success,
         "message": message,
+        "detailsMessage": original_message if original_message and original_message != message else "",
         "installedNow": installed_now,
         "missingAfter": blocking_missing,
+        "blockingMessage": message if not success else "",
         "optionalMissing": optional_missing,
+        "optionalMessage": (
+            f"Dépendances multimodales optionnelles absentes : {', '.join(optional_labels)}."
+            if optional_labels
+            else ""
+        ),
         "library": payload.get("library"),
         "rscript": payload.get("rscript") or resolve_rscript(),
         "python": payload.get("python") or sys.executable,

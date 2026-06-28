@@ -2144,9 +2144,19 @@ async function ensureDependenciesReady() {
         appState.bootstrapReady = false;
         appState.bootstrapPromise = null;
         if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets (voir logs)";
-        log(`[error] ${payload.message || "Bootstrap des packages en échec."}`);
-        if (Array.isArray(payload.missingAfter) && payload.missingAfter.length) {
+        const blockingMessage = payload.blockingMessage || payload.message || "Bootstrap des packages en échec.";
+        const optionalMessage = payload.optionalMessage || "";
+        const detailsMessage = payload.detailsMessage || "";
+
+        log(`[error] ${blockingMessage}`);
+        if (detailsMessage) {
+          log(`[info] Détail bootstrap : ${detailsMessage}`);
+        }
+        if (!blockingMessage && Array.isArray(payload.missingAfter) && payload.missingAfter.length) {
           log(`[error] Dépendances encore manquantes : ${payload.missingAfter.join(", ")}`);
+        }
+        if (optionalMessage) {
+          log(`[info] ${optionalMessage}`);
         }
         if (payload.rscript) {
           log(`[info] Rscript utilisé : ${payload.rscript}`);
