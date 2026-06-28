@@ -453,7 +453,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
             )
             st.error("Controle d'acces temporairement indisponible.")
             if snapshot["message"]:
-                st.caption(snapshot["message"])
+                st.error(snapshot["message"])
 
     if snapshot["statut"] == "actif":
         st_autorefresh(interval=snapshot["heartbeat_ms"], key=f"{default_app_id}-heartbeat")
@@ -472,5 +472,5 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
     else:
         st.error("Controle d'acces temporairement indisponible.")
         if snapshot["message"]:
-            st.caption(snapshot["message"])
+            st.error(snapshot["message"])
     st.stop()
