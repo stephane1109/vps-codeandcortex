@@ -3,6 +3,29 @@
 suppressWarnings(options(stringsAsFactors = FALSE))
 invisible(suppressWarnings(try(Sys.setlocale("LC_CTYPE", "en_US.UTF-8"), silent = TRUE)))
 
+split_lib_paths <- function(value) {
+  if (is.null(value) || !length(value)) return(character(0))
+  parts <- trimws(unlist(strsplit(as.character(value[[1]]), .Platform$path.sep, fixed = TRUE), use.names = FALSE))
+  parts[nzchar(parts)]
+}
+
+configure_runtime_library_paths <- function() {
+  lib_target <- Sys.getenv("IRAMUTEQ_R_LIBS_USER", unset = "")
+  system_candidates <- unique(c(
+    if (nzchar(lib_target)) lib_target else character(0),
+    split_lib_paths(Sys.getenv("IRAMUTEQ_R_SYSTEM_LIBS", unset = "")),
+    split_lib_paths(Sys.getenv("R_LIBS_SITE", unset = "")),
+    "/usr/lib/R/site-library",
+    "/usr/lib/R/library",
+    "/usr/local/lib/R/site-library",
+    "/usr/local/lib/R/library",
+    .libPaths()
+  ))
+  .libPaths(unique(Filter(dir.exists, system_candidates)))
+}
+
+configure_runtime_library_paths()
+
 `%||%` <- function(x, y) {
   if (is.null(x) || length(x) == 0) y else x
 }

@@ -29,6 +29,12 @@ required_packages <- c(
   "FactoMineR", "igraph", "proxy", "htmltools", "topicmodels", "irlba", "factoextra"
 )
 
+split_lib_paths <- function(value) {
+  if (is.null(value) || !length(value)) return(character(0))
+  parts <- trimws(unlist(strsplit(as.character(value[[1]]), .Platform$path.sep, fixed = TRUE), use.names = FALSE))
+  parts[nzchar(parts)]
+}
+
 configure_user_library <- function() {
   lib_target <- Sys.getenv("IRAMUTEQ_R_LIBS_USER", unset = "")
   if (!nzchar(lib_target)) {
@@ -37,8 +43,20 @@ configure_user_library <- function() {
   if (!dir.exists(lib_target)) {
     dir.create(lib_target, recursive = TRUE, showWarnings = FALSE)
   }
+  system_candidates <- unique(c(
+    split_lib_paths(Sys.getenv("IRAMUTEQ_R_SYSTEM_LIBS", unset = "")),
+    split_lib_paths(Sys.getenv("R_LIBS_SITE", unset = "")),
+    "/usr/lib/R/site-library",
+    "/usr/lib/R/library",
+    "/usr/local/lib/R/site-library",
+    "/usr/local/lib/R/library",
+    .libPaths()
+  ))
+  existing_system_libs <- Filter(dir.exists, system_candidates)
   if (dir.exists(lib_target)) {
-    .libPaths(unique(c(lib_target, .libPaths())))
+    .libPaths(unique(c(lib_target, existing_system_libs)))
+  } else {
+    .libPaths(unique(existing_system_libs))
   }
   normalizePath(.libPaths()[1], winslash = "/", mustWork = FALSE)
 }

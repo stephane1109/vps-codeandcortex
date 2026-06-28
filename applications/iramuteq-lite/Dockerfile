@@ -6,6 +6,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     IRAMUTEQ_APP_DATA_DIR=/data/app \
     IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library \
+    IRAMUTEQ_R_SYSTEM_LIBS=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
+    R_LIBS_SITE=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
     IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0 \
     USE_BUNDLED_LIBUV=1 \
     RGL_USE_NULL=TRUE \
@@ -27,6 +29,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # #### NOTE BUILD R
 # USE_BUNDLED_LIBUV=1 reste active pour securiser l'installation du package R `fs`
 # si Coolify ou le miroir CRAN ne voit pas correctement `libuv.pc`.
+# #### BIBLIOTHEQUES R SYSTEME
+# Les paquets `r-cran-*` installes via `apt` tombent dans `/usr/lib/R/...` alors que
+# `rocker/r-ver` utilise aussi `/usr/local/lib/R/...`. On force ici la visibilite des
+# deux emplacements pour eviter que le bootstrap recompilie inutilement depuis CRAN.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -104,14 +110,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       r-cran-promises \
       r-cran-proxy \
       r-cran-purrr \
+      r-cran-quanteda \
       r-cran-quantreg \
       r-cran-rcppeigen \
       r-cran-rcolorbrewer \
+      r-cran-reticulate \
+      r-cran-rgexf \
+      r-cran-rgl \
       r-cran-rmarkdown \
       r-cran-rstatix \
       r-cran-scales \
       r-cran-scatterplot3d \
+      r-cran-shiny \
+      r-cran-shinyfiles \
       r-cran-slam \
+      r-cran-sna \
       r-cran-snowballc \
       r-cran-stopwords \
       r-cran-stringi \
@@ -123,6 +136,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       r-cran-vctrs \
       r-cran-viridis \
       r-cran-viridislite \
+      r-cran-visnetwork \
       r-cran-wordcloud \
       r-cran-xml2 \
       r-cran-yaml \

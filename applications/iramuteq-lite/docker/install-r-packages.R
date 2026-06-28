@@ -1,11 +1,26 @@
 options(repos = c(CRAN = Sys.getenv("R_CRAN_MIRROR", unset = "https://cloud.r-project.org")))
 
+split_lib_paths <- function(value) {
+  if (is.null(value) || !length(value)) return(character(0))
+  parts <- trimws(unlist(strsplit(as.character(value[[1]]), .Platform$path.sep, fixed = TRUE), use.names = FALSE))
+  parts[nzchar(parts)]
+}
+
 lib_target <- Sys.getenv("IRAMUTEQ_R_LIBS_USER", unset = "")
 if (!nzchar(lib_target)) {
   lib_target <- file.path(path.expand("~"), ".local", "share", "iramuteq-lite", "R", "library")
 }
 dir.create(lib_target, recursive = TRUE, showWarnings = FALSE)
-.libPaths(unique(c(lib_target, .libPaths())))
+system_candidates <- unique(c(
+  split_lib_paths(Sys.getenv("IRAMUTEQ_R_SYSTEM_LIBS", unset = "")),
+  split_lib_paths(Sys.getenv("R_LIBS_SITE", unset = "")),
+  "/usr/lib/R/site-library",
+  "/usr/lib/R/library",
+  "/usr/local/lib/R/site-library",
+  "/usr/local/lib/R/library",
+  .libPaths()
+))
+.libPaths(unique(c(lib_target, Filter(dir.exists, system_candidates))))
 
 cran_packages <- c(
   "ape",

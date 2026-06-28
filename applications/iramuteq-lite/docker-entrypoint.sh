@@ -15,5 +15,6 @@ mkdir -p /tmp/iramuteq-lite
 
 export TMPDIR="${TMPDIR:-/tmp/iramuteq-lite}"
 export MPLCONFIGDIR="$MPLCONFIG_PATH"
+export R_LIBS_SITE="${R_LIBS_SITE:-${IRAMUTEQ_R_SYSTEM_LIBS:-/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library}}"
 
 exec python3 -m uvicorn webapp.main:app --host 0.0.0.0 --port "$PORT"
