@@ -6,7 +6,7 @@ saisies.
 
 ## Dépendances
 - `densite.py` : construction du texte combiné à partir du DataFrame filtré.
-- `test_lesch_Kincaid.py` : calcul des scores Flesch-Kincaid, bande de
+- `flesch_kincaid.py` : calcul des scores Flesch-Kincaid, bande de
   difficulté et messages d'interprétation.
 - `fcts_utils.py` : affichage des connecteurs actifs pour guider
   l'utilisateur.
@@ -22,13 +22,13 @@ import pandas as pd
 import streamlit as st
 
 from densite import build_text_from_dataframe
-from fcts_utils import render_connectors_reminder
-from test_lesch_Kincaid import (
+from flesch_kincaid import (
     READABILITY_SCALE,
     compute_flesch_kincaid_metrics,
     get_readability_band,
     interpret_reading_ease,
 )
+from fcts_utils import render_connectors_reminder
 
 
 def rendu_lisibilite(tab, df: pd.DataFrame, filtered_connectors: Dict[str, str]) -> None:

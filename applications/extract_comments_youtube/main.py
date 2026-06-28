@@ -3,6 +3,7 @@ import json
 import os
 import re
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
@@ -21,6 +22,8 @@ RESULT_COLUMNS = [
 ]
 
 DEFAULT_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+APP_DIR = Path(__file__).resolve().parent
+HELP_PATH = APP_DIR / "aide.md"
 
 
 class CommentsDisabledError(Exception):
@@ -366,6 +369,13 @@ def dataframes_to_excel_bytes(video_df: pd.DataFrame, comments_df: pd.DataFrame)
     return buffer.getvalue()
 
 
+def load_help_markdown() -> str:
+    try:
+        return HELP_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return "Le fichier `aide.md` est introuvable pour cette application."
+
+
 st.set_page_config(page_title="Extract Comments YouTube", layout="wide")
 
 if "video_details" not in st.session_state:
@@ -384,6 +394,9 @@ st.caption(
     "Recuperez les commentaires d'une video YouTube ou YouTube Shorts, "
     "puis telechargez-les au format texte ou Excel."
 )
+
+with st.expander("Aide"):
+    st.markdown(load_help_markdown())
 
 st.markdown("### 1. Parametres")
 
@@ -415,11 +428,6 @@ with options_col_2:
 
 with options_col_3:
     clean_emojis = st.checkbox("Supprimer les emojis", value=True)
-
-st.info(
-    "Vous pouvez renseigner la variable d'environnement YOUTUBE_API_KEY dans Coolify "
-    "pour pre-remplir la cle API. L'application n'ecrit aucun fichier sur le serveur."
-)
 
 if st.button("Extraire les commentaires", type="primary"):
     st.session_state.video_details = None

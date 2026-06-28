@@ -439,7 +439,7 @@ st.set_page_config(page_title="Temporalité multimodale – SHS/Politique", layo
 # - APP_TICKET_COST
 # - CAPACITE_SERVEUR
 # - APP_TICKET_TTL_SECONDS (augmente-la si les analyses sont longues)
-enforce_streamlit_access("analyses_multi_modales", "Analyses multi-modales")
+enforce_streamlit_access("Analyses_multi_modales", "Analyses multi-modales")
 st.title("Analyse multimodale de la temporalité (texte + audio + images)")
 
 for k in [
@@ -493,8 +493,8 @@ tab_data, tab_analyse, tab_anomalies, tab_tests, tab_attitudes, tab_emotions, ta
 
 with st.sidebar:
     st.header("Paramètres")
-    nlp, msg_nlp = charger_spacy_transformer()
-    st.caption(msg_nlp)
+    nlp = None
+    st.caption("Le modele spaCy Transformer sera charge uniquement au lancement de l'analyse.")
     locuteur_global = st.text_input("Identifiant locuteur", value="locuteur_1")
     use_whisper = st.checkbox("Transcrire l'audio avec Whisper (si installé)", value=False)
     fichiers_txt = st.file_uploader("Fichiers texte (.txt)", type=["txt"], accept_multiple_files=True)
@@ -518,8 +518,10 @@ with st.sidebar:
     lancer = st.button("Lancer l’analyse")
 
 if lancer:
-    keep_ticket_alive("analyses_multi_modales", "Analyses multi-modales")
+    keep_ticket_alive("Analyses_multi_modales", "Analyses multi-modales")
+    nlp, msg_nlp = charger_spacy_transformer()
     with tab_data:
+        st.caption(msg_nlp)
         st.subheader("Texte – Documents et segments (phrases)")
         docs_rows, segments_txt_rows = [], []
         df_align_sec_uploaded = None
@@ -530,7 +532,7 @@ if lancer:
             else:
                 texts_map = st.session_state.get("texts_map", {}) or {}
                 for f in fichiers_txt:
-                    keep_ticket_alive("analyses_multi_modales", "Analyses multi-modales")
+                    keep_ticket_alive("Analyses_multi_modales", "Analyses multi-modales")
                     contenu = f.read().decode("utf-8", errors="ignore")
                     texts_map[f.name] = contenu
                     out = indicateurs_texte_doc(contenu, nlp)
@@ -580,7 +582,7 @@ if lancer:
         segs_rows = []
         if fichiers_audio:
             for f in fichiers_audio:
-                keep_ticket_alive("analyses_multi_modales", "Analyses multi-modales")
+                keep_ticket_alive("Analyses_multi_modales", "Analyses multi-modales")
                 fbytes = f.read()
                 y, sr, err = charger_audio_bytes(fbytes, sr_target=16000)
                 if err:
@@ -621,7 +623,7 @@ if lancer:
 
         texte_corrige = st.session_state.get("texte_corrige_global", "")
         if fichier_timestamps is not None:
-            keep_ticket_alive("analyses_multi_modales", "Analyses multi-modales")
+            keep_ticket_alive("Analyses_multi_modales", "Analyses multi-modales")
             try:
                 df_align_sec_uploaded = charger_timestamps_depuis_fichier(
                     fichier_timestamps.getvalue(), filename=fichier_timestamps.name
@@ -701,7 +703,7 @@ if lancer:
 
         st.subheader("Images – Inventaire (1 fps strict)")
         if fichiers_images:
-            keep_ticket_alive("analyses_multi_modales", "Analyses multi-modales")
+            keep_ticket_alive("Analyses_multi_modales", "Analyses multi-modales")
             df_images = preparer_images(fichiers_images, decalage_global_s=decalage_global_s)
             st.session_state["df_images"] = df_images.copy()
         df_images = st.session_state.get("df_images")

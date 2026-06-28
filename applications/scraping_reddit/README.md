@@ -29,3 +29,8 @@ streamlit run main.py
 ## Deploiement VPS / Coolify
 
 Le dossier GitHub cible est `applications/scraping_reddit`.
+
+## Aide
+
+Une aide dediee a la creation du `client_id`, du `client_secret` et du
+`user_agent` Reddit est disponible dans `aide.md`.

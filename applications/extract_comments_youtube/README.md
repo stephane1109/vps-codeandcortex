@@ -40,3 +40,4 @@ Application accessible ensuite sur `http://localhost:8501`.
 - Une cle API YouTube Data v3 valide est necessaire.
 - Seuls les commentaires publics exposes par l'API YouTube peuvent etre recuperes.
 - Si les commentaires sont desactives pour une video, l'application retourne quand meme les metadonnees de la video.
+- Une aide dediee a la creation de la cle API YouTube et a la comprehension des quotas est disponible dans `aide.md`.

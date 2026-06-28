@@ -402,26 +402,12 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
 def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
     snapshot = keep_ticket_alive(default_app_id, app_label)
 
+    if not snapshot["enabled"]:
+        return snapshot
+
     with st.sidebar:
         st.markdown("### Acces utilisateur")
         st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
-        st.caption(
-            "Variables utiles : REDIS_URL, APP_TICKET_ID, APP_TICKET_MAX_ACTIVE, "
-            "APP_TICKET_COST, CAPACITE_SERVEUR, APP_TICKET_TTL_SECONDS."
-        )
-
-        if not snapshot["enabled"]:
-            st.markdown(
-                """
-                <div class="ticket-status-card">
-                  <span class="ticket-status-dot is-error"></span>
-                  <div class="ticket-status-meta"><strong>Controle desactive</strong><br>Redis n'est pas branche pour cette application.</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.warning(snapshot["message"])
-            return snapshot
 
         if snapshot["statut"] == "actif":
             st.markdown(
@@ -449,6 +435,17 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 unsafe_allow_html=True,
             )
             st.warning(f"Application occupee. Position dans la file : {position}.")
+        elif snapshot["statut"] == "refuse":
+            st.markdown(
+                """
+                <div class="ticket-status-card">
+                  <span class="ticket-status-dot is-error"></span>
+                  <div class="ticket-status-meta"><strong>File d'attente pleine</strong><br>Impossible d'ajouter un nouvel utilisateur pour le moment.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.error("File d'attente pleine pour cette application.")
         else:
             st.markdown(
                 """
@@ -459,10 +456,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 """,
                 unsafe_allow_html=True,
             )
-            st.error(snapshot.get("message") or "Acces indisponible.")
-
-    if not snapshot["enabled"]:
-        return snapshot
+            st.error("Controle d'acces temporairement indisponible.")
 
     if snapshot["statut"] == "actif":
         st_autorefresh(interval=snapshot["heartbeat_ms"], key=f"{default_app_id}-heartbeat")
@@ -476,5 +470,8 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         )
         st.stop()
 
-    st.error(snapshot.get("message") or f"Acces refuse a {app_label}.")
+    if snapshot["statut"] == "refuse":
+        st.error("File d'attente pleine pour cette application.")
+    else:
+        st.error("Controle d'acces temporairement indisponible.")
     st.stop()

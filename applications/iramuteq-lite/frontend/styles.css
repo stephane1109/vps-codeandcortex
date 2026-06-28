@@ -1117,6 +1117,13 @@ progress {
   padding: 1rem;
 }
 
+.diagnostic-state {
+  white-space: pre-line;
+  place-items: start;
+  text-align: left;
+  align-content: start;
+}
+
 .result-image {
   display: block;
   width: 100%;

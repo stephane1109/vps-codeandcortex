@@ -1,8 +1,9 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_PREFER_BINARY=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
@@ -13,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/home/app/.cache/huggingface \
     TRANSFORMERS_CACHE=/home/app/.cache/huggingface \
     ULTRALYTICS_HOME=/home/app/.cache/ultralytics \
-    APP_TICKET_ID=analyses_multi_modales \
+    APP_TICKET_ID=Analyses_multi_modales \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
     APP_TICKET_TTL_SECONDS=3600 \
@@ -33,6 +34,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         ffmpeg \
         fonts-dejavu-core \
         libgl1 \
@@ -61,7 +63,7 @@ USER app
 
 EXPOSE 8501
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=8 \
   CMD python -c "import os, urllib.request; port = os.getenv('PORT', '8501'); urllib.request.urlopen(f'http://127.0.0.1:{port}/_stcore/health', timeout=3).read()"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

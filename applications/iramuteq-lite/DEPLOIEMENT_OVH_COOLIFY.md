@@ -37,6 +37,20 @@ Application accessible ensuite sur :
 5. Définir le port exposé sur `8000`
 6. Ajouter un volume persistant monté sur `/data/app`
 
+## Import des corpus texte sur le VPS
+
+Le VPS n'a pas besoin d'un parametrage special pour "autoriser" les fichiers texte :
+
+- le navigateur lit le fichier `.txt` choisi par l'utilisateur
+- le frontend envoie ensuite le contenu texte au backend HTTP
+- le backend ecrit le corpus et les sorties du job dans `IRAMUTEQ_APP_DATA_DIR`
+- en production Coolify, cela correspond normalement a `/data/app/jobs`
+
+En clair :
+
+- si le corpus s'importe mais qu'aucun resultat ne sort, le blocage vient en general du conteneur ou des dependances R/Python
+- ce n'est pas un probleme de capacite native du VPS a stocker un `.txt`
+
 ## Variables d'environnement utiles
 
 ```env
@@ -81,6 +95,7 @@ Les dependances Python multimodales lourdes restent optionnelles sauf si `IRAMUT
 3. Confirmer que le `Base Directory` est bien `/applications/iramuteq-lite`.
 4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `0` en production.
 5. Regarder les logs de build : si un package R echoue pendant la construction, l'image doit etre corrigee au build et non au premier lancement utilisateur.
+6. Si les logs mentionnent `fs`, `libuv` ou `FactoMineR`, le probleme est dans l'environnement R de l'image Docker, pas dans l'import du corpus texte.
 
 ## Domaine et sous-domaine
 

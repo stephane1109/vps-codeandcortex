@@ -551,7 +551,7 @@ async function refreshTicketSidebarStatus() {
   try {
     const snapshot = await callTicketApi("/api/tickets/status");
     if (!snapshot.enabled) {
-      setSidebarTicketStatus("Acces libre (Redis desactive)", "idle");
+      setSidebarTicketStatus("Application disponible", "idle");
       return snapshot;
     }
     if (snapshot.statut === "actif") {
@@ -566,11 +566,48 @@ async function refreshTicketSidebarStatus() {
       setSidebarTicketStatus("Application occupee", "waiting");
       return snapshot;
     }
+    if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
+      setSidebarTicketStatus(
+        snapshot.statut === "refuse" ? "File d'attente pleine" : "Acces serveur indisponible",
+        "error"
+      );
+      return snapshot;
+    }
     setSidebarTicketStatus("Application disponible", "idle");
     return snapshot;
   } catch (error) {
     setSidebarTicketStatus("Statut utilisateur indisponible", "error");
     return normalizeTicketSnapshot({ enabled: false, message: error?.message || String(error) });
+  }
+}
+
+async function claimPageTicketOnOpen() {
+  try {
+    const snapshot = await claimAnalysisTicket();
+    if (!snapshot.enabled) {
+      setSidebarTicketStatus("Application disponible", "idle");
+      return snapshot;
+    }
+    if (snapshot.statut === "actif") {
+      setSidebarTicketStatus("Session reservee sur cette application", "active");
+      return snapshot;
+    }
+    if (snapshot.statut === "attente") {
+      setSidebarTicketStatus(`File d'attente : position ${snapshot.position || "?"}`, "waiting");
+      return snapshot;
+    }
+    if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
+      setSidebarTicketStatus(
+        snapshot.statut === "refuse" ? "File d'attente pleine" : "Acces serveur indisponible",
+        "error"
+      );
+      return snapshot;
+    }
+    setSidebarTicketStatus("Acces serveur indisponible", "error");
+    return snapshot;
+  } catch (error) {
+    setSidebarTicketStatus("Statut utilisateur indisponible", "error");
+    return null;
   }
 }
 
@@ -600,9 +637,12 @@ async function releaseAnalysisTicket({ silent = false } = {}) {
 async function waitForAnalysisTicket(progressionController, logger) {
   let snapshot = await claimAnalysisTicket();
   if (!snapshot.enabled) {
-    setSidebarTicketStatus("Acces libre (Redis desactive)", "idle");
+    setSidebarTicketStatus("Application disponible", "idle");
     logger("[info] Controle d'acces Redis inactif pour cette application.");
     return snapshot;
+  }
+  if (snapshot.statut === "erreur") {
+    throw new Error("Controle d'acces temporairement indisponible.");
   }
 
   let lastWaitingMessage = "";
@@ -618,8 +658,12 @@ async function waitForAnalysisTicket(progressionController, logger) {
     snapshot = await claimAnalysisTicket();
   }
 
+  if (snapshot.statut === "refuse") {
+    throw new Error("File d'attente pleine pour cette application.");
+  }
+
   if (snapshot.statut !== "actif") {
-    throw new Error(snapshot.message || "Impossible d'obtenir un ticket actif pour lancer l'analyse.");
+    throw new Error("Impossible d'obtenir un ticket actif pour lancer l'analyse.");
   }
 
   setSidebarTicketStatus("Ticket actif : analyse en cours", "active");
@@ -2076,7 +2120,7 @@ async function ensureDependenciesReady() {
     log("[info] Vérification des dépendances R et Python nécessaires au lancement.");
 
     try {
-      bootstrapProgression.set(42, "Installation des dépendances manquantes si nécessaire...");
+      bootstrapProgression.set(42, "Controle des dependances de l'image et installation si necessaire...");
       const payload = await tauriInvoke("bootstrap_dependencies");
       if (payload.success) {
         appState.bootstrapReady = true;
@@ -2099,7 +2143,7 @@ async function ensureDependenciesReady() {
       } else {
         appState.bootstrapReady = false;
         appState.bootstrapPromise = null;
-        if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets";
+        if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets (voir logs)";
         log(`[error] ${payload.message || "Bootstrap des packages en échec."}`);
         if (Array.isArray(payload.missingAfter) && payload.missingAfter.length) {
           log(`[error] Dépendances encore manquantes : ${payload.missingAfter.join(", ")}`);
@@ -2117,7 +2161,7 @@ async function ensureDependenciesReady() {
     } catch (error) {
       appState.bootstrapReady = false;
       appState.bootstrapPromise = null;
-      if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets";
+      if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets (voir logs)";
       log(`[error] Bootstrap impossible : ${error?.message || String(error)}`);
       bootstrapProgression.set(100, "Échec du bootstrap de démarrage.");
       setTimeout(() => bootstrapProgression.close(), 400);
@@ -8356,6 +8400,56 @@ function createEmptyState(message) {
   wrapper.className = "empty-state";
   wrapper.textContent = message;
   return wrapper;
+}
+
+function createDiagnosticState(message) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "empty-state diagnostic-state";
+  wrapper.textContent = message;
+  return wrapper;
+}
+
+function getNavigationTargetForAnalysisKind({ isLdaMode = false, isSimiMode = false, isSuiviMode = false } = {}) {
+  if (isLdaMode) return "lda";
+  if (isSimiMode) return "similitudes";
+  if (isSuiviMode) return "suivi_longitudinal";
+  return "resultats_chd";
+}
+
+function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
+  const diagnosticText = String(message || "").trim() || "Aucun export exploitable n'a ete genere par l'analyse.";
+  let containers = [];
+
+  if (navigationTarget === "lda") {
+    containers = [resultContainers.ldaBubblePlot, resultContainers.ldaHeatmap, resultContainers.ldaSegments];
+  } else if (navigationTarget === "similitudes") {
+    containers = [resultContainers.simiGraph];
+  } else if (navigationTarget === "suivi_longitudinal") {
+    containers = [resultContainers.suiviMeta, resultContainers.suiviIndicatorsTable, resultContainers.suiviEntropyPlot];
+  } else {
+    containers = [
+      resultContainers.chdDendrogramme,
+      resultContainers.chdStatsTable,
+      resultContainers.chdConcordancier,
+      resultContainers.chdWordclouds,
+      resultContainers.afcClassesPlot,
+      resultContainers.afcTermsPlot
+    ];
+  }
+
+  containers.filter(Boolean).forEach((container) => {
+    clearContainer(container);
+    container.appendChild(createDiagnosticState(diagnosticText));
+  });
+
+  activateTopTab(navigationTarget);
+  if (navigationTarget === "resultats_chd") {
+    activateChdSubTab("dendrogramme");
+  } else if (navigationTarget === "suivi_longitudinal") {
+    activateSuiviSubTab("suivi_indicateurs");
+  } else if (navigationTarget === "lda") {
+    activateLdaSubTab("lda_bubble");
+  }
 }
 
 function renderResults(files) {
@@ -15139,6 +15233,7 @@ async function startAnalysis(analysisKind = "chd") {
   const isLdaMode = analysisKind === "lda";
   const isSimiMode = analysisKind === "simi";
   const isSuiviMode = analysisKind === "suivi";
+  const navigationTarget = getNavigationTargetForAnalysisKind({ isLdaMode, isSimiMode, isSuiviMode });
   const suiviSelectedUnits = isSuiviMode ? getSelectedMultiSelectValues(suiviInterviewsSelect) : [];
   const suiviAvailableUnits = isSuiviMode ? getSuiviAvailableUnits(document) : [];
   const suiviVariableName = isSuiviMode ? resolveSuiviVariableName(document) : "";
@@ -15362,14 +15457,6 @@ async function startAnalysis(analysisKind = "chd") {
       createVirtualFileFromArtifact(artifact, payload.jobId || "exports")
     );
 
-    const navigationTarget = isLdaMode
-      ? "lda"
-      : isSimiMode
-        ? "similitudes"
-        : isSuiviMode
-          ? "suivi_longitudinal"
-          : "resultats_chd";
-
     if (virtualFiles.length) {
       await handleExportsFolderSelection(virtualFiles, navigationTarget);
       rememberAnalysisHistoryEntry({
@@ -15387,6 +15474,15 @@ async function startAnalysis(analysisKind = "chd") {
       });
     } else {
       log("[error] Aucun export exploitable n'a été récupéré après l'analyse.");
+      renderAnalysisDiagnostic(
+        [
+          "Aucun export exploitable n'a ete recupere apres l'analyse.",
+          payload.outputDir ? `Dossier d'exports : ${payload.outputDir}` : "",
+          payload.stdoutLog ? `Stdout : ${payload.stdoutLog}` : "",
+          payload.stderrLog ? `Stderr : ${payload.stderrLog}` : ""
+        ].filter(Boolean).join("\n"),
+        navigationTarget
+      );
       activateTopTab(navigationTarget);
     }
 
@@ -15419,6 +15515,7 @@ async function startAnalysis(analysisKind = "chd") {
         log(index === 0 ? `[error] ${line}` : line);
       });
     }
+    renderAnalysisDiagnostic(lines.join("\n"), navigationTarget);
     progression.close();
   } finally {
     await releaseAnalysisTicket({ silent: true });
@@ -15453,7 +15550,7 @@ void loadHelpMarkdown(helpLdaMarkdownContent, "lda.md");
 void loadHelpMarkdown(helpJsdMarkdownContent, "jsd.md");
 void loadHelpMarkdown(helpSuiviMarkdownContent, "suivi.md");
 void loadHelpMarkdown(helpMultimodaleMarkdownContent, "multimodale.md");
-void refreshTicketSidebarStatus();
+void claimPageTicketOnOpen();
 window.setInterval(() => {
   void refreshTicketSidebarStatus();
 }, 15000);

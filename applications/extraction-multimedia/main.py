@@ -30,6 +30,11 @@ REPERTOIRE_TEMP = SESSION_DIR / "tmp"
 SEUIL_APERCU_OCTETS = 160 * 1024 * 1024
 LONGUEUR_TITRE_MAX = 24
 LONGUEUR_PREFIX_ID = 8
+USER_AGENT_YOUTUBE_DEFAUT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/137.0.0.0 Safari/537.36"
+)
 
 
 def _import_module_local(nom_module: str):
@@ -211,8 +216,8 @@ def _logger_silencieux(actif: bool):
     return SilentLogger()
 
 
-def _opts_communs(verbose: bool, cookies_path: Optional[Path]) -> Dict[str, Any]:
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0"
+def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) -> Dict[str, Any]:
+    user_agent_final = (user_agent or "").strip() or USER_AGENT_YOUTUBE_DEFAUT
     opts: Dict[str, Any] = {
         "paths": {"home": str(REPERTOIRE_SORTIE)},
         "outtmpl": {"default": "%(id)s.%(ext)s"},
@@ -223,8 +228,12 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path]) -> Dict[str, Any]
         "fragment_retries": 10,
         "continuedl": True,
         "concurrent_fragment_downloads": 1,
+        "sleep_interval_requests": 1,
+        "sleep_interval": 2,
+        "max_sleep_interval": 5,
+        "extractor_retries": 3,
         "http_headers": {
-            "User-Agent": user_agent,
+            "User-Agent": user_agent_final,
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.5",
             "Referer": "https://www.youtube.com/",
@@ -247,6 +256,7 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path]) -> Dict[str, Any]
 def telecharger_preparer_video(
     url: str,
     cookies_path: Optional[Path],
+    user_agent: str,
     verbose: bool,
     qualite: str,
     utiliser_intervalle: bool,
@@ -255,7 +265,7 @@ def telecharger_preparer_video(
 ):
     st.write("Telechargement / preparation de la video en cours...")
 
-    ydl_opts = _opts_communs(verbose, cookies_path)
+    ydl_opts = _opts_communs(verbose, cookies_path, user_agent)
     if utiliser_intervalle:
         ydl_opts["download_sections"] = [{"section": f"*{debut}-{fin}"}]
         ydl_opts["force_keyframes_at_cuts"] = True
@@ -270,6 +280,20 @@ def telecharger_preparer_video(
         info = _telecharger(ydl_opts)
     except Exception as e:
         message = str(e) or repr(e)
+        if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+            if not cookies_path:
+                return None, None, None, (
+                    "YouTube bloque la requete comme anti-bot. "
+                    "Ajoute un cookies.txt recent exporte depuis le meme navigateur "
+                    "et idealement la meme IP publique, puis relance."
+                )
+            return None, None, None, (
+                "YouTube refuse encore la requete malgre le cookies.txt. "
+                "Cause probable : cookies trop anciens, export incomplet, compte non reconnecte "
+                "recemment, ou User-Agent non coherent avec le navigateur d'origine. "
+                "Recharge YouTube dans ton navigateur, re-exporte le cookies.txt, puis colle "
+                "le User-Agent exact du navigateur dans le champ dedie."
+            )
         if "403" in message or "Forbidden" in message:
             if not cookies_path:
                 return None, None, None, "HTTP 403 detecte. La video est restreinte. Fournis un cookies.txt puis relance."
@@ -556,6 +580,10 @@ st.markdown(
     "Si la video est restreinte (403), exportez vos cookies avec l'extension Firefox "
     "[cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)."
 )
+st.caption(
+    "Si YouTube affiche un blocage anti-bot, il faut en pratique un cookies.txt recent, "
+    "exporte depuis le navigateur qui vient d'ouvrir la video, avec un User-Agent coherent."
+)
 
 with st.expander("Diagnostic systeme"):
     try:
@@ -583,6 +611,14 @@ st.session_state.setdefault("local_name_base", None)
 
 url = st.text_input("URL YouTube")
 cookies_path_eff = ck.afficher_section_cookies(REPERTOIRE_SORTIE)
+user_agent_youtube = st.text_input(
+    "User-Agent navigateur (utile si YouTube bloque)",
+    value=os.environ.get("YTDLP_BROWSER_USER_AGENT", USER_AGENT_YOUTUBE_DEFAUT),
+    help=(
+        "Colle ici le User-Agent exact du navigateur ayant servi a ouvrir YouTube "
+        "et a exporter le cookies.txt. Si tu n'es pas bloque, laisse la valeur par defaut."
+    ),
+)
 fichier_local = st.file_uploader("Ou importer un fichier video (.mp4)", type=["mp4"])
 
 mode_verbose = st.checkbox("Mode diagnostic yt-dlp", value=False)
@@ -646,6 +682,7 @@ if st.button("Lancer le traitement"):
                 video_base, base_court, info, erreur = telecharger_preparer_video(
                     url,
                     cookies_path_eff,
+                    user_agent_youtube,
                     mode_verbose,
                     qualite,
                     utiliser_intervalle,

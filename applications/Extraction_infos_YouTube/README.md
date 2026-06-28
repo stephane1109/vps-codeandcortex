@@ -4,8 +4,10 @@ Application Streamlit pour :
 
 - rechercher des videos YouTube par mot-cle
 - filtrer par region, langue et plage de dates
+- affiner l'affichage avec des cases a cocher par date de publication
 - recuperer les metadonnees principales des videos
 - trier les resultats par vues, likes ou commentaires
+- afficher des graphiques d'evolution par date (videos, vues, likes, commentaires)
 - exporter les resultats au format Excel
 
 ## Adaptation VPS

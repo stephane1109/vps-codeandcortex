@@ -42,3 +42,4 @@ Application accessible ensuite sur `http://localhost:8501`.
 - Les cookies YouTube importes sont conserves uniquement dans l'espace temporaire de la session courante.
 - Les donnees sont ecrites dans `APP_DATA_DIR`, qui vaut `/tmp/appdata` par defaut.
 - Aucun volume persistant n'est obligatoire pour fonctionner, mais il peut etre ajoute si tu veux conserver plus longtemps les sorties temporaires.
+- Une aide pas a pas pour exporter un `cookies.txt` depuis Firefox ou Chrome est disponible dans `aide.md`.

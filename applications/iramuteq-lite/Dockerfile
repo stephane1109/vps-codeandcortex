@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     IRAMUTEQ_APP_DATA_DIR=/data/app \
     IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library \
     IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0 \
+    USE_BUNDLED_LIBUV=1 \
     RGL_USE_NULL=TRUE \
     PORT=8000 \
     APP_TICKET_ID=iramuteq-lite \
@@ -23,6 +24,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_TICKET_MAX_ACTIVE=1 pour conserver l'exclusivite
 # - APP_TICKET_COST selon la charge reelle du VPS
 # - APP_TICKET_TTL_SECONDS si une analyse peut durer longtemps
+# #### NOTE BUILD R
+# USE_BUNDLED_LIBUV=1 reste active pour securiser l'installation du package R `fs`
+# si Coolify ou le miroir CRAN ne voit pas correctement `libuv.pc`.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -54,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglu1-mesa-dev \
     libglib2.0-0 \
     libgsl-dev \
+    libuv1-dev \
     libudunits2-dev \
     libsm6 \
     libxext6 \

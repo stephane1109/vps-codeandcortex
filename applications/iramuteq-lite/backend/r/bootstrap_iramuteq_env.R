@@ -47,6 +47,12 @@ install_missing_packages <- function(packages, repo, lib) {
   if (!length(packages)) return(character(0))
   tryCatch(
     {
+      # #### VPS / COOLIFY
+      # Certains paquets CRAN (notamment fs, dependance indirecte de FactoMineR/factoextra)
+      # echouent sur certains builds Docker si libuv n'est pas detecte correctement.
+      # On force ici l'utilisation de la version embarquee de libuv pour rendre
+      # le bootstrap plus robuste, meme si libuv1-dev n'est pas visible.
+      Sys.setenv(USE_BUNDLED_LIBUV = "1")
       utils::install.packages(
         packages,
         repos = repo,
@@ -88,6 +94,16 @@ installed_after <- rownames(installed.packages())
 missing_after <- setdiff(required_packages, installed_after)
 installed_now <- setdiff(intersect(required_packages, installed_after), installed_before)
 
+if (!length(install_errors) && length(missing_after)) {
+  install_errors <- c(
+    install_errors,
+    paste0(
+      "Packages R encore manquants apres installation: ",
+      paste(missing_after, collapse = ", ")
+    )
+  )
+}
+
 payload <- list(
   success = length(missing_after) == 0,
   mode = mode,
@@ -100,3 +116,8 @@ payload <- list(
 )
 
 cat(jsonlite::toJSON(payload, auto_unbox = TRUE, pretty = TRUE, null = "null"))
+cat("\n")
+
+if (!isTRUE(payload$success)) {
+  quit(save = "no", status = 1L)
+}

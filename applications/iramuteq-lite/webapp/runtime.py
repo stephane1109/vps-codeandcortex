@@ -237,6 +237,35 @@ def process_failure_message(process: subprocess.CompletedProcess[str], fallback:
     return last_non_empty_line(process.stderr, process.stdout) or fallback
 
 
+def missing_artifacts_message(
+    output_dir: Path,
+    *,
+    job_id: str | None = None,
+    status_file: Path | None = None,
+    results_file: Path | None = None,
+    stdout_log: Path | None = None,
+    stderr_log: Path | None = None,
+) -> str:
+    lines = [
+        "L'analyse s'est terminee sans generer d'exports lisibles pour l'interface.",
+        f"Dossier d'exports : {output_dir}",
+    ]
+    if job_id:
+        lines.append(f"Job : {job_id}")
+    if status_file:
+        lines.append(f"Status : {status_file}")
+    if results_file:
+        lines.append(f"Results : {results_file}")
+    if stdout_log:
+        lines.append(f"Stdout : {stdout_log}")
+    if stderr_log:
+        lines.append(f"Stderr : {stderr_log}")
+    lines.append(
+        "Sur le VPS, cela indique en general un probleme de generation des fichiers cote R/Python, meme si le job a atteint sa fin."
+    )
+    return "\n".join(lines)
+
+
 def is_optional_missing(item: Any) -> bool:
     value = str(item or "").strip()
     if not value.startswith("python:"):
@@ -406,13 +435,25 @@ def run_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, An
         raise RuntimeError("Le job Python n'a pas renvoyé de dossier d'exports.")
 
     output_dir_path = Path(output_dir).resolve()
+    artifact_files = collect_artifact_files(output_dir_path) if output_dir_path.is_dir() else []
+    if not artifact_files:
+        raise RuntimeError(
+            missing_artifacts_message(
+                output_dir_path,
+                job_id=str(payload.get("job_id") or job_id),
+                status_file=Path(str(payload.get("status_file") or "")) if payload.get("status_file") else None,
+                results_file=job_root / "results.json",
+                stdout_log=Path(str(payload.get("stdout_log") or "")) if payload.get("stdout_log") else None,
+                stderr_log=Path(str(payload.get("stderr_log") or "")) if payload.get("stderr_log") else None,
+            )
+        )
     return {
         "success": True,
         "jobId": str(payload.get("job_id") or job_id),
         "outputDir": str(output_dir_path),
         "summary": payload.get("summary"),
         "logs": payload.get("logs") or [],
-        "files": collect_artifact_files(output_dir_path) if output_dir_path.is_dir() else [],
+        "files": artifact_files,
         "statusFile": payload.get("status_file"),
         "stdoutLog": payload.get("stdout_log"),
         "stderrLog": payload.get("stderr_log"),
@@ -496,6 +537,18 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
         output_dir_path = Path(str(output_dir)).resolve()
         if output_dir_path.is_dir():
             files = collect_artifact_files(output_dir_path)
+        if not files:
+            success = False
+            message = missing_artifacts_message(
+                output_dir_path,
+                job_id=str(result_payload.get("job_id") or job_id),
+                status_file=Path(str(result_payload.get("status_file") or status_file)),
+                results_file=results_file,
+                stdout_log=Path(str(result_payload.get("stdout_log") or stdout_log)),
+                stderr_log=Path(str(result_payload.get("stderr_log") or stderr_log)),
+            )
+            if message not in logs:
+                logs = [*logs, message]
 
     return {
         "jobId": job_id,

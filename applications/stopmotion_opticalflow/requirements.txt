@@ -1,4 +1,3 @@
 streamlit
 opencv-python-headless
-numpy
-yt_dlp
+yt-dlp

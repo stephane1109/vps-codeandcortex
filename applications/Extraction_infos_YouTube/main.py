@@ -13,7 +13,6 @@ RESULT_COLUMNS = [
     "Titre",
     "Description",
     "Date de publication",
-    "Date ISO",
     "URL",
     "Channel ID",
     "Nom de la chaine",
@@ -25,6 +24,8 @@ RESULT_COLUMNS = [
     "Langue par defaut",
     "Langue audio par defaut",
 ]
+
+INTERNAL_DATE_COLUMN = "_date_publication_utc"
 
 REGION_OPTIONS = {
     "Toutes": None,
@@ -62,6 +63,105 @@ def format_published_at(date_iso: str) -> str:
         return datetime.fromisoformat(date_iso.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S")
     except ValueError:
         return date_iso
+
+
+def build_date_filter_labels(df: pd.DataFrame) -> list[str]:
+    if df.empty or "Date de publication" not in df.columns:
+        return []
+
+    labels = (
+        pd.to_datetime(df["Date de publication"], errors="coerce")
+        .dt.strftime("%Y-%m-%d")
+        .dropna()
+        .drop_duplicates()
+        .sort_values()
+    )
+    return labels.tolist()
+
+
+def filter_dataframe_by_checked_dates(df: pd.DataFrame) -> pd.DataFrame:
+    available_dates = build_date_filter_labels(df)
+    if not available_dates:
+        return df
+
+    st.markdown("### 3. Filtrage fin par date")
+    st.caption("Decoche une date pour l'exclure du tableau, de l'export et des graphiques.")
+
+    selected_dates: list[str] = []
+    columns = st.columns(4)
+    for index, date_label in enumerate(available_dates):
+        with columns[index % 4]:
+            if st.checkbox(date_label, value=True, key=f"youtube_date_filter_{date_label}"):
+                selected_dates.append(date_label)
+
+    if not selected_dates:
+        return df.iloc[0:0].copy()
+
+    publication_dates = pd.to_datetime(df["Date de publication"], errors="coerce").dt.strftime("%Y-%m-%d")
+    return df[publication_dates.isin(selected_dates)].reset_index(drop=True)
+
+
+def build_evolution_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "Date de publication" not in df.columns:
+        return pd.DataFrame()
+
+    working_df = df.copy()
+    working_df["_jour_publication"] = pd.to_datetime(
+        working_df["Date de publication"],
+        errors="coerce",
+    ).dt.strftime("%Y-%m-%d")
+    working_df = working_df.dropna(subset=["_jour_publication"])
+    if working_df.empty:
+        return pd.DataFrame()
+
+    evolution_df = (
+        working_df.groupby("_jour_publication", as_index=False)
+        .agg(
+            videos=("Titre", "size"),
+            vues=("Vues", "sum"),
+            likes=("Likes", "sum"),
+            commentaires=("Commentaires", "sum"),
+        )
+        .rename(
+            columns={
+                "_jour_publication": "Date",
+                "videos": "Nombre de videos",
+                "vues": "Vues",
+                "likes": "Likes",
+                "commentaires": "Commentaires",
+            }
+        )
+        .sort_values("Date")
+    )
+    return evolution_df
+
+
+def render_evolution_charts(df: pd.DataFrame) -> None:
+    evolution_df = build_evolution_dataframe(df)
+    if evolution_df.empty:
+        st.info("Les graphiques d'evolution ne sont pas disponibles pour ces resultats.")
+        return
+
+    st.markdown("### 4. Graphiques d'evolution")
+    st.caption("Les valeurs sont regroupees par date de publication a partir des videos actuellement affichees.")
+
+    chart_df = evolution_df.set_index("Date")
+
+    chart_col_1, chart_col_2 = st.columns(2)
+    with chart_col_1:
+        st.markdown("#### Nombre de videos par date")
+        st.bar_chart(chart_df["Nombre de videos"])
+    with chart_col_2:
+        st.markdown("#### Vues par date")
+        st.line_chart(chart_df["Vues"])
+
+    chart_col_3, chart_col_4 = st.columns(2)
+    with chart_col_3:
+        st.markdown("#### Likes par date")
+        st.line_chart(chart_df["Likes"])
+    with chart_col_4:
+        st.markdown("#### Commentaires par date")
+        st.line_chart(chart_df["Commentaires"])
 
 
 def build_category_mapping(youtube, region_code: str | None) -> dict[str, str]:
@@ -140,7 +240,6 @@ def rechercher_videos_youtube(
                         "Titre": snippet.get("title", ""),
                         "Description": snippet.get("description", ""),
                         "Date de publication": format_published_at(date_iso),
-                        "Date ISO": date_iso,
                         "URL": f"https://www.youtube.com/watch?v={video_id}",
                         "Channel ID": snippet.get("channelId", ""),
                         "Nom de la chaine": snippet.get("channelTitle", ""),
@@ -151,6 +250,7 @@ def rechercher_videos_youtube(
                         "Commentaires desactives": "commentCount" not in stats,
                         "Langue par defaut": default_language,
                         "Langue audio par defaut": default_audio_language,
+                        INTERNAL_DATE_COLUMN: date_iso,
                     }
                 )
 
@@ -158,24 +258,25 @@ def rechercher_videos_youtube(
         if not page_token or len(collected_items) >= 500:
             break
 
-    df = pd.DataFrame(collected_items, columns=RESULT_COLUMNS)
-    if df.empty:
-        return df
+    if not collected_items:
+        return pd.DataFrame(columns=RESULT_COLUMNS)
 
-    df["Date ISO"] = pd.to_datetime(df["Date ISO"], errors="coerce", utc=True)
+    df = pd.DataFrame(collected_items)
+    df[INTERNAL_DATE_COLUMN] = pd.to_datetime(df[INTERNAL_DATE_COLUMN], errors="coerce", utc=True)
 
     if published_after:
-        df = df[df["Date ISO"] >= pd.to_datetime(published_after, utc=True)]
+        df = df[df[INTERNAL_DATE_COLUMN] >= pd.to_datetime(published_after, utc=True)]
     if published_before:
-        df = df[df["Date ISO"] <= pd.to_datetime(published_before, utc=True)]
+        df = df[df[INTERNAL_DATE_COLUMN] <= pd.to_datetime(published_before, utc=True)]
 
     if sort_by in df.columns:
         df = df.sort_values(by=sort_by, ascending=False, na_position="last")
 
     df = df.head(max_videos).copy()
-    df["Date ISO"] = df["Date ISO"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    formatted_dates = df[INTERNAL_DATE_COLUMN].dt.strftime("%Y-%m-%d %H:%M:%S")
+    df.loc[formatted_dates.notna(), "Date de publication"] = formatted_dates[formatted_dates.notna()]
     df = df.reset_index(drop=True)
-    return df
+    return df[RESULT_COLUMNS]
 
 
 def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -288,11 +389,15 @@ if df_resultats is not None:
     if df_resultats.empty:
         st.warning("Aucune video ne correspond aux filtres selectionnes.")
     else:
-        st.success(f"{len(df_resultats)} video(s) recuperee(s).")
-        st.dataframe(df_resultats, use_container_width=True)
+        df_resultats_filtres = filter_dataframe_by_checked_dates(df_resultats)
+        if df_resultats_filtres.empty:
+            st.warning("Aucune date n'est actuellement selectionnee. Coche au moins une date pour afficher des resultats.")
+        st.success(f"{len(df_resultats_filtres)} video(s) affichee(s) sur {len(df_resultats)} recuperee(s).")
+        st.dataframe(df_resultats_filtres, use_container_width=True)
         st.download_button(
             label="Telecharger les resultats au format Excel",
-            data=dataframe_to_excel_bytes(df_resultats),
+            data=dataframe_to_excel_bytes(df_resultats_filtres),
             file_name=st.session_state.nom_fichier_export,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        render_evolution_charts(df_resultats_filtres)

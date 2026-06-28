@@ -3,12 +3,13 @@
 ## Repertoire
 
 - Depot : `stephane1109/vps-codeandcortex`
-- Base directory : `/applications/Analyses_multi_modales`
+- Base directory : `applications/Analyses_multi_modales`
 
 ## Build
 
 - Type : `Dockerfile`
 - Port interne : `8501`
+- Rebuild conseille : `sans cache` lors du premier deploiement ou apres changement des dependances
 
 ## Variables utiles
 
@@ -27,3 +28,4 @@ Cette application charge des briques lourdes (`spaCy Transformer`, `TensorFlow`,
 - Les images attendues pour la synchro doivent suivre le format `i_{N}s_1fps.jpg`.
 - Le premier lancement des briques vision / emotion peut etre plus long si certains poids doivent etre initialises.
 - L'upload Streamlit a ete releve a `1024 MB` dans `.streamlit/config.toml` pour conserver les usages audio + images.
+- Le conteneur utilise une base `Python 3.11` pour maximiser la compatibilite des roues binaires TensorFlow / MediaPipe / DeepFace sur Coolify.
