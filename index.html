@@ -74,7 +74,7 @@
                 <article class="aide-rapide-carte">
                     <h3>États des applications</h3>
                     <p>
-                        Vert : l'application est libre. Orange : une file d'attente existe.
+                        Vert : l'application est libre. Orange : l'application est en cours d'utilisation ou une file d'attente existe.
                         En cas de souci de synchronisation, un message apparaît en haut de la page.
                     </p>
                 </article>
@@ -305,13 +305,13 @@
             const globalServer = document.getElementById("global-server");
             function badgeClassFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
-                if (state === "busy" || state === "active") return "occupee";
+                if (state === "busy" || state === "active") return "attente";
                 return "libre";
             }
 
             function labelFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
-                if (state === "busy" || state === "active") return "Occupée";
+                if (state === "busy" || state === "active") return "En cours";
                 return "Libre";
             }
 
@@ -403,7 +403,7 @@
             }
 
             refreshDashboard();
-            window.setInterval(refreshDashboard, 5000);
+            window.setInterval(refreshDashboard, 2000);
         })();
     </script>
 </body>

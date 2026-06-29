@@ -14,14 +14,14 @@ Elle permet surtout de savoir si une application est libre, occupée ou déjà s
 ## Comprendre les statuts affichés
 
 - `Libre` : l'application peut accueillir immédiatement un utilisateur.
-- `Occupée` : un utilisateur est déjà en train de travailler sur l'application.
+- `En cours` : un utilisateur est déjà en train de travailler sur l'application.
 - `File d'attente` : au moins une personne attend une place.
 - `Synchronisation indisponible` : le dashboard n'arrive plus à lire Redis ; l'affichage peut être incomplet ou figé.
 
 Sur les cartes :
 
 - point vert : accès libre ;
-- point orange : file d'attente en cours ;
+- point orange : application en cours d'utilisation ou file d'attente en cours ;
 - un message en haut de page signale les problèmes de synchronisation du dashboard.
 
 ## Comment libérer une application
