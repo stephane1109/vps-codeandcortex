@@ -44,8 +44,8 @@ package_installed_version <- function(pkg) {
 }
 
 package_required_version <- function(pkg) {
-  version <- required_min_versions[[pkg]]
-  if (is.null(version) || !length(version) || is.na(version[[1]]) || !nzchar(as.character(version[[1]]))) {
+  version <- unname(required_min_versions[pkg])
+  if (!length(version) || is.na(version[[1]]) || !nzchar(as.character(version[[1]]))) {
     ""
   } else {
     as.character(version[[1]])
