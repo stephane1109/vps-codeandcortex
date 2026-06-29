@@ -155,7 +155,7 @@
                 </span>
                 <i class="icone fas fa-file-export"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">VPS</span>
+                    <span class="titre-application">Scrapper Wikipedia</span>
                     <span class="meta-application">Scrapper Wikipedia</span>
                     <span class="description-application">Scrapper Wikipedia</span>
                 </span>
@@ -194,7 +194,7 @@
                 </span>
                 <i class="icone fas fa-chart-pie"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">Analyses multi-modales</span>
+                    <span class="titre-application">Analyses multimodales</span>
                     <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
                     <span class="description-application">Analyse multimodale de la temporalité à partir de texte, audio et images.</span>
                 </span>
@@ -358,12 +358,12 @@
                     const payload = await response.json();
                     applyDashboard(payload);
                 } catch (error) {
-                    markDashboardOffline("API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.");
+                    markDashboardOffline("API dashboard indisponible : verifie le conteneur FastAPI et l'endpoint `/api/tickets/dashboard`.");
                 }
             }
 
             refreshDashboard();
-            window.setInterval(refreshDashboard, 5000);
+            window.setInterval(refreshDashboard, 10000);
         })();
     </script>
 </body>
