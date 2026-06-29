@@ -8481,6 +8481,14 @@ function clearContainer(container) {
   return true;
 }
 
+function setContainerEmptyState(container, message) {
+  if (!clearContainer(container)) {
+    return false;
+  }
+  container.appendChild(createEmptyState(message));
+  return true;
+}
+
 function createObjectUrl(file) {
   const url = URL.createObjectURL(file);
   appState.objectUrls.push(url);
@@ -8831,10 +8839,12 @@ async function resetAnnotationEntriesOnStartup() {
 }
 
 function renderImage(container, file, altText, emptyMessage = "Aucun fichier image disponible.") {
-  clearContainer(container);
+  if (!clearContainer(container)) {
+    return;
+  }
 
   if (!file) {
-    container.appendChild(createEmptyState(emptyMessage));
+    setContainerEmptyState(container, emptyMessage);
     return;
   }
 
@@ -8858,11 +8868,13 @@ function makeResultImagePreviewable(container, title, contextLabel) {
 }
 
 function renderImageGallery(container, items, emptyMessage, options = {}) {
-  clearContainer(container);
+  if (!clearContainer(container)) {
+    return;
+  }
   const { previewKicker = "" } = options;
 
   if (!items.length) {
-    container.appendChild(createEmptyState(emptyMessage));
+    setContainerEmptyState(container, emptyMessage);
     return;
   }
 
@@ -10085,10 +10097,12 @@ function buildConcordancierHtmlDocument(headHtml, bodyHtml) {
 }
 
 function renderConcordancierFrame(container, htmlText, emptyMessage) {
-  clearContainer(container);
+  if (!clearContainer(container)) {
+    return;
+  }
 
   if (!htmlText) {
-    container.appendChild(createEmptyState(emptyMessage));
+    setContainerEmptyState(container, emptyMessage);
     return;
   }
 
@@ -10166,10 +10180,12 @@ function renderHtmlFrame(container, htmlText, emptyMessage) {
     return;
   }
 
-  clearContainer(container);
+  if (!clearContainer(container)) {
+    return;
+  }
 
   if (!htmlText) {
-    container.appendChild(createEmptyState(emptyMessage));
+    setContainerEmptyState(container, emptyMessage);
     return;
   }
 
@@ -10429,10 +10445,12 @@ function highlightLdaSegmentTerms(segment, terms) {
 }
 
 function renderTable(container, parsed, options = {}) {
-  clearContainer(container);
+  if (!clearContainer(container)) {
+    return;
+  }
 
   if (!parsed || !parsed.headers.length) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau disponible."));
+    setContainerEmptyState(container, options.emptyMessage || "Aucun tableau disponible.");
     return;
   }
 
@@ -10851,8 +10869,7 @@ async function renderCsvFromFile(container, file, options = {}) {
 
 async function renderJsdCsvFromFile(container, file, options = {}) {
   if (!file) {
-    clearContainer(container);
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau JSD disponible."));
+    setContainerEmptyState(container, options.emptyMessage || "Aucun tableau JSD disponible.");
     return;
   }
 
@@ -10867,16 +10884,14 @@ async function renderJsdCsvFromFile(container, file, options = {}) {
       })
     });
   } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire le tableau CSV."));
+    setContainerEmptyState(container, "Impossible de lire le tableau CSV.");
     log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
   }
 }
 
 async function renderJsdContributionsTable(container, file, options = {}) {
   if (!file) {
-    clearContainer(container);
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucune contribution de termes n'est disponible."));
+    setContainerEmptyState(container, options.emptyMessage || "Aucune contribution de termes n'est disponible.");
     return;
   }
 
@@ -10909,8 +10924,7 @@ async function renderJsdContributionsTable(container, file, options = {}) {
       }
     });
   } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire la table des contributions JSD."));
+    setContainerEmptyState(container, "Impossible de lire la table des contributions JSD.");
     log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
   }
 }
@@ -12684,14 +12698,12 @@ async function renderLongitudinalExports(index) {
         emptyMessage: "Aucune métadonnée de suivi n'est disponible."
       });
     } catch (error) {
-      clearContainer(resultContainers.suiviMeta);
-      resultContainers.suiviMeta.appendChild(createEmptyState("Aucune métadonnée de suivi n'est disponible."));
+      setContainerEmptyState(resultContainers.suiviMeta, "Aucune métadonnée de suivi n'est disponible.");
       log(`[error] Lecture CSV impossible (${suiviMetaFile.name}) : ${error.message}`);
       applySuiviPresentation();
     }
   } else {
-    clearContainer(resultContainers.suiviMeta);
-    resultContainers.suiviMeta.appendChild(createEmptyState("Aucune métadonnée de suivi n'est disponible."));
+    setContainerEmptyState(resultContainers.suiviMeta, "Aucune métadonnée de suivi n'est disponible.");
     applySuiviPresentation();
   }
 
