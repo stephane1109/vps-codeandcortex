@@ -149,6 +149,11 @@ h1 {
     box-shadow: 0 14px 30px rgba(245, 158, 11, 0.14);
 }
 
+.carte-application.indisponible {
+    border-color: rgba(100, 116, 139, 0.34);
+    box-shadow: 0 12px 24px rgba(100, 116, 139, 0.1);
+}
+
 .carte-application:hover {
     transform: translateY(-5px);
     border-color: var(--couleur-accent);
@@ -240,6 +245,11 @@ h1 {
     animation: pulse 1.2s infinite;
 }
 
+.pastille-etat.indisponible {
+    background: #64748b;
+    box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.18);
+}
+
 .statut {
     font-size: 10px;
     font-weight: 700;
@@ -259,6 +269,10 @@ h1 {
 
 .carte-application.attente .statut {
     color: #d97706;
+}
+
+.carte-application.indisponible .statut {
+    color: #475569;
 }
 
 .pied {

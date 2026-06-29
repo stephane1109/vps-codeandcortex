@@ -630,6 +630,8 @@ function releaseTicketOnPageHide() {
 async function callTicketApi(path, { method = "GET", body = null } = {}) {
   const response = await fetch(path, {
     method,
+    credentials: "same-origin",
+    cache: "no-store",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined
   });
@@ -15696,16 +15698,27 @@ void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void loadHelpMarkdown(helpLdaMarkdownContent, "lda.md");
-void claimPageTicketOnOpen();
+void claimPageTicketOnOpen().then(() => {
+  window.setTimeout(() => {
+    void refreshTicketSidebarStatus();
+  }, 800);
+});
 window.setInterval(() => {
   void refreshTicketSidebarStatus();
 }, 15000);
 if (releaseAccessBtn) {
   releaseAccessBtn.addEventListener("click", async () => {
     releaseAccessBtn.disabled = true;
-    const snapshot = await releaseAnalysisTicket();
-    if (snapshot) {
-      setSidebarRuntimeStatus("Acces libere pour cette session.", "success");
+    try {
+      const snapshot = await releaseAnalysisTicket();
+      if (snapshot) {
+        setSidebarRuntimeStatus("Acces libere pour cette session.", "success");
+      } else {
+        setSidebarRuntimeStatus("Liberation a reessayer : le statut va etre reverifie.", "error");
+      }
+    } finally {
+      await refreshTicketSidebarStatus();
+      updateReleaseAccessButton();
     }
   });
 }

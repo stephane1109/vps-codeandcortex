@@ -576,8 +576,8 @@ def construire_tableau_de_bord_indisponible(
             "maxActive": configuration["max_active"],
             "queued": 0,
             "cost": configuration["cout"],
-            "state": "available",
-            "stateLabel": "Libre",
+            "state": "unavailable",
+            "stateLabel": "Synchronisation indisponible",
             "message": erreur,
         }
 

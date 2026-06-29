@@ -262,12 +262,14 @@
             function badgeClassFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
                 if (state === "busy" || state === "active") return "occupee";
+                if (state === "unavailable" || state === "degraded") return "indisponible";
                 return "libre";
             }
 
             function labelFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
                 if (state === "busy" || state === "active") return "Occupée";
+                if (state === "unavailable" || state === "degraded") return "Synchronisation";
                 return "Libre";
             }
 
@@ -282,17 +284,19 @@
                 label.textContent = payload.stateLabel || labelFromState(payload.state, payload.queued || 0);
                 meta.textContent = `${payload.active || 0} / ${payload.maxActive || 0} actif · ${payload.queued || 0} attente`;
 
-                card.classList.remove("libre", "occupee", "attente");
+                card.classList.remove("libre", "occupee", "attente", "indisponible");
                 card.classList.add(stateClass);
             }
 
-            function markCardAvailable(card) {
+            function markCardUnavailable(card) {
                 const dot = card.querySelector("[data-status-dot]");
                 const label = card.querySelector("[data-status-label]");
-                if (dot) dot.className = "pastille-etat libre";
-                if (label) label.textContent = "Libre";
-                card.classList.remove("occupee", "attente");
-                card.classList.add("libre");
+                const meta = card.querySelector("[data-status-meta]");
+                if (dot) dot.className = "pastille-etat indisponible";
+                if (label) label.textContent = "Synchronisation";
+                if (meta) meta.textContent = "Etat indisponible";
+                card.classList.remove("libre", "occupee", "attente");
+                card.classList.add("indisponible");
             }
 
             function decorateGlobal(payload) {
@@ -313,7 +317,7 @@
                     if (appPayload) {
                         decorateCard(card, appPayload);
                     } else {
-                        markCardAvailable(card);
+                        markCardUnavailable(card);
                     }
                 });
 
@@ -330,7 +334,7 @@
 
             function markDashboardUnavailable(message) {
                 if (!hasSuccessfulSync) {
-                    cards.forEach((card) => markCardAvailable(card));
+                    cards.forEach((card) => markCardUnavailable(card));
                 }
                 globalServer.textContent = "Synchronisation indisponible";
                 if (note) {
