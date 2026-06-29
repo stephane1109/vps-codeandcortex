@@ -27,5 +27,5 @@ Version **web/VPS uniquement** de `iramuteq-lite`, prévue pour Coolify sur le V
 
 ## Note build VPS
 
-- le conteneur n'installe plus tous les packages R pendant le `docker build`
-- le bootstrap applicatif installe les dependances texte essentielles au premier usage
+- le conteneur preinstalle par defaut le bootstrap R/CHD pendant le `docker build`
+- les dependances runtime eventuellement reinstallees sont conservees dans `/data/app`

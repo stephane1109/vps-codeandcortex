@@ -56,6 +56,7 @@ En clair :
 ```env
 PORT=8000
 IRAMUTEQ_APP_DATA_DIR=/data/app
+IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages
 IRAMUTEQ_R_LIBS_USER=/data/app/r-library
 RGL_USE_NULL=TRUE
 IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
@@ -71,26 +72,25 @@ APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=30000
 ```
 
-Optionnel si vous disposez d'un builder Docker plus puissant que celui de Coolify :
+Optionnel si vous voulez explicitement desactiver le bootstrap build-time :
 
 ```text
-Build arg: IRAMUTEQ_BUILD_BOOTSTRAP=1
+Build arg: IRAMUTEQ_BUILD_BOOTSTRAP=0
 ```
 
-Sur un VPS OVH modeste, la compilation source de `Matrix` + `quanteda` pendant le build Docker depasse souvent le timeout du helper Coolify.
-La configuration recommandee est donc :
+La configuration recommandee est maintenant :
 
-- `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1`
+- bootstrap build-time actif par defaut
 - `IRAMUTEQ_R_LIBS_USER=/data/app/r-library` pour conserver les packages dans le volume persistant
-- build rapide sans `IRAMUTEQ_BUILD_BOOTSTRAP`
+- `IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages` pour conserver les packages Python eventuellement reinstalles au runtime
 
-Dans ce mode, le conteneur se deploie rapidement puis l'application termine l'installation R/Python manquante au premier lancement.
-Si vous activez `IRAMUTEQ_BUILD_BOOTSTRAP=1`, le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
+Dans ce mode, l'image arrive normalement prete et l'application ne doit plus rester bloquee au premier clic sur le controle des dependances.
+Si vous repassez a `IRAMUTEQ_BUILD_BOOTSTRAP=0`, l'application retombera sur une installation complementaire au premier lancement. Le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
 
 ## Pourquoi ce choix
 
 - sur un petit VPS, le deploiement doit d'abord aboutir avant d'exiger un build R complet
-- les packages R peuvent etre installes une seule fois puis reutilises s'ils vivent dans `/data/app/r-library`
+- les packages R et Python peuvent etre installes une seule fois puis reutilises s'ils vivent dans `/data/app`
 - si l'interface affiche `Packages incomplets`, cela signifie en pratique que le bootstrap runtime n'a pas encore termine ou a echoue
 
 ## Que faire si `Packages incomplets` apparait
@@ -98,10 +98,11 @@ Si vous activez `IRAMUTEQ_BUILD_BOOTSTRAP=1`, le build Docker relance aussi un t
 1. Verifier que Coolify rebuild bien l'application a partir du dernier code.
 2. Forcer un nouveau build de l'image Docker, si possible sans cache.
 3. Confirmer que le `Base Directory` est bien `/applications/iramuteq-lite`.
-4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `1` en production Coolify sur petit VPS.
-5. Verifier que `IRAMUTEQ_R_LIBS_USER` pointe vers un chemin persistant, idealement `/data/app/r-library`.
-6. Regarder les logs de build : si le build meurt pendant `Matrix` ou `quanteda` sans message R final, il s'agit souvent d'un timeout Coolify et non d'un bug applicatif.
-7. Si vous activez `IRAMUTEQ_BUILD_BOOTSTRAP=1` et que le smoke-test CHD casse, le probleme est alors confirme dans l'image Docker elle-meme, avant meme l'ouverture de l'application dans le navigateur.
+4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `1` en production Coolify.
+5. Verifier que `IRAMUTEQ_R_LIBS_USER` pointe vers `/data/app/r-library`.
+6. Verifier que `IRAMUTEQ_PYTHON_SITE_DIR` pointe vers `/data/app/python-site-packages`.
+7. Regarder les logs de build : si le build meurt pendant `Matrix` ou `quanteda` sans message R final, il s'agit souvent d'un timeout ou d'un manque d'espace sur Coolify et non d'un bug applicatif.
+8. Si le smoke-test CHD casse au build, le probleme est alors confirme dans l'image Docker elle-meme, avant meme l'ouverture de l'application dans le navigateur.
 
 ## Domaine et sous-domaine
 

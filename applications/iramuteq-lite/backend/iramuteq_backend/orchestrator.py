@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import site
 import shutil
 import subprocess
 import sys
@@ -369,6 +370,35 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
     }
     python_min_versions = {}
 
+    def python_site_dir() -> Path:
+        explicit = os.environ.get("IRAMUTEQ_PYTHON_SITE_DIR", "").strip()
+        if explicit:
+            target = Path(explicit).expanduser()
+        else:
+            app_data_dir = os.environ.get("IRAMUTEQ_APP_DATA_DIR", "").strip()
+            base_dir = Path(app_data_dir).expanduser() if app_data_dir else (repo_root_from_file() / "backend" / ".runtime-data")
+            target = base_dir / "python-site-packages"
+        target.mkdir(parents=True, exist_ok=True)
+        return target.resolve()
+
+    def with_python_site_dir(env: dict[str, str], target: Path) -> dict[str, str]:
+        updated = env.copy()
+        current_pythonpath = updated.get("PYTHONPATH", "").strip()
+        target_str = str(target)
+        updated["PYTHONPATH"] = (
+            target_str
+            if not current_pythonpath
+            else target_str + os.pathsep + current_pythonpath
+        )
+        updated["IRAMUTEQ_PYTHON_SITE_DIR"] = target_str
+        return updated
+
+    def activate_python_site_dir(target: Path) -> None:
+        target_str = str(target)
+        if target_str not in sys.path:
+            sys.path.insert(0, target_str)
+        site.addsitedir(target_str)
+
     def parse_version_token(version: str) -> tuple[int, ...]:
         raw = str(version or "").strip()
         if not raw:
@@ -419,10 +449,10 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                env={
+                env=with_python_site_dir({
                     **os.environ,
                     "PYTHONNOUSERSITE": "1",
-                },
+                }, runtime_python_site_dir),
             )
             if process.returncode != 0:
                 broken.append(import_name)
@@ -432,10 +462,7 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         if not packages:
             return [], [], None
 
-        in_virtualenv = getattr(sys, "base_prefix", sys.prefix) != sys.prefix
-        command = [sys.executable, "-m", "pip", "install"]
-        if not in_virtualenv:
-            command.append("--user")
+        command = [sys.executable, "-m", "pip", "install", "--target", str(runtime_python_site_dir)]
         if upgrade:
             command.append("--upgrade")
         command.extend([python_install_targets[name] for name in packages])
@@ -445,11 +472,11 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
             text=True,
             encoding="utf-8",
             errors="replace",
-            env={
+            env=with_python_site_dir({
                 **os.environ,
                 "PYTHONNOUSERSITE": "1",
                 "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-            },
+            }, runtime_python_site_dir),
         )
 
         missing_after_install = detect_missing_python_packages()
@@ -470,6 +497,8 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         return installed_now, missing_after_install, details
 
     repo_root = repo_root_from_file()
+    runtime_python_site_dir = python_site_dir()
+    activate_python_site_dir(runtime_python_site_dir)
     script = repo_root / "backend" / "r" / "bootstrap_iramuteq_env.R"
     if not script.exists():
         return {
@@ -478,7 +507,7 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
         }
 
     resolved_rscript = locate_rscript(rscript_path)
-    env = os.environ.copy()
+    env = with_python_site_dir(os.environ.copy(), runtime_python_site_dir)
     env.setdefault("LANG", "en_US.UTF-8")
     env.setdefault("LC_CTYPE", "en_US.UTF-8")
     mode = "install" if auto_install else "check"

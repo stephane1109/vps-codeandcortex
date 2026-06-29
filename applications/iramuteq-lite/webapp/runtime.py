@@ -59,6 +59,20 @@ def mplconfig_dir() -> Path:
     return ensure_directory(app_data_root() / "mplconfig")
 
 
+def r_library_dir() -> Path:
+    explicit = os.environ.get("IRAMUTEQ_R_LIBS_USER", "").strip()
+    if explicit:
+        return ensure_directory(Path(explicit).expanduser().resolve())
+    return ensure_directory(app_data_root() / "r-library")
+
+
+def python_site_dir() -> Path:
+    explicit = os.environ.get("IRAMUTEQ_PYTHON_SITE_DIR", "").strip()
+    if explicit:
+        return ensure_directory(Path(explicit).expanduser().resolve())
+    return ensure_directory(app_data_root() / "python-site-packages")
+
+
 def annotation_dictionary_path() -> Path:
     explicit = os.environ.get("IRAMUTEQ_ADD_EXPRESSION_PATH", "").strip()
     if explicit:
@@ -179,7 +193,15 @@ def build_command_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
     env.setdefault("RGL_USE_NULL", "TRUE")
     env["IRAMUTEQ_APP_DATA_DIR"] = str(app_data_root())
+    env["IRAMUTEQ_R_LIBS_USER"] = str(r_library_dir())
+    env["IRAMUTEQ_PYTHON_SITE_DIR"] = str(python_site_dir())
     env["MPLCONFIGDIR"] = str(mplconfig_dir())
+    current_pythonpath = env.get("PYTHONPATH", "").strip()
+    env["PYTHONPATH"] = (
+        env["IRAMUTEQ_PYTHON_SITE_DIR"]
+        if not current_pythonpath
+        else env["IRAMUTEQ_PYTHON_SITE_DIR"] + os.pathsep + current_pythonpath
+    )
     if extra:
         env.update({key: str(value) for key, value in extra.items() if value is not None})
     return env

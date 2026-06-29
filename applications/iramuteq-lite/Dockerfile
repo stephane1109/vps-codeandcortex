@@ -1,13 +1,14 @@
 FROM rocker/r-ver:4.4.1
 
-ARG IRAMUTEQ_BUILD_BOOTSTRAP=0
+ARG IRAMUTEQ_BUILD_BOOTSTRAP=1
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     IRAMUTEQ_APP_DATA_DIR=/data/app \
-    IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library \
+    IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages \
+    IRAMUTEQ_R_LIBS_USER=/data/app/r-library \
     IRAMUTEQ_R_SYSTEM_LIBS=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
     R_LIBS_SITE=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
     IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1 \
@@ -28,16 +29,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_TICKET_MAX_ACTIVE=1 pour conserver l'exclusivite
 # - APP_TICKET_COST selon la charge reelle du VPS
 # - APP_TICKET_TTL_SECONDS si une analyse peut durer longtemps
-# - IRAMUTEQ_R_LIBS_USER=/data/app/r-library si vous voulez conserver
+# - IRAMUTEQ_R_LIBS_USER=/data/app/r-library pour conserver
 #   les packages R installes au runtime dans le volume persistant Coolify
+# - IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages pour conserver
+#   les packages Python installes au runtime dans le volume persistant
 # #### MODE VPS / COOLIFY
-# Par defaut, le build lourd R/CHD est desactive (`IRAMUTEQ_BUILD_BOOTSTRAP=0`)
-# car la compilation source de Matrix + quanteda depasse facilement le timeout
-# du helper Coolify sur un VPS modeste. Les dependances R manquantes sont alors
-# installees au premier lancement applicatif via `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1`.
+# Par defaut, on preinstalle maintenant le bootstrap R/CHD dans l'image
+# (`IRAMUTEQ_BUILD_BOOTSTRAP=1`) pour eviter un premier lancement bloque
+# plusieurs minutes sur le controle des dependances.
 # #### MODE BUILD COMPLET
-# Si vous disposez d'un builder plus puissant, vous pouvez reactiver le bootstrap
-# complet pendant le build Docker via `IRAMUTEQ_BUILD_BOOTSTRAP=1`.
+# Si besoin, vous pouvez desactiver ce bootstrap build-time via
+# `IRAMUTEQ_BUILD_BOOTSTRAP=0` et retomber sur l'installation au runtime.
 # #### NOTE BUILD R
 # USE_BUNDLED_LIBUV=1 reste active pour securiser l'installation du package R `fs`
 # si Coolify ou le miroir CRAN ne voit pas correctement `libuv.pc`.
@@ -196,11 +198,9 @@ WORKDIR /app
 COPY --chown=app:app . /app
 
 # #### VPS / COOLIFY
-# Le build helper Coolify coupe ici frequemment apres ~10 minutes quand Matrix
-# et quanteda doivent etre compiles depuis CRAN. On garde donc le build rapide
-# par defaut et on laisse le bootstrap runtime terminer l'installation au premier
-# lancement. Rien n'est retire cote fonctionnalites : seul le moment de
-# l'installation change.
+# Le bootstrap build-time est prefere pour livrer une image deja exploitable
+# des le premier lancement utilisateur. Si vous manquez encore de temps de build
+# sur Coolify, vous pouvez explicitement revenir a `IRAMUTEQ_BUILD_BOOTSTRAP=0`.
 # #### BUILD COMPLET OPTIONNEL
 # Definir `IRAMUTEQ_BUILD_BOOTSTRAP=1` si vous souhaitez a nouveau:
 # - preinstaller les packages R au build
@@ -214,8 +214,8 @@ RUN python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, 
        fi
 
 RUN chmod +x /app/docker-entrypoint.sh \
-    && mkdir -p /data/app /opt/iramuteq-r-library /tmp/iramuteq-lite \
-    && chown -R app:app /app /data/app /opt/iramuteq-r-library /tmp/iramuteq-lite
+    && mkdir -p /data/app /data/app/r-library /data/app/python-site-packages /tmp/iramuteq-lite \
+    && chown -R app:app /app /data/app /tmp/iramuteq-lite
 
 USER app
 
