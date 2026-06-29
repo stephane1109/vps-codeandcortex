@@ -28,7 +28,8 @@ COPY requirements.txt /app/requirements.txt
 
 RUN pip install --upgrade pip "setuptools<81" wheel \
     && pip install -r /app/requirements.txt \
-    && pip install --no-deps fer==22.4.0
+    && pip install --no-deps fer==22.4.0 \
+    && python -c "import pkg_resources; from fer import FER"
 
 COPY . /app
 
