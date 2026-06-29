@@ -257,16 +257,15 @@
             const globalActive = document.getElementById("global-active");
             const globalQueue = document.getElementById("global-queue");
             const globalServer = document.getElementById("global-server");
+            let hasSuccessfulSync = false;
 
             function badgeClassFromState(state, queued) {
-                if (state === "offline") return "hors-ligne";
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
                 if (state === "busy" || state === "active") return "occupee";
                 return "libre";
             }
 
             function labelFromState(state, queued) {
-                if (state === "offline") return "Hors ligne";
                 if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
                 if (state === "busy" || state === "active") return "Occupée";
                 return "Libre";
@@ -283,19 +282,17 @@
                 label.textContent = payload.stateLabel || labelFromState(payload.state, payload.queued || 0);
                 meta.textContent = `${payload.active || 0} / ${payload.maxActive || 0} actif · ${payload.queued || 0} attente`;
 
-                card.classList.remove("libre", "occupee", "attente", "hors-ligne");
+                card.classList.remove("libre", "occupee", "attente");
                 card.classList.add(stateClass);
             }
 
-            function markCardOffline(card, message) {
-                decorateCard(card, {
-                    state: "offline",
-                    stateLabel: "Hors ligne",
-                    active: 0,
-                    maxActive: 0,
-                    queued: 0,
-                    message: message || "",
-                });
+            function markCardAvailable(card) {
+                const dot = card.querySelector("[data-status-dot]");
+                const label = card.querySelector("[data-status-label]");
+                if (dot) dot.className = "pastille-etat libre";
+                if (label) label.textContent = "Libre";
+                card.classList.remove("occupee", "attente");
+                card.classList.add("libre");
             }
 
             function decorateGlobal(payload) {
@@ -316,26 +313,28 @@
                     if (appPayload) {
                         decorateCard(card, appPayload);
                     } else {
-                        markCardOffline(card, "Aucune donnee recue pour cette application.");
+                        markCardAvailable(card);
                     }
                 });
 
+                hasSuccessfulSync = true;
+
                 if (note) {
-                    if (payload.global && payload.global.serverState === "offline") {
-                        note.textContent = payload.global.message || "Redis est hors ligne : le dashboard reste visible mais les tickets ne sont pas synchronisés.";
+                    if (payload.global && payload.global.serverState === "degraded") {
+                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : les cartes restent visibles, mais l'etat reel peut prendre un peu de retard.";
                     } else {
                         note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
                     }
                 }
             }
 
-            function markDashboardOffline(message) {
-                cards.forEach((card) => markCardOffline(card, message));
-                globalActive.textContent = "0 · charge 0/0";
-                globalQueue.textContent = "0";
-                globalServer.textContent = "Hors ligne";
+            function markDashboardUnavailable(message) {
+                if (!hasSuccessfulSync) {
+                    cards.forEach((card) => markCardAvailable(card));
+                }
+                globalServer.textContent = "Synchronisation indisponible";
                 if (note) {
-                    note.textContent = message || "API dashboard indisponible.";
+                    note.textContent = message || "API dashboard indisponible pour le moment.";
                 }
             }
 
@@ -358,12 +357,12 @@
                     const payload = await response.json();
                     applyDashboard(payload);
                 } catch (error) {
-                    markDashboardOffline("API dashboard indisponible : verifie le conteneur FastAPI et l'endpoint `/api/tickets/dashboard`.");
+                    markDashboardUnavailable("API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.");
                 }
             }
 
             refreshDashboard();
-            window.setInterval(refreshDashboard, 10000);
+            window.setInterval(refreshDashboard, 5000);
         })();
     </script>
 </body>

@@ -576,8 +576,8 @@ def construire_tableau_de_bord_indisponible(
             "maxActive": configuration["max_active"],
             "queued": 0,
             "cost": configuration["cout"],
-            "state": "offline",
-            "stateLabel": "Hors ligne",
+            "state": "available",
+            "stateLabel": "Libre",
             "message": erreur,
         }
 
@@ -588,8 +588,8 @@ def construire_tableau_de_bord_indisponible(
             "activeLoad": 0,
             "maxLoad": configuration_globale["capacite_serveur"],
             "totalQueued": 0,
-            "serverState": "offline",
-            "serverLabel": "Redis hors ligne",
+            "serverState": "degraded",
+            "serverLabel": "Synchronisation indisponible",
             "message": erreur,
             "updatedAt": int(time.time()),
         },
