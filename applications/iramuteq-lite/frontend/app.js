@@ -12543,7 +12543,27 @@ async function renderCombinedTables(container, descriptors, emptyMessage) {
   }
 }
 
+function isLongitudinalUiAvailable() {
+  return [
+    resultContainers.suiviMeta,
+    resultContainers.suiviIndicatorsTable,
+    resultContainers.suiviEntropyPlot
+  ].every((container) => container instanceof HTMLElement);
+}
+
 async function renderLongitudinalExports(index) {
+  if (!isLongitudinalUiAvailable()) {
+    appState.jsdConcordancierRows = [];
+    appState.suiviPresentation = {
+      layer: "lexicale_brute",
+      emotionLexicon: "",
+      hasEmotionProfiles: false,
+      hasValenceProfiles: false,
+      note: ""
+    };
+    return;
+  }
+
   appState.jsdConcordancierRows = [];
   appState.suiviPresentation = {
     layer: "lexicale_brute",
