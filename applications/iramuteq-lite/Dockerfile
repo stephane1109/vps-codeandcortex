@@ -33,6 +33,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Les paquets `r-cran-*` installes via `apt` tombent dans `/usr/lib/R/...` alors que
 # `rocker/r-ver` utilise aussi `/usr/local/lib/R/...`. On force ici la visibilite des
 # deux emplacements pour eviter que le bootstrap recompilie inutilement depuis CRAN.
+# #### COMPILATION Rcpp / quanteda
+# `quanteda` retombe en compilation source sur cette image Ubuntu/R. Certains couples
+# GCC + Rcpp declenchent un `-Werror=format-security` dans les headers Rcpp, ce qui
+# casse le build alors qu'il ne s'agit pas d'une erreur fonctionnelle du package.
+# On neutralise uniquement cette promotion warning -> error dans Makevars.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -155,7 +160,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        fi \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /etc/R /root/.R \
+    && printf '%s\n' \
+      'CFLAGS += -Wno-error=format-security' \
+      'CXXFLAGS += -Wno-error=format-security' \
+      'CXX11FLAGS += -Wno-error=format-security' \
+      'CXX14FLAGS += -Wno-error=format-security' \
+      'CXX17FLAGS += -Wno-error=format-security' \
+      'CXX20FLAGS += -Wno-error=format-security' \
+      > /etc/R/Makevars.site \
+    && cp /etc/R/Makevars.site /root/.R/Makevars
+
 RUN useradd --create-home --shell /bin/bash app
+RUN mkdir -p /home/app/.R \
+    && cp /etc/R/Makevars.site /home/app/.R/Makevars \
+    && chown -R app:app /home/app/.R
 
 COPY docker/requirements-python.txt /tmp/requirements-python.txt
 RUN pip install --upgrade pip setuptools wheel && pip install -r /tmp/requirements-python.txt

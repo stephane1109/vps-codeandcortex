@@ -73,6 +73,9 @@ install_missing_packages <- function(packages, repo, lib) {
   # `MAKEFLAGS=-j1` limite la compilation a un seul coeur pour reduire les pointes
   # memoire qui peuvent faire echouer les builds Coolify sur des VPS modestes.
   Sys.setenv(USE_BUNDLED_LIBUV = "1", MAKEFLAGS = "-j1")
+  if (!nzchar(Sys.getenv("R_MAKEVARS_USER", unset = "")) && file.exists("/etc/R/Makevars.site")) {
+    Sys.setenv(R_MAKEVARS_USER = "/etc/R/Makevars.site")
+  }
 
   install_opts <- c("--no-html", "--no-help", "--no-demo", "--no-docs")
   dependency_scope <- c("Depends", "Imports", "LinkingTo")
