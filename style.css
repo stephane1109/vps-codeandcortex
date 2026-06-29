@@ -237,22 +237,25 @@ h1 {
     color: var(--couleur-texte);
     text-decoration: none;
     text-align: center;
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
 }
 
 .carte-application.libre {
     border-color: rgba(34, 197, 94, 0.34);
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(255, 255, 255, 0.98));
     box-shadow: 0 12px 24px rgba(34, 197, 94, 0.08);
 }
 
 .carte-application.occupee {
     border-color: #ef4444;
-    box-shadow: 0 14px 30px rgba(239, 68, 68, 0.16);
+    background: linear-gradient(180deg, rgba(239, 68, 68, 0.10), rgba(255, 255, 255, 0.98));
+    box-shadow: 0 14px 30px rgba(239, 68, 68, 0.18);
 }
 
 .carte-application.attente {
     border-color: #f59e0b;
-    box-shadow: 0 14px 30px rgba(245, 158, 11, 0.14);
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.98));
+    box-shadow: 0 14px 30px rgba(245, 158, 11, 0.18);
 }
 
 .carte-application.indisponible {
@@ -379,6 +382,33 @@ h1 {
 
 .carte-application.indisponible .statut {
     color: #475569;
+}
+
+.carte-application.libre .icone {
+    color: #16a34a;
+}
+
+.carte-application.occupee .icone {
+    color: #dc2626;
+}
+
+.carte-application.attente .icone {
+    color: #d97706;
+}
+
+.carte-application.libre .meta-application,
+.carte-application.libre .description-application {
+    color: #166534;
+}
+
+.carte-application.occupee .meta-application,
+.carte-application.occupee .description-application {
+    color: #991b1b;
+}
+
+.carte-application.attente .meta-application,
+.carte-application.attente .description-application {
+    color: #92400e;
 }
 
 .pied {
