@@ -1,4 +1,4 @@
-FROM rocker/r-ver:4.4.1
+FROM rocker/r2u:jammy
 
 ARG IRAMUTEQ_BUILD_BOOTSTRAP=1
 
@@ -34,6 +34,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages pour conserver
 #   les packages Python installes au runtime dans le volume persistant
 # #### MODE VPS / COOLIFY
+# Base `rocker/r2u:jammy` :
+# - expose les paquets CRAN en binaires Ubuntu via `apt`
+# - evite ici la compilation source tres longue de `quanteda`
+# - reduit fortement le risque de timeout Coolify pendant le build
 # Par defaut, on preinstalle maintenant le bootstrap R/CHD dans l'image
 # (`IRAMUTEQ_BUILD_BOOTSTRAP=1`) pour eviter un premier lancement bloque
 # plusieurs minutes sur le controle des dependances.

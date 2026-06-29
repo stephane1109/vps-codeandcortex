@@ -5,6 +5,7 @@ Cette application `iramuteq-lite` est la version **web uniquement** de `iramuteq
 - `FastAPI` pour le backend HTTP
 - le frontend statique conservé et servi comme application web
 - `R` + `Python` embarqués dans le conteneur Docker
+- une base Docker `rocker/r2u:jammy` pour recuperer un maximum de paquets CRAN deja compiles
 
 Il n'est donc pas nécessaire d'installer manuellement `Python`, `R`, `Streamlit` ou Tauri sur le VPS hôte.
 
@@ -81,6 +82,7 @@ Build arg: IRAMUTEQ_BUILD_BOOTSTRAP=0
 La configuration recommandee est maintenant :
 
 - bootstrap build-time actif par defaut
+- image basee sur `rocker/r2u:jammy` pour eviter la compilation source de `quanteda`
 - `IRAMUTEQ_R_LIBS_USER=/data/app/r-library` pour conserver les packages dans le volume persistant
 - `IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages` pour conserver les packages Python eventuellement reinstalles au runtime
 
