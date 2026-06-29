@@ -19,10 +19,15 @@ def build_web_index() -> str:
     index_path = runtime.frontend_root() / "index.html"
     html = index_path.read_text(encoding="utf-8")
     app_script = '<script type="module" src="./app.js"></script>'
-    shim_script = '<script src="./web-runtime.js"></script>\n    <script type="module" src="./app.js"></script>'
+    shim_tag = '<script src="./web-runtime.js"></script>'
+    shim_script = f"{shim_tag}\n    {app_script}"
+    if shim_tag in html and app_script in html:
+        return html
     if app_script in html:
         return html.replace(app_script, shim_script, 1)
-    return html.replace("</body>", '    <script src="./web-runtime.js"></script>\n  </body>', 1)
+    if shim_tag in html:
+        return html
+    return html.replace("</body>", f"    {shim_tag}\n  </body>", 1)
 
 
 def get_payload_arg(payload: dict[str, Any], *names: str, default: Any = _MISSING) -> Any:
