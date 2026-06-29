@@ -48,7 +48,7 @@ def tickets_dashboard(applications: str | None = Query(default=None)) -> dict:
         return construire_tableau_de_bord_indisponible(application_ids, str(exc))
 
 
-@app.post("/api/tickets/release")
+@app.api_route("/api/tickets/release", methods=["GET", "POST"])
 def release_ticket(application_id: str = Query(...), session_id: str = Query(...)) -> dict[str, str]:
     client_redis = connecter_redis()
     liberer_ticket(client_redis, session_id, application_id)

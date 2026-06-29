@@ -12,6 +12,20 @@ le `Dockerfile` situé à la racine.
 - Dockerfile : `./Dockerfile`
 - Port interne : `8000`
 
+Important : c'est un seul et meme service Coolify qui doit exposer toutes les
+routes suivantes :
+
+- `/`
+- `/index.html`
+- `/style.css`
+- `/api/health`
+- `/api/tickets/dashboard`
+- `/api/tickets/release`
+
+Il ne faut pas deployer `index.html` seul, ni un service statique separe pour
+la home. Le domaine du dashboard doit pointer vers le conteneur FastAPI de la
+racine du depot.
+
 ## 2. Variables d'environnement obligatoires
 
 - `REDIS_URL=redis://:MOTDEPASSE@NOM_DU_SERVICE_REDIS:6379/0`
