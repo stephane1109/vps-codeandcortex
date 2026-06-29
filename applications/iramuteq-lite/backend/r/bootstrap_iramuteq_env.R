@@ -25,14 +25,63 @@ scalar_chr <- function(x, default = "") {
 }
 
 required_packages <- c(
-  "jsonlite", "quanteda", "Matrix", "dplyr", "wordcloud", "RColorBrewer",
+  "jsonlite", "Matrix", "quanteda", "dplyr", "wordcloud", "RColorBrewer",
   "FactoMineR", "igraph", "proxy", "htmltools", "topicmodels", "irlba", "factoextra"
+)
+
+required_min_versions <- c(
+  Matrix = "1.5.0"
 )
 
 split_lib_paths <- function(value) {
   if (is.null(value) || !length(value)) return(character(0))
   parts <- trimws(unlist(strsplit(as.character(value[[1]]), .Platform$path.sep, fixed = TRUE), use.names = FALSE))
   parts[nzchar(parts)]
+}
+
+package_installed_version <- function(pkg) {
+  tryCatch(as.character(utils::packageVersion(pkg)), error = function(e) "")
+}
+
+package_required_version <- function(pkg) {
+  version <- required_min_versions[[pkg]]
+  if (is.null(version) || !length(version) || is.na(version[[1]]) || !nzchar(as.character(version[[1]]))) {
+    ""
+  } else {
+    as.character(version[[1]])
+  }
+}
+
+package_needs_install <- function(pkg) {
+  installed_version <- package_installed_version(pkg)
+  if (!nzchar(installed_version)) {
+    return(TRUE)
+  }
+  min_version <- package_required_version(pkg)
+  if (!nzchar(min_version)) {
+    return(FALSE)
+  }
+  utils::compareVersion(installed_version, min_version) < 0
+}
+
+describe_package_requirement <- function(pkg) {
+  installed_version <- package_installed_version(pkg)
+  min_version <- package_required_version(pkg)
+  if (!nzchar(min_version)) {
+    return(pkg)
+  }
+  if (!nzchar(installed_version)) {
+    return(sprintf("%s (>= %s requis)", pkg, min_version))
+  }
+  if (utils::compareVersion(installed_version, min_version) < 0) {
+    return(sprintf("%s (%s installe, >= %s requis)", pkg, installed_version, min_version))
+  }
+  pkg
+}
+
+sort_packages_for_install <- function(packages) {
+  priority <- c("Matrix")
+  unique(c(intersect(priority, packages), setdiff(packages, priority)))
 }
 
 configure_user_library <- function() {
@@ -63,6 +112,7 @@ configure_user_library <- function() {
 
 install_missing_packages <- function(packages, repo, lib) {
   if (!length(packages)) return(character(0))
+  packages <- sort_packages_for_install(packages)
   install_errors <- character(0)
   # #### VPS / COOLIFY
   # Certains paquets CRAN (notamment fs, dependance indirecte de FactoMineR/factoextra)
@@ -81,12 +131,11 @@ install_missing_packages <- function(packages, repo, lib) {
   dependency_scope <- c("Depends", "Imports", "LinkingTo")
 
   for (pkg in packages) {
-    installed_now <- rownames(installed.packages())
-    if (pkg %in% installed_now) {
+    if (!package_needs_install(pkg)) {
       next
     }
 
-    message("Installation package R requis: ", pkg)
+    message("Installation / mise a niveau package R requis: ", describe_package_requirement(pkg))
 
     install_error <- tryCatch(
       {
@@ -125,27 +174,34 @@ cran_repo <- trimws(Sys.getenv("R_CRAN_MIRROR", unset = "https://cloud.r-project
 options(repos = c(CRAN = cran_repo))
 lib_path <- configure_user_library()
 
-installed_before <- rownames(installed.packages())
-missing_before <- setdiff(required_packages, installed_before)
+installed_versions_before <- setNames(vapply(required_packages, package_installed_version, character(1)), required_packages)
+missing_before <- required_packages[vapply(required_packages, package_needs_install, logical(1))]
+outdated_before <- missing_before[nzchar(installed_versions_before[missing_before])]
 install_errors <- character(0)
 
 if (identical(mode, "install") && length(missing_before)) {
   install_error <- install_missing_packages(missing_before, repo = cran_repo, lib = lib_path)
-  if (length(install_error) && nzchar(install_error[[1]])) {
-    install_errors <- c(install_errors, install_error[[1]])
+  if (length(install_error)) {
+    install_errors <- c(install_errors, install_error)
   }
 }
 
-installed_after <- rownames(installed.packages())
-missing_after <- setdiff(required_packages, installed_after)
-installed_now <- setdiff(intersect(required_packages, installed_after), installed_before)
+installed_versions_after <- setNames(vapply(required_packages, package_installed_version, character(1)), required_packages)
+missing_after <- required_packages[vapply(required_packages, package_needs_install, logical(1))]
+outdated_after <- missing_after[nzchar(installed_versions_after[missing_after])]
+installed_now <- required_packages[!nzchar(installed_versions_before[required_packages]) & nzchar(installed_versions_after[required_packages])]
+upgraded_now <- required_packages[
+  nzchar(installed_versions_before[required_packages]) &
+    nzchar(installed_versions_after[required_packages]) &
+    installed_versions_before[required_packages] != installed_versions_after[required_packages]
+]
 
 if (!length(install_errors) && length(missing_after)) {
   install_errors <- c(
     install_errors,
     paste0(
-      "Packages R encore manquants apres installation: ",
-      paste(missing_after, collapse = ", ")
+      "Packages R encore manquants ou obsoletes apres installation: ",
+      paste(vapply(missing_after, describe_package_requirement, character(1)), collapse = ", ")
     )
   )
 }
@@ -156,8 +212,11 @@ payload <- list(
   library = lib_path,
   cran_repo = cran_repo,
   missing_before = unname(missing_before),
+  outdated_before = unname(outdated_before),
   installed_now = unname(installed_now),
+  upgraded_now = unname(upgraded_now),
   missing_after = unname(missing_after),
+  outdated_after = unname(outdated_after),
   install_errors = unname(install_errors)
 )
 
