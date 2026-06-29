@@ -8373,7 +8373,11 @@ function clearObjectUrls() {
 }
 
 function clearContainer(container) {
+  if (!(container instanceof HTMLElement)) {
+    return false;
+  }
   container.innerHTML = "";
+  return true;
 }
 
 function createObjectUrl(file) {
@@ -13695,7 +13699,9 @@ function resetResultPanes() {
   };
 
   Object.entries(resultContainers).forEach(([key, container]) => {
-    clearContainer(container);
+    if (!clearContainer(container)) {
+      return;
+    }
     container.appendChild(createEmptyState(messages[key]));
   });
 
