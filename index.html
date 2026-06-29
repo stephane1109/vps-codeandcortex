@@ -75,7 +75,7 @@
                     <h3>États des applications</h3>
                     <p>
                         Vert : l'application est libre. Rouge : un utilisateur travaille déjà dessus. Orange : une file
-                        d'attente existe. Gris : la synchronisation du dashboard est indisponible.
+                        d'attente existe. En cas de souci de synchronisation, un message apparaît en haut de la page.
                     </p>
                 </article>
 
@@ -306,14 +306,12 @@
             function badgeClassFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
                 if (state === "busy" || state === "active") return "occupee";
-                if (state === "unavailable" || state === "degraded") return "indisponible";
                 return "libre";
             }
 
             function labelFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
                 if (state === "busy" || state === "active") return "Occupée";
-                if (state === "unavailable" || state === "degraded") return "Synchronisation";
                 return "Libre";
             }
 
@@ -336,11 +334,11 @@
                 const dot = card.querySelector("[data-status-dot]");
                 const label = card.querySelector("[data-status-label]");
                 const meta = card.querySelector("[data-status-meta]");
-                if (dot) dot.className = "pastille-etat indisponible";
-                if (label) label.textContent = "Synchronisation";
-                if (meta) meta.textContent = "Etat indisponible";
-                card.classList.remove("libre", "occupee", "attente");
-                card.classList.add("indisponible");
+                if (dot) dot.className = "pastille-etat libre";
+                if (label) label.textContent = "Libre";
+                if (meta) meta.textContent = "Etat non synchronise";
+                card.classList.remove("occupee", "attente", "indisponible");
+                card.classList.add("libre");
             }
 
             function decorateGlobal(payload) {
