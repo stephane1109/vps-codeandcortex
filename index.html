@@ -33,9 +33,14 @@
                 </p>
             </div>
 
-            <a href="https://www.codeandcortex.fr" class="lien-site" target="_blank">
-                www.codeandcortex.fr
-            </a>
+            <div class="actions-entete">
+                <a href="/aide.md" class="lien-aide" target="_blank" rel="noopener noreferrer">
+                    Aide d'utilisation
+                </a>
+                <a href="https://www.codeandcortex.fr" class="lien-site" target="_blank" rel="noopener noreferrer">
+                    www.codeandcortex.fr
+                </a>
+            </div>
         </header>
 
         <section class="etat-serveur" aria-label="État du serveur">
@@ -53,6 +58,47 @@
                 <span class="label">Serveur de calcul</span>
                 <span class="valeur" id="global-server">Initialisation</span>
             </div>
+        </section>
+
+        <section class="aide-rapide" aria-label="Aide rapide du tableau de bord">
+            <div class="aide-rapide-intro">
+                <p class="aide-rapide-surtitre">Aide rapide</p>
+                <h2 class="aide-rapide-titre">Comprendre la file d'attente et la charge serveur</h2>
+                <p class="aide-rapide-description">
+                    Certaines applications réservent un ticket utilisateur et consomment une partie de la capacité totale du VPS.
+                    Quand vous avez terminé, pensez à libérer l'accès dans l'application pour laisser la place au suivant.
+                </p>
+            </div>
+
+            <div class="aide-rapide-grille">
+                <article class="aide-rapide-carte">
+                    <h3>États des applications</h3>
+                    <p>
+                        Vert : l'application est libre. Rouge : un utilisateur travaille déjà dessus. Orange : une file
+                        d'attente existe. Gris : la synchronisation du dashboard est indisponible.
+                    </p>
+                </article>
+
+                <article class="aide-rapide-carte">
+                    <h3>Libérer l'accès</h3>
+                    <p>
+                        Après votre analyse, cliquez sur le bouton <strong>Libérer l'accès</strong> dans l'application.
+                        Fermer l'onglet aide souvent, mais la libération manuelle reste la méthode la plus fiable.
+                    </p>
+                </article>
+
+                <article class="aide-rapide-carte">
+                    <h3>Capacité du serveur</h3>
+                    <p>
+                        Le compteur <strong>charge x/y</strong> indique combien de points de calcul sont déjà mobilisés.
+                        Les grosses applications coûtent plus cher et sont limitées à moins d'utilisateurs simultanés.
+                    </p>
+                </article>
+            </div>
+
+            <a href="/aide.md" class="aide-rapide-lien" target="_blank" rel="noopener noreferrer">
+                Lire l'aide complète
+            </a>
         </section>
 
         <section class="grille-applications" aria-label="Applications disponibles">

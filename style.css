@@ -84,11 +84,117 @@ h1 {
     color: var(--couleur-accent);
 }
 
+.actions-entete {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.lien-aide,
+.lien-site {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lien-aide {
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid var(--couleur-accent);
+    background: var(--couleur-accent);
+    padding: 10px 14px;
+    white-space: nowrap;
+    transition: all 0.25s ease;
+}
+
+.lien-aide:hover {
+    background: #ffffff;
+    color: var(--couleur-accent);
+}
+
 .etat-serveur {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     margin-bottom: 20px;
+}
+
+.aide-rapide {
+    margin-bottom: 22px;
+    padding: 18px;
+    background: linear-gradient(135deg, rgba(255, 75, 75, 0.06), rgba(17, 17, 17, 0.03));
+    border: 1px solid rgba(255, 75, 75, 0.14);
+}
+
+.aide-rapide-intro {
+    margin-bottom: 16px;
+}
+
+.aide-rapide-surtitre {
+    margin: 0 0 8px 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--couleur-accent);
+}
+
+.aide-rapide-titre {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    color: var(--couleur-principale);
+}
+
+.aide-rapide-description {
+    margin: 10px 0 0 0;
+    max-width: 820px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--couleur-secondaire);
+}
+
+.aide-rapide-grille {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.aide-rapide-carte {
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(17, 17, 17, 0.08);
+}
+
+.aide-rapide-carte h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    letter-spacing: -0.02em;
+}
+
+.aide-rapide-carte p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--couleur-secondaire);
+}
+
+.aide-rapide-lien {
+    display: inline-flex;
+    margin-top: 16px;
+    color: var(--couleur-accent);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.aide-rapide-lien:hover {
+    text-decoration: underline;
 }
 
 .indicateur {
@@ -308,6 +414,10 @@ h1 {
         grid-template-columns: 1fr;
     }
 
+    .aide-rapide-grille {
+        grid-template-columns: 1fr;
+    }
+
     .entete {
         align-items: flex-start;
         flex-direction: column;
@@ -336,5 +446,13 @@ h1 {
     .lien-site {
         width: 100%;
         text-align: center;
+    }
+
+    .lien-aide {
+        width: 100%;
+    }
+
+    .actions-entete {
+        width: 100%;
     }
 }

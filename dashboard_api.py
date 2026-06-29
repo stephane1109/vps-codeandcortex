@@ -17,6 +17,7 @@ from gestion_tickets import (
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
 STYLE_FILE = ROOT / "style.css"
+AIDE_FILE = ROOT / "aide.md"
 
 app = FastAPI(title="Code & Cortex VPS Dashboard", docs_url=None, redoc_url=None)
 app.add_middleware(
@@ -67,3 +68,8 @@ def index_alias() -> FileResponse:
 @app.get("/style.css")
 def style() -> FileResponse:
     return FileResponse(STYLE_FILE, media_type="text/css; charset=utf-8")
+
+
+@app.get("/aide.md")
+def aide_markdown() -> FileResponse:
+    return FileResponse(AIDE_FILE, media_type="text/markdown; charset=utf-8")
