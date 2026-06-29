@@ -305,6 +305,10 @@ coords_have_two_axes <- function(coords) {
   !is.null(coords) && is.matrix(coords) && ncol(coords) >= 2
 }
 
+coords_have_at_least_one_axis <- function(coords) {
+  !is.null(coords) && (is.matrix(coords) || is.data.frame(coords)) && ncol(coords) >= 1
+}
+
 normaliser_id_classe_local <- function(x) {
   x_chr <- trimws(as.character(x))
   x_num <- suppressWarnings(as.numeric(x_chr))
@@ -1941,7 +1945,7 @@ run_batch <- function() {
 
     afc_classes_png <- NULL
     afc_termes_png <- NULL
-    if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
+    if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
       activer_repel <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
       taille_sel <- scalar_chr(config$afc_taille_mots, "frequency")
       if (!taille_sel %in% c("frequency", "chi2")) taille_sel <- "frequency"
@@ -1950,20 +1954,38 @@ run_batch <- function() {
       afc_classes_png <- file.path(afc_dir, "afc_classes.png")
       afc_termes_png <- file.path(afc_dir, "afc_termes.png")
       grDevices::png(afc_classes_png, width = 1800, height = 1400, res = 180)
-      tracer_afc_classes_seules(afc_obj, axes = c(1, 2), cex_labels = 1.05)
-      grDevices::dev.off()
-      grDevices::png(afc_termes_png, width = 2000, height = 1600, res = 180)
-      tracer_afc_classes_termes(
-        afc_obj,
-        axes = c(1, 2),
-        top_termes = top_termes,
-        taille_sel = taille_sel,
-        activer_repel = activer_repel
+      tryCatch(
+        tracer_afc_classes_seules(afc_obj, axes = c(1, 2), cex_labels = 1.05),
+        error = function(e) {
+          plot.new()
+          text(0.5, 0.5, paste0("AFC classes indisponible : ", e$message), cex = 1.0)
+          log_info(paste0("AFC classes : rendu de secours utilise (", e$message, ")."))
+        }
       )
       grDevices::dev.off()
-      log_info("AFC classes x termes : calcul terminé.", progress = 78)
+      grDevices::png(afc_termes_png, width = 2000, height = 1600, res = 180)
+      tryCatch(
+        tracer_afc_classes_termes(
+          afc_obj,
+          axes = c(1, 2),
+          top_termes = top_termes,
+          taille_sel = taille_sel,
+          activer_repel = activer_repel
+        ),
+        error = function(e) {
+          plot.new()
+          text(0.5, 0.5, paste0("AFC termes indisponible : ", e$message), cex = 1.0)
+          log_info(paste0("AFC termes : rendu de secours utilise (", e$message, ")."))
+        }
+      )
+      grDevices::dev.off()
+      if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
+        log_info("AFC classes x termes : calcul terminé.", progress = 78)
+      } else {
+        log_info("AFC classes x termes : un seul axe disponible, export PNG en projection 1D.", progress = 78)
+      }
     } else {
-      log_info("AFC classes/termes : moins de deux axes disponibles, graphiques PNG ignorés.")
+      log_info("AFC classes/termes : aucun axe exploitable, graphiques PNG ignorés.")
     }
 
     ecrire_csv_6_decimales(afc_obj$table, file.path(afc_dir, "table_classes_termes.csv"), row.names = TRUE)
@@ -1995,20 +2017,30 @@ run_batch <- function() {
     )
     if (!is.null(afc_vars_obj) && !is.null(afc_vars_obj$ca)) {
       afc_vars_png <- NULL
-      if (coords_have_two_axes(afc_vars_obj$rowcoord) && coords_have_two_axes(afc_vars_obj$colcoord)) {
+      if (coords_have_at_least_one_axis(afc_vars_obj$rowcoord) && coords_have_at_least_one_axis(afc_vars_obj$colcoord)) {
         activer_repel2 <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
         top_mod <- 120L
         afc_vars_png <- file.path(afc_dir, "afc_variables_etoilees.png")
         grDevices::png(afc_vars_png, width = 2000, height = 1600, res = 180)
-        tracer_afc_variables_etoilees(
-          afc_vars_obj,
-          axes = c(1, 2),
-          top_modalites = top_mod,
-          activer_repel = activer_repel2
+        tryCatch(
+          tracer_afc_variables_etoilees(
+            afc_vars_obj,
+            axes = c(1, 2),
+            top_modalites = top_mod,
+            activer_repel = activer_repel2
+          ),
+          error = function(e) {
+            plot.new()
+            text(0.5, 0.5, paste0("AFC variables etoilees indisponible : ", e$message), cex = 1.0)
+            log_info(paste0("AFC variables etoilees : rendu de secours utilise (", e$message, ")."))
+          }
         )
         grDevices::dev.off()
+        if (!coords_have_two_axes(afc_vars_obj$rowcoord) || !coords_have_two_axes(afc_vars_obj$colcoord)) {
+          log_info("AFC variables étoilées : un seul axe disponible, export PNG en projection 1D.")
+        }
       } else {
-        log_info("AFC variables étoilées : moins de deux axes disponibles, graphique PNG ignoré.")
+        log_info("AFC variables étoilées : aucun axe exploitable, graphique PNG ignoré.")
       }
       log_info("AFC variables étoilées : calcul terminé.", progress = 80)
       ecrire_csv_6_decimales(afc_vars_obj$modalites_stats, file.path(afc_dir, "stats_modalites.csv"), row.names = FALSE)

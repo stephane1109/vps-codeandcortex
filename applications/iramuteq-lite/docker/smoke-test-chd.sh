@@ -70,6 +70,20 @@ for expected_file in \
   fi
 done
 
+for expected_afc_file in \
+  "$JOB_ROOT/exports/afc/afc_classes.png" \
+  "$JOB_ROOT/exports/afc/afc_termes.png"; do
+  if [ ! -f "$expected_afc_file" ]; then
+    echo "Fichier AFC attendu manquant: $expected_afc_file"
+    if [ -f /tmp/iramuteq-smoke-result.json ]; then
+      echo "--- cli-result.json ---"
+      cat /tmp/iramuteq-smoke-result.json
+    fi
+    dump_debug
+    exit 1
+  fi
+done
+
 if [ -f "$JOB_ROOT/exports/segments_par_classe.html" ]; then
   :
 elif [ -f "$JOB_ROOT/exports/concordancier.html" ]; then

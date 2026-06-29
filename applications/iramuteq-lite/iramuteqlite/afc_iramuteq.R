@@ -40,6 +40,57 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
   c(-m, m)
 }
 
+.resoudre_axes_trace_afc <- function(coords, axes = c(1, 2)) {
+  if (is.null(coords) || !(is.matrix(coords) || is.data.frame(coords))) {
+    return(NULL)
+  }
+
+  n_axes <- ncol(coords)
+  if (!is.finite(n_axes) || n_axes < 1) {
+    return(NULL)
+  }
+
+  ax1 <- max(1L, min(as.integer(axes[1]), n_axes))
+  has_second <- n_axes >= 2L && length(axes) >= 2L
+  ax2 <- if (has_second) max(1L, min(as.integer(axes[2]), n_axes)) else ax1
+
+  list(ax1 = ax1, ax2 = ax2, has_second = has_second)
+}
+
+.extraire_coordonnees_trace_afc <- function(coords, axes = c(1, 2)) {
+  resolved <- .resoudre_axes_trace_afc(coords, axes)
+  if (is.null(resolved)) {
+    stop("AFC : coordonnees insuffisantes pour le trace.")
+  }
+
+  list(
+    x = as.numeric(coords[, resolved$ax1]),
+    y = if (isTRUE(resolved$has_second)) as.numeric(coords[, resolved$ax2]) else rep(0, nrow(coords)),
+    axes = resolved
+  )
+}
+
+.calculer_limites_trace_afc <- function(x, y, has_second_axis = TRUE) {
+  xlim_use <- calculer_lim_sym(x, 0)
+  if (isTRUE(has_second_axis)) {
+    ylim_use <- calculer_lim_sym(y, 0)
+  } else {
+    amplitude <- max(abs(xlim_use))
+    if (!is.finite(amplitude) || amplitude <= 0) amplitude <- 1
+    y_half <- max(0.45, amplitude * 0.18)
+    ylim_use <- c(-y_half, y_half)
+  }
+
+  list(xlim = xlim_use, ylim = ylim_use)
+}
+
+.etiquette_axe_y_afc <- function(axis_info) {
+  if (isTRUE(axis_info$has_second)) {
+    return(paste0("Axe ", axis_info$ax2))
+  }
+  "Projection 1D"
+}
+
 # Test de chevauchement rectangles
 .rectangles_chevauchent <- function(r1, r2) {
   !(r1$xmax < r2$xmin || r2$xmax < r1$xmin || r1$ymax < r2$ymin || r2$ymax < r1$ymin)
@@ -303,25 +354,24 @@ executer_afc_classes <- function(dfm_obj, groupes, termes_cibles = NULL, max_ter
 # Tracé AFC des classes uniquement
 tracer_afc_classes_seules <- function(obj, axes = c(1, 2), cex_labels = 1.0) {
   if (is.null(obj$ca) || is.null(obj$rowcoord)) stop("AFC classes : objet incomplet.")
-  ax1 <- axes[1]
-  ax2 <- axes[2]
-
   rc <- obj$rowcoord
-  x_c <- rc[, ax1]
-  y_c <- rc[, ax2]
-
-  lim <- calculer_lim_sym(x_c, y_c)
+  coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
+  x_c <- coords_classes$x
+  y_c <- coords_classes$y
+  axis_info <- coords_classes$axes
+  lim <- .calculer_limites_trace_afc(x_c, y_c, axis_info$has_second)
+  label_pos <- if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L)
   plot(
     0, 0,
     type = "n",
-    xlab = paste0("Axe ", ax1),
-    ylab = paste0("Axe ", ax2),
-    xlim = lim, ylim = lim
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
+    xlim = lim$xlim, ylim = lim$ylim
   )
   abline(h = 0, v = 0, col = "gray80")
 
   points(x_c, y_c, pch = 19, cex = 1.3)
-  text(x_c, y_c, labels = rownames(rc), pos = 3, cex = cex_labels)
+  text(x_c, y_c, labels = rownames(rc), pos = label_pos, cex = cex_labels)
 }
 
 # Tracé AFC classes + termes
@@ -345,12 +395,13 @@ tracer_afc_classes_termes <- function(
   }
 
   taille_sel <- match.arg(taille_sel)
-  ax1 <- axes[1]
-  ax2 <- axes[2]
 
   rc <- obj$rowcoord
   cc <- obj$colcoord
   st <- obj$termes_stats
+  coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
+  coords_termes <- .extraire_coordonnees_trace_afc(cc, axes = axes)
+  axis_info <- coords_termes$axes
 
   st <- st[!is.na(st$Terme) & nzchar(st$Terme), , drop = FALSE]
   st <- st[order(-st$frequency), , drop = FALSE]
@@ -367,16 +418,15 @@ tracer_afc_classes_termes <- function(
   }
 
   mots <- st$Terme
-  xy_m <- cc[mots, , drop = FALSE]
-  x_m <- xy_m[, ax1]
-  y_m <- xy_m[, ax2]
+  x_m <- coords_termes$x[match(mots, rownames(cc))]
+  y_m <- coords_termes$y[match(mots, rownames(cc))]
 
-  x_c <- rc[, ax1]
-  y_c <- rc[, ax2]
+  x_c <- coords_classes$x
+  y_c <- coords_classes$y
 
-  lim <- calculer_lim_sym(c(x_m, x_c), c(y_m, y_c))
-  xlim_use <- lim
-  ylim_use <- lim
+  lim <- .calculer_limites_trace_afc(c(x_m, x_c), c(y_m, y_c), axis_info$has_second)
+  xlim_use <- lim$xlim
+  ylim_use <- lim$ylim
   if (!is.null(xlim_zoom) && length(xlim_zoom) == 2 && all(is.finite(xlim_zoom))) {
     xlim_use <- as.numeric(xlim_zoom)
   }
@@ -386,8 +436,8 @@ tracer_afc_classes_termes <- function(
   plot(
     0, 0,
     type = "n",
-    xlab = paste0("Axe ", ax1),
-    ylab = paste0("Axe ", ax2),
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
     xlim = xlim_use, ylim = ylim_use
   )
   abline(h = 0, v = 0, col = "gray80")
@@ -396,7 +446,13 @@ tracer_afc_classes_termes <- function(
   # avec tests de collision rectangles afin de réduire le chevauchement des étiquettes.
   # Cela ne garantit pas 0 collision dans tous les cas, mais réduit fortement les superpositions.
   points(x_c, y_c, pch = 19, cex = 1.25)
-  text(x_c, y_c, labels = rownames(rc), pos = 3, cex = 1.0)
+  text(
+    x_c,
+    y_c,
+    labels = rownames(rc),
+    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
+    cex = 1.0
+  )
 
   # Couleurs par classe
   classes <- sort(unique(rownames(rc)))
@@ -720,12 +776,12 @@ tracer_afc_variables_etoilees <- function(
     stop("AFC variables étoilées : objet incomplet (coordonnées / stats manquantes).")
   }
 
-  ax1 <- axes[1]
-  ax2 <- axes[2]
-
   rc <- obj$rowcoord
   cc <- obj$colcoord
   st <- obj$modalites_stats
+  coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
+  coords_modalites <- .extraire_coordonnees_trace_afc(cc, axes = axes)
+  axis_info <- coords_modalites$axes
 
   st <- .selectionner_modalites_pour_trace(
     st = st,
@@ -741,25 +797,30 @@ tracer_afc_variables_etoilees <- function(
   }
 
   mods <- st$Modalite
-  xy_m <- cc[mods, , drop = FALSE]
-  x_m <- xy_m[, ax1]
-  y_m <- xy_m[, ax2]
+  x_m <- coords_modalites$x[match(mods, rownames(cc))]
+  y_m <- coords_modalites$y[match(mods, rownames(cc))]
 
-  x_c <- rc[, ax1]
-  y_c <- rc[, ax2]
+  x_c <- coords_classes$x
+  y_c <- coords_classes$y
 
-  lim <- calculer_lim_sym(c(x_m, x_c), c(y_m, y_c))
+  lim <- .calculer_limites_trace_afc(c(x_m, x_c), c(y_m, y_c), axis_info$has_second)
   plot(
     0, 0,
     type = "n",
-    xlab = paste0("Axe ", ax1),
-    ylab = paste0("Axe ", ax2),
-    xlim = lim, ylim = lim
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
+    xlim = lim$xlim, ylim = lim$ylim
   )
   abline(h = 0, v = 0, col = "gray80")
 
   points(x_c, y_c, pch = 19, cex = 1.25)
-  text(x_c, y_c, labels = rownames(rc), pos = 3, cex = 1.0)
+  text(
+    x_c,
+    y_c,
+    labels = rownames(rc),
+    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
+    cex = 1.0
+  )
 
   # Couleurs par classe (classe max)
   classes <- sort(unique(rownames(rc)))
