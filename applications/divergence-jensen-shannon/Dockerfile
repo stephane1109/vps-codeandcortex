@@ -21,6 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - ne pas definir APP_TICKET_DEFAULT_REDIS_URL dans cette application
 # - APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
 # - APP_TICKET_HIDDEN_RELEASE_SECONDS=0 pour desactiver, sinon liberation auto si onglet cache
+# - APP_TICKET_WAIT_STALE_SECONDS=120 pour nettoyer plus vite la file d'attente si un onglet est abandonne
 # - APP_TICKET_MAX_ACTIVE
 # - APP_TICKET_COST
 # - CAPACITE_SERVEUR

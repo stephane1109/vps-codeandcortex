@@ -35,13 +35,17 @@ APP_TICKET_TTL_SECONDS=3600
 APP_TICKET_MAX_WAITING=20
 APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=300000
+APP_TICKET_WAIT_STALE_SECONDS=120
 APP_TICKET_ENFORCED=1
+APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
 ```
 
 ### Commentaires utiles
 
 - `REDIS_URL` doit contenir le nom exact du service Redis visible dans Coolify.
 - Si Redis exige un utilisateur ACL, utilise `redis://default:motdepasse@nom-exact-du-service-redis:6379/0`
+- `APP_TICKET_RELEASE_URL` doit pointer vers le dashboard racine du depot, celui qui expose `/api/tickets/release`.
+- `APP_TICKET_WAIT_STALE_SECONDS=120` est recommande pour que les tickets d'attente abandonnes disparaissent vite.
 - Si l'application affiche `Controle d'acces temporairement indisponible`, la cause Redis exacte doit maintenant s'afficher juste en dessous dans l'interface.
 
 ## 3. Healthcheck recommande
