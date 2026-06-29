@@ -157,6 +157,24 @@ textarea {
   font-size: 0.84rem;
 }
 
+.status-pill[data-state="active"] {
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.22);
+  background: rgba(240, 253, 244, 0.95);
+}
+
+.status-pill[data-state="waiting"] {
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(255, 251, 235, 0.95);
+}
+
+.status-pill[data-state="error"] {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.24);
+  background: rgba(254, 242, 242, 0.95);
+}
+
 .status-dot {
   width: 0.72rem;
   height: 0.72rem;
@@ -805,6 +823,24 @@ textarea {
   margin-top: 0.8rem;
   font-size: 0.74rem;
   line-height: 1.18;
+}
+
+.sidebar-release-button {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.sidebar-runtime-status {
+  min-height: 1.2rem;
+  margin-bottom: 0;
+}
+
+.sidebar-runtime-status.is-error {
+  color: #b91c1c;
+}
+
+.sidebar-runtime-status.is-success {
+  color: #15803d;
 }
 
 .sidebar-history-block {

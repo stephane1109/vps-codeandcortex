@@ -9,6 +9,8 @@ const analysisHistory = document.getElementById("analysisHistory");
 const sidebarStatus = document.getElementById("sidebarStatus");
 const sidebarStatusPill = document.querySelector(".status-pill");
 const sidebarStatusDot = document.querySelector(".status-dot");
+const releaseAccessBtn = document.getElementById("releaseAccessBtn");
+const sidebarRuntimeStatus = document.getElementById("sidebarRuntimeStatus");
 const progress = document.getElementById("progress");
 const progressLabel = document.getElementById("progressLabel");
 const runProgressDialog = document.getElementById("runProgressDialog");
@@ -428,6 +430,12 @@ const appState = {
   termChartExport: null
 };
 
+const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
+let latestTicketSnapshot = normalizeTicketSnapshot({});
+let analysisExecutionInProgress = false;
+let idleReleaseTimerId = null;
+let lastTicketInteractionAt = Date.now();
+
 const MORPHO_CATEGORIES = [
   "ADJ",
   "ADJ_DEM",
@@ -512,6 +520,17 @@ function setSidebarTicketStatus(message, state = "idle") {
   }
 }
 
+function setSidebarRuntimeStatus(message = "", state = "info") {
+  if (!sidebarRuntimeStatus) return;
+  sidebarRuntimeStatus.textContent = String(message || "");
+  sidebarRuntimeStatus.classList.remove("is-error", "is-success");
+  if (state === "error") {
+    sidebarRuntimeStatus.classList.add("is-error");
+  } else if (state === "success") {
+    sidebarRuntimeStatus.classList.add("is-success");
+  }
+}
+
 function normalizeTicketSnapshot(snapshot) {
   return {
     enabled: Boolean(snapshot?.enabled),
@@ -522,8 +541,90 @@ function normalizeTicketSnapshot(snapshot) {
     maxActive: Number(snapshot?.max_active || 0),
     waitRefreshMs: Number(snapshot?.wait_refresh_ms || 10000),
     heartbeatMs: Number(snapshot?.heartbeat_ms || 30000),
+    idleReleaseMs: Number(snapshot?.idle_release_ms || DEFAULT_TICKET_IDLE_RELEASE_MS),
     message: String(snapshot?.message || "")
   };
+}
+
+function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
+  if (!releaseAccessBtn) return;
+  const canRelease = Boolean(snapshot?.enabled) && ["actif", "attente"].includes(String(snapshot?.statut || ""));
+  releaseAccessBtn.disabled = !canRelease || analysisExecutionInProgress;
+}
+
+function resolveIdleReleaseMs(snapshot = latestTicketSnapshot) {
+  return Math.max(60000, Number(snapshot?.idleReleaseMs || DEFAULT_TICKET_IDLE_RELEASE_MS));
+}
+
+function rememberUserInteraction() {
+  lastTicketInteractionAt = Date.now();
+  scheduleIdleTicketRelease();
+}
+
+function rememberTicketSnapshot(snapshot) {
+  latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
+  updateReleaseAccessButton(latestTicketSnapshot);
+  scheduleIdleTicketRelease();
+  return latestTicketSnapshot;
+}
+
+async function autoReleaseTicketAfterInactivity() {
+  if (analysisExecutionInProgress) {
+    return;
+  }
+
+  const hasLiveTicket = latestTicketSnapshot.enabled && ["actif", "attente"].includes(latestTicketSnapshot.statut);
+  if (!hasLiveTicket) {
+    return;
+  }
+
+  const idleReleaseMs = resolveIdleReleaseMs();
+  if (Date.now() - lastTicketInteractionAt < idleReleaseMs) {
+    scheduleIdleTicketRelease();
+    return;
+  }
+
+  const snapshot = await releaseAnalysisTicket({ silent: true });
+  if (snapshot) {
+    setSidebarRuntimeStatus("Acces libere automatiquement apres inactivite.", "success");
+    await refreshTicketSidebarStatus();
+  }
+}
+
+function scheduleIdleTicketRelease() {
+  if (idleReleaseTimerId) {
+    window.clearTimeout(idleReleaseTimerId);
+    idleReleaseTimerId = null;
+  }
+
+  if (analysisExecutionInProgress) {
+    return;
+  }
+
+  const hasLiveTicket = latestTicketSnapshot.enabled && ["actif", "attente"].includes(latestTicketSnapshot.statut);
+  if (!hasLiveTicket) {
+    return;
+  }
+
+  const idleReleaseMs = resolveIdleReleaseMs();
+  const remainingMs = Math.max(1000, idleReleaseMs - (Date.now() - lastTicketInteractionAt));
+  idleReleaseTimerId = window.setTimeout(() => {
+    void autoReleaseTicketAfterInactivity();
+  }, remainingMs);
+}
+
+function releaseTicketOnPageHide() {
+  if (analysisExecutionInProgress) {
+    return;
+  }
+  if (!latestTicketSnapshot.enabled || !["actif", "attente"].includes(latestTicketSnapshot.statut)) {
+    return;
+  }
+  void fetch("/api/tickets/release", {
+    method: "POST",
+    credentials: "same-origin",
+    keepalive: true
+  }).catch(() => {});
 }
 
 async function callTicketApi(path, { method = "GET", body = null } = {}) {
@@ -549,7 +650,7 @@ async function callTicketApi(path, { method = "GET", body = null } = {}) {
 
 async function refreshTicketSidebarStatus() {
   try {
-    const snapshot = await callTicketApi("/api/tickets/status");
+    const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/status"));
     if (!snapshot.enabled) {
       setSidebarTicketStatus("Application disponible", "idle");
       return snapshot;
@@ -577,7 +678,7 @@ async function refreshTicketSidebarStatus() {
     return snapshot;
   } catch (error) {
     setSidebarTicketStatus("Statut utilisateur indisponible", "error");
-    return normalizeTicketSnapshot({ enabled: false, message: error?.message || String(error) });
+    return rememberTicketSnapshot({ enabled: false, message: error?.message || String(error) });
   }
 }
 
@@ -612,16 +713,16 @@ async function claimPageTicketOnOpen() {
 }
 
 async function claimAnalysisTicket() {
-  return callTicketApi("/api/tickets/claim", { method: "POST" });
+  return rememberTicketSnapshot(await callTicketApi("/api/tickets/claim", { method: "POST" }));
 }
 
 async function heartbeatAnalysisTicket() {
-  return callTicketApi("/api/tickets/heartbeat", { method: "POST" });
+  return rememberTicketSnapshot(await callTicketApi("/api/tickets/heartbeat", { method: "POST" }));
 }
 
 async function releaseAnalysisTicket({ silent = false } = {}) {
   try {
-    const snapshot = await callTicketApi("/api/tickets/release", { method: "POST" });
+    const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
     if (!silent) {
       await refreshTicketSidebarStatus();
     }
@@ -2110,7 +2211,7 @@ async function ensureDependenciesReady() {
       "Vérification des dépendances R et Python nécessaires au lancement."
     );
     bootstrapProgression.set(8, "Analyse des dépendances...");
-    if (sidebarStatus) sidebarStatus.textContent = "Vérification des dépendances";
+    setSidebarRuntimeStatus("Verification des dependances");
     log("[info] Vérification des dépendances R et Python nécessaires au lancement.");
 
     try {
@@ -2137,7 +2238,7 @@ async function ensureDependenciesReady() {
       } else {
         appState.bootstrapReady = false;
         appState.bootstrapPromise = null;
-        if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets (voir logs)";
+        setSidebarRuntimeStatus("Packages incomplets (voir logs)", "error");
         const blockingMessage = payload.blockingMessage || payload.message || "Bootstrap des packages en échec.";
         const optionalMessage = payload.optionalMessage || "";
         const detailsMessage = payload.detailsMessage || "";
@@ -2165,7 +2266,7 @@ async function ensureDependenciesReady() {
     } catch (error) {
       appState.bootstrapReady = false;
       appState.bootstrapPromise = null;
-      if (sidebarStatus) sidebarStatus.textContent = "Packages incomplets (voir logs)";
+      setSidebarRuntimeStatus("Packages incomplets (voir logs)", "error");
       log(`[error] Bootstrap impossible : ${error?.message || String(error)}`);
       bootstrapProgression.set(100, "Échec du bootstrap de démarrage.");
       setTimeout(() => bootstrapProgression.close(), 400);
@@ -8249,7 +8350,7 @@ async function downloadResultsArchive({ outputDir, entryCount = 0, archiveBaseNa
       button.disabled = true;
       button.textContent = "Préparation...";
     }
-    if (sidebarStatus) sidebarStatus.textContent = "Préparation de l'archive";
+    setSidebarRuntimeStatus("Preparation de l'archive");
     setDownloadResultsStatus("Création de l'archive des résultats en cours...", { isError: false });
     const safeArchiveBaseName = String(archiveBaseName || "").trim() || "iramuteq-resultats";
     log(`[info] Préparation de l'archive des résultats (${entryCount} fichier(s)).`);
@@ -8259,7 +8360,7 @@ async function downloadResultsArchive({ outputDir, entryCount = 0, archiveBaseNa
         outputDir,
         archiveName: `${safeArchiveBaseName}.zip`
       });
-      if (sidebarStatus) sidebarStatus.textContent = "Archive enregistrée";
+      setSidebarRuntimeStatus("Archive enregistree", "success");
       setDownloadResultsStatus(`Archive enregistrée : ${payload.savedPath || payload.filename}`, { isError: false });
       log(`[info] Archive des résultats enregistrée : ${payload.savedPath || payload.filename}`);
       await revealInFileManager(payload.savedPath || payload.filename);
@@ -8280,7 +8381,7 @@ async function downloadResultsArchive({ outputDir, entryCount = 0, archiveBaseNa
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      if (sidebarStatus) sidebarStatus.textContent = "Archive préparée";
+      setSidebarRuntimeStatus("Archive preparee", "success");
       setDownloadResultsStatus(
         `Le navigateur a préparé l'archive ${payload.filename || `${safeArchiveBaseName}.zip`}. Vérifie ton dossier Téléchargements.`,
         { isError: false }
@@ -8289,7 +8390,7 @@ async function downloadResultsArchive({ outputDir, entryCount = 0, archiveBaseNa
       log(`[info] Cause du fallback : ${nativeError?.message || String(nativeError)}`);
     }
   } catch (error) {
-    if (sidebarStatus) sidebarStatus.textContent = "Échec du téléchargement";
+    setSidebarRuntimeStatus("Echec du telechargement", "error");
     setDownloadResultsStatus(`Téléchargement impossible : ${error?.message || String(error)}`, { isError: true });
     log(`[error] Téléchargement des résultats impossible : ${error?.message || String(error)}`);
   } finally {
@@ -13642,7 +13743,7 @@ async function handleExportsFolderSelection(fileList, navigationTarget = "result
   const { entries, index } = buildExportsIndex(files);
 
   appState.exportsFolderName = folderName;
-  if (sidebarStatus) sidebarStatus.textContent = "Exports chargés dans l'application";
+  setSidebarRuntimeStatus("Exports charges dans l'application", "success");
 
   await renderExports(entries, index);
   activateTopTab(navigationTarget);
@@ -15174,7 +15275,7 @@ corpusFileInput.addEventListener("change", async () => {
     appState.corpusStarredModalitiesByVariable = {};
     resetSimiTermsState();
     fileInfo.textContent = "Aucun fichier sélectionné.";
-    if (sidebarStatus) sidebarStatus.textContent = "";
+    setSidebarRuntimeStatus("");
     corpusPreview.textContent = "Importez un fichier texte pour afficher un extrait ici.";
     if (annotationCorpusText) annotationCorpusText.value = "";
     renderAnnotationPreview();
@@ -15188,7 +15289,7 @@ corpusFileInput.addEventListener("change", async () => {
   resetResultPanes();
   appState.corpusFileName = selectedFile.name;
   fileInfo.textContent = `Fichier: ${selectedFile.name} (${getFileSizeLabel(selectedFile)})`;
-  if (sidebarStatus) sidebarStatus.textContent = "";
+  setSidebarRuntimeStatus("");
   await loadCorpusPreview(selectedFile);
   if (annotationCorpusText) {
     annotationCorpusText.value = appState.corpusText;
@@ -15324,7 +15425,7 @@ async function startAnalysis(analysisKind = "chd") {
         ? "Préparation de la trajectoire lexicale..."
         : "Préparation de la CHD...";
 
-  setSidebarTicketStatus("Verification de l'acces serveur...", "idle");
+  setSidebarRuntimeStatus("Verification de l'acces serveur...");
   activateTopTab("analyse");
   progression.open(progressTitle, progressStartMessage);
   await waitForNextPaint();
@@ -15395,7 +15496,7 @@ async function startAnalysis(analysisKind = "chd") {
   try {
     const bootstrap = await ensureDependenciesReady();
     if (!bootstrap?.success) {
-      setSidebarTicketStatus("Packages incomplets", "error");
+      setSidebarRuntimeStatus("Packages incomplets", "error");
       progression.set(0);
       log("[error] L'analyse est bloquée tant que les packages requis ne sont pas installés.");
       progression.close();
@@ -15410,6 +15511,9 @@ async function startAnalysis(analysisKind = "chd") {
     let lastTicketHeartbeatAt = 0;
 
     analysisTicket = await waitForAnalysisTicket(progression, log);
+    analysisExecutionInProgress = true;
+    updateReleaseAccessButton();
+    setSidebarRuntimeStatus("Analyse en cours. L'acces reste reserve pour cette session.");
 
     progression.set(12, "Envoi du corpus au backend...");
     log("[info] Envoi du corpus à Python pour orchestration du job R.");
@@ -15523,7 +15627,8 @@ async function startAnalysis(analysisKind = "chd") {
     }
 
     progression.set(100, "Analyse terminée.");
-    setSidebarTicketStatus("Analyse terminee, liberation du ticket...", "active");
+    setSidebarTicketStatus("Application active sur cette session", "active");
+    setSidebarRuntimeStatus("Analyse terminee. Vous pouvez liberer l'acces ou lancer une nouvelle analyse.", "success");
     const summary = payload.summary || {};
     log(
       isLdaMode
@@ -15537,7 +15642,7 @@ async function startAnalysis(analysisKind = "chd") {
     log(`[info] Exports backend: ${payload.outputDir}`);
     progression.close();
   } catch (error) {
-    setSidebarTicketStatus("Echec de l'analyse", "error");
+    setSidebarRuntimeStatus("Echec de l'analyse", "error");
     progression.set(0, "Échec de l'analyse.");
     const message = error?.message || String(error);
     const lines = String(message)
@@ -15554,7 +15659,9 @@ async function startAnalysis(analysisKind = "chd") {
     renderAnalysisDiagnostic(lines.join("\n"), navigationTarget);
     progression.close();
   } finally {
-    await releaseAnalysisTicket({ silent: true });
+    analysisExecutionInProgress = false;
+    updateReleaseAccessButton();
+    scheduleIdleTicketRelease();
     await refreshTicketSidebarStatus();
   }
 }
@@ -15581,6 +15688,17 @@ void claimPageTicketOnOpen();
 window.setInterval(() => {
   void refreshTicketSidebarStatus();
 }, 15000);
-window.addEventListener("beforeunload", () => {
-  void releaseAnalysisTicket({ silent: true });
-});
+if (releaseAccessBtn) {
+  releaseAccessBtn.addEventListener("click", async () => {
+    releaseAccessBtn.disabled = true;
+    const snapshot = await releaseAnalysisTicket();
+    if (snapshot) {
+      setSidebarRuntimeStatus("Acces libere pour cette session.", "success");
+    }
+  });
+}
+window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
+window.addEventListener("keydown", rememberUserInteraction);
+window.addEventListener("scroll", rememberUserInteraction, { passive: true });
+window.addEventListener("pagehide", releaseTicketOnPageHide);
+window.addEventListener("beforeunload", releaseTicketOnPageHide);

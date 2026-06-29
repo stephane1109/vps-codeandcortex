@@ -16,6 +16,9 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_DATA_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "iramuteq-lite-data"
+ANALYSIS_LOCK_FILENAME = "active-analysis.json"
+ANALYSIS_LOCK_STALE_SECONDS = 300
+TERMINAL_JOB_STATES = {"cancelled", "completed", "done", "error", "failed", "success", "succeeded"}
 TEXT_EXTENSIONS = {
     ".csv",
     ".html",
@@ -82,6 +85,144 @@ def annotation_dictionary_path() -> Path:
 
 def next_job_id(prefix: str = "web") -> str:
     return f"{prefix}-{int(time.time() * 1000)}"
+
+
+def analysis_lock_path() -> Path:
+    return app_data_root() / ANALYSIS_LOCK_FILENAME
+
+
+def write_json_file(path: Path, payload: Any) -> None:
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def try_read_json_file(path: Path) -> Any | None:
+    try:
+        return read_json_file(path)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def process_is_running(pid: Any) -> bool:
+    try:
+        numeric_pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if numeric_pid <= 0:
+        return False
+    try:
+        os.kill(numeric_pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def clear_analysis_lock(expected_job_id: str | None = None) -> None:
+    lock_path = analysis_lock_path()
+    if not lock_path.exists():
+        return
+
+    if expected_job_id:
+        payload = try_read_json_file(lock_path)
+        current_job_id = str((payload or {}).get("job_id") or "").strip()
+        if current_job_id and current_job_id != expected_job_id:
+            return
+
+    try:
+        lock_path.unlink()
+    except FileNotFoundError:
+        return
+
+
+def active_analysis_error_message(lock_payload: dict[str, Any]) -> str:
+    job_id = str(lock_payload.get("job_id") or "").strip()
+    corpus_name = str(lock_payload.get("corpus_name") or "").strip()
+    details = []
+    if corpus_name:
+        details.append(f"corpus {corpus_name}")
+    if job_id:
+        details.append(f"job {job_id}")
+    suffix = f" ({', '.join(details)})" if details else ""
+    return (
+        "Une analyse est deja en cours sur le serveur pour IRaMuTeQ Lite"
+        f"{suffix}. Attendez sa fin avant d'en lancer une autre."
+    )
+
+
+def current_analysis_lock() -> dict[str, Any] | None:
+    lock_path = analysis_lock_path()
+    if not lock_path.exists():
+        return None
+
+    payload = try_read_json_file(lock_path)
+    if not isinstance(payload, dict):
+        clear_analysis_lock()
+        return None
+
+    job_id = str(payload.get("job_id") or "").strip()
+    created_at = int(payload.get("created_at") or time.time())
+
+    if job_id:
+        job_root = jobs_root() / job_id
+        results_file = job_root / "results.json"
+        status_file = job_root / "status.json"
+
+        if results_file.exists():
+            clear_analysis_lock(expected_job_id=job_id)
+            return None
+
+        status_payload = try_read_json_file(status_file) if status_file.exists() else None
+        if isinstance(status_payload, dict):
+            state = str(status_payload.get("state") or "").strip().lower()
+            if state in TERMINAL_JOB_STATES:
+                clear_analysis_lock(expected_job_id=job_id)
+                return None
+
+    if process_is_running(payload.get("pid")):
+        return payload
+
+    if not job_id and time.time() - created_at <= ANALYSIS_LOCK_STALE_SECONDS:
+        return payload
+
+    clear_analysis_lock(expected_job_id=job_id or None)
+    return None
+
+
+def reserve_analysis_slot(corpus_name: str | None = None) -> None:
+    active_lock = current_analysis_lock()
+    if active_lock:
+        raise RuntimeError(active_analysis_error_message(active_lock))
+
+    payload = {
+        "job_id": "",
+        "pid": None,
+        "corpus_name": safe_input_name(corpus_name or "corpus.txt"),
+        "created_at": int(time.time()),
+    }
+
+    lock_path = analysis_lock_path()
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as error:
+        active_lock = current_analysis_lock()
+        if active_lock:
+            raise RuntimeError(active_analysis_error_message(active_lock)) from error
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, ensure_ascii=False)
+
+
+def activate_analysis_lock(job_id: str, pid: int, corpus_name: str | None = None) -> None:
+    write_json_file(
+        analysis_lock_path(),
+        {
+            "job_id": str(job_id or "").strip(),
+            "pid": int(pid),
+            "corpus_name": safe_input_name(corpus_name or "corpus.txt"),
+            "created_at": int(time.time()),
+            "updated_at": int(time.time()),
+        },
+    )
 
 
 def safe_input_name(name: str) -> str:
@@ -317,7 +458,7 @@ def create_job_inputs(corpus_name: str, corpus_text: str, config: dict[str, Any]
     input_path = job_root / f"input-{safe_input_name(corpus_name)}"
     config_path = job_root / "request-config.json"
     input_path.write_text(str(corpus_text or ""), encoding="utf-8")
-    config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_json_file(config_path, config)
     return job_id, job_root, input_path, config_path
 
 
@@ -459,15 +600,21 @@ def run_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, An
 
 
 def start_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, Any]) -> dict[str, str]:
-    job_id, job_root, input_path, config_path = create_job_inputs(corpus_name, corpus_text, config)
-    subprocess.Popen(
-        backend_runner_command("run", input_path, config_path, job_id),
-        cwd=PROJECT_ROOT,
-        env=build_command_env({"IRAMUTEQ_ADD_EXPRESSION_PATH": str(annotation_dictionary_path())}),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    reserve_analysis_slot(corpus_name)
+    try:
+        job_id, job_root, input_path, config_path = create_job_inputs(corpus_name, corpus_text, config)
+        process = subprocess.Popen(
+            backend_runner_command("run", input_path, config_path, job_id),
+            cwd=PROJECT_ROOT,
+            env=build_command_env({"IRAMUTEQ_ADD_EXPRESSION_PATH": str(annotation_dictionary_path())}),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        activate_analysis_lock(job_id, process.pid, corpus_name)
+    except Exception:
+        clear_analysis_lock()
+        raise
     return {
         "jobId": job_id,
         "statusFile": str(job_root / "status.json"),
@@ -547,6 +694,8 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             )
             if message not in logs:
                 logs = [*logs, message]
+
+    clear_analysis_lock(expected_job_id=job_id)
 
     return {
         "jobId": job_id,

@@ -21,13 +21,8 @@ Controle d'acces Redis pour IRaMuTeQ Lite.
 Variables d'environnement a regler dans Coolify si besoin :
 
 - REDIS_URL
-  URL Redis prioritaire du VPS.
+  URL Redis obligatoire du VPS.
   Exemple : redis://:motdepasse@redis:6379/0
-
-- APP_TICKET_DEFAULT_REDIS_URL
-  URL Redis de secours si REDIS_URL n'est pas renseignee.
-  Si ton service Coolify s'appelle "redis", tu peux laisser :
-  redis://redis:6379/0
 
 - APP_TICKET_ID
   Identifiant Redis de l'application. Laisse "iramuteq-lite" par defaut.
@@ -53,6 +48,10 @@ Variables d'environnement a regler dans Coolify si besoin :
 
 - APP_TICKET_HEARTBEAT_MS
   Intervalle de heartbeat pour un utilisateur actif.
+
+- APP_TICKET_IDLE_RELEASE_MS
+  Duree d'inactivite frontend avant liberation automatique du ticket
+  quand aucune analyse n'est en cours.
 
 - APP_TICKET_ENFORCED
   Mettre 0 pour desactiver temporairement la gestion de file d'attente.
@@ -88,21 +87,22 @@ def _config(default_app_id: str = "iramuteq-lite", app_label: str = "IRaMuTeQ Li
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
         "heartbeat_ms": max(15000, _env_int("APP_TICKET_HEARTBEAT_MS", 30000)),
+        "idle_release_ms": max(60000, _env_int("APP_TICKET_IDLE_RELEASE_MS", 900000)),
     }
 
 
 def _redis_client():
     if redis is None:
         return None, "Le paquet Python 'redis' n'est pas installe dans IRaMuTeQ Lite."
-    redis_url_env = os.getenv("REDIS_URL", "").strip()
-    redis_url = redis_url_env or os.getenv("APP_TICKET_DEFAULT_REDIS_URL", "redis://redis:6379/0").strip()
-    redis_source = "REDIS_URL" if redis_url_env else "APP_TICKET_DEFAULT_REDIS_URL / redis://redis:6379/0"
+    redis_url = os.getenv("REDIS_URL", "").strip()
+    if not redis_url:
+        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
         return client, None
     except Exception as exc:  # pragma: no cover - depend du runtime Redis
-        return None, f"Connexion Redis impossible via {redis_source} : {exc}"
+        return None, f"Connexion Redis impossible via REDIS_URL : {exc}"
 
 
 def _keys(app_id: str) -> dict[str, str]:
@@ -201,6 +201,7 @@ def _build_snapshot(
         "max_active": cfg["max_active"],
         "wait_refresh_ms": cfg["wait_refresh_ms"],
         "heartbeat_ms": cfg["heartbeat_ms"],
+        "idle_release_ms": cfg["idle_release_ms"],
         "message": message,
     }
 
