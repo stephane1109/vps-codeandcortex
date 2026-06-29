@@ -1,5 +1,7 @@
 FROM rocker/r-ver:4.4.1
 
+ARG IRAMUTEQ_BUILD_BOOTSTRAP=0
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library \
     IRAMUTEQ_R_SYSTEM_LIBS=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
     R_LIBS_SITE=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
-    IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0 \
+    IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1 \
     USE_BUNDLED_LIBUV=1 \
     RGL_USE_NULL=TRUE \
     PORT=8000 \
@@ -26,6 +28,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_TICKET_MAX_ACTIVE=1 pour conserver l'exclusivite
 # - APP_TICKET_COST selon la charge reelle du VPS
 # - APP_TICKET_TTL_SECONDS si une analyse peut durer longtemps
+# - IRAMUTEQ_R_LIBS_USER=/data/app/r-library si vous voulez conserver
+#   les packages R installes au runtime dans le volume persistant Coolify
+# #### MODE VPS / COOLIFY
+# Par defaut, le build lourd R/CHD est desactive (`IRAMUTEQ_BUILD_BOOTSTRAP=0`)
+# car la compilation source de Matrix + quanteda depasse facilement le timeout
+# du helper Coolify sur un VPS modeste. Les dependances R manquantes sont alors
+# installees au premier lancement applicatif via `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1`.
+# #### MODE BUILD COMPLET
+# Si vous disposez d'un builder plus puissant, vous pouvez reactiver le bootstrap
+# complet pendant le build Docker via `IRAMUTEQ_BUILD_BOOTSTRAP=1`.
 # #### NOTE BUILD R
 # USE_BUNDLED_LIBUV=1 reste active pour securiser l'installation du package R `fs`
 # si Coolify ou le miroir CRAN ne voit pas correctement `libuv.pc`.
@@ -183,15 +195,23 @@ WORKDIR /app
 
 COPY --chown=app:app . /app
 
-# #### PREINSTALLATION DES DEPENDANCES R
-# On installe les packages R necessaires pendant le build Docker pour eviter
-# que le premier utilisateur bloque sur un bootstrap long ou incomplet.
-# #### TEST DE FUMEE CHD
-# Une vraie analyse CHD est lancee pendant le build afin d'eviter
-# de deployer une image qui demarre mais ne produit aucun resultat exploitable.
-RUN Rscript /app/backend/r/bootstrap_iramuteq_env.R --mode install \
-    && python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, vl_convert" \
-    && sh /app/docker/smoke-test-chd.sh
+# #### VPS / COOLIFY
+# Le build helper Coolify coupe ici frequemment apres ~10 minutes quand Matrix
+# et quanteda doivent etre compiles depuis CRAN. On garde donc le build rapide
+# par defaut et on laisse le bootstrap runtime terminer l'installation au premier
+# lancement. Rien n'est retire cote fonctionnalites : seul le moment de
+# l'installation change.
+# #### BUILD COMPLET OPTIONNEL
+# Definir `IRAMUTEQ_BUILD_BOOTSTRAP=1` si vous souhaitez a nouveau:
+# - preinstaller les packages R au build
+# - executer le smoke-test CHD pendant le build
+RUN python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, vl_convert" \
+    && if [ "${IRAMUTEQ_BUILD_BOOTSTRAP}" = "1" ]; then \
+         Rscript /app/backend/r/bootstrap_iramuteq_env.R --mode install \
+         && sh /app/docker/smoke-test-chd.sh; \
+       else \
+         echo "Build R/CHD saute pour Coolify (IRAMUTEQ_BUILD_BOOTSTRAP=${IRAMUTEQ_BUILD_BOOTSTRAP})."; \
+       fi
 
 RUN chmod +x /app/docker-entrypoint.sh \
     && mkdir -p /data/app /opt/iramuteq-r-library /tmp/iramuteq-lite \

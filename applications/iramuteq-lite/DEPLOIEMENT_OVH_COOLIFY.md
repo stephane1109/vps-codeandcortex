@@ -56,9 +56,9 @@ En clair :
 ```env
 PORT=8000
 IRAMUTEQ_APP_DATA_DIR=/data/app
-IRAMUTEQ_R_LIBS_USER=/opt/iramuteq-r-library
+IRAMUTEQ_R_LIBS_USER=/data/app/r-library
 RGL_USE_NULL=TRUE
-IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0
+IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
 REDIS_URL=redis://redis:6379/0
 APP_TICKET_ENFORCED=1
 APP_TICKET_ID=iramuteq-lite
@@ -71,31 +71,37 @@ APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=30000
 ```
 
-Optionnel en environnement non conteneurisé ou pour du debug local :
+Optionnel si vous disposez d'un builder Docker plus puissant que celui de Coolify :
 
-```env
-IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
+```text
+Build arg: IRAMUTEQ_BUILD_BOOTSTRAP=1
 ```
 
-Dans l'image Docker VPS a deployer sur Coolify, les dependances R/Python du coeur applicatif doivent etre preinstallees pendant le build.
-Le conteneur en production doit donc rester en `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=0` pour eviter qu'un utilisateur declenche une installation longue au premier lancement.
-Le build Docker lance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
+Sur un VPS OVH modeste, la compilation source de `Matrix` + `quanteda` pendant le build Docker depasse souvent le timeout du helper Coolify.
+La configuration recommandee est donc :
+
+- `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1`
+- `IRAMUTEQ_R_LIBS_USER=/data/app/r-library` pour conserver les packages dans le volume persistant
+- build rapide sans `IRAMUTEQ_BUILD_BOOTSTRAP`
+
+Dans ce mode, le conteneur se deploie rapidement puis l'application termine l'installation R/Python manquante au premier lancement.
+Si vous activez `IRAMUTEQ_BUILD_BOOTSTRAP=1`, le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
 
 ## Pourquoi ce choix
 
-- le premier utilisateur ne doit plus rester bloque sur `Installation des dependances manquantes si necessaire`
-- si l'interface affiche `Packages incomplets`, cela signifie en pratique que l'image construite ne contient pas toutes les dependances attendues
-- dans ce cas il faut verifier les logs de build Coolify et relancer un redeploiement complet de l'application, idealement sans cache de build
+- sur un petit VPS, le deploiement doit d'abord aboutir avant d'exiger un build R complet
+- les packages R peuvent etre installes une seule fois puis reutilises s'ils vivent dans `/data/app/r-library`
+- si l'interface affiche `Packages incomplets`, cela signifie en pratique que le bootstrap runtime n'a pas encore termine ou a echoue
 
 ## Que faire si `Packages incomplets` apparait
 
 1. Verifier que Coolify rebuild bien l'application a partir du dernier code.
 2. Forcer un nouveau build de l'image Docker, si possible sans cache.
 3. Confirmer que le `Base Directory` est bien `/applications/iramuteq-lite`.
-4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `0` en production.
-5. Regarder les logs de build : si un package R echoue pendant la construction, l'image doit etre corrigee au build et non au premier lancement utilisateur.
-6. Si les logs mentionnent `fs`, `libuv` ou `FactoMineR`, le probleme est dans l'environnement R de l'image Docker, pas dans l'import du corpus texte.
-7. Si le nouveau test de fumee CHD casse pendant le build, le probleme est confirme dans l'image Docker elle-meme, avant meme l'ouverture de l'application dans le navigateur.
+4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `1` en production Coolify sur petit VPS.
+5. Verifier que `IRAMUTEQ_R_LIBS_USER` pointe vers un chemin persistant, idealement `/data/app/r-library`.
+6. Regarder les logs de build : si le build meurt pendant `Matrix` ou `quanteda` sans message R final, il s'agit souvent d'un timeout Coolify et non d'un bug applicatif.
+7. Si vous activez `IRAMUTEQ_BUILD_BOOTSTRAP=1` et que le smoke-test CHD casse, le probleme est alors confirme dans l'image Docker elle-meme, avant meme l'ouverture de l'application dans le navigateur.
 
 ## Domaine et sous-domaine
 
