@@ -7,7 +7,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     MPLBACKEND=Agg \
-    APP_DATA_DIR=/tmp/appdata
+    APP_DATA_DIR=/tmp/appdata \
+    APP_TICKET_ID=vecteur-emotionnel \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_ENFORCED=1
+
+# #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
+# - REDIS_URL=redis://:motdepasse@redis:6379/0
+# - APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
+# - APP_TICKET_HIDDEN_RELEASE_SECONDS=0 pour desactiver la liberation auto sur onglet cache
+# - CAPACITE_SERVEUR=6 pour coller a la capacite globale du VPS
 
 WORKDIR /app
 

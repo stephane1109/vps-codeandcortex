@@ -29,6 +29,8 @@ from sklearn.preprocessing import StandardScaler
 from yt_dlp import YoutubeDL
 from youtube_transcript_api import YouTubeTranscriptApi
 
+from ticket_gate import enforce_streamlit_access
+
 
 EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi"}
@@ -797,6 +799,7 @@ def file_bytes(path: str | Path) -> bytes:
 
 
 st.set_page_config(page_title="Vecteur emotionnel", layout="wide")
+enforce_streamlit_access("vecteur-emotionnel", "Vecteur emotionnel")
 
 session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 session_dir = SESSIONS_DIR / session_id
