@@ -96,6 +96,14 @@ Si une application reste occupée alors que plus personne ne l'utilise :
 - vérifiez que l'utilisateur précédent a bien cliqué sur `Libérer l'accès` ;
 - sinon, laissez expirer le ticket ou redémarrez le service concerné côté administration.
 
+## Liens utiles depuis la page d'accueil
+
+Les liens de vérification du dashboard doivent rester relatifs au service courant :
+
+- `/`
+- `/api/health`
+- `/api/tickets/dashboard?applications=iramuteq-lite`
+
 ## En résumé
 
 Le tableau de bord sert à partager proprement les ressources du VPS :

@@ -184,6 +184,34 @@ h1 {
     color: var(--couleur-secondaire);
 }
 
+.liens-diagnostic {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.lien-diagnostic {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 14px;
+    border: 1px solid rgba(17, 17, 17, 0.12);
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--couleur-principale);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    transition: all 0.25s ease;
+}
+
+.lien-diagnostic:hover {
+    border-color: var(--couleur-accent);
+    color: var(--couleur-accent);
+    transform: translateY(-1px);
+}
+
 .aide-rapide-lien {
     display: inline-flex;
     margin-top: 16px;
@@ -463,6 +491,10 @@ h1 {
 @media (max-width: 620px) {
     body {
         padding: 28px 16px;
+    }
+
+    .liens-diagnostic {
+        flex-direction: column;
     }
 
     .grille-applications {
