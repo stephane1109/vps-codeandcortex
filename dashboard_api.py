@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from gestion_tickets import (
     connecter_redis,
     construire_tableau_de_bord,
     construire_tableau_de_bord_indisponible,
+    liberer_ticket,
 )
 
 
@@ -17,6 +19,13 @@ INDEX_FILE = ROOT / "index.html"
 STYLE_FILE = ROOT / "style.css"
 
 app = FastAPI(title="Code & Cortex VPS Dashboard", docs_url=None, redoc_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/health")
@@ -36,6 +45,13 @@ def tickets_dashboard(applications: str | None = Query(default=None)) -> dict:
         return construire_tableau_de_bord(client_redis, application_ids)
     except Exception as exc:
         return construire_tableau_de_bord_indisponible(application_ids, str(exc))
+
+
+@app.post("/api/tickets/release")
+def release_ticket(application_id: str = Query(...), session_id: str = Query(...)) -> dict[str, str]:
+    client_redis = connecter_redis()
+    liberer_ticket(client_redis, session_id, application_id)
+    return {"status": "released", "application_id": application_id, "session_id": session_id}
 
 
 @app.get("/")

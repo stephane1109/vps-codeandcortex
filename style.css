@@ -139,13 +139,13 @@ h1 {
 }
 
 .carte-application.occupee {
-    border-color: #f59e0b;
-    box-shadow: 0 14px 30px rgba(245, 158, 11, 0.14);
+    border-color: #ef4444;
+    box-shadow: 0 14px 30px rgba(239, 68, 68, 0.16);
 }
 
 .carte-application.attente {
-    border-color: #ef4444;
-    box-shadow: 0 14px 30px rgba(239, 68, 68, 0.16);
+    border-color: #f59e0b;
+    box-shadow: 0 14px 30px rgba(245, 158, 11, 0.14);
 }
 
 .carte-application.hors-ligne {
@@ -232,15 +232,15 @@ h1 {
 }
 
 .pastille-etat.occupee {
-    background: #f59e0b;
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
-    animation: pulse 1.2s infinite;
-}
-
-.pastille-etat.attente {
     background: #ef4444;
     box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
     animation: pulse 0.8s infinite;
+}
+
+.pastille-etat.attente {
+    background: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+    animation: pulse 1.2s infinite;
 }
 
 .pastille-etat.hors-ligne {

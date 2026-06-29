@@ -25,6 +25,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # #### VARIABLES D'ENVIRONNEMENT A MODIFIER DANS COOLIFY
 # - REDIS_URL
+# - APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
+# - APP_TICKET_HIDDEN_RELEASE_SECONDS=0 pour desactiver, sinon liberation auto si onglet cache
 # - APP_TICKET_MAX_ACTIVE=1 pour garder l'exclusivite
 # - APP_TICKET_COST selon la charge observee
 # - APP_TICKET_TTL_SECONDS si l'analyse dure longtemps
