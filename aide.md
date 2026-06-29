@@ -21,9 +21,8 @@ Elle permet surtout de savoir si une application est libre, occupée ou déjà s
 Sur les cartes :
 
 - point vert : accès libre ;
-- point rouge : application active ou déjà occupée ;
 - point orange : file d'attente en cours ;
-- point gris : problème de synchronisation du dashboard.
+- un message en haut de page signale les problèmes de synchronisation du dashboard.
 
 ## Comment libérer une application
 
