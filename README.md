@@ -27,6 +27,8 @@ Exemple de sous-domaine cible :
 
 - `europressetoiramuteq.codeandcortex.fr`
 
+Le controle d'acces Redis avec bouton `Liberer l'acces` dans la sidebar est supporte sur la version VPS.
+
 Lancez localement le conteneur avec :
 
 ```bash
