@@ -9,13 +9,20 @@ Dans Coolify :
 1. Cree une nouvelle ressource `Application`
 2. Selectionne le depot Git
 3. Choisis le build `Dockerfile`
-4. Definis le `Base Directory` sur :
+4. Si tu deployes la branche standalone `deploy-mp3_to_text`, laisse le `Base Directory` vide, `/` ou `.`.
+   Si tu deployes encore depuis `main`, alors seulement tu peux utiliser :
 
 ```text
 /applications/mp3_to_text
 ```
 
-5. Port applicatif :
+5. `Dockerfile Location` :
+
+```text
+Dockerfile
+```
+
+6. Port applicatif / `Ports Exposes` :
 
 ```text
 8501
