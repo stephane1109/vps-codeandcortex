@@ -1,0 +1,9 @@
+# Fichier texte des onglets
+
+Ce fichier sert de placeholder pour stocker ou documenter du contenu lié aux
+onglets de l'application. Il ne contient pas de logique exécutable, mais peut
+accueillir des notes ou du texte exporté.
+
+## Dépendances
+Aucune dépendance directe : ce fichier texte est indépendant du code Python et
+peut être lu ou modifié sans impact sur les modules voisins.
