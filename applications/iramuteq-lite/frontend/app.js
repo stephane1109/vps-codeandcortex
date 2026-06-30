@@ -435,6 +435,7 @@ let latestTicketSnapshot = normalizeTicketSnapshot({});
 let analysisExecutionInProgress = false;
 let idleReleaseTimerId = null;
 let lastTicketInteractionAt = Date.now();
+let ticketReleasedLocally = false;
 
 const MORPHO_CATEGORIES = [
   "ADJ",
@@ -563,6 +564,9 @@ function rememberUserInteraction() {
 
 function rememberTicketSnapshot(snapshot) {
   latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
+  if (["actif", "attente"].includes(latestTicketSnapshot.statut)) {
+    ticketReleasedLocally = false;
+  }
   updateReleaseAccessButton(latestTicketSnapshot);
   scheduleIdleTicketRelease();
   return latestTicketSnapshot;
@@ -653,6 +657,14 @@ async function callTicketApi(path, { method = "GET", body = null } = {}) {
 async function refreshTicketSidebarStatus() {
   try {
     const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/status"));
+    if (ticketReleasedLocally && snapshot.enabled && !["actif", "attente"].includes(snapshot.statut)) {
+      if (snapshot.statut === "occupee") {
+        setSidebarTicketStatus("Acces libere pour cette session. Application reprise par un autre utilisateur.", "idle");
+        return snapshot;
+      }
+      setSidebarTicketStatus("Acces libere pour cette session.", "idle");
+      return snapshot;
+    }
     if (!snapshot.enabled) {
       setSidebarTicketStatus("Application disponible", "idle");
       return snapshot;
@@ -725,6 +737,7 @@ async function heartbeatAnalysisTicket() {
 async function releaseAnalysisTicket({ silent = false } = {}) {
   try {
     const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
+    ticketReleasedLocally = true;
     if (!silent) {
       await refreshTicketSidebarStatus();
     }
