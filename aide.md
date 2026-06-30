@@ -39,6 +39,12 @@ Important :
 - la libération manuelle reste la bonne pratique ;
 - si un ticket n'est plus rafraîchi, il finit normalement par expirer automatiquement.
 - sur `IRaMuTeQ Lite`, le TTL par défaut est maintenant de `300` secondes, soit environ `5 minutes`.
+- sur `IRaMuTeQ Lite`, si l'onglet reste ouvert mais qu'il n'y a plus d'interaction utilisateur
+  comme clic, clavier ou scroll, la libération automatique intervient au bout d'environ
+  `15 minutes` quand aucune analyse n'est en cours.
+- cela ne veut pas dire qu'un utilisateur n'a droit qu'à `15 minutes` d'usage :
+  tant qu'il utilise réellement l'application, le compteur d'inactivité repart et
+  l'accès peut durer plus longtemps.
 
 ## Pourquoi certaines applications n'acceptent qu'un seul utilisateur
 
