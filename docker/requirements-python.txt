@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+numpy<2
+scikit-learn
+pyLDAvis
+wordcloud
+matplotlib
+altair
+vl-convert-python
+pillow
+redis>=5,<6

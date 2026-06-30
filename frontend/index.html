@@ -1,0 +1,1213 @@
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IRaMuTeQ Lite</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-block">
+          <p class="eyebrow">IRAMUTEQ LITE</p>
+          <h1>IRAMUTEQ LITE</h1>
+          <p class="brand-copy">
+            Tentative de reproduction de la CHD du (vrai !) 
+            <a href="https://pratinaud.gitpages.huma-num.fr/iramuteq-website/" target="_blank" rel="noopener noreferrer">logiciel IRaMuTeQ (IRaMuTeQ - Pierre Ratinaud - LERASS)</a>
+          </p>
+          <p class="brand-copy">
+            En développement : Analyse Discriminante Linéaire (LDA), analyse de similitude de Vergès
+          </p>
+          <p class="brand-copy">
+            Pour d'autres scripts/appli, vous pouvez consulter mon site :
+            <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
+          </p>
+          <p class="brand-copy">v0_3beta - 09-04-2026</p>
+        </div>
+
+        <nav class="top-nav" aria-label="Navigation principale">
+          <button class="nav-link is-active" data-tab-target="analyse" type="button">Analyse</button>
+          <button class="nav-link" data-tab-target="corpus" type="button">Corpus</button>
+          <button class="nav-link" data-tab-target="annotation_expressions" type="button">Annotation</button>
+          <button class="nav-link" data-tab-target="resultats_chd" type="button">CHD</button>
+          <button class="nav-link" data-tab-target="afc" type="button">AFC</button>
+          <button class="nav-link" data-tab-target="lda" type="button">LDA</button>
+          <button class="nav-link" data-tab-target="similitudes" type="button">Similitudes</button>
+          <button class="nav-link" data-tab-target="aide" type="button">Aide</button>
+          <details class="nav-menu">
+            <summary class="nav-link nav-link--menu">Outils</summary>
+            <div class="nav-menu-panel">
+              <a
+                class="nav-menu-item"
+                href="https://europresse-to-iramuteq-v4.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Europresse to Iramuteq
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://youtube-mp4-25fps-mp3.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Extraction multimedia
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://segmentation-locuteurs.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Diarization
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://whisper-isthia-cloud.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                mp3 to text
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://scraper-commentaires-youtube.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Scraper les commentaires YouTube
+              </a>
+              <a
+                class="nav-menu-item"
+                href="https://symbolicconnectors.streamlit.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Symbolic commector
+              </a>
+            </div>
+          </details>
+        </nav>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <section class="sidebar-card">
+            <button id="importCorpusBtn" class="primary-button" type="button">
+              Importer un fichier texte
+            </button>
+            <input id="corpusFile" type="file" accept=".txt,.csv,.tsv" hidden />
+            <p class="muted sidebar-import-help">
+              Le corpus doit être au format IRaMuTeQ, avec une première ligne
+              commençant par <code>****</code>.
+            </p>
+            <p id="fileInfo" class="muted sidebar-file-info">Aucun fichier sélectionné.</p>
+            <p id="downloadResultsStatus" class="muted sidebar-note"></p>
+            <section class="sidebar-history-block" aria-labelledby="analysisHistoryTitle">
+              <p id="analysisHistoryTitle" class="sidebar-kicker">Analyses lancées</p>
+              <div id="analysisHistory" class="analysis-history">
+                <p class="muted analysis-history-empty">Les analyses lancées s'afficheront ici.</p>
+              </div>
+            </section>
+            <div class="status-pill">
+              <span class="status-dot"></span>
+              <span id="sidebarStatus"></span>
+            </div>
+            <button id="releaseAccessBtn" class="secondary-button sidebar-release-button" type="button" disabled>
+              Liberer l'acces
+            </button>
+            <p id="sidebarRuntimeStatus" class="muted sidebar-note sidebar-runtime-status"></p>
+          </section>
+        </aside>
+
+        <main class="content">
+          <section class="panel is-active" data-panel="analyse">
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Analyse</p>
+                <h2>Analyse du corpus</h2>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>Synthèse du corpus</h3>
+                <div id="analysisSummary" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3 class="zipf-card-title">Loi de Zipf</h3>
+                <div id="zipfChart" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Étapes de l'analyse</h3>
+                <div id="analysisSteps" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Journal debug</h3>
+                <div class="progress-wrap">
+                  <progress id="progress" max="100" value="0"></progress>
+                  <span id="progressLabel">0%</span>
+                </div>
+                <pre id="logs" class="logs">[info] Prêt.</pre>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="corpus" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Corpus</p>
+                <h2>Corpus importé</h2>
+              </div>
+            </div>
+
+            <article class="card">
+              <h3>Prévisualisation</h3>
+              <pre id="corpusPreview" class="preview-box">Importez un fichier texte pour afficher un extrait ici.</pre>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="annotation_expressions" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Annotation</p>
+                <h2>Annotation du corpus</h2>
+              </div>
+            </div>
+
+            <article class="card">
+              <p>
+                Import de <code>add_expression_fr.csv</code>, prévisualisation annotée
+                et gestion du dictionnaire d'expressions de session.
+              </p>
+              <p class="field-help">
+                Aide : le plus simple est de surligner, copier puis coller les expressions à transformer dans le dictionnaire. Par exemple, <code>intelligence artificielle</code> deviendra <code>intelligence_artificielle</code>.
+              </p>
+              <p class="field-help">
+                Vous pouvez enregistrer votre dictionnaire d'expressions, mais vous pouvez également ajuster (supprimer) et enrichir (ajouter) un dictionnaire déjà annoté.
+              </p>
+              <p class="field-help annotation-import-help">
+                Vous pouvez réimporter un fichier d'expressions déjà annoté ; il doit
+                impérativement être nommé add_expression_fr.csv.
+              </p>
+              <div class="toolbar">
+                <button id="annotationImportBtn" class="primary-button" type="button">Charger un dictionnaire d'expression</button>
+                <input id="annotationImportCsv" type="file" accept=".csv" hidden />
+              </div>
+              <textarea id="annotationCorpusText" class="large-textarea" placeholder="Texte à annoter"></textarea>
+              <div id="annotationCorpusColored" class="annotation-preview"></div>
+              <div class="form-grid">
+                <label>
+                  Texte sélectionné (dic_mot)
+                  <input id="annotationSelection" type="text" placeholder="Expression source" />
+                </label>
+                <label>
+                  Normalisation (dic_norm)
+                  <input id="annotationNorm" type="text" placeholder="Expression normalisée" />
+                </label>
+                <label>
+                  Type morpho (dic_morpho)
+                  <select id="annotationMorpho">
+                    <option value="">Choisir une catégorie (optionnel)</option>
+                  </select>
+                  <span class="field-help">
+                    Si vous n'ajoutez pas de catégorie morphosyntaxique, le champ restera
+                    vide et l'expression sera interprétée comme « autre forme ».
+                  </span>
+                </label>
+              </div>
+              <div class="toolbar annotation-add-actions">
+                <button id="annotationAddEntryBtn" class="primary-button" type="button">Ajouter / mettre à jour</button>
+              </div>
+              <div class="form-grid">
+                <label>
+                  Supprimer une entrée (dic_mot)
+                  <input id="annotationRemoveKey" type="text" placeholder="Expression à supprimer" />
+                </label>
+              </div>
+              <div class="toolbar annotation-danger-actions">
+                <button id="annotationRemoveEntryBtn" class="primary-button" type="button">Supprimer</button>
+              </div>
+              <div class="toolbar annotation-danger-actions">
+                <button id="annotationDownloadCsvBtn" class="primary-button" type="button">Enregistrer add_expression_fr.csv</button>
+              </div>
+              <p id="annotationSaveStatus" class="muted"></p>
+              <div id="annotationDictTable" class="result-pane"></div>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="resultats_chd" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">CHD</p>
+                <h2>Résultats CHD</h2>
+              </div>
+            </div>
+
+            <nav class="sub-nav" aria-label="Sous-navigation CHD">
+              <button class="sub-nav-link is-active" data-subtab-target="dendrogramme" type="button">Dendrogramme</button>
+              <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
+              <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
+              <button class="sub-nav-link" data-subtab-target="nuage_de_mots" type="button">Nuage de mots</button>
+            </nav>
+
+            <section class="subpanel is-active" data-subpanel="dendrogramme">
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Dendrogramme CHD</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                </article>
+
+                <article class="card">
+                  <h3>Résultat</h3>
+                  <div class="field">
+                    <label for="chdDendrogramSelect">Type de dendrogramme</label>
+                    <select id="chdDendrogramSelect">
+                      <option value="iramuteq">Dendrogramme IRaMuTeQ</option>
+                      <option value="factoextra">Dendrogramme factoextra</option>
+                    </select>
+                  </div>
+                  <div id="chdDendrogramme" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="stats_chd" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Stats CHD</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">Les tableaux sont organisés par classe, comme dans l'UI R.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Tableaux statistiques CHD par classe</h3>
+                  <div id="chdStatsTable" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="concordancier" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Concordancier</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">Affichage des segments classés et du concordancier HTML exporté.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultat</h3>
+                  <div id="chdConcordancier" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="nuage_de_mots" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Paramétrage</p>
+                      <h3>Nuages de mots CHD</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">Le nombre de mots affichés suit le réglage des nuages de mots de l'analyse.</p>
+                </article>
+
+                <article class="card">
+                  <h3>Résultat</h3>
+                  <div id="chdWordclouds" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+          </section>
+
+          <section class="panel" data-panel="afc" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">AFC</p>
+                <h2>Analyse factorielle des correspondances</h2>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>AFC des classes</h3>
+                <div id="afcClassesPlot" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>AFC des termes</h3>
+                <div class="toolbar">
+                  <button id="afcTermsZoomInBtn" class="secondary-button" type="button">Zoom +</button>
+                  <button id="afcTermsZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
+                  <button id="afcTermsZoomResetBtn" class="secondary-button" type="button">Réinitialiser</button>
+                </div>
+                <div id="afcTermsPlot" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Modalités et valeurs propres</h3>
+                <div id="afcVarsPlot" class="result-pane"></div>
+                <div id="afcVarsTable" class="result-pane result-pane--spaced"></div>
+                <div id="afcEigTable" class="result-pane result-pane--spaced"></div>
+              </article>
+
+              <article class="card">
+                <h3>Table des mots projetés</h3>
+                <div id="afcTermsTable" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="lda" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">LDA</p>
+                <h2>Analyse LDA</h2>
+                <p class="section-copy">
+                  L'analyse LDA est particulièrement adaptée aux corpus très volumineux. Un de ses atouts ici est le paramétrage sur les bigrammes.
+                </p>
+              </div>
+              <button class="primary-button" type="button" data-open-lda-dialog>Paramètres LDA</button>
+            </div>
+
+            <div class="local-tabs" role="tablist" aria-label="Sous-onglets LDA">
+              <button class="local-tab-button is-active" data-lda-subtab-target="lda_tables" type="button">Tableau des probabilités</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_segments" type="button">Segments de texte</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_vis" type="button">Visualisation pyLDAvis</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_heatmap" type="button">Heatmap mots × topics</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_network" type="button">Réseau topics × mots</button>
+              <button class="local-tab-button" data-lda-subtab-target="lda_wordclouds" type="button">Nuages de mots par topic</button>
+            </div>
+
+            <section class="local-tab-panel is-active" data-lda-subpanel="lda_tables">
+              <p class="field-help">
+                `P(mot | topic)` décrit les mots caractéristiques d'un topic. `P(topic | segment)` indique à quel topic un segment de texte est le plus rattaché.
+              </p>
+              <div class="section-stack">
+                <article class="card">
+                  <h3>Tableau général des probabilités par mot</h3>
+                  <div id="ldaTopTerms" class="result-pane result-pane--spaced"></div>
+                </article>
+
+                <article class="card">
+                  <h3>Tableaux par topic</h3>
+                  <div id="ldaDocTopics" class="result-pane result-pane--spaced"></div>
+                </article>
+
+                <article class="card" hidden>
+                  <h3>Détail par topic</h3>
+                  <div id="ldaTopicWords" class="result-pane result-pane--spaced"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_segments" hidden>
+              <article class="card">
+                <h3>Segments de texte par topic</h3>
+                <div id="ldaSegments" class="result-pane result-pane--spaced"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_vis" hidden>
+              <article class="card">
+                <h3>Visualisation pyLDAvis</h3>
+                <div id="ldaBubblePlot" class="result-pane"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_heatmap" hidden>
+              <article class="card">
+                <h3>Heatmap mots × topics</h3>
+                <div id="ldaHeatmap" class="result-pane"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_network" hidden>
+              <article class="card">
+                <h3>Réseau topics × mots</h3>
+                <div id="ldaNetwork" class="result-pane"></div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-lda-subpanel="lda_wordclouds" hidden>
+              <article class="card">
+                <h3>Nuages de mots par topic</h3>
+                <div id="ldaWordclouds" class="result-pane result-pane--spaced"></div>
+              </article>
+            </section>
+          </section>
+
+          <section class="panel" data-panel="similitudes" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Similitudes</p>
+                <h2>Analyse de similitudes</h2>
+              </div>
+              <button class="primary-button" type="button" data-open-simi-dialog>Paramétrer l'analyse de similitudes</button>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <p class="field-help field-help--alert">
+                  Réalisez d'abord une CHD. L'analyse de similitudes réutilise ensuite les termes les plus fréquents issus de la CHD.
+                </p>
+                <h3>Résultat</h3>
+                <div class="toolbar">
+                  <button id="simiZoomInBtn" class="secondary-button" type="button">Zoom +</button>
+                  <button id="simiZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
+                  <button id="simiZoomResetBtn" class="secondary-button" type="button">Réinitialiser le zoom</button>
+                  <span id="simiZoomValue" class="toolbar-meta">100%</span>
+                </div>
+                <div id="simiGraph" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="aide" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Aide</p>
+                <h2>Documentation</h2>
+              </div>
+            </div>
+
+            <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
+              <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
+              <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
+              <button class="local-tab-button" data-help-subtab-target="help_lda" type="button">Aide LDA</button>
+            </div>
+
+            <section class="local-tab-panel is-active" data-help-subpanel="help_general">
+              <article class="card prose-card">
+                <div id="helpMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/help.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_morpho" hidden>
+              <article class="card prose-card">
+                <div id="helpMorphoMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/pos_lexique.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_lda" hidden>
+              <article class="card prose-card">
+                <div id="helpLdaMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/lda.md</code>...
+                </div>
+              </article>
+            </section>
+
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <section class="visually-hidden" aria-hidden="true">
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">CHD</p>
+            <h3>Paramètres CHD</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label for="analysisType">Méthode Iramuteq-lite</label>
+            <select id="analysisType">
+              <option value="iramuteq">IRaMuTeQ-lite</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="segmentSize">segment_size</label>
+            <input id="segmentSize" type="number" min="5" value="40" />
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useStrongPunctuation">
+              <input id="useStrongPunctuation" type="checkbox" checked />
+              <span>Tenir compte de la ponctuation forte (. ! ?) dans le découpage</span>
+            </label>
+            <p class="field-help">
+              Si activé, le découpage recherche la meilleure frontière autour de
+              segment_size avec priorité . ! ?, puis ; :, puis , puis espace ;
+              un retour à la ligne clôture aussi le segment.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="minFreq">Fréquence minimale des termes (min_docfreq)</label>
+            <input id="minFreq" type="number" min="1" value="3" />
+          </div>
+
+          <div class="field">
+            <label for="maxP">max_p (p-value)</label>
+            <input id="maxP" type="number" min="0" max="1" step="0.01" value="0.05" />
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="filterPvalue">
+              <input id="filterPvalue" type="checkbox" checked />
+              <span>Filtrer l'affichage des résultats par p-value (p ≤ max_p)</span>
+            </label>
+            <p class="field-help field-help--pvalue-note">
+              Ce filtre sert à l'affichage de l'AFC, AFC des variables étoilées,
+              du concordancier, des nuages de mots, mais dans les stats les formes
+              supérieures à votre p-value définie seront affichées en rouge dans le tableau.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">CHD</p>
+            <h3>Paramètres CHD (IRaMuTeQ-lite)</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label for="kIramuteq">Nombre de classes terminales de la phase 1</label>
+            <input id="kIramuteq" type="number" min="2" value="10" />
+          </div>
+
+          <div class="field">
+            <label for="iramuteqMaxFormes">Nombre maximum de formes analysées</label>
+            <input id="iramuteqMaxFormes" type="number" min="1" step="100" value="20000" />
+          </div>
+
+          <div class="field">
+            <label for="minclMode">Nombre minimum d'UCE par classe terminale (mincl)</label>
+            <select id="minclMode">
+              <option value="auto">Automatique</option>
+              <option value="manuel">Manuel</option>
+            </select>
+            <p class="field-help">
+              Ce paramètre définit le seuil minimal d'UCE pour conserver une classe terminale.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="minclManual">mincl (manuel)</label>
+            <input id="minclManual" type="number" min="1" value="5" />
+          </div>
+
+          <div class="field field--full" data-classification-mode-card>
+            <label for="classificationMode">Type de classification terminale</label>
+            <input id="classificationMode" type="hidden" value="simple" />
+            <div class="radio-group">
+              <label class="radio-option">
+                <input
+                  id="classificationModeSimple"
+                  type="radio"
+                  name="classificationModeChoice"
+                  value="simple"
+                  data-classification-radio
+                />
+                <span>Simple</span>
+              </label>
+              <label class="radio-option">
+                <input
+                  id="classificationModeDouble"
+                  type="radio"
+                  name="classificationModeChoice"
+                  value="double"
+                  data-classification-radio
+                />
+                <span>Double</span>
+              </label>
+            </div>
+            <div class="fields-grid field-inline" data-rst-fields hidden>
+              <div>
+                <label for="rst1">Taille de rst1</label>
+                <input id="rst1" type="number" min="2" value="12" />
+              </div>
+              <div>
+                <label for="rst2">Taille de rst2</label>
+                <input id="rst2" type="number" min="2" value="14" />
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="svdMethod">Méthode SVD</label>
+            <select id="svdMethod">
+              <option value="irlba">irlba</option>
+              <option value="svdR">svdR</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="statsMode">Calcul des statistiques CHD</label>
+            <select id="statsMode">
+              <option value="vectorise">Mode optimisé (vectorisé, recommandé)</option>
+              <option value="classique">Mode classique (chisq.test par terme)</option>
+            </select>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Lexique</p>
+            <h3>Dictionnaire</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label for="dictionarySource">Source de lemmatisation</label>
+            <select id="dictionarySource">
+              <option value="lexique_fr">Lexique (fr)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useLemmas">
+              <input id="useLemmas" type="checkbox" checked />
+              <span>Lemmatisation via les lemmes de lexique_fr (forme vers c_lemme)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useExpressions">
+              <input id="useExpressions" type="checkbox" />
+              <span>Utiliser le dictionnaire d'expression (dic_mot vers dic_norm)</span>
+            </label>
+            <p class="field-help">Import du dictionnaire dans l'onglet Annotation.</p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="useAnnotationExpressions">
+              <input id="useAnnotationExpressions" type="checkbox" />
+              <span>Ajouter le dictionnaire utilisateur add_expression_fr.csv</span>
+            </label>
+            <p class="field-help">Fusionne les entrées de l'onglet Annotation avec le dictionnaire d'expressions de base pendant la CHD.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Nettoyage</p>
+            <h3>Nettoyage</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid">
+          <div class="field">
+            <label class="check-option" for="cleanChars">
+              <input id="cleanChars" type="checkbox" checked />
+              <span>Nettoyage caractères (regex)</span>
+            </label>
+            <p class="field-help mono-help">[^a-zA-Z0-9àÀâÂäÄáÁåÅãéÉèÈêÊëËìÌîÎïÏíÍóÓòÒôÔöÖõÕøØùÙûÛüÜúÚçÇßœŒ’ñÑ_\\.:,;!\\?']</p>
+            <p class="field-help">
+              Les caractères présents dans la liste entre crochets sont conservés
+              (dont _ pour les expressions normalisées) ; tous les autres sont
+              remplacés par des espaces.
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removePunctuation">
+              <input id="removePunctuation" type="checkbox" />
+              <span>Supprimer la ponctuation</span>
+            </label>
+            <p class="field-help">
+              Supprime la ponctuation à la tokenisation quanteda (remove_punct), par ex.
+              . , ; : ! ? ' ’ " - ( ) [ ] …
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removeDigits">
+              <input id="removeDigits" type="checkbox" />
+              <span>Supprimer les chiffres (0-9)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removeApostrophes">
+              <input id="removeApostrophes" type="checkbox" checked />
+              <span>Traiter les élisions FR (c'est vers est, m'écrire vers écrire)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="replaceHyphen">
+              <input id="replaceHyphen" type="checkbox" />
+              <span>Remplacer les tirets (-) par des espaces</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="removeStopwords">
+              <input id="removeStopwords" type="checkbox" />
+              <span>Retirer les stopwords (liste française quanteda)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="morphoFilter">
+              <input id="morphoFilter" type="checkbox" />
+              <span>Filtrage morphosyntaxique</span>
+            </label>
+          </div>
+
+          <div class="field field--full" data-chd-morpho-card>
+            <label for="posKeep">Catégories c_morpho à conserver</label>
+            <input id="posKeep" type="hidden" value="NOM, VER, ADJ" data-morpho-selected-input />
+            <div class="chip-picker">
+              <div class="chip-picker-controls">
+                <select id="posKeepAvailable" data-morpho-available-select>
+                  <option value="">Choisir une catégorie</option>
+                </select>
+                <button class="secondary-button" type="button" data-morpho-add-btn>Ajouter</button>
+              </div>
+              <div class="chip-picker-list" data-morpho-selected-list></div>
+            </div>
+            <p class="field-help">Utilisé si le filtrage morphosyntaxique est actif.</p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="excludeEtre">
+              <input id="excludeEtre" type="checkbox" />
+              <span>Filtrer le terme « être » dans la catégorie VERB</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="keepUnknownForms">
+              <input id="keepUnknownForms" type="checkbox" checked />
+              <span>Conserver les formes non reconnues par le lexique (AUTRE_FORME)</span>
+            </label>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-chd-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">AFC</p>
+            <h3>Paramètres AFC complémentaires</h3>
+          </div>
+        </div>
+
+        <div class="fields-grid fields-grid--compact">
+          <div class="field">
+            <label class="check-option" for="reduceOverlap">
+              <input id="reduceOverlap" type="checkbox" checked />
+              <span>Réduire les chevauchements des mots (AFC)</span>
+            </label>
+          </div>
+          <div class="field">
+            <label for="wordSizeMode">Taille des mots (AFC termes)</label>
+            <select id="wordSizeMode">
+              <option value="frequency">Fréquence</option>
+              <option value="chi2">Chi2</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="topNWords">Top N mots par classe (nuages)</label>
+            <input id="topNWords" type="number" min="5" value="20" />
+          </div>
+          <div class="field field--full" data-afc-starred-variables-card>
+            <label for="afcStarredVariables">Variables étoilées à projeter (AFC variables)</label>
+            <input
+              id="afcStarredVariables"
+              type="hidden"
+              value=""
+              data-afc-starred-selected-input
+            />
+            <div class="chip-picker">
+              <div class="chip-picker-controls">
+                <select id="afcStarredVariablesAvailable" data-afc-starred-available-select>
+                  <option value="">Choisir une variable</option>
+                </select>
+                <button class="secondary-button" type="button" data-afc-starred-add-btn>Ajouter</button>
+              </div>
+              <div class="chip-picker-list" data-afc-starred-selected-list></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-simi-config-source data-simi-config-card>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Réseau</p>
+            <h3>Paramètres</h3>
+          </div>
+          <p class="section-copy">
+            Ces options préparent la matrice et l'affichage du graphe de similitude.
+          </p>
+        </div>
+        <div class="fields-grid">
+          <div class="field">
+            <label for="simiMethod">Méthode de calcul</label>
+            <select id="simiMethod">
+              <option value="cooc">Cooccurrence</option>
+              <option value="Braun-Blanquet">Braun-Blanquet</option>
+              <option value="Chi-squared">Chi-squared</option>
+              <option value="correlation">Correlation</option>
+              <option value="cosine">Cosine</option>
+              <option value="jaccard">Jaccard</option>
+              <option value="Pearson">Pearson</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="simiThreshold">Seuil minimal des arêtes</label>
+            <input id="simiThreshold" type="number" min="0" value="0" />
+            <p class="field-help">Le seuil supprime les arêtes trop faibles.</p>
+          </div>
+
+          <div class="field">
+            <label for="simiTopTerms">Nombre de termes à conserver (plus fréquents)</label>
+            <input id="simiTopTerms" type="number" min="5" value="100" data-simi-top-terms-input />
+            <p class="field-help">
+              On conserve les N mots les plus fréquents, puis on calcule les liens selon l'indice choisi.
+            </p>
+          </div>
+
+          <div class="field field--full">
+            <label for="simiTermsSelected">Mots les plus fréquents retenus pour l'analyse</label>
+            <input id="simiTermsSelected" type="hidden" value="" data-simi-terms-input />
+            <p class="field-help">
+              La liste est peuplée par fréquence. Cliquez sur la croix d'un mot pour l'exclure de l'analyse.
+            </p>
+            <div class="selected-terms-picker" data-simi-terms-picker>
+              <p class="selected-terms-meta" data-simi-terms-meta></p>
+              <div class="selected-terms-list" data-simi-terms-list></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiMaxTree">
+              <input id="simiMaxTree" type="checkbox" checked />
+              <span>Limiter au graphe couvrant maximal (arbre de poids max)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="simiLayout">Type de layout</label>
+            <select id="simiLayout">
+              <option value="frutch">Fruchterman-Reingold</option>
+              <option value="kawa">Kamada-Kawai</option>
+              <option value="circle">Circulaire</option>
+              <option value="random">Aléatoire</option>
+              <option value="spirale">Spirale</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="simiEngine">Moteur de rendu du graphe</label>
+            <select id="simiEngine">
+              <option value="igraph">igraph (statique)</option>
+              <option value="visnetwork">visNetwork (interactif)</option>
+            </select>
+            <p class="field-help">
+              En mode visNetwork, ouvrez le panneau config pour adapter le rendu du graphe
+              (nœuds, arêtes, physique, layout, interactions, etc.).
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiEdgeLabels">
+              <input id="simiEdgeLabels" type="checkbox" checked />
+              <span>Afficher le score de l'indice (arêtes / info-bulles)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiEdgeWidth">
+              <input id="simiEdgeWidth" type="checkbox" checked />
+              <span>Largeur des arêtes proportionnelle à l'indice</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiVertexText">
+              <input id="simiVertexText" type="checkbox" checked />
+              <span>Taille du texte des sommets proportionnelle aux fréquences</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiCommunities">
+              <input id="simiCommunities" type="checkbox" checked />
+              <span>Communautés</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="simiCommunityMethod">Méthode de communautés</label>
+            <select id="simiCommunityMethod">
+              <option value="edge_betweenness">edge.betweenness.community</option>
+              <option value="fast_greedy">fastgreedy.community</option>
+              <option value="label_propagation">label.propagation.community</option>
+              <option value="leading_eigen">leading.eigenvector.community</option>
+              <option value="multilevel">multilevel.community</option>
+              <option value="walktrap">walktrap.community</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="simiHalo">
+              <input id="simiHalo" type="checkbox" checked />
+              <span>Halo</span>
+            </label>
+          </div>
+        </div>
+      </article>
+
+      <article class="card section-card" data-lda-config-source>
+        <div class="section-head">
+          <div>
+            <p class="card-kicker">Paramétrage LDA</p>
+            <h3>Options de l'analyse LDA</h3>
+          </div>
+        </div>
+        <div class="section-stack">
+          <div class="field">
+            <label for="language">Unité d'analyse</label>
+            <select id="language">
+              <option value="segment">Segment de texte</option>
+              <option value="document">Document (chaque entrée commence par ****)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="ldaK">Nombre de topics</label>
+            <input id="ldaK" type="number" min="2" value="6" />
+          </div>
+
+          <div class="field">
+            <label for="ldaTerms">Nombre de termes affichés par topic</label>
+            <input id="ldaTerms" type="number" min="3" value="10" />
+          </div>
+
+          <div class="field">
+            <label for="ldaSegmentSize">Taille des segments LDA (en mots)</label>
+            <input id="ldaSegmentSize" type="number" min="5" value="40" />
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="ldaStrongPunctuation">
+              <input id="ldaStrongPunctuation" type="checkbox" checked />
+              <span>Segmenter à partir de la ponctuation forte (. ! ?)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="ldaStopwords">
+              <input id="ldaStopwords" type="checkbox" />
+              <span>Retirer les stopwords</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="check-option" for="ldaMorpho">
+              <input id="ldaMorpho" type="checkbox" checked />
+              <span>Filtrer par catégories morphosyntaxiques</span>
+            </label>
+            <p class="field-help">
+              Filtrage morphosyntaxique = conservation des termes dont c_morpho du lexique_fr.csv
+              appartient aux catégories sélectionnées.
+            </p>
+          </div>
+
+          <div class="field field--full" data-lda-morpho-card>
+            <label for="ldaPosKeep">Catégories à conserver</label>
+            <input id="ldaPosKeep" type="hidden" value="NOM, VER, ADJ" data-lda-morpho-selected-input />
+            <div class="chip-picker">
+              <div class="chip-picker-controls">
+                <select id="ldaPosKeepAvailable" data-lda-morpho-available-select>
+                  <option value="">Choisir une catégorie</option>
+                </select>
+                <button class="secondary-button" type="button" data-lda-morpho-add-btn>Ajouter</button>
+              </div>
+              <div class="chip-picker-list" data-lda-morpho-selected-list></div>
+            </div>
+            <p class="field-help">
+              Les catégories sont lues dans dictionnaires/lexique_fr.csv
+              (colonnes c_mot, c_lemme, c_morpho).
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="ldaMinDf">Fréquence documentaire minimale (min_df)</label>
+            <input id="ldaMinDf" type="number" min="1" value="2" />
+          </div>
+
+          <div class="field">
+            <label for="ldaMaxDf">Fréquence documentaire maximale (max_df)</label>
+            <input id="ldaMaxDf" type="number" min="0" max="1" step="0.01" value="0.9" />
+          </div>
+
+          <div class="field">
+            <label for="ldaMaxIter">Nombre maximal d'itérations (max_iter)</label>
+            <input id="ldaMaxIter" type="number" min="5" value="100" />
+          </div>
+
+          <div class="field">
+            <label for="ldaNgramRange">N-grammes retenus (ngram_range)</label>
+            <select id="ldaNgramRange">
+              <option value="1,1">Unigramme</option>
+              <option value="2,2">Bigramme</option>
+            </select>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <dialog id="chdConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse CHD</h2>
+          </div>
+        </header>
+        <div id="chdConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeChdDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchChdDialogBtn" class="primary-button" type="button">Lancer la CHD</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="simiConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse de similitudes</h2>
+          </div>
+        </header>
+        <div id="simiConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeSimiDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchSimiDialogBtn" class="primary-button" type="button">Lancer l'analyse</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="ldaConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse LDA</h2>
+          </div>
+        </header>
+        <div id="ldaConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeLdaDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchLdaDialogBtn" class="primary-button" type="button">Lancer l'analyse LDA</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="runProgressDialog" class="progress-dialog">
+      <div class="progress-dialog-card">
+        <p id="runProgressTitle" class="dialog-kicker">Analyse en cours</p>
+        <h2>Traitement</h2>
+        <p id="runProgressMessage" class="muted">Initialisation...</p>
+        <progress id="runProgressBar" max="100" value="0"></progress>
+        <p id="runProgressValue" class="progress-value">0%</p>
+      </div>
+    </dialog>
+
+    <dialog id="startupBootstrapDialog" class="progress-dialog">
+      <div class="progress-dialog-card">
+        <p id="startupBootstrapTitle" class="dialog-kicker">Vérification de l'environnement</p>
+        <h2>Démarrage de l'application</h2>
+        <p id="startupBootstrapMessage" class="muted">Préparation des dépendances...</p>
+        <progress id="startupBootstrapBar" max="100" value="0"></progress>
+        <p id="startupBootstrapValue" class="progress-value">0%</p>
+      </div>
+    </dialog>
+
+    <div id="chdTermContextMenu" class="context-menu" hidden>
+      <button type="button" class="context-menu-item" data-chd-term-action="chi2-class">χ² par classe</button>
+      <button type="button" class="context-menu-item" data-chd-term-action="segments-class">Segments de texte dans la classe</button>
+      <button type="button" class="context-menu-item" data-chd-term-action="segments-all-classes">Segments de texte dans les classes</button>
+    </div>
+
+    <dialog id="imagePreviewDialog" class="dialog-panel image-preview-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p id="imagePreviewKicker" class="dialog-kicker">Prévisualisation</p>
+            <h2 id="imagePreviewTitle">Image</h2>
+          </div>
+          <div class="image-preview-header-actions">
+            <p id="imagePreviewCounter" class="readonly-field image-preview-counter">Image 1 / 1</p>
+            <button id="closeImagePreviewBtn" class="secondary-button" type="button">Fermer</button>
+          </div>
+        </header>
+        <div class="image-preview-stage">
+          <button id="imagePreviewPrevBtn" class="secondary-button image-preview-nav" type="button" aria-label="Image précédente">←</button>
+          <div id="imagePreviewContent" class="image-preview-content"></div>
+          <button id="imagePreviewNextBtn" class="secondary-button image-preview-nav" type="button" aria-label="Image suivante">→</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="termSegmentsDialog" class="dialog-panel term-segments-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p id="termSegmentsKicker" class="dialog-kicker">Segments trouvés</p>
+            <h2 id="termSegmentsTitle">Occurrences d'une forme</h2>
+            <p id="termSegmentsMeta" class="muted"></p>
+          </div>
+          <button id="closeTermSegmentsBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+        <div id="termSegmentsList" class="term-segments-list"></div>
+        <footer id="termSegmentsFooter" class="dialog-footer" hidden>
+          <p id="termSegmentsStatus" class="term-segments-status muted"></p>
+          <div class="dialog-footer-actions">
+            <button id="saveChi2PngBtn" class="secondary-button" type="button" hidden>Enregistrer en PNG</button>
+            <button id="buildSubcorpusBtn" class="primary-button" type="button">Construire un sous-corpus</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
+    <script src="./web-runtime.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
