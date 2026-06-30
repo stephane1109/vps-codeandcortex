@@ -161,7 +161,7 @@ h1 {
 
 .aide-rapide-grille {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
 }
 
@@ -242,7 +242,7 @@ h1 {
 
 .carte-application.libre {
     border-color: rgba(17, 17, 17, 0.10);
-    background: linear-gradient(180deg, rgba(238, 238, 234, 0.96), rgba(255, 255, 255, 0.98));
+    background: linear-gradient(180deg, rgba(244, 244, 240, 0.98), rgba(255, 255, 255, 1));
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
 }
 
@@ -259,8 +259,9 @@ h1 {
 }
 
 .carte-application.indisponible {
-    border-color: rgba(100, 116, 139, 0.34);
-    box-shadow: 0 12px 24px rgba(100, 116, 139, 0.1);
+    border-color: rgba(115, 115, 115, 0.24);
+    background: linear-gradient(180deg, rgba(240, 240, 238, 0.96), rgba(255, 255, 255, 0.98));
+    box-shadow: 0 12px 24px rgba(115, 115, 115, 0.08);
 }
 
 .carte-application:hover {
@@ -355,8 +356,8 @@ h1 {
 }
 
 .pastille-etat.indisponible {
-    background: #64748b;
-    box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.18);
+    background: #8a8a8a;
+    box-shadow: 0 0 0 4px rgba(138, 138, 138, 0.16);
 }
 
 .statut {
@@ -381,7 +382,7 @@ h1 {
 }
 
 .carte-application.indisponible .statut {
-    color: #475569;
+    color: #575757;
 }
 
 .carte-application.libre .icone {
@@ -409,6 +410,11 @@ h1 {
 .carte-application.attente .meta-application,
 .carte-application.attente .description-application {
     color: #92400e;
+}
+
+.carte-application.indisponible .meta-application,
+.carte-application.indisponible .description-application {
+    color: #6b7280;
 }
 
 .pied {

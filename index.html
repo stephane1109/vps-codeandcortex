@@ -67,6 +67,7 @@
                 <p class="aide-rapide-description">
                     Certaines applications réservent un ticket utilisateur et consomment une partie de la capacité totale du VPS.
                     Quand vous avez terminé, pensez à libérer l'accès dans l'application pour laisser la place au suivant.
+                    Si l'état n'a pas encore été relu par le dashboard, les cartes restent grises quelques secondes avant d'afficher leur vrai statut.
                 </p>
             </div>
 
@@ -74,8 +75,8 @@
                 <article class="aide-rapide-carte">
                     <h3>États des applications</h3>
                     <p>
-                        Vert : l'application est libre. Orange : l'application est en cours d'utilisation ou une file d'attente existe.
-                        En cas de souci de synchronisation, un message apparaît en haut de la page.
+                        Gris : le dashboard relit encore Redis ou met à jour l'état. Vert : l'application est libre.
+                        Orange : l'application est en cours d'utilisation ou une file d'attente existe.
                     </p>
                 </article>
 
@@ -84,6 +85,14 @@
                     <p>
                         Après votre analyse, cliquez sur le bouton <strong>Libérer l'accès</strong> dans l'application.
                         Fermer l'onglet aide souvent, mais la libération manuelle reste la méthode la plus fiable.
+                    </p>
+                </article>
+
+                <article class="aide-rapide-carte">
+                    <h3>Délais automatiques</h3>
+                    <p>
+                        Si un ticket n'est plus rafraîchi, il expire en général au bout d'environ <strong>5 minutes</strong>.
+                        Si un onglet reste ouvert sans interaction, certaines grosses applications peuvent aussi se libérer après environ <strong>15 minutes d'inactivité</strong>.
                     </p>
                 </article>
 
@@ -288,7 +297,7 @@
         </section>
 
         <p class="pied" id="dashboard-note">
-            Les états se rafraîchissent automatiquement dès que le conteneur FastAPI du dashboard répond sur `/api/tickets/dashboard`.
+            Les cartes restent grises tant que les tickets n'ont pas encore été relus, puis passent automatiquement en vert ou en orange selon l'état réel.
         </p>
 
     </main>
@@ -303,6 +312,18 @@
             const globalActive = document.getElementById("global-active");
             const globalQueue = document.getElementById("global-queue");
             const globalServer = document.getElementById("global-server");
+
+            function markCardPending(card) {
+                const dot = card.querySelector("[data-status-dot]");
+                const label = card.querySelector("[data-status-label]");
+                const meta = card.querySelector("[data-status-meta]");
+                if (dot) dot.className = "pastille-etat indisponible";
+                if (label) label.textContent = "Mise a jour";
+                if (meta) meta.textContent = "Lecture des tickets...";
+                card.classList.remove("libre", "occupee", "attente", "indisponible");
+                card.classList.add("indisponible");
+            }
+
             function badgeClassFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
                 if (state === "busy" || state === "active") return "attente";
@@ -334,11 +355,11 @@
                 const dot = card.querySelector("[data-status-dot]");
                 const label = card.querySelector("[data-status-label]");
                 const meta = card.querySelector("[data-status-meta]");
-                if (dot) dot.className = "pastille-etat libre";
-                if (label) label.textContent = "Libre";
-                if (meta) meta.textContent = "Etat non synchronise";
-                card.classList.remove("occupee", "attente", "indisponible");
-                card.classList.add("libre");
+                if (dot) dot.className = "pastille-etat indisponible";
+                if (label) label.textContent = "Mise a jour";
+                if (meta) meta.textContent = "Synchronisation dashboard requise";
+                card.classList.remove("libre", "occupee", "attente", "indisponible");
+                card.classList.add("indisponible");
             }
 
             function decorateGlobal(payload) {
@@ -402,6 +423,7 @@
                 }
             }
 
+            cards.forEach(markCardPending);
             refreshDashboard();
             window.setInterval(refreshDashboard, 2000);
         })();
