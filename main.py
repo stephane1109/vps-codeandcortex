@@ -287,7 +287,7 @@ def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
-st.set_page_config(page_title="Extraction infos YouTube", layout="wide")
+st.set_page_config(page_title="Extraction infos YouTube", layout="centered")
 
 if "df_resultats" not in st.session_state:
     st.session_state.df_resultats = None
