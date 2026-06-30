@@ -92,6 +92,6 @@ http://localhost:8501
 ## 8. Notes d'exploitation
 
 - Le conteneur ecoute sur `0.0.0.0`.
-- l'extraction video est geree directement par `opencv-python-headless`.
+- `ffmpeg` est embarque dans l'image via `imageio-ffmpeg`, sans `apt-get`.
 - Les sessions sont nettoyees automatiquement selon `APP_SESSION_TTL_HOURS`.
 - Le bundle ZIP telechargeable contient les exports principaux et les images annotees.

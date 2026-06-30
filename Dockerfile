@@ -25,8 +25,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Build sans apt-get pour eviter les echecs de deploiement quand BuildKit
-# dispose de peu d'espace disque temporaire sur le VPS Coolify.
+# `ffmpeg` reste disponible dans le conteneur via le package Python
+# `imageio-ffmpeg`, ce qui evite l'etape `apt-get` qui cassait le build.
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
