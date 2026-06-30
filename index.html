@@ -71,7 +71,8 @@
                 <p class="aide-rapide-description">
                     Certaines applications réservent un ticket utilisateur et consomment une partie de la capacité totale du VPS.
                     Quand vous avez terminé, pensez à libérer l'accès dans l'application pour laisser la place au suivant.
-                    Les cartes libres restent volontairement grises ; seules les applications occupées ou avec attente passent en orange.
+                    Les cartes restent volontairement neutres en gris/blanc.
+                    Seules les pastilles indiquent l'etat de disponibilité ou d'attente.
                 </p>
             </div>
 
@@ -80,7 +81,7 @@
                 <span class="aide-regle"><strong>TTL :</strong> un ticket non rafraîchi expire en général après <strong>5 minutes</strong>.</span>
                 <span class="aide-regle"><strong>Inactivité :</strong> certaines grosses applis se libèrent après environ <strong>15 minutes</strong> sans action.</span>
                 <span class="aide-regle"><strong>File d'attente :</strong> laissez l'application ouverte si vous attendez votre tour.</span>
-                <span class="aide-regle"><strong>Couleurs :</strong> gris = libre, orange = occupée ou attente.</span>
+                <span class="aide-regle"><strong>Couleurs :</strong> cartes neutres ; seules les pastilles changent selon l'etat.</span>
                 <span class="aide-regle"><strong>Mise à jour :</strong> la page relit automatiquement les tickets toutes les quelques secondes.</span>
             </div>
 
@@ -88,8 +89,8 @@
                 <article class="aide-rapide-carte">
                     <h3>États des applications</h3>
                     <p>
-                        Carte gris clair + pastille verte : l'application est libre.
-                        Carte orange : l'application est en cours d'utilisation ou une file d'attente existe.
+                        Carte gris/blanc + icone orange + texte noir : apparence normale.
+                        La pastille seule devient verte, orange, rouge ou grise selon l'etat.
                     </p>
                 </article>
 
@@ -130,7 +131,7 @@
                     <p>
                         Le dashboard met à jour automatiquement l'état des cartes.
                         Si une carte semble bloquée, rechargez la page pour relire immédiatement l'état courant.
-                        En cas de micro-coupure de synchronisation, l'ouverture d'une application colore quand meme la carte en orange.
+                        En cas de micro-coupure de synchronisation, l'ouverture d'une application met quand meme a jour sa pastille.
                     </p>
                 </article>
             </div>
@@ -327,7 +328,7 @@
         </section>
 
         <p class="pied" id="dashboard-note">
-            Les cartes libres restent grises avec texte noir. Elles passent en orange uniquement quand une application est occupee ou quand une file d'attente existe.
+            Les cartes restent neutres en gris/blanc avec icones orange et texte noir. Seules les pastilles changent selon l'etat.
         </p>
 
     </main>
@@ -515,7 +516,7 @@
 
                 if (note) {
                     if (payload.global && payload.global.serverState === "degraded") {
-                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et colore en orange une application que vous venez d'ouvrir.";
+                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et met a jour la pastille d'une application que vous venez d'ouvrir.";
                     } else {
                         note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
                     }

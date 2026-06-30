@@ -268,15 +268,15 @@ h1 {
 }
 
 .carte-application.occupee {
-    border-color: #ef4444;
-    background: linear-gradient(180deg, rgba(239, 68, 68, 0.10), rgba(255, 255, 255, 0.98));
-    box-shadow: 0 14px 30px rgba(239, 68, 68, 0.18);
+    border-color: rgba(17, 17, 17, 0.10);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(242, 242, 239, 0.99));
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
 }
 
 .carte-application.attente {
-    border-color: #f59e0b;
-    background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.98));
-    box-shadow: 0 14px 30px rgba(245, 158, 11, 0.18);
+    border-color: rgba(17, 17, 17, 0.10);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(242, 242, 239, 0.99));
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
 }
 
 .carte-application.indisponible {
@@ -386,7 +386,7 @@ h1 {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--couleur-accent);
+    color: var(--couleur-principale);
     margin-left: auto;
 }
 
@@ -395,11 +395,11 @@ h1 {
 }
 
 .carte-application.occupee .statut {
-    color: #dc2626;
+    color: var(--couleur-principale);
 }
 
 .carte-application.attente .statut {
-    color: #d97706;
+    color: var(--couleur-principale);
 }
 
 .carte-application.indisponible .statut {
@@ -407,30 +407,30 @@ h1 {
 }
 
 .carte-application.libre .icone {
-    color: var(--couleur-principale);
+    color: var(--couleur-accent);
 }
 
 .carte-application.occupee .icone {
-    color: #dc2626;
+    color: var(--couleur-accent);
 }
 
 .carte-application.attente .icone {
-    color: #d97706;
+    color: var(--couleur-accent);
 }
 
 .carte-application.libre .meta-application,
 .carte-application.libre .description-application {
-    color: var(--couleur-secondaire);
+    color: var(--couleur-principale);
 }
 
 .carte-application.occupee .meta-application,
 .carte-application.occupee .description-application {
-    color: #991b1b;
+    color: var(--couleur-principale);
 }
 
 .carte-application.attente .meta-application,
 .carte-application.attente .description-application {
-    color: #92400e;
+    color: var(--couleur-principale);
 }
 
 .carte-application.indisponible .meta-application,
