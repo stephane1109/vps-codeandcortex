@@ -191,7 +191,7 @@ def init_state() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Scraper Wikipedia", page_icon="📚", layout="wide")
+    st.set_page_config(page_title="Scraper Wikipedia", layout="wide")
     init_state()
 
     st.title("Scraper Wikipedia")
