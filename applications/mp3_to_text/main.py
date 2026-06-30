@@ -8,11 +8,15 @@ import uuid
 from pathlib import Path
 
 import streamlit as st
-import whisper
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
+
+try:
+    from faster_whisper import WhisperModel
+except Exception:  # pragma: no cover - depend de l'image Docker finale
+    WhisperModel = None
 
 
 APP_NAME = "MP3 to Text"
@@ -23,6 +27,9 @@ MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large"]
 UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
+WHISPER_MODEL_ALIASES = {
+    "large": "large-v3",
+}
 
 
 class ApplicationError(RuntimeError):
@@ -100,8 +107,17 @@ def save_uploaded_audio(uploaded_file, run_dir: Path) -> Path:
 
 @st.cache_resource(show_spinner=False)
 def load_whisper_model(model_size: str):
+    if WhisperModel is None:
+        raise ApplicationError("Le backend faster-whisper n'est pas disponible dans l'application.")
     ensure_directory(WHISPER_CACHE_DIR)
-    return whisper.load_model(model_size, download_root=str(WHISPER_CACHE_DIR))
+    resolved_model_size = WHISPER_MODEL_ALIASES.get(model_size, model_size)
+    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip() or "int8"
+    return WhisperModel(
+        resolved_model_size,
+        device="cpu",
+        compute_type=compute_type,
+        download_root=str(WHISPER_CACHE_DIR),
+    )
 
 
 def transcrire_audio(audio_path: Path, model_size: str, language_code: str) -> str:
@@ -112,11 +128,17 @@ def transcrire_audio(audio_path: Path, model_size: str, language_code: str) -> s
     language = (language_code or "").strip() or None
 
     try:
-        result = model.transcribe(str(audio_path), language=language, fp16=False)
+        segments, _info = model.transcribe(
+            str(audio_path),
+            language=language,
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 300},
+        )
+        text = " ".join((segment.text or "").strip() for segment in segments).strip()
     except Exception as exc:  # pragma: no cover - depend du backend Whisper
         raise ApplicationError(f"Erreur lors de la transcription Whisper : {exc}") from exc
 
-    text = str(result.get("text") or "").strip()
     if not text:
         raise ApplicationError("Whisper n'a renvoye aucun texte exploitable.")
     return text
@@ -157,11 +179,12 @@ def run_transcription_with_progress(audio_path: Path, model_size: str, language_
 def build_sidebar_notes() -> None:
     with st.sidebar:
         st.header("Execution VPS")
-        st.caption("Le modele Whisper est telecharge au premier usage puis reutilise depuis le cache du conteneur.")
+        st.caption("Le modele faster-whisper est telecharge au premier usage puis reutilise depuis le cache du conteneur.")
         st.markdown(
             "\n".join(
                 [
                     "- Source audio : YouTube ou fichier local",
+                    "- Backend : faster-whisper CPU",
                     "- Modeles : tiny a large",
                     "- Export final : transcription `.txt`",
                     "- Dossier temporaire : `APP_WORKDIR`",

@@ -18,6 +18,7 @@ Les adaptations principales sont :
 - conteneur Docker autonome
 - compatibilite Coolify via `PORT` et `STREAMLIT_SERVER_BASE_URL_PATH`
 - installation systeme de `ffmpeg` dans le conteneur
+- backend `faster-whisper` CPU plus leger pour le VPS
 - gestion d'un cache Whisper dedie et d'un dossier temporaire `APP_WORKDIR`
 - aucun stockage persistant obligatoire, les fichiers restent dans le conteneur temporaire
 
@@ -36,6 +37,7 @@ Application accessible ensuite sur `http://localhost:8501`.
 - `STREAMLIT_SERVER_BASE_URL_PATH` : prefixe d'URL si besoin
 - `APP_WORKDIR` : dossier temporaire de travail
 - `WHISPER_CACHE_DIR` : dossier de cache des modeles Whisper
+- `WHISPER_COMPUTE_TYPE` : type de calcul `faster-whisper`, recommande `int8` sur CPU
 
 ## Notes
 

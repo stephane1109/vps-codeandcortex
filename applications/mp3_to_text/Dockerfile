@@ -37,12 +37,10 @@ RUN apt-get update \
 
 COPY requirements.txt /app/requirements.txt
 
-# Sur un VPS CPU, il faut forcer la roue CPU officielle de torch.
-# Sinon pip telecharge la variante CUDA moderne avec de gros paquets
-# NVIDIA, ce qui fait echouer le build Coolify par manque d'espace disque.
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple "torch==2.5.1" \
-    && pip install -r /app/requirements.txt
+# On evite ici openai-whisper + torch, trop lourds pour les builds Coolify
+# du VPS. faster-whisper CPU reduit fortement le risque de "No space left
+# on device" pendant l'installation.
+RUN pip install -r /app/requirements.txt
 
 COPY . /app
 

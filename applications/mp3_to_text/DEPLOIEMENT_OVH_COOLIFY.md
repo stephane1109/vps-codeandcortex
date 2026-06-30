@@ -28,6 +28,7 @@ PORT=8501
 STREAMLIT_SERVER_BASE_URL_PATH=
 APP_WORKDIR=/tmp/mp3-to-text
 WHISPER_CACHE_DIR=/home/app/.cache/whisper
+WHISPER_COMPUTE_TYPE=int8
 REDIS_URL=redis://:motdepasse@nom-exact-du-service-redis:6379/0
 APP_TICKET_ID=mp3_to_text
 APP_TICKET_MAX_ACTIVE=1
@@ -96,4 +97,4 @@ http://localhost:8501
 - Le premier lancement d'un modele Whisper est plus lent a cause du telechargement.
 - Le cache Whisper peut rester ephemere ou etre monte sur un volume si tu veux accelerer les redeploiements.
 - Aucune base de donnees n'est necessaire.
-- Le `Dockerfile` force maintenant `torch` en version CPU pour eviter les gros paquets CUDA/NVIDIA qui bloquaient le build Coolify avec `No space left on device`.
+- Cette version utilise maintenant `faster-whisper` en CPU pour eviter le poids de `torch` pendant le build Coolify.
