@@ -41,6 +41,18 @@ Vous pouvez laisser Coolify gérer `PORT`, mais ces variables sont utiles :
 PORT=8501
 STREAMLIT_SERVER_BASE_URL_PATH=
 STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
+APP_TICKET_ID=europresse-to-iramuteq
+APP_TICKET_ENFORCED=1
+APP_TICKET_MAX_ACTIVE=2
+APP_TICKET_COST=1
+CAPACITE_SERVEUR=6
+APP_TICKET_TTL_SECONDS=3600
+APP_TICKET_MAX_WAITING=20
+APP_TICKET_WAIT_REFRESH_MS=10000
+APP_TICKET_HEARTBEAT_MS=300000
+APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
+APP_TICKET_HIDDEN_RELEASE_SECONDS=300
 ```
 
 `STREAMLIT_SERVER_BASE_URL_PATH` peut rester vide si l'application est exposée directement sur son sous-domaine.
@@ -86,3 +98,4 @@ Si vous chargez de gros exports Europresse, démarrez plutôt à **1 vCPU / 2 Go
 - Le healthcheck HTTP permet à Coolify de savoir rapidement si l'application est saine.
 - La limite d'upload Streamlit est fixée à `512 Mo` dans `.streamlit/config.toml`.
 - Aucun volume persistant n'est nécessaire pour le fonctionnement courant de l'application.
+- Le bouton `Liberer l'acces` apparait dans la sidebar si `REDIS_URL` et `APP_TICKET_*` sont configures.

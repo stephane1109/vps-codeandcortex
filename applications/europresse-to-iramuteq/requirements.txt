@@ -1,6 +1,7 @@
 # install requierements.txt
 
 streamlit
+streamlit-autorefresh>=1,<2
 beautifulsoup4
 pandas
 lxml
@@ -8,3 +9,4 @@ html5lib
 Babel
 openpyxl
 xlsxwriter
+redis>=5,<6

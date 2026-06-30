@@ -26,6 +26,7 @@ import streamlit as st
 from io import StringIO, BytesIO
 import zipfile
 from datetime import datetime
+from ticket_gate import enforce_streamlit_access
 from doublons import (
     LONGUEUR_MINIMALE_PAR_DEFAUT,
     compter_mots,
@@ -35,6 +36,7 @@ from doublons import (
 )
 
 st.set_page_config(layout="wide")
+enforce_streamlit_access("europresse-to-iramuteq", "Europresse to IRaMuTeQ")
 
 # -----------------------------------------
 # 1) DICTIONNAIRE POUR LES DATES
