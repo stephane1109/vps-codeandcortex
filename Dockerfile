@@ -201,7 +201,7 @@ COPY docker/requirements-python.txt /tmp/requirements-python.txt
 # - cela n'ajoute aucune fonctionnalite a l'application
 # - cela augmente inutilement le volume telecharge et decompresse
 # - sur un builder Coolify deja charge, c'est un facteur de plantage supplementaire
-RUN python3 -m pip install --no-cache-dir --prefer-binary -r /tmp/requirements-python.txt
+RUN python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /tmp/requirements-python.txt
 
 WORKDIR /app
 
