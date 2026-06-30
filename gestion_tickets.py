@@ -54,6 +54,11 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 2,
         "cout": 2,
     },
+    "cooccurrencesmotpivot": {
+        "label": "Cooccurrences mot pivot",
+        "max_active": 2,
+        "cout": 2,
+    },
     "symbolic_connectors": {
         "label": "Symbolic Connectors",
         "max_active": 1,
