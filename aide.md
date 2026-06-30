@@ -20,8 +20,7 @@ Elle permet surtout de savoir si une application est libre, occupée ou déjà s
 
 Sur les cartes :
 
-- point gris : le dashboard est en train de relire les tickets ou l'état n'a pas encore été synchronisé ;
-- point vert : accès libre ;
+- point gris : accès libre, ou état encore en cours de relecture si la carte affiche `Mise a jour` ;
 - point orange : application en cours d'utilisation ou file d'attente en cours ;
 - un message en haut de page signale les problèmes de synchronisation du dashboard.
 

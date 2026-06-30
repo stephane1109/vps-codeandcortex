@@ -67,7 +67,7 @@
                 <p class="aide-rapide-description">
                     Certaines applications réservent un ticket utilisateur et consomment une partie de la capacité totale du VPS.
                     Quand vous avez terminé, pensez à libérer l'accès dans l'application pour laisser la place au suivant.
-                    Si l'état n'a pas encore été relu par le dashboard, les cartes restent grises quelques secondes avant d'afficher leur vrai statut.
+                    Les cartes libres restent volontairement grises ; seules les applications occupées ou avec attente passent en orange.
                 </p>
             </div>
 
@@ -75,7 +75,7 @@
                 <article class="aide-rapide-carte">
                     <h3>États des applications</h3>
                     <p>
-                        Gris : le dashboard relit encore Redis ou met à jour l'état. Vert : l'application est libre.
+                        Gris : l'application est libre. Gris avec la mention <strong>Mise a jour</strong> : le dashboard relit encore Redis.
                         Orange : l'application est en cours d'utilisation ou une file d'attente existe.
                     </p>
                 </article>
@@ -297,7 +297,7 @@
         </section>
 
         <p class="pied" id="dashboard-note">
-            Les cartes restent grises tant que les tickets n'ont pas encore été relus, puis passent automatiquement en vert ou en orange selon l'état réel.
+            Les cartes libres restent grises avec texte noir. Elles passent en orange uniquement quand une application est occupee ou quand une file d'attente existe.
         </p>
 
     </main>
