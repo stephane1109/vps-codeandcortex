@@ -9,11 +9,19 @@ Dans Coolify :
 1. Cree une nouvelle ressource `Application`
 2. Selectionne le depot Git
 3. Choisis le build `Dockerfile`
-4. Definis le `Base Directory` sur :
+4. Si tu deployes depuis la branche `main`, definis le `Base Directory` sur :
 
 ```text
 /applications/extract_comments_youtube
 ```
+
+Si tu deployes depuis la branche dediee `deploy-extract_comments_youtube`, laisse plutot :
+
+```text
+/
+```
+
+avec `Dockerfile Location = Dockerfile`.
 
 5. Port applicatif :
 
@@ -27,9 +35,22 @@ Dans Coolify :
 PORT=8501
 STREAMLIT_SERVER_BASE_URL_PATH=
 YOUTUBE_API_KEY=
+REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
+APP_TICKET_ENFORCED=1
+APP_TICKET_ID=extract_comments_youtube
+APP_TICKET_MAX_ACTIVE=2
+APP_TICKET_COST=1
+CAPACITE_SERVEUR=6
+APP_TICKET_TTL_SECONDS=900
+APP_TICKET_MAX_WAITING=20
+APP_TICKET_WAIT_REFRESH_MS=10000
+APP_TICKET_HEARTBEAT_MS=300000
+APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
 ```
 
 `YOUTUBE_API_KEY` est optionnelle mais utile si tu veux que la cle API soit pre-remplie a l'ouverture de l'application.
+
+Les variables `REDIS_URL` et `APP_TICKET_*` activent la file d'attente utilisateur et font apparaitre le bouton `Liberer l'acces` dans la barre laterale.
 
 ## 3. Healthcheck recommande
 

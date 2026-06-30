@@ -15,9 +15,11 @@ Cette version est preparee pour un deploiement sur un VPS OVH via Coolify.
 Les adaptations principales sont :
 
 - interface Streamlit exploitable depuis un navigateur
+- affichage recentre dans un conteneur Streamlit plutot qu'en pleine largeur
 - conteneur Docker autonome
 - compatibilite Coolify via `PORT` et `STREAMLIT_SERVER_BASE_URL_PATH`
 - prise en charge optionnelle de `YOUTUBE_API_KEY` comme variable d'environnement
+- prise en charge du controle d'acces Redis avec bouton `Liberer l'acces`
 - aucun stockage persistant requis, les exports sont generes en memoire
 
 ## Lancer localement avec Docker
@@ -34,6 +36,10 @@ Application accessible ensuite sur `http://localhost:8501`.
 - `PORT` : port d'ecoute Streamlit
 - `STREAMLIT_SERVER_BASE_URL_PATH` : prefixe d'URL si besoin
 - `YOUTUBE_API_KEY` : cle API YouTube Data v3 optionnelle pour pre-remplir le champ
+- `REDIS_URL` : URL de connexion Redis pour la file d'attente
+- `APP_TICKET_ID` : identifiant Redis de l'application, ici `extract_comments_youtube`
+- `APP_TICKET_MAX_ACTIVE` : nombre maximal d'utilisateurs simultanes
+- `APP_TICKET_RELEASE_URL` : URL du dashboard qui expose `/api/tickets/release`
 
 ## Notes
 

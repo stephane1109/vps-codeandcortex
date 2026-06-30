@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from ticket_gate import enforce_streamlit_access
 
 
 RESULT_COLUMNS = [
@@ -24,6 +25,14 @@ RESULT_COLUMNS = [
 DEFAULT_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
+APP_DISPLAY_NAME = "Extraction des commentaires YouTube"
+APP_SHELL_STYLE = """
+<style>
+div[data-testid="stMainBlockContainer"] {
+    max-width: 980px;
+}
+</style>
+"""
 
 
 class CommentsDisabledError(Exception):
@@ -376,7 +385,9 @@ def load_help_markdown() -> str:
         return "Le fichier `aide.md` est introuvable pour cette application."
 
 
-st.set_page_config(page_title="Extract Comments YouTube", layout="wide")
+st.set_page_config(page_title="Extract Comments YouTube", layout="centered")
+enforce_streamlit_access("extract_comments_youtube", APP_DISPLAY_NAME)
+st.markdown(APP_SHELL_STYLE, unsafe_allow_html=True)
 
 if "video_details" not in st.session_state:
     st.session_state.video_details = None
@@ -389,148 +400,153 @@ if "txt_export_name" not in st.session_state:
 if "xlsx_export_name" not in st.session_state:
     st.session_state.xlsx_export_name = "youtube_comments.xlsx"
 
-st.title("Extraction des commentaires YouTube")
-st.caption(
-    "Recuperez les commentaires d'une video YouTube ou YouTube Shorts, "
-    "puis telechargez-les au format texte ou Excel."
-)
+def render_application() -> None:
+    with st.container():
+        st.title(APP_DISPLAY_NAME)
+        st.caption(
+            "Recuperez les commentaires d'une video YouTube ou YouTube Shorts, "
+            "puis telechargez-les au format texte ou Excel."
+        )
 
-with st.expander("Aide"):
-    st.markdown(load_help_markdown())
+        with st.expander("Aide"):
+            st.markdown(load_help_markdown())
 
-st.markdown("### 1. Parametres")
+        st.markdown("### 1. Parametres")
 
-api_key_input = st.text_input(
-    "Cle API YouTube",
-    value=DEFAULT_API_KEY,
-    placeholder="Entrez votre cle API YouTube Data v3",
-    type="password",
-)
-video_url_input = st.text_input(
-    "URL de la video",
-    placeholder="https://www.youtube.com/watch?v=... ou https://youtube.com/shorts/...",
-)
+        api_key_input = st.text_input(
+            "Cle API YouTube",
+            value=DEFAULT_API_KEY,
+            placeholder="Entrez votre cle API YouTube Data v3",
+            type="password",
+        )
+        video_url_input = st.text_input(
+            "URL de la video",
+            placeholder="https://www.youtube.com/watch?v=... ou https://youtube.com/shorts/...",
+        )
 
-options_col_1, options_col_2, options_col_3 = st.columns(3)
+        options_col_1, options_col_2, options_col_3 = st.columns(3)
 
-with options_col_1:
-    max_comments = st.number_input(
-        "Nombre maximum de commentaires",
-        min_value=1,
-        max_value=5000,
-        value=100,
-        step=50,
-    )
+        with options_col_1:
+            max_comments = st.number_input(
+                "Nombre maximum de commentaires",
+                min_value=1,
+                max_value=5000,
+                value=100,
+                step=50,
+            )
 
-with options_col_2:
-    include_replies = st.checkbox("Inclure les reponses", value=False)
-    lowercase_comments = st.checkbox("Mettre les commentaires en minuscules", value=True)
+        with options_col_2:
+            include_replies = st.checkbox("Inclure les reponses", value=False)
+            lowercase_comments = st.checkbox("Mettre les commentaires en minuscules", value=True)
 
-with options_col_3:
-    clean_emojis = st.checkbox("Supprimer les emojis", value=True)
+        with options_col_3:
+            clean_emojis = st.checkbox("Supprimer les emojis", value=True)
 
-if st.button("Extraire les commentaires", type="primary"):
-    st.session_state.video_details = None
-    st.session_state.df_comments = None
-    st.session_state.result_message = None
+        if st.button("Extraire les commentaires", type="primary"):
+            st.session_state.video_details = None
+            st.session_state.df_comments = None
+            st.session_state.result_message = None
 
-    if not api_key_input.strip() or not video_url_input.strip():
-        st.error("Renseignez la cle API YouTube et l'URL de la video.")
-    else:
-        video_details = None
-        try:
-            with st.spinner("Extraction des commentaires en cours..."):
-                video_id = extraire_video_id(video_url_input)
-                youtube = build_youtube_client(api_key_input.strip())
-                video_details = get_video_details(youtube, video_id, clean_emojis=clean_emojis)
-                df_comments = fetch_comments(
-                    youtube=youtube,
-                    video_id=video_id,
-                    max_results=int(max_comments),
-                    include_replies=include_replies,
-                    clean_emojis=clean_emojis,
-                    lowercase_comments=lowercase_comments,
+            if not api_key_input.strip() or not video_url_input.strip():
+                st.error("Renseignez la cle API YouTube et l'URL de la video.")
+            else:
+                video_details = None
+                try:
+                    with st.spinner("Extraction des commentaires en cours..."):
+                        video_id = extraire_video_id(video_url_input)
+                        youtube = build_youtube_client(api_key_input.strip())
+                        video_details = get_video_details(youtube, video_id, clean_emojis=clean_emojis)
+                        df_comments = fetch_comments(
+                            youtube=youtube,
+                            video_id=video_id,
+                            max_results=int(max_comments),
+                            include_replies=include_replies,
+                            clean_emojis=clean_emojis,
+                            lowercase_comments=lowercase_comments,
+                        )
+
+                    st.session_state.video_details = video_details
+                    st.session_state.df_comments = df_comments
+
+                    fragment = normaliser_fragment_nom_fichier(str(video_details.get("Titre") or video_id))
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    st.session_state.txt_export_name = f"youtube_comments_{fragment}_{timestamp}.txt"
+                    st.session_state.xlsx_export_name = f"youtube_comments_{fragment}_{timestamp}.xlsx"
+
+                    if df_comments.empty:
+                        st.session_state.result_message = "Aucun commentaire recupere pour cette video."
+                except CommentsDisabledError as exc:
+                    st.session_state.video_details = video_details
+                    st.session_state.df_comments = pd.DataFrame(columns=RESULT_COLUMNS)
+                    st.session_state.result_message = str(exc)
+
+                    fragment_source = ""
+                    if video_details:
+                        fragment_source = str(video_details.get("Titre") or video_details.get("Video ID") or "")
+                    fragment = normaliser_fragment_nom_fichier(fragment_source or "youtube_comments")
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    st.session_state.txt_export_name = f"youtube_comments_{fragment}_{timestamp}.txt"
+                    st.session_state.xlsx_export_name = f"youtube_comments_{fragment}_{timestamp}.xlsx"
+                except ValueError as exc:
+                    st.error(str(exc))
+                except HttpError as exc:
+                    _, message = parse_api_error(exc)
+                    st.error(message)
+                except Exception as exc:  # pragma: no cover - garde-fou Streamlit
+                    st.error(f"Erreur lors de l'extraction des commentaires : {exc}")
+
+        video_details = st.session_state.video_details
+        df_comments = st.session_state.df_comments
+        result_message = st.session_state.result_message
+
+        if video_details is not None:
+            st.markdown("### 2. Informations video")
+
+            meta_col_1, meta_col_2, meta_col_3 = st.columns(3)
+            with meta_col_1:
+                st.metric("Nom de la chaine", value=str(video_details.get("Nom de la chaine", "")) or "n/d")
+            with meta_col_2:
+                st.metric("Date de publication", value=str(video_details.get("Date de publication", "")) or "n/d")
+            with meta_col_3:
+                comments_count = video_details.get("Commentaires exposes par YouTube")
+                st.metric(
+                    "Commentaires exposes",
+                    value="desactives" if comments_count is None else str(comments_count),
                 )
 
-            st.session_state.video_details = video_details
-            st.session_state.df_comments = df_comments
+            st.markdown(f"**Titre** : {video_details.get('Titre', '')}")
+            st.markdown(f"**URL** : {video_details.get('URL', '')}")
 
-            fragment = normaliser_fragment_nom_fichier(str(video_details.get("Titre") or video_id))
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.session_state.txt_export_name = f"youtube_comments_{fragment}_{timestamp}.txt"
-            st.session_state.xlsx_export_name = f"youtube_comments_{fragment}_{timestamp}.xlsx"
+            if result_message:
+                st.warning(result_message)
 
-            if df_comments.empty:
-                st.session_state.result_message = "Aucun commentaire recupere pour cette video."
-        except CommentsDisabledError as exc:
-            st.session_state.video_details = video_details
-            st.session_state.df_comments = pd.DataFrame(columns=RESULT_COLUMNS)
-            st.session_state.result_message = str(exc)
+            st.markdown("### 3. Resultats")
 
-            fragment_source = ""
-            if video_details:
-                fragment_source = str(video_details.get("Titre") or video_details.get("Video ID") or "")
-            fragment = normaliser_fragment_nom_fichier(fragment_source or "youtube_comments")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.session_state.txt_export_name = f"youtube_comments_{fragment}_{timestamp}.txt"
-            st.session_state.xlsx_export_name = f"youtube_comments_{fragment}_{timestamp}.xlsx"
-        except ValueError as exc:
-            st.error(str(exc))
-        except HttpError as exc:
-            _, message = parse_api_error(exc)
-            st.error(message)
-        except Exception as exc:  # pragma: no cover - garde-fou Streamlit
-            st.error(f"Erreur lors de l'extraction des commentaires : {exc}")
+            if df_comments is not None and not df_comments.empty:
+                st.success(f"{len(df_comments)} commentaire(s) recupere(s).")
+                st.dataframe(df_comments, use_container_width=True)
+            elif df_comments is not None:
+                st.info("Aucun commentaire a afficher.")
 
-video_details = st.session_state.video_details
-df_comments = st.session_state.df_comments
-result_message = st.session_state.result_message
+            video_df = video_details_to_dataframe(video_details)
+            comments_df = df_comments if df_comments is not None else pd.DataFrame(columns=RESULT_COLUMNS)
+            export_col_1, export_col_2 = st.columns(2)
 
-if video_details is not None:
-    st.markdown("### 2. Informations video")
+            with export_col_1:
+                st.download_button(
+                    label="Telecharger le fichier texte",
+                    data=comments_to_txt_bytes(video_details, comments_df),
+                    file_name=st.session_state.txt_export_name,
+                    mime="text/plain",
+                )
 
-    meta_col_1, meta_col_2, meta_col_3 = st.columns(3)
-    with meta_col_1:
-        st.metric("Nom de la chaine", value=str(video_details.get("Nom de la chaine", "")) or "n/d")
-    with meta_col_2:
-        st.metric("Date de publication", value=str(video_details.get("Date de publication", "")) or "n/d")
-    with meta_col_3:
-        comments_count = video_details.get("Commentaires exposes par YouTube")
-        st.metric(
-            "Commentaires exposes",
-            value="desactives" if comments_count is None else str(comments_count),
-        )
+            with export_col_2:
+                st.download_button(
+                    label="Telecharger le fichier Excel",
+                    data=dataframes_to_excel_bytes(video_df, comments_df),
+                    file_name=st.session_state.xlsx_export_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
 
-    st.markdown(f"**Titre** : {video_details.get('Titre', '')}")
-    st.markdown(f"**URL** : {video_details.get('URL', '')}")
 
-    if result_message:
-        st.warning(result_message)
-
-    st.markdown("### 3. Resultats")
-
-    if df_comments is not None and not df_comments.empty:
-        st.success(f"{len(df_comments)} commentaire(s) recupere(s).")
-        st.dataframe(df_comments, use_container_width=True)
-    elif df_comments is not None:
-        st.info("Aucun commentaire a afficher.")
-
-    video_df = video_details_to_dataframe(video_details)
-    comments_df = df_comments if df_comments is not None else pd.DataFrame(columns=RESULT_COLUMNS)
-    export_col_1, export_col_2 = st.columns(2)
-
-    with export_col_1:
-        st.download_button(
-            label="Telecharger le fichier texte",
-            data=comments_to_txt_bytes(video_details, comments_df),
-            file_name=st.session_state.txt_export_name,
-            mime="text/plain",
-        )
-
-    with export_col_2:
-        st.download_button(
-            label="Telecharger le fichier Excel",
-            data=dataframes_to_excel_bytes(video_df, comments_df),
-            file_name=st.session_state.xlsx_export_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+render_application()
