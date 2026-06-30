@@ -1,0 +1,7 @@
+[server]
+headless = true
+fileWatcherType = "none"
+maxUploadSize = 4096
+
+[browser]
+gatherUsageStats = false
