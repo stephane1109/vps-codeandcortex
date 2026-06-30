@@ -196,7 +196,12 @@ RUN mkdir -p /home/app/.R \
     && chown -R app:app /home/app/.R
 
 COPY docker/requirements-python.txt /tmp/requirements-python.txt
-RUN pip install --upgrade pip setuptools wheel && pip install -r /tmp/requirements-python.txt
+# #### VPS / COOLIFY
+# On evite ici l'upgrade de pip/setuptools/wheel au build:
+# - cela n'ajoute aucune fonctionnalite a l'application
+# - cela augmente inutilement le volume telecharge et decompresse
+# - sur un builder Coolify deja charge, c'est un facteur de plantage supplementaire
+RUN python3 -m pip install --no-cache-dir --prefer-binary -r /tmp/requirements-python.txt
 
 WORKDIR /app
 
