@@ -5,7 +5,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import time
 import uuid
 import zipfile
@@ -129,10 +128,6 @@ def create_job_directory(jobs_dir: Path, base_name: str) -> Path:
     return job_dir
 
 
-def ffmpeg_available() -> bool:
-    return shutil.which("ffmpeg") is not None
-
-
 def pick_downloaded_video(job_dir: Path) -> Path:
     candidates = [
         path
@@ -218,36 +213,32 @@ def emotion_dominante_par_moyenne(emotions_list: list[dict[str, float]]) -> tupl
     return moyenne_emotions, emotion_dominante
 
 
-def extraire_images_25fps_ffmpeg(video_path: Path, images_dir: Path, seconde: int) -> list[Path]:
+def extraire_images_25fps(video_path: Path, images_dir: Path, seconde: int) -> list[Path]:
     images_extraites: list[Path] = []
-    for frame in range(25):
-        image_path = images_dir / f"image_25fps_{seconde}_{frame}.jpg"
-        if image_path.exists():
-            images_extraites.append(image_path)
-            continue
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise RuntimeError("Impossible d'ouvrir la video telechargee pour extraire les frames.")
 
-        sample_time = seconde + frame * (1 / 25)
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-ss",
-            str(sample_time),
-            "-i",
-            str(video_path),
-            "-frames:v",
-            "1",
-            "-q:v",
-            "2",
-            str(image_path),
-        ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Erreur FFmpeg a {sample_time:.2f} seconde(s) : {result.stderr.decode('utf-8', errors='ignore')}"
-            )
-        images_extraites.append(image_path)
+    try:
+        for frame in range(25):
+            image_path = images_dir / f"image_25fps_{seconde}_{frame}.jpg"
+            if image_path.exists():
+                images_extraites.append(image_path)
+                continue
+
+            sample_time_ms = (seconde + frame * (1 / 25)) * 1000
+            capture.set(cv2.CAP_PROP_POS_MSEC, sample_time_ms)
+            success, image = capture.read()
+            if not success or image is None:
+                raise RuntimeError(
+                    f"Impossible d'extraire la frame {frame} a {sample_time_ms / 1000:.2f} seconde(s)."
+                )
+            if not cv2.imwrite(str(image_path), image):
+                raise RuntimeError(f"Impossible d'ecrire l'image {image_path.name}.")
+            images_extraites.append(image_path)
+    finally:
+        capture.release()
+
     return images_extraites
 
 
@@ -416,7 +407,7 @@ def analyser_video(
 
     for seconde in range(start_time, end_time + 1):
         status(f"Analyse de la seconde {seconde}...")
-        images_25fps = extraire_images_25fps_ffmpeg(video_path, images_dir, seconde)
+        images_25fps = extraire_images_25fps(video_path, images_dir, seconde)
         images_data.append(images_25fps)
 
         emotions_25fps_list: list[dict[str, float]] = []
@@ -814,10 +805,6 @@ st.title("Vecteur emotionnel")
 st.caption(
     "Analyse emotionnelle d'une video YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
 )
-
-if not ffmpeg_available():
-    st.error("ffmpeg n'est pas disponible sur ce serveur. L'application ne peut pas extraire les frames.")
-    st.stop()
 
 st.info(
     "Cette version VPS gere automatiquement les repertoires de travail par session. "

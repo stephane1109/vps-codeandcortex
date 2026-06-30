@@ -17,7 +17,7 @@ Les adaptations principales sont :
 
 - stockage temporaire gere par session utilisateur
 - exports telechargeables sans demander un chemin local a l'utilisateur
-- conteneur Docker autonome avec `ffmpeg`
+- extraction video geree directement par `opencv-python-headless`
 - compatibilite Coolify via `PORT`, `STREAMLIT_SERVER_BASE_URL_PATH` et `APP_DATA_DIR`
 - bundle ZIP regroupant concordancier, tableaux, graphiques et images annotees
 
