@@ -28,6 +28,7 @@ PORT=8501
 STREAMLIT_SERVER_BASE_URL_PATH=
 APP_WORKDIR=/tmp/mp3-to-text
 WHISPER_CACHE_DIR=/home/app/.cache/whisper
+WHISPER_PROFILE_DEFAULT=faster-whisper
 WHISPER_COMPUTE_TYPE=int8
 REDIS_URL=redis://:motdepasse@nom-exact-du-service-redis:6379/0
 APP_TICKET_ID=mp3_to_text
@@ -46,6 +47,8 @@ APP_TICKET_ENFORCED=1
 - `REDIS_URL` doit contenir le nom exact du service Redis visible dans Coolify.
 - Si Redis exige un utilisateur ACL, utilise `redis://default:motdepasse@nom-exact-du-service-redis:6379/0`
 - Si l'application affiche `Controle d'acces temporairement indisponible`, la cause Redis exacte doit maintenant s'afficher juste en dessous dans l'interface.
+- `WHISPER_PROFILE_DEFAULT` permet de preselectionner `faster-whisper`, `sm` ou `md` dans l'application.
+- Le mode avance de l'application laisse toujours choisir directement `tiny`, `base`, `small`, `medium` ou `large`.
 
 ## 3. Healthcheck recommande
 
@@ -97,4 +100,4 @@ http://localhost:8501
 - Le premier lancement d'un modele Whisper est plus lent a cause du telechargement.
 - Le cache Whisper peut rester ephemere ou etre monte sur un volume si tu veux accelerer les redeploiements.
 - Aucune base de donnees n'est necessaire.
-- Cette version utilise maintenant `faster-whisper` en CPU pour eviter le poids de `torch` pendant le build Coolify.
+- Les choix visibles dans l'interface sont maintenant `faster-whisper`, `sm` et `md`, avec un mode avance si tu veux afficher les tailles Whisper classiques.

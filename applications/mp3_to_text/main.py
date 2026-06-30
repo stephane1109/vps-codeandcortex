@@ -23,12 +23,35 @@ APP_NAME = "MP3 to Text"
 DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=WDQqDOXAUIM"
 DEFAULT_LANGUAGE = "fr"
 DEFAULT_MODEL = "base"
+DEFAULT_PROFILE = (os.getenv("WHISPER_PROFILE_DEFAULT", "faster-whisper") or "faster-whisper").strip().lower()
 MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large"]
 UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
 WHISPER_MODEL_ALIASES = {
     "large": "large-v3",
+}
+MODEL_PROFILES = {
+    # #### PROFILS DE MODELES AFFICHES DANS L'APPLICATION
+    # L'utilisateur voit explicitement ces trois choix dans l'interface.
+    "faster-whisper": {
+        "backend": "faster-whisper",
+        "model_size": "base",
+        "label": "faster-whisper",
+        "description": "Profil rapide et leger, recommande par defaut sur le VPS.",
+    },
+    "sm": {
+        "backend": "faster-whisper",
+        "model_size": "small",
+        "label": "sm",
+        "description": "Modele small, meilleur compromis qualite/temps.",
+    },
+    "md": {
+        "backend": "faster-whisper",
+        "model_size": "medium",
+        "label": "md",
+        "description": "Modele medium, plus lourd mais souvent plus precis.",
+    },
 }
 
 
@@ -144,6 +167,25 @@ def transcrire_audio(audio_path: Path, model_size: str, language_code: str) -> s
     return text
 
 
+def resolve_model_profile(profile_key: str, advanced_mode: bool, advanced_model_size: str) -> tuple[str, str, str]:
+    normalized_key = (profile_key or DEFAULT_PROFILE).strip().lower()
+    if advanced_mode:
+        model_size = (advanced_model_size or DEFAULT_MODEL).strip().lower() or DEFAULT_MODEL
+        return "faster-whisper", model_size, f"avance ({model_size})"
+
+    profile = MODEL_PROFILES.get(normalized_key) or MODEL_PROFILES["faster-whisper"]
+    return (
+        str(profile["backend"]),
+        str(profile["model_size"]),
+        str(profile["label"]),
+    )
+
+
+def format_profile_option(profile_key: str) -> str:
+    profile = MODEL_PROFILES.get(profile_key, MODEL_PROFILES["faster-whisper"])
+    return f"{profile['label']} - {profile['description']}"
+
+
 def save_transcription(transcription_text: str, audio_path: Path) -> Path:
     output_path = audio_path.with_suffix(".txt")
     output_path.write_text(transcription_text, encoding="utf-8")
@@ -179,13 +221,14 @@ def run_transcription_with_progress(audio_path: Path, model_size: str, language_
 def build_sidebar_notes() -> None:
     with st.sidebar:
         st.header("Execution VPS")
-        st.caption("Le modele faster-whisper est telecharge au premier usage puis reutilise depuis le cache du conteneur.")
+        st.caption("Le modele choisi est telecharge au premier usage puis reutilise depuis le cache du conteneur.")
         st.markdown(
             "\n".join(
                 [
                     "- Source audio : YouTube ou fichier local",
-                    "- Backend : faster-whisper CPU",
-                    "- Modeles : tiny a large",
+                    "- Choix visibles : faster-whisper, sm, md",
+                    "- Mode avance : tiny, base, small, medium, large",
+                    "- Backend Docker : Whisper CPU compatible VPS",
                     "- Export final : transcription `.txt`",
                     "- Dossier temporaire : `APP_WORKDIR`",
                 ]
@@ -211,7 +254,8 @@ def main() -> None:
 
         - telecharger l'audio d'une video YouTube
         - importer un fichier audio local
-        - choisir la taille du modele Whisper
+        - choisir le profil visible `faster-whisper`, `sm` ou `md`
+        - garder un mode avance pour choisir directement `tiny`, `base`, `small`, `medium`, `large`
         - transcrire automatiquement en texte puis telecharger le resultat
         """
     )
@@ -232,12 +276,38 @@ def main() -> None:
             help="Formats conseilles : mp3, wav, m4a, mp4, webm.",
         )
 
-    model_size = st.selectbox("Choisissez la taille du modele Whisper", options=MODEL_OPTIONS, index=1)
+    profile_options = list(MODEL_PROFILES.keys())
+    default_profile = DEFAULT_PROFILE if DEFAULT_PROFILE in MODEL_PROFILES else "faster-whisper"
+    profile_index = profile_options.index(default_profile)
+    selected_profile = st.selectbox(
+        "Choisissez le profil de modele",
+        options=profile_options,
+        index=profile_index,
+        format_func=format_profile_option,
+        help="Choix visibles demandes dans l'application : faster-whisper, sm, md.",
+    )
+    advanced_mode = st.checkbox(
+        "Afficher le mode avance pour choisir directement tiny/base/small/medium/large",
+        value=False,
+    )
+    advanced_model_size = st.selectbox(
+        "Choisissez la taille exacte du modele Whisper",
+        options=MODEL_OPTIONS,
+        index=1,
+        disabled=not advanced_mode,
+    )
+    backend_name, model_size, resolved_profile = resolve_model_profile(
+        selected_profile,
+        advanced_mode,
+        advanced_model_size,
+    )
     language_code = st.text_input(
         "Code langue pour la transcription",
         value=DEFAULT_LANGUAGE,
         help="Exemple : fr, en, es. Laissez vide pour laisser Whisper detecter la langue.",
     )
+
+    st.caption(f"Profil actif : `{resolved_profile}` · Backend : `{backend_name}` · Modele charge : `{model_size}`")
 
     if st.button("Lancer la transcription", type="primary"):
         run_dir = create_run_directory()
@@ -264,6 +334,9 @@ def main() -> None:
                     "\n".join(
                         [
                             f"Audio : {audio_path}",
+                            f"Profil choisi : {selected_profile}",
+                            f"Profil resolu : {resolved_profile}",
+                            f"Backend : {backend_name}",
                             f"Transcription : {transcription_path}",
                             f"Modele : {model_size}",
                             f"Langue : {language_code or 'auto'}",

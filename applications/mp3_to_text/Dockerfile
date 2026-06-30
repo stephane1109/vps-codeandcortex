@@ -6,9 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
+    PORT=8501 \
     APP_WORKDIR=/tmp/mp3-to-text \
     XDG_CACHE_HOME=/home/app/.cache \
     WHISPER_CACHE_DIR=/home/app/.cache/whisper \
+    WHISPER_PROFILE_DEFAULT=faster-whisper \
+    WHISPER_COMPUTE_TYPE=int8 \
     APP_TICKET_ID=mp3_to_text \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
@@ -23,6 +26,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - ne pas definir APP_TICKET_DEFAULT_REDIS_URL dans cette application
 # - APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
 # - APP_TICKET_HIDDEN_RELEASE_SECONDS=0 pour desactiver, sinon liberation auto si onglet cache
+# - WHISPER_PROFILE_DEFAULT=faster-whisper pour choisir le profil par defaut visible dans l'application
+# - WHISPER_COMPUTE_TYPE=int8 pour le CPU, a augmenter seulement si le serveur suit
 # - APP_TICKET_MAX_ACTIVE pour autoriser plus d'un utilisateur
 # - APP_TICKET_COST pour ajuster la charge serveur
 # - APP_TICKET_TTL_SECONDS si une transcription peut durer longtemps
@@ -37,9 +42,10 @@ RUN apt-get update \
 
 COPY requirements.txt /app/requirements.txt
 
-# On evite ici openai-whisper + torch, trop lourds pour les builds Coolify
-# du VPS. faster-whisper CPU reduit fortement le risque de "No space left
-# on device" pendant l'installation.
+# #### BACKEND WHISPER INSTALLE DANS L'IMAGE
+# L'interface permet ensuite de choisir explicitement les profils
+# `faster-whisper`, `sm` et `md`, sans figer l'utilisateur dans un seul
+# modele visible.
 RUN pip install -r /app/requirements.txt
 
 COPY . /app
