@@ -256,7 +256,7 @@ def lire_stopwords_personnalises(value: str) -> set[str]:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Divergence Jensen-Shannon", page_icon="📊", layout="wide")
+    st.set_page_config(page_title="Divergence Jensen-Shannon", layout="wide")
     # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
     # Variables a personnaliser dans Coolify :
     # - REDIS_URL
