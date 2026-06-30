@@ -159,9 +159,30 @@ h1 {
     color: var(--couleur-secondaire);
 }
 
+.aide-rapide-regles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.aide-regle {
+    display: block;
+    padding: 12px 13px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(17, 17, 17, 0.08);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--couleur-secondaire);
+}
+
+.aide-regle strong {
+    color: var(--couleur-principale);
+}
+
 .aide-rapide-grille {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
 }
 
@@ -447,6 +468,10 @@ h1 {
     }
 
     .etat-serveur {
+        grid-template-columns: 1fr;
+    }
+
+    .aide-rapide-regles {
         grid-template-columns: 1fr;
     }
 
