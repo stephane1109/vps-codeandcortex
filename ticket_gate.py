@@ -121,6 +121,10 @@ TICKET_STATUS_STYLE = """
 .ticket-status-meta strong {
   color: #0f172a !important;
 }
+.ticket-status-card.is-active .ticket-status-meta,
+.ticket-status-card.is-active .ticket-status-meta * {
+  color: #15803d !important;
+}
 .ticket-status-card.is-active .ticket-status-meta strong {
   color: #15803d !important;
 }
