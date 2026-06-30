@@ -84,8 +84,8 @@
                 <article class="aide-rapide-carte">
                     <h3>États des applications</h3>
                     <p>
-                        Gris : l'application est libre. Gris avec la mention <strong>Mise a jour</strong> : le dashboard relit encore Redis.
-                        Orange : l'application est en cours d'utilisation ou une file d'attente existe.
+                        Carte gris clair + pastille verte : l'application est libre.
+                        Carte orange : l'application est en cours d'utilisation ou une file d'attente existe.
                     </p>
                 </article>
 
@@ -338,17 +338,6 @@
             const globalQueue = document.getElementById("global-queue");
             const globalServer = document.getElementById("global-server");
 
-            function markCardPending(card) {
-                const dot = card.querySelector("[data-status-dot]");
-                const label = card.querySelector("[data-status-label]");
-                const meta = card.querySelector("[data-status-meta]");
-                if (dot) dot.className = "pastille-etat indisponible";
-                if (label) label.textContent = "Mise a jour";
-                if (meta) meta.textContent = "Lecture des tickets...";
-                card.classList.remove("libre", "occupee", "attente", "indisponible");
-                card.classList.add("indisponible");
-            }
-
             function badgeClassFromState(state, queued) {
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
                 if (state === "busy" || state === "active") return "attente";
@@ -377,14 +366,8 @@
             }
 
             function markCardUnavailable(card) {
-                const dot = card.querySelector("[data-status-dot]");
-                const label = card.querySelector("[data-status-label]");
                 const meta = card.querySelector("[data-status-meta]");
-                if (dot) dot.className = "pastille-etat indisponible";
-                if (label) label.textContent = "Mise a jour";
-                if (meta) meta.textContent = "Synchronisation dashboard requise";
-                card.classList.remove("libre", "occupee", "attente", "indisponible");
-                card.classList.add("indisponible");
+                if (meta) meta.textContent = "Etat a verifier";
             }
 
             function decorateGlobal(payload) {
@@ -448,7 +431,6 @@
                 }
             }
 
-            cards.forEach(markCardPending);
             refreshDashboard();
             window.setInterval(refreshDashboard, 2000);
         })();

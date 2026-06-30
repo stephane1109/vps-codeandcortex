@@ -360,8 +360,8 @@ h1 {
 }
 
 .pastille-etat.libre {
-    background: #7c7c7c;
-    box-shadow: 0 0 0 4px rgba(124, 124, 124, 0.14);
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
 }
 
 .pastille-etat.occupee {
