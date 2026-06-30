@@ -92,6 +92,6 @@ http://localhost:8501
 ## 8. Notes d'exploitation
 
 - Le conteneur ecoute sur `0.0.0.0`.
-- `ffmpeg` est installe dans l'image Docker.
+- l'extraction video est geree directement par `opencv-python-headless`.
 - Les sessions sont nettoyees automatiquement selon `APP_SESSION_TTL_HOURS`.
 - Le bundle ZIP telechargeable contient les exports principaux et les images annotees.

@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.10-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -25,16 +25,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ffmpeg \
-        fonts-dejavu-core \
-        libgl1 \
-        libglib2.0-0 \
-        libgomp1 \
-        libsm6 \
-        libxext6 \
-    && rm -rf /var/lib/apt/lists/*
+# Build sans apt-get pour eviter les echecs de deploiement quand BuildKit
+# dispose de peu d'espace disque temporaire sur le VPS Coolify.
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
