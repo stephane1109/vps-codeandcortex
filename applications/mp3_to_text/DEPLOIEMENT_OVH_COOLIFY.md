@@ -96,3 +96,4 @@ http://localhost:8501
 - Le premier lancement d'un modele Whisper est plus lent a cause du telechargement.
 - Le cache Whisper peut rester ephemere ou etre monte sur un volume si tu veux accelerer les redeploiements.
 - Aucune base de donnees n'est necessaire.
+- Le `Dockerfile` force maintenant `torch` en version CPU pour eviter les gros paquets CUDA/NVIDIA qui bloquaient le build Coolify avec `No space left on device`.
