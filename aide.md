@@ -38,6 +38,7 @@ Important :
 - fermer l'onglet peut déclencher une libération automatique, mais ce n'est pas la méthode la plus sûre ;
 - la libération manuelle reste la bonne pratique ;
 - si un ticket n'est plus rafraîchi, il finit normalement par expirer automatiquement.
+- sur `IRaMuTeQ Lite`, le TTL par défaut est maintenant de `300` secondes, soit environ `5 minutes`.
 
 ## Pourquoi certaines applications n'acceptent qu'un seul utilisateur
 

@@ -18,7 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APP_TICKET_ID=iramuteq-lite \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
-    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_TTL_SECONDS=300 \
     APP_TICKET_MAX_WAITING=20 \
     APP_TICKET_WAIT_REFRESH_MS=10000 \
     APP_TICKET_HEARTBEAT_MS=30000 \
@@ -28,7 +28,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - REDIS_URL
 # - APP_TICKET_MAX_ACTIVE=1 pour conserver l'exclusivite
 # - APP_TICKET_COST selon la charge reelle du VPS
-# - APP_TICKET_TTL_SECONDS si une analyse peut durer longtemps
+# - APP_TICKET_TTL_SECONDS=300 par defaut, soit 5 minutes avant expiration
+#   automatique si le ticket n'est plus rafraichi
 # - IRAMUTEQ_R_LIBS_USER=/data/app/r-library pour conserver
 #   les packages R installes au runtime dans le volume persistant Coolify
 # - IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages pour conserver

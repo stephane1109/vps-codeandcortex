@@ -39,6 +39,7 @@ Variables d'environnement a regler dans Coolify si besoin :
 
 - APP_TICKET_TTL_SECONDS
   Duree de vie du ticket si le frontend ne fait plus de heartbeat.
+  Par defaut sur IRaMuTeQ Lite VPS : 300 secondes, soit 5 minutes.
 
 - APP_TICKET_MAX_WAITING
   Taille maximale de la file d'attente.
@@ -83,7 +84,7 @@ def _config(default_app_id: str = "iramuteq-lite", app_label: str = "IRaMuTeQ Li
         "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 1)),
         "cost": max(0, _env_int("APP_TICKET_COST", 4)),
         "global_capacity": max(1, _env_int("CAPACITE_SERVEUR", 6)),
-        "ttl_seconds": max(60, _env_int("APP_TICKET_TTL_SECONDS", 3600)),
+        "ttl_seconds": max(60, _env_int("APP_TICKET_TTL_SECONDS", 300)),
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
         "heartbeat_ms": max(15000, _env_int("APP_TICKET_HEARTBEAT_MS", 30000)),

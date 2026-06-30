@@ -67,7 +67,7 @@ APP_TICKET_ID=iramuteq-lite
 APP_TICKET_MAX_ACTIVE=1
 APP_TICKET_COST=4
 CAPACITE_SERVEUR=6
-APP_TICKET_TTL_SECONDS=3600
+APP_TICKET_TTL_SECONDS=300
 APP_TICKET_MAX_WAITING=20
 APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=30000
@@ -88,6 +88,17 @@ La configuration recommandee est maintenant :
 
 Dans ce mode, l'image arrive normalement prete et l'application ne doit plus rester bloquee au premier clic sur le controle des dependances.
 Si vous repassez a `IRAMUTEQ_BUILD_BOOTSTRAP=0`, l'application retombera sur une installation complementaire au premier lancement. Le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
+
+## TTL ticket utilisateur
+
+Par defaut, `APP_TICKET_TTL_SECONDS=300`, soit 5 minutes.
+
+Cela veut dire :
+
+- si l'utilisateur ferme brutalement l'onglet ;
+- ou si le navigateur ne reussit pas a envoyer la liberation finale ;
+- le ticket Redis d'IRaMuTeQ Lite expirera automatiquement au bout d'environ 5 minutes
+  s'il n'est plus rafraichi.
 
 ## Pourquoi ce choix
 
