@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appli VPS Code & Cortex</title>
+
+    <meta name="description" content="Applications hébergées sur le VPS CodeandCortex.">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-HRHJCYTP4N"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-HRHJCYTP4N');
+    </script>
+</head>
+
+<body
+    data-dashboard-endpoint="/api/tickets/dashboard"
+    data-local-pending-ms="15000"
+    data-local-fallback-ms="300000"
+>
+    <main class="page">
+
+        <header class="entete">
+            <div class="bloc-titre">
+                <p class="sur-titre">Serveur VPS</p>
+                <h1>Appli VPS Code & Cortex</h1>
+                <p class="description">
+                    Tableau de bord des applications d’analyse textuelle, statistique hébergées sur le serveur Code & Cortex.
+                </p>
+            </div>
+
+            <div class="actions-entete">
+                <a href="/aide.md" class="lien-aide" target="_blank" rel="noopener noreferrer">
+                    Aide d'utilisation
+                </a>
+                <a href="https://www.codeandcortex.fr" class="lien-site" target="_blank" rel="noopener noreferrer">
+                    www.codeandcortex.fr
+                </a>
+            </div>
+        </header>
+
+        <section class="etat-serveur" aria-label="État du serveur">
+            <div class="indicateur">
+                <span class="label">Sessions actives</span>
+                <span class="valeur" id="global-active">0 · charge 0/0</span>
+            </div>
+
+            <div class="indicateur">
+                <span class="label">File d’attente</span>
+                <span class="valeur" id="global-queue">0</span>
+            </div>
+
+            <div class="indicateur">
+                <span class="label">Serveur de calcul</span>
+                <span class="valeur" id="global-server">Initialisation</span>
+            </div>
+        </section>
+
+        <section class="aide-rapide" aria-label="Aide rapide du tableau de bord">
+            <div class="aide-rapide-intro">
+                <p class="aide-rapide-surtitre">Aide rapide</p>
+                <h2 class="aide-rapide-titre">Comprendre la file d'attente et la charge serveur</h2>
+                <p class="aide-rapide-description">
+                    Certaines applications réservent un ticket utilisateur et consomment une partie de la capacité totale du VPS.
+                    Quand vous avez terminé, pensez à libérer l'accès dans l'application pour laisser la place au suivant.
+                    Les cartes restent volontairement neutres en gris/blanc.
+                    Seules les pastilles indiquent l'etat de disponibilité ou d'attente.
+                    Trois delais sont a retenir : le rafraichissement de la page, l'expiration du ticket et la liberation automatique en cas d'inactivite.
+                </p>
+            </div>
+
+            <div class="aide-rapide-regles" aria-label="Regles principales">
+                <span class="aide-regle"><strong>Libération :</strong> Pensez à cliquer sur <strong>Libérer l'accès</strong> à la fin. C'est aussi simple que de penser à ferme sa porte d'entrée quand on quitte son appartement !</span>
+                <span class="aide-regle"><strong>Rafraîchissement :</strong> la page relit automatiquement les tickets toutes les quelques secondes pour mettre a jour les pastilles.</span>
+                <span class="aide-regle"><strong>TTL ticket :</strong> un ticket non rafraîchi expire en général après <strong>5 minutes</strong>.</span>
+                <span class="aide-regle"><strong>Inactivité :</strong> certaines grosses applis se libèrent après environ <strong>15 minutes</strong> sans action.</span>
+            </div>
+
+            <div class="aide-rapide-grille">
+                <article class="aide-rapide-carte">
+                    <h3>États des applications</h3>
+                    <p>
+                        Carte gris/blanc + icone orange + texte noir : apparence normale.
+                        La pastille seule devient verte, orange, rouge ou grise selon l'etat.
+                    </p>
+                </article>
+
+                <article class="aide-rapide-carte">
+                    <h3>Délais automatiques</h3>
+                    <p>
+                        Si un ticket n'est plus rafraîchi, il expire en général au bout d'environ <strong>5 minutes</strong>.
+                        Si un onglet reste ouvert sans interaction, certaines grosses applications peuvent aussi se libérer après environ <strong>15 minutes d'inactivité</strong>.
+                    </p>
+                </article>
+
+                <article class="aide-rapide-carte">
+                    <h3>File d'attente</h3>
+                    <p>
+                        Si l'application est déjà occupée, la position d'attente s'affiche dans l'application.
+                        Gardez l'onglet ouvert jusqu'à l'obtention du ticket.
+                    </p>
+                </article>
+
+            </div>
+
+            <a href="/aide.md" class="aide-rapide-lien" target="_blank" rel="noopener noreferrer">
+                Lire l'aide complète
+            </a>
+        </section>
+
+        <section class="grille-applications" aria-label="Applications disponibles">
+
+            <a href="https://europresse.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="europresse-to-iramuteq">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+               <i class="icone fas fa-file-export"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Europresse → IRaMuTeQ</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Conversion d’exports Europresse vers un corpus compatible avec IRaMuTeQ.</span>
+                </span>
+            </a>
+
+            <a href="https://multimedia.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="extraction-multimedia">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-photo-film"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Extraction Multimédia</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Pour extraire des fichiers images, mp4, mp3 depuis une vidéo YouTube.</span>
+                </span>
+            </a>
+
+            <a href="https://extractcommentyoutube.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="extract_comments_youtube">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-file-export"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Extraction commentaires YouTube</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Extraire les commentaires YouTube avec clé API Google obligatoire.</span>
+                </span>
+            </a>
+
+            <a href="https://scrapingreddit.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="scraping_reddit">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-diagram-project"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Scraper Reddit</span>
+                    <span class="meta-application" data-status-meta>0 / 3 actif · 0 attente</span>
+                    <span class="description-application">Scraper les posts Reddit.</span>
+                </span>
+            </a>
+
+            <a href="https://infosyoutube.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="Extraction_infos_YouTube">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-diagram-project"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Réseau de vidéo YouTube</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Scraper les informations d’une chaîne YouTube.</span>
+                </span>
+            </a>
+
+            <a href="https://speechtotext.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="mp3_to_text">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-file-export"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Speech to text</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Conversion de fichier mp3 en texte avec Whisper.</span>
+                </span>
+            </a>
+
+            <a href="https://cooccurrences.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="analyse_cooccurrences">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-ticket"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Cooccurrences</span>
+                    <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
+                    <span class="description-application">Cooccurrences à partir d’un mot clé.</span>
+                </span>
+            </a>
+
+            <a href="https://wikipedia.codeandcortex.fr" class="carte-application libre" target="_blank">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-file-export"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Scrapper Wikipedia</span>
+                    <span class="meta-application">Scrapper Wikipedia</span>
+                    <span class="description-application">Scrapper Wikipedia</span>
+                </span>
+            </a>
+
+            <a href="https://connectors.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="symbolic_connectors">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-pie"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Symbolic connectors</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Pour tester les discours algorithmiques des IA génératives.</span>
+                </span>
+            </a>
+
+            <a href="https://vecteuremotionnel.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="vecteur-emotionnel">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-pie"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Vecteur émotionnel</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Analyse émotionnelle multimodale à forte charge serveur.</span>
+                </span>
+            </a>
+
+            <a href="https://multimodales.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="Analyses_multi_modales">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-pie"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Analyses multimodales</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Analyse multimodale de la temporalité à partir de texte, audio et images.</span>
+                </span>
+            </a>
+
+            <a href="https://iramuteqlite.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="iramuteq-lite">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-pie"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">IRaMuTeQ Lite</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">CHD, AFC et test LDA avec limitation recommandée à un calcul lourd simultané.</span>
+                </span>
+            </a>
+
+            <a href="https://stopmotion.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="stopmotion_opticalflow">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-photo-film"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">StopMotion</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Extraction et génération stopmotion avec traitement vidéo coûteux.</span>
+                </span>
+            </a>
+
+            <a href="https://djs.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="divergence-jensen-shannon">
+                <span class="ruban-statut">
+                    <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
+                    <span class="statut" data-status-label>Libre</span>
+                </span>
+                <i class="icone fas fa-chart-area"></i>
+                <span class="contenu-carte">
+                    <span class="titre-application">Divergence Jensen-Shannon</span>
+                    <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
+                    <span class="description-application">Comparer deux textes à partir de la divergence de Jensen-Shannon.</span>
+                </span>
+            </a>
+
+        </section>
+
+        <p class="pied" id="dashboard-note">
+            Les cartes restent neutres en gris/blanc avec icones orange et texte noir. Seules les pastilles changent selon l'etat.
+        </p>
+
+    </main>
+
+    <script>
+        (function () {
+            const body = document.body;
+            const endpoint = body.dataset.dashboardEndpoint || "/api/tickets/dashboard";
+            const localPendingMs = Math.max(5000, Number.parseInt(body.dataset.localPendingMs || "15000", 10) || 15000);
+            const localFallbackMs = Math.max(localPendingMs, Number.parseInt(body.dataset.localFallbackMs || "300000", 10) || 300000);
+            const localStorageKey = "codeandcortex-dashboard-local-tickets";
+            const cards = Array.from(document.querySelectorAll("[data-app-id]"));
+            const appIds = cards.map((card) => card.dataset.appId).filter(Boolean);
+            const note = document.getElementById("dashboard-note");
+            const globalActive = document.getElementById("global-active");
+            const globalQueue = document.getElementById("global-queue");
+            const globalServer = document.getElementById("global-server");
+
+            function safeParseJson(value) {
+                try {
+                    return JSON.parse(value);
+                } catch (error) {
+                    return {};
+                }
+            }
+
+            function readLocalTickets() {
+                return safeParseJson(window.localStorage.getItem(localStorageKey) || "{}");
+            }
+
+            function writeLocalTickets(payload) {
+                window.localStorage.setItem(localStorageKey, JSON.stringify(payload));
+            }
+
+            function cleanupLocalTickets() {
+                const now = Date.now();
+                const payload = readLocalTickets();
+                let dirty = false;
+
+                Object.entries(payload).forEach(([appId, item]) => {
+                    const expiresAt = Number(item && item.expiresAt || 0);
+                    if (!expiresAt || expiresAt <= now) {
+                        delete payload[appId];
+                        dirty = true;
+                    }
+                });
+
+                if (dirty) {
+                    writeLocalTickets(payload);
+                }
+
+                return payload;
+            }
+
+            function getLocalTicket(appId) {
+                const payload = cleanupLocalTickets();
+                return payload[appId] || null;
+            }
+
+            function setLocalTicket(appId) {
+                const payload = cleanupLocalTickets();
+                const now = Date.now();
+                payload[appId] = {
+                    pendingUntil: now + localPendingMs,
+                    expiresAt: now + localFallbackMs,
+                };
+                writeLocalTickets(payload);
+            }
+
+            function clearLocalTicket(appId) {
+                const payload = readLocalTickets();
+                if (!payload[appId]) return;
+                delete payload[appId];
+                writeLocalTickets(payload);
+            }
+
+            function extractMaxActive(card) {
+                const meta = card.querySelector("[data-status-meta]");
+                const text = meta ? meta.textContent || "" : "";
+                const match = text.match(/\/\s*(\d+)/);
+                return match ? Math.max(1, Number.parseInt(match[1], 10) || 1) : 1;
+            }
+
+            function isUnavailableState(state) {
+                return state === "unavailable" || state === "degraded";
+            }
+
+            function isBusyState(state, active, queued) {
+                if ((queued || 0) > 0) return true;
+                if ((active || 0) > 0) return true;
+                return state === "busy" || state === "active" || state === "queued" || state === "full";
+            }
+
+            function badgeClassFromState(state, queued) {
+                if (isUnavailableState(state)) return "indisponible";
+                if (queued > 0 || state === "queued" || state === "full") return "attente";
+                if (state === "busy" || state === "active") return "attente";
+                return "libre";
+            }
+
+            function labelFromState(state, queued) {
+                if (isUnavailableState(state)) return "Synchronisation";
+                if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
+                if (state === "busy" || state === "active") return "En cours";
+                return "Libre";
+            }
+
+            function buildLocalPayload(card) {
+                return {
+                    state: "busy",
+                    stateLabel: "Ouverture",
+                    active: 1,
+                    maxActive: extractMaxActive(card),
+                    queued: 0,
+                    metaText: "Ouverture en cours...",
+                };
+            }
+
+            function resolvePayload(card, payload) {
+                const appId = card.dataset.appId;
+                const localTicket = appId ? getLocalTicket(appId) : null;
+
+                if (payload && !isUnavailableState(payload.state)) {
+                    if (isBusyState(payload.state, payload.active, payload.queued)) {
+                        clearLocalTicket(appId);
+                        return payload;
+                    }
+                    if (localTicket && Date.now() < Number(localTicket.pendingUntil || 0)) {
+                        return buildLocalPayload(card);
+                    }
+                    clearLocalTicket(appId);
+                    return payload;
+                }
+
+                if (localTicket) {
+                    return buildLocalPayload(card);
+                }
+
+                return null;
+            }
+
+            function decorateCard(card, payload) {
+                const dot = card.querySelector("[data-status-dot]");
+                const label = card.querySelector("[data-status-label]");
+                const meta = card.querySelector("[data-status-meta]");
+                if (!dot || !label || !meta || !payload) return;
+
+                const stateClass = badgeClassFromState(payload.state, payload.queued || 0);
+                dot.className = "pastille-etat " + stateClass;
+                label.textContent = payload.stateLabel || labelFromState(payload.state, payload.queued || 0);
+                meta.textContent = payload.metaText || `${payload.active || 0} / ${payload.maxActive || 0} actif · ${payload.queued || 0} attente`;
+
+                card.classList.remove("libre", "occupee", "attente", "indisponible");
+                card.classList.add(stateClass);
+            }
+
+            function applyLocalFallbackStates() {
+                cards.forEach((card) => {
+                    const appId = card.dataset.appId;
+                    if (!appId || !getLocalTicket(appId)) return;
+                    decorateCard(card, buildLocalPayload(card));
+                });
+            }
+
+            function decorateGlobal(payload) {
+                if (!payload) return;
+
+                globalActive.textContent = `${payload.activeUsers || 0} · charge ${payload.activeLoad || 0}/${payload.maxLoad || 0}`;
+                globalQueue.textContent = `${payload.totalQueued || 0}`;
+                globalServer.textContent = payload.serverLabel || "Disponible";
+            }
+
+            function applyDashboard(payload) {
+                if (!payload || typeof payload !== "object") return;
+                decorateGlobal(payload.global || null);
+
+                cards.forEach((card) => {
+                    const appId = card.dataset.appId;
+                    const appPayload = payload.apps && payload.apps[appId];
+                    const resolvedPayload = resolvePayload(card, appPayload);
+                    if (resolvedPayload) {
+                        decorateCard(card, resolvedPayload);
+                    }
+                });
+
+                if (note) {
+                    if (payload.global && payload.global.serverState === "degraded") {
+                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et met a jour la pastille d'une application que vous venez d'ouvrir.";
+                    } else {
+                        note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
+                    }
+                }
+            }
+
+            function markDashboardUnavailable(message) {
+                globalServer.textContent = "Synchronisation indisponible";
+                applyLocalFallbackStates();
+                if (note) {
+                    note.textContent = message || "API dashboard indisponible pour le moment.";
+                }
+            }
+
+            async function refreshDashboard() {
+                if (!appIds.length) return;
+
+                const url = new URL(endpoint, window.location.origin);
+                url.searchParams.set("applications", appIds.join(","));
+
+                try {
+                    const response = await fetch(url.toString(), {
+                        headers: { "Accept": "application/json" },
+                        cache: "no-store",
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    applyDashboard(payload);
+                } catch (error) {
+                    markDashboardUnavailable("API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.");
+                }
+            }
+
+            cards.forEach((card) => {
+                card.addEventListener("click", () => {
+                    const appId = card.dataset.appId;
+                    if (!appId) return;
+                    setLocalTicket(appId);
+                    decorateCard(card, buildLocalPayload(card));
+                    window.setTimeout(refreshDashboard, 1200);
+                });
+            });
+
+            window.addEventListener("storage", () => {
+                refreshDashboard();
+            });
+
+            window.addEventListener("focus", () => {
+                refreshDashboard();
+            });
+
+            refreshDashboard();
+            window.setInterval(refreshDashboard, 2000);
+        })();
+    </script>
+</body>
+</html>
