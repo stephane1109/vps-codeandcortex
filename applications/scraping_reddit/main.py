@@ -13,6 +13,7 @@ from pathlib import Path
 import praw
 import streamlit as st
 from langdetect import DetectorFactory, LangDetectException, detect
+from ticket_gate import enforce_streamlit_access
 
 DetectorFactory.seed = 0
 
@@ -136,6 +137,7 @@ def generer_fichier_txt(resultats):
 
 # Interface utilisateur Streamlit
 st.set_page_config(page_title="Scraping Reddit", layout="wide")
+enforce_streamlit_access("scraping_reddit", "Scraper Reddit")
 initialiser_etat()
 
 st.title("Scraper Reddit : posts et commentaires en français")

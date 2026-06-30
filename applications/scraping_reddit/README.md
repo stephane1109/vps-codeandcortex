@@ -11,12 +11,17 @@ Application Streamlit pour rechercher des posts Reddit recents a partir d'un mot
 - filtrage francophone sur les posts et les commentaires
 - apercu des premiers resultats
 - export `.txt` complet
+- controle d'acces Redis avec bouton `Liberer l'acces` dans la sidebar
 
 ## Variables d'environnement optionnelles
 
 - `REDDIT_CLIENT_ID`
 - `REDDIT_CLIENT_SECRET`
 - `REDDIT_USER_AGENT`
+- `REDIS_URL`
+- `APP_TICKET_ID=scraping_reddit`
+- `APP_TICKET_MAX_ACTIVE`
+- `APP_TICKET_RELEASE_URL`
 
 Ces variables sont optionnelles et n'enlevent pas la saisie manuelle dans l'interface.
 
