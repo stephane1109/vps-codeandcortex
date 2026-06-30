@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import time
 import uuid
 import zipfile
@@ -14,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import altair as alt
 import cv2
+import imageio_ffmpeg
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -128,6 +130,24 @@ def create_job_directory(jobs_dir: Path, base_name: str) -> Path:
     return job_dir
 
 
+def ffmpeg_binary() -> str:
+    system_binary = shutil.which("ffmpeg")
+    if system_binary:
+        return system_binary
+
+    try:
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as exc:
+        raise RuntimeError(f"Impossible de localiser ffmpeg dans le conteneur : {exc}") from exc
+
+
+def ffmpeg_available() -> bool:
+    try:
+        return bool(ffmpeg_binary())
+    except Exception:
+        return False
+
+
 def pick_downloaded_video(job_dir: Path) -> Path:
     candidates = [
         path
@@ -215,29 +235,35 @@ def emotion_dominante_par_moyenne(emotions_list: list[dict[str, float]]) -> tupl
 
 def extraire_images_25fps(video_path: Path, images_dir: Path, seconde: int) -> list[Path]:
     images_extraites: list[Path] = []
-    capture = cv2.VideoCapture(str(video_path))
-    if not capture.isOpened():
-        raise RuntimeError("Impossible d'ouvrir la video telechargee pour extraire les frames.")
-
-    try:
-        for frame in range(25):
-            image_path = images_dir / f"image_25fps_{seconde}_{frame}.jpg"
-            if image_path.exists():
-                images_extraites.append(image_path)
-                continue
-
-            sample_time_ms = (seconde + frame * (1 / 25)) * 1000
-            capture.set(cv2.CAP_PROP_POS_MSEC, sample_time_ms)
-            success, image = capture.read()
-            if not success or image is None:
-                raise RuntimeError(
-                    f"Impossible d'extraire la frame {frame} a {sample_time_ms / 1000:.2f} seconde(s)."
-                )
-            if not cv2.imwrite(str(image_path), image):
-                raise RuntimeError(f"Impossible d'ecrire l'image {image_path.name}.")
+    ffmpeg_exe = ffmpeg_binary()
+    for frame in range(25):
+        image_path = images_dir / f"image_25fps_{seconde}_{frame}.jpg"
+        if image_path.exists():
             images_extraites.append(image_path)
-    finally:
-        capture.release()
+            continue
+
+        sample_time = seconde + frame * (1 / 25)
+        cmd = [
+            ffmpeg_exe,
+            "-y",
+            "-loglevel",
+            "error",
+            "-ss",
+            str(sample_time),
+            "-i",
+            str(video_path),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(image_path),
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Erreur FFmpeg a {sample_time:.2f} seconde(s) : {result.stderr.decode('utf-8', errors='ignore')}"
+            )
+        images_extraites.append(image_path)
 
     return images_extraites
 
