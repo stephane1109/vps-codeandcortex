@@ -21,7 +21,11 @@
     </script>
 </head>
 
-<body data-dashboard-endpoint="/api/tickets/dashboard">
+<body
+    data-dashboard-endpoint="/api/tickets/dashboard"
+    data-local-pending-ms="15000"
+    data-local-fallback-ms="300000"
+>
     <main class="page">
 
         <header class="entete">
@@ -126,6 +130,7 @@
                     <p>
                         Le dashboard met à jour automatiquement l'état des cartes.
                         Si une carte semble bloquée, rechargez la page pour relire immédiatement l'état courant.
+                        En cas de micro-coupure de synchronisation, l'ouverture d'une application colore quand meme la carte en orange.
                     </p>
                 </article>
             </div>
@@ -331,6 +336,9 @@
         (function () {
             const body = document.body;
             const endpoint = body.dataset.dashboardEndpoint || "/api/tickets/dashboard";
+            const localPendingMs = Math.max(5000, Number.parseInt(body.dataset.localPendingMs || "15000", 10) || 15000);
+            const localFallbackMs = Math.max(localPendingMs, Number.parseInt(body.dataset.localFallbackMs || "300000", 10) || 300000);
+            const localStorageKey = "codeandcortex-dashboard-local-tickets";
             const cards = Array.from(document.querySelectorAll("[data-app-id]"));
             const appIds = cards.map((card) => card.dataset.appId).filter(Boolean);
             const note = document.getElementById("dashboard-note");
@@ -338,16 +346,127 @@
             const globalQueue = document.getElementById("global-queue");
             const globalServer = document.getElementById("global-server");
 
+            function safeParseJson(value) {
+                try {
+                    return JSON.parse(value);
+                } catch (error) {
+                    return {};
+                }
+            }
+
+            function readLocalTickets() {
+                return safeParseJson(window.localStorage.getItem(localStorageKey) || "{}");
+            }
+
+            function writeLocalTickets(payload) {
+                window.localStorage.setItem(localStorageKey, JSON.stringify(payload));
+            }
+
+            function cleanupLocalTickets() {
+                const now = Date.now();
+                const payload = readLocalTickets();
+                let dirty = false;
+
+                Object.entries(payload).forEach(([appId, item]) => {
+                    const expiresAt = Number(item && item.expiresAt || 0);
+                    if (!expiresAt || expiresAt <= now) {
+                        delete payload[appId];
+                        dirty = true;
+                    }
+                });
+
+                if (dirty) {
+                    writeLocalTickets(payload);
+                }
+
+                return payload;
+            }
+
+            function getLocalTicket(appId) {
+                const payload = cleanupLocalTickets();
+                return payload[appId] || null;
+            }
+
+            function setLocalTicket(appId) {
+                const payload = cleanupLocalTickets();
+                const now = Date.now();
+                payload[appId] = {
+                    pendingUntil: now + localPendingMs,
+                    expiresAt: now + localFallbackMs,
+                };
+                writeLocalTickets(payload);
+            }
+
+            function clearLocalTicket(appId) {
+                const payload = readLocalTickets();
+                if (!payload[appId]) return;
+                delete payload[appId];
+                writeLocalTickets(payload);
+            }
+
+            function extractMaxActive(card) {
+                const meta = card.querySelector("[data-status-meta]");
+                const text = meta ? meta.textContent || "" : "";
+                const match = text.match(/\/\s*(\d+)/);
+                return match ? Math.max(1, Number.parseInt(match[1], 10) || 1) : 1;
+            }
+
+            function isUnavailableState(state) {
+                return state === "unavailable" || state === "degraded";
+            }
+
+            function isBusyState(state, active, queued) {
+                if ((queued || 0) > 0) return true;
+                if ((active || 0) > 0) return true;
+                return state === "busy" || state === "active" || state === "queued" || state === "full";
+            }
+
             function badgeClassFromState(state, queued) {
+                if (isUnavailableState(state)) return "indisponible";
                 if (queued > 0 || state === "queued" || state === "full") return "attente";
                 if (state === "busy" || state === "active") return "attente";
                 return "libre";
             }
 
             function labelFromState(state, queued) {
+                if (isUnavailableState(state)) return "Synchronisation";
                 if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
                 if (state === "busy" || state === "active") return "En cours";
                 return "Libre";
+            }
+
+            function buildLocalPayload(card) {
+                return {
+                    state: "busy",
+                    stateLabel: "Ouverture",
+                    active: 1,
+                    maxActive: extractMaxActive(card),
+                    queued: 0,
+                    metaText: "Ouverture en cours...",
+                };
+            }
+
+            function resolvePayload(card, payload) {
+                const appId = card.dataset.appId;
+                const localTicket = appId ? getLocalTicket(appId) : null;
+
+                if (payload && !isUnavailableState(payload.state)) {
+                    if (isBusyState(payload.state, payload.active, payload.queued)) {
+                        clearLocalTicket(appId);
+                        return payload;
+                    }
+                    if (localTicket && Date.now() < Number(localTicket.pendingUntil || 0)) {
+                        return buildLocalPayload(card);
+                    }
+                    clearLocalTicket(appId);
+                    return payload;
+                }
+
+                if (localTicket) {
+                    return buildLocalPayload(card);
+                }
+
+                return null;
             }
 
             function decorateCard(card, payload) {
@@ -359,15 +478,18 @@
                 const stateClass = badgeClassFromState(payload.state, payload.queued || 0);
                 dot.className = "pastille-etat " + stateClass;
                 label.textContent = payload.stateLabel || labelFromState(payload.state, payload.queued || 0);
-                meta.textContent = `${payload.active || 0} / ${payload.maxActive || 0} actif · ${payload.queued || 0} attente`;
+                meta.textContent = payload.metaText || `${payload.active || 0} / ${payload.maxActive || 0} actif · ${payload.queued || 0} attente`;
 
                 card.classList.remove("libre", "occupee", "attente", "indisponible");
                 card.classList.add(stateClass);
             }
 
-            function markCardUnavailable(card) {
-                const meta = card.querySelector("[data-status-meta]");
-                if (meta) meta.textContent = "Etat a verifier";
+            function applyLocalFallbackStates() {
+                cards.forEach((card) => {
+                    const appId = card.dataset.appId;
+                    if (!appId || !getLocalTicket(appId)) return;
+                    decorateCard(card, buildLocalPayload(card));
+                });
             }
 
             function decorateGlobal(payload) {
@@ -385,16 +507,15 @@
                 cards.forEach((card) => {
                     const appId = card.dataset.appId;
                     const appPayload = payload.apps && payload.apps[appId];
-                    if (appPayload) {
-                        decorateCard(card, appPayload);
-                    } else {
-                        markCardUnavailable(card);
+                    const resolvedPayload = resolvePayload(card, appPayload);
+                    if (resolvedPayload) {
+                        decorateCard(card, resolvedPayload);
                     }
                 });
 
                 if (note) {
                     if (payload.global && payload.global.serverState === "degraded") {
-                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : les cartes restent visibles, mais l'etat reel peut prendre un peu de retard.";
+                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et colore en orange une application que vous venez d'ouvrir.";
                     } else {
                         note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
                     }
@@ -403,6 +524,7 @@
 
             function markDashboardUnavailable(message) {
                 globalServer.textContent = "Synchronisation indisponible";
+                applyLocalFallbackStates();
                 if (note) {
                     note.textContent = message || "API dashboard indisponible pour le moment.";
                 }
@@ -430,6 +552,24 @@
                     markDashboardUnavailable("API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.");
                 }
             }
+
+            cards.forEach((card) => {
+                card.addEventListener("click", () => {
+                    const appId = card.dataset.appId;
+                    if (!appId) return;
+                    setLocalTicket(appId);
+                    decorateCard(card, buildLocalPayload(card));
+                    window.setTimeout(refreshDashboard, 1200);
+                });
+            });
+
+            window.addEventListener("storage", () => {
+                refreshDashboard();
+            });
+
+            window.addEventListener("focus", () => {
+                refreshDashboard();
+            });
 
             refreshDashboard();
             window.setInterval(refreshDashboard, 2000);
