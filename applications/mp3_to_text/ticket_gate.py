@@ -91,6 +91,7 @@ TICKET_STATUS_STYLE = """
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(248, 250, 252, 0.96);
+  color: #0f172a !important;
 }
 .ticket-status-dot {
   width: 0.8rem;
@@ -115,6 +116,22 @@ TICKET_STATUS_STYLE = """
 .ticket-status-meta {
   font-size: 0.84rem;
   line-height: 1.35;
+  color: #0f172a !important;
+}
+.ticket-status-meta strong {
+  color: #0f172a !important;
+}
+.ticket-status-card.is-active .ticket-status-meta strong {
+  color: #15803d !important;
+}
+.ticket-status-card.is-waiting .ticket-status-meta strong {
+  color: #b45309 !important;
+}
+.ticket-status-card.is-error .ticket-status-meta strong {
+  color: #b91c1c !important;
+}
+.ticket-status-card.is-released .ticket-status-meta strong {
+  color: #475569 !important;
 }
 @keyframes ticket-pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
@@ -572,7 +589,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         if snapshot["statut"] == "actif":
             st.markdown(
                 f"""
-                <div class="ticket-status-card">
+                <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
                   <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
                 </div>
@@ -588,7 +605,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
             position = snapshot["position"] or "?"
             st.markdown(
                 f"""
-                <div class="ticket-status-card">
+                <div class="ticket-status-card is-waiting">
                   <span class="ticket-status-dot is-waiting"></span>
                   <div class="ticket-status-meta"><strong>Application occupee</strong><br>Position actuelle dans la file : {position}.</div>
                 </div>
@@ -599,7 +616,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         elif snapshot["statut"] == "refuse":
             st.markdown(
                 """
-                <div class="ticket-status-card">
+                <div class="ticket-status-card is-error">
                   <span class="ticket-status-dot is-error"></span>
                   <div class="ticket-status-meta"><strong>File d'attente pleine</strong><br>Impossible d'ajouter un nouvel utilisateur pour le moment.</div>
                 </div>
@@ -610,7 +627,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         elif snapshot["statut"] == "released":
             st.markdown(
                 """
-                <div class="ticket-status-card">
+                <div class="ticket-status-card is-released">
                   <span class="ticket-status-dot is-released"></span>
                   <div class="ticket-status-meta"><strong>Acces libere</strong><br>Cette page n'occupe plus l'application.</div>
                 </div>
@@ -624,7 +641,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         else:
             st.markdown(
                 """
-                <div class="ticket-status-card">
+                <div class="ticket-status-card is-error">
                   <span class="ticket-status-dot is-error"></span>
                   <div class="ticket-status-meta"><strong>Acces indisponible</strong><br>Le ticket courant n'a pas pu etre valide.</div>
                 </div>
