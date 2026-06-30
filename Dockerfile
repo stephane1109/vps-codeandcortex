@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir --disable-pip-version-check -r /app/requirements.txt
 
 COPY dashboard_api.py gestion_tickets.py index.html style.css aide.md /app/
 
@@ -19,4 +19,4 @@ COPY dashboard_api.py gestion_tickets.py index.html style.css aide.md /app/
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn dashboard_api:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python /app/dashboard_api.py"]
