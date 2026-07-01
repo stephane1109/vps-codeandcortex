@@ -79,8 +79,9 @@
                 <article class="aide-rapide-carte">
                     <h3>3 façons de libérer l'accès</h3>
                     <p>
+                        Chaque application est encadrée par des variables d'environnement pour éviter de bloquer le serveur : nombre d'accès simultanés via <code>APP_TICKET_MAX_ACTIVE</code>, coût de charge via <code>APP_TICKET_COST</code>, capacité globale via <code>CAPACITE_SERVEUR</code>, rafraîchissement d'un ticket actif via <code>APP_TICKET_HEARTBEAT_MS</code> et rafraîchissement d'une attente via <code>APP_TICKET_WAIT_REFRESH_MS</code>.<br><br>
                         <strong>1. Bouton manuel :</strong> l'utilisateur clique sur <strong>Libérer l'accès</strong> dans l'application. Le bouton s'appuie sur <code>APP_TICKET_RELEASE_URL</code>.<br><br>
-                        <strong>2. Expiration du ticket :</strong> si le navigateur ne rafraîchit plus son ticket, la place se libère après <code>APP_TICKET_TTL_SECONDS</code>.<br><br>
+                        <strong>2. Expiration du ticket :</strong> tant que le navigateur rafraîchit son ticket, l'accès reste actif. Si ce rafraîchissement s'arrête, la place se libère après le délai défini dans <code>APP_TICKET_TTL_SECONDS</code>.<br><br>
                         <strong>3. Libération automatique complémentaire :</strong> selon l'application, un onglet caché peut se libérer via <code>APP_TICKET_HIDDEN_RELEASE_SECONDS</code>, ou une longue inactivité via <code>APP_TICKET_IDLE_RELEASE_MS</code>.
                     </p>
                 </article>
