@@ -368,14 +368,31 @@ progress {
 }
 
 .card--plot {
-  min-height: 34rem;
+  grid-column: 1 / -1;
+  min-height: 52rem;
+  padding: 1.35rem;
+}
+
+#plotPlaceholder {
+  display: grid;
+  place-items: center;
+  min-height: 44rem;
+  border: 1px dashed rgba(15, 23, 42, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+  padding: 1rem;
 }
 
 .explorer-plot {
   display: block;
   width: 100%;
+  min-height: 44rem;
   border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   background: #fff;
+  object-fit: contain;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .docs-intro {
@@ -532,6 +549,15 @@ progress {
   .explorer-grid,
   .metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .card--plot {
+    min-height: 40rem;
+  }
+
+  #plotPlaceholder,
+  .explorer-plot {
+    min-height: 32rem;
   }
 
   .sidebar-card {
