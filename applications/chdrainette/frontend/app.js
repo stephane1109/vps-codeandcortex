@@ -65,6 +65,12 @@ const els = {
   uposSelection: document.getElementById("uposSelection"),
 };
 
+const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
+const TICKET_SESSION_STORAGE_KEY = "chdrainette_ticket_session";
+let ticketReleasedLocally = false;
+let idleReleaseTimerId = null;
+let lastTicketInteractionAt = Date.now();
+
 function switchPanel(target) {
   els.navLinks.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.panelTarget === target);
@@ -226,6 +232,107 @@ function ticketStatusClasses(status) {
   return { dot: "", label: "Statut inconnu" };
 }
 
+async function callTicketApi(path, { method = "GET" } = {}) {
+  const sessionId = window.localStorage.getItem(TICKET_SESSION_STORAGE_KEY) || "";
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: sessionId ? { "X-App-Ticket-Session": sessionId } : undefined,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (payload?.session_id) {
+    window.localStorage.setItem(TICKET_SESSION_STORAGE_KEY, String(payload.session_id));
+  }
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || `Erreur HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+function hasLiveTicket(snapshot = state.ticketSnapshot) {
+  return Boolean(snapshot?.enabled) && ["actif", "attente"].includes(String(snapshot?.statut || ""));
+}
+
+function rememberTicketSnapshot(snapshot) {
+  state.ticketSnapshot = snapshot;
+  if (hasLiveTicket(snapshot)) {
+    ticketReleasedLocally = false;
+  }
+  return snapshot;
+}
+
+function updateReleaseAccessButton() {
+  const busy = Boolean(state.currentJobId);
+  if (ticketReleasedLocally) {
+    els.releaseAccessBtn.textContent = "Reprendre l'accès";
+    els.releaseAccessBtn.disabled = busy;
+    return;
+  }
+  els.releaseAccessBtn.textContent = "Libérer l'accès";
+  els.releaseAccessBtn.disabled = !hasLiveTicket() || busy;
+}
+
+function resolveIdleReleaseMs(snapshot = state.ticketSnapshot) {
+  return Math.max(60000, Number(snapshot?.idle_release_ms || DEFAULT_TICKET_IDLE_RELEASE_MS));
+}
+
+function rememberUserInteraction() {
+  lastTicketInteractionAt = Date.now();
+  scheduleIdleRelease();
+}
+
+async function autoReleaseTicketAfterInactivity() {
+  if (state.currentJobId || !hasLiveTicket()) {
+    return;
+  }
+  const idleReleaseMs = resolveIdleReleaseMs();
+  if (Date.now() - lastTicketInteractionAt < idleReleaseMs) {
+    scheduleIdleRelease();
+    return;
+  }
+
+  try {
+    rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
+    window.localStorage.removeItem(TICKET_SESSION_STORAGE_KEY);
+    ticketReleasedLocally = true;
+    renderTicketStatus();
+  } catch (_error) {
+    scheduleIdleRelease();
+  }
+}
+
+function scheduleIdleRelease() {
+  if (idleReleaseTimerId) {
+    clearTimeout(idleReleaseTimerId);
+    idleReleaseTimerId = null;
+  }
+  if (state.currentJobId || !hasLiveTicket()) {
+    return;
+  }
+
+  const idleReleaseMs = resolveIdleReleaseMs();
+  const remainingMs = Math.max(1000, idleReleaseMs - (Date.now() - lastTicketInteractionAt));
+  idleReleaseTimerId = setTimeout(() => {
+    void autoReleaseTicketAfterInactivity();
+  }, remainingMs);
+}
+
+function releaseTicketOnPageHide() {
+  if (state.currentJobId || !hasLiveTicket()) {
+    return;
+  }
+  const sessionId = window.localStorage.getItem(TICKET_SESSION_STORAGE_KEY) || "";
+  window.localStorage.removeItem(TICKET_SESSION_STORAGE_KEY);
+  void fetch("/api/tickets/release", {
+    method: "POST",
+    credentials: "same-origin",
+    keepalive: true,
+    headers: sessionId ? { "X-App-Ticket-Session": sessionId } : undefined,
+  }).catch(() => {});
+}
+
 function updateRunAvailability() {
   const snapshot = state.ticketSnapshot;
   const hasCorpus = Boolean(state.corpusText.trim());
@@ -246,15 +353,15 @@ function scheduleTicketLoop() {
 
   const snapshot = state.ticketSnapshot;
   if (!snapshot || snapshot.enabled === false) {
+    updateReleaseAccessButton();
     return;
   }
 
   if (snapshot.statut === "actif") {
     state.heartbeatTimer = setInterval(() => {
-      fetch("/api/tickets/heartbeat", { method: "POST" })
-        .then((response) => response.json())
+      callTicketApi("/api/tickets/heartbeat", { method: "POST" })
         .then((payload) => {
-          state.ticketSnapshot = payload;
+          rememberTicketSnapshot(payload);
           renderTicketStatus();
         })
         .catch(() => {});
@@ -273,12 +380,16 @@ function renderTicketStatus() {
 
   if (!snapshot) {
     els.accessMessage.textContent = "Vérification du ticket en cours.";
-    els.releaseAccessBtn.disabled = true;
+    updateReleaseAccessButton();
     updateRunAvailability();
     return;
   }
 
   const extra = [];
+  if (ticketReleasedLocally && !hasLiveTicket(snapshot)) {
+    extra.push("Accès libéré pour cette session.");
+    extra.push("Cliquez sur « Reprendre l'accès » pour revenir dans la file.");
+  }
   if (snapshot.statut === "actif") {
     extra.push(`${snapshot.active || 0} utilisateur(s) actif(s) sur ${snapshot.max_active || 1}.`);
   }
@@ -289,38 +400,48 @@ function renderTicketStatus() {
     extra.push(snapshot.message);
   }
   els.accessMessage.textContent = extra.join(" ");
-  els.releaseAccessBtn.disabled = snapshot.statut !== "actif" && snapshot.statut !== "attente";
+  updateReleaseAccessButton();
   updateRunAvailability();
+  scheduleIdleRelease();
   scheduleTicketLoop();
 }
 
 async function refreshTicketStatus() {
   try {
-    let response = await fetch("/api/tickets/status");
-    let payload = await response.json();
-    if (payload.statut === "inconnu" || (!payload.ticket_id && payload.enabled !== false)) {
-      response = await fetch("/api/tickets/claim", { method: "POST" });
-      payload = await response.json();
+    let payload = await callTicketApi("/api/tickets/status");
+    const shouldClaim =
+      !ticketReleasedLocally &&
+      (payload.statut === "inconnu" || (!payload.ticket_id && payload.enabled !== false));
+    if (shouldClaim) {
+      payload = await callTicketApi("/api/tickets/claim", { method: "POST" });
     }
-    state.ticketSnapshot = payload;
+    rememberTicketSnapshot(payload);
     renderTicketStatus();
   } catch (error) {
-    state.ticketSnapshot = {
+    rememberTicketSnapshot({
       enabled: true,
       statut: "erreur",
       message: error instanceof Error ? error.message : "Erreur ticket.",
-    };
+    });
     renderTicketStatus();
   }
 }
 
 async function releaseAccess() {
   try {
-    const response = await fetch("/api/tickets/release", { method: "POST" });
-    state.ticketSnapshot = await response.json();
+    if (ticketReleasedLocally) {
+      rememberTicketSnapshot(await callTicketApi("/api/tickets/claim", { method: "POST" }));
+      renderTicketStatus();
+      return;
+    }
+
+    rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
+    window.localStorage.removeItem(TICKET_SESSION_STORAGE_KEY);
+    ticketReleasedLocally = true;
     renderTicketStatus();
   } catch (error) {
     els.accessMessage.textContent = error instanceof Error ? error.message : "Libération impossible.";
+    updateReleaseAccessButton();
   }
 }
 
@@ -338,6 +459,7 @@ async function runAnalysis() {
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         corpusName: state.corpusName || "corpus.txt",
@@ -351,6 +473,7 @@ async function runAnalysis() {
     }
     const payload = await response.json();
     state.currentJobId = payload.jobId;
+    updateReleaseAccessButton();
     addHistoryEntry(payload.jobId, state.corpusName || "corpus.txt");
     pollJobStatus(payload.jobId);
   } catch (error) {
@@ -384,12 +507,14 @@ async function pollJobStatus(jobId) {
       state.currentResult = payload.result;
       els.runStatus.textContent = "Analyse terminée.";
       renderResult(payload.result);
+      updateReleaseAccessButton();
       updateRunAvailability();
       return;
     }
     if (stateName === "error" || stateName === "failed") {
       state.currentJobId = "";
       els.runStatus.textContent = payload.message || "Analyse en erreur.";
+      updateReleaseAccessButton();
       updateRunAvailability();
       return;
     }
@@ -397,6 +522,7 @@ async function pollJobStatus(jobId) {
   } catch (error) {
     state.currentJobId = "";
     els.runStatus.textContent = error instanceof Error ? error.message : "Lecture du statut impossible.";
+    updateReleaseAccessButton();
     updateRunAvailability();
   }
 }
@@ -540,6 +666,11 @@ function bindEvents() {
   els.showExplorerCodeBtn.addEventListener("click", refreshExplorerCode);
   els.runAnalysisBtn.addEventListener("click", runAnalysis);
   els.releaseAccessBtn.addEventListener("click", releaseAccess);
+  window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
+  window.addEventListener("keydown", rememberUserInteraction);
+  window.addEventListener("scroll", rememberUserInteraction, { passive: true });
+  window.addEventListener("pagehide", releaseTicketOnPageHide);
+  window.addEventListener("beforeunload", releaseTicketOnPageHide);
 }
 
 function init() {
@@ -548,6 +679,8 @@ function init() {
   syncExplorerUi();
   els.segmentSize.disabled = false;
   els.uposSelection.disabled = !els.lemmatisation.checked;
+  lastTicketInteractionAt = Date.now();
+  updateReleaseAccessButton();
   refreshTicketStatus();
   updateRunAvailability();
 }

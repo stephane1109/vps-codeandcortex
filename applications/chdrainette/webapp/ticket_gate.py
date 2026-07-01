@@ -315,6 +315,8 @@ def _refresh_existing_ticket(client, cfg: dict[str, Any], session_id: str | None
 
 def _session_id_from_request(request: Request) -> str | None:
     value = request.cookies.get(SESSION_COOKIE_NAME, "").strip()
+    if not value:
+        value = request.headers.get("X-App-Ticket-Session", "").strip()
     return value or None
 
 

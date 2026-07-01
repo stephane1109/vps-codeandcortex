@@ -14,6 +14,12 @@ from . import ticket_gate
 app = FastAPI(title="CHD Rainette Web", docs_url=None, redoc_url=None)
 
 
+def with_session_id(snapshot: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    payload = dict(snapshot)
+    payload["session_id"] = session_id
+    return payload
+
+
 def read_index_html() -> str:
     return (runtime.frontend_root() / "index.html").read_text(encoding="utf-8")
 
@@ -41,7 +47,7 @@ def health() -> dict[str, str]:
 @app.get("/api/tickets/status")
 def ticket_status(request: Request) -> JSONResponse:
     snapshot, session_id = ticket_gate.status_for_request(request)
-    response = JSONResponse(snapshot)
+    response = JSONResponse(with_session_id(snapshot, session_id))
     ticket_gate.apply_session_cookie_headers(response, session_id)
     return response
 
@@ -49,7 +55,7 @@ def ticket_status(request: Request) -> JSONResponse:
 @app.post("/api/tickets/claim")
 def ticket_claim(request: Request) -> JSONResponse:
     snapshot, session_id = ticket_gate.claim_ticket_for_request(request)
-    response = JSONResponse(snapshot)
+    response = JSONResponse(with_session_id(snapshot, session_id))
     ticket_gate.apply_session_cookie_headers(response, session_id)
     return response
 
@@ -57,7 +63,7 @@ def ticket_claim(request: Request) -> JSONResponse:
 @app.post("/api/tickets/heartbeat")
 def ticket_heartbeat(request: Request) -> JSONResponse:
     snapshot, session_id = ticket_gate.heartbeat_ticket_for_request(request)
-    response = JSONResponse(snapshot)
+    response = JSONResponse(with_session_id(snapshot, session_id))
     ticket_gate.apply_session_cookie_headers(response, session_id)
     return response
 
@@ -65,7 +71,7 @@ def ticket_heartbeat(request: Request) -> JSONResponse:
 @app.post("/api/tickets/release")
 def ticket_release(request: Request) -> JSONResponse:
     snapshot = ticket_gate.release_ticket_for_request(request)
-    response = JSONResponse(snapshot)
+    response = JSONResponse(with_session_id(snapshot, None))
     ticket_gate.clear_session_cookie_headers(response)
     return response
 
