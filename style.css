@@ -246,6 +246,38 @@ h1 {
     gap: 14px;
 }
 
+.catalogue-applications {
+    display: grid;
+    gap: 22px;
+}
+
+.famille-applications {
+    padding: 18px;
+    border: 1px solid var(--couleur-bordure);
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.famille-entete {
+    margin-bottom: 14px;
+}
+
+.famille-surtitre {
+    margin: 0 0 6px 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--couleur-accent);
+}
+
+.famille-titre {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--couleur-principale);
+}
+
 .carte-application {
     min-height: 160px;
     position: relative;
