@@ -1,4 +1,0 @@
-streamlit
-pandas
-google-api-python-client
-XlsxWriter
