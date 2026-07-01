@@ -422,7 +422,7 @@ def formater_sortie_texte(
 
 
 def main() -> None:
-    st.set_page_config(page_title="Extraction PDF → Texte", page_icon="📄", layout="wide")
+    st.set_page_config(page_title="Extraction PDF → Texte", layout="wide")
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
@@ -442,6 +442,11 @@ def main() -> None:
     if fitz is None:
         st.error("PyMuPDF est requis mais indisponible. Vérifie le build Docker et relance l'application.")
         st.stop()
+
+    st.markdown(
+        '<link rel="icon" href="data:,">',
+        unsafe_allow_html=True,
+    )
 
     st.title(APP_NAME)
     st.markdown(
