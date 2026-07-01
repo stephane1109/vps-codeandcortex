@@ -2,15 +2,16 @@
 
 Adaptation VPS de l'application `chdrainette`.
 
-Cette version ne lance **pas** `rainette_explor(...)` dans un second navigateur Shiny.
-Sur le VPS, l'exploration Shiny est remplacée par une exécution **batch R** puis par
-des **exports statiques** directement intégrés dans l'interface Streamlit :
+Cette version n'utilise plus Streamlit.
+Le VPS sert maintenant :
 
-- visualisation Rainette statique
-- répartition des classes
-- nuages de mots par classe
-- concordancier HTML intégré
-- exports CSV / TXT / ZIP
+- un backend **FastAPI**
+- une interface **HTML / CSS / JavaScript** inspirée du graphisme de `iramuteq-lite`
+- une exécution **R batch** pour la CHD
+- une exploration web des résultats dans l'esprit de `rainette_explor(...)`
+
+L'objectif est de conserver l'analyse Rainette, tout en évitant l'ouverture d'un second navigateur
+Shiny séparé comme dans le script d'origine.
 
 ## Fonctionnalités conservées
 
@@ -24,6 +25,15 @@ des **exports statiques** directement intégrés dans l'interface Streamlit :
 - nuages de mots chi² et fréquence
 - exports des segments par classe
 - exports CSV des mots discriminants et segments
+
+## Fonctionnalités ajoutées pour le VPS
+
+- ticket utilisateur Redis dès l'ouverture de la page
+- page web unique avec sidebar, navigation et logs
+- rendu dynamique du graphe Rainette selon `k`, `measure`, `n_terms`, `same_scales`, `show_negative`, `text_size`
+- exploration des segments par cluster avec filtre terme, taille d'extrait et échantillonnage
+- génération du code R correspondant au graphe courant
+- téléchargement direct des exports générés
 
 ## Variables d'environnement Coolify
 
@@ -44,12 +54,14 @@ des **exports statiques** directement intégrés dans l'interface Streamlit :
 
 #### Variables applicatives
 
-- `PORT=8501`
+- `PORT=8000`
 - `APP_DATA_DIR=/data/app`
+- `CHDRAINETTE_APP_DATA_DIR=/data/app`
 - `CHDRAINETTE_R_LIBS_USER=/data/app/r-library`
 - `CHDRAINETTE_CACHE_DIR=/data/app/cache`
 
 ## Dépendances système dans l'image
 
 Le Dockerfile s'appuie sur `rocker/r2u:jammy` pour limiter les compilations R longues,
-puis installe les paquets R nécessaires à Rainette et à UDPipe.
+puis installe les paquets R nécessaires à Rainette et à UDPipe ainsi que le runtime Python
+léger requis par FastAPI / Uvicorn / Redis.

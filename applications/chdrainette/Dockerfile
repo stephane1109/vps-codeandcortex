@@ -4,11 +4,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
-    STREAMLIT_SERVER_HEADLESS=true \
-    STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
-    PORT=8501 \
+    PORT=8000 \
     APP_DATA_DIR=/data/app \
+    CHDRAINETTE_APP_DATA_DIR=/data/app \
     CHDRAINETTE_R_LIBS_USER=/data/app/r-library \
     CHDRAINETTE_CACHE_DIR=/data/app/cache \
     R_LIBS_USER=/data/app/r-library \
@@ -30,9 +28,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - CAPACITE_SERVEUR=6 pour coller a la capacite globale du VPS
 # - APP_TICKET_TTL_SECONDS=3600 si l'analyse peut durer longtemps
 # - APP_DATA_DIR=/data/app pour conserver les jobs et les sorties cote serveur
+# - CHDRAINETTE_APP_DATA_DIR=/data/app pour que le backend web et le R utilisent le meme volume
 # - CHDRAINETTE_R_LIBS_USER=/data/app/r-library pour les packages R persistants
 # - CHDRAINETTE_CACHE_DIR=/data/app/cache pour le modele UDPipe
-# - PORT=8501 pour Streamlit
+# - PORT=8000 pour FastAPI / Uvicorn
 
 WORKDIR /app
 
@@ -72,6 +71,7 @@ RUN apt-get update \
       r-cran-htmltools \
       r-cran-jsonlite \
       r-cran-quanteda \
+      r-cran-quanteda.textstats \
       r-cran-rcolorbrewer \
       r-cran-remotes \
       r-cran-stopwords \
@@ -101,14 +101,14 @@ COPY . /app
 
 RUN useradd --create-home --shell /bin/bash app \
     && chmod +x /app/docker-entrypoint.sh \
-    && mkdir -p /home/app/.streamlit /data/app /data/app/r-library /data/app/cache \
+    && mkdir -p /data/app /data/app/r-library /data/app/cache \
     && chown -R app:app /app /home/app /data/app
 
 USER app
 
-EXPOSE 8501
+EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-  CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8501'); urllib.request.urlopen(f'http://127.0.0.1:{port}/_stcore/health', timeout=3).read()"
+  CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health', timeout=3).read()"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

@@ -462,7 +462,7 @@ tryCatch({
   text(
     0.5,
     0.55,
-    labels = "Visualisation Rainette indisponible en mode Shiny.\nLe VPS affiche un export statique de secours.",
+    labels = "Visualisation Rainette indisponible pour ce rendu.\nLe VPS affiche un export statique de secours.",
     cex = 1.2
   )
   text(
@@ -482,9 +482,23 @@ metadata <- list(
   n_segments_analyzed = quanteda::ndoc(filtered_corpus),
   n_features = quanteda::nfeat(dfm_obj),
   n_classes = nrow(resume_classes),
-  classes_distribution = split(resume_classes, seq_len(nrow(resume_classes))),
-  output_files = list.files(output_dir, recursive = TRUE)
+  classes_distribution = split(resume_classes, seq_len(nrow(resume_classes)))
 )
+
+bundle_path <- file.path(output_dir, "analysis_bundle.rds")
+analysis_bundle <- list(
+  res = res,
+  dtm = dfm_obj,
+  corpus_src = corpus_affichage,
+  metadata = metadata,
+  summary = resume_classes,
+  keyness = res_stats_df,
+  max_k = max(classes, na.rm = TRUE)
+)
+saveRDS(analysis_bundle, bundle_path)
+
+metadata$bundle_file <- basename(bundle_path)
+metadata$output_files <- list.files(output_dir, recursive = TRUE)
 
 jsonlite::write_json(metadata, path = file.path(output_dir, "metadata.json"), auto_unbox = TRUE, pretty = TRUE)
 log_info("Analyse Rainette terminée.")

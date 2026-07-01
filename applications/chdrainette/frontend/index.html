@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CHD Rainette</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-block">
+          <p class="eyebrow">CHD RAINETTE</p>
+          <h1>CHD Rainette</h1>
+          <p class="brand-copy">
+            Adaptation VPS de l’analyse CHD Rainette avec une interface web inspirée d’IRaMuTeQ Lite
+            et une exploration interactive du clustering dans l’esprit de <code>rainette_explor()</code>.
+          </p>
+          <p class="brand-copy">
+            <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
+          </p>
+        </div>
+
+        <nav class="top-nav" aria-label="Navigation principale">
+          <button class="nav-link is-active" data-panel-target="analyse" type="button">Analyse</button>
+          <button class="nav-link" data-panel-target="corpus" type="button">Corpus</button>
+          <button class="nav-link" data-panel-target="explorateur" type="button">Explorateur</button>
+          <button class="nav-link" data-panel-target="exports" type="button">Exports</button>
+          <button class="nav-link" data-panel-target="aide" type="button">Aide</button>
+        </nav>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <section class="sidebar-card">
+            <button id="importCorpusBtn" class="primary-button" type="button">Importer un corpus texte</button>
+            <input id="corpusFile" type="file" accept=".txt" hidden />
+            <p class="muted sidebar-import-help">
+              Corpus texte au format IRaMuTeQ. Les lignes commençant par <code>****</code> sont reconnues.
+            </p>
+            <p id="fileInfo" class="muted sidebar-file-info">Aucun fichier sélectionné.</p>
+
+            <div class="status-pill">
+              <span id="accessDot" class="status-dot"></span>
+              <span id="accessLabel">Vérification du ticket...</span>
+            </div>
+            <button id="releaseAccessBtn" class="secondary-button sidebar-release-button" type="button" disabled>
+              Libérer l'accès
+            </button>
+            <p id="accessMessage" class="muted sidebar-note"></p>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">Paramètres CHD</p>
+              <div class="form-grid form-grid--single">
+                <label>
+                  Mode de découpage
+                  <select id="modeDecoupage">
+                    <option value="segment_size">segment_size</option>
+                    <option value="ponctuation">ponctuation</option>
+                  </select>
+                </label>
+                <label>
+                  Taille des segments
+                  <input id="segmentSize" type="number" min="10" max="500" step="5" value="40" />
+                </label>
+                <label>
+                  Nombre de classes (k)
+                  <input id="kValue" type="number" min="2" max="20" step="1" value="6" />
+                </label>
+                <label>
+                  Segments minimum avant division
+                  <input id="minSplitSegments" type="number" min="3" max="100" step="1" value="12" />
+                </label>
+                <label>
+                  Fréquence documentaire minimale
+                  <input id="minDocfreq" type="number" min="1" max="20" step="1" value="1" />
+                </label>
+                <label>
+                  Nombre maximal de mots par classe
+                  <input id="topN" type="number" min="5" max="100" step="1" value="20" />
+                </label>
+                <label class="checkbox-row">
+                  <input id="lemmatisation" type="checkbox" checked />
+                  <span>Activer la lemmatisation UDPipe</span>
+                </label>
+                <label>
+                  UPOS à conserver
+                  <select id="uposSelection" multiple size="8">
+                    <option value="ADJ" selected>ADJ</option>
+                    <option value="ADP">ADP</option>
+                    <option value="ADV">ADV</option>
+                    <option value="AUX">AUX</option>
+                    <option value="CCONJ">CCONJ</option>
+                    <option value="DET">DET</option>
+                    <option value="INTJ">INTJ</option>
+                    <option value="NOUN" selected>NOUN</option>
+                    <option value="NUM">NUM</option>
+                    <option value="PART">PART</option>
+                    <option value="PRON">PRON</option>
+                    <option value="PROPN">PROPN</option>
+                    <option value="PUNCT">PUNCT</option>
+                    <option value="SCONJ">SCONJ</option>
+                    <option value="SYM">SYM</option>
+                    <option value="VERB">VERB</option>
+                    <option value="X">X</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <button id="runAnalysisBtn" class="primary-button primary-button--launch" type="button">
+              Lancer l’analyse CHD Rainette
+            </button>
+            <p id="runStatus" class="muted sidebar-note"></p>
+
+            <section class="sidebar-history-block" aria-labelledby="analysisHistoryTitle">
+              <p id="analysisHistoryTitle" class="sidebar-kicker">Analyses lancées</p>
+              <div id="analysisHistory" class="analysis-history">
+                <p class="muted analysis-history-empty">Les analyses lancées s’afficheront ici.</p>
+              </div>
+            </section>
+          </section>
+        </aside>
+
+        <main class="content">
+          <section class="panel is-active" data-panel="analyse">
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Analyse</p>
+                <h2>Suivi de l’analyse</h2>
+              </div>
+            </div>
+
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <span class="metric-label">Documents importés</span>
+                <strong id="metricDocs">—</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Segments créés</span>
+                <strong id="metricSegments">—</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Segments analysés</span>
+                <strong id="metricAnalyzed">—</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Classes</span>
+                <strong id="metricClasses">—</strong>
+              </article>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>Résumé des classes</h3>
+                <div id="summaryTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Mots discriminants</h3>
+                <div id="detailTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Progression</h3>
+                <div class="progress-wrap">
+                  <progress id="progress" max="100" value="0"></progress>
+                  <span id="progressLabel">0%</span>
+                </div>
+                <p id="statusMessage" class="muted"></p>
+              </article>
+
+              <article class="card">
+                <h3>Logs</h3>
+                <pre id="logs" class="logs">[info] Prêt.</pre>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="corpus" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Corpus</p>
+                <h2>Prévisualisation du corpus</h2>
+              </div>
+            </div>
+
+            <article class="card">
+              <pre id="corpusPreview" class="preview-box">Importez un fichier texte pour afficher un extrait ici.</pre>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="explorateur" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Explorateur</p>
+                <h2>Exploration Rainette</h2>
+              </div>
+            </div>
+
+            <div class="explorer-grid">
+              <article class="card">
+                <h3>Paramètres du graphe</h3>
+                <div class="form-grid">
+                  <label>
+                    Nombre de clusters
+                    <input id="explorerK" type="range" min="2" max="6" step="1" value="6" />
+                    <span id="explorerKValue" class="field-help">6</span>
+                  </label>
+                  <label>
+                    Statistique
+                    <select id="explorerMeasure">
+                      <option value="chi2">Keyness - Chi-squared</option>
+                      <option value="lr">Keyness - Likelihood ratio</option>
+                      <option value="frequency">Frequency - Terms</option>
+                      <option value="docprop">Frequency - Documents proportion</option>
+                    </select>
+                  </label>
+                  <label>
+                    Nombre de termes
+                    <input id="explorerTerms" type="number" min="5" max="50" step="1" value="20" />
+                  </label>
+                  <label>
+                    Taille du texte
+                    <input id="explorerTextSize" type="number" min="6" max="24" step="1" value="12" />
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="explorerSameScales" type="checkbox" checked />
+                    <span>Forcer les mêmes échelles</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="explorerShowNegative" type="checkbox" />
+                    <span>Afficher les valeurs négatives</span>
+                  </label>
+                </div>
+                <div class="toolbar">
+                  <button id="refreshExplorerBtn" class="secondary-button" type="button">Rafraîchir le graphe</button>
+                  <button id="showExplorerCodeBtn" class="secondary-button" type="button">Afficher le code R</button>
+                </div>
+                <pre id="explorerCode" class="code-box">Le code R courant s’affichera ici.</pre>
+              </article>
+
+              <article class="card card--plot">
+                <h3>Graphe CHD Rainette</h3>
+                <div id="plotPlaceholder" class="empty-state">
+                  Lancez une analyse pour afficher l’exploration Rainette.
+                </div>
+                <img id="explorerPlot" class="explorer-plot" alt="Graphe Rainette" hidden />
+              </article>
+            </div>
+
+            <article class="card">
+              <h3>Documents du cluster</h3>
+              <div class="form-grid">
+                <label>
+                  Cluster
+                  <select id="docsCluster"></select>
+                </label>
+                <label>
+                  Documents affichés
+                  <input id="docsNDoc" type="number" min="1" step="1" value="100" />
+                </label>
+                <label>
+                  Longueur maximale
+                  <input id="docsMaxChars" type="number" min="10" step="10" value="1000" />
+                </label>
+                <label>
+                  Filtre terme
+                  <input id="docsFilterTerm" type="text" placeholder="Mot ou motif" />
+                </label>
+                <label class="checkbox-row">
+                  <input id="docsRandomSample" type="checkbox" />
+                  <span>Échantillon aléatoire</span>
+                </label>
+              </div>
+              <div class="toolbar">
+                <button id="refreshDocsBtn" class="secondary-button" type="button">Rafraîchir les documents</button>
+              </div>
+              <div id="docsIntro" class="docs-intro">Aucun cluster chargé pour le moment.</div>
+              <div id="docsSample" class="docs-sample">
+                <p class="empty-state">Les segments du cluster s’afficheront ici.</p>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="exports" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Exports</p>
+                <h2>Fichiers générés</h2>
+              </div>
+            </div>
+
+            <article class="card">
+              <div id="artifactList" class="artifact-list">
+                <p class="empty-state">Les exports apparaîtront après une analyse réussie.</p>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="aide" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Aide</p>
+                <h2>Repères d’utilisation</h2>
+              </div>
+            </div>
+
+            <article class="card prose-card">
+              <p>
+                Cette version VPS ne passe plus par Streamlit. Le calcul Rainette reste exécuté côté R,
+                mais l’interface web affiche maintenant directement le graphe CHD et les documents du cluster.
+              </p>
+              <p>
+                Le bloc <strong>Explorateur</strong> reprend les réglages principaux de
+                <code>rainette_explor()</code> : nombre de clusters, statistique, nombre de termes,
+                échelles, valeurs négatives et taille du texte.
+              </p>
+              <p>
+                Les exports générés par l’analyse restent téléchargeables : segments par classe,
+                concordancier HTML/CSV, nuages de mots, distribution des classes et bundle de travail.
+              </p>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
