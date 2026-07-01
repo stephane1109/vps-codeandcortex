@@ -124,12 +124,12 @@ def parse_api_error(exc: HttpError) -> tuple[str | None, str]:
     reason = errors[0].get("reason") if errors else None
 
     custom_messages = {
-        "commentsDisabled": "Les commentaires sont desactives pour cette video.",
-        "quotaExceeded": "Le quota de l'API YouTube est depasse. Reessayez plus tard ou utilisez une autre cle API.",
-        "dailyLimitExceeded": "La limite quotidienne de l'API YouTube est atteinte pour cette cle.",
-        "keyInvalid": "La cle API YouTube semble invalide.",
-        "videoNotFound": "La video est introuvable ou non accessible via l'API.",
-        "forbidden": "Acces refuse par l'API YouTube pour cette requete.",
+        "commentsDisabled": "Les commentaires sont désactivés pour cette vidéo.",
+        "quotaExceeded": "Le quota de l'API YouTube est dépassé. Réessayez plus tard ou utilisez une autre clé API.",
+        "dailyLimitExceeded": "La limite quotidienne de l'API YouTube est atteinte pour cette clé.",
+        "keyInvalid": "La clé API YouTube semble invalide.",
+        "videoNotFound": "La vidéo est introuvable ou non accessible via l'API.",
+        "forbidden": "Accès refusé par l'API YouTube pour cette requête.",
     }
 
     return reason, custom_messages.get(reason, message)
@@ -170,7 +170,7 @@ def get_video_details(youtube, video_id: str, clean_emojis: bool) -> dict[str, o
     response = youtube.videos().list(part="snippet,statistics", id=video_id).execute()
     items = response.get("items", [])
     if not items:
-        raise ValueError("Aucune video YouTube n'a ete trouvee pour cette URL.")
+        raise ValueError("Aucune vidéo YouTube n'a été trouvée pour cette URL.")
 
     item = items[0]
     snippet = item.get("snippet", {})
@@ -190,8 +190,8 @@ def get_video_details(youtube, video_id: str, clean_emojis: bool) -> dict[str, o
         "Date ISO": published_at,
         "Vues": int(statistics.get("viewCount", 0)),
         "Likes": int(statistics.get("likeCount", 0)),
-        "Commentaires exposes par YouTube": int(comment_count) if comment_count is not None else None,
-        "Commentaires desactives": comment_count is None,
+        "Commentaires exposés par YouTube": int(comment_count) if comment_count is not None else None,
+        "Commentaires désactivés": comment_count is None,
     }
 
 
@@ -337,8 +337,8 @@ def video_details_to_dataframe(video_details: dict[str, object]) -> pd.DataFrame
                 "Video ID": video_details.get("Video ID", ""),
                 "Vues": video_details.get("Vues", 0),
                 "Likes": video_details.get("Likes", 0),
-                "Commentaires exposes par YouTube": video_details.get("Commentaires exposes par YouTube", ""),
-                "Commentaires desactives": video_details.get("Commentaires desactives", False),
+                "Commentaires exposés par YouTube": video_details.get("Commentaires exposés par YouTube", ""),
+                "Commentaires désactivés": video_details.get("Commentaires désactivés", False),
             }
         ]
     )
@@ -358,7 +358,7 @@ def comments_to_txt_bytes(video_details: dict[str, object], df_comments: pd.Data
     ]
 
     if df_comments.empty:
-        lines.append("Aucun commentaire recupere.")
+        lines.append("Aucun commentaire récupéré.")
     else:
         for row in df_comments.itertuples(index=False):
             prefix = "Reponse : " if row.Type == "Reponse" else ""
@@ -403,24 +403,34 @@ if "xlsx_export_name" not in st.session_state:
 def render_application() -> None:
     with st.container():
         st.title(APP_DISPLAY_NAME)
+        st.markdown(
+            """
+<div style="font-size:0.9rem;color:#6b7280;margin-top:-0.35rem;">
+  Version du 1 juillet 2026 -
+  <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
+</div>
+<div style="height:0.85rem;"></div>
+""",
+            unsafe_allow_html=True,
+        )
         st.caption(
-            "Recuperez les commentaires d'une video YouTube ou YouTube Shorts, "
-            "puis telechargez-les au format texte ou Excel."
+            "Récupérez les commentaires d'une vidéo YouTube ou YouTube Shorts, "
+            "puis téléchargez-les au format texte ou Excel."
         )
 
         with st.expander("Aide"):
-            st.markdown(load_help_markdown())
+            st.markdown(load_help_markdown(), unsafe_allow_html=True)
 
-        st.markdown("### 1. Parametres")
+        st.markdown("### 1. Paramètres")
 
         api_key_input = st.text_input(
-            "Cle API YouTube",
+            "Clé API YouTube",
             value=DEFAULT_API_KEY,
-            placeholder="Entrez votre cle API YouTube Data v3",
+            placeholder="Entrez votre clé API YouTube Data v3",
             type="password",
         )
         video_url_input = st.text_input(
-            "URL de la video",
+            "URL de la vidéo",
             placeholder="https://www.youtube.com/watch?v=... ou https://youtube.com/shorts/...",
         )
 
@@ -436,7 +446,7 @@ def render_application() -> None:
             )
 
         with options_col_2:
-            include_replies = st.checkbox("Inclure les reponses", value=False)
+            include_replies = st.checkbox("Inclure les réponses", value=False)
             lowercase_comments = st.checkbox("Mettre les commentaires en minuscules", value=True)
 
         with options_col_3:
@@ -448,7 +458,7 @@ def render_application() -> None:
             st.session_state.result_message = None
 
             if not api_key_input.strip() or not video_url_input.strip():
-                st.error("Renseignez la cle API YouTube et l'URL de la video.")
+                st.error("Renseignez la clé API YouTube et l'URL de la vidéo.")
             else:
                 video_details = None
                 try:
@@ -474,7 +484,7 @@ def render_application() -> None:
                     st.session_state.xlsx_export_name = f"youtube_comments_{fragment}_{timestamp}.xlsx"
 
                     if df_comments.empty:
-                        st.session_state.result_message = "Aucun commentaire recupere pour cette video."
+                        st.session_state.result_message = "Aucun commentaire récupéré pour cette vidéo."
                 except CommentsDisabledError as exc:
                     st.session_state.video_details = video_details
                     st.session_state.df_comments = pd.DataFrame(columns=RESULT_COLUMNS)
@@ -500,7 +510,7 @@ def render_application() -> None:
         result_message = st.session_state.result_message
 
         if video_details is not None:
-            st.markdown("### 2. Informations video")
+            st.markdown("### 2. Informations vidéo")
 
             meta_col_1, meta_col_2, meta_col_3 = st.columns(3)
             with meta_col_1:
@@ -508,10 +518,10 @@ def render_application() -> None:
             with meta_col_2:
                 st.metric("Date de publication", value=str(video_details.get("Date de publication", "")) or "n/d")
             with meta_col_3:
-                comments_count = video_details.get("Commentaires exposes par YouTube")
+                comments_count = video_details.get("Commentaires exposés par YouTube")
                 st.metric(
-                    "Commentaires exposes",
-                    value="desactives" if comments_count is None else str(comments_count),
+                    "Commentaires exposés",
+                    value="désactivés" if comments_count is None else str(comments_count),
                 )
 
             st.markdown(f"**Titre** : {video_details.get('Titre', '')}")
@@ -520,13 +530,13 @@ def render_application() -> None:
             if result_message:
                 st.warning(result_message)
 
-            st.markdown("### 3. Resultats")
+            st.markdown("### 3. Résultats")
 
             if df_comments is not None and not df_comments.empty:
-                st.success(f"{len(df_comments)} commentaire(s) recupere(s).")
+                st.success(f"{len(df_comments)} commentaire(s) récupéré(s).")
                 st.dataframe(df_comments, use_container_width=True)
             elif df_comments is not None:
-                st.info("Aucun commentaire a afficher.")
+                st.info("Aucun commentaire à afficher.")
 
             video_df = video_details_to_dataframe(video_details)
             comments_df = df_comments if df_comments is not None else pd.DataFrame(columns=RESULT_COLUMNS)
@@ -534,7 +544,7 @@ def render_application() -> None:
 
             with export_col_1:
                 st.download_button(
-                    label="Telecharger le fichier texte",
+                    label="Télécharger le fichier texte",
                     data=comments_to_txt_bytes(video_details, comments_df),
                     file_name=st.session_state.txt_export_name,
                     mime="text/plain",
@@ -542,7 +552,7 @@ def render_application() -> None:
 
             with export_col_2:
                 st.download_button(
-                    label="Telecharger le fichier Excel",
+                    label="Télécharger le fichier Excel",
                     data=dataframes_to_excel_bytes(video_df, comments_df),
                     file_name=st.session_state.xlsx_export_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
