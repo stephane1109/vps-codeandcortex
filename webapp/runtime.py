@@ -293,6 +293,28 @@ def _augment_artifacts(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _augment_exports(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return payload
+
+    out = dict(payload)
+    global_zip = out.get("globalZip")
+    if isinstance(global_zip, dict):
+        out["globalZip"] = _augment_artifacts([dict(global_zip)])[0]
+
+    categories = []
+    for category in out.get("categories") or []:
+        if not isinstance(category, dict):
+            continue
+        item = dict(category)
+        if isinstance(item.get("zip"), dict):
+            item["zip"] = _augment_artifacts([dict(item["zip"])])[0]
+        item["files"] = _augment_artifacts([dict(file_item) for file_item in item.get("files") or [] if isinstance(file_item, dict)])
+        categories.append(item)
+    out["categories"] = categories
+    return out
+
+
 def _job_result_payload(job_root: Path) -> dict[str, Any] | None:
     results_file = job_root / "results.json"
     if not results_file.exists():
@@ -300,6 +322,7 @@ def _job_result_payload(job_root: Path) -> dict[str, Any] | None:
     payload = read_json_file(results_file)
     artifacts = payload.get("artifacts") or []
     payload["artifacts"] = _augment_artifacts([dict(item) for item in artifacts])
+    payload["exports"] = _augment_exports(payload.get("exports"))
     return payload
 
 
