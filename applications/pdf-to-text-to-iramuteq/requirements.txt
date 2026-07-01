@@ -1,0 +1,9 @@
+streamlit
+streamlit-autorefresh
+redis
+PyMuPDF
+pypdf
+pdfminer.six
+pytesseract
+pdf2image
+pillow
