@@ -68,31 +68,15 @@
             <div class="aide-rapide-intro">
                 <p class="aide-rapide-surtitre">Aide rapide</p>
                 <h2 class="aide-rapide-titre">Comprendre la file d'attente et la charge serveur</h2>
-                <p class="aide-rapide-description">
-                    Certaines applications réservent un ticket utilisateur et consomment une partie de la capacité totale du VPS.
-                    Quand vous avez terminé, pensez à libérer l'accès dans l'application pour laisser la place au suivant.
-                    Les cartes restent volontairement neutres en gris/blanc.
-                    Seules les pastilles indiquent l'etat de disponibilité ou d'attente.
-                    Trois delais sont a retenir : le rafraichissement de la page, l'expiration du ticket et la liberation automatique en cas d'inactivite.
-                </p>
             </div>
 
             <div class="aide-rapide-regles" aria-label="Regles principales">
                 <span class="aide-regle"><strong>Libération :</strong> Pensez à cliquer sur <strong>Libérer l'accès</strong> à la fin. C'est aussi simple que de penser à ferme sa porte d'entrée quand on quitte son appartement !</span>
-                <span class="aide-regle"><strong>Rafraîchissement :</strong> la page relit automatiquement les tickets toutes les quelques secondes pour mettre a jour les pastilles.</span>
                 <span class="aide-regle"><strong>TTL ticket :</strong> un ticket non rafraîchi expire en général après <strong>5 minutes</strong>.</span>
                 <span class="aide-regle"><strong>Inactivité :</strong> certaines grosses applis se libèrent après environ <strong>15 minutes</strong> sans action.</span>
             </div>
 
             <div class="aide-rapide-grille">
-                <article class="aide-rapide-carte">
-                    <h3>États des applications</h3>
-                    <p>
-                        Carte gris/blanc + icone orange + texte noir : apparence normale.
-                        La pastille seule devient verte, orange, rouge ou grise selon l'etat.
-                    </p>
-                </article>
-
                 <article class="aide-rapide-carte">
                     <h3>Délais automatiques</h3>
                     <p>
@@ -196,16 +180,16 @@
                 </span>
             </a>
 
-            <a href="https://cooccurrences.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="analyse_cooccurrences">
+            <a href="https://cooccurrences.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="cooccurrencesmotpivot">
                 <span class="ruban-statut">
                     <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
                     <span class="statut" data-status-label>Libre</span>
                 </span>
                 <i class="icone fas fa-ticket"></i>
                 <span class="contenu-carte">
-                    <span class="titre-application">Cooccurrences</span>
+                    <span class="titre-application">Cooccurrences mot pivot</span>
                     <span class="meta-application" data-status-meta>0 / 2 actif · 0 attente</span>
-                    <span class="description-application">Cooccurrences à partir d’un mot clé.</span>
+                    <span class="description-application">Analyse de cooccurrences centrée sur un mot pivot.</span>
                 </span>
             </a>
 
@@ -292,7 +276,7 @@
                     <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
                     <span class="statut" data-status-label>Libre</span>
                 </span>
-                <i class="icone fas fa-chart-area"></i>
+                <i class="icone fas fa-chart-pie"></i>
                 <span class="contenu-carte">
                     <span class="titre-application">Divergence Jensen-Shannon</span>
                     <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
