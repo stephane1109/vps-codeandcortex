@@ -151,6 +151,82 @@ function artifactListHtml(artifacts) {
     .join("");
 }
 
+function formatBytes(size) {
+  const numeric = Number(size || 0);
+  if (numeric > 1024 * 1024) {
+    return `${(numeric / (1024 * 1024)).toFixed(2)} Mo`;
+  }
+  if (numeric > 1024) {
+    return `${(numeric / 1024).toFixed(1)} Ko`;
+  }
+  return `${numeric} o`;
+}
+
+function exportFileItemHtml(item) {
+  return `
+    <div class="artifact-item">
+      <div>
+        <strong>${escapeHtml(item.relativePath || "")}</strong><br />
+        <span class="muted">${escapeHtml(item.mimeType || "")} · ${formatBytes(item.sizeBytes)}</span>
+      </div>
+      <a href="${item.downloadUrl}" target="_blank" rel="noopener noreferrer">Télécharger</a>
+    </div>
+  `;
+}
+
+function exportCategoriesHtml(exportsPayload, fallbackArtifacts) {
+  const categories = exportsPayload?.categories || [];
+  const globalZip = exportsPayload?.globalZip || null;
+  if (!categories.length && !globalZip) {
+    return artifactListHtml(fallbackArtifacts || []);
+  }
+
+  const blocks = [];
+
+  if (globalZip) {
+    blocks.push(`
+      <section class="export-bundle export-bundle--global">
+        <div class="export-bundle__header">
+          <div>
+            <p class="export-bundle__kicker">Export global</p>
+            <h3>ZIP complet de l'analyse</h3>
+            <p class="muted">Ce fichier regroupe tous les résultats, les graphiques, les tableaux, les segments, les logs et la configuration de session.</p>
+          </div>
+          <a class="export-bundle__cta" href="${globalZip.downloadUrl}" target="_blank" rel="noopener noreferrer">
+            Télécharger le ZIP complet
+          </a>
+        </div>
+        <p class="muted export-bundle__meta">${escapeHtml(globalZip.relativePath || "")} · ${formatBytes(globalZip.sizeBytes)}</p>
+      </section>
+    `);
+  }
+
+  categories.forEach((category) => {
+    const files = category.files || [];
+    blocks.push(`
+      <section class="export-bundle">
+        <div class="export-bundle__header">
+          <div>
+            <p class="export-bundle__kicker">Export par type</p>
+            <h3>${escapeHtml(category.label || "")}</h3>
+            <p class="muted">${escapeHtml(category.description || "")}</p>
+          </div>
+          ${
+            category.zip
+              ? `<a class="export-bundle__cta" href="${category.zip.downloadUrl}" target="_blank" rel="noopener noreferrer">Télécharger le ZIP ${escapeHtml(category.label || "")}</a>`
+              : ""
+          }
+        </div>
+        <div class="artifact-list artifact-list--nested">
+          ${files.map((item) => exportFileItemHtml(item)).join("")}
+        </div>
+      </section>
+    `);
+  });
+
+  return blocks.join("");
+}
+
 function addHistoryEntry(jobId, corpusName) {
   state.history.unshift({
     jobId,
@@ -564,7 +640,7 @@ function renderResult(result) {
   els.metricClasses.textContent = metadata.n_classes ?? "—";
   els.summaryTable.innerHTML = tableFromRows(result.summaryRows || []);
   els.detailTable.innerHTML = tableFromRows(result.detailRows || []);
-  els.artifactList.innerHTML = artifactListHtml(result.artifacts || []);
+  els.artifactList.innerHTML = exportCategoriesHtml(result.exports || null, result.artifacts || []);
   configureExplorer(metadata);
   refreshExplorer();
 }
