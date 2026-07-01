@@ -78,6 +78,15 @@
 
             <div class="aide-rapide-grille">
                 <article class="aide-rapide-carte">
+                    <h3>3 façons de libérer l'accès</h3>
+                    <p>
+                        <strong>1. Bouton manuel :</strong> l'utilisateur clique sur <strong>Libérer l'accès</strong> dans l'application. Le bouton s'appuie sur <code>APP_TICKET_RELEASE_URL</code>.<br><br>
+                        <strong>2. Expiration du ticket :</strong> si le navigateur ne rafraîchit plus son ticket, la place se libère après <code>APP_TICKET_TTL_SECONDS</code>.<br><br>
+                        <strong>3. Libération automatique complémentaire :</strong> selon l'application, un onglet caché peut se libérer via <code>APP_TICKET_HIDDEN_RELEASE_SECONDS</code>, ou une longue inactivité via <code>APP_TICKET_IDLE_RELEASE_MS</code>.
+                    </p>
+                </article>
+
+                <article class="aide-rapide-carte">
                     <h3>Délais automatiques</h3>
                     <p>
                         Si un ticket n'est plus rafraîchi, il expire en général au bout d'environ <strong>5 minutes</strong>.
@@ -102,7 +111,7 @@
 
         <section class="catalogue-applications" aria-label="Applications disponibles">
 
-            <section class="famille-applications" aria-label="Applications pour extraire des donnees">
+            <section class="famille-applications famille-extraire" aria-label="Applications pour extraire des donnees">
                 <div class="famille-entete">
                     <p class="famille-surtitre">Classe</p>
                     <h2 class="famille-titre">Extraire</h2>
@@ -202,7 +211,7 @@
                 </div>
             </section>
 
-            <section class="famille-applications" aria-label="Applications pour calculer et comparer">
+            <section class="famille-applications famille-calculer" aria-label="Applications pour calculer et comparer">
                 <div class="famille-entete">
                     <p class="famille-surtitre">Classe</p>
                     <h2 class="famille-titre">Calculer</h2>
@@ -263,7 +272,7 @@
                 </div>
             </section>
 
-            <section class="famille-applications" aria-label="Applications multimodales">
+            <section class="famille-applications famille-multimodale" aria-label="Applications multimodales">
                 <div class="famille-entete">
                     <p class="famille-surtitre">Classe</p>
                     <h2 class="famille-titre">Multimodale</h2>
@@ -293,19 +302,6 @@
                             <span class="titre-application">Analyses multimodales</span>
                             <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
                             <span class="description-application">Analyse multimodale de la temporalité à partir de texte, audio et images.</span>
-                        </span>
-                    </a>
-
-                    <a href="https://analysemm.codeandcortex.fr" class="carte-application libre" target="_blank" data-app-id="Analyse_MM">
-                        <span class="ruban-statut">
-                            <span class="pastille-etat libre" data-status-dot aria-hidden="true"></span>
-                            <span class="statut" data-status-label>Libre</span>
-                        </span>
-                        <i class="icone fas fa-photo-film"></i>
-                        <span class="contenu-carte">
-                            <span class="titre-application">Analyse MM</span>
-                            <span class="meta-application" data-status-meta>0 / 1 actif · 0 attente</span>
-                            <span class="description-application">Préparation vidéo, extraction, transcription, anomalies et analyses multimodales.</span>
                         </span>
                     </a>
 
