@@ -1,16 +1,6 @@
-.DS_Store
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
 .pytest_cache/
-.env
-.env.*
-.venv/
-venv/
-env/
-dist/
-build/
 .git/
-.gitignore
-.streamlit/secrets.toml
+.venv/

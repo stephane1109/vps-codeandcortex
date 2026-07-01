@@ -1,132 +1,167 @@
-# main.py
-# Page d’accueil : choix de la source (URL + cookies, ou fichier local),
-# préparation de la vidéo de base (HD ou compressée), intervalle optionnel,
-# et aperçu. Aucune extraction ici : tout se fait dans les onglets.
+######################
+# www.codeandcortex.fr
+######################
 
-import os
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
+from __future__ import annotations
+
+from pathlib import Path
 
 import streamlit as st
-from pathlib import Path
-import subprocess
 
-from app_runtime import enforce_access, heartbeat
-from core_media import (
-    initialiser_repertoires, info_ffmpeg, afficher_message_cookies,
-    preparer_depuis_url, preparer_depuis_fichier, SEUIL_APERCU_OCTETS
-)
+from analysedebit import analyser_debit, format_timestamp, resolve_storage_directory
+from analysepauses import analyser_pauses, generer_export_pauses, graph_pauses
+from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
-# ----------------- Initialisation -----------------
-BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 
-st.set_page_config(page_title="Source & Préparation", layout="wide")
-enforce_access()
-st.title("Source & Préparation de la vidéo")
-st.markdown("**www.codeandcortex.fr**")
+APP_NAME = "Analyse du débit de parole"
 
-# Etat partagé
-st.session_state.setdefault("video_base", None)
-st.session_state.setdefault("base_court", None)
-st.session_state.setdefault("url", "")
-st.session_state.setdefault("cookies_path", None)
-st.session_state.setdefault("local_temp_path", None)
-st.session_state.setdefault("local_name_base", None)
-st.session_state.setdefault("debut_secs", 0)
-st.session_state.setdefault("fin_secs", 10)
 
-# ----------------- Diagnostic -----------------
-with st.expander("Diagnostic système"):
-    chemin_ffmpeg, version_l1 = info_ffmpeg()
-    if chemin_ffmpeg:
-        st.write(f"ffmpeg : {chemin_ffmpeg}")
-        if version_l1:
-            st.code(version_l1)
-    else:
-        st.write("ffmpeg : introuvable")
+def render_download_button(path_str: str, label: str, mime: str) -> None:
+    path = Path(path_str)
+    if not path.exists():
+        return
+    st.download_button(
+        label=label,
+        data=path.read_bytes(),
+        file_name=path.name,
+        mime=mime,
+        use_container_width=True,
+    )
 
-# ----------------- Source -----------------
-st.subheader("Choix de la source")
 
-colL, colR = st.columns([2, 1])
+def main() -> None:
+    st.set_page_config(page_title=APP_NAME, layout="centered")
 
-with colL:
-    url = st.text_input("URL YouTube", value=st.session_state["url"])
-    st.session_state["url"] = url
+    # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
+    # - REDIS_URL
+    # - APP_TICKET_ID
+    # - APP_TICKET_MAX_ACTIVE
+    # - APP_TICKET_COST
+    # - CAPACITE_SERVEUR
+    # - APP_TICKET_TTL_SECONDS
+    # - APP_DATA_DIR
+    # - WHISPER_MODEL_NAME
+    enforce_streamlit_access("analyse_debit_parole", APP_NAME)
 
-cookies_path = afficher_message_cookies(REP_SORTIE)
+    st.title("Analyse du débit de parole d'une vidéo YouTube")
+    st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
+    st.markdown(
+        """
+        Cette application télécharge une vidéo YouTube, découpe un sous-clip et le transcrit avec Whisper.
 
-with colR:
-    qualite = st.radio("Qualité vidéo de base", ["Compressée (1280p, CRF 28)", "HD (max qualité dispo)"], index=0)
-    verbose = st.checkbox("Mode diagnostic yt-dl", value=False)
+        Choisissez la méthode de segmentation :
 
-st.markdown(
-    "Par défaut, l’extraction porte sur **toute la vidéo**. "
-    "Active un intervalle personnalisé si besoin. "
-    "Si la vidéo est restreinte (403), exporte tes cookies avec l’extension Firefox : "
-    "[cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)."
-)
+        - **whisper** : segmentation automatique effectuée par Whisper
+        - **ponctuation** : découpage de la transcription par ponctuation sur la base des timestamps
 
-etendue = st.radio("Étendue à préparer", ["Toute la vidéo", "Intervalle personnalisé"], index=0, horizontal=True)
-utiliser_intervalle = (etendue == "Intervalle personnalisé")
-if utiliser_intervalle:
-    st.info(f"Intervalle personnalisé activé : de {st.session_state['debut_secs']}s à {st.session_state['fin_secs']}s. La préparation traitera uniquement cet intervalle.")
-    c1, c2 = st.columns(2)
-    st.session_state["debut_secs"] = c1.number_input("Début (s)", min_value=0, value=st.session_state["debut_secs"])
-    st.session_state["fin_secs"] = c2.number_input("Fin (s)", min_value=1, value=st.session_state["fin_secs"])
-    if st.session_state["fin_secs"] <= st.session_state["debut_secs"]:
-        st.warning("La fin doit être strictement supérieure au début.")
+        Tous les exports sont conservés côté serveur dans le dossier applicatif, et peuvent aussi être téléchargés depuis l'interface.
+        """
+    )
 
-st.subheader("Ou importer un fichier local")
-f_local = st.file_uploader("Importer une vidéo (.mp4)", type=["mp4"])
-if f_local is not None:
-    tmp = REP_TMP / f"local_{f_local.name}"
-    with open(tmp, "wb") as g:
-        g.write(f_local.read())
-    st.session_state["local_temp_path"] = str(tmp)
-    st.session_state["local_name_base"] = Path(f_local.name).stem
-    st.success(f"Fichier local chargé : {f_local.name}")
+    with st.form(key="form_analyse"):
+        video_url = st.text_input("URL de la vidéo YouTube", "")
+        start_time = st.text_input("Temps de début (en secondes)", "0")
+        end_time = st.text_input("Temps de fin (en secondes)", "60")
+        repertoire = st.text_input(
+            "Répertoire de stockage",
+            "analyse-debit-parole",
+            help="Nom du dossier de stockage sur le serveur VPS. Le dossier réel sera créé sous APP_DATA_DIR.",
+        )
+        segmentation_mode = st.selectbox(
+            "Mode de segmentation",
+            options=["whisper", "ponctuation"],
+            help="Choisissez la méthode de segmentation.",
+        )
+        submit_button = st.form_submit_button(label="Analyser la vidéo")
 
-if st.button("Préparer la vidéo"):
-    heartbeat()
-    with st.spinner("Préparation en cours..."):
-        if st.session_state.get("local_temp_path"):
-            ok, msg = preparer_depuis_fichier(
-                Path(st.session_state["local_temp_path"]),
-                st.session_state["local_name_base"],
-                qualite,
-                utiliser_intervalle,
-                st.session_state["debut_secs"],
-                st.session_state["fin_secs"]
+    if submit_button:
+        try:
+            keep_ticket_alive("analyse_debit_parole", APP_NAME)
+            output_dir = resolve_storage_directory(repertoire)
+            st.info(f"Analyse en cours... Les fichiers seront stockés dans : {output_dir}")
+
+            with st.spinner("Traitement de la vidéo et transcription Whisper..."):
+                results = analyser_debit(
+                    video_url,
+                    float(start_time),
+                    float(end_time),
+                    repertoire,
+                    segmentation_mode=segmentation_mode,
+                )
+
+            keep_ticket_alive("analyse_debit_parole", APP_NAME)
+
+            (
+                df_debit,
+                chart_barres,
+                chart_combine,
+                export_text,
+                export_fichier,
+                df_csv,
+                graph_barres_html,
+                graph_barres_png,
+                graph_combine_html,
+                graph_combine_png,
+                dialogue_file,
+                transcript_segments,
+                output_dir_str,
+            ) = results
+
+            st.video(video_url)
+            st.success(f"Analyse terminée. Répertoire serveur : {output_dir_str}")
+
+            st.subheader("Débit de parole par segment")
+            st.dataframe(df_debit, use_container_width=True)
+            st.altair_chart(chart_barres, use_container_width=True)
+            st.altair_chart(chart_combine, use_container_width=True)
+
+            st.subheader("Rapport détaillé des segments")
+            st.text_area("Export texte", export_text, height=300)
+
+            st.subheader("Exports")
+            col1, col2 = st.columns(2)
+            with col1:
+                render_download_button(export_fichier, "Télécharger le rapport TXT", "text/plain")
+                render_download_button(df_csv, "Télécharger le CSV", "text/csv")
+                render_download_button(graph_barres_png, "Télécharger le graphique barres PNG", "image/png")
+                render_download_button(graph_combine_png, "Télécharger le graphique combiné PNG", "image/png")
+            with col2:
+                render_download_button(graph_barres_html, "Télécharger le graphique barres HTML", "text/html")
+                render_download_button(graph_combine_html, "Télécharger le graphique combiné HTML", "text/html")
+                if dialogue_file:
+                    render_download_button(dialogue_file, "Télécharger le fichier dialogues TXT", "text/plain")
+
+            st.markdown(f"**Rapport TXT exporté :** `{export_fichier}`")
+            st.markdown(f"**DataFrame CSV exportée :** `{df_csv}`")
+            st.markdown(f"**Graphique en barres HTML :** `{graph_barres_html}`")
+            st.markdown(f"**Graphique en barres PNG :** `{graph_barres_png}`")
+            st.markdown(f"**Graphique combiné HTML :** `{graph_combine_html}`")
+            st.markdown(f"**Graphique combiné PNG :** `{graph_combine_png}`")
+            if dialogue_file:
+                st.markdown(f"**Fichier de dialogue exporté :** `{dialogue_file}`")
+
+            pauses = analyser_pauses(transcript_segments, seuil=1.0)
+            if pauses:
+                pause_text = generer_export_pauses(pauses, format_timestamp)
+                st.subheader("Analyse des pauses")
+                st.text_area("Analyse des pauses", pause_text, height=180)
+                chart_pauses = graph_pauses(pauses)
+                st.altair_chart(chart_pauses, use_container_width=True)
+            else:
+                st.subheader("Analyse des pauses")
+                st.info("Aucune pause supérieure à 1 seconde n'a été détectée.")
+
+            st.markdown(
+                """
+                **Remarque sur le découpage :**
+
+                - En mode **whisper**, seule la segmentation interne détectée par Whisper est utilisée.
+                - En mode **ponctuation**, la transcription globale est découpée par ponctuation.
+                """
             )
-        elif st.session_state["url"]:
-            ok, msg = preparer_depuis_url(
-                st.session_state["url"],
-                cookies_path,
-                qualite,
-                verbose,
-                utiliser_intervalle,
-                st.session_state["debut_secs"],
-                st.session_state["fin_secs"]
-            )
-        else:
-            st.warning("Veuillez fournir une URL ou un fichier local.")
-            ok, msg = False, None
+        except Exception as exc:
+            st.error(f"Une erreur est survenue : {exc}")
 
-        if ok:
-            st.session_state["video_base"], st.session_state["base_court"] = msg
-            heartbeat()
-            st.success(f"Vidéo prête : {Path(st.session_state['video_base']).name}")
-        elif msg:
-            st.error(msg)
 
-st.subheader("Aperçu")
-apercu_ok = False
-if st.session_state.get("video_base") and Path(st.session_state["video_base"]).exists():
-    p = Path(st.session_state["video_base"])
-    if p.stat().st_size <= SEUIL_APERCU_OCTETS:
-        with open(p, "rb") as fh:
-            st.video(fh.read(), format="video/mp4")
-            apercu_ok = True
-
-if not apercu_ok:
-    st.info("Aperçu indisponible ou fichier volumineux. Utilisez les onglets pour l’extraction et les analyses.")
+if __name__ == "__main__":
+    main()
