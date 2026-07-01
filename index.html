@@ -599,6 +599,16 @@
                 refreshDashboard();
             });
 
+            window.addEventListener("message", (event) => {
+                const payload = event && event.data;
+                if (!payload || typeof payload !== "object") return;
+                if (payload.type !== "codeandcortex-ticket:released") return;
+                const appId = String(payload.appId || "").trim();
+                if (!appId) return;
+                clearLocalTicket(appId);
+                refreshDashboard();
+            });
+
             window.addEventListener("focus", () => {
                 refreshDashboard();
             });

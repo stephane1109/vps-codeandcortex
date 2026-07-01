@@ -67,6 +67,7 @@ const els = {
 
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
 const TICKET_SESSION_STORAGE_KEY = "chdrainette_ticket_session";
+const HOME_DASHBOARD_MESSAGE_PREFIX = "codeandcortex-ticket";
 let ticketReleasedLocally = false;
 let idleReleaseTimerId = null;
 let lastTicketInteractionAt = Date.now();
@@ -283,6 +284,31 @@ function rememberUserInteraction() {
   scheduleIdleRelease();
 }
 
+function dashboardMessageTargetOrigin() {
+  if (!document.referrer) {
+    return "*";
+  }
+  try {
+    return new URL(document.referrer).origin || "*";
+  } catch (_error) {
+    return "*";
+  }
+}
+
+function notifyHomeDashboard(eventName) {
+  if (!window.opener || typeof window.opener.postMessage !== "function") {
+    return;
+  }
+  window.opener.postMessage(
+    {
+      type: `${HOME_DASHBOARD_MESSAGE_PREFIX}:${eventName}`,
+      appId: "chdrainette",
+      at: Date.now(),
+    },
+    dashboardMessageTargetOrigin(),
+  );
+}
+
 async function autoReleaseTicketAfterInactivity() {
   if (state.currentJobId || !hasLiveTicket()) {
     return;
@@ -297,6 +323,7 @@ async function autoReleaseTicketAfterInactivity() {
     rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
     window.localStorage.removeItem(TICKET_SESSION_STORAGE_KEY);
     ticketReleasedLocally = true;
+    notifyHomeDashboard("released");
     renderTicketStatus();
   } catch (_error) {
     scheduleIdleRelease();
@@ -325,6 +352,7 @@ function releaseTicketOnPageHide() {
   }
   const sessionId = window.localStorage.getItem(TICKET_SESSION_STORAGE_KEY) || "";
   window.localStorage.removeItem(TICKET_SESSION_STORAGE_KEY);
+  notifyHomeDashboard("released");
   void fetch("/api/tickets/release", {
     method: "POST",
     credentials: "same-origin",
@@ -438,6 +466,7 @@ async function releaseAccess() {
     rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
     window.localStorage.removeItem(TICKET_SESSION_STORAGE_KEY);
     ticketReleasedLocally = true;
+    notifyHomeDashboard("released");
     renderTicketStatus();
   } catch (error) {
     els.accessMessage.textContent = error instanceof Error ? error.message : "Libération impossible.";
