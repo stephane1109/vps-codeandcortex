@@ -7,6 +7,12 @@
     --couleur-secondaire: #666666;
     --couleur-bordure: #dddddd;
     --ombre-carte: 0 12px 28px rgba(0, 0, 0, 0.08);
+    --couleur-classe-extraire: rgba(255, 191, 87, 0.16);
+    --couleur-classe-extraire-bordure: rgba(214, 138, 30, 0.28);
+    --couleur-classe-calculer: rgba(114, 169, 255, 0.14);
+    --couleur-classe-calculer-bordure: rgba(53, 108, 193, 0.26);
+    --couleur-classe-multimodale: rgba(118, 210, 168, 0.15);
+    --couleur-classe-multimodale-bordure: rgba(46, 139, 103, 0.24);
 }
 
 * {
@@ -255,6 +261,21 @@ h1 {
     padding: 18px;
     border: 1px solid var(--couleur-bordure);
     background: rgba(255, 255, 255, 0.72);
+}
+
+.famille-applications.famille-extraire {
+    border-color: var(--couleur-classe-extraire-bordure);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), var(--couleur-classe-extraire));
+}
+
+.famille-applications.famille-calculer {
+    border-color: var(--couleur-classe-calculer-bordure);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), var(--couleur-classe-calculer));
+}
+
+.famille-applications.famille-multimodale {
+    border-color: var(--couleur-classe-multimodale-bordure);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), var(--couleur-classe-multimodale));
 }
 
 .famille-entete {
