@@ -1,44 +1,19 @@
-# Deploiement OVH VPS avec Coolify
+# Deploiement Coolify - Analyse MM
 
-Ce projet est pret pour un deploiement sur un VPS OVH via **Coolify** avec le `Dockerfile` present dans ce dossier.
+## Branche conseillee
 
-## 1. Configuration Coolify
+Utiliser la branche dediee :
 
-Dans Coolify :
+`deploy-Analyse_MM`
 
-1. Cree une nouvelle ressource `Application`
-2. Selectionne le depot Git
-3. Choisis le build `Dockerfile`
-4. Si tu deployes la branche standalone `deploy-mp3_to_text`, laisse le `Base Directory` vide, `/` ou `.`.
-   Si tu deployes encore depuis `main`, alors seulement tu peux utiliser :
+Cette branche doit contenir uniquement les fichiers de l'application a la racine pour eviter les clonages inutiles du depot complet.
 
-```text
-/applications/mp3_to_text
-```
-
-5. `Dockerfile Location` :
-
-```text
-Dockerfile
-```
-
-6. Port applicatif / `Ports Exposes` :
-
-```text
-8501
-```
-
-## 2. Variables d'environnement recommandees
+## Variables d'environnement
 
 ```env
-PORT=8501
-STREAMLIT_SERVER_BASE_URL_PATH=
-APP_WORKDIR=/tmp/mp3-to-text
-WHISPER_CACHE_DIR=/home/app/.cache/whisper
-WHISPER_PROFILE_DEFAULT=faster-whisper
-WHISPER_COMPUTE_TYPE=int8
-REDIS_URL=redis://:motdepasse@nom-exact-du-service-redis:6379/0
-APP_TICKET_ID=mp3_to_text
+REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
+APP_TICKET_ID=Analyse_MM
+APP_TICKET_ENFORCED=1
 APP_TICKET_MAX_ACTIVE=1
 APP_TICKET_COST=4
 CAPACITE_SERVEUR=6
@@ -46,65 +21,21 @@ APP_TICKET_TTL_SECONDS=3600
 APP_TICKET_MAX_WAITING=20
 APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=300000
-APP_TICKET_ENFORCED=1
+APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
+APP_TICKET_HIDDEN_RELEASE_SECONDS=300
+APP_DATA_DIR=/data/app
+PORT=8501
 ```
 
-### Commentaires utiles
+## Reglages Coolify
 
-- `REDIS_URL` doit contenir le nom exact du service Redis visible dans Coolify.
-- Si Redis exige un utilisateur ACL, utilise `redis://default:motdepasse@nom-exact-du-service-redis:6379/0`
-- Si l'application affiche `Controle d'acces temporairement indisponible`, la cause Redis exacte doit maintenant s'afficher juste en dessous dans l'interface.
-- `WHISPER_PROFILE_DEFAULT` permet de preselectionner `faster-whisper`, `sm` ou `md` dans l'application.
-- Le mode avance de l'application laisse toujours choisir directement `tiny`, `base`, `small`, `medium` ou `large`.
+- Build Pack : `Dockerfile`
+- Base Directory : `/`
+- Port expose : `8501`
+- Healthcheck : laisser celui du Dockerfile
 
-## 3. Healthcheck recommande
+## Remarques
 
-- Path : `/_stcore/health`
-
-## 4. Domaine
-
-Exemple de sous-domaine :
-
-- `mp3totext.codeandcortex.fr`
-
-Dans Coolify :
-
-1. Ouvre l'application
-2. Ajoute ton domaine
-3. Active le certificat SSL automatique
-
-## 5. DNS OVH
-
-Dans la zone DNS de `codeandcortex.fr`, ajoute par exemple :
-
-- Type `A` : `mp3totext` -> `IP publique du VPS`
-
-## 6. Ressources conseillees
-
-Pour cette application :
-
-- CPU : 2 vCPU minimum
-- RAM : 4 Go minimum pour `base` ou `small`
-- RAM : 8 Go ou plus si tu veux proposer `medium` ou `large`
-- Disque : 5 Go minimum pour les modeles et fichiers temporaires
-
-## 7. Verification locale
-
-```bash
-docker build -t mp3-to-text .
-docker run --rm -p 8501:8501 mp3-to-text
-```
-
-Puis ouvrir :
-
-```text
-http://localhost:8501
-```
-
-## 8. Notes d'exploitation
-
-- Le conteneur ecoute sur `0.0.0.0`.
-- Le premier lancement d'un modele Whisper est plus lent a cause du telechargement.
-- Le cache Whisper peut rester ephemere ou etre monte sur un volume si tu veux accelerer les redeploiements.
-- Aucune base de donnees n'est necessaire.
-- Les choix visibles dans l'interface sont maintenant `faster-whisper`, `sm` et `md`, avec un mode avance si tu veux afficher les tailles Whisper classiques.
+- `APP_DATA_DIR=/data/app` sert a conserver un espace de travail clair cote conteneur.
+- `APP_TICKET_MAX_ACTIVE=1` est adapte a une application multimodale lourde.
+- Si une analyse video est longue, augmente `APP_TICKET_TTL_SECONDS`.

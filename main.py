@@ -1,363 +1,132 @@
-from __future__ import annotations
+# main.py
+# Page d’accueil : choix de la source (URL + cookies, ou fichier local),
+# préparation de la vidéo de base (HD ou compressée), intervalle optionnel,
+# et aperçu. Aucune extraction ici : tout se fait dans les onglets.
 
-import concurrent.futures
 import os
-import re
-import time
-import uuid
-from pathlib import Path
+os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 
 import streamlit as st
-from yt_dlp import YoutubeDL
-from yt_dlp.utils import DownloadError
+from pathlib import Path
+import subprocess
 
-from ticket_gate import enforce_streamlit_access, keep_ticket_alive
+from app_runtime import enforce_access, heartbeat
+from core_media import (
+    initialiser_repertoires, info_ffmpeg, afficher_message_cookies,
+    preparer_depuis_url, preparer_depuis_fichier, SEUIL_APERCU_OCTETS
+)
 
-try:
-    from faster_whisper import WhisperModel
-except Exception:  # pragma: no cover - depend de l'image Docker finale
-    WhisperModel = None
+# ----------------- Initialisation -----------------
+BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 
+st.set_page_config(page_title="Source & Préparation", layout="wide")
+enforce_access()
+st.title("Source & Préparation de la vidéo")
+st.markdown("**www.codeandcortex.fr**")
 
-APP_NAME = "MP3 to Text"
-DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=WDQqDOXAUIM"
-DEFAULT_LANGUAGE = "fr"
-DEFAULT_MODEL = "base"
-DEFAULT_PROFILE = (os.getenv("WHISPER_PROFILE_DEFAULT", "faster-whisper") or "faster-whisper").strip().lower()
-MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large"]
-UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
-WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
-WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
-WHISPER_MODEL_ALIASES = {
-    "large": "large-v3",
-}
-MODEL_PROFILES = {
-    # #### PROFILS DE MODELES AFFICHES DANS L'APPLICATION
-    # L'utilisateur voit explicitement ces trois choix dans l'interface.
-    "faster-whisper": {
-        "backend": "faster-whisper",
-        "model_size": "base",
-        "label": "faster-whisper",
-        "description": "Profil rapide et leger, recommande par defaut sur le VPS.",
-    },
-    "sm": {
-        "backend": "faster-whisper",
-        "model_size": "small",
-        "label": "sm",
-        "description": "Modele small, meilleur compromis qualite/temps.",
-    },
-    "md": {
-        "backend": "faster-whisper",
-        "model_size": "medium",
-        "label": "md",
-        "description": "Modele medium, plus lourd mais souvent plus precis.",
-    },
-}
+# Etat partagé
+st.session_state.setdefault("video_base", None)
+st.session_state.setdefault("base_court", None)
+st.session_state.setdefault("url", "")
+st.session_state.setdefault("cookies_path", None)
+st.session_state.setdefault("local_temp_path", None)
+st.session_state.setdefault("local_name_base", None)
+st.session_state.setdefault("debut_secs", 0)
+st.session_state.setdefault("fin_secs", 10)
 
-
-class ApplicationError(RuntimeError):
-    """Erreur metier a afficher proprement dans l'interface."""
-
-
-def ensure_directory(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def normalize_filename_fragment(value: str, fallback: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", (value or "").strip())
-    cleaned = cleaned.strip("._-")
-    return cleaned or fallback
-
-
-def create_run_directory() -> Path:
-    ensure_directory(WORKDIR)
-    run_dir = WORKDIR / f"run-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-    return ensure_directory(run_dir)
-
-
-def find_downloaded_mp3(run_dir: Path) -> Path:
-    candidates = sorted(run_dir.glob("*.mp3"), key=lambda item: item.stat().st_mtime, reverse=True)
-    if candidates:
-        return candidates[0]
-    raise ApplicationError("Le telechargement YouTube est termine mais aucun fichier MP3 n'a ete trouve.")
-
-
-def telecharger_audio_youtube(url: str, run_dir: Path) -> Path:
-    if not url.strip():
-        raise ApplicationError("Veuillez entrer une URL YouTube.")
-
-    output_template = str(run_dir / "%(title).120s.%(ext)s")
-    options_ydl = {
-        "format": "bestaudio/best",
-        "noplaylist": True,
-        "outtmpl": output_template,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
-        "quiet": True,
-        "no_warnings": True,
-    }
-
-    try:
-        with YoutubeDL(options_ydl) as ydl:
-            ydl.extract_info(url.strip(), download=True)
-    except DownloadError as exc:
-        raise ApplicationError(f"Erreur lors du telechargement YouTube : {exc}") from exc
-    except Exception as exc:  # pragma: no cover - depend du reseau/runtime
-        raise ApplicationError(f"Telechargement YouTube impossible : {exc}") from exc
-
-    return find_downloaded_mp3(run_dir)
-
-
-def save_uploaded_audio(uploaded_file, run_dir: Path) -> Path:
-    if uploaded_file is None:
-        raise ApplicationError("Veuillez importer un fichier audio.")
-
-    suffix = Path(uploaded_file.name).suffix.lower()
-    if not suffix:
-        suffix = ".mp3"
-
-    filename = normalize_filename_fragment(Path(uploaded_file.name).stem, "audio") + suffix
-    audio_path = run_dir / filename
-    audio_path.write_bytes(uploaded_file.getbuffer())
-    return audio_path
-
-
-@st.cache_resource(show_spinner=False)
-def load_whisper_model(model_size: str):
-    if WhisperModel is None:
-        raise ApplicationError("Le backend faster-whisper n'est pas disponible dans l'application.")
-    ensure_directory(WHISPER_CACHE_DIR)
-    resolved_model_size = WHISPER_MODEL_ALIASES.get(model_size, model_size)
-    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip() or "int8"
-    return WhisperModel(
-        resolved_model_size,
-        device="cpu",
-        compute_type=compute_type,
-        download_root=str(WHISPER_CACHE_DIR),
-    )
-
-
-def transcrire_audio(audio_path: Path, model_size: str, language_code: str) -> str:
-    if not audio_path.exists():
-        raise ApplicationError(f"Fichier audio introuvable : {audio_path}")
-
-    model = load_whisper_model(model_size)
-    language = (language_code or "").strip() or None
-
-    try:
-        segments, _info = model.transcribe(
-            str(audio_path),
-            language=language,
-            beam_size=5,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 300},
-        )
-        text = " ".join((segment.text or "").strip() for segment in segments).strip()
-    except Exception as exc:  # pragma: no cover - depend du backend Whisper
-        raise ApplicationError(f"Erreur lors de la transcription Whisper : {exc}") from exc
-
-    if not text:
-        raise ApplicationError("Whisper n'a renvoye aucun texte exploitable.")
-    return text
-
-
-def resolve_model_profile(profile_key: str, advanced_mode: bool, advanced_model_size: str) -> tuple[str, str, str]:
-    normalized_key = (profile_key or DEFAULT_PROFILE).strip().lower()
-    if advanced_mode:
-        model_size = (advanced_model_size or DEFAULT_MODEL).strip().lower() or DEFAULT_MODEL
-        return "faster-whisper", model_size, f"avance ({model_size})"
-
-    profile = MODEL_PROFILES.get(normalized_key) or MODEL_PROFILES["faster-whisper"]
-    return (
-        str(profile["backend"]),
-        str(profile["model_size"]),
-        str(profile["label"]),
-    )
-
-
-def format_profile_option(profile_key: str) -> str:
-    profile = MODEL_PROFILES.get(profile_key, MODEL_PROFILES["faster-whisper"])
-    return f"{profile['label']} - {profile['description']}"
-
-
-def save_transcription(transcription_text: str, audio_path: Path) -> Path:
-    output_path = audio_path.with_suffix(".txt")
-    output_path.write_text(transcription_text, encoding="utf-8")
-    return output_path
-
-
-def run_transcription_with_progress(audio_path: Path, model_size: str, language_code: str, debug_mode: bool) -> str:
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(transcrire_audio, audio_path, model_size, language_code)
-        progress_bar = st.progress(0)
-        progress_text = st.empty()
-        progress = 0
-        heartbeat_tick = 0
-
-        while not future.done():
-            time.sleep(0.2)
-            progress = min(95, progress + 1)
-            progress_bar.progress(progress)
-            heartbeat_tick += 1
-            if heartbeat_tick % 20 == 0:
-                # Si le traitement devient long, augmente APP_TICKET_TTL_SECONDS
-                # dans Coolify ou garde ce heartbeat actif pour ne pas perdre le ticket.
-                keep_ticket_alive("mp3_to_text", APP_NAME)
-            if debug_mode:
-                progress_text.text(f"Progression estimee : {progress}%")
-
-        transcription_text = future.result()
-        progress_bar.progress(100)
-        progress_text.text("Progression estimee : 100%")
-        return transcription_text
-
-
-def build_sidebar_notes() -> None:
-    with st.sidebar:
-        st.header("Execution VPS")
-        st.caption("Le modele choisi est telecharge au premier usage puis reutilise depuis le cache du conteneur.")
-        st.markdown(
-            "\n".join(
-                [
-                    "- Source audio : YouTube ou fichier local",
-                    "- Choix visibles : faster-whisper, sm, md",
-                    "- Mode avance : tiny, base, small, medium, large",
-                    "- Backend Docker : Whisper CPU compatible VPS",
-                    "- Export final : transcription `.txt`",
-                    "- Dossier temporaire : `APP_WORKDIR`",
-                ]
-            )
-        )
-
-
-def main() -> None:
-    st.set_page_config(page_title=APP_NAME, page_icon="🎙️", layout="centered")
-    # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
-    # Variables a modifier dans Coolify si besoin :
-    # - REDIS_URL
-    # - APP_TICKET_MAX_ACTIVE (laisser 1 pour une application lourde)
-    # - APP_TICKET_COST
-    # - CAPACITE_SERVEUR
-    # - APP_TICKET_TTL_SECONDS
-    enforce_streamlit_access("mp3_to_text", APP_NAME)
-    st.title("Speech to text avec Whisper - OpenAI")
-    st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
-    st.markdown(
-        """
-        Cette version VPS permet de :
-
-        - telecharger l'audio d'une video YouTube
-        - importer un fichier audio local
-        - choisir le profil visible `faster-whisper`, `sm` ou `md`
-        - garder un mode avance pour choisir directement `tiny`, `base`, `small`, `medium`, `large`
-        - transcrire automatiquement en texte puis telecharger le resultat
-        """
-    )
-    build_sidebar_notes()
-
-    debug_mode = st.checkbox("Mode debug", value=False)
-    source = st.radio("Choisissez la source de l'audio", options=["URL YouTube", "Fichier audio"])
-
-    youtube_url = ""
-    uploaded_audio = None
-
-    if source == "URL YouTube":
-        youtube_url = st.text_input("Entrez l'URL de la video YouTube", value=DEFAULT_YOUTUBE_URL)
+# ----------------- Diagnostic -----------------
+with st.expander("Diagnostic système"):
+    chemin_ffmpeg, version_l1 = info_ffmpeg()
+    if chemin_ffmpeg:
+        st.write(f"ffmpeg : {chemin_ffmpeg}")
+        if version_l1:
+            st.code(version_l1)
     else:
-        uploaded_audio = st.file_uploader(
-            "Importer un fichier audio",
-            type=UPLOAD_EXTENSIONS,
-            help="Formats conseilles : mp3, wav, m4a, mp4, webm.",
-        )
+        st.write("ffmpeg : introuvable")
 
-    profile_options = list(MODEL_PROFILES.keys())
-    default_profile = DEFAULT_PROFILE if DEFAULT_PROFILE in MODEL_PROFILES else "faster-whisper"
-    profile_index = profile_options.index(default_profile)
-    selected_profile = st.selectbox(
-        "Choisissez le profil de modele",
-        options=profile_options,
-        index=profile_index,
-        format_func=format_profile_option,
-        help="Choix visibles demandes dans l'application : faster-whisper, sm, md.",
-    )
-    advanced_mode = st.checkbox(
-        "Afficher le mode avance pour choisir directement tiny/base/small/medium/large",
-        value=False,
-    )
-    advanced_model_size = st.selectbox(
-        "Choisissez la taille exacte du modele Whisper",
-        options=MODEL_OPTIONS,
-        index=1,
-        disabled=not advanced_mode,
-    )
-    backend_name, model_size, resolved_profile = resolve_model_profile(
-        selected_profile,
-        advanced_mode,
-        advanced_model_size,
-    )
-    language_code = st.text_input(
-        "Code langue pour la transcription",
-        value=DEFAULT_LANGUAGE,
-        help="Exemple : fr, en, es. Laissez vide pour laisser Whisper detecter la langue.",
-    )
+# ----------------- Source -----------------
+st.subheader("Choix de la source")
 
-    st.caption(f"Profil actif : `{resolved_profile}` · Backend : `{backend_name}` · Modele charge : `{model_size}`")
+colL, colR = st.columns([2, 1])
 
-    if st.button("Lancer la transcription", type="primary"):
-        run_dir = create_run_directory()
-        audio_path: Path | None = None
+with colL:
+    url = st.text_input("URL YouTube", value=st.session_state["url"])
+    st.session_state["url"] = url
 
-        try:
-            if source == "URL YouTube":
-                with st.spinner("Telechargement de l'audio depuis YouTube..."):
-                    audio_path = telecharger_audio_youtube(youtube_url, run_dir)
-            else:
-                audio_path = save_uploaded_audio(uploaded_audio, run_dir)
+cookies_path = afficher_message_cookies(REP_SORTIE)
 
-            st.success(f"Audio pret : {audio_path.name}")
+with colR:
+    qualite = st.radio("Qualité vidéo de base", ["Compressée (1280p, CRF 28)", "HD (max qualité dispo)"], index=0)
+    verbose = st.checkbox("Mode diagnostic yt-dl", value=False)
 
-            with st.spinner("Transcription en cours..."):
-                transcription_text = run_transcription_with_progress(audio_path, model_size, language_code, debug_mode)
+st.markdown(
+    "Par défaut, l’extraction porte sur **toute la vidéo**. "
+    "Active un intervalle personnalisé si besoin. "
+    "Si la vidéo est restreinte (403), exporte tes cookies avec l’extension Firefox : "
+    "[cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)."
+)
 
-            transcription_path = save_transcription(transcription_text, audio_path)
-            st.success(f"Transcription enregistree : {transcription_path.name}")
+etendue = st.radio("Étendue à préparer", ["Toute la vidéo", "Intervalle personnalisé"], index=0, horizontal=True)
+utiliser_intervalle = (etendue == "Intervalle personnalisé")
+if utiliser_intervalle:
+    st.info(f"Intervalle personnalisé activé : de {st.session_state['debut_secs']}s à {st.session_state['fin_secs']}s. La préparation traitera uniquement cet intervalle.")
+    c1, c2 = st.columns(2)
+    st.session_state["debut_secs"] = c1.number_input("Début (s)", min_value=0, value=st.session_state["debut_secs"])
+    st.session_state["fin_secs"] = c2.number_input("Fin (s)", min_value=1, value=st.session_state["fin_secs"])
+    if st.session_state["fin_secs"] <= st.session_state["debut_secs"]:
+        st.warning("La fin doit être strictement supérieure au début.")
 
-            if debug_mode:
-                st.info(f"Dossier de travail : {run_dir}")
-                st.code(
-                    "\n".join(
-                        [
-                            f"Audio : {audio_path}",
-                            f"Profil choisi : {selected_profile}",
-                            f"Profil resolu : {resolved_profile}",
-                            f"Backend : {backend_name}",
-                            f"Transcription : {transcription_path}",
-                            f"Modele : {model_size}",
-                            f"Langue : {language_code or 'auto'}",
-                            f"Cache Whisper : {WHISPER_CACHE_DIR}",
-                        ]
-                    )
-                )
+st.subheader("Ou importer un fichier local")
+f_local = st.file_uploader("Importer une vidéo (.mp4)", type=["mp4"])
+if f_local is not None:
+    tmp = REP_TMP / f"local_{f_local.name}"
+    with open(tmp, "wb") as g:
+        g.write(f_local.read())
+    st.session_state["local_temp_path"] = str(tmp)
+    st.session_state["local_name_base"] = Path(f_local.name).stem
+    st.success(f"Fichier local chargé : {f_local.name}")
 
-            st.subheader("Transcription")
-            st.text_area("Texte de la transcription", transcription_text, height=320)
-            st.download_button(
-                "Telecharger la transcription",
-                data=transcription_text,
-                file_name=transcription_path.name,
-                mime="text/plain",
+if st.button("Préparer la vidéo"):
+    heartbeat()
+    with st.spinner("Préparation en cours..."):
+        if st.session_state.get("local_temp_path"):
+            ok, msg = preparer_depuis_fichier(
+                Path(st.session_state["local_temp_path"]),
+                st.session_state["local_name_base"],
+                qualite,
+                utiliser_intervalle,
+                st.session_state["debut_secs"],
+                st.session_state["fin_secs"]
             )
-        except ApplicationError as exc:
-            st.error(str(exc))
-        except Exception as exc:  # pragma: no cover - garde-fou Streamlit
-            st.error(f"Erreur inattendue : {exc}")
+        elif st.session_state["url"]:
+            ok, msg = preparer_depuis_url(
+                st.session_state["url"],
+                cookies_path,
+                qualite,
+                verbose,
+                utiliser_intervalle,
+                st.session_state["debut_secs"],
+                st.session_state["fin_secs"]
+            )
+        else:
+            st.warning("Veuillez fournir une URL ou un fichier local.")
+            ok, msg = False, None
 
+        if ok:
+            st.session_state["video_base"], st.session_state["base_court"] = msg
+            heartbeat()
+            st.success(f"Vidéo prête : {Path(st.session_state['video_base']).name}")
+        elif msg:
+            st.error(msg)
 
-if __name__ == "__main__":
-    main()
+st.subheader("Aperçu")
+apercu_ok = False
+if st.session_state.get("video_base") and Path(st.session_state["video_base"]).exists():
+    p = Path(st.session_state["video_base"])
+    if p.stat().st_size <= SEUIL_APERCU_OCTETS:
+        with open(p, "rb") as fh:
+            st.video(fh.read(), format="video/mp4")
+            apercu_ok = True
+
+if not apercu_ok:
+    st.info("Aperçu indisponible ou fichier volumineux. Utilisez les onglets pour l’extraction et les analyses.")

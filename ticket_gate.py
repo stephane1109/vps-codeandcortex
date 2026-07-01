@@ -17,7 +17,7 @@ except ModuleNotFoundError:  # pragma: no cover - depend de l'image Docker final
 
 
 """
-Controle d'acces Redis pour les applications Streamlit.
+Contrôle d'accès Redis pour les applications Streamlit.
 
 #### VARIABLES D'ENVIRONNEMENT A MODIFIER SI BESOIN
 
@@ -91,7 +91,6 @@ TICKET_STATUS_STYLE = """
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(248, 250, 252, 0.96);
-  color: #0f172a !important;
 }
 .ticket-status-dot {
   width: 0.8rem;
@@ -116,26 +115,6 @@ TICKET_STATUS_STYLE = """
 .ticket-status-meta {
   font-size: 0.84rem;
   line-height: 1.35;
-  color: #0f172a !important;
-}
-.ticket-status-meta strong {
-  color: #0f172a !important;
-}
-.ticket-status-card.is-active .ticket-status-meta,
-.ticket-status-card.is-active .ticket-status-meta * {
-  color: #15803d !important;
-}
-.ticket-status-card.is-active .ticket-status-meta strong {
-  color: #15803d !important;
-}
-.ticket-status-card.is-waiting .ticket-status-meta strong {
-  color: #b45309 !important;
-}
-.ticket-status-card.is-error .ticket-status-meta strong {
-  color: #b91c1c !important;
-}
-.ticket-status-card.is-released .ticket-status-meta strong {
-  color: #475569 !important;
 }
 @keyframes ticket-pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
@@ -184,10 +163,10 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
 
 def _redis_client():
     if redis is None:
-        return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
+        return None, "Le paquet Python 'redis' n'est pas installé dans l'application."
     redis_url_env = os.getenv("REDIS_URL", "").strip()
     if not redis_url_env:
-        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
+        return None, "REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url_env, decode_responses=True)
         client.ping()
@@ -283,7 +262,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": bypass_message or "Controle d'acces desactive.",
+            "message": bypass_message or "Contrôle d'accès désactivé.",
         }
 
     active = _active_count(client, cfg)
@@ -299,7 +278,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": "Aucun ticket associe a cette session.",
+            "message": "Aucun ticket associé à cette session.",
         }
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
@@ -355,7 +334,7 @@ def _released_snapshot(client, cfg: dict[str, Any], message: str) -> dict[str, A
 
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de réserver un ticket.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -562,14 +541,14 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
 def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     if not cfg["enabled"]:
-        return _bypass_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _bypass_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     if st.session_state.get(RELEASED_STATE_KEY):
         return _released_snapshot(
             client,
             cfg,
-            "Acces libere pour cette page. Clique sur 'Reprendre l'acces' pour revenir dans la file.",
+            "Accès libéré pour cette page. Clique sur 'Reprendre l'accès' pour revenir dans la file.",
         )
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
@@ -587,40 +566,40 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         _install_release_hooks(cfg, session_id)
 
     with st.sidebar:
-        st.markdown("### Acces utilisateur")
+        st.markdown("### Accès utilisateur")
         st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
 
         if snapshot["statut"] == "actif":
             st.markdown(
                 f"""
-                <div class="ticket-status-card is-active">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-active"></span>
                   <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.success(f"Acces actif ({snapshot['active']} / {snapshot['max_active']}).")
-            if st.button("Liberer l'acces", use_container_width=True):
+            st.success(f"Accès actif ({snapshot['active']} / {snapshot['max_active']}).")
+            if st.button("Libérer l'accès", use_container_width=True):
                 if release_ticket_for_session(default_app_id, app_label):
                     st.rerun()
-                st.warning("Impossible de liberer le ticket courant pour le moment.")
+                st.warning("Impossible de libérer le ticket courant pour le moment.")
         elif snapshot["statut"] == "attente":
             position = snapshot["position"] or "?"
             st.markdown(
                 f"""
-                <div class="ticket-status-card is-waiting">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-waiting"></span>
-                  <div class="ticket-status-meta"><strong>Application occupee</strong><br>Position actuelle dans la file : {position}.</div>
+                  <div class="ticket-status-meta"><strong>Application occupée</strong><br>Position actuelle dans la file : {position}.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.warning(f"Application occupee. Position dans la file : {position}.")
+            st.warning(f"Application occupée. Position dans la file : {position}.")
         elif snapshot["statut"] == "refuse":
             st.markdown(
                 """
-                <div class="ticket-status-card is-error">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-error"></span>
                   <div class="ticket-status-meta"><strong>File d'attente pleine</strong><br>Impossible d'ajouter un nouvel utilisateur pour le moment.</div>
                 </div>
@@ -631,28 +610,28 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         elif snapshot["statut"] == "released":
             st.markdown(
                 """
-                <div class="ticket-status-card is-released">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-released"></span>
-                  <div class="ticket-status-meta"><strong>Acces libere</strong><br>Cette page n'occupe plus l'application.</div>
+                  <div class="ticket-status-meta"><strong>Accès libéré</strong><br>Cette page n'occupe plus l'application.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.info("Acces libere pour cette page.")
-            if st.button("Reprendre l'acces", use_container_width=True):
+            st.info("Accès libéré pour cette page.")
+            if st.button("Reprendre l'accès", use_container_width=True):
                 _resume_local_ticket_state()
                 st.rerun()
         else:
             st.markdown(
                 """
-                <div class="ticket-status-card is-error">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-error"></span>
-                  <div class="ticket-status-meta"><strong>Acces indisponible</strong><br>Le ticket courant n'a pas pu etre valide.</div>
+                  <div class="ticket-status-meta"><strong>Accès indisponible</strong><br>Le ticket courant n'a pas pu être validé.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.error("Controle d'acces temporairement indisponible.")
+            st.error("Contrôle d'accès temporairement indisponible.")
             if snapshot["message"]:
                 st.error(snapshot["message"])
 
@@ -669,13 +648,13 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.stop()
 
     if snapshot["statut"] == "released":
-        st.info("Acces libere. Clique sur 'Reprendre l'acces' pour revenir dans la file.")
+        st.info("Accès libéré. Clique sur 'Reprendre l'accès' pour revenir dans la file.")
         st.stop()
 
     if snapshot["statut"] == "refuse":
         st.error("File d'attente pleine pour cette application.")
     else:
-        st.error("Controle d'acces temporairement indisponible.")
+        st.error("Contrôle d'accès temporairement indisponible.")
         if snapshot["message"]:
             st.error(snapshot["message"])
     st.stop()
