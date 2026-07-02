@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 
 RESULT_COLUMNS = [
@@ -20,12 +21,14 @@ RESULT_COLUMNS = [
     "Vues",
     "Likes",
     "Commentaires",
-    "Commentaires desactives",
+    "Commentaires désactivés",
     "Langue par defaut",
     "Langue audio par defaut",
 ]
 
 INTERNAL_DATE_COLUMN = "_date_publication_utc"
+APP_NAME = "Extraction d'informations YouTube"
+APP_TICKET_DEFAULT_ID = "Extraction_infos_YouTube"
 
 REGION_OPTIONS = {
     "Toutes": None,
@@ -185,6 +188,7 @@ def rechercher_videos_youtube(
     max_videos: int = 100,
     sort_by: str = "Vues",
 ) -> pd.DataFrame:
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     youtube = build("youtube", "v3", developerKey=cle_api)
     category_mapping = build_category_mapping(youtube, region_code)
 
@@ -192,6 +196,7 @@ def rechercher_videos_youtube(
     collected_items: list[dict[str, object]] = []
 
     while True:
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
         search_params = {
             "q": mot_cle,
             "part": "snippet",
@@ -211,6 +216,7 @@ def rechercher_videos_youtube(
             search_params["publishedBefore"] = published_before
 
         search_response = youtube.search().list(**search_params).execute()
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
         video_ids = [
             item.get("id", {}).get("videoId")
             for item in search_response.get("items", [])
@@ -218,6 +224,7 @@ def rechercher_videos_youtube(
         ]
 
         for video_id_batch in chunked(video_ids, 50):
+            keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
             videos_response = youtube.videos().list(
                 part="snippet,statistics",
                 id=",".join(video_id_batch),
@@ -247,7 +254,7 @@ def rechercher_videos_youtube(
                         "Vues": int(stats.get("viewCount", 0)),
                         "Likes": int(stats.get("likeCount", 0)),
                         "Commentaires": int(stats.get("commentCount", 0)),
-                        "Commentaires desactives": "commentCount" not in stats,
+                        "Commentaires désactivés": "commentCount" not in stats,
                         "Langue par defaut": default_language,
                         "Langue audio par defaut": default_audio_language,
                         INTERNAL_DATE_COLUMN: date_iso,
@@ -276,18 +283,26 @@ def rechercher_videos_youtube(
     formatted_dates = df[INTERNAL_DATE_COLUMN].dt.strftime("%Y-%m-%d %H:%M:%S")
     df.loc[formatted_dates.notna(), "Date de publication"] = formatted_dates[formatted_dates.notna()]
     df = df.reset_index(drop=True)
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     return df[RESULT_COLUMNS]
 
 
 def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Resultats")
+        df.to_excel(writer, index=False, sheet_name="Résultats")
     buffer.seek(0)
     return buffer.getvalue()
 
 
-st.set_page_config(page_title="Extraction infos YouTube", layout="centered")
+# La sidebar doit rester visible par défaut pour afficher nettement
+# l'état utilisateur / file d'attente / libération d'accès.
+st.set_page_config(
+    page_title="Extraction infos YouTube",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 if "df_resultats" not in st.session_state:
     st.session_state.df_resultats = None
@@ -295,24 +310,24 @@ if "nom_fichier_export" not in st.session_state:
     st.session_state.nom_fichier_export = "youtube_resultats.xlsx"
 
 st.title("Extraction d'informations YouTube")
-st.caption("Recherche de videos YouTube par mot-cle avec export Excel.")
+st.caption("Recherche de vidéos YouTube par mot-clé avec export Excel.")
 
-st.markdown("### 1. Parametres de recherche")
+st.markdown("### 1. Paramètres de recherche")
 
 cle_api_input = st.text_input(
-    "Cle API YouTube",
-    placeholder="Entrez votre cle API YouTube Data v3",
+    "Clé API YouTube",
+    placeholder="Entrez votre clé API YouTube Data v3",
     type="password",
 )
 mot_cle_input = st.text_input(
-    "Mot-cle de recherche",
+    "Mot-clé de recherche",
     placeholder="Ex : IA, Picasso, energie, geopolitique",
 )
 
 filters_col_1, filters_col_2, filters_col_3 = st.columns(3)
 
 with filters_col_1:
-    region_label = st.selectbox("Region des resultats", options=list(REGION_OPTIONS.keys()), index=0)
+    region_label = st.selectbox("Région des résultats", options=list(REGION_OPTIONS.keys()), index=0)
     region_code = REGION_OPTIONS[region_label]
 
 with filters_col_2:
@@ -321,7 +336,7 @@ with filters_col_2:
 
 with filters_col_3:
     max_videos = st.number_input(
-        "Nombre de videos a extraire",
+        "Nombre de vidéos à extraire",
         min_value=1,
         max_value=500,
         value=100,
@@ -341,26 +356,27 @@ if date_range_valid:
     published_after = date_range[0].strftime("%Y-%m-%dT00:00:00Z")
     published_before = date_range[1].strftime("%Y-%m-%dT23:59:59Z")
 else:
-    st.warning("Selectionnez une date de debut et une date de fin pour lancer la recherche.")
+    st.warning("Sélectionnez une date de début et une date de fin pour lancer la recherche.")
 
-st.markdown("### 2. Tri des resultats")
+st.markdown("### 2. Tri des résultats")
 
 sort_by = st.radio(
-    "Trier les videos par",
+    "Trier les vidéos par",
     options=["Vues", "Likes", "Commentaires"],
     horizontal=True,
 )
 
 st.info(
-    "Une cle API YouTube Data v3 est necessaire. "
-    "Le nombre reel de resultats depend de la disponibilite de l'API et des metadonnees exposees par YouTube."
+    "Une clé API YouTube Data v3 est nécessaire. "
+    "Le nombre réel de résultats dépend de la disponibilité de l'API et des métadonnées exposées par YouTube."
 )
 
 if st.button("Lancer la recherche", type="primary", disabled=not date_range_valid):
     if not cle_api_input or not mot_cle_input.strip():
-        st.error("Renseignez la cle API et le mot-cle de recherche.")
+        st.error("Renseignez la clé API et le mot-clé de recherche.")
     else:
-        with st.spinner("Recherche des videos en cours..."):
+        with st.spinner("Recherche des vidéos en cours..."):
+            keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
             try:
                 df_resultats = rechercher_videos_youtube(
                     cle_api=cle_api_input.strip(),
@@ -381,21 +397,21 @@ if st.button("Lancer la recherche", type="primary", disabled=not date_range_vali
                 st.error(f"Erreur API YouTube : {exc}")
             except Exception as exc:  # pragma: no cover - garde-fou Streamlit
                 st.session_state.df_resultats = None
-                st.error(f"Erreur lors de la recuperation des videos : {exc}")
+                st.error(f"Erreur lors de la récupération des vidéos : {exc}")
 
 df_resultats = st.session_state.df_resultats
 
 if df_resultats is not None:
     if df_resultats.empty:
-        st.warning("Aucune video ne correspond aux filtres selectionnes.")
+        st.warning("Aucune vidéo ne correspond aux filtres sélectionnés.")
     else:
         df_resultats_filtres = filter_dataframe_by_checked_dates(df_resultats)
         if df_resultats_filtres.empty:
-            st.warning("Aucune date n'est actuellement selectionnee. Coche au moins une date pour afficher des resultats.")
-        st.success(f"{len(df_resultats_filtres)} video(s) affichee(s) sur {len(df_resultats)} recuperee(s).")
+            st.warning("Aucune date n'est actuellement sélectionnée. Coche au moins une date pour afficher des résultats.")
+        st.success(f"{len(df_resultats_filtres)} vidéo(s) affichée(s) sur {len(df_resultats)} récupérée(s).")
         st.dataframe(df_resultats_filtres, use_container_width=True)
         st.download_button(
-            label="Telecharger les resultats au format Excel",
+            label="Télécharger les résultats au format Excel",
             data=dataframe_to_excel_bytes(df_resultats_filtres),
             file_name=st.session_state.nom_fichier_export,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
