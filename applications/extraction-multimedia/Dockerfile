@@ -6,7 +6,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
-    APP_DATA_DIR=/tmp/appdata
+    PORT=8501 \
+    APP_DATA_DIR=/tmp/appdata \
+    APP_TICKET_ID=extraction-multimedia \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_ENFORCED=1
+
+# #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
+# - REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
+# - APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
+# - APP_TICKET_HIDDEN_RELEASE_SECONDS=300 pour liberer un onglet laisse en arriere-plan
+# - APP_TICKET_MAX_ACTIVE=1 pour reserver cette application a un seul utilisateur a la fois
+# - APP_TICKET_COST=4 et CAPACITE_SERVEUR=6 pour rester coherent avec le reste du VPS
+# - APP_TICKET_TTL_SECONDS si tu veux allonger ou raccourcir la duree d'un ticket
 
 WORKDIR /app
 

@@ -18,6 +18,14 @@ import cv2
 import streamlit as st
 from yt_dlp import YoutubeDL
 
+from ticket_gate import enforce_streamlit_access, keep_ticket_alive
+
+st.set_page_config(
+    page_title="Extraction multimedia",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+
 
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
@@ -36,6 +44,8 @@ USER_AGENT_YOUTUBE_DEFAUT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/137.0.0.0 Safari/537.36"
 )
+APP_NAME = "Extraction multimedia"
+APP_TICKET_DEFAULT_ID = "extraction-multimedia"
 
 
 def _import_module_local(nom_module: str):
@@ -95,6 +105,7 @@ def nettoyer_sessions_expirees() -> None:
 
 initialiser_repertoires_session()
 nettoyer_sessions_expirees()
+enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 
 def ffmpeg_disponible() -> bool:
@@ -271,7 +282,8 @@ def telecharger_preparer_video(
     debut: int,
     fin: int,
 ):
-    st.write("Telechargement / preparation de la video en cours...")
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+    st.write("Téléchargement / préparation de la vidéo en cours...")
 
     ydl_opts = _opts_communs(verbose, cookies_path, user_agent)
     if utiliser_intervalle:
@@ -291,12 +303,12 @@ def telecharger_preparer_video(
         if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
             if not cookies_path:
                 return None, None, None, (
-                    "YouTube bloque la requete comme anti-bot. "
+                    "YouTube bloque la requête comme anti-bot. "
                     "Ajoute un cookies.txt recent exporte depuis le meme navigateur "
                     "et idealement la meme IP publique, puis relance."
                 )
             return None, None, None, (
-                "YouTube refuse encore la requete malgre le cookies.txt. "
+                "YouTube refuse encore la requête malgré le cookies.txt. "
                 "Cause probable : cookies trop anciens, export incomplet, compte non reconnecte "
                 "recemment, ou User-Agent non coherent avec le navigateur d'origine. "
                 "Recharge YouTube dans ton navigateur, re-exporte le cookies.txt, puis colle "
@@ -326,12 +338,13 @@ def telecharger_preparer_video(
                 return None, None, None, "Echec du fallback universel : " + (" | ".join(erreurs_fallback) or message)
         else:
             return None, None, None, message
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     candidats: List[Path] = []
     for ext in ["mp4", "mkv", "webm", "m4a", "mp3"]:
         candidats.extend(REPERTOIRE_SORTIE.glob(f"*.{ext}"))
     if not candidats:
-        return None, None, None, "Telechargement termine mais aucun fichier detecte."
+        return None, None, None, "Téléchargement terminé mais aucun fichier détecté."
     candidats.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     fichier_final = candidats[0]
 
@@ -381,10 +394,13 @@ def telecharger_preparer_video(
     except Exception:
         pass
 
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+
     return str(cible), base_court, info, None
 
 
 def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_intervalle: bool, debut: int, fin: int) -> str:
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     try:
         ffmpeg = tl.chemin_ffmpeg()
     except Exception as e:
@@ -448,10 +464,12 @@ def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_inter
                 str(cible),
             ]
             _run_ffmpeg(args)
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     return str(cible)
 
 
 def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, options: Dict[str, bool], utiliser_intervalle: bool):
+    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     try:
         ffmpeg = tl.chemin_ffmpeg()
     except Exception as e:
@@ -502,14 +520,17 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
     if options.get("mp4"):
         nom = f"{base_court}_seg.mp4" if utiliser_intervalle else f"{base_court}_full.mp4"
         _run_ffmpeg(cmd_segment(REPERTOIRE_SORTIE / nom))
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     if options.get("mp3"):
         nom = f"{base_court}_seg.mp3" if utiliser_intervalle else f"{base_court}_full.mp3"
         _run_ffmpeg(cmd_audio(REPERTOIRE_SORTIE / nom, ["-vn", "-acodec", "libmp3lame", "-q:a", "5"]))
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     if options.get("wav"):
         nom = f"{base_court}_seg.wav" if utiliser_intervalle else f"{base_court}_full.wav"
         _run_ffmpeg(cmd_audio(REPERTOIRE_SORTIE / nom, ["-vn", "-acodec", "adpcm_ima_wav"]))
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     if options.get("img1") or options.get("img25"):
         for fps in (1, 25):
@@ -539,26 +560,27 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
                         dst = Path(f"{base_dst}_{suffixe}{ext}")
                         suffixe += 1
                     os.replace(str(src), str(dst))
+                keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     return None
 
 
 def afficher_video_bytes(chemin_video: Path) -> None:
     if not chemin_video.exists() or not chemin_video.is_file():
-        st.info("Apercu indisponible : fichier absent.")
+        st.info("Aperçu indisponible : fichier absent.")
         return
     taille = taille_fichier(chemin_video) or 0
     if taille <= 0:
-        st.info("Apercu indisponible : fichier vide.")
+        st.info("Aperçu indisponible : fichier vide.")
         return
     if taille > SEUIL_APERCU_OCTETS:
-        st.info("Fichier volumineux : apercu desactive.")
+        st.info("Fichier volumineux : aperçu désactivé.")
         return
     try:
         with open(chemin_video, "rb") as fichier:
             st.video(fichier.read(), format="video/mp4", start_time=0)
     except Exception as e:
-        st.warning(f"Apercu impossible : {e}")
+        st.warning(f"Aperçu impossible : {e}")
 
 
 def sauvegarder_upload_local(fichier_local) -> Optional[Path]:
@@ -583,14 +605,14 @@ def sauvegarder_upload_local(fichier_local) -> Optional[Path]:
 st.title("Extraction multimedia (video, audio, images)")
 st.markdown("**[www.codeandcortex.fr](http://www.codeandcortex.fr)**")
 st.markdown(
-    "Par defaut, l'extraction porte sur toute la video. "
-    "Vous pouvez activer un intervalle personnalise si besoin. "
-    "Si la video est restreinte (403), exportez vos cookies avec l'extension Firefox "
+    "Par défaut, l'extraction porte sur toute la vidéo. "
+    "Vous pouvez activer un intervalle personnalisé si besoin. "
+    "Si la vidéo est restreinte (403), exportez vos cookies avec l'extension Firefox "
     "[cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)."
 )
 st.caption(
-    "Si YouTube affiche un blocage anti-bot, il faut en pratique un cookies.txt recent, "
-    "exporte depuis le navigateur qui vient d'ouvrir la video, avec un User-Agent coherent."
+    "Si YouTube affiche un blocage anti-bot, il faut en pratique un cookies.txt récent, "
+    "exporté depuis le navigateur qui vient d'ouvrir la vidéo, avec un User-Agent cohérent."
 )
 with st.expander("Aide"):
     st.markdown(load_help_markdown())
@@ -625,21 +647,21 @@ user_agent_youtube = st.text_input(
     "User-Agent navigateur (utile si YouTube bloque)",
     value=os.environ.get("YTDLP_BROWSER_USER_AGENT", USER_AGENT_YOUTUBE_DEFAUT),
     help=(
-        "Colle ici le User-Agent exact du navigateur ayant servi a ouvrir YouTube "
-        "et a exporter le cookies.txt. Si tu n'es pas bloque, laisse la valeur par defaut."
+    "Colle ici le User-Agent exact du navigateur ayant servi à ouvrir YouTube "
+    "et à exporter le cookies.txt. Si tu n'es pas bloqué, laisse la valeur par défaut."
     ),
 )
-fichier_local = st.file_uploader("Ou importer un fichier video (.mp4)", type=["mp4"])
+fichier_local = st.file_uploader("Ou importer un fichier vidéo (.mp4)", type=["mp4"])
 
 mode_verbose = st.checkbox("Mode diagnostic yt-dlp", value=False)
-qualite = st.radio("Qualite de la video de base", ["Compressee (1280p, CRF 28)", "HD (max qualite dispo)"], index=0)
+qualite = st.radio("Qualité de la vidéo de base", ["Compressée (1280p, CRF 28)", "HD (max qualité dispo)"], index=0)
 
-st.subheader("Ressources a produire")
+st.subheader("Ressources à produire")
 st.markdown("<style>div[data-testid='stHorizontalBlock'] label { white-space: nowrap; }</style>", unsafe_allow_html=True)
 
 opt_timelapse = st.checkbox("Timelapse", key="opt_timelapse")
 if opt_timelapse:
-    st.warning("Timelapse selectionne : seul le timelapse sera exporte. Les autres options sont desactivees.")
+    st.warning("Timelapse sélectionné : seul le timelapse sera exporté. Les autres options sont désactivées.")
     fps_timelapse = st.selectbox("FPS timelapse", [4, 6, 8, 10, 12, 14, 16], index=2, key="fps_timelapse")
 else:
     fps_timelapse = 12
@@ -656,23 +678,23 @@ with col4:
 with col5:
     opt_img25 = st.checkbox("Img 25 FPS", key="opt_img25", disabled=opt_timelapse)
 
-st.subheader("Etendue")
-etendue = st.radio("Choisir l'etendue", ["Toute la video", "Intervalle personnalise"], index=0)
-if etendue == "Intervalle personnalise":
+st.subheader("Étendue")
+etendue = st.radio("Choisir l'étendue", ["Toute la vidéo", "Intervalle personnalisé"], index=0)
+if etendue == "Intervalle personnalisé":
     st.info(
-        f"Intervalle personnalise active : de {st.session_state['debut_secs']}s "
-        f"a {st.session_state['fin_secs']}s. Le telechargement traitera uniquement cet intervalle."
+        f"Intervalle personnalisé activé : de {st.session_state['debut_secs']}s "
+        f"à {st.session_state['fin_secs']}s. Le téléchargement traitera uniquement cet intervalle."
     )
     cc1, cc2 = st.columns(2)
-    st.session_state["debut_secs"] = cc1.number_input("Debut (s)", min_value=0, value=st.session_state["debut_secs"])
+    st.session_state["debut_secs"] = cc1.number_input("Début (s)", min_value=0, value=st.session_state["debut_secs"])
     st.session_state["fin_secs"] = cc2.number_input("Fin (s)", min_value=1, value=st.session_state["fin_secs"])
     utiliser_intervalle = True
     if st.session_state["fin_secs"] <= st.session_state["debut_secs"]:
-        st.warning("La fin doit etre strictement superieure au debut.")
+        st.warning("La fin doit être strictement supérieure au début.")
 else:
     utiliser_intervalle = False
 
-afficher_apercu = st.checkbox("Afficher l'apercu video", value=True, disabled=opt_timelapse)
+afficher_apercu = st.checkbox("Afficher l'aperçu vidéo", value=True, disabled=opt_timelapse)
 if afficher_apercu and not opt_timelapse:
     if st.session_state.get("video_base") and Path(st.session_state["video_base"]).exists():
         afficher_video_bytes(Path(st.session_state["video_base"]))
@@ -681,10 +703,11 @@ if afficher_apercu and not opt_timelapse:
         if tmp is not None:
             afficher_video_bytes(tmp)
     elif url:
-        st.info("Apercu indisponible pour une URL tant que le traitement n'a pas ete lance.")
+        st.info("Aperçu indisponible pour une URL tant que le traitement n'a pas été lancé.")
 
 if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
         if not ffmpeg_disponible():
             st.error("ffmpeg introuvable et fallback impossible. Verifie l'image Docker et les dependances systeme.")
         else:
@@ -705,7 +728,7 @@ if st.button("Lancer le traitement"):
                 else:
                     st.session_state["video_base"] = video_base
                     st.session_state["base_court"] = base_court
-                    st.success(f"Video prete : {Path(video_base).name}")
+                    st.success(f"Vidéo prête : {Path(video_base).name}")
             elif fichier_local is not None or st.session_state.get("local_temp_path"):
                 base_court = st.session_state.get("local_name_base") or generer_nom_base("local", "video")
                 try:
@@ -725,7 +748,7 @@ if st.button("Lancer le traitement"):
                     )
                     st.session_state["video_base"] = cible
                     st.session_state["base_court"] = base_court
-                    st.success(f"Video prete : {Path(cible).name}")
+                    st.success(f"Vidéo prête : {Path(cible).name}")
                 except Exception as e:
                     st.error(f"Echec du traitement local : {e}")
             else:
@@ -748,10 +771,11 @@ if st.button("Lancer le traitement"):
                             fin=st.session_state["fin_secs"] if utiliser_intervalle else None,
                             job_root=SESSION_DIR / "timelapse_jobs",
                         )
+                        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
                         st.success(f"Timelapse genere ({nb_images} images).")
                         with open(out_path, "rb") as sortie:
                             st.download_button(
-                                "Telecharger le timelapse (.mp4)",
+                                "Télécharger le timelapse (.mp4)",
                                 data=sortie,
                                 file_name=Path(out_path).name,
                                 mime="video/mp4",
@@ -760,7 +784,7 @@ if st.button("Lancer le traitement"):
                         zipper_sur_disque([Path(out_path)], zip_path)
                         with open(zip_path, "rb") as archive:
                             st.download_button(
-                                "Telecharger les resultats (.zip)",
+                                "Télécharger les résultats (.zip)",
                                 data=archive,
                                 file_name=zip_path.name,
                                 mime="application/zip",
@@ -789,6 +813,7 @@ if st.button("Lancer le traitement"):
                             st.error(f"Erreur pendant l'extraction : {erreur_extraction}")
                         else:
                             st.success("Ressources generees.")
+                            keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
                     fichiers = lister_sorties(base_court)
                     if Path(video_path) not in fichiers:
@@ -797,7 +822,7 @@ if st.button("Lancer le traitement"):
                     zipper_sur_disque(fichiers, zip_path)
                     with open(zip_path, "rb") as archive:
                         st.download_button(
-                            "Telecharger les resultats (.zip)",
+                            "Télécharger les résultats (.zip)",
                             data=archive,
                             file_name=zip_path.name,
                             mime="application/zip",
