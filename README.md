@@ -9,9 +9,8 @@ Cette version est preparee pour un deploiement sur un VPS OVH via Coolify.
 Les adaptations principales sont :
 
 - conteneur Docker autonome pour Streamlit
-- cache d'import isole par session utilisateur au lieu d'un fichier global dans `/tmp`
 - preinstallation des stopwords NLTK a la build
-- compatibilite Coolify via `PORT`, `STREAMLIT_SERVER_BASE_URL_PATH` et `APP_DATA_DIR`
+- compatibilite Coolify via `PORT` et `STREAMLIT_SERVER_BASE_URL_PATH`
 - configuration headless adaptee a un usage serveur
 
 ## Fonctionnalites principales
@@ -34,8 +33,6 @@ Application accessible ensuite sur `http://localhost:8501`.
 
 - `PORT` : port d'ecoute Streamlit
 - `STREAMLIT_SERVER_BASE_URL_PATH` : prefixe d'URL si besoin
-- `APP_DATA_DIR` : cache local par session
-- `APP_SESSION_TTL_HOURS` : duree de retention des sessions temporaires
 
 ## Structure des donnees attendue
 
