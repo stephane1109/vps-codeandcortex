@@ -366,6 +366,12 @@ progress {
   line-height: 1.45;
 }
 
+.preview-box--corpus {
+  min-height: 34rem;
+  max-height: 70vh;
+  font-size: 0.95rem;
+}
+
 .explorer-grid {
   display: grid;
   grid-template-columns: 380px minmax(0, 1fr);
