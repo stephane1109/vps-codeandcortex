@@ -7,8 +7,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     MPLBACKEND=Agg \
-    APP_DATA_DIR=/tmp/appdata \
-    APP_SESSION_TTL_HOURS=24 \
     NLTK_DATA=/usr/local/share/nltk_data \
     APP_TICKET_ID=symbolic_connectors \
     APP_TICKET_MAX_ACTIVE=1 \
@@ -46,8 +44,8 @@ RUN pip install --upgrade pip setuptools wheel \
 COPY . /app
 
 RUN chmod +x /app/docker-entrypoint.sh \
-    && mkdir -p /tmp/appdata /home/app/.streamlit /usr/local/share/nltk_data \
-    && chown -R app:app /app /tmp/appdata /home/app /usr/local/share/nltk_data
+    && mkdir -p /home/app/.streamlit /usr/local/share/nltk_data \
+    && chown -R app:app /app /home/app /usr/local/share/nltk_data
 
 USER app
 

@@ -5,13 +5,9 @@ assemblage des onglets et préparation des données partagées.
 """
 from __future__ import annotations
 
-import os
-import shutil
 import sys
 from importlib import import_module
 from pathlib import Path
-import time
-import uuid
 
 import streamlit as st
 
@@ -45,64 +41,16 @@ _dictionary_import = import_module("import")
 
 
 APP_VERSION = "0.3.0-beta"
-APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
-SESSIONS_DIR = APP_DATA_DIR / "sessions"
-
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.environ.get(name, str(default)))
-    except Exception:
-        return default
-
-
-def _ensure_directory(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _touch_session(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    os.utime(path, None)
-
-
-def _cleanup_expired_sessions(current_session_id: str) -> None:
-    ttl_hours = max(0, _env_int("APP_SESSION_TTL_HOURS", 24))
-    if ttl_hours == 0:
-        return
-
-    limit = time.time() - (ttl_hours * 3600)
-    _ensure_directory(SESSIONS_DIR)
-
-    for session_dir in SESSIONS_DIR.iterdir():
-        if not session_dir.is_dir() or session_dir.name == current_session_id:
-            continue
-        try:
-            if session_dir.stat().st_mtime < limit:
-                shutil.rmtree(session_dir, ignore_errors=True)
-        except OSError:
-            continue
-
-
-def _reset_upload_cache(upload_cache_path: Path) -> None:
-    st.session_state.pop("uploaded_content", None)
-    st.session_state.pop("uploaded_filename", None)
-    try:
-        upload_cache_path.unlink(missing_ok=True)
-    except OSError:
-        st.warning("Le cache local n'a pas pu etre supprime.")
 
 
 def _load_uploaded_content(
     uploaded_file: st.runtime.uploaded_file_manager.UploadedFile | None,
-    upload_cache_path: Path,
 ) -> str | None:
-    """Load content from upload, session state or a temporary cache.
+    """Load content from upload or from the current Streamlit session.
 
     Order of precedence:
     1. Fresh upload from the user.
     2. Content preserved in ``st.session_state`` during reruns.
-    3. Last uploaded content persisted in a session-specific cache directory.
     """
 
     if uploaded_file:
@@ -115,28 +63,12 @@ def _load_uploaded_content(
         st.session_state["uploaded_content"] = content
         st.session_state["uploaded_filename"] = uploaded_file.name
 
-        try:
-            upload_cache_path.write_text(content, encoding="utf-8")
-        except OSError:
-            st.warning("Le fichier n'a pas pu être mis en cache localement, seul st.session_state sera utilisé.")
-
         return content
 
-    # Pas d'upload en cours : chercher dans la session ou le cache local
+    # Pas d'upload en cours : chercher dans la session Streamlit
     cached_content = st.session_state.get("uploaded_content")
     if cached_content:
         return cached_content
-
-    if upload_cache_path.exists():
-        try:
-            content = upload_cache_path.read_text(encoding="utf-8")
-        except OSError:
-            st.warning("Impossible de relire le cache local, merci de re-téléverser le fichier.")
-            return None
-
-        st.session_state["uploaded_content"] = content
-        st.info("Fichier rechargé automatiquement depuis le cache local.")
-        return content
 
     return None
 
@@ -152,21 +84,7 @@ def main() -> None:
     # - APP_TICKET_TTL_SECONDS
     enforce_streamlit_access("symbolic_connectors", "Symbolic Connectors")
 
-    session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
-    session_dir = _ensure_directory(SESSIONS_DIR / session_id)
-    _cleanup_expired_sessions(session_id)
-    _touch_session(session_dir)
-    upload_cache_path = session_dir / "last_upload.txt"
-
     st.title("Symbolic Connectors")
-    reset_col, version_col = st.columns([1, 3])
-    with reset_col:
-        if st.button("Reinitialiser la session", use_container_width=True):
-            _reset_upload_cache(upload_cache_path)
-            st.success("La session et le cache d'import ont ete reinitialises.")
-            st.rerun()
-    with version_col:
-        st.caption("Cache d'import isole par session utilisateur.")
     st.markdown(
         "Symbolic Connectors : ce titre renvoie au courant symbolique en IA, "
         "qui s’appuie sur une logique de programme et de règles (par opposition au "
@@ -211,7 +129,7 @@ def main() -> None:
 
     _dictionary_import.render_dictionary_selector()
     uploaded_file = st.file_uploader("Fichier IRaMuTeQ", type=["txt"])  # type: ignore[assignment]
-    content = _load_uploaded_content(uploaded_file, upload_cache_path)
+    content = _load_uploaded_content(uploaded_file)
 
     tabs = st.tabs(
         [

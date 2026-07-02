@@ -26,11 +26,7 @@ Dans Coolify :
 ```env
 PORT=8501
 STREAMLIT_SERVER_BASE_URL_PATH=
-APP_DATA_DIR=/tmp/appdata
-APP_SESSION_TTL_HOURS=24
 ```
-
-`APP_DATA_DIR` peut pointer vers un volume persistant si tu veux conserver les caches d'import plus longtemps.
 
 ## 3. Healthcheck recommande
 
@@ -80,6 +76,5 @@ http://localhost:8501
 ## 8. Notes d'exploitation
 
 - Le conteneur ecoute sur `0.0.0.0`.
-- Les uploads IRaMuTeQ sont caches par session utilisateur.
 - Les stopwords NLTK sont pre-installes a la build pour eviter un telechargement au runtime.
 - Le modele spaCy francais est installe via `requirements.txt`.
