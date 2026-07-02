@@ -40,7 +40,8 @@ code {
 }
 
 .app-shell {
-  width: min(1480px, calc(100vw - 2rem));
+  width: calc(100vw - 2rem);
+  max-width: none;
   margin: 1rem auto;
 }
 
@@ -174,6 +175,11 @@ textarea {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
+}
+
+.stacked-fields {
+  display: grid;
+  gap: 0.85rem;
 }
 
 .form-grid {
@@ -367,6 +373,49 @@ progress {
   margin-bottom: 1rem;
 }
 
+.visual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.visual-plot {
+  display: block;
+  width: 100%;
+  min-height: 24rem;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  object-fit: contain;
+}
+
+.plot-box-empty {
+  display: grid;
+  place-items: center;
+  min-height: 24rem;
+  border: 1px dashed rgba(15, 23, 42, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+  padding: 1rem;
+}
+
+.visual-gallery {
+  display: grid;
+  gap: 1rem;
+}
+
+.gallery-item {
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.gallery-item h4 {
+  margin: 0 0 0.75rem;
+}
+
 .card--plot {
   grid-column: 1 / -1;
   min-height: 52rem;
@@ -547,6 +596,7 @@ progress {
 @media (max-width: 1100px) {
   .workspace,
   .explorer-grid,
+  .visual-grid,
   .metrics-grid {
     grid-template-columns: 1fr;
   }
