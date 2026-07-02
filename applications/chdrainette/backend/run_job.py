@@ -99,23 +99,6 @@ def artifact_metadata(output_dir: Path) -> list[dict[str, object]]:
     return artifacts
 
 
-def artifact_by_relative_path(artifacts: list[dict[str, object]], relative_path: str) -> dict[str, object] | None:
-    target = str(relative_path or "").replace("\\", "/")
-    for artifact in artifacts:
-        if str(artifact.get("relativePath") or "").replace("\\", "/") == target:
-            return artifact
-    return None
-
-
-def prefixed_artifacts(artifacts: list[dict[str, object]], prefix: str) -> list[dict[str, object]]:
-    normalized_prefix = str(prefix or "").replace("\\", "/").rstrip("/") + "/"
-    return [
-        artifact
-        for artifact in artifacts
-        if str(artifact.get("relativePath") or "").replace("\\", "/").startswith(normalized_prefix)
-    ]
-
-
 EXPORT_CATEGORY_SPECS = [
     {
         "id": "synthese",
@@ -319,7 +302,6 @@ def main() -> int:
 
     metadata_path = output_dir / "metadata.json"
     metadata = read_json(metadata_path) if metadata_path.exists() else {}
-    artifacts = artifact_metadata(output_dir)
     result_payload = {
         "success": True,
         "jobId": args.job_id,
@@ -328,25 +310,7 @@ def main() -> int:
         "metadata": metadata,
         "summaryRows": csv_rows(output_dir / "resume_classes.csv"),
         "detailRows": csv_rows(output_dir / "mots_chi2_frequence_segments.csv", limit=200),
-        "afc": {
-            "error": metadata.get("afc_error") or "",
-            "variablesError": metadata.get("afc_variables_error") or "",
-            "classesPlot": artifact_by_relative_path(artifacts, "afc/afc_classes.png"),
-            "termsPlot": artifact_by_relative_path(artifacts, "afc/afc_termes.png"),
-            "variablesPlot": artifact_by_relative_path(artifacts, "afc/afc_variables_etoilees.png"),
-            "termsRows": csv_rows(output_dir / "afc" / "stats_termes.csv", limit=200),
-            "variablesRows": csv_rows(output_dir / "afc" / "stats_modalites.csv", limit=200),
-            "eigenRows": csv_rows(output_dir / "afc" / "valeurs_propres.csv", limit=20),
-            "variablesEigenRows": csv_rows(output_dir / "afc" / "valeurs_propres_vars.csv", limit=20),
-        },
-        "ner": {
-            "enabled": bool(metadata.get("has_ner")),
-            "summaryRows": csv_rows(output_dir / "ner" / "ner_resume.csv", limit=200),
-            "detailRows": csv_rows(output_dir / "ner" / "ner_details.csv", limit=500),
-            "globalPlot": artifact_by_relative_path(artifacts, "ner/ner_wordcloud_global.png"),
-            "classPlots": prefixed_artifacts(artifacts, "ner"),
-        },
-        "artifacts": artifacts,
+        "artifacts": artifact_metadata(output_dir),
         "exports": build_export_catalog(job_root, output_dir, args.job_id),
         "stdoutLog": str(stdout_log.resolve()),
         "stderrLog": str(stderr_log.resolve()),

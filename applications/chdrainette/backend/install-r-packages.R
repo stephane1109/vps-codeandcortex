@@ -28,46 +28,20 @@ system_candidates <- unique(c(
 .libPaths(unique(c(lib_target, Filter(dir.exists, system_candidates))))
 
 packages_required <- c(
-  "FactoMineR",
-  "igraph",
   "jsonlite",
+  "rainette",
+  "quanteda",
+  "wordcloud",
+  "RColorBrewer",
   "dplyr",
   "htmltools",
-  "quanteda",
-  "rainette",
-  "RColorBrewer",
-  "remotes",
-  "stopwords",
-  "stringi",
-  "wordcloud"
+  "udpipe"
 )
 
 install_if_missing <- function(packages) {
-  installed <- rownames(installed.packages())
-  missing <- setdiff(packages, installed)
+  missing <- setdiff(packages, rownames(installed.packages()))
   if (!length(missing)) return(invisible(character(0)))
-
-  standard_packages <- setdiff(missing, "FactoMineR")
-  if (length(standard_packages)) {
-    install.packages(standard_packages, dependencies = TRUE, lib = .libPaths()[1])
-  }
-
-  if ("FactoMineR" %in% missing && !"FactoMineR" %in% rownames(installed.packages())) {
-    tryCatch(
-      install.packages("FactoMineR", dependencies = TRUE, lib = .libPaths()[1]),
-      error = function(error) {
-        message("Installation CRAN de FactoMineR impossible : ", conditionMessage(error))
-      }
-    )
-  }
-
-  if (!"FactoMineR" %in% rownames(installed.packages())) {
-    if (!"remotes" %in% rownames(installed.packages())) {
-      install.packages("remotes", dependencies = TRUE, lib = .libPaths()[1])
-    }
-    remotes::install_github("husson/FactoMineR", dependencies = NA, upgrade = "never", lib = .libPaths()[1])
-  }
-
+  install.packages(missing, dependencies = TRUE, lib = .libPaths()[1])
   invisible(setdiff(packages, rownames(installed.packages())))
 }
 
