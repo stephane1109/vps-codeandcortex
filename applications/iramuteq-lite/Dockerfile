@@ -1,6 +1,6 @@
 FROM rocker/r2u:jammy
 
-ARG IRAMUTEQ_BUILD_BOOTSTRAP=1
+ARG IRAMUTEQ_BUILD_BOOTSTRAP=0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -39,12 +39,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - expose les paquets CRAN en binaires Ubuntu via `apt`
 # - evite ici la compilation source tres longue de `quanteda`
 # - reduit fortement le risque de timeout Coolify pendant le build
-# Par defaut, on preinstalle maintenant le bootstrap R/CHD dans l'image
-# (`IRAMUTEQ_BUILD_BOOTSTRAP=1`) pour eviter un premier lancement bloque
-# plusieurs minutes sur le controle des dependances.
+# Par defaut, on desactive ici le bootstrap R/CHD pendant le build
+# (`IRAMUTEQ_BUILD_BOOTSTRAP=0`) pour fiabiliser Coolify:
+# - moins de temps de build
+# - moins de place temporaire consommee
+# - moins de risque que le smoke-test CHD casse le deploiement
+# L'installation complementaire se fait alors au runtime dans `/data/app`
+# via `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1`.
 # #### MODE BUILD COMPLET
-# Si besoin, vous pouvez desactiver ce bootstrap build-time via
-# `IRAMUTEQ_BUILD_BOOTSTRAP=0` et retomber sur l'installation au runtime.
+# Si besoin, vous pouvez reactiver ce bootstrap build-time via
+# `IRAMUTEQ_BUILD_BOOTSTRAP=1` pour revalider l'image au build.
 # #### NOTE BUILD R
 # USE_BUNDLED_LIBUV=1 reste active pour securiser l'installation du package R `fs`
 # si Coolify ou le miroir CRAN ne voit pas correctement `libuv.pc`.
@@ -208,9 +212,9 @@ WORKDIR /app
 COPY --chown=app:app . /app
 
 # #### VPS / COOLIFY
-# Le bootstrap build-time est prefere pour livrer une image deja exploitable
-# des le premier lancement utilisateur. Si vous manquez encore de temps de build
-# sur Coolify, vous pouvez explicitement revenir a `IRAMUTEQ_BUILD_BOOTSTRAP=0`.
+# Sur VPS/Coolify, le bootstrap build-time reste desactive par defaut.
+# Le premier lancement peut donc verifier/installer les packages manquants
+# dans le volume persistant sans faire echouer la construction de l'image.
 # #### BUILD COMPLET OPTIONNEL
 # Definir `IRAMUTEQ_BUILD_BOOTSTRAP=1` si vous souhaitez a nouveau:
 # - preinstaller les packages R au build

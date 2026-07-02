@@ -73,21 +73,21 @@ APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=30000
 ```
 
-Optionnel si vous voulez explicitement desactiver le bootstrap build-time :
+Optionnel si vous voulez explicitement reactiver le bootstrap build-time :
 
 ```text
-Build arg: IRAMUTEQ_BUILD_BOOTSTRAP=0
+Build arg: IRAMUTEQ_BUILD_BOOTSTRAP=1
 ```
 
 La configuration recommandee est maintenant :
 
-- bootstrap build-time actif par defaut
+- bootstrap build-time desactive par defaut
 - image basee sur `rocker/r2u:jammy` pour eviter la compilation source de `quanteda`
 - `IRAMUTEQ_R_LIBS_USER=/data/app/r-library` pour conserver les packages dans le volume persistant
 - `IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages` pour conserver les packages Python eventuellement reinstalles au runtime
 
-Dans ce mode, l'image arrive normalement prete et l'application ne doit plus rester bloquee au premier clic sur le controle des dependances.
-Si vous repassez a `IRAMUTEQ_BUILD_BOOTSTRAP=0`, l'application retombera sur une installation complementaire au premier lancement. Le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
+Dans ce mode, le deploiement Coolify est beaucoup plus fiable: l'image se construit sans lancer toute la chaine CHD au build, puis l'application complete l'installation au runtime dans `/data/app` si necessaire.
+Si vous forcez `IRAMUTEQ_BUILD_BOOTSTRAP=1`, le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
 
 ## TTL ticket utilisateur
 
@@ -114,8 +114,8 @@ Cela veut dire :
 4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `1` en production Coolify.
 5. Verifier que `IRAMUTEQ_R_LIBS_USER` pointe vers `/data/app/r-library`.
 6. Verifier que `IRAMUTEQ_PYTHON_SITE_DIR` pointe vers `/data/app/python-site-packages`.
-7. Regarder les logs de build : si le build meurt pendant `Matrix` ou `quanteda` sans message R final, il s'agit souvent d'un timeout ou d'un manque d'espace sur Coolify et non d'un bug applicatif.
-8. Si le smoke-test CHD casse au build, le probleme est alors confirme dans l'image Docker elle-meme, avant meme l'ouverture de l'application dans le navigateur.
+7. Regarder les logs de build : si le build meurt pendant `Matrix`, `quanteda` ou le smoke-test CHD, le probleme vient generalement du mode `IRAMUTEQ_BUILD_BOOTSTRAP=1`.
+8. Pour un VPS Coolify charge, laisser `IRAMUTEQ_BUILD_BOOTSTRAP=0` est le mode recommande.
 
 ## Domaine et sous-domaine
 
