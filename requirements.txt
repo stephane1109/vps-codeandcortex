@@ -1,6 +1,8 @@
-streamlit
+streamlit>=1.36,<2
+streamlit-autorefresh>=1,<2
 yt_dlp
 ffmpeg-python
 opencv-python-headless
 numpy
 imageio-ffmpeg
+redis>=5,<6
