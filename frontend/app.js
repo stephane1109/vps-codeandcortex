@@ -147,6 +147,22 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function artifactByRelativePath(artifacts, relativePath) {
+  const target = String(relativePath || "").replaceAll("\\", "/");
+  return (artifacts || []).find(
+    (item) => String(item?.relativePath || "").replaceAll("\\", "/") === target,
+  ) || null;
+}
+
+function explorerFallbackArtifact(result) {
+  const artifacts = result?.artifacts || [];
+  return (
+    artifactByRelativePath(artifacts, "explor/chd.png")
+    || artifactByRelativePath(artifacts, "rainette_plot.png")
+    || null
+  );
+}
+
 function tableFromRows(rows) {
   if (!rows || !rows.length) {
     return "<p class='empty-state'>Aucune donnée disponible.</p>";
@@ -778,6 +794,12 @@ function renderResult(result) {
   els.artifactList.innerHTML = exportCategoriesHtml(result.exports || null, result.artifacts || []);
   renderAfc(result.afc || {});
   renderNer(result.ner || {});
+  showImage(
+    els.explorerPlot,
+    els.plotPlaceholder,
+    explorerFallbackArtifact(result),
+    "Le graphe Rainette apparaîtra ici après l'analyse.",
+  );
   configureExplorer(metadata);
   refreshExplorer();
 }
@@ -806,11 +828,32 @@ async function refreshExplorer() {
   els.plotPlaceholder.hidden = false;
   els.plotPlaceholder.textContent = "Génération du graphe Rainette...";
   els.explorerPlot.hidden = true;
+  const fallbackArtifact = explorerFallbackArtifact(state.currentResult);
 
   const plotUrl = `/api/jobs/${encodeURIComponent(jobId)}/explorer/plot?${explorerPlotParams().toString()}&ts=${Date.now()}`;
   els.explorerPlot.onload = () => {
     els.plotPlaceholder.hidden = true;
     els.explorerPlot.hidden = false;
+  };
+  els.explorerPlot.onerror = () => {
+    els.explorerPlot.onload = null;
+    els.explorerPlot.onerror = null;
+    if (fallbackArtifact?.downloadUrl) {
+      showImage(
+        els.explorerPlot,
+        els.plotPlaceholder,
+        {
+          ...fallbackArtifact,
+          downloadUrl: `${fallbackArtifact.downloadUrl}${fallbackArtifact.downloadUrl.includes("?") ? "&" : "?"}ts=${Date.now()}`,
+        },
+        "Le graphe Rainette généré par l'analyse n'est pas disponible.",
+      );
+      return;
+    }
+    els.explorerPlot.hidden = true;
+    els.explorerPlot.removeAttribute("src");
+    els.plotPlaceholder.hidden = false;
+    els.plotPlaceholder.textContent = "Impossible d'afficher le graphe Rainette pour le moment.";
   };
   els.explorerPlot.src = plotUrl;
 
