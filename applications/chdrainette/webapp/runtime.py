@@ -396,8 +396,13 @@ def render_explorer_plot(job_id: str, params: dict[str, Any]) -> Path:
     cache_root = ensure_directory(job_root / "explorer-cache")
     output_png = cache_root / f"plot-{params_path.stem}.png"
 
-    if output_png.exists():
+    if output_png.exists() and output_png.stat().st_size > 0:
         return output_png
+    if output_png.exists():
+        try:
+            output_png.unlink()
+        except OSError:
+            pass
 
     process = subprocess.run(
         [
