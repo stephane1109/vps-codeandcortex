@@ -3502,7 +3502,7 @@ body.comparison-ab-fullscreen-open {
 
 .progress-dialog::backdrop {
   background: rgba(18, 16, 13, 0.28);
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
 }
 
 .progress-dialog-shell {
@@ -3579,7 +3579,7 @@ body.comparison-ab-fullscreen-open {
 
 .startup-dialog::backdrop {
   background: rgba(18, 16, 13, 0.26);
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
 }
 
 .startup-dialog-shell {

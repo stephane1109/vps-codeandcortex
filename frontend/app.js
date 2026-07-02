@@ -590,7 +590,7 @@ async function autoReleaseTicketAfterInactivity() {
 
   const snapshot = await releaseAnalysisTicket({ silent: true });
   if (snapshot) {
-    setSidebarRuntimeStatus("Acces libere automatiquement apres inactivite.", "success");
+    setSidebarRuntimeStatus("Accès libéré automatiquement après inactivité.", "success");
     await refreshTicketSidebarStatus();
   }
 }
@@ -659,10 +659,10 @@ async function refreshTicketSidebarStatus() {
     const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/status"));
     if (ticketReleasedLocally && snapshot.enabled && !["actif", "attente"].includes(snapshot.statut)) {
       if (snapshot.statut === "occupee") {
-        setSidebarTicketStatus("Acces libere pour cette session. Application reprise par un autre utilisateur.", "idle");
+        setSidebarTicketStatus("Accès libéré pour cette session. Application reprise par un autre utilisateur.", "idle");
         return snapshot;
       }
-      setSidebarTicketStatus("Acces libere pour cette session.", "idle");
+      setSidebarTicketStatus("Accès libéré pour cette session.", "idle");
       return snapshot;
     }
     if (!snapshot.enabled) {
@@ -678,12 +678,12 @@ async function refreshTicketSidebarStatus() {
       return snapshot;
     }
     if (snapshot.statut === "occupee") {
-      setSidebarTicketStatus("Application occupee", "waiting");
+      setSidebarTicketStatus("Application occupée", "waiting");
       return snapshot;
     }
     if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
       setSidebarTicketStatus(
-        snapshot.statut === "refuse" ? "File d'attente pleine" : "Acces serveur indisponible",
+        snapshot.statut === "refuse" ? "File d'attente pleine" : "Accès serveur indisponible",
         "error"
       );
       return snapshot;
@@ -704,7 +704,7 @@ async function claimPageTicketOnOpen() {
       return snapshot;
     }
     if (snapshot.statut === "actif") {
-      setSidebarTicketStatus("Session reservee sur cette application", "active");
+      setSidebarTicketStatus("Session réservée sur cette application", "active");
       return snapshot;
     }
     if (snapshot.statut === "attente") {
@@ -713,12 +713,12 @@ async function claimPageTicketOnOpen() {
     }
     if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
       setSidebarTicketStatus(
-        snapshot.statut === "refuse" ? "File d'attente pleine" : "Acces serveur indisponible",
+        snapshot.statut === "refuse" ? "File d'attente pleine" : "Accès serveur indisponible",
         "error"
       );
       return snapshot;
     }
-    setSidebarTicketStatus("Acces serveur indisponible", "error");
+    setSidebarTicketStatus("Accès serveur indisponible", "error");
     return snapshot;
   } catch (error) {
     setSidebarTicketStatus("Statut utilisateur indisponible", "error");
@@ -754,16 +754,16 @@ async function waitForAnalysisTicket(progressionController, logger) {
   let snapshot = await claimAnalysisTicket();
   if (!snapshot.enabled) {
     setSidebarTicketStatus("Application disponible", "idle");
-    logger("[info] Controle d'acces Redis inactif pour cette application.");
+    logger("[info] Contrôle d'accès Redis inactif pour cette application.");
     return snapshot;
   }
   if (snapshot.statut === "erreur") {
-    throw new Error("Controle d'acces temporairement indisponible.");
+    throw new Error("Contrôle d'accès temporairement indisponible.");
   }
 
   let lastWaitingMessage = "";
   while (snapshot.statut === "attente") {
-    const waitingMessage = `Application occupee. Position dans la file : ${snapshot.position || "?"}.`;
+    const waitingMessage = `Application occupée. Position dans la file : ${snapshot.position || "?"}.`;
     setSidebarTicketStatus(waitingMessage, "waiting");
     progressionController.set(8, waitingMessage);
     if (waitingMessage !== lastWaitingMessage) {
@@ -783,7 +783,7 @@ async function waitForAnalysisTicket(progressionController, logger) {
   }
 
   setSidebarTicketStatus("Ticket actif : analyse en cours", "active");
-  progressionController.set(10, "Acces serveur obtenu. Lancement de l'analyse...");
+  progressionController.set(10, "Accès serveur obtenu. Lancement de l'analyse...");
   logger("[info] Ticket utilisateur actif. Lancement du job IRaMuTeQ Lite.");
   return snapshot;
 }
@@ -13471,6 +13471,16 @@ function findFiles(index, predicate) {
     .map(([path, file]) => ({ path, file }));
 }
 
+async function safeRenderExportSection(label, renderCallback) {
+  try {
+    await renderCallback();
+    return true;
+  } catch (error) {
+    log(`[error] Rendu exports impossible (${label}) : ${error?.message || String(error)}`);
+    return false;
+  }
+}
+
 async function renderExports(entries, index) {
   clearObjectUrls();
   appState.chdSegmentsByClass = new Map();
@@ -13482,277 +13492,287 @@ async function renderExports(entries, index) {
   ]);
   renderSelectableChdDendrogram();
 
-  const chdSegmentsFile = findFile(index, [(path) => path.endsWith("segments_par_classe.txt")]);
-  if (chdSegmentsFile) {
-    try {
-      appState.chdSegmentsByClass = parseSegmentsByClassText(await chdSegmentsFile.text());
-    } catch (error) {
-      appState.chdSegmentsByClass = new Map();
-      log(`[error] Lecture TXT impossible (${chdSegmentsFile.name}): ${error.message}`);
-    }
-  }
-
-  const chdStatsFile = findFile(index, [(path) => path.endsWith("stats_par_classe.csv")]);
-  if (!chdStatsFile) {
-    clearContainer(resultContainers.chdStatsTable);
-    resultContainers.chdStatsTable.appendChild(
-      createEmptyState("Le fichier stats_par_classe.csv est absent du dossier d'exports.")
-    );
-  } else {
-    try {
-      const parsedChdStats = parseCsv(await chdStatsFile.text());
-      syncSimiTermsChoicesFromChdStats(parsedChdStats);
-      renderChdStatsByClass(resultContainers.chdStatsTable, parsedChdStats, {
-        title: "stats_par_classe.csv",
-        emptyMessage: "Le fichier stats_par_classe.csv est vide."
-      });
-      renderSimiTermsPickers(document, { resetSelection: true });
-    } catch (error) {
-      clearContainer(resultContainers.chdStatsTable);
-      resultContainers.chdStatsTable.appendChild(createEmptyState("Impossible de lire les statistiques CHD."));
-      log(`[error] Lecture CSV impossible (${chdStatsFile.name}): ${error.message}`);
-    }
-  }
-
-  const concordancierFile = findFile(index, [
-    (path) => path.endsWith("segments_par_classe.html"),
-    (path) => path.endsWith("concordancier.html"),
-    (path) => path.endsWith("concordancier_afc.html")
-  ]);
-
-  if (concordancierFile) {
-    try {
-      renderHtmlFrame(
-        resultContainers.chdConcordancier,
-        await concordancierFile.text(),
-        "Aucun concordancier HTML disponible."
-      );
-    } catch (error) {
-      renderHtmlFrame(resultContainers.chdConcordancier, "", "Impossible de lire le concordancier HTML.");
-      log(`[error] Lecture HTML impossible (${concordancierFile.name}): ${error.message}`);
-    }
-  } else {
-    renderHtmlFrame(resultContainers.chdConcordancier, "", "Aucun concordancier HTML disponible.");
-  }
-
-  const wordcloudFiles = findFiles(
-    index,
-    (path) => path.endsWith(".png") && path.startsWith("wordclouds/")
-  )
-    .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }))
-    .map(({ path, file }) => ({
-      file,
-      title: path
-        .replace(/^.*wordclouds\//, "")
-        .replace("_wordcloud.png", "")
-        .replace("cluster_", "Classe ")
-    }));
-
-  renderImageGallery(
-    resultContainers.chdWordclouds,
-    wordcloudFiles,
-        "Aucun nuage de mots exporté dans wordclouds/.",
-    { previewKicker: "CHD" }
-  );
-
-  renderImage(
-    resultContainers.afcClassesPlot,
-    findFile(index, [(path) => path.endsWith("afc/afc_classes.png")]),
-    "AFC des classes"
-  );
-
-  renderImage(
-    resultContainers.afcTermsPlot,
-    findFile(index, [(path) => path.endsWith("afc/afc_termes.png")]),
-    "AFC des termes"
-  );
-
-  renderImage(
-    resultContainers.afcVarsPlot,
-    findFile(index, [(path) => path.endsWith("afc/afc_variables_etoilees.png")]),
-    "AFC des variables etoilees"
-  );
-
-  await renderAfcTermsByClass(
-    resultContainers.afcTermsTable,
-    findFile(index, [(path) => path.endsWith("afc/stats_termes.csv")]),
-    {
-      title: "stats_termes.csv",
-      emptyMessage: "Le fichier afc/stats_termes.csv est absent."
-    }
-  );
-
-  await renderCsvFromFile(
-    resultContainers.afcVarsTable,
-    findFile(index, [(path) => path.endsWith("afc/stats_modalites.csv")]),
-    {
-      title: "stats_modalites.csv",
-      emptyMessage: "Le fichier afc/stats_modalites.csv est absent."
-    }
-  );
-
-  await renderCombinedTables(
-    resultContainers.afcEigTable,
-    [
-      {
-        title: "valeurs_propres.csv",
-        file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres.csv")])
-      },
-      {
-        title: "valeurs_propres_vars.csv",
-        file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres_vars.csv")])
+  await safeRenderExportSection("CHD", async () => {
+    const chdSegmentsFile = findFile(index, [(path) => path.endsWith("segments_par_classe.txt")]);
+    if (chdSegmentsFile) {
+      try {
+        appState.chdSegmentsByClass = parseSegmentsByClassText(await chdSegmentsFile.text());
+      } catch (error) {
+        appState.chdSegmentsByClass = new Map();
+        log(`[error] Lecture TXT impossible (${chdSegmentsFile.name}): ${error.message}`);
       }
-    ],
-    "Aucune table de valeurs propres disponible."
-  );
+    }
 
-  await renderLongitudinalExports(index);
-
-  const ldaWordcloudFiles = findFiles(
-    index,
-    (path) => path.endsWith(".png") && (path.includes("wordcloud_lda") || path.includes("lda/wordcloud"))
-  )
-    .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }))
-    .map(({ path, file }) => ({
-      file,
-      title: path.split("/").pop().replace(".png", "")
-    }));
-
-  renderImageGallery(
-    resultContainers.ldaWordclouds,
-    ldaWordcloudFiles,
-    "Aucun nuage LDA détecté dans le dossier chargé.",
-    { previewKicker: "LDA" }
-  );
-
-  const ldaVisHtmlFile = findFile(index, [
-    (path) => path.endsWith("lda/pyldavis.html"),
-    (path) => path.endsWith("pyldavis.html")
-  ]);
-  if (ldaVisHtmlFile) {
-    try {
-      renderHtmlFrame(
-        resultContainers.ldaBubblePlot,
-        await ldaVisHtmlFile.text(),
-        "Impossible de lire la visualisation pyLDAvis."
+    const chdStatsFile = findFile(index, [(path) => path.endsWith("stats_par_classe.csv")]);
+    if (!chdStatsFile) {
+      clearContainer(resultContainers.chdStatsTable);
+      resultContainers.chdStatsTable.appendChild(
+        createEmptyState("Le fichier stats_par_classe.csv est absent du dossier d'exports.")
       );
-    } catch (error) {
+    } else {
+      try {
+        const parsedChdStats = parseCsv(await chdStatsFile.text());
+        syncSimiTermsChoicesFromChdStats(parsedChdStats);
+        renderChdStatsByClass(resultContainers.chdStatsTable, parsedChdStats, {
+          title: "stats_par_classe.csv",
+          emptyMessage: "Le fichier stats_par_classe.csv est vide."
+        });
+        renderSimiTermsPickers(document, { resetSelection: true });
+      } catch (error) {
+        clearContainer(resultContainers.chdStatsTable);
+        resultContainers.chdStatsTable.appendChild(createEmptyState("Impossible de lire les statistiques CHD."));
+        log(`[error] Lecture CSV impossible (${chdStatsFile.name}): ${error.message}`);
+      }
+    }
+
+    const concordancierFile = findFile(index, [
+      (path) => path.endsWith("segments_par_classe.html"),
+      (path) => path.endsWith("concordancier.html"),
+      (path) => path.endsWith("concordancier_afc.html")
+    ]);
+
+    if (concordancierFile) {
+      try {
+        renderHtmlFrame(
+          resultContainers.chdConcordancier,
+          await concordancierFile.text(),
+          "Aucun concordancier HTML disponible."
+        );
+      } catch (error) {
+        renderHtmlFrame(resultContainers.chdConcordancier, "", "Impossible de lire le concordancier HTML.");
+        log(`[error] Lecture HTML impossible (${concordancierFile.name}): ${error.message}`);
+      }
+    } else {
+      renderHtmlFrame(resultContainers.chdConcordancier, "", "Aucun concordancier HTML disponible.");
+    }
+
+    const wordcloudFiles = findFiles(
+      index,
+      (path) => path.endsWith(".png") && path.startsWith("wordclouds/")
+    )
+      .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }))
+      .map(({ path, file }) => ({
+        file,
+        title: path
+          .replace(/^.*wordclouds\//, "")
+          .replace("_wordcloud.png", "")
+          .replace("cluster_", "Classe ")
+      }));
+
+    renderImageGallery(
+      resultContainers.chdWordclouds,
+      wordcloudFiles,
+      "Aucun nuage de mots exporté dans wordclouds/.",
+      { previewKicker: "CHD" }
+    );
+  });
+
+  await safeRenderExportSection("AFC", async () => {
+    renderImage(
+      resultContainers.afcClassesPlot,
+      findFile(index, [(path) => path.endsWith("afc/afc_classes.png")]),
+      "AFC des classes"
+    );
+
+    renderImage(
+      resultContainers.afcTermsPlot,
+      findFile(index, [(path) => path.endsWith("afc/afc_termes.png")]),
+      "AFC des termes"
+    );
+
+    renderImage(
+      resultContainers.afcVarsPlot,
+      findFile(index, [(path) => path.endsWith("afc/afc_variables_etoilees.png")]),
+      "AFC des variables etoilees"
+    );
+
+    await renderAfcTermsByClass(
+      resultContainers.afcTermsTable,
+      findFile(index, [(path) => path.endsWith("afc/stats_termes.csv")]),
+      {
+        title: "stats_termes.csv",
+        emptyMessage: "Le fichier afc/stats_termes.csv est absent."
+      }
+    );
+
+    await renderCsvFromFile(
+      resultContainers.afcVarsTable,
+      findFile(index, [(path) => path.endsWith("afc/stats_modalites.csv")]),
+      {
+        title: "stats_modalites.csv",
+        emptyMessage: "Le fichier afc/stats_modalites.csv est absent."
+      }
+    );
+
+    await renderCombinedTables(
+      resultContainers.afcEigTable,
+      [
+        {
+          title: "valeurs_propres.csv",
+          file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres.csv")])
+        },
+        {
+          title: "valeurs_propres_vars.csv",
+          file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres_vars.csv")])
+        }
+      ],
+      "Aucune table de valeurs propres disponible."
+    );
+  });
+
+  await safeRenderExportSection("Trajectoire lexicale", async () => {
+    await renderLongitudinalExports(index);
+  });
+
+  await safeRenderExportSection("LDA", async () => {
+    const ldaWordcloudFiles = findFiles(
+      index,
+      (path) => path.endsWith(".png") && (path.includes("wordcloud_lda") || path.includes("lda/wordcloud"))
+    )
+      .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }))
+      .map(({ path, file }) => ({
+        file,
+        title: path.split("/").pop().replace(".png", "")
+      }));
+
+    renderImageGallery(
+      resultContainers.ldaWordclouds,
+      ldaWordcloudFiles,
+      "Aucun nuage LDA détecté dans le dossier chargé.",
+      { previewKicker: "LDA" }
+    );
+
+    const ldaVisHtmlFile = findFile(index, [
+      (path) => path.endsWith("lda/pyldavis.html"),
+      (path) => path.endsWith("pyldavis.html")
+    ]);
+    if (ldaVisHtmlFile) {
+      try {
+        renderHtmlFrame(
+          resultContainers.ldaBubblePlot,
+          await ldaVisHtmlFile.text(),
+          "Impossible de lire la visualisation pyLDAvis."
+        );
+      } catch (error) {
+        clearContainer(resultContainers.ldaBubblePlot);
+        resultContainers.ldaBubblePlot.appendChild(createEmptyState("Impossible de lire la visualisation pyLDAvis."));
+        log(`[error] Lecture HTML impossible (${ldaVisHtmlFile.name}): ${error.message}`);
+      }
+    } else {
       clearContainer(resultContainers.ldaBubblePlot);
-      resultContainers.ldaBubblePlot.appendChild(createEmptyState("Impossible de lire la visualisation pyLDAvis."));
-      log(`[error] Lecture HTML impossible (${ldaVisHtmlFile.name}): ${error.message}`);
-    }
-  } else {
-    clearContainer(resultContainers.ldaBubblePlot);
-    resultContainers.ldaBubblePlot.appendChild(
-      createEmptyState("Visualisation pyLDAvis indisponible. Vérifiez que le package Python pyLDAvis est installé.")
-    );
-  }
-
-  const ldaHeatmapFile = findFile(index, [
-    (path) => path.endsWith("lda/heatmap_lda.png"),
-    (path) => path.endsWith("/heatmap_lda.png"),
-    (path) => path.endsWith("heatmap_lda.png")
-  ]);
-  if (ldaHeatmapFile) {
-    renderImage(resultContainers.ldaHeatmap, ldaHeatmapFile, "Heatmap LDA mots × topics");
-    const heatmapImage = resultContainers.ldaHeatmap?.querySelector(".result-image");
-    if (heatmapImage instanceof HTMLImageElement) {
-      heatmapImage.classList.add("is-clickable");
-      heatmapImage.addEventListener("click", () =>
-        openImagePreview("Heatmap mots × topics", heatmapImage.src, "LDA")
+      resultContainers.ldaBubblePlot.appendChild(
+        createEmptyState("Visualisation pyLDAvis indisponible. Vérifiez que le package Python pyLDAvis est installé.")
       );
     }
-  } else {
-    clearContainer(resultContainers.ldaHeatmap);
-    resultContainers.ldaHeatmap.appendChild(
-      createEmptyState("Aucune heatmap LDA détectée dans le dossier chargé.")
-    );
-  }
 
-  const ldaTopTermsFile = findFile(index, [
-    (path) => path.endsWith("lda/topic_term_matrix.csv"),
-    (path) => path.endsWith("/topic_term_matrix.csv"),
-    (path) => path.endsWith("topic_term_matrix.csv"),
-    (path) => path.endsWith("lda/top_terms.csv"),
-    (path) => path.endsWith("/top_terms.csv"),
-    (path) => path.endsWith("top_terms.csv"),
-    (path) => path.endsWith("lda/topics.csv"),
-    (path) => path.endsWith("/topics.csv") && !path.endsWith("doc_topics.csv") && !path.endsWith("documents_topics.csv")
-  ]);
-  log(`[info] Fichier LDA retenu pour les mots : ${ldaTopTermsFile?.name || "aucun"}.`);
-  await renderLdaBipartiteNetwork(
-    resultContainers.ldaNetwork,
-    ldaTopTermsFile,
-    {
-      heading: "Réseau topics × mots",
-      emptyMessage: "Aucun export CSV LDA exploitable n'a été trouvé."
-    }
-  );
-
-  await renderLdaTopTermsMatrix(
-    resultContainers.ldaTopTerms,
-    ldaTopTermsFile,
-    {
-      title: "Probabilités mot × topic",
-      emptyMessage: "Aucun export CSV de top termes LDA n'a été trouvé."
-    }
-  );
-
-  await renderLdaTopTermsByTopic(
-    resultContainers.ldaDocTopics,
-    ldaTopTermsFile,
-    {
-      heading: "Tableaux par topic",
-      title: "Tableaux par topic",
-      emptyMessage: "Aucun export CSV de top termes LDA n'a été trouvé."
-    }
-  );
-
-  const ldaSegmentsFile = findFile(index, [
-    (path) => path.endsWith("lda/lda_python_output.json"),
-    (path) => path.endsWith("/lda_python_output.json"),
-    (path) => path.endsWith("lda_python_output.json"),
-    (path) => path.endsWith("lda/segments_topics.csv"),
-    (path) => path.endsWith("/segments_topics.csv"),
-    (path) => path.endsWith("segments_topics.csv")
-  ]);
-  await renderLdaTopicSegments(
-    resultContainers.ldaSegments,
-    ldaSegmentsFile,
-    {
-      heading: "Segments de texte par topic",
-      topTermsFile: ldaTopTermsFile,
-      highlightTermsPerTopic: 20,
-      emptyMessage: "Aucun export CSV de segments LDA n'a été trouvé."
-    }
-  );
-
-  clearContainer(resultContainers.ldaTopicWords);
-
-  const similitudeHtmlFile = findFile(index, [
-    (path) => path.endsWith(".html") && path.includes("simi"),
-    (path) => path.endsWith(".html") && path.includes("simil"),
-    (path) => path.endsWith(".png") && path.includes("simi"),
-    (path) => path.endsWith(".png") && path.includes("simil")
-  ]);
-
-  if (similitudeHtmlFile?.name.endsWith(".html")) {
-    try {
-      renderHtmlFrame(
-        resultContainers.simiGraph,
-        await similitudeHtmlFile.text(),
-        "Aucun graphe de similitudes exporté."
+    const ldaHeatmapFile = findFile(index, [
+      (path) => path.endsWith("lda/heatmap_lda.png"),
+      (path) => path.endsWith("/heatmap_lda.png"),
+      (path) => path.endsWith("heatmap_lda.png")
+    ]);
+    if (ldaHeatmapFile) {
+      renderImage(resultContainers.ldaHeatmap, ldaHeatmapFile, "Heatmap LDA mots × topics");
+      const heatmapImage = resultContainers.ldaHeatmap?.querySelector(".result-image");
+      if (heatmapImage instanceof HTMLImageElement) {
+        heatmapImage.classList.add("is-clickable");
+        heatmapImage.addEventListener("click", () =>
+          openImagePreview("Heatmap mots × topics", heatmapImage.src, "LDA")
+        );
+      }
+    } else {
+      clearContainer(resultContainers.ldaHeatmap);
+      resultContainers.ldaHeatmap.appendChild(
+        createEmptyState("Aucune heatmap LDA détectée dans le dossier chargé.")
       );
-    } catch (error) {
-      renderHtmlFrame(resultContainers.simiGraph, "", "Impossible de lire le graphe HTML.");
-      log(`[error] Lecture HTML impossible (${similitudeHtmlFile.name}): ${error.message}`);
     }
-  } else if (similitudeHtmlFile) {
-    renderImage(resultContainers.simiGraph, similitudeHtmlFile, "Graphe de similitudes");
-  } else {
-    clearContainer(resultContainers.simiGraph);
-    resultContainers.simiGraph.appendChild(createEmptyState("Aucun graphe de similitudes exporté."));
-  }
+
+    const ldaTopTermsFile = findFile(index, [
+      (path) => path.endsWith("lda/topic_term_matrix.csv"),
+      (path) => path.endsWith("/topic_term_matrix.csv"),
+      (path) => path.endsWith("topic_term_matrix.csv"),
+      (path) => path.endsWith("lda/top_terms.csv"),
+      (path) => path.endsWith("/top_terms.csv"),
+      (path) => path.endsWith("top_terms.csv"),
+      (path) => path.endsWith("lda/topics.csv"),
+      (path) => path.endsWith("/topics.csv") && !path.endsWith("doc_topics.csv") && !path.endsWith("documents_topics.csv")
+    ]);
+    log(`[info] Fichier LDA retenu pour les mots : ${ldaTopTermsFile?.name || "aucun"}.`);
+    await renderLdaBipartiteNetwork(
+      resultContainers.ldaNetwork,
+      ldaTopTermsFile,
+      {
+        heading: "Réseau topics × mots",
+        emptyMessage: "Aucun export CSV LDA exploitable n'a été trouvé."
+      }
+    );
+
+    await renderLdaTopTermsMatrix(
+      resultContainers.ldaTopTerms,
+      ldaTopTermsFile,
+      {
+        title: "Probabilités mot × topic",
+        emptyMessage: "Aucun export CSV de top termes LDA n'a été trouvé."
+      }
+    );
+
+    await renderLdaTopTermsByTopic(
+      resultContainers.ldaDocTopics,
+      ldaTopTermsFile,
+      {
+        heading: "Tableaux par topic",
+        title: "Tableaux par topic",
+        emptyMessage: "Aucun export CSV de top termes LDA n'a été trouvé."
+      }
+    );
+
+    const ldaSegmentsFile = findFile(index, [
+      (path) => path.endsWith("lda/lda_python_output.json"),
+      (path) => path.endsWith("/lda_python_output.json"),
+      (path) => path.endsWith("lda_python_output.json"),
+      (path) => path.endsWith("lda/segments_topics.csv"),
+      (path) => path.endsWith("/segments_topics.csv"),
+      (path) => path.endsWith("segments_topics.csv")
+    ]);
+    await renderLdaTopicSegments(
+      resultContainers.ldaSegments,
+      ldaSegmentsFile,
+      {
+        heading: "Segments de texte par topic",
+        topTermsFile: ldaTopTermsFile,
+        highlightTermsPerTopic: 20,
+        emptyMessage: "Aucun export CSV de segments LDA n'a été trouvé."
+      }
+    );
+
+    clearContainer(resultContainers.ldaTopicWords);
+  });
+
+  await safeRenderExportSection("Similitudes", async () => {
+    const similitudeHtmlFile = findFile(index, [
+      (path) => path.endsWith(".html") && path.includes("simi"),
+      (path) => path.endsWith(".html") && path.includes("simil"),
+      (path) => path.endsWith(".png") && path.includes("simi"),
+      (path) => path.endsWith(".png") && path.includes("simil")
+    ]);
+
+    if (similitudeHtmlFile?.name.endsWith(".html")) {
+      try {
+        renderHtmlFrame(
+          resultContainers.simiGraph,
+          await similitudeHtmlFile.text(),
+          "Aucun graphe de similitudes exporté."
+        );
+      } catch (error) {
+        renderHtmlFrame(resultContainers.simiGraph, "", "Impossible de lire le graphe HTML.");
+        log(`[error] Lecture HTML impossible (${similitudeHtmlFile.name}): ${error.message}`);
+      }
+    } else if (similitudeHtmlFile) {
+      renderImage(resultContainers.simiGraph, similitudeHtmlFile, "Graphe de similitudes");
+    } else {
+      clearContainer(resultContainers.simiGraph);
+      resultContainers.simiGraph.appendChild(createEmptyState("Aucun graphe de similitudes exporté."));
+    }
+  });
 
   appState.exportEntries = entries;
   renderResults(entries.map((entry) => entry.relativePath));
@@ -15452,7 +15472,7 @@ async function startAnalysis(analysisKind = "chd") {
         ? "Préparation de la trajectoire lexicale..."
         : "Préparation de la CHD...";
 
-  setSidebarRuntimeStatus("Verification de l'acces serveur...");
+  setSidebarRuntimeStatus("Vérification de l'accès serveur...");
   activateTopTab("analyse");
   progression.open(progressTitle, progressStartMessage);
   await waitForNextPaint();
@@ -15655,7 +15675,7 @@ async function startAnalysis(analysisKind = "chd") {
 
     progression.set(100, "Analyse terminée.");
     setSidebarTicketStatus("Application active sur cette session", "active");
-    setSidebarRuntimeStatus("Analyse terminee. Vous pouvez liberer l'acces ou lancer une nouvelle analyse.", "success");
+    setSidebarRuntimeStatus("Analyse terminée. Vous pouvez libérer l'accès ou lancer une nouvelle analyse.", "success");
     const summary = payload.summary || {};
     log(
       isLdaMode
@@ -15725,7 +15745,7 @@ if (releaseAccessBtn) {
     try {
       const snapshot = await releaseAnalysisTicket();
       if (snapshot) {
-        setSidebarRuntimeStatus("Acces libere pour cette session.", "success");
+        setSidebarRuntimeStatus("Accès libéré pour cette session.", "success");
       } else {
         setSidebarRuntimeStatus("Liberation a reessayer : le statut va etre reverifie.", "error");
       }
