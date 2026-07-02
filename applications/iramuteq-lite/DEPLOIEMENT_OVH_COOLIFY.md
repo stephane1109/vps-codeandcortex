@@ -85,6 +85,7 @@ La configuration recommandee est maintenant :
 - image basee sur `rocker/r2u:jammy` pour eviter la compilation source de `quanteda`
 - `IRAMUTEQ_R_LIBS_USER=/data/app/r-library` pour conserver les packages dans le volume persistant
 - `IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages` pour conserver les packages Python eventuellement reinstalles au runtime
+- preinstallation R allegee dans le `Dockerfile` : la trajectoire lexicale retiree n'alourdit plus l'image de base
 
 Dans ce mode, le deploiement Coolify est beaucoup plus fiable: l'image se construit sans lancer toute la chaine CHD au build, puis l'application complete l'installation au runtime dans `/data/app` si necessaire.
 Si vous forcez `IRAMUTEQ_BUILD_BOOTSTRAP=1`, le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
