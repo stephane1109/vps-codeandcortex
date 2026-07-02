@@ -16,6 +16,7 @@ const els = {
   importCorpusBtn: document.getElementById("importCorpusBtn"),
   corpusFile: document.getElementById("corpusFile"),
   fileInfo: document.getElementById("fileInfo"),
+  corpusMeta: document.getElementById("corpusMeta"),
   corpusPreview: document.getElementById("corpusPreview"),
   runAnalysisBtn: document.getElementById("runAnalysisBtn"),
   runStatus: document.getElementById("runStatus"),
@@ -213,6 +214,32 @@ function formatBytes(size) {
     return `${(numeric / 1024).toFixed(1)} Ko`;
   }
   return `${numeric} o`;
+}
+
+function updateCorpusPreview(fileName, text, fileSize = 0) {
+  const corpusText = String(text || "");
+  const lineCount = corpusText ? corpusText.split(/\r?\n/).length : 0;
+  const documentCount = corpusText
+    ? corpusText.split(/\r?\n/).filter((line) => line.trim().startsWith("****")).length
+    : 0;
+  const charCount = corpusText.length;
+
+  if (!corpusText.trim()) {
+    els.corpusMeta.textContent = fileName
+      ? `${fileName} · fichier vide`
+      : "Aucun corpus importé.";
+    els.corpusPreview.textContent = "(fichier vide)";
+    return;
+  }
+
+  els.corpusMeta.textContent = [
+    fileName || "corpus.txt",
+    formatBytes(fileSize),
+    `${lineCount} ligne(s)`,
+    `${documentCount} texte(s) détecté(s)`,
+    `${charCount} caractère(s)`,
+  ].join(" · ");
+  els.corpusPreview.textContent = corpusText;
 }
 
 function exportFileItemHtml(item) {
@@ -928,7 +955,7 @@ function bindEvents() {
       state.corpusName = file.name;
       state.corpusText = text;
       els.fileInfo.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} Ko`;
-      els.corpusPreview.textContent = text.split(/\r?\n/).slice(0, 50).join("\n") || "(fichier vide)";
+      updateCorpusPreview(file.name, text, file.size);
       updateRunAvailability();
     } catch (error) {
       els.fileInfo.textContent = error instanceof Error ? error.message : "Lecture du fichier impossible.";

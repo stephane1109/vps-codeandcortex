@@ -13,16 +13,14 @@
           <p class="eyebrow">CHD RAINETTE</p>
           <h1>CHD Rainette</h1>
           <p class="brand-copy">
-            Adaptation VPS de l’analyse CHD Rainette avec une interface web inspirée d’IRaMuTeQ Lite
-            et une exploration interactive du clustering dans l’esprit de <code>rainette_explor()</code>.
-          </p>
-          <p class="brand-copy">
             <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
           </p>
         </div>
 
         <nav class="top-nav" aria-label="Navigation principale">
           <button class="nav-link is-active" data-panel-target="analyse" type="button">Analyse</button>
+          <button class="nav-link" data-panel-target="afc" type="button">AFC</button>
+          <button class="nav-link" data-panel-target="ner" type="button">NER</button>
           <button class="nav-link" data-panel-target="corpus" type="button">Corpus</button>
           <button class="nav-link" data-panel-target="explorateur" type="button">Explorateur</button>
           <button class="nav-link" data-panel-target="exports" type="button">Exports</button>
@@ -55,55 +53,180 @@
                 <label>
                   Mode de découpage
                   <select id="modeDecoupage">
-                    <option value="segment_size">segment_size</option>
+                    <option value="segment_size" selected>segment_size</option>
                     <option value="ponctuation">ponctuation</option>
                   </select>
                 </label>
                 <label>
-                  Taille des segments
-                  <input id="segmentSize" type="number" min="10" max="500" step="5" value="40" />
+                  segment_size
+                  <input id="segmentSize" type="number" min="5" max="500" step="1" value="40" />
                 </label>
                 <label>
-                  Nombre de classes (k)
-                  <input id="kValue" type="number" min="2" max="20" step="1" value="6" />
+                  k (nombre de classes)
+                  <input id="kValue" type="number" min="2" max="20" step="1" value="3" />
                 </label>
                 <label>
-                  Segments minimum avant division
-                  <input id="minSplitSegments" type="number" min="3" max="100" step="1" value="12" />
+                  Nombre minimal de termes par segment
+                  <input id="minSegmentSize" type="number" min="1" max="200" step="1" value="10" />
                 </label>
                 <label>
-                  Fréquence documentaire minimale
-                  <input id="minDocfreq" type="number" min="1" max="20" step="1" value="1" />
+                  Effectif minimal pour scinder une classe
+                  <input id="minSplitSegments" type="number" min="1" max="200" step="1" value="10" />
                 </label>
                 <label>
-                  Nombre maximal de mots par classe
-                  <input id="topN" type="number" min="5" max="100" step="1" value="20" />
+                  Fréquence minimale des termes
+                  <input id="minDocfreq" type="number" min="1" max="50" step="1" value="3" />
+                </label>
+                <label>
+                  max_p (p-value)
+                  <input id="maxP" type="number" min="0" max="1" step="0.01" value="0.05" />
+                </label>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">Dictionnaire spaCy</p>
+              <div class="form-grid form-grid--single">
+                <label>
+                  Langue du corpus
+                  <select id="spacyLangue">
+                    <option value="fr" selected>Français</option>
+                    <option value="en">Anglais</option>
+                    <option value="es">Espagnol</option>
+                  </select>
+                </label>
+                <p class="muted sidebar-note">
+                  Ce choix pilote spaCy, les stopwords et le NER.
+                </p>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">Classification</p>
+              <div class="form-grid form-grid--single">
+                <label>
+                  Type de classification
+                  <select id="typeClassification">
+                    <option value="simple" selected>Classification simple (rainette)</option>
+                    <option value="double">Classification double (rainette2)</option>
+                  </select>
+                </label>
+                <div id="doubleClassificationOptions" class="stacked-fields" hidden>
+                  <label>
+                    min_segment_size (classification 2)
+                    <input id="minSegmentSize2" type="number" min="1" max="200" step="1" value="15" />
+                  </label>
+                  <label>
+                    max_k (rainette2)
+                    <input id="maxKDouble" type="number" min="2" max="20" step="1" value="8" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">Nettoyage</p>
+              <div class="form-grid form-grid--single">
+                <label class="checkbox-row">
+                  <input id="nettoyageCaracteres" type="checkbox" />
+                  <span>Nettoyage caractères (regex)</span>
                 </label>
                 <label class="checkbox-row">
-                  <input id="lemmatisation" type="checkbox" checked />
-                  <span>Activer la lemmatisation UDPipe</span>
+                  <input id="supprimerPonctuation" type="checkbox" />
+                  <span>Supprimer la ponctuation</span>
+                </label>
+                <label class="checkbox-row">
+                  <input id="supprimerChiffres" type="checkbox" />
+                  <span>Supprimer les chiffres</span>
+                </label>
+                <label class="checkbox-row">
+                  <input id="supprimerApostrophes" type="checkbox" />
+                  <span>Traiter les élisions françaises</span>
+                </label>
+                <label class="checkbox-row">
+                  <input id="forcerMinusculesAvant" type="checkbox" />
+                  <span>Forcer les minuscules avant traitement</span>
+                </label>
+                <label class="checkbox-row">
+                  <input id="retirerStopwords" type="checkbox" />
+                  <span>Retirer les stopwords (spaCy)</span>
+                </label>
+                <label class="checkbox-row">
+                  <input id="filtrageMorpho" type="checkbox" />
+                  <span>Filtrage morphosyntaxique (spaCy)</span>
+                </label>
+                <div id="posSection" class="stacked-fields" hidden>
+                  <label>
+                    POS à conserver
+                    <select id="uposSelection" multiple size="8">
+                      <option value="ADJ">ADJ</option>
+                      <option value="ADP">ADP</option>
+                      <option value="ADV">ADV</option>
+                      <option value="AUX">AUX</option>
+                      <option value="CCONJ">CCONJ</option>
+                      <option value="DET">DET</option>
+                      <option value="INTJ">INTJ</option>
+                      <option value="NOUN" selected>NOUN</option>
+                      <option value="NUM">NUM</option>
+                      <option value="PART">PART</option>
+                      <option value="PRON">PRON</option>
+                      <option value="PROPN">PROPN</option>
+                      <option value="PUNCT">PUNCT</option>
+                      <option value="SCONJ">SCONJ</option>
+                      <option value="SYM">SYM</option>
+                      <option value="VERB" selected>VERB</option>
+                      <option value="X">X</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input id="spacyUtiliserLemmes" type="checkbox" />
+                  <span>Lemmatisation (spaCy)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">spaCy / NER</p>
+              <div class="form-grid form-grid--single">
+                <label class="checkbox-row">
+                  <input id="activerNer" type="checkbox" />
+                  <span>Activer NER (spaCy)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">AFC</p>
+              <div class="form-grid form-grid--single">
+                <label class="checkbox-row">
+                  <input id="afcReduireChevauchement" type="checkbox" />
+                  <span>Réduire les chevauchements des mots</span>
                 </label>
                 <label>
-                  UPOS à conserver
-                  <select id="uposSelection" multiple size="8">
-                    <option value="ADJ" selected>ADJ</option>
-                    <option value="ADP">ADP</option>
-                    <option value="ADV">ADV</option>
-                    <option value="AUX">AUX</option>
-                    <option value="CCONJ">CCONJ</option>
-                    <option value="DET">DET</option>
-                    <option value="INTJ">INTJ</option>
-                    <option value="NOUN" selected>NOUN</option>
-                    <option value="NUM">NUM</option>
-                    <option value="PART">PART</option>
-                    <option value="PRON">PRON</option>
-                    <option value="PROPN">PROPN</option>
-                    <option value="PUNCT">PUNCT</option>
-                    <option value="SCONJ">SCONJ</option>
-                    <option value="SYM">SYM</option>
-                    <option value="VERB">VERB</option>
-                    <option value="X">X</option>
+                  Taille des mots (AFC termes)
+                  <select id="afcTailleMots">
+                    <option value="frequency" selected>Fréquence</option>
+                    <option value="chi2">Chi2</option>
                   </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <p class="sidebar-kicker">Cooccurrences</p>
+              <div class="form-grid form-grid--single">
+                <label>
+                  top_n (wordcloud)
+                  <input id="topN" type="number" min="5" max="150" step="1" value="20" />
+                </label>
+                <label>
+                  window (cooccurrences)
+                  <input id="windowCooc" type="number" min="1" max="20" step="1" value="5" />
+                </label>
+                <label>
+                  top_feat (cooccurrences)
+                  <input id="topFeat" type="number" min="5" max="150" step="1" value="20" />
                 </label>
               </div>
             </div>
@@ -157,7 +280,7 @@
               </article>
 
               <article class="card">
-                <h3>Mots discriminants</h3>
+                <h3>Statistiques discriminantes</h3>
                 <div id="detailTable" class="result-pane"></div>
               </article>
 
@@ -177,16 +300,111 @@
             </div>
           </section>
 
+          <section class="panel" data-panel="afc" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">AFC</p>
+                <h2>Analyse factorielle des correspondances</h2>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>Statut AFC</h3>
+                <p id="afcStatus" class="muted">Lancez une analyse pour produire les sorties AFC.</p>
+              </article>
+
+              <div class="visual-grid">
+                <article class="card">
+                  <h3>Représentation des classes</h3>
+                  <div id="afcClassesPlaceholder" class="empty-state plot-box-empty">Aucun graphique disponible.</div>
+                  <img id="afcClassesPlot" class="visual-plot" alt="AFC classes" hidden />
+                </article>
+                <article class="card">
+                  <h3>AFC des termes</h3>
+                  <div id="afcTermsPlaceholder" class="empty-state plot-box-empty">Aucun graphique disponible.</div>
+                  <img id="afcTermsPlot" class="visual-plot" alt="AFC termes" hidden />
+                </article>
+              </div>
+
+              <article class="card">
+                <h3>Table des mots projetés</h3>
+                <div id="afcTermsTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Valeurs propres AFC termes</h3>
+                <div id="afcEigTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>AFC des variables étoilées</h3>
+                <div id="afcVarsPlaceholder" class="empty-state plot-box-empty">Aucun graphique disponible.</div>
+                <img id="afcVarsPlot" class="visual-plot" alt="AFC variables étoilées" hidden />
+              </article>
+
+              <article class="card">
+                <h3>Table des modalités projetées</h3>
+                <div id="afcVarsTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Valeurs propres AFC variables</h3>
+                <div id="afcVarsEigTable" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="ner" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">NER</p>
+                <h2>Entités nommées spaCy</h2>
+              </div>
+            </div>
+
+            <div class="section-stack">
+              <article class="card">
+                <h3>Statut NER</h3>
+                <p id="nerStatus" class="muted">Activez le NER dans la colonne de gauche pour générer ces sorties.</p>
+              </article>
+
+              <article class="card">
+                <h3>Nuage global</h3>
+                <div id="nerGlobalPlaceholder" class="empty-state plot-box-empty">Aucun nuage global disponible.</div>
+                <img id="nerGlobalPlot" class="visual-plot" alt="NER global" hidden />
+              </article>
+
+              <article class="card">
+                <h3>Résumé</h3>
+                <div id="nerSummaryTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Détails</h3>
+                <div id="nerDetailTable" class="result-pane"></div>
+              </article>
+
+              <article class="card">
+                <h3>Nuages par classe</h3>
+                <div id="nerClassPlots" class="visual-gallery">
+                  <p class="empty-state">Les nuages par classe apparaîtront ici.</p>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <section class="panel" data-panel="corpus" hidden>
             <div class="page-heading">
               <div>
-                <p class="section-kicker">Corpus</p>
-                <h2>Prévisualisation du corpus</h2>
+                <p class="section-kicker">Aperçu du corpus</p>
+                <h2>Corpus importé</h2>
               </div>
             </div>
 
             <article class="card">
-              <pre id="corpusPreview" class="preview-box">Importez un fichier texte pour afficher un extrait ici.</pre>
+              <p id="corpusMeta" class="muted">Aucun corpus importé.</p>
+              <pre id="corpusPreview" class="preview-box preview-box--corpus">Importez un fichier texte pour afficher le corpus complet ici.</pre>
             </article>
           </section>
 
@@ -306,21 +524,38 @@
               </div>
             </div>
 
-            <article class="card prose-card">
-              <p>
-                Cette version VPS ne passe plus par Streamlit. Le calcul Rainette reste exécuté côté R,
-                mais l’interface web affiche maintenant directement le graphe CHD et les documents du cluster.
-              </p>
-              <p>
-                Le bloc <strong>Explorateur</strong> reprend les réglages principaux de
-                <code>rainette_explor()</code> : nombre de clusters, statistique, nombre de termes,
-                échelles, valeurs négatives et taille du texte.
-              </p>
-              <p>
-                L’onglet <strong>Exports</strong> propose maintenant un <strong>ZIP global</strong> qui regroupe tous les fichiers utiles de la session,
-                ainsi que des <strong>ZIP par catégorie</strong> : synthèse, graphiques, segments/concordances, tableaux détaillés et session technique.
-              </p>
-            </article>
+            <div class="section-stack">
+              <article class="card prose-card">
+                <p>
+                  Cette adaptation VPS conserve le moteur Rainette de la version Hugging Face, mais l’exécute dans une
+                  interface web locale au conteneur pour éviter la dépendance à Shiny côté utilisateur.
+                </p>
+                <p>
+                  Les blocs latéraux couvrent maintenant les paramètres CHD, les choix spaCy, la classification simple ou double,
+                  le nettoyage, le NER, l’AFC et les cooccurrences.
+                </p>
+                <p>
+                  L’onglet <strong>Explorateur</strong> reste le point d’entrée pour le graphe CHD interactif, tandis que
+                  <strong>Exports</strong> regroupe le ZIP global et les ZIP catégorisés.
+                </p>
+              </article>
+
+              <article class="card prose-card">
+                <h3>Repères rapides</h3>
+                <p>
+                  Utilisez <strong>classification simple</strong> pour une CHD classique. Passez en <strong>classification double</strong>
+                  si vous voulez rapprocher le comportement de <code>rainette2()</code> de la version source.
+                </p>
+                <p>
+                  Activez le <strong>filtrage morphosyntaxique</strong> ou la <strong>lemmatisation spaCy</strong> seulement si vous souhaitez
+                  vraiment piloter la nature grammaticale des formes conservées.
+                </p>
+                <p>
+                  Les sorties NER et AFC se remplissent uniquement si le calcul correspondant aboutit. En cas d’échec, le détail reste visible
+                  dans les logs et dans le statut des onglets concernés.
+                </p>
+              </article>
+            </div>
           </section>
         </main>
       </div>
