@@ -255,56 +255,26 @@ function exportFileItemHtml(item) {
 }
 
 function exportCategoriesHtml(exportsPayload, fallbackArtifacts) {
-  const categories = exportsPayload?.categories || [];
   const globalZip = exportsPayload?.globalZip || null;
-  if (!categories.length && !globalZip) {
-    return artifactListHtml(fallbackArtifacts || []);
+  if (!globalZip) {
+    return "<p class='empty-state'>L'export global apparaîtra après une analyse réussie.</p>";
   }
 
-  const blocks = [];
-
-  if (globalZip) {
-    blocks.push(`
-      <section class="export-bundle export-bundle--global">
-        <div class="export-bundle__header">
-          <div>
-            <p class="export-bundle__kicker">Export global</p>
-            <h3>ZIP complet de l'analyse</h3>
-            <p class="muted">Ce fichier regroupe tous les résultats, les graphiques, les tableaux, les segments, les logs et la configuration de session.</p>
-          </div>
-          <a class="export-bundle__cta" href="${globalZip.downloadUrl}" target="_blank" rel="noopener noreferrer">
-            Télécharger le ZIP complet
-          </a>
+  return `
+    <section class="export-bundle export-bundle--global">
+      <div class="export-bundle__header">
+        <div>
+          <p class="export-bundle__kicker">Export global</p>
+          <h3>ZIP complet de l'analyse</h3>
+          <p class="muted">Ce fichier regroupe tous les résultats, les graphiques, les tableaux, les segments, les logs et la configuration de session.</p>
         </div>
-        <p class="muted export-bundle__meta">${escapeHtml(globalZip.relativePath || "")} · ${formatBytes(globalZip.sizeBytes)}</p>
-      </section>
-    `);
-  }
-
-  categories.forEach((category) => {
-    const files = category.files || [];
-    blocks.push(`
-      <section class="export-bundle">
-        <div class="export-bundle__header">
-          <div>
-            <p class="export-bundle__kicker">Export par type</p>
-            <h3>${escapeHtml(category.label || "")}</h3>
-            <p class="muted">${escapeHtml(category.description || "")}</p>
-          </div>
-          ${
-            category.zip
-              ? `<a class="export-bundle__cta" href="${category.zip.downloadUrl}" target="_blank" rel="noopener noreferrer">Télécharger le ZIP ${escapeHtml(category.label || "")}</a>`
-              : ""
-          }
-        </div>
-        <div class="artifact-list artifact-list--nested">
-          ${files.map((item) => exportFileItemHtml(item)).join("")}
-        </div>
-      </section>
-    `);
-  });
-
-  return blocks.join("");
+        <a class="export-bundle__cta" href="${globalZip.downloadUrl}" target="_blank" rel="noopener noreferrer">
+          Télécharger le ZIP complet
+        </a>
+      </div>
+      <p class="muted export-bundle__meta">${escapeHtml(globalZip.relativePath || "")} · ${formatBytes(globalZip.sizeBytes)}</p>
+    </section>
+  `;
 }
 
 function addHistoryEntry(jobId, corpusName) {
