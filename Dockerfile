@@ -56,6 +56,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Les paquets `r-cran-*` installes via `apt` tombent dans `/usr/lib/R/...` alors que
 # `rocker/r-ver` utilise aussi `/usr/local/lib/R/...`. On force ici la visibilite des
 # deux emplacements pour eviter que le bootstrap recompilie inutilement depuis CRAN.
+# #### MENAGE VERSION WEB
+# La trajectoire lexicale / suivi a ete retiree de cette version web.
+# On en profite pour reduire ici la preinstallation R aux briques encore utiles
+# au pipeline actif :
+# - CHD
+# - AFC
+# - LDA
+# - similitudes statiques
+# Les anciens paquets de l'interface Shiny / desktop ne sont plus precharges
+# au build et, si besoin ponctuel, seront reinstalles par le bootstrap runtime.
 # #### COMPILATION Rcpp / quanteda
 # `quanteda` retombe en compilation source sur cette image Ubuntu/R. Certains couples
 # GCC + Rcpp declenchent un `-Werror=format-security` dans les headers Rcpp, ce qui
@@ -98,76 +108,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     && binary_r_packages="\
       r-cran-ape \
-      r-cran-broom \
-      r-cran-bslib \
-      r-cran-car \
-      r-cran-cardata \
       r-cran-colorspace \
-      r-cran-corrplot \
-      r-cran-cowplot \
       r-cran-dplyr \
-      r-cran-dt \
-      r-cran-ellipse \
-      r-cran-emmeans \
       r-cran-factoextra \
       r-cran-factominer \
-      r-cran-flashclust \
-      r-cran-fontawesome \
       r-cran-fs \
       r-cran-ggplot2 \
-      r-cran-ggpubr \
-      r-cran-ggrepel \
-      r-cran-ggsignif \
-      r-cran-gridextra \
       r-cran-htmltools \
-      r-cran-htmlwidgets \
       r-cran-igraph \
       r-cran-irlba \
-      r-cran-isoband \
-      r-cran-jquerylib \
       r-cran-jsonlite \
-      r-cran-knitr \
-      r-cran-later \
-      r-cran-lazyeval \
-      r-cran-lme4 \
-      r-cran-markdown \
-      r-cran-modeltools \
-      r-cran-nloptr \
-      r-cran-pbkrtest \
-      r-cran-plotly \
-      r-cran-promises \
       r-cran-proxy \
-      r-cran-purrr \
       r-cran-quanteda \
-      r-cran-quantreg \
-      r-cran-rcppeigen \
       r-cran-rcolorbrewer \
-      r-cran-reticulate \
       r-cran-rgexf \
       r-cran-rgl \
-      r-cran-rmarkdown \
-      r-cran-rstatix \
-      r-cran-scales \
-      r-cran-scatterplot3d \
-      r-cran-shiny \
-      r-cran-shinyfiles \
-      r-cran-slam \
       r-cran-sna \
-      r-cran-snowballc \
-      r-cran-stopwords \
-      r-cran-stringi \
-      r-cran-stringr \
-      r-cran-tibble \
-      r-cran-tidyr \
-      r-cran-tm \
       r-cran-topicmodels \
-      r-cran-vctrs \
-      r-cran-viridis \
-      r-cran-viridislite \
-      r-cran-visnetwork \
       r-cran-wordcloud \
-      r-cran-xml2 \
-      r-cran-yaml \
     " \
     && available_r_packages="" \
     && for pkg in $binary_r_packages; do \
