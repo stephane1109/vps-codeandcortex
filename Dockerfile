@@ -30,7 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_DATA_DIR=/data/app pour conserver les jobs et les sorties cote serveur
 # - CHDRAINETTE_APP_DATA_DIR=/data/app pour que le backend web et le R utilisent le meme volume
 # - CHDRAINETTE_R_LIBS_USER=/data/app/r-library pour les packages R persistants
-# - CHDRAINETTE_CACHE_DIR=/data/app/cache pour le modele UDPipe
+# - CHDRAINETTE_CACHE_DIR=/data/app/cache pour les caches NLP / spaCy
 # - PORT=8000 pour FastAPI / Uvicorn
 
 WORKDIR /app
@@ -68,13 +68,16 @@ RUN apt-get update \
         libxrender1 \
     && binary_r_packages="\
       r-cran-dplyr \
+      r-cran-factominer \
       r-cran-htmltools \
+      r-cran-igraph \
       r-cran-jsonlite \
       r-cran-quanteda \
       r-cran-quanteda.textstats \
       r-cran-rcolorbrewer \
       r-cran-remotes \
       r-cran-stopwords \
+      r-cran-stringi \
       r-cran-wordcloud \
       r-cran-xml2 \
     " \
@@ -92,7 +95,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
-RUN python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /app/requirements.txt
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /app/requirements.txt
 
 COPY backend/install-r-packages.R /tmp/install-r-packages.R
 RUN Rscript /tmp/install-r-packages.R

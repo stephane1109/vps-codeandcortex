@@ -58,11 +58,48 @@ const els = {
   modeDecoupage: document.getElementById("modeDecoupage"),
   segmentSize: document.getElementById("segmentSize"),
   kValue: document.getElementById("kValue"),
+  minSegmentSize: document.getElementById("minSegmentSize"),
   minSplitSegments: document.getElementById("minSplitSegments"),
   minDocfreq: document.getElementById("minDocfreq"),
-  topN: document.getElementById("topN"),
-  lemmatisation: document.getElementById("lemmatisation"),
+  maxP: document.getElementById("maxP"),
+  spacyLangue: document.getElementById("spacyLangue"),
+  typeClassification: document.getElementById("typeClassification"),
+  doubleClassificationOptions: document.getElementById("doubleClassificationOptions"),
+  minSegmentSize2: document.getElementById("minSegmentSize2"),
+  maxKDouble: document.getElementById("maxKDouble"),
+  nettoyageCaracteres: document.getElementById("nettoyageCaracteres"),
+  supprimerPonctuation: document.getElementById("supprimerPonctuation"),
+  supprimerChiffres: document.getElementById("supprimerChiffres"),
+  supprimerApostrophes: document.getElementById("supprimerApostrophes"),
+  forcerMinusculesAvant: document.getElementById("forcerMinusculesAvant"),
+  retirerStopwords: document.getElementById("retirerStopwords"),
+  filtrageMorpho: document.getElementById("filtrageMorpho"),
+  posSection: document.getElementById("posSection"),
   uposSelection: document.getElementById("uposSelection"),
+  spacyUtiliserLemmes: document.getElementById("spacyUtiliserLemmes"),
+  activerNer: document.getElementById("activerNer"),
+  afcReduireChevauchement: document.getElementById("afcReduireChevauchement"),
+  afcTailleMots: document.getElementById("afcTailleMots"),
+  topN: document.getElementById("topN"),
+  windowCooc: document.getElementById("windowCooc"),
+  topFeat: document.getElementById("topFeat"),
+  afcStatus: document.getElementById("afcStatus"),
+  afcClassesPlaceholder: document.getElementById("afcClassesPlaceholder"),
+  afcClassesPlot: document.getElementById("afcClassesPlot"),
+  afcTermsPlaceholder: document.getElementById("afcTermsPlaceholder"),
+  afcTermsPlot: document.getElementById("afcTermsPlot"),
+  afcVarsPlaceholder: document.getElementById("afcVarsPlaceholder"),
+  afcVarsPlot: document.getElementById("afcVarsPlot"),
+  afcTermsTable: document.getElementById("afcTermsTable"),
+  afcVarsTable: document.getElementById("afcVarsTable"),
+  afcEigTable: document.getElementById("afcEigTable"),
+  afcVarsEigTable: document.getElementById("afcVarsEigTable"),
+  nerStatus: document.getElementById("nerStatus"),
+  nerGlobalPlaceholder: document.getElementById("nerGlobalPlaceholder"),
+  nerGlobalPlot: document.getElementById("nerGlobalPlot"),
+  nerSummaryTable: document.getElementById("nerSummaryTable"),
+  nerDetailTable: document.getElementById("nerDetailTable"),
+  nerClassPlots: document.getElementById("nerClassPlots"),
 };
 
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
@@ -251,21 +288,51 @@ function renderHistory() {
           <strong>${escapeHtml(entry.corpusName)}</strong><br />
           <span class="muted">${escapeHtml(entry.at)} · ${escapeHtml(entry.jobId)}</span>
         </div>
-      `
+      `,
     )
     .join("");
+}
+
+function toggleAdvancedUi() {
+  const fixedSegmentation = els.modeDecoupage.value === "segment_size";
+  els.segmentSize.disabled = !fixedSegmentation;
+
+  const isDouble = els.typeClassification.value === "double";
+  els.doubleClassificationOptions.hidden = !isDouble;
+
+  const showPos = els.filtrageMorpho.checked;
+  els.posSection.hidden = !showPos;
+  els.uposSelection.disabled = !showPos;
 }
 
 function configPayload() {
   return {
     mode_decoupage: els.modeDecoupage.value,
     segment_size: Number(els.segmentSize.value || 40),
-    k: Number(els.kValue.value || 6),
-    min_split_segments: Number(els.minSplitSegments.value || 12),
-    min_docfreq: Number(els.minDocfreq.value || 1),
+    k: Number(els.kValue.value || 3),
+    min_segment_size: Number(els.minSegmentSize.value || 10),
+    min_split_members: Number(els.minSplitSegments.value || 10),
+    min_docfreq: Number(els.minDocfreq.value || 3),
+    max_p: Number(els.maxP.value || 0.05),
+    spacy_langue: els.spacyLangue.value,
+    type_classification: els.typeClassification.value,
+    min_segment_size2: Number(els.minSegmentSize2.value || 15),
+    max_k_double: Number(els.maxKDouble.value || 8),
+    nettoyage_caracteres: Boolean(els.nettoyageCaracteres.checked),
+    supprimer_ponctuation: Boolean(els.supprimerPonctuation.checked),
+    supprimer_chiffres: Boolean(els.supprimerChiffres.checked),
+    supprimer_apostrophes: Boolean(els.supprimerApostrophes.checked),
+    forcer_minuscules_avant: Boolean(els.forcerMinusculesAvant.checked),
+    retirer_stopwords: Boolean(els.retirerStopwords.checked),
+    filtrage_morpho: Boolean(els.filtrageMorpho.checked),
+    pos_spacy_a_conserver: selectedValues(els.uposSelection),
+    spacy_utiliser_lemmes: Boolean(els.spacyUtiliserLemmes.checked),
+    activer_ner: Boolean(els.activerNer.checked),
+    afc_reduire_chevauchement: Boolean(els.afcReduireChevauchement.checked),
+    afc_taille_mots: els.afcTailleMots.value,
     top_n: Number(els.topN.value || 20),
-    lemmatisation: Boolean(els.lemmatisation.checked),
-    upos_a_conserver: selectedValues(els.uposSelection),
+    window_cooc: Number(els.windowCooc.value || 5),
+    top_feat: Number(els.topFeat.value || 20),
   };
 }
 
@@ -632,6 +699,74 @@ async function pollJobStatus(jobId) {
   }
 }
 
+function showImage(imgEl, placeholderEl, artifact, fallbackMessage) {
+  const url = artifact?.downloadUrl || "";
+  if (!url) {
+    imgEl.hidden = true;
+    imgEl.removeAttribute("src");
+    placeholderEl.hidden = false;
+    placeholderEl.textContent = fallbackMessage;
+    return;
+  }
+  imgEl.src = url;
+  imgEl.hidden = false;
+  placeholderEl.hidden = true;
+}
+
+function renderAfc(afcPayload) {
+  const afc = afcPayload || {};
+  const messages = [];
+  if (afc.error) messages.push(afc.error);
+  if (afc.variablesError) messages.push(afc.variablesError);
+  if (!messages.length && (afc.termsRows?.length || afc.variablesRows?.length || afc.classesPlot || afc.termsPlot)) {
+    messages.push("AFC calculée. Les sorties termes et variables étoilées sont disponibles ci-dessous.");
+  }
+  if (!messages.length) {
+    messages.push("Lancez une analyse pour produire les sorties AFC.");
+  }
+  els.afcStatus.textContent = messages.join(" ");
+
+  showImage(els.afcClassesPlot, els.afcClassesPlaceholder, afc.classesPlot, "Aucune représentation des classes disponible.");
+  showImage(els.afcTermsPlot, els.afcTermsPlaceholder, afc.termsPlot, "Aucune AFC des termes disponible.");
+  showImage(els.afcVarsPlot, els.afcVarsPlaceholder, afc.variablesPlot, "Aucune AFC des variables étoilées disponible.");
+
+  els.afcTermsTable.innerHTML = tableFromRows(afc.termsRows || []);
+  els.afcVarsTable.innerHTML = tableFromRows(afc.variablesRows || []);
+  els.afcEigTable.innerHTML = tableFromRows(afc.eigenRows || []);
+  els.afcVarsEigTable.innerHTML = tableFromRows(afc.variablesEigenRows || []);
+}
+
+function renderNer(nerPayload) {
+  const ner = nerPayload || {};
+  if (!ner.enabled && !(ner.summaryRows || []).length) {
+    els.nerStatus.textContent = "NER désactivé pour cette analyse. Activez l’option spaCy / NER avant le lancement.";
+  } else {
+    els.nerStatus.textContent = "NER calculé. Les tableaux et nuages d’entités sont disponibles ci-dessous.";
+  }
+
+  showImage(els.nerGlobalPlot, els.nerGlobalPlaceholder, ner.globalPlot, "Aucun nuage global disponible.");
+  els.nerSummaryTable.innerHTML = tableFromRows(ner.summaryRows || []);
+  els.nerDetailTable.innerHTML = tableFromRows(ner.detailRows || []);
+
+  const classPlots = (ner.classPlots || []).filter((item) => String(item.relativePath || "").includes("ner_wordcloud_classe_"));
+  if (!classPlots.length) {
+    els.nerClassPlots.innerHTML = '<p class="empty-state">Les nuages par classe apparaîtront ici.</p>';
+    return;
+  }
+  els.nerClassPlots.innerHTML = classPlots
+    .map((item) => {
+      const match = String(item.relativePath || "").match(/classe_(\d+)/);
+      const classe = match?.[1] || "—";
+      return `
+        <article class="gallery-item">
+          <h4>Classe ${escapeHtml(classe)}</h4>
+          <img class="visual-plot" src="${item.downloadUrl}" alt="NER classe ${escapeHtml(classe)}" />
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderResult(result) {
   const metadata = result.metadata || {};
   els.metricDocs.textContent = metadata.n_documents_imported ?? "—";
@@ -641,20 +776,22 @@ function renderResult(result) {
   els.summaryTable.innerHTML = tableFromRows(result.summaryRows || []);
   els.detailTable.innerHTML = tableFromRows(result.detailRows || []);
   els.artifactList.innerHTML = exportCategoriesHtml(result.exports || null, result.artifacts || []);
+  renderAfc(result.afc || {});
+  renderNer(result.ner || {});
   configureExplorer(metadata);
   refreshExplorer();
 }
 
 function configureExplorer(metadata) {
-  const maxK = Math.max(2, Number(metadata.n_classes || 2));
+  const maxK = Math.max(2, Number(metadata.max_k || metadata.n_classes || 2));
+  const currentK = Math.max(2, Number(metadata.n_classes || 2));
   els.explorerK.max = String(maxK);
-  els.explorerK.value = String(maxK);
-  els.explorerKValue.textContent = String(maxK);
+  els.explorerK.value = String(Math.min(currentK, maxK));
+  els.explorerKValue.textContent = els.explorerK.value;
   els.docsCluster.innerHTML = Array.from({ length: maxK }, (_item, index) => {
     const value = index + 1;
     return `<option value="${value}">Cluster ${value}</option>`;
   }).join("");
-  switchPanel("explorateur");
 }
 
 async function refreshExplorer() {
@@ -755,14 +892,11 @@ function bindEvents() {
     }
   });
 
-  els.modeDecoupage.addEventListener("change", () => {
-    const fixed = els.modeDecoupage.value === "segment_size";
-    els.segmentSize.disabled = !fixed;
-  });
-
-  els.lemmatisation.addEventListener("change", () => {
-    els.uposSelection.disabled = !els.lemmatisation.checked;
-  });
+  [
+    els.modeDecoupage,
+    els.typeClassification,
+    els.filtrageMorpho,
+  ].forEach((element) => element.addEventListener("change", toggleAdvancedUi));
 
   els.explorerK.addEventListener("input", syncExplorerUi);
   els.explorerMeasure.addEventListener("change", syncExplorerUi);
@@ -781,9 +915,8 @@ function bindEvents() {
 function init() {
   bindEvents();
   renderHistory();
+  toggleAdvancedUi();
   syncExplorerUi();
-  els.segmentSize.disabled = false;
-  els.uposSelection.disabled = !els.lemmatisation.checked;
   lastTicketInteractionAt = Date.now();
   updateReleaseAccessButton();
   refreshTicketStatus();

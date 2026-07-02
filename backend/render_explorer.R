@@ -37,6 +37,11 @@ escape_doc_html <- function(text) {
   gsub("\n", "<br>", htmlEscape(text), fixed = TRUE)
 }
 
+`%||%` <- function(left, right) {
+  if (is.null(left) || !length(left)) return(right)
+  left
+}
+
 highlight_html <- function(text, pattern) {
   if (!nzchar(pattern)) return(text)
   tryCatch(
@@ -66,7 +71,13 @@ build_plot_code <- function(current_k, measure, n_terms, same_scales, show_negat
   )
 }
 
+plot_res <- bundle$plot_res %||% bundle$res
+cutree_res <- bundle$cutree_res %||% bundle$res
+plot_dtm <- bundle$plot_dtm %||% bundle$dtm
+corpus_src <- bundle$corpus_src
 max_k <- safe_int(bundle$max_k, default = 2L, minimum = 2L)
+max_k_plot <- safe_int(bundle$max_k_plot, default = max_k, minimum = 2L)
+current_bundle_k <- safe_int(bundle$current_k, default = max_k, minimum = 2L)
 current_k <- safe_int(params$k, default = max_k, minimum = 2L, maximum = max_k)
 
 if (identical(action, "plot")) {
@@ -84,15 +95,16 @@ if (identical(action, "plot")) {
   show_negative <- as_bool(params$show_negative, default = FALSE)
   text_size <- safe_int(params$text_size, default = 12L, minimum = 6L, maximum = 24L)
 
-  res <- bundle$res
-  dtm <- bundle$dtm
+  res <- plot_res
+  dtm <- plot_dtm
+  plot_k <- min(current_k, max_k_plot)
 
   png(output_png, width = 1500, height = 980, res = 150)
   tryCatch(
     rainette::rainette_plot(
       res,
       dtm,
-      k = current_k,
+      k = plot_k,
       n_terms = n_terms,
       free_scales = !same_scales,
       measure = measure,
@@ -121,8 +133,16 @@ if (identical(action, "plot")) {
 }
 
 if (identical(action, "docs")) {
-  corpus_src <- bundle$corpus_src
-  groups <- rainette::cutree(bundle$res, k = current_k)
+  groups <- if (!is.null(bundle$groups_current) && current_k == current_bundle_k) {
+    as.integer(bundle$groups_current)
+  } else {
+    rainette::cutree(cutree_res, k = current_k)
+  }
+
+  if (length(groups) != quanteda::ndoc(corpus_src)) {
+    stop("Le bundle Rainette est incohérent : le nombre de groupes ne correspond pas au corpus source.")
+  }
+
   cluster <- safe_int(params$cluster, default = 1L, minimum = 1L, maximum = current_k)
   ndoc <- safe_int(params$ndoc, default = 100L, minimum = 1L)
   max_chars <- safe_int(params$nchar, default = 1000L, minimum = 10L)
@@ -196,9 +216,10 @@ if (identical(action, "code")) {
   same_scales <- as_bool(params$same_scales, default = TRUE)
   show_negative <- as_bool(params$show_negative, default = FALSE)
   text_size <- safe_int(params$text_size, default = 12L, minimum = 6L, maximum = 24L)
+  plot_k <- min(current_k, max_k_plot)
 
   payload <- list(
-    plotCode = build_plot_code(current_k, measure, n_terms, same_scales, show_negative, text_size),
+    plotCode = build_plot_code(plot_k, measure, n_terms, same_scales, show_negative, text_size),
     cutreeCode = paste0("cutree_rainette(res, k = ", current_k, ")")
   )
   cat(toJSON(payload, auto_unbox = TRUE, pretty = TRUE))
