@@ -7,12 +7,22 @@ import tempfile
 import subprocess
 from pathlib import Path
 
+from ticket_gate import enforce_streamlit_access
+
 
 DEFAULT_YOUTUBE_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/137.0.0.0 Safari/537.36"
 )
+APP_DIR = Path(__file__).resolve().parent
+HELP_PATH = APP_DIR / "aide.md"
+
+
+def load_help_markdown() -> str:
+    if not HELP_PATH.exists():
+        return "Le fichier `aide.md` est introuvable pour cette application."
+    return HELP_PATH.read_text(encoding="utf-8")
 
 
 def enregistrer_cookies_upload(fichier_streamlit, dossier_temporaire):
@@ -188,7 +198,11 @@ def reencoder_video_h264(chemin_entrée, chemin_sortie):
     subprocess.run(commande, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 # Interface Streamlit
+st.set_page_config(page_title="StopMotion", layout="wide")
+enforce_streamlit_access("stopmotion_opticalflow", "StopMotion")
 st.title("Générateur de Stop Motion avec Optical Flow (optionnel)")
+with st.expander("Aide"):
+    st.markdown(load_help_markdown(), unsafe_allow_html=True)
 
 mode = st.radio("Source de la vidéo :", ["YouTube (yt-dlp)", "Fichier local (.mp4)"])
 
@@ -273,4 +287,3 @@ if st.button("Créer la vidéo Stop Motion"):
             st.error("Erreur lors de l'utilisation de yt-dlp ou ffmpeg. Vérifiez leur installation.")
         except Exception as e:
             st.error(f"Erreur : {str(e)}")
-
