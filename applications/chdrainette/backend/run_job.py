@@ -99,59 +99,21 @@ def artifact_metadata(output_dir: Path) -> list[dict[str, object]]:
     return artifacts
 
 
-EXPORT_CATEGORY_SPECS = [
-    {
-        "id": "synthese",
-        "label": "Synthèse",
-        "description": "Résumé des classes, paramètres et métadonnées de l'analyse.",
-    },
-    {
-        "id": "graphiques",
-        "label": "Graphiques",
-        "description": "Graphe Rainette, répartition des classes et nuages de mots.",
-    },
-    {
-        "id": "segments",
-        "label": "Segments et concordances",
-        "description": "Exports texte et HTML des segments classés et concordancier principal.",
-    },
-    {
-        "id": "tableaux",
-        "label": "Tableaux détaillés",
-        "description": "Fichiers CSV détaillés pour les mots discriminants et les classes.",
-    },
-    {
-        "id": "session",
-        "label": "Session technique",
-        "description": "Corpus importé, configuration, logs et bundle de travail.",
-    },
-]
+def artifact_by_relative_path(artifacts: list[dict[str, object]], relative_path: str) -> dict[str, object] | None:
+    target = str(relative_path or "").replace("\\", "/")
+    for artifact in artifacts:
+        if str(artifact.get("relativePath") or "").replace("\\", "/") == target:
+            return artifact
+    return None
 
 
-def classify_export_file(relative_path: str) -> str:
-    normalized = str(relative_path or "").replace("\\", "/")
-
-    if normalized in {"output/metadata.json", "output/resume_classes.csv"}:
-        return "synthese"
-
-    if (
-        normalized in {"output/rainette_plot.png", "output/class_distribution.png"}
-        or normalized.startswith("output/wordclouds/")
-    ):
-        return "graphiques"
-
-    if normalized in {
-        "output/segments_par_classe.txt",
-        "output/segments_par_classe.html",
-        "output/mots_chi2_segments.csv",
-    }:
-        return "segments"
-
-    if normalized in {"output/mots_chi2_frequence_segments.csv"} or normalized.startswith("output/mots_par_classe_csv/"):
-        return "tableaux"
-
-    return "session"
-
+def prefixed_artifacts(artifacts: list[dict[str, object]], prefix: str) -> list[dict[str, object]]:
+    normalized_prefix = str(prefix or "").replace("\\", "/").rstrip("/") + "/"
+    return [
+        artifact
+        for artifact in artifacts
+        if str(artifact.get("relativePath") or "").replace("\\", "/").startswith(normalized_prefix)
+    ]
 
 def artifact_entry(base_root: Path, path: Path) -> dict[str, object]:
     mime_type, _encoding = mimetypes.guess_type(str(path))
@@ -175,7 +137,15 @@ def build_zip_archive(base_root: Path, zip_path: Path, files: list[Path]) -> Pat
     return zip_path
 
 
-def build_export_catalog(job_root: Path, output_dir: Path, job_id: str) -> dict[str, object]:
+def export_zip_name(corpus_name: str) -> str:
+    raw_name = Path(str(corpus_name or "").strip() or "corpus.txt").name
+    stem = Path(raw_name).stem or "corpus"
+    safe_stem = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in stem)
+    safe_stem = safe_stem.strip("._") or "corpus"
+    return f"{safe_stem}.zip"
+
+
+def build_export_catalog(job_root: Path, output_dir: Path, corpus_name: str) -> dict[str, object]:
     exports_dir = ensure_directory(job_root / "exports")
     source_files = [
         path
@@ -183,37 +153,14 @@ def build_export_catalog(job_root: Path, output_dir: Path, job_id: str) -> dict[
         if path.is_file() and path.suffix.lower() != ".zip"
     ]
 
-    files_by_category: dict[str, list[Path]] = {spec["id"]: [] for spec in EXPORT_CATEGORY_SPECS}
-    for path in source_files:
-        relative_path = path.relative_to(job_root).as_posix()
-        files_by_category.setdefault(classify_export_file(relative_path), []).append(path)
-
-    categories = []
-    for index, spec in enumerate(EXPORT_CATEGORY_SPECS, start=1):
-        category_files = files_by_category.get(spec["id"], [])
-        if not category_files:
-            continue
-        zip_name = f"{index:02d}_{spec['id']}_{job_id}.zip"
-        zip_path = build_zip_archive(job_root, exports_dir / zip_name, category_files)
-        categories.append(
-            {
-                "id": spec["id"],
-                "label": spec["label"],
-                "description": spec["description"],
-                "zip": artifact_entry(job_root, zip_path),
-                "files": [artifact_entry(job_root, path) for path in category_files],
-            }
-        )
-
     global_zip = build_zip_archive(
         job_root,
-        exports_dir / f"chdrainette_exports_complets_{job_id}.zip",
+        exports_dir / export_zip_name(corpus_name),
         source_files,
     )
 
     return {
         "globalZip": artifact_entry(job_root, global_zip),
-        "categories": categories,
         "totalFiles": len(source_files),
         "jobRoot": str(job_root.resolve()),
         "outputRoot": str(output_dir.resolve()),
@@ -302,6 +249,7 @@ def main() -> int:
 
     metadata_path = output_dir / "metadata.json"
     metadata = read_json(metadata_path) if metadata_path.exists() else {}
+    artifacts = artifact_metadata(output_dir)
     result_payload = {
         "success": True,
         "jobId": args.job_id,
@@ -310,8 +258,26 @@ def main() -> int:
         "metadata": metadata,
         "summaryRows": csv_rows(output_dir / "resume_classes.csv"),
         "detailRows": csv_rows(output_dir / "mots_chi2_frequence_segments.csv", limit=200),
-        "artifacts": artifact_metadata(output_dir),
-        "exports": build_export_catalog(job_root, output_dir, args.job_id),
+        "afc": {
+            "error": metadata.get("afc_error") or "",
+            "variablesError": metadata.get("afc_variables_error") or "",
+            "classesPlot": artifact_by_relative_path(artifacts, "afc/afc_classes.png"),
+            "termsPlot": artifact_by_relative_path(artifacts, "afc/afc_termes.png"),
+            "variablesPlot": artifact_by_relative_path(artifacts, "afc/afc_variables_etoilees.png"),
+            "termsRows": csv_rows(output_dir / "afc" / "stats_termes.csv", limit=200),
+            "variablesRows": csv_rows(output_dir / "afc" / "stats_modalites.csv", limit=200),
+            "eigenRows": csv_rows(output_dir / "afc" / "valeurs_propres.csv", limit=20),
+            "variablesEigenRows": csv_rows(output_dir / "afc" / "valeurs_propres_vars.csv", limit=20),
+        },
+        "ner": {
+            "enabled": bool(metadata.get("has_ner")),
+            "summaryRows": csv_rows(output_dir / "ner" / "ner_resume.csv", limit=200),
+            "detailRows": csv_rows(output_dir / "ner" / "ner_details.csv", limit=500),
+            "globalPlot": artifact_by_relative_path(artifacts, "ner/ner_wordcloud_global.png"),
+            "classPlots": prefixed_artifacts(artifacts, "ner"),
+        },
+        "artifacts": artifacts,
+        "exports": build_export_catalog(job_root, output_dir, Path(args.input).name.removeprefix("input-")),
         "stdoutLog": str(stdout_log.resolve()),
         "stderrLog": str(stderr_log.resolve()),
     }
