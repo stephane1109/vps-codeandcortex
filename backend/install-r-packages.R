@@ -28,15 +28,18 @@ system_candidates <- unique(c(
 .libPaths(unique(c(lib_target, Filter(dir.exists, system_candidates))))
 
 packages_required <- c(
+  "bslib",
   "FactoMineR",
   "igraph",
   "jsonlite",
   "dplyr",
   "htmltools",
+  "miniUI",
   "quanteda",
   "rainette",
   "RColorBrewer",
   "remotes",
+  "shiny",
   "stopwords",
   "stringi",
   "wordcloud"

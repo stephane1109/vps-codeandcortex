@@ -680,6 +680,31 @@ progress {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
+.card--shiny-explorer {
+  min-height: 68rem;
+}
+
+.explorer-shiny-frame {
+  display: block;
+  width: 100%;
+  min-height: 60rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+#explorerShinyPlaceholder {
+  display: grid;
+  place-items: center;
+  min-height: 60rem;
+  border: 1px dashed rgba(15, 23, 42, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+  padding: 1rem;
+}
+
 .docs-intro {
   margin-bottom: 1rem;
   padding: 0.85rem 1rem;
@@ -864,7 +889,9 @@ progress {
   }
 
   #plotPlaceholder,
-  .explorer-plot {
+  .explorer-plot,
+  #explorerShinyPlaceholder,
+  .explorer-shiny-frame {
     min-height: 32rem;
   }
 

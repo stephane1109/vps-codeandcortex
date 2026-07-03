@@ -520,89 +520,116 @@
               </div>
             </div>
 
-            <div class="explorer-grid">
+            <article class="card card--plot card--shiny-explorer">
+              <div class="section-head">
+                <div>
+                  <p class="card-kicker">Shiny</p>
+                  <h3>rainette_explor / rainette2_explor</h3>
+                </div>
+                <div class="toolbar">
+                  <button id="explorerShinyReloadBtn" class="secondary-button" type="button">Rafraîchir l’explorateur Shiny</button>
+                </div>
+              </div>
+              <p class="muted">
+                Cette vue utilise un sous-app Shiny natif pour afficher l’explorateur Rainette officiel,
+                tout en conservant le backend FastAPI et le pipeline Python/spaCy de l’application.
+              </p>
+              <div id="explorerShinyPlaceholder" class="empty-state">
+                Lancez une analyse pour charger l’explorateur Shiny Rainette.
+              </div>
+              <iframe
+                id="explorerShinyFrame"
+                class="explorer-shiny-frame"
+                title="Explorateur Shiny Rainette"
+                hidden
+              ></iframe>
+            </article>
+
+            <div id="legacyExplorerTools" hidden>
+              <div class="explorer-grid">
+                <article class="card">
+                  <h3>Paramètres du graphe</h3>
+                  <div class="form-grid">
+                    <label>
+                      Nombre de clusters
+                      <input id="explorerK" type="range" min="2" max="6" step="1" value="6" />
+                      <span id="explorerKValue" class="field-help">6</span>
+                    </label>
+                    <label>
+                      Statistique
+                      <select id="explorerMeasure">
+                        <option value="chi2">Keyness - Chi-squared</option>
+                        <option value="lr">Keyness - Likelihood ratio</option>
+                        <option value="frequency">Frequency - Terms</option>
+                        <option value="docprop">Frequency - Documents proportion</option>
+                      </select>
+                    </label>
+                    <label>
+                      Nombre de termes
+                      <input id="explorerTerms" type="number" min="5" max="50" step="1" value="20" />
+                    </label>
+                    <label>
+                      Taille du texte
+                      <input id="explorerTextSize" type="number" min="6" max="24" step="1" value="12" />
+                    </label>
+                    <label class="checkbox-row">
+                      <input id="explorerSameScales" type="checkbox" checked />
+                      <span>Forcer les mêmes échelles</span>
+                    </label>
+                    <label class="checkbox-row">
+                      <input id="explorerShowNegative" type="checkbox" />
+                      <span>Afficher les valeurs négatives</span>
+                    </label>
+                  </div>
+                  <div class="toolbar">
+                    <button id="refreshExplorerBtn" class="secondary-button" type="button">Rafraîchir le graphe</button>
+                    <button id="showExplorerCodeBtn" class="secondary-button" type="button">Afficher le code R</button>
+                  </div>
+                  <pre id="explorerCode" class="code-box">Le code R courant s’affichera ici.</pre>
+                </article>
+
+                <article class="card card--plot">
+                  <h3>Graphe CHD Rainette</h3>
+                  <div id="plotPlaceholder" class="empty-state">
+                    Lancez une analyse pour afficher l’exploration Rainette.
+                  </div>
+                  <img id="explorerPlot" class="explorer-plot" alt="Graphe Rainette" hidden />
+                </article>
+              </div>
+
               <article class="card">
-                <h3>Paramètres du graphe</h3>
+                <h3>Documents du cluster</h3>
                 <div class="form-grid">
                   <label>
-                    Nombre de clusters
-                    <input id="explorerK" type="range" min="2" max="6" step="1" value="6" />
-                    <span id="explorerKValue" class="field-help">6</span>
+                    Cluster
+                    <select id="docsCluster"></select>
                   </label>
                   <label>
-                    Statistique
-                    <select id="explorerMeasure">
-                      <option value="chi2">Keyness - Chi-squared</option>
-                      <option value="lr">Keyness - Likelihood ratio</option>
-                      <option value="frequency">Frequency - Terms</option>
-                      <option value="docprop">Frequency - Documents proportion</option>
-                    </select>
+                    Documents affichés
+                    <input id="docsNDoc" type="number" min="1" step="1" value="100" />
                   </label>
                   <label>
-                    Nombre de termes
-                    <input id="explorerTerms" type="number" min="5" max="50" step="1" value="20" />
+                    Longueur maximale
+                    <input id="docsMaxChars" type="number" min="10" step="10" value="1000" />
                   </label>
                   <label>
-                    Taille du texte
-                    <input id="explorerTextSize" type="number" min="6" max="24" step="1" value="12" />
+                    Filtre terme
+                    <input id="docsFilterTerm" type="text" placeholder="Mot ou motif" />
                   </label>
                   <label class="checkbox-row">
-                    <input id="explorerSameScales" type="checkbox" checked />
-                    <span>Forcer les mêmes échelles</span>
-                  </label>
-                  <label class="checkbox-row">
-                    <input id="explorerShowNegative" type="checkbox" />
-                    <span>Afficher les valeurs négatives</span>
+                    <input id="docsRandomSample" type="checkbox" />
+                    <span>Échantillon aléatoire</span>
                   </label>
                 </div>
                 <div class="toolbar">
-                  <button id="refreshExplorerBtn" class="secondary-button" type="button">Rafraîchir le graphe</button>
-                  <button id="showExplorerCodeBtn" class="secondary-button" type="button">Afficher le code R</button>
+                  <button id="refreshDocsBtn" class="secondary-button" type="button">Rafraîchir les documents</button>
                 </div>
-                <pre id="explorerCode" class="code-box">Le code R courant s’affichera ici.</pre>
-              </article>
-
-              <article class="card card--plot">
-                <h3>Graphe CHD Rainette</h3>
-                <div id="plotPlaceholder" class="empty-state">
-                  Lancez une analyse pour afficher l’exploration Rainette.
+                <div id="docsIntro" class="docs-intro">Aucun cluster chargé pour le moment.</div>
+                <div id="docsSample" class="docs-sample">
+                  <p class="empty-state">Les segments du cluster s’afficheront ici.</p>
                 </div>
-                <img id="explorerPlot" class="explorer-plot" alt="Graphe Rainette" hidden />
               </article>
             </div>
-
-            <article class="card">
-              <h3>Documents du cluster</h3>
-              <div class="form-grid">
-                <label>
-                  Cluster
-                  <select id="docsCluster"></select>
-                </label>
-                <label>
-                  Documents affichés
-                  <input id="docsNDoc" type="number" min="1" step="1" value="100" />
-                </label>
-                <label>
-                  Longueur maximale
-                  <input id="docsMaxChars" type="number" min="10" step="10" value="1000" />
-                </label>
-                <label>
-                  Filtre terme
-                  <input id="docsFilterTerm" type="text" placeholder="Mot ou motif" />
-                </label>
-                <label class="checkbox-row">
-                  <input id="docsRandomSample" type="checkbox" />
-                  <span>Échantillon aléatoire</span>
-                </label>
-              </div>
-              <div class="toolbar">
-                <button id="refreshDocsBtn" class="secondary-button" type="button">Rafraîchir les documents</button>
-              </div>
-              <div id="docsIntro" class="docs-intro">Aucun cluster chargé pour le moment.</div>
-              <div id="docsSample" class="docs-sample">
-                <p class="empty-state">Les segments du cluster s’afficheront ici.</p>
-              </div>
-            </article>
           </section>
 
           <section class="panel" data-panel="exports" hidden>

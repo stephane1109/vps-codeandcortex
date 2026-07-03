@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import runtime
@@ -12,6 +12,7 @@ from . import ticket_gate
 
 
 app = FastAPI(title="CHD Rainette Web", docs_url=None, redoc_url=None)
+PROXY_HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
 
 def with_session_id(snapshot: dict[str, Any], session_id: str | None) -> dict[str, Any]:
@@ -194,6 +195,22 @@ def explorer_code(
         raise HTTPException(status_code=404, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.api_route("/api/jobs/{job_id}/explorer/shiny", methods=PROXY_HTTP_METHODS)
+@app.api_route("/api/jobs/{job_id}/explorer/shiny/{full_path:path}", methods=PROXY_HTTP_METHODS)
+async def explorer_shiny(job_id: str, request: Request, full_path: str = "") -> Response:
+    try:
+        status_code, headers, content = await runtime.proxy_shiny_explorer_request(job_id, full_path, request)
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    response = Response(content=content, status_code=status_code)
+    for name, value in headers.items():
+        response.headers[name] = value
+    return response
 
 
 @app.get("/api/local-file")

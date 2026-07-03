@@ -297,7 +297,7 @@ tracer_afc_classes_seules <- function(obj, axes = c(1, 2), cex_labels = 1.0) {
     type = "n",
     xlab = paste0("Axe ", ax1),
     ylab = paste0("Axe ", ax2),
-    xlim = lim, ylim = lim
+    xlim = lim, ylim = lim, asp = 1
   )
   abline(h = 0, v = 0, col = "gray80")
 
@@ -359,7 +359,7 @@ tracer_afc_classes_termes <- function(
     type = "n",
     xlab = paste0("Axe ", ax1),
     ylab = paste0("Axe ", ax2),
-    xlim = lim, ylim = lim
+    xlim = lim, ylim = lim, asp = 1
   )
   abline(h = 0, v = 0, col = "gray80")
 
@@ -587,7 +587,7 @@ tracer_afc_variables_etoilees <- function(
     type = "n",
     xlab = paste0("Axe ", ax1),
     ylab = paste0("Axe ", ax2),
-    xlim = lim, ylim = lim
+    xlim = lim, ylim = lim, asp = 1
   )
   abline(h = 0, v = 0, col = "gray80")
 

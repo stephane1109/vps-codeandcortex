@@ -36,6 +36,9 @@ const els = {
   summaryTable: document.getElementById("summaryTable"),
   detailTable: document.getElementById("detailTable"),
   artifactList: document.getElementById("artifactList"),
+  explorerShinyFrame: document.getElementById("explorerShinyFrame"),
+  explorerShinyPlaceholder: document.getElementById("explorerShinyPlaceholder"),
+  explorerShinyReloadBtn: document.getElementById("explorerShinyReloadBtn"),
   plotPlaceholder: document.getElementById("plotPlaceholder"),
   explorerPlot: document.getElementById("explorerPlot"),
   explorerK: document.getElementById("explorerK"),
@@ -1147,12 +1150,6 @@ function renderResult(result) {
   els.artifactList.innerHTML = exportCategoriesHtml(result.exports || null, result.artifacts || []);
   renderAfc(result.afc || {});
   renderNer(result.ner || {});
-  showImage(
-    els.explorerPlot,
-    els.plotPlaceholder,
-    explorerFallbackArtifact(result),
-    "Le graphe Rainette apparaîtra ici après l'analyse.",
-  );
   configureExplorer(metadata);
   refreshExplorer();
 }
@@ -1171,46 +1168,42 @@ function configureExplorer(metadata) {
 
 async function refreshExplorer() {
   if (!state.currentResult) {
+    if (els.explorerShinyFrame) {
+      els.explorerShinyFrame.hidden = true;
+      els.explorerShinyFrame.removeAttribute("src");
+    }
+    if (els.explorerShinyPlaceholder) {
+      els.explorerShinyPlaceholder.hidden = false;
+      els.explorerShinyPlaceholder.textContent = "Lancez une analyse pour charger l'explorateur Shiny Rainette.";
+    }
     return;
   }
-  syncExplorerUi();
   const jobId = state.currentResult.jobId || state.currentJobId || state.history[0]?.jobId;
   if (!jobId) {
     return;
   }
-  els.plotPlaceholder.hidden = false;
-  els.plotPlaceholder.textContent = "Génération du graphe Rainette...";
-  els.explorerPlot.hidden = true;
-  const fallbackArtifact = explorerFallbackArtifact(state.currentResult);
+  if (!els.explorerShinyFrame || !els.explorerShinyPlaceholder) {
+    return;
+  }
 
-  const plotUrl = `/api/jobs/${encodeURIComponent(jobId)}/explorer/plot?${explorerPlotParams().toString()}&ts=${Date.now()}`;
-  els.explorerPlot.onload = () => {
-    els.plotPlaceholder.hidden = true;
-    els.explorerPlot.hidden = false;
-  };
-  els.explorerPlot.onerror = () => {
-    els.explorerPlot.onload = null;
-    els.explorerPlot.onerror = null;
-    if (fallbackArtifact?.downloadUrl) {
-      showImage(
-        els.explorerPlot,
-        els.plotPlaceholder,
-        {
-          ...fallbackArtifact,
-          downloadUrl: `${fallbackArtifact.downloadUrl}${fallbackArtifact.downloadUrl.includes("?") ? "&" : "?"}ts=${Date.now()}`,
-        },
-        "Le graphe Rainette généré par l'analyse n'est pas disponible.",
-      );
-      return;
-    }
-    els.explorerPlot.hidden = true;
-    els.explorerPlot.removeAttribute("src");
-    els.plotPlaceholder.hidden = false;
-    els.plotPlaceholder.textContent = "Impossible d'afficher le graphe Rainette pour le moment.";
-  };
-  els.explorerPlot.src = plotUrl;
+  const shinyUrl = `/api/jobs/${encodeURIComponent(jobId)}/explorer/shiny/?ts=${Date.now()}`;
+  els.explorerShinyPlaceholder.hidden = false;
+  els.explorerShinyPlaceholder.textContent = "Chargement de l'explorateur Shiny Rainette...";
+  els.explorerShinyFrame.hidden = true;
 
-  await refreshDocs();
+  els.explorerShinyFrame.onload = () => {
+    els.explorerShinyPlaceholder.hidden = true;
+    els.explorerShinyFrame.hidden = false;
+  };
+  els.explorerShinyFrame.onerror = () => {
+    els.explorerShinyFrame.onload = null;
+    els.explorerShinyFrame.onerror = null;
+    els.explorerShinyFrame.hidden = true;
+    els.explorerShinyFrame.removeAttribute("src");
+    els.explorerShinyPlaceholder.hidden = false;
+    els.explorerShinyPlaceholder.textContent = "Impossible de charger l'explorateur Shiny Rainette pour le moment.";
+  };
+  els.explorerShinyFrame.src = shinyUrl;
 }
 
 async function refreshDocs() {
@@ -1307,6 +1300,9 @@ function bindEvents() {
   els.explorerK.addEventListener("input", syncExplorerUi);
   els.explorerMeasure.addEventListener("change", syncExplorerUi);
   els.refreshExplorerBtn.addEventListener("click", refreshExplorer);
+  if (els.explorerShinyReloadBtn) {
+    els.explorerShinyReloadBtn.addEventListener("click", refreshExplorer);
+  }
   els.refreshDocsBtn.addEventListener("click", refreshDocs);
   els.showExplorerCodeBtn.addEventListener("click", refreshExplorerCode);
   els.runAnalysisBtn?.addEventListener("click", openChdConfigDialog);

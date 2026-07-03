@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import mimetypes
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlunsplit
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +20,8 @@ DEFAULT_APP_DATA_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "chdrainette-da
 ANALYSIS_LOCK_FILENAME = "active-analysis.json"
 ANALYSIS_LOCK_STALE_SECONDS = 900
 TERMINAL_JOB_STATES = {"cancelled", "completed", "done", "error", "failed", "success", "succeeded"}
+SHINY_EXPLORER_START_TIMEOUT_SECONDS = 20
+SHINY_EXPLORER_READY_POLL_SECONDS = 0.25
 
 
 def ensure_directory(path: Path) -> Path:
@@ -54,6 +59,10 @@ def cache_dir() -> Path:
     configured = os.environ.get("CHDRAINETTE_CACHE_DIR", "").strip()
     path = Path(configured).expanduser() if configured else app_data_root() / "cache"
     return ensure_directory(path.resolve())
+
+
+def shiny_explorer_root() -> Path:
+    return ensure_directory(app_data_root() / "shiny-explorer")
 
 
 def write_json_file(path: Path, payload: Any) -> None:
@@ -495,6 +504,160 @@ def render_explorer_code(job_id: str, params: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise RuntimeError("Réponse explorer/code invalide.")
     return payload
+
+
+def _shiny_record_path(job_id: str) -> Path:
+    return shiny_explorer_root() / f"{str(job_id or '').strip()}.json"
+
+
+def _read_shiny_record(job_id: str) -> dict[str, Any] | None:
+    path = _shiny_record_path(job_id)
+    payload = try_read_json_file(path)
+    return payload if isinstance(payload, dict) else None
+
+
+def _write_shiny_record(job_id: str, payload: dict[str, Any]) -> None:
+    write_json_file(_shiny_record_path(job_id), payload)
+
+
+def _clear_shiny_record(job_id: str) -> None:
+    try:
+        _shiny_record_path(job_id).unlink()
+    except FileNotFoundError:
+        return
+
+
+def _find_free_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
+        handle.bind(("127.0.0.1", 0))
+        handle.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return int(handle.getsockname()[1])
+
+
+def _shiny_process_is_usable(record: dict[str, Any]) -> bool:
+    if not isinstance(record, dict):
+        return False
+    if not process_is_running(record.get("pid")):
+        return False
+    try:
+        port = int(record.get("port"))
+    except (TypeError, ValueError):
+        return False
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+        conn.request("GET", "/")
+        response = conn.getresponse()
+        response.read()
+        return response.status < 500
+    except OSError:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def ensure_shiny_explorer(job_id: str) -> dict[str, Any]:
+    cleaned_job_id = str(job_id or "").strip()
+    if not cleaned_job_id:
+        raise ValueError("Identifiant de job manquant.")
+
+    bundle_path = _job_bundle_path(cleaned_job_id)
+    existing = _read_shiny_record(cleaned_job_id)
+    if existing and _shiny_process_is_usable(existing):
+        return existing
+
+    if existing and process_is_running(existing.get("pid")):
+        try:
+            os.kill(int(existing["pid"]), 15)
+        except OSError:
+            pass
+    _clear_shiny_record(cleaned_job_id)
+
+    port = _find_free_local_port()
+    log_path = shiny_explorer_root() / f"{cleaned_job_id}.log"
+    log_handle = open(log_path, "a", encoding="utf-8")
+    try:
+        process = subprocess.Popen(
+            [
+                resolve_rscript(),
+                str(PROJECT_ROOT / "backend" / "launch_shiny_explorer.R"),
+                str(bundle_path),
+                str(port),
+            ],
+            cwd=PROJECT_ROOT,
+            env=build_command_env(),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    finally:
+        log_handle.close()
+
+    record = {
+        "job_id": cleaned_job_id,
+        "pid": int(process.pid),
+        "port": int(port),
+        "bundle_path": str(bundle_path),
+        "log_path": str(log_path),
+        "started_at": int(time.time()),
+    }
+    _write_shiny_record(cleaned_job_id, record)
+
+    deadline = time.time() + SHINY_EXPLORER_START_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        refreshed = _read_shiny_record(cleaned_job_id) or record
+        if _shiny_process_is_usable(refreshed):
+            return refreshed
+        if not process_is_running(process.pid):
+            break
+        time.sleep(SHINY_EXPLORER_READY_POLL_SECONDS)
+
+    message = "Impossible de démarrer l'explorateur Shiny Rainette."
+    try:
+        if log_path.exists():
+            tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            tail = [line.strip() for line in tail if line.strip()]
+            if tail:
+                message = tail[-1]
+    except OSError:
+        pass
+    raise RuntimeError(message)
+
+
+async def proxy_shiny_explorer_request(job_id: str, full_path: str, request: Any) -> tuple[int, dict[str, str], bytes]:
+    record = ensure_shiny_explorer(job_id)
+    path = "/" + str(full_path or "").lstrip("/")
+    if path == "//":
+        path = "/"
+    query = str(request.url.query or "").strip()
+    target = urlunsplit(("", "", path, query, ""))
+
+    conn = http.client.HTTPConnection("127.0.0.1", int(record["port"]), timeout=60)
+    try:
+        body = await request.body()
+        headers = {}
+        for name, value in request.headers.items():
+            lowered = name.lower()
+            if lowered in {"host", "connection", "content-length", "accept-encoding"}:
+                continue
+            headers[name] = value
+        conn.request(request.method.upper(), target, body=body if body else None, headers=headers)
+        response = conn.getresponse()
+        content = response.read()
+        response_headers: dict[str, str] = {}
+        for name, value in response.getheaders():
+            lowered = name.lower()
+            if lowered in {"transfer-encoding", "connection", "content-length", "content-encoding", "date", "server"}:
+                continue
+            response_headers[name] = value
+        return response.status, response_headers, content
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
 
 
 def mime_type_for_path(path: Path) -> str:
