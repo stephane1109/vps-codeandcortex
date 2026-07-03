@@ -1,0 +1,8 @@
+streamlit
+streamlit-autorefresh
+redis
+numpy
+pandas
+plotly
+soundfile
+openai-whisper
