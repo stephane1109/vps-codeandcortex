@@ -110,6 +110,7 @@ const els = {
 };
 
 const chdConfigDialog = document.getElementById("chdConfigDialog");
+const chdConfigDialogForm = document.getElementById("chdConfigDialogForm");
 const chdConfigDialogContent = document.getElementById("chdConfigDialogContent");
 const closeChdDialogBtn = document.getElementById("closeChdDialogBtn");
 const launchChdDialogBtn = document.getElementById("launchChdDialogBtn");
@@ -126,6 +127,7 @@ const HOME_DASHBOARD_MESSAGE_PREFIX = "codeandcortex-ticket";
 let ticketReleasedLocally = false;
 let idleReleaseTimerId = null;
 let lastTicketInteractionAt = Date.now();
+let chdLaunchInFlight = false;
 
 function switchPanel(target) {
   els.navLinks.forEach((button) => {
@@ -142,6 +144,38 @@ function selectedValues(select) {
   return [...select.selectedOptions].map((option) => option.value);
 }
 
+function selectedPosValues(root = document) {
+  const checkboxRoot = resolveScopedField(root, "posCheckboxes");
+  if (checkboxRoot instanceof HTMLElement) {
+    const selected = [...checkboxRoot.querySelectorAll("input[type='checkbox'][data-pos-value]:checked")]
+      .map((checkbox) => checkbox.getAttribute("data-pos-value") || "")
+      .filter(Boolean);
+    if (selected.length || checkboxRoot.querySelector("input[type='checkbox'][data-pos-value]")) {
+      return selected;
+    }
+  }
+
+  const select = resolveScopedField(root, "uposSelection");
+  if (select instanceof HTMLSelectElement) {
+    return selectedValues(select);
+  }
+  return [];
+}
+
+function syncPosCheckboxVisualState(root = document) {
+  const checkboxRoot = resolveScopedField(root, "posCheckboxes");
+  const section = resolveScopedField(root, "posSection");
+  const disabled = !(section instanceof HTMLElement) || section.hidden;
+  if (!(checkboxRoot instanceof HTMLElement)) {
+    return;
+  }
+  checkboxRoot.querySelectorAll(".pos-checkbox-pill").forEach((pill) => {
+    const input = pill.querySelector("input[type='checkbox'][data-pos-value]");
+    pill.classList.toggle("is-checked", Boolean(input?.checked));
+    pill.classList.toggle("is-disabled", disabled);
+  });
+}
+
 function syncPosSelectFromCheckboxes(root = document) {
   const select = resolveScopedField(root, "uposSelection");
   const checkboxRoot = resolveScopedField(root, "posCheckboxes");
@@ -156,7 +190,25 @@ function syncPosSelectFromCheckboxes(root = document) {
   [...select.options].forEach((option) => {
     option.selected = selected.has(option.value);
   });
+  syncPosCheckboxVisualState(root);
   return [...selected];
+}
+
+function applySelectedPosValues(root = document, values = []) {
+  const selected = new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean));
+  const select = resolveScopedField(root, "uposSelection");
+  if (select instanceof HTMLSelectElement) {
+    [...select.options].forEach((option) => {
+      option.selected = selected.has(option.value);
+    });
+  }
+  const checkboxRoot = resolveScopedField(root, "posCheckboxes");
+  if (checkboxRoot instanceof HTMLElement) {
+    checkboxRoot.querySelectorAll("input[type='checkbox'][data-pos-value]").forEach((checkbox) => {
+      checkbox.checked = selected.has(checkbox.getAttribute("data-pos-value") || "");
+    });
+  }
+  syncPosCheckboxVisualState(root);
 }
 
 function renderPosCheckboxes(root = document) {
@@ -181,6 +233,7 @@ function renderPosCheckboxes(root = document) {
       syncPosSelectFromCheckboxes(root);
     });
   });
+  syncPosCheckboxVisualState(root);
 }
 
 function resolveScopedField(root, sourceId) {
@@ -270,6 +323,7 @@ function applyDialogValuesToSource() {
   if (!chdConfigDialogContent) {
     return;
   }
+  const dialogSelectedPos = selectedPosValues(chdConfigDialogContent);
   const dialogFields = chdConfigDialogContent.querySelectorAll("[data-source-id]");
   dialogFields.forEach((dialogField) => {
     const source = document.getElementById(dialogField.dataset.sourceId || "");
@@ -281,7 +335,11 @@ function applyDialogValuesToSource() {
       && dialogField.multiple
       && source.multiple
     ) {
-      const selected = new Set([...dialogField.selectedOptions].map((option) => option.value));
+      const selected = new Set(
+        dialogField.dataset.sourceId === "uposSelection"
+          ? dialogSelectedPos
+          : [...dialogField.selectedOptions].map((option) => option.value),
+      );
       [...source.options].forEach((option) => {
         option.selected = selected.has(option.value);
       });
@@ -305,6 +363,7 @@ function applyDialogValuesToSource() {
     }
   });
 
+  applySelectedPosValues(document, dialogSelectedPos);
   renderPosCheckboxes(document);
   toggleAdvancedUi(document);
 }
@@ -322,14 +381,8 @@ function bindChdDialogInteractions() {
   renderPosCheckboxes(chdConfigDialogContent);
   chdConfigDialogContent.querySelectorAll("[data-pos-action]").forEach((button) => {
     button.addEventListener("click", () => {
-      const checkboxRoot = resolveScopedField(chdConfigDialogContent, "posCheckboxes");
-      if (!(checkboxRoot instanceof HTMLElement)) {
-        return;
-      }
       const shouldCheck = button.getAttribute("data-pos-action") === "select-all";
-      checkboxRoot.querySelectorAll("input[type='checkbox'][data-pos-value]").forEach((checkbox) => {
-        checkbox.checked = shouldCheck;
-      });
+      applySelectedPosValues(chdConfigDialogContent, shouldCheck ? POS_VALUES : []);
       syncPosSelectFromCheckboxes(chdConfigDialogContent);
     });
   });
@@ -434,6 +487,10 @@ function openChdConfigDialog() {
 function closeChdConfigDialog() {
   if (chdConfigDialog?.open) {
     chdConfigDialog.close();
+  }
+  chdLaunchInFlight = false;
+  if (launchChdDialogBtn) {
+    launchChdDialogBtn.disabled = false;
   }
   updateChdDialogStatus("");
 }
@@ -645,6 +702,7 @@ function toggleAdvancedUi(root = document) {
           : "Seules les catégories sélectionnées seront conservées dans le texte avant l'analyse.";
       }
     }
+    syncPosCheckboxVisualState(root);
   }
 }
 
@@ -669,7 +727,7 @@ function configPayload() {
     retirer_stopwords: Boolean(els.retirerStopwords.checked),
     filtrage_morpho: Boolean(els.filtrageMorpho.checked),
     pos_spacy_mode: els.posSelectionMode?.value || "keep",
-    pos_spacy_a_conserver: selectedValues(els.uposSelection),
+    pos_spacy_a_conserver: selectedPosValues(document),
     spacy_utiliser_lemmes: Boolean(els.spacyUtiliserLemmes.checked),
     activer_ner: Boolean(els.activerNer.checked),
     afc_reduire_chevauchement: Boolean(els.afcReduireChevauchement.checked),
@@ -1026,6 +1084,31 @@ async function runAnalysis() {
   }
 }
 
+async function submitChdLaunch() {
+  if (chdLaunchInFlight) {
+    return;
+  }
+  chdLaunchInFlight = true;
+  if (launchChdDialogBtn) {
+    launchChdDialogBtn.disabled = true;
+  }
+  updateChdDialogStatus("Préparation du lancement de l'analyse...");
+
+  try {
+    applyDialogValuesToSource();
+    const started = await runAnalysis();
+    if (started) {
+      closeChdConfigDialog();
+      return;
+    }
+  } finally {
+    chdLaunchInFlight = false;
+    if (launchChdDialogBtn && chdConfigDialog?.open) {
+      launchChdDialogBtn.disabled = false;
+    }
+  }
+}
+
 function stopJobPolling() {
   if (state.jobTimer) {
     clearTimeout(state.jobTimer);
@@ -1310,12 +1393,9 @@ function bindEvents() {
     button.addEventListener("click", openChdConfigDialog);
   });
   closeChdDialogBtn?.addEventListener("click", closeChdConfigDialog);
-  launchChdDialogBtn?.addEventListener("click", async () => {
-    applyDialogValuesToSource();
-    const started = await runAnalysis();
-    if (started) {
-      closeChdConfigDialog();
-    }
+  chdConfigDialogForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitChdLaunch();
   });
   openProgressDialogBtn?.addEventListener("click", openProgressDialog);
   closeProgressDialogBtn?.addEventListener("click", closeProgressDialog);

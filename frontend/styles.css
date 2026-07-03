@@ -520,6 +520,24 @@ progress {
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(255, 255, 255, 0.9);
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.pos-checkbox-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(207, 111, 45, 0.24);
+}
+
+.pos-checkbox-pill.is-checked {
+  border-color: rgba(207, 111, 45, 0.45);
+  background: rgba(207, 111, 45, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(207, 111, 45, 0.12);
+}
+
+.pos-checkbox-pill.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .pos-checkbox-pill input {
