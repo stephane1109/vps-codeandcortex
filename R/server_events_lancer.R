@@ -23,6 +23,11 @@ register_events_lancer <- function(input, output, session, rv) {
       write.csv(formater_df_csv_6_decimales(df), chemin, row.names = row.names)
     }
 
+    valeur_input_par_defaut <- function(value, default) {
+      if (is.null(value) || !length(value)) return(default)
+      value
+    }
+
     observeEvent(input$lancer, {
       rv$logs <- ""
       rv$statut <- "Vérification du fichier..."
@@ -152,16 +157,35 @@ register_events_lancer <- function(input, output, session, rv) {
           } else {
 
             pos_a_conserver <- NULL
+            pos_mode <- tolower(trimws(as.character(valeur_input_par_defaut(input$pos_spacy_mode, "keep"))))
+            if (!pos_mode %in% c("keep", "remove")) pos_mode <- "keep"
+            all_pos_spacy <- c("ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN", "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X")
+            pos_selection <- character(0)
             if (isTRUE(filtrage_morpho)) {
-              pos_a_conserver <- input$pos_spacy_a_conserver
-              if (is.null(pos_a_conserver) || length(pos_a_conserver) == 0) pos_a_conserver <- c("NOUN", "ADJ")
+              pos_selection <- toupper(trimws(as.character(valeur_input_par_defaut(input$pos_spacy_a_conserver, character(0)))))
+              pos_selection <- intersect(all_pos_spacy, pos_selection)
+              if (identical(pos_mode, "remove")) {
+                pos_a_conserver <- setdiff(all_pos_spacy, pos_selection)
+              } else {
+                pos_a_conserver <- pos_selection
+                if (is.null(pos_a_conserver) || length(pos_a_conserver) == 0) pos_a_conserver <- c("NOUN", "VERB")
+              }
             }
 
             ajouter_log(
               rv,
               paste0(
                 "spaCy (", config_spacy$modele, ", ", config_spacy$libelle, ") | filtrage POS=", ifelse(filtrage_morpho, "1", "0"),
-                ifelse(filtrage_morpho, paste0(" (", paste(pos_a_conserver, collapse = ", "), ")"), ""),
+                ifelse(
+                  filtrage_morpho,
+                  paste0(
+                    " [mode=", ifelse(identical(pos_mode, "remove"), "supprimer", "conserver"),
+                    " | selection=", ifelse(length(pos_selection), paste(pos_selection, collapse = ", "), "aucune"),
+                    " | retenues=", paste(pos_a_conserver, collapse = ", "),
+                    "]"
+                  ),
+                  ""
+                ),
                 " | lemmes=", ifelse(utiliser_lemmes, "1", "0"),
                 " | stopwords: spaCy"
               )

@@ -76,6 +76,9 @@ const els = {
   retirerStopwords: document.getElementById("retirerStopwords"),
   filtrageMorpho: document.getElementById("filtrageMorpho"),
   posSection: document.getElementById("posSection"),
+  posSelectionMode: document.getElementById("posSelectionMode"),
+  posSelectionLabel: document.getElementById("posSelectionLabel"),
+  posSelectionHint: document.getElementById("posSelectionHint"),
   uposSelection: document.getElementById("uposSelection"),
   spacyUtiliserLemmes: document.getElementById("spacyUtiliserLemmes"),
   activerNer: document.getElementById("activerNer"),
@@ -260,7 +263,7 @@ function bindChdDialogInteractions() {
   if (!chdConfigDialogContent) {
     return;
   }
-  ["modeDecoupage", "typeClassification", "filtrageMorpho"].forEach((sourceId) => {
+  ["modeDecoupage", "typeClassification", "filtrageMorpho", "posSelectionMode"].forEach((sourceId) => {
     const element = resolveScopedField(chdConfigDialogContent, sourceId);
     if (element) {
       element.addEventListener("change", () => toggleAdvancedUi(chdConfigDialogContent));
@@ -465,6 +468,9 @@ function toggleAdvancedUi(root = document) {
   const doubleClassificationOptions = resolveScopedField(root, "doubleClassificationOptions");
   const filtrageMorpho = resolveScopedField(root, "filtrageMorpho");
   const posSection = resolveScopedField(root, "posSection");
+  const posSelectionMode = resolveScopedField(root, "posSelectionMode");
+  const posSelectionLabel = resolveScopedField(root, "posSelectionLabel");
+  const posSelectionHint = resolveScopedField(root, "posSelectionHint");
   const uposSelection = resolveScopedField(root, "uposSelection");
 
   if (modeDecoupage && segmentSize) {
@@ -481,6 +487,21 @@ function toggleAdvancedUi(root = document) {
     const showPos = Boolean(filtrageMorpho.checked);
     posSection.hidden = !showPos;
     uposSelection.disabled = !showPos;
+    if (posSelectionMode) {
+      posSelectionMode.disabled = !showPos;
+    }
+
+    if (showPos) {
+      const mode = posSelectionMode?.value === "remove" ? "remove" : "keep";
+      if (posSelectionLabel) {
+        posSelectionLabel.textContent = mode === "remove" ? "POS à supprimer" : "POS à conserver";
+      }
+      if (posSelectionHint) {
+        posSelectionHint.textContent = mode === "remove"
+          ? "Les catégories sélectionnées seront retirées du texte avant l'analyse."
+          : "Seules les catégories sélectionnées seront conservées dans le texte avant l'analyse.";
+      }
+    }
   }
 }
 
@@ -504,6 +525,7 @@ function configPayload() {
     forcer_minuscules_avant: Boolean(els.forcerMinusculesAvant.checked),
     retirer_stopwords: Boolean(els.retirerStopwords.checked),
     filtrage_morpho: Boolean(els.filtrageMorpho.checked),
+    pos_spacy_mode: els.posSelectionMode?.value || "keep",
     pos_spacy_a_conserver: selectedValues(els.uposSelection),
     spacy_utiliser_lemmes: Boolean(els.spacyUtiliserLemmes.checked),
     activer_ner: Boolean(els.activerNer.checked),
@@ -1126,6 +1148,7 @@ function bindEvents() {
     els.modeDecoupage,
     els.typeClassification,
     els.filtrageMorpho,
+    els.posSelectionMode,
   ].forEach((element) => element.addEventListener("change", () => toggleAdvancedUi(document)));
 
   els.explorerK.addEventListener("input", syncExplorerUi);

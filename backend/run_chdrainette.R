@@ -330,8 +330,21 @@ afc_top_modalites <- config_int(c("afc_top_modalites"), 120L, minimum = 20L)
 top_n <- config_int(c("top_n"), 20L, minimum = 5L)
 window_cooc <- config_int(c("window_cooc"), 5L, minimum = 1L)
 top_feat <- config_int(c("top_feat"), 20L, minimum = 5L)
-pos_spacy_a_conserver <- config_chr_vec(c("pos_spacy_a_conserver", "upos_a_conserver"), c("NOUN", "VERB"))
-if (!length(pos_spacy_a_conserver)) pos_spacy_a_conserver <- c("NOUN", "VERB")
+all_pos_spacy <- c("ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN", "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X")
+pos_spacy_mode <- tolower(config_chr(c("pos_spacy_mode", "mode_pos_spacy"), "keep"))
+if (!pos_spacy_mode %in% c("keep", "remove")) pos_spacy_mode <- "keep"
+pos_spacy_selection <- toupper(config_chr_vec(c("pos_spacy_a_conserver", "upos_a_conserver"), c("NOUN", "VERB")))
+pos_spacy_selection <- intersect(all_pos_spacy, pos_spacy_selection)
+
+if (identical(pos_spacy_mode, "remove")) {
+  pos_spacy_a_conserver <- setdiff(all_pos_spacy, pos_spacy_selection)
+  if (!length(pos_spacy_a_conserver)) {
+    stop("Le filtrage morphosyntaxique supprime toutes les catégories POS. Garde au moins une catégorie.")
+  }
+} else {
+  if (!length(pos_spacy_selection)) pos_spacy_selection <- c("NOUN", "VERB")
+  pos_spacy_a_conserver <- pos_spacy_selection
+}
 
 tryCatch({
   avancer(0.04, "Import du corpus")
@@ -387,6 +400,17 @@ tryCatch({
     dfm_obj <- res_dfm$dfm
   } else {
     avancer(0.30, paste0("spaCy : ", config_spacy$modele))
+    ajouter_log(
+      rv,
+      paste0(
+        "spaCy : mode POS=",
+        if (identical(pos_spacy_mode, "remove")) "supprimer" else "conserver",
+        " | selection=",
+        if (length(pos_spacy_selection)) paste(pos_spacy_selection, collapse = ", ") else "aucune",
+        " | retenues=",
+        paste(pos_spacy_a_conserver, collapse = ", ")
+      )
+    )
     sp <- executer_spacy_filtrage(
       ids = ids_corpus,
       textes = unname(textes_chd),

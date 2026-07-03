@@ -179,7 +179,14 @@
                   </label>
                   <div id="posSection" class="stacked-fields" hidden>
                     <label>
-                      POS à conserver
+                      Mode de sélection des POS
+                      <select id="posSelectionMode">
+                        <option value="keep" selected>Conserver les POS sélectionnés</option>
+                        <option value="remove">Supprimer les POS sélectionnés</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span id="posSelectionLabel">POS à conserver</span>
                       <select id="uposSelection" multiple size="8">
                         <option value="ADJ">ADJ</option>
                         <option value="ADP">ADP</option>
@@ -200,6 +207,9 @@
                         <option value="X">X</option>
                       </select>
                     </label>
+                    <p id="posSelectionHint" class="muted sidebar-note">
+                      Choisissez ici si la liste sert à conserver ou à supprimer certaines catégories grammaticales.
+                    </p>
                   </div>
                   <label class="checkbox-row">
                     <input id="spacyUtiliserLemmes" type="checkbox" />
