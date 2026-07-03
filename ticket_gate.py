@@ -286,9 +286,9 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "message": bypass_message or "Contrôle d'accès désactivé.",
         }
 
-    active = _active_count(client, cfg)
-    queued = _waiting_count(client, cfg)
     if not ticket_id:
+        active = _active_count(client, cfg)
+        queued = _waiting_count(client, cfg)
         return {
             "enabled": True,
             "ticket_id": None,
@@ -303,11 +303,31 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
         }
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
+    status = data.get("status", "inconnu")
+    active_key = _keys(cfg["app_id"])["active"]
+    waiting_key = _keys(cfg["app_id"])["waiting"]
+
+    # Restaure la coherence Redis si un ticket existe mais n'apparait plus dans
+    # l'ensemble qui correspond a son statut courant.
+    if status == "actif":
+        if client.zscore(waiting_key, ticket_id) is not None:
+            client.zrem(waiting_key, ticket_id)
+        if client.zscore(active_key, ticket_id) is None:
+            client.zadd(active_key, {ticket_id: time.time()})
+        if client.zscore(_global_active_key(), ticket_id) is None:
+            client.zadd(_global_active_key(), {ticket_id: time.time()})
+    elif status == "attente" and client.zscore(waiting_key, ticket_id) is None:
+        waiting_score = float(data.get("created_at") or time.time())
+        client.zadd(waiting_key, {ticket_id: waiting_score})
+
+    active = _active_count(client, cfg)
+    queued = _waiting_count(client, cfg)
+    position = _waiting_position(client, cfg, ticket_id)
     return {
         "enabled": True,
         "ticket_id": ticket_id,
-        "statut": data.get("status", "inconnu"),
-        "position": _waiting_position(client, cfg, ticket_id),
+        "statut": status,
+        "position": position,
         "active": active,
         "queued": queued,
         "max_active": cfg["max_active"],
@@ -617,6 +637,10 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 unsafe_allow_html=True,
             )
             st.warning(f"Application occupée. Position dans la file : {position}.")
+            if st.button("Libérer l'accès", use_container_width=True):
+                if release_ticket_for_session(default_app_id, app_label):
+                    st.rerun()
+                st.warning("Impossible de libérer le ticket courant pour le moment.")
         elif snapshot["statut"] == "refuse":
             st.markdown(
                 """
