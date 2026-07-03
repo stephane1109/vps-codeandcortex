@@ -112,6 +112,7 @@ const closeChdDialogBtn = document.getElementById("closeChdDialogBtn");
 const launchChdDialogBtn = document.getElementById("launchChdDialogBtn");
 const chdDialogStatus = document.getElementById("chdDialogStatus");
 const chdConfigSourceCards = [...document.querySelectorAll("[data-chd-config-source]")];
+const POS_VALUES = ["ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN", "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X"];
 
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
 const TICKET_SESSION_STORAGE_KEY = "chdrainette_ticket_session";
@@ -133,6 +134,47 @@ function switchPanel(target) {
 
 function selectedValues(select) {
   return [...select.selectedOptions].map((option) => option.value);
+}
+
+function syncPosSelectFromCheckboxes(root = document) {
+  const select = resolveScopedField(root, "uposSelection");
+  const checkboxRoot = resolveScopedField(root, "posCheckboxes");
+  if (!(select instanceof HTMLSelectElement) || !(checkboxRoot instanceof HTMLElement)) {
+    return [];
+  }
+  const selected = new Set(
+    [...checkboxRoot.querySelectorAll("input[type='checkbox'][data-pos-value]:checked")]
+      .map((checkbox) => checkbox.getAttribute("data-pos-value") || "")
+      .filter(Boolean),
+  );
+  [...select.options].forEach((option) => {
+    option.selected = selected.has(option.value);
+  });
+  return [...selected];
+}
+
+function renderPosCheckboxes(root = document) {
+  const select = resolveScopedField(root, "uposSelection");
+  const checkboxRoot = resolveScopedField(root, "posCheckboxes");
+  if (!(select instanceof HTMLSelectElement) || !(checkboxRoot instanceof HTMLElement)) {
+    return;
+  }
+
+  const selected = new Set(selectedValues(select));
+  checkboxRoot.innerHTML = POS_VALUES
+    .map((value) => `
+      <label class="pos-checkbox-pill">
+        <input type="checkbox" data-pos-value="${value}" ${selected.has(value) ? "checked" : ""} />
+        <span>${value}</span>
+      </label>
+    `)
+    .join("");
+
+  checkboxRoot.querySelectorAll("input[type='checkbox'][data-pos-value]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      syncPosSelectFromCheckboxes(root);
+    });
+  });
 }
 
 function resolveScopedField(root, sourceId) {
@@ -257,6 +299,7 @@ function applyDialogValuesToSource() {
     }
   });
 
+  renderPosCheckboxes(document);
   toggleAdvancedUi(document);
 }
 
@@ -269,6 +312,20 @@ function bindChdDialogInteractions() {
     if (element) {
       element.addEventListener("change", () => toggleAdvancedUi(chdConfigDialogContent));
     }
+  });
+  renderPosCheckboxes(chdConfigDialogContent);
+  chdConfigDialogContent.querySelectorAll("[data-pos-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const checkboxRoot = resolveScopedField(chdConfigDialogContent, "posCheckboxes");
+      if (!(checkboxRoot instanceof HTMLElement)) {
+        return;
+      }
+      const shouldCheck = button.getAttribute("data-pos-action") === "select-all";
+      checkboxRoot.querySelectorAll("input[type='checkbox'][data-pos-value]").forEach((checkbox) => {
+        checkbox.checked = shouldCheck;
+      });
+      syncPosSelectFromCheckboxes(chdConfigDialogContent);
+    });
   });
   toggleAdvancedUi(chdConfigDialogContent);
 }
@@ -319,6 +376,7 @@ function openChdConfigDialog() {
   }
 
   populateConfigDialog(chdConfigDialogContent, chdConfigSourceCards, "__dialog");
+  renderPosCheckboxes(chdConfigDialogContent);
   bindChdDialogInteractions();
 
   if (typeof chdConfigDialog.showModal === "function") {
@@ -1234,6 +1292,7 @@ function bindEvents() {
 function init() {
   bindEvents();
   renderHistory();
+  renderPosCheckboxes(document);
   toggleAdvancedUi(document);
   syncExplorerUi();
   lastTicketInteractionAt = Date.now();

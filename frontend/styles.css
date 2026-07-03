@@ -481,6 +481,57 @@ progress {
   padding: 1rem;
 }
 
+.pos-selection-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.ghost-button {
+  appearance: none;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.ghost-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(207, 111, 45, 0.35);
+  background: rgba(207, 111, 45, 0.08);
+}
+
+.pos-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 0.65rem;
+}
+
+.pos-checkbox-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+.pos-checkbox-pill input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.pos-checkbox-pill span {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .dialog-footer {
   display: flex;
   align-items: center;
