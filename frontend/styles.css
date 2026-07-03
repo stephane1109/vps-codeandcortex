@@ -554,6 +554,67 @@ progress {
   gap: 0.8rem;
 }
 
+.progress-dialog {
+  position: fixed;
+  inset: 6.25rem 1.25rem auto auto;
+  width: min(520px, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.progress-dialog:not([open]) {
+  display: none;
+}
+
+.progress-dialog[open] {
+  display: block;
+  z-index: 1500;
+}
+
+.progress-dialog-shell {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+.progress-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.progress-dialog-header h2,
+.progress-dialog-card h3 {
+  margin: 0;
+}
+
+.progress-dialog-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.progress-dialog-card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.progress-wrap--dialog {
+  margin-bottom: 0;
+}
+
+.logs--dialog {
+  min-height: 18rem;
+  max-height: 42vh;
+}
+
 .visual-plot {
   display: block;
   width: 100%;
@@ -786,6 +847,16 @@ progress {
     width: 100%;
     justify-content: stretch;
     flex-direction: column;
+  }
+
+  .progress-dialog {
+    inset: auto 1rem 1rem 1rem;
+    width: auto;
+  }
+
+  .progress-dialog-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .card--plot {

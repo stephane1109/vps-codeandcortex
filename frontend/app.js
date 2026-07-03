@@ -112,6 +112,9 @@ const closeChdDialogBtn = document.getElementById("closeChdDialogBtn");
 const launchChdDialogBtn = document.getElementById("launchChdDialogBtn");
 const chdDialogStatus = document.getElementById("chdDialogStatus");
 const chdConfigSourceCards = [...document.querySelectorAll("[data-chd-config-source]")];
+const progressDialog = document.getElementById("progressDialog");
+const openProgressDialogBtn = document.getElementById("openProgressDialogBtn");
+const closeProgressDialogBtn = document.getElementById("closeProgressDialogBtn");
 const POS_VALUES = ["ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN", "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X"];
 
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
@@ -336,6 +339,37 @@ function updateChdDialogStatus(message = "") {
   }
   chdDialogStatus.textContent = String(message || "").trim();
   chdDialogStatus.hidden = !chdDialogStatus.textContent;
+}
+
+function openProgressDialog() {
+  if (!progressDialog) {
+    return;
+  }
+  if (progressDialog.open) {
+    return;
+  }
+  if (typeof progressDialog.show === "function") {
+    try {
+      progressDialog.show();
+      return;
+    } catch (_error) {
+    }
+  }
+  progressDialog.setAttribute("open", "");
+}
+
+function closeProgressDialog() {
+  if (!progressDialog?.open) {
+    return;
+  }
+  if (typeof progressDialog.close === "function") {
+    try {
+      progressDialog.close();
+      return;
+    } catch (_error) {
+    }
+  }
+  progressDialog.removeAttribute("open");
 }
 
 function currentLaunchBlockerMessage() {
@@ -947,6 +981,7 @@ async function runAnalysis() {
   }
 
   switchPanel("chd");
+  openProgressDialog();
   els.runStatus.textContent = "Lancement du job CHD Rainette...";
   updateChdDialogStatus("");
   state.currentJobId = "__launching__";
@@ -1286,6 +1321,8 @@ function bindEvents() {
       closeChdConfigDialog();
     }
   });
+  openProgressDialogBtn?.addEventListener("click", openProgressDialog);
+  closeProgressDialogBtn?.addEventListener("click", closeProgressDialog);
   els.releaseAccessBtn.addEventListener("click", releaseAccess);
   window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
   window.addEventListener("keydown", rememberUserInteraction);

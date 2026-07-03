@@ -357,23 +357,21 @@
                 </p>
               </article>
 
-              <div class="chd-control-grid">
-                <article class="card">
-                  <h3>Progression</h3>
-                  <div class="progress-wrap">
-                    <progress id="progress" max="100" value="0"></progress>
-                    <span id="progressLabel">0%</span>
+              <article class="card section-card">
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">Suivi</p>
+                    <h3>Progression de la CHD</h3>
                   </div>
-                  <p id="statusMessage" class="muted chd-status-note">
-                    Importez un corpus puis ouvrez la fenêtre de paramétrage pour lancer l’analyse.
-                  </p>
-                </article>
-
-                <article class="card">
-                  <h3>Logs</h3>
-                  <pre id="logs" class="logs">[info] Prêt.</pre>
-                </article>
-              </div>
+                  <button id="openProgressDialogBtn" class="secondary-button" type="button">
+                    Ouvrir la progression
+                  </button>
+                </div>
+                <p class="section-copy">
+                  Le suivi de calcul s’ouvre maintenant dans une boîte latérale à droite, avec la progression détaillée
+                  et les logs du traitement.
+                </p>
+              </article>
 
               <div class="metrics-grid">
                 <article class="metric-card">
@@ -684,6 +682,36 @@
           </div>
         </footer>
       </form>
+    </dialog>
+
+    <dialog id="progressDialog" class="progress-dialog">
+      <div class="progress-dialog-shell">
+        <div class="progress-dialog-header">
+          <div>
+            <p class="dialog-kicker">Suivi CHD</p>
+            <h2>Progression de l'analyse</h2>
+          </div>
+          <button id="closeProgressDialogBtn" class="secondary-button" type="button">Fermer</button>
+        </div>
+
+        <div class="progress-dialog-body">
+          <article class="card progress-dialog-card">
+            <h3>Progression</h3>
+            <div class="progress-wrap progress-wrap--dialog">
+              <progress id="progress" max="100" value="0"></progress>
+              <span id="progressLabel">0%</span>
+            </div>
+            <p id="statusMessage" class="muted chd-status-note">
+              Importez un corpus puis ouvrez la fenêtre de paramétrage pour lancer l’analyse.
+            </p>
+          </article>
+
+          <article class="card progress-dialog-card">
+            <h3>Logs</h3>
+            <pre id="logs" class="logs logs--dialog">[info] Prêt.</pre>
+          </article>
+        </div>
+      </div>
     </dialog>
 
     <script type="module" src="./app.js"></script>
