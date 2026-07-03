@@ -1,4 +1,5 @@
 options(
+  bspm.sudo = TRUE,
   repos = c(
     JUBA = Sys.getenv("RAINETTE_REPO", unset = "https://juba.r-universe.dev"),
     CRAN = Sys.getenv("R_CRAN_MIRROR", unset = "https://cloud.r-project.org")

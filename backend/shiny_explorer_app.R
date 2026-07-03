@@ -1,5 +1,10 @@
 #!/usr/bin/env Rscript
 
+options(
+  stringsAsFactors = FALSE,
+  bspm.sudo = TRUE
+)
+
 suppressPackageStartupMessages({
   library(shiny)
   library(miniUI)
@@ -157,7 +162,7 @@ build_simple_explorer_app <- function(res, dtm, corpus_src = NULL) {
                   class = "explorer-actions",
                   actionButton("show_code", label = "Get R code", icon = icon("code"), class = "btn-success")
                 ),
-                p(class = "explorer-note", "Vue Shiny native inspirée directement de rainette_explor().")
+                p(class = "explorer-note", "Vue Shiny native construite à partir du code officiel de rainette_explor().")
               )
             ),
             fillCol(
@@ -272,7 +277,7 @@ build_double_explorer_app <- function(res, dtm, corpus_src = NULL) {
                   class = "explorer-actions",
                   actionButton("show_code", label = "Get R code", icon = icon("code"), class = "btn-success")
                 ),
-                p(class = "explorer-note", "Vue Shiny native inspirée directement de rainette2_explor().")
+                p(class = "explorer-note", "Vue Shiny native construite à partir du code officiel de rainette2_explor().")
               )
             ),
             fillCol(

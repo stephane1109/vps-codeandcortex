@@ -1,5 +1,10 @@
 #!/usr/bin/env Rscript
 
+options(
+  stringsAsFactors = FALSE,
+  bspm.sudo = TRUE
+)
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 2) {
   stop("Usage: Rscript launch_shiny_explorer.R <analysis_bundle.rds> <port> [host]")

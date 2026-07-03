@@ -392,12 +392,23 @@
                 </article>
               </div>
 
-              <article class="card">
-                <h3>Graphe CHD Rainette</h3>
-                <div id="plotPlaceholder" class="empty-state plot-box-empty">
-                  Lancez une analyse pour afficher la CHD Rainette.
+              <article class="card card--plot">
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">Explorateur officiel</p>
+                    <h3>rainette_explor / rainette2_explor</h3>
+                  </div>
+                  <button class="secondary-button" type="button" data-panel-shortcut="explorateur">
+                    Ouvrir l'explorateur Rainette
+                  </button>
                 </div>
-                <img id="explorerPlot" class="visual-plot visual-plot--chd" alt="Graphe CHD Rainette" hidden />
+                <div id="plotPlaceholder" class="empty-state plot-box-empty">
+                  Lancez une analyse pour activer l’explorateur Rainette interactif.
+                </div>
+                <p id="explorerPlotNote" class="section-copy" hidden>
+                  Le rendu CHD interactif s’affiche dans l’onglet Explorateur via le code officiel de
+                  <code>rainette_explor()</code> / <code>rainette2_explor()</code>.
+                </p>
               </article>
 
               <article class="card">
@@ -533,23 +544,10 @@
               </div>
             </div>
 
-            <article class="card card--plot">
-              <div class="section-head">
-                <div>
-                  <p class="card-kicker">Aperçu</p>
-                  <h3>Graphe Rainette</h3>
-                </div>
-              </div>
-              <div id="explorerStaticPlaceholder" class="empty-state plot-box-empty">
-                Lancez une analyse pour afficher le graphe Rainette.
-              </div>
-              <img id="explorerStaticPlot" class="visual-plot visual-plot--chd" alt="Graphe Rainette" hidden />
-            </article>
-
             <article class="card card--plot card--shiny-explorer">
               <div class="section-head">
                 <div>
-                  <p class="card-kicker">Shiny</p>
+                  <p class="card-kicker">Explorateur officiel</p>
                   <h3>rainette_explor / rainette2_explor</h3>
                 </div>
                 <div class="toolbar">
@@ -557,8 +555,8 @@
                 </div>
               </div>
               <p class="muted">
-                Cette vue utilise un sous-app Shiny natif pour afficher l’explorateur Rainette officiel,
-                tout en conservant le backend FastAPI et le pipeline Python/spaCy de l’application.
+                Cette vue charge l’explorateur Rainette officiel dans une fenêtre Shiny dédiée, sans reconstituer
+                la CHD en image statique côté interface.
               </p>
               <div id="explorerShinyPlaceholder" class="empty-state">
                 Lancez une analyse pour charger l’explorateur Shiny Rainette.

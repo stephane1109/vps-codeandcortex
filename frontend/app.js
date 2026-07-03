@@ -36,13 +36,11 @@ const els = {
   summaryTable: document.getElementById("summaryTable"),
   detailTable: document.getElementById("detailTable"),
   artifactList: document.getElementById("artifactList"),
+  explorerPlotNote: document.getElementById("explorerPlotNote"),
   explorerShinyFrame: document.getElementById("explorerShinyFrame"),
   explorerShinyPlaceholder: document.getElementById("explorerShinyPlaceholder"),
   explorerShinyReloadBtn: document.getElementById("explorerShinyReloadBtn"),
-  explorerStaticPlaceholder: document.getElementById("explorerStaticPlaceholder"),
-  explorerStaticPlot: document.getElementById("explorerStaticPlot"),
   plotPlaceholder: document.getElementById("plotPlaceholder"),
-  explorerPlot: document.getElementById("explorerPlot"),
   explorerK: document.getElementById("explorerK"),
   explorerKValue: document.getElementById("explorerKValue"),
   explorerMeasure: document.getElementById("explorerMeasure"),
@@ -503,26 +501,6 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
-}
-
-function artifactByRelativePath(artifacts, relativePath) {
-  const target = String(relativePath || "").replaceAll("\\", "/");
-  return (artifacts || []).find(
-    (item) => String(item?.relativePath || "").replaceAll("\\", "/") === target,
-  ) || null;
-}
-
-function explorerFallbackArtifact(result) {
-  const artifacts = result?.artifacts || [];
-  return (
-    artifactByRelativePath(artifacts, "explor/chd.png")
-    || artifactByRelativePath(artifacts, "rainette_plot.png")
-    || null
-  );
-}
-
-function explorerPlotUrl(jobId) {
-  return `/api/jobs/${encodeURIComponent(jobId)}/explorer/plot?${explorerPlotParams().toString()}&ts=${Date.now()}`;
 }
 
 function tableFromRows(rows) {
@@ -1228,37 +1206,21 @@ function renderNer(nerPayload) {
     .join("");
 }
 
-function renderChd(result) {
-  const artifact = explorerFallbackArtifact(result);
-  const jobId = result?.jobId || state.currentJobId || state.history[0]?.jobId || "";
-  const dynamicArtifact = jobId ? { downloadUrl: explorerPlotUrl(jobId) } : null;
-  showImage(
-    els.explorerPlot,
-    els.plotPlaceholder,
-    dynamicArtifact || artifact,
-    "Aucun graphe CHD disponible pour cette analyse.",
-  );
-}
-
-function renderExplorerStaticPlot() {
-  if (!state.currentResult) {
-    showImage(
-      els.explorerStaticPlot,
-      els.explorerStaticPlaceholder,
-      null,
-      "Lancez une analyse pour afficher le graphe Rainette.",
-    );
+function renderChdExplorerCallout(result) {
+  if (!result) {
+    els.plotPlaceholder.hidden = false;
+    els.plotPlaceholder.textContent = "Lancez une analyse pour activer l’explorateur Rainette interactif.";
+    if (els.explorerPlotNote) {
+      els.explorerPlotNote.hidden = true;
+    }
     return;
   }
 
-  const jobId = state.currentResult.jobId || state.currentJobId || state.history[0]?.jobId || "";
-  const artifact = jobId ? { downloadUrl: explorerPlotUrl(jobId) } : explorerFallbackArtifact(state.currentResult);
-  showImage(
-    els.explorerStaticPlot,
-    els.explorerStaticPlaceholder,
-    artifact,
-    "Aucun graphe Rainette disponible pour cette analyse.",
-  );
+  els.plotPlaceholder.hidden = false;
+  els.plotPlaceholder.textContent = "Analyse prête. Ouvrez l’onglet Explorateur pour afficher le rendu interactif officiel de Rainette.";
+  if (els.explorerPlotNote) {
+    els.explorerPlotNote.hidden = false;
+  }
 }
 
 function renderResult(result) {
@@ -1267,14 +1229,13 @@ function renderResult(result) {
   els.metricSegments.textContent = metadata.n_segments_created ?? "—";
   els.metricAnalyzed.textContent = metadata.n_segments_analyzed ?? "—";
   els.metricClasses.textContent = metadata.n_classes ?? "—";
-  renderChd(result);
+  renderChdExplorerCallout(result);
   els.summaryTable.innerHTML = tableFromRows(result.summaryRows || []);
   els.detailTable.innerHTML = tableFromRows(result.detailRows || []);
   els.artifactList.innerHTML = exportCategoriesHtml(result.exports || null, result.artifacts || []);
   renderAfc(result.afc || {});
   renderNer(result.ner || {});
   configureExplorer(metadata);
-  renderExplorerStaticPlot();
   refreshExplorer();
 }
 
@@ -1292,12 +1253,7 @@ function configureExplorer(metadata) {
 
 async function refreshExplorer() {
   if (!state.currentResult) {
-    showImage(
-      els.explorerStaticPlot,
-      els.explorerStaticPlaceholder,
-      null,
-      "Lancez une analyse pour afficher le graphe Rainette.",
-    );
+    renderChdExplorerCallout(null);
     if (els.explorerShinyFrame) {
       els.explorerShinyFrame.hidden = true;
       els.explorerShinyFrame.removeAttribute("src");
@@ -1312,7 +1268,6 @@ async function refreshExplorer() {
   if (!jobId) {
     return;
   }
-  renderExplorerStaticPlot();
   if (!els.explorerShinyFrame || !els.explorerShinyPlaceholder) {
     return;
   }
@@ -1321,6 +1276,52 @@ async function refreshExplorer() {
   els.explorerShinyPlaceholder.hidden = false;
   els.explorerShinyPlaceholder.textContent = "Chargement de l'explorateur Shiny Rainette...";
   els.explorerShinyFrame.hidden = true;
+
+  try {
+    const probe = await fetch(shinyUrl, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    const contentType = String(probe.headers.get("content-type") || "").toLowerCase();
+    const payloadText = await probe.text();
+
+    if (!probe.ok) {
+      let message = "Impossible de charger l'explorateur Shiny Rainette pour le moment.";
+      if (contentType.includes("application/json")) {
+        try {
+          const parsed = JSON.parse(payloadText);
+          message = parsed.detail || message;
+        } catch (_error) {
+        }
+      } else if (payloadText.trim()) {
+        message = payloadText.trim().slice(0, 240);
+      }
+      throw new Error(message);
+    }
+
+    if (contentType.includes("application/json")) {
+      try {
+        const parsed = JSON.parse(payloadText);
+        throw new Error(parsed.detail || "Le backend a renvoyé une réponse inattendue à la place de l'application Shiny.");
+      } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error("Le backend a renvoyé une réponse inattendue à la place de l'application Shiny.");
+      }
+    }
+  } catch (error) {
+    els.explorerShinyFrame.onload = null;
+    els.explorerShinyFrame.onerror = null;
+    els.explorerShinyFrame.hidden = true;
+    els.explorerShinyFrame.removeAttribute("src");
+    els.explorerShinyPlaceholder.hidden = false;
+    els.explorerShinyPlaceholder.textContent = error instanceof Error
+      ? error.message
+      : "Impossible de charger l'explorateur Shiny Rainette pour le moment.";
+    return;
+  }
 
   els.explorerShinyFrame.onload = () => {
     els.explorerShinyPlaceholder.hidden = true;

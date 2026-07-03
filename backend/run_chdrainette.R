@@ -1,6 +1,9 @@
 #!/usr/bin/env Rscript
 
-options(stringsAsFactors = FALSE)
+options(
+  stringsAsFactors = FALSE,
+  bspm.sudo = TRUE
+)
 
 suppressPackageStartupMessages({
   library(jsonlite)
