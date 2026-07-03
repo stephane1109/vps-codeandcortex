@@ -1222,12 +1222,23 @@ function renderNer(nerPayload) {
     .join("");
 }
 
+function renderChd(result) {
+  const artifact = explorerFallbackArtifact(result);
+  showImage(
+    els.explorerPlot,
+    els.plotPlaceholder,
+    artifact,
+    "Aucun graphe CHD disponible pour cette analyse.",
+  );
+}
+
 function renderResult(result) {
   const metadata = result.metadata || {};
   els.metricDocs.textContent = metadata.n_documents_imported ?? "—";
   els.metricSegments.textContent = metadata.n_segments_created ?? "—";
   els.metricAnalyzed.textContent = metadata.n_segments_analyzed ?? "—";
   els.metricClasses.textContent = metadata.n_classes ?? "—";
+  renderChd(result);
   els.summaryTable.innerHTML = tableFromRows(result.summaryRows || []);
   els.detailTable.innerHTML = tableFromRows(result.detailRows || []);
   els.artifactList.innerHTML = exportCategoriesHtml(result.exports || null, result.artifacts || []);

@@ -404,6 +404,11 @@ progress {
   line-height: 1.45;
 }
 
+.logs--main {
+  min-height: 18rem;
+  max-height: 42vh;
+}
+
 .preview-box--corpus {
   min-height: 34rem;
   max-height: 70vh;
@@ -641,6 +646,10 @@ progress {
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: #fff;
   object-fit: contain;
+}
+
+.visual-plot--chd {
+  min-height: 44rem;
 }
 
 .plot-box-empty {

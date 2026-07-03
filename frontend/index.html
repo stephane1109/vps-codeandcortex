@@ -361,15 +361,15 @@
                 <div class="section-head">
                   <div>
                     <p class="card-kicker">Suivi</p>
-                    <h3>Progression de la CHD</h3>
+                    <h3>Progression de l'analyse</h3>
                   </div>
-                  <button id="openProgressDialogBtn" class="secondary-button" type="button">
-                    Ouvrir la progression
-                  </button>
                 </div>
-                <p class="section-copy">
-                  Le suivi de calcul s’ouvre maintenant dans une boîte latérale à droite, avec la progression détaillée
-                  et les logs du traitement.
+                <div class="progress-wrap">
+                  <progress id="progress" max="100" value="0"></progress>
+                  <span id="progressLabel">0%</span>
+                </div>
+                <p id="statusMessage" class="muted chd-status-note">
+                  Importez un corpus puis ouvrez la fenêtre de paramétrage pour lancer l’analyse.
                 </p>
               </article>
 
@@ -391,6 +391,19 @@
                   <strong id="metricClasses">—</strong>
                 </article>
               </div>
+
+              <article class="card">
+                <h3>Graphe CHD Rainette</h3>
+                <div id="plotPlaceholder" class="empty-state plot-box-empty">
+                  Lancez une analyse pour afficher la CHD Rainette.
+                </div>
+                <img id="explorerPlot" class="visual-plot visual-plot--chd" alt="Graphe CHD Rainette" hidden />
+              </article>
+
+              <article class="card">
+                <h3>Logs</h3>
+                <pre id="logs" class="logs logs--main">[info] Prêt.</pre>
+              </article>
 
               <article class="card">
                 <h3>Résumé des classes</h3>
@@ -588,13 +601,6 @@
                   <pre id="explorerCode" class="code-box">Le code R courant s’affichera ici.</pre>
                 </article>
 
-                <article class="card card--plot">
-                  <h3>Graphe CHD Rainette</h3>
-                  <div id="plotPlaceholder" class="empty-state">
-                    Lancez une analyse pour afficher l’exploration Rainette.
-                  </div>
-                  <img id="explorerPlot" class="explorer-plot" alt="Graphe Rainette" hidden />
-                </article>
               </div>
 
               <article class="card">
@@ -709,36 +715,6 @@
           </div>
         </footer>
       </form>
-    </dialog>
-
-    <dialog id="progressDialog" class="progress-dialog">
-      <div class="progress-dialog-shell">
-        <div class="progress-dialog-header">
-          <div>
-            <p class="dialog-kicker">Suivi CHD</p>
-            <h2>Progression de l'analyse</h2>
-          </div>
-          <button id="closeProgressDialogBtn" class="secondary-button" type="button">Fermer</button>
-        </div>
-
-        <div class="progress-dialog-body">
-          <article class="card progress-dialog-card">
-            <h3>Progression</h3>
-            <div class="progress-wrap progress-wrap--dialog">
-              <progress id="progress" max="100" value="0"></progress>
-              <span id="progressLabel">0%</span>
-            </div>
-            <p id="statusMessage" class="muted chd-status-note">
-              Importez un corpus puis ouvrez la fenêtre de paramétrage pour lancer l’analyse.
-            </p>
-          </article>
-
-          <article class="card progress-dialog-card">
-            <h3>Logs</h3>
-            <pre id="logs" class="logs logs--dialog">[info] Prêt.</pre>
-          </article>
-        </div>
-      </div>
     </dialog>
 
     <script type="module" src="./app.js"></script>
