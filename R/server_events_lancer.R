@@ -101,12 +101,19 @@ register_events_lancer <- function(input, output, session, rv) {
           ajouter_log(rv, paste0("MD5 fichier = ", md5))
 
           corpus <- import_corpus_iramuteq(chemin_fichier)
+          rv$corpus_importe <- corpus
           ajouter_log(rv, paste0("Nombre de documents importés : ", ndoc(corpus)))
 
           avancer(0.14, "Segmentation")
           rv$statut <- "Segmentation..."
           segment_size <- input$segment_size
-          corpus <- split_segments(corpus, segment_size = segment_size)
+          mode_decoupage <- as.character(valeur_input_par_defaut(input$mode_decoupage, "segment_size"))
+          corpus <- if (identical(mode_decoupage, "ponctuation")) {
+            split_sentences_with_docvars(corpus)
+          } else {
+            split_segments(corpus, segment_size = segment_size)
+          }
+          rv$corpus_segmente <- corpus
           ajouter_log(rv, paste0("Nombre de segments après découpage : ", ndoc(corpus)))
 
           ids_corpus <- docnames(corpus)
@@ -187,11 +194,11 @@ register_events_lancer <- function(input, output, session, rv) {
                   ""
                 ),
                 " | lemmes=", ifelse(utiliser_lemmes, "1", "0"),
-                " | stopwords: spaCy"
+                " | stopwords: spaCy via reticulate"
               )
             )
 
-            avancer(0.28, "spaCy : exécution Python")
+            avancer(0.28, "spaCy : exécution via reticulate")
             rv$statut <- "spaCy : prétraitement..."
 
             sp <- executer_spacy_filtrage(

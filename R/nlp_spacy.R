@@ -1,91 +1,117 @@
-# Module NLP - exécution spaCy (filtrage POS et NER)
-# Ce fichier encapsule les appels aux scripts Python externes (`spacy_preprocess.py`
-# et `ner.py`) pour produire le texte filtré (tokens/POS/lemmes) et les entités nommées.
+# Module NLP - exécution spaCy via reticulate
+# Ce fichier branche directement les scripts Python de l'application dans R via
+# reticulate, au lieu de lancer des commandes shell intermédiaires.
 
-executer_spacy_filtrage <- function(ids, textes, pos_a_conserver, utiliser_lemmes, lower_input, modele_spacy, rv) {
-  script_spacy <- tryCatch(normalizePath("spacy_preprocess.py", mustWork = TRUE), error = function(e) NA_character_)
-  if (is.na(script_spacy) || !file.exists(script_spacy)) stop("Script spaCy introuvable : spacy_preprocess.py (à la racine du projet).")
-
-  python_cmd <- "python3"
-
-  in_tsv <- file.path(tempdir(), paste0("spacy_in_", Sys.getpid(), ".tsv"))
-  out_tsv <- file.path(tempdir(), paste0("spacy_out_", Sys.getpid(), ".tsv"))
-  tok_tsv <- file.path(tempdir(), paste0("spacy_tokens_", Sys.getpid(), ".tsv"))
-
-  df_in <- data.frame(doc_id = ids, text = textes, stringsAsFactors = FALSE)
-
-  write.table(
-    df_in, file = in_tsv, sep = "\t", quote = FALSE,
-    row.names = FALSE, col.names = TRUE, fileEncoding = "UTF-8"
-  )
-
-  if (is.null(pos_a_conserver) || length(pos_a_conserver) == 0) pos_a_conserver <- c("NOUN", "ADJ")
-
-  args <- c(
-    script_spacy,
-    "--input", in_tsv,
-    "--output", out_tsv,
-    "--modele", modele_spacy,
-    "--pos_keep", paste(pos_a_conserver, collapse = ","),
-    "--lemmes", ifelse(isTRUE(utiliser_lemmes), "1", "0"),
-    "--lower_input", ifelse(isTRUE(lower_input), "1", "0"),
-    "--output_tokens", tok_tsv
-  )
-
-  ajouter_log(rv, paste0("spaCy : exécution (", python_cmd, " ", paste(args, collapse = " "), ")"))
-
-  sortie <- tryCatch(system2(python_cmd, args = args, stdout = TRUE, stderr = TRUE), error = function(e) stop("Erreur exécution spaCy : ", e$message))
-  if (!is.null(sortie) && length(sortie) > 0) ajouter_log(rv, paste(sortie, collapse = "\n"))
-
-  if (!file.exists(out_tsv)) stop("spaCy n'a pas produit de fichier de sortie.")
-
-  df_out <- read.delim(out_tsv, sep = "\t", stringsAsFactors = FALSE, quote = "", fileEncoding = "UTF-8")
-  if (!all(c("doc_id", "text") %in% names(df_out))) stop("Sortie spaCy invalide : colonnes attendues 'doc_id' et 'text'.")
-
-  df_tok <- NULL
-  if (file.exists(tok_tsv)) {
-    df_tok <- read.delim(tok_tsv, sep = "\t", stringsAsFactors = FALSE, quote = "", fileEncoding = "UTF-8")
-    colonnes_attendues <- c("doc_id", "token", "lemma", "pos")
-    if (!all(colonnes_attendues %in% names(df_tok))) df_tok <- NULL
+normaliser_tokens_reticulate <- function(tokens) {
+  if (is.null(tokens) || length(tokens) == 0) {
+    return(NULL)
   }
 
-  res <- setNames(df_out$text, df_out$doc_id)
-  list(textes = res[ids], tokens_df = df_tok)
+  if (is.data.frame(tokens)) {
+    return(tokens)
+  }
+
+  tokens <- lapply(tokens, function(row) {
+    if (is.null(row)) {
+      return(NULL)
+    }
+    as.list(row)
+  })
+  tokens <- Filter(Negate(is.null), tokens)
+  if (!length(tokens)) {
+    return(NULL)
+  }
+
+  data.frame(
+    doc_id = vapply(tokens, function(row) as.character(row$doc_id %||% ""), character(1)),
+    token = vapply(tokens, function(row) as.character(row$token %||% ""), character(1)),
+    lemma = vapply(tokens, function(row) as.character(row$lemma %||% ""), character(1)),
+    pos = vapply(tokens, function(row) as.character(row$pos %||% ""), character(1)),
+    stringsAsFactors = FALSE
+  )
+}
+
+executer_spacy_filtrage <- function(ids, textes, pos_a_conserver, utiliser_lemmes, lower_input, modele_spacy, rv) {
+  bridge <- obtenir_bridge_reticulate()
+
+  if (is.null(pos_a_conserver)) {
+    pos_a_conserver <- character(0)
+  }
+
+  ajouter_log(
+    rv,
+    paste0(
+      "spaCy / reticulate : modèle ", modele_spacy,
+      " | POS=",
+      if (length(pos_a_conserver)) paste(pos_a_conserver, collapse = ", ") else "aucun filtrage POS",
+      " | lemmes=", ifelse(isTRUE(utiliser_lemmes), "1", "0")
+    )
+  )
+
+  result <- tryCatch(
+    bridge$preprocess_corpus(
+      doc_ids = as.list(as.character(ids)),
+      textes = as.list(as.character(textes)),
+      modele = as.character(modele_spacy),
+      pos_keep = as.list(as.character(pos_a_conserver)),
+      utiliser_lemmes = isTRUE(utiliser_lemmes),
+      lower_input = isTRUE(lower_input)
+    ),
+    error = function(error) {
+      stop("Erreur spaCy / reticulate : ", conditionMessage(error))
+    }
+  )
+
+  doc_ids <- as.character(result$doc_ids %||% character(0))
+  textes_sortie <- as.character(result$texts %||% character(0))
+  if (!length(doc_ids) || length(doc_ids) != length(textes_sortie)) {
+    stop("spaCy / reticulate a renvoyé une sortie incohérente.")
+  }
+
+  names(textes_sortie) <- doc_ids
+  tokens_df <- normaliser_tokens_reticulate(result$tokens %||% NULL)
+  list(textes = textes_sortie[as.character(ids)], tokens_df = tokens_df)
 }
 
 executer_spacy_ner <- function(ids, textes, modele_spacy, rv) {
-  script_ner <- tryCatch(normalizePath("ner.py", mustWork = TRUE), error = function(e) NA_character_)
-  if (is.na(script_ner) || !file.exists(script_ner)) stop("Script NER introuvable : ner.py (à la racine du projet).")
+  bridge <- obtenir_bridge_reticulate()
 
-  python_cmd <- "python3"
+  ajouter_log(rv, paste0("NER / reticulate : modèle ", modele_spacy))
 
-  in_tsv <- file.path(tempdir(), paste0("ner_in_", Sys.getpid(), ".tsv"))
-  out_tsv <- file.path(tempdir(), paste0("ner_out_", Sys.getpid(), ".tsv"))
-
-  df_in <- data.frame(doc_id = ids, text = textes, stringsAsFactors = FALSE)
-
-  write.table(
-    df_in, file = in_tsv, sep = "\t", quote = FALSE,
-    row.names = FALSE, col.names = TRUE, fileEncoding = "UTF-8"
+  rows <- tryCatch(
+    bridge$extract_entities(
+      doc_ids = as.list(as.character(ids)),
+      textes = as.list(as.character(textes)),
+      modele = as.character(modele_spacy)
+    ),
+    error = function(error) {
+      stop("Erreur NER / reticulate : ", conditionMessage(error))
+    }
   )
 
-  args <- c(
-    script_ner,
-    "--input", in_tsv,
-    "--output", out_tsv,
-    "--modele", modele_spacy
-  )
+  if (is.null(rows) || length(rows) == 0) {
+    return(data.frame(
+      doc_id = character(0),
+      ent_text = character(0),
+      ent_label = character(0),
+      start_char = integer(0),
+      end_char = integer(0),
+      stringsAsFactors = FALSE
+    ))
+  }
 
-  ajouter_log(rv, paste0("NER : exécution (", python_cmd, " ", paste(args, collapse = " "), ")"))
-
-  sortie <- tryCatch(system2(python_cmd, args = args, stdout = TRUE, stderr = TRUE), error = function(e) stop("Erreur exécution NER : ", e$message))
-  if (!is.null(sortie) && length(sortie) > 0) ajouter_log(rv, paste(sortie, collapse = "\n"))
-
-  if (!file.exists(out_tsv)) stop("NER n'a pas produit de fichier de sortie.")
-
-  df_ent <- read.delim(out_tsv, sep = "\t", stringsAsFactors = FALSE, quote = "", fileEncoding = "UTF-8")
-  colonnes_attendues <- c("doc_id", "ent_text", "ent_label", "start_char", "end_char")
-  if (!all(colonnes_attendues %in% names(df_ent))) stop("Sortie NER invalide : colonnes attendues 'doc_id, ent_text, ent_label, start_char, end_char'.")
+  if (is.data.frame(rows)) {
+    df_ent <- rows
+  } else {
+    df_ent <- data.frame(
+      doc_id = vapply(rows, function(row) as.character(row$doc_id %||% ""), character(1)),
+      ent_text = vapply(rows, function(row) as.character(row$ent_text %||% ""), character(1)),
+      ent_label = vapply(rows, function(row) as.character(row$ent_label %||% ""), character(1)),
+      start_char = suppressWarnings(as.integer(vapply(rows, function(row) as.character(row$start_char %||% NA_character_), character(1)))),
+      end_char = suppressWarnings(as.integer(vapply(rows, function(row) as.character(row$end_char %||% NA_character_), character(1)))),
+      stringsAsFactors = FALSE
+    )
+  }
 
   df_ent$doc_id <- trimws(as.character(df_ent$doc_id))
   df_ent$ent_text <- trimws(gsub("\\s+", " ", as.character(df_ent$ent_text), perl = TRUE))

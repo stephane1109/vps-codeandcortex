@@ -78,41 +78,24 @@ obtenir_stopwords_spacy <- local({
       return(get(code, envir = cache, inherits = FALSE))
     }
 
-    python_cmd <- Sys.which("python3")
-    if (!nzchar(python_cmd)) python_cmd <- Sys.which("python")
+    sw <- tryCatch(
+      unique(as.character(obtenir_bridge_reticulate()$get_spacy_stopwords(cfg$stopwords_module))),
+      error = function(e) character(0)
+    )
 
-    if (nzchar(python_cmd)) {
-      py_code <- paste(
-        paste0("from spacy.lang.", cfg$stopwords_module, ".stop_words import STOP_WORDS"),
-        "for w in sorted(STOP_WORDS):",
-        "    print(w)",
-        sep = "\n"
-      )
-
-      sortie <- tryCatch(
-        system2(python_cmd, args = c("-c", shQuote(py_code)), stdout = TRUE, stderr = TRUE),
-        error = function(e) character(0)
-      )
-
-      if (length(sortie) > 0) {
-        stopwords_spacy <- trimws(sortie)
-        stopwords_spacy <- stopwords_spacy[nzchar(stopwords_spacy)]
-        stopwords_spacy <- stopwords_spacy[!grepl("^Traceback", stopwords_spacy)]
-
-        if (length(stopwords_spacy) > 0) {
-          sw <- unique(stopwords_spacy)
-          assign(code, sw, envir = cache)
-          if (!is.null(rv)) {
-            ajouter_log(rv, paste0("Stopwords spaCy chargés (", cfg$libelle, ") : ", length(sw), " termes."))
-          }
-          return(sw)
-        }
+    sw <- trimws(sw)
+    sw <- sw[nzchar(sw)]
+    if (length(sw) > 0) {
+      assign(code, sw, envir = cache)
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Stopwords spaCy chargés via reticulate (", cfg$libelle, ") : ", length(sw), " termes."))
       }
+      return(sw)
     }
 
     assign(code, character(0), envir = cache)
     if (!is.null(rv)) {
-      ajouter_log(rv, paste0("Impossible de charger les stopwords spaCy pour ", cfg$libelle, "."))
+      ajouter_log(rv, paste0("Impossible de charger les stopwords spaCy via reticulate pour ", cfg$libelle, "."))
     }
     get(code, envir = cache, inherits = FALSE)
   }

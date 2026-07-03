@@ -10,9 +10,11 @@ Sortie : TSV (doc_id, ent_text, ent_label, start_char, end_char)
 import argparse
 import csv
 import sys
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 
 import spacy
+
+_NLP_CACHE = {}
 
 
 def lire_tsv(chemin: str) -> Tuple[List[str], List[str]]:
@@ -39,6 +41,40 @@ def ecrire_tsv(chemin: str, lignes: List[dict]) -> None:
             ecrivain.writerow(row)
 
 
+def obtenir_modele(modele: str, keep: Iterable[str] | None = None):
+    keep_tuple = tuple(sorted(keep or {"tok2vec", "ner"}))
+    key = (modele, keep_tuple)
+    if key not in _NLP_CACHE:
+        nlp = spacy.load(modele)
+        disable = [pipe_name for pipe_name in nlp.pipe_names if pipe_name not in keep_tuple]
+        if disable:
+            nlp.disable_pipes(*disable)
+        _NLP_CACHE[key] = nlp
+    return _NLP_CACHE[key]
+
+
+def extract_entities(doc_ids: List[str], textes: List[str], modele: str = "fr_core_news_md") -> List[dict]:
+    nlp = obtenir_modele(modele, keep={"tok2vec", "ner"})
+    lignes: List[dict] = []
+
+    for did, doc in zip([str(doc_id or "").strip() for doc_id in doc_ids], nlp.pipe([str(text or "") for text in textes])):
+        for ent in doc.ents:
+            txt = (ent.text or "").strip()
+            if not txt:
+                continue
+            lignes.append(
+                {
+                    "doc_id": did,
+                    "ent_text": " ".join(txt.split()),
+                    "ent_label": ent.label_,
+                    "start_char": ent.start_char,
+                    "end_char": ent.end_char,
+                }
+            )
+
+    return lignes
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="Chemin TSV d'entrée (doc_id, text).")
@@ -47,16 +83,10 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        nlp = spacy.load(args.modele)
+        obtenir_modele(args.modele, keep={"tok2vec", "ner"})
     except Exception as e:
         sys.stderr.write(f"Erreur chargement modèle spaCy '{args.modele}' : {e}\n")
         return 2
-
-    # On ne garde que tok2vec + ner pour accélérer et stabiliser
-    keep = {"tok2vec", "ner"}
-    disable = [p for p in nlp.pipe_names if p not in keep]
-    if disable:
-        nlp.disable_pipes(*disable)
 
     try:
         doc_ids, textes = lire_tsv(args.input)
@@ -64,23 +94,8 @@ def main() -> int:
         sys.stderr.write(f"Erreur lecture TSV : {e}\n")
         return 3
 
-    lignes: List[dict] = []
     try:
-        for did, doc in zip(doc_ids, nlp.pipe(textes)):
-            for ent in doc.ents:
-                txt = (ent.text or "").strip()
-                if not txt:
-                    continue
-
-                lignes.append(
-                    {
-                        "doc_id": did,
-                        "ent_text": " ".join(txt.split()),
-                        "ent_label": ent.label_,
-                        "start_char": ent.start_char,
-                        "end_char": ent.end_char,
-                    }
-                )
+        lignes = extract_entities(doc_ids=doc_ids, textes=textes, modele=args.modele)
     except Exception as e:
         sys.stderr.write(f"Erreur traitement NER : {e}\n")
         return 4

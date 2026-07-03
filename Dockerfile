@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8000 \
+    RETICULATE_PYTHON=/usr/bin/python3 \
     APP_DATA_DIR=/data/app \
     CHDRAINETTE_APP_DATA_DIR=/data/app \
     CHDRAINETTE_R_LIBS_USER=/data/app/r-library \
@@ -31,7 +32,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - CHDRAINETTE_APP_DATA_DIR=/data/app pour que le backend web et le R utilisent le meme volume
 # - CHDRAINETTE_R_LIBS_USER=/data/app/r-library pour les packages R persistants
 # - CHDRAINETTE_CACHE_DIR=/data/app/cache pour les caches NLP / spaCy
-# - PORT=8000 pour FastAPI / Uvicorn
+# - PORT=8000 pour l'application Shiny
 
 WORKDIR /app
 
@@ -68,14 +69,18 @@ RUN apt-get update \
         libxrender1 \
     && binary_r_packages="\
       r-cran-dplyr \
+      r-cran-bslib \
       r-cran-factominer \
       r-cran-htmltools \
       r-cran-igraph \
       r-cran-jsonlite \
+      r-cran-markdown \
       r-cran-quanteda \
       r-cran-quanteda.textstats \
       r-cran-rcolorbrewer \
+      r-cran-reticulate \
       r-cran-remotes \
+      r-cran-shiny \
       r-cran-stopwords \
       r-cran-stringi \
       r-cran-wordcloud \
@@ -113,6 +118,6 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-  CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health', timeout=3).read()"
+  CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=3).read()"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

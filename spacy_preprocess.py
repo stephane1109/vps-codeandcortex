@@ -11,9 +11,11 @@ Optionnel : TSV tokens détaillés (doc_id, token, lemma, pos)
 import argparse
 import csv
 import sys
-from typing import List, Tuple, Optional
+from typing import Iterable, List, Tuple
 
 import spacy
+
+_NLP_CACHE = {}
 
 
 def lire_tsv(chemin: str) -> Tuple[List[str], List[str]]:
@@ -88,6 +90,57 @@ def nettoyer_et_filtrer_doc(doc, pos_keep_set, utiliser_lemmes: bool) -> Tuple[s
     return " ".join(tokens_sortie), lignes_tokens
 
 
+def obtenir_modele(modele: str, disable: Iterable[str] | None = None):
+    key = (modele, tuple(disable or ()))
+    if key not in _NLP_CACHE:
+        _NLP_CACHE[key] = spacy.load(modele, disable=list(disable or ()))
+    return _NLP_CACHE[key]
+
+
+def get_spacy_stopwords(stopwords_module: str = "fr") -> List[str]:
+    module_name = f"spacy.lang.{stopwords_module}.stop_words"
+    module = __import__(module_name, fromlist=["STOP_WORDS"])
+    return sorted(getattr(module, "STOP_WORDS"))
+
+
+def preprocess_corpus(
+    doc_ids: List[str],
+    textes: List[str],
+    modele: str = "fr_core_news_md",
+    pos_keep: List[str] | None = None,
+    utiliser_lemmes: bool = False,
+    lower_input: bool = False,
+):
+    nlp = obtenir_modele(modele, disable=["ner", "parser"])
+
+    clean_doc_ids = [str(doc_id or "").strip() for doc_id in doc_ids]
+    clean_texts = [str(text or "") for text in textes]
+    if lower_input:
+      clean_texts = [text.lower() for text in clean_texts]
+
+    pos_keep_set = {str(pos or "").strip().upper() for pos in (pos_keep or []) if str(pos or "").strip()}
+
+    textes_sortie: List[str] = []
+    tokens_export: List[dict] = []
+
+    for did, doc in zip(clean_doc_ids, nlp.pipe(clean_texts)):
+        reconstruit, lignes_tok = nettoyer_et_filtrer_doc(
+            doc=doc,
+            pos_keep_set=pos_keep_set,
+            utiliser_lemmes=utiliser_lemmes,
+        )
+        textes_sortie.append(reconstruit)
+        for row in lignes_tok:
+            row["doc_id"] = did
+        tokens_export.extend(lignes_tok)
+
+    return {
+        "doc_ids": clean_doc_ids,
+        "texts": textes_sortie,
+        "tokens": tokens_export,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="Chemin TSV d'entrée (doc_id, text).")
@@ -107,7 +160,7 @@ def main() -> int:
     pos_keep_set = set(pos_keep)
 
     try:
-        nlp = spacy.load(args.modele, disable=["ner", "parser"])
+        nlp = obtenir_modele(args.modele, disable=["ner", "parser"])
     except Exception as e:
         sys.stderr.write(f"Erreur chargement modèle spaCy '{args.modele}' : {e}\n")
         return 2
@@ -125,18 +178,17 @@ def main() -> int:
     tokens_export: List[dict] = []
 
     try:
-        for did, doc in zip(doc_ids, nlp.pipe(textes)):
-            reconstruit, lignes_tok = nettoyer_et_filtrer_doc(
-                doc=doc,
-                pos_keep_set=pos_keep_set,
-                utiliser_lemmes=utiliser_lemmes,
-            )
-            textes_sortie.append(reconstruit)
-
-            if args.output_tokens:
-                for row in lignes_tok:
-                    row["doc_id"] = did
-                tokens_export.extend(lignes_tok)
+        payload = preprocess_corpus(
+            doc_ids=doc_ids,
+            textes=textes,
+            modele=args.modele,
+            pos_keep=pos_keep,
+            utiliser_lemmes=utiliser_lemmes,
+            lower_input=lower_input,
+        )
+        textes_sortie = payload["texts"]
+        if args.output_tokens:
+            tokens_export = payload["tokens"]
 
     except Exception as e:
         sys.stderr.write(f"Erreur traitement spaCy : {e}\n")
