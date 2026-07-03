@@ -103,6 +103,12 @@ const els = {
   nerClassPlots: document.getElementById("nerClassPlots"),
 };
 
+const chdConfigDialog = document.getElementById("chdConfigDialog");
+const chdConfigDialogContent = document.getElementById("chdConfigDialogContent");
+const closeChdDialogBtn = document.getElementById("closeChdDialogBtn");
+const launchChdDialogBtn = document.getElementById("launchChdDialogBtn");
+const chdConfigSourceCards = [...document.querySelectorAll("[data-chd-config-source]")];
+
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
 const TICKET_SESSION_STORAGE_KEY = "chdrainette_ticket_session";
 const HOME_DASHBOARD_MESSAGE_PREFIX = "codeandcortex-ticket";
@@ -125,6 +131,13 @@ function selectedValues(select) {
   return [...select.selectedOptions].map((option) => option.value);
 }
 
+function resolveScopedField(root, sourceId) {
+  if (!root || root === document) {
+    return document.getElementById(sourceId);
+  }
+  return root.querySelector(`[data-source-id="${sourceId}"]`) || root.querySelector(`#${sourceId}`);
+}
+
 function readFileAsText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -138,6 +151,145 @@ function setProgress(value, label = "") {
   const progressValue = Number.isFinite(Number(value)) ? Number(value) : 0;
   els.progress.value = progressValue;
   els.progressLabel.textContent = label || `${progressValue}%`;
+}
+
+function syncFieldValue(source, target) {
+  if (
+    source instanceof HTMLSelectElement
+    && target instanceof HTMLSelectElement
+    && source.multiple
+    && target.multiple
+  ) {
+    const selected = new Set([...source.selectedOptions].map((option) => option.value));
+    [...target.options].forEach((option) => {
+      option.selected = selected.has(option.value);
+    });
+    return;
+  }
+
+  if (source instanceof HTMLInputElement && target instanceof HTMLInputElement) {
+    if (source.type === "checkbox" || source.type === "radio") {
+      target.checked = source.checked;
+      return;
+    }
+  }
+
+  if ("value" in source && "value" in target) {
+    target.value = source.value;
+    return;
+  }
+
+  if (source instanceof HTMLElement && target instanceof HTMLElement) {
+    target.textContent = source.textContent;
+  }
+}
+
+function populateConfigDialog(dialogContent, sourceCards, suffix = "__dialog") {
+  dialogContent.innerHTML = "";
+
+  sourceCards.forEach((card) => {
+    const clone = card.cloneNode(true);
+    clone.removeAttribute("data-chd-config-source");
+
+    clone.querySelectorAll("[id]").forEach((element) => {
+      const originalId = element.id;
+      element.dataset.sourceId = originalId;
+      element.id = `${originalId}${suffix}`;
+
+      const source = document.getElementById(originalId);
+      if (source) {
+        syncFieldValue(source, element);
+      }
+    });
+
+    clone.querySelectorAll("label[for]").forEach((label) => {
+      label.htmlFor = `${label.htmlFor}${suffix}`;
+    });
+
+    clone.querySelectorAll("input[type='radio'][name]").forEach((radio) => {
+      radio.name = `${radio.name}${suffix}`;
+    });
+
+    dialogContent.appendChild(clone);
+  });
+}
+
+function applyDialogValuesToSource() {
+  if (!chdConfigDialogContent) {
+    return;
+  }
+  const dialogFields = chdConfigDialogContent.querySelectorAll("[data-source-id]");
+  dialogFields.forEach((dialogField) => {
+    const source = document.getElementById(dialogField.dataset.sourceId || "");
+    if (!source) return;
+
+    if (
+      dialogField instanceof HTMLSelectElement
+      && source instanceof HTMLSelectElement
+      && dialogField.multiple
+      && source.multiple
+    ) {
+      const selected = new Set([...dialogField.selectedOptions].map((option) => option.value));
+      [...source.options].forEach((option) => {
+        option.selected = selected.has(option.value);
+      });
+      source.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    if (dialogField instanceof HTMLInputElement && source instanceof HTMLInputElement) {
+      if (dialogField.type === "checkbox" || dialogField.type === "radio") {
+        source.checked = dialogField.checked;
+      } else {
+        source.value = dialogField.value;
+      }
+      source.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    if ("value" in dialogField && "value" in source) {
+      source.value = dialogField.value;
+      source.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+
+  toggleAdvancedUi(document);
+}
+
+function bindChdDialogInteractions() {
+  if (!chdConfigDialogContent) {
+    return;
+  }
+  ["modeDecoupage", "typeClassification", "filtrageMorpho"].forEach((sourceId) => {
+    const element = resolveScopedField(chdConfigDialogContent, sourceId);
+    if (element) {
+      element.addEventListener("change", () => toggleAdvancedUi(chdConfigDialogContent));
+    }
+  });
+  toggleAdvancedUi(chdConfigDialogContent);
+}
+
+function openChdConfigDialog() {
+  if (!chdConfigDialog || !chdConfigDialogContent) {
+    return;
+  }
+
+  populateConfigDialog(chdConfigDialogContent, chdConfigSourceCards, "__dialog");
+  bindChdDialogInteractions();
+
+  if (typeof chdConfigDialog.showModal === "function") {
+    chdConfigDialog.showModal();
+  } else if (typeof chdConfigDialog.show === "function") {
+    chdConfigDialog.show();
+  } else {
+    chdConfigDialog.setAttribute("open", "");
+  }
+}
+
+function closeChdConfigDialog() {
+  if (chdConfigDialog?.open) {
+    chdConfigDialog.close();
+  }
 }
 
 function escapeHtml(value) {
@@ -306,16 +458,30 @@ function renderHistory() {
     .join("");
 }
 
-function toggleAdvancedUi() {
-  const fixedSegmentation = els.modeDecoupage.value === "segment_size";
-  els.segmentSize.disabled = !fixedSegmentation;
+function toggleAdvancedUi(root = document) {
+  const modeDecoupage = resolveScopedField(root, "modeDecoupage");
+  const segmentSize = resolveScopedField(root, "segmentSize");
+  const typeClassification = resolveScopedField(root, "typeClassification");
+  const doubleClassificationOptions = resolveScopedField(root, "doubleClassificationOptions");
+  const filtrageMorpho = resolveScopedField(root, "filtrageMorpho");
+  const posSection = resolveScopedField(root, "posSection");
+  const uposSelection = resolveScopedField(root, "uposSelection");
 
-  const isDouble = els.typeClassification.value === "double";
-  els.doubleClassificationOptions.hidden = !isDouble;
+  if (modeDecoupage && segmentSize) {
+    const fixedSegmentation = modeDecoupage.value === "segment_size";
+    segmentSize.disabled = !fixedSegmentation;
+  }
 
-  const showPos = els.filtrageMorpho.checked;
-  els.posSection.hidden = !showPos;
-  els.uposSelection.disabled = !showPos;
+  if (typeClassification && doubleClassificationOptions) {
+    const isDouble = typeClassification.value === "double";
+    doubleClassificationOptions.hidden = !isDouble;
+  }
+
+  if (filtrageMorpho && posSection && uposSelection) {
+    const showPos = Boolean(filtrageMorpho.checked);
+    posSection.hidden = !showPos;
+    uposSelection.disabled = !showPos;
+  }
 }
 
 function configPayload() {
@@ -522,7 +688,17 @@ function updateRunAvailability() {
   const hasCorpus = Boolean(state.corpusText.trim());
   const hasActiveTicket = !snapshot || snapshot.enabled === false || snapshot.statut === "actif";
   const busy = Boolean(state.currentJobId);
-  els.runAnalysisBtn.disabled = !hasCorpus || !hasActiveTicket || busy;
+  const canLaunch = hasCorpus && hasActiveTicket && !busy;
+
+  if (els.runAnalysisBtn) {
+    els.runAnalysisBtn.disabled = busy;
+  }
+  document.querySelectorAll("[data-open-chd-dialog]").forEach((button) => {
+    button.disabled = busy;
+  });
+  if (launchChdDialogBtn) {
+    launchChdDialogBtn.disabled = !canLaunch;
+  }
 }
 
 function scheduleTicketLoop() {
@@ -635,8 +811,10 @@ async function runAnalysis() {
     els.runStatus.textContent = "Importez d’abord un corpus texte.";
     return;
   }
+  switchPanel("chd");
   els.runStatus.textContent = "Lancement du job CHD Rainette...";
-  els.runAnalysisBtn.disabled = true;
+  state.currentJobId = "__launching__";
+  updateRunAvailability();
   setProgress(5, "5%");
   els.statusMessage.textContent = "Initialisation du job.";
   els.logs.textContent = "[info] Lancement du job CHD Rainette...";
@@ -659,9 +837,11 @@ async function runAnalysis() {
     const payload = await response.json();
     state.currentJobId = payload.jobId;
     updateReleaseAccessButton();
+    updateRunAvailability();
     addHistoryEntry(payload.jobId, state.corpusName || "corpus.txt");
     pollJobStatus(payload.jobId);
   } catch (error) {
+    state.currentJobId = "";
     els.runStatus.textContent = error instanceof Error ? error.message : "Lancement impossible.";
     els.statusMessage.textContent = els.runStatus.textContent;
     updateRunAvailability();
@@ -692,6 +872,7 @@ async function pollJobStatus(jobId) {
       state.currentResult = payload.result;
       els.runStatus.textContent = "Analyse terminée.";
       renderResult(payload.result);
+      switchPanel("chd");
       updateReleaseAccessButton();
       updateRunAvailability();
       return;
@@ -916,6 +1097,15 @@ function bindEvents() {
     button.addEventListener("click", () => switchPanel(button.dataset.panelTarget));
   });
 
+  document.querySelectorAll("[data-panel-shortcut]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = button.getAttribute("data-panel-shortcut");
+      if (target) {
+        switchPanel(target);
+      }
+    });
+  });
+
   els.importCorpusBtn.addEventListener("click", () => els.corpusFile.click());
   els.corpusFile.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
@@ -936,14 +1126,23 @@ function bindEvents() {
     els.modeDecoupage,
     els.typeClassification,
     els.filtrageMorpho,
-  ].forEach((element) => element.addEventListener("change", toggleAdvancedUi));
+  ].forEach((element) => element.addEventListener("change", () => toggleAdvancedUi(document)));
 
   els.explorerK.addEventListener("input", syncExplorerUi);
   els.explorerMeasure.addEventListener("change", syncExplorerUi);
   els.refreshExplorerBtn.addEventListener("click", refreshExplorer);
   els.refreshDocsBtn.addEventListener("click", refreshDocs);
   els.showExplorerCodeBtn.addEventListener("click", refreshExplorerCode);
-  els.runAnalysisBtn.addEventListener("click", runAnalysis);
+  els.runAnalysisBtn?.addEventListener("click", openChdConfigDialog);
+  document.querySelectorAll("[data-open-chd-dialog]").forEach((button) => {
+    button.addEventListener("click", openChdConfigDialog);
+  });
+  closeChdDialogBtn?.addEventListener("click", closeChdConfigDialog);
+  launchChdDialogBtn?.addEventListener("click", () => {
+    applyDialogValuesToSource();
+    closeChdConfigDialog();
+    runAnalysis();
+  });
   els.releaseAccessBtn.addEventListener("click", releaseAccess);
   window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
   window.addEventListener("keydown", rememberUserInteraction);
@@ -955,7 +1154,7 @@ function bindEvents() {
 function init() {
   bindEvents();
   renderHistory();
-  toggleAdvancedUi();
+  toggleAdvancedUi(document);
   syncExplorerUi();
   lastTicketInteractionAt = Date.now();
   updateReleaseAccessButton();
