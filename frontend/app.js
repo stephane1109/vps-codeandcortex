@@ -339,35 +339,40 @@ function updateChdDialogStatus(message = "") {
 }
 
 function currentLaunchBlockerMessage() {
+  const reasons = [];
+
   if (!state.corpusText.trim()) {
-    return "Importez d'abord un corpus texte avant de lancer l'analyse.";
+    reasons.push("Importez d'abord un corpus texte avant de lancer l'analyse.");
   }
 
   if (state.currentJobId) {
-    return "Une analyse est déjà en cours sur cette session.";
+    reasons.push("Une analyse est déjà en cours sur cette session.");
   }
 
   const snapshot = state.ticketSnapshot;
   if (!snapshot || snapshot.enabled === false) {
-    return "";
+    return reasons.join(" ");
   }
 
   if (snapshot.statut === "actif") {
-    return "";
+    return reasons.join(" ");
   }
 
   if (snapshot.statut === "attente" || snapshot.statut === "occupee") {
     const position = Number(snapshot.position || 0) > 0
       ? ` Position actuelle dans la file : ${snapshot.position}.`
       : "";
-    return `L'application est occupée. Attendez que votre ticket devienne actif avant de lancer l'analyse.${position}`;
+    reasons.push(`L'application est occupée. Attendez que votre ticket devienne actif avant de lancer l'analyse.${position}`);
+    return reasons.join(" ");
   }
 
   if (snapshot.statut === "erreur") {
-    return String(snapshot.message || "Le contrôle d'accès est indisponible pour le moment.");
+    reasons.push(String(snapshot.message || "Le contrôle d'accès est indisponible pour le moment."));
+    return reasons.join(" ");
   }
 
-  return String(snapshot.message || "Le ticket utilisateur n'est pas encore actif.");
+  reasons.push(String(snapshot.message || "Le ticket utilisateur n'est pas encore actif."));
+  return reasons.join(" ");
 }
 
 function openChdConfigDialog() {
