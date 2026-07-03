@@ -54,6 +54,11 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 2,
         "cout": 2,
     },
+    "cooccurrencesmotpivot": {
+        "label": "Cooccurrences mot pivot",
+        "max_active": 2,
+        "cout": 2,
+    },
     "symbolic_connectors": {
         "label": "Symbolic Connectors",
         "max_active": 1,
@@ -73,6 +78,7 @@ APPLICATIONS_PAR_DEFAUT = {
         "label": "IRaMuTeQ Lite",
         "max_active": 1,
         "cout": 4,
+        "duree_ticket": 300,
     },
     "stopmotion_opticalflow": {
         "label": "StopMotion",
@@ -153,6 +159,10 @@ def _fusionner_configuration_application(
     configuration_globale: dict[str, int],
 ) -> dict[str, Any]:
     brute = configuration_brute or {}
+    duree_ticket = max(
+        60,
+        int(brute.get("duree_ticket", configuration_globale["duree_ticket"])),
+    )
     return {
         "application_id": application_id,
         "label": str(brute.get("label") or application_id),
@@ -165,9 +175,10 @@ def _fusionner_configuration_application(
             0,
             int(brute.get("max_file_attente", configuration_globale["max_file_attente_defaut"])),
         ),
-        "duree_ticket": max(
-            60,
-            int(brute.get("duree_ticket", configuration_globale["duree_ticket"])),
+        "duree_ticket": duree_ticket,
+        "duree_attente": max(
+            30,
+            int(brute.get("duree_attente", min(duree_ticket, 120))),
         ),
     }
 
@@ -259,16 +270,70 @@ def _lister_tickets(client_redis, key: str) -> list[str]:
     return [str(item) for item in client_redis.zrange(key, 0, -1)]
 
 
+def _lire_donnees_ticket(client_redis, identifiant_ticket: str) -> dict[str, Any]:
+    return client_redis.hgetall(cle_ticket(identifiant_ticket)) or {}
+
+
+def _statut_ticket(donnees: dict[str, Any]) -> str:
+    return str(donnees.get("status") or donnees.get("statut") or "attente").strip() or "attente"
+
+
+def _session_ticket(donnees: dict[str, Any]) -> str:
+    return str(donnees.get("session_id") or donnees.get("identifiant_session") or "").strip()
+
+
+def _heartbeat_ticket(donnees: dict[str, Any], maintenant: int) -> int:
+    brute = donnees.get("updated_at") or donnees.get("created_at") or donnees.get("date_creation") or maintenant
+    try:
+        return int(brute)
+    except (TypeError, ValueError):
+        return maintenant
+
+
+def _timeout_ticket(configuration: dict[str, Any], statut: str) -> int:
+    if statut == "attente":
+        return int(configuration.get("duree_attente", min(configuration["duree_ticket"], 120)))
+    return int(configuration["duree_ticket"])
+
+
+def _supprimer_ticket(client_redis, identifiant_ticket: str, application_id: str, donnees: dict[str, Any] | None = None) -> None:
+    donnees_ticket = donnees or _lire_donnees_ticket(client_redis, identifiant_ticket)
+    session_id = _session_ticket(donnees_ticket)
+    client_redis.zrem(cles_redis_application(application_id)["tickets_actifs"], identifiant_ticket)
+    client_redis.zrem(cles_redis_application(application_id)["tickets_attente"], identifiant_ticket)
+    client_redis.zrem(_zset_actifs_globale(), identifiant_ticket)
+    client_redis.delete(cle_ticket(identifiant_ticket))
+    if session_id:
+        client_redis.delete(cle_session(application_id, session_id))
+
+
 def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
-    """Supprimer des index les tickets dont la clé Redis a expiré."""
+    """Supprimer des index les tickets expirés ou abandonnés."""
     applications = [normaliser_identifiant_application(application_id)] if application_id else _application_ids_configures()
+    tickets_vus: set[tuple[str, str]] = set()
+    maintenant = int(time.time())
 
     for identifiant_application in applications:
+        configuration = lire_configuration_tickets(identifiant_application)
         cles = cles_redis_application(identifiant_application)
         for key in (cles["tickets_actifs"], cles["tickets_attente"]):
             for identifiant_ticket in _lister_tickets(client_redis, key):
+                cle_vue = (identifiant_application, identifiant_ticket)
+                if cle_vue in tickets_vus:
+                    continue
+                tickets_vus.add(cle_vue)
+
                 if not client_redis.exists(cle_ticket(identifiant_ticket)):
-                    client_redis.zrem(key, identifiant_ticket)
+                    client_redis.zrem(cles["tickets_actifs"], identifiant_ticket)
+                    client_redis.zrem(cles["tickets_attente"], identifiant_ticket)
+                    client_redis.zrem(_zset_actifs_globale(), identifiant_ticket)
+                    continue
+
+                donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
+                statut = _statut_ticket(donnees)
+                heartbeat = _heartbeat_ticket(donnees, maintenant)
+                if maintenant - heartbeat > _timeout_ticket(configuration, statut):
+                    _supprimer_ticket(client_redis, identifiant_ticket, identifiant_application, donnees)
 
     for identifiant_ticket in _lister_tickets(client_redis, _zset_actifs_globale()):
         if not client_redis.exists(cle_ticket(identifiant_ticket)):
@@ -332,7 +397,7 @@ def _statut_application_depuis_compteurs(active: int, max_active: int, queued: i
 
 def _resume_ticket(client_redis, identifiant_ticket: str, application_id: str) -> dict[str, Any]:
     configuration = lire_configuration_tickets(application_id)
-    donnees = client_redis.hgetall(cle_ticket(identifiant_ticket))
+    donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
     position = calculer_position_attente(client_redis, identifiant_ticket, application_id)
     active = compter_tickets_actifs_application(client_redis, application_id)
     queued = compter_tickets_attente_application(client_redis, application_id)
@@ -340,7 +405,7 @@ def _resume_ticket(client_redis, identifiant_ticket: str, application_id: str) -
 
     return {
         "identifiant_ticket": identifiant_ticket,
-        "statut": donnees.get("statut", "inconnu"),
+        "statut": _statut_ticket(donnees) if donnees else "inconnu",
         "position": position,
         "charge_active": calculer_charge_active(client_redis),
         "capacite_serveur": configuration["capacite_serveur"],
@@ -371,7 +436,7 @@ def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = N
     nettoyer_tickets_expires(client_redis)
 
     for _score, application_id, identifiant_ticket in _candidats_attente(client_redis):
-        donnees = client_redis.hgetall(cle_ticket(identifiant_ticket))
+        donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
         if not donnees:
             client_redis.zrem(cles_redis_application(application_id)["tickets_attente"], identifiant_ticket)
             continue
@@ -387,7 +452,15 @@ def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = N
         if charge_active + cout_application > capacite:
             continue
 
-        client_redis.hset(cle_ticket(identifiant_ticket), "statut", "actif")
+        maintenant = int(time.time())
+        client_redis.hset(
+            cle_ticket(identifiant_ticket),
+            mapping={"statut": "actif", "status": "actif", "updated_at": maintenant},
+        )
+        session_id = _session_ticket(donnees)
+        client_redis.expire(cle_ticket(identifiant_ticket), configuration["duree_ticket"])
+        if session_id:
+            client_redis.expire(cle_session(application_id, session_id), configuration["duree_ticket"])
         client_redis.zrem(cles_redis_application(application_id)["tickets_attente"], identifiant_ticket)
         client_redis.zadd(cles_redis_application(application_id)["tickets_actifs"], {identifiant_ticket: time.time()})
         client_redis.zadd(_zset_actifs_globale(), {identifiant_ticket: time.time()})
@@ -410,8 +483,12 @@ def creer_ou_recuperer_ticket(client_redis, identifiant_session: str, applicatio
     ticket_existant = client_redis.get(cle_ticket_session)
 
     if ticket_existant and client_redis.exists(cle_ticket(ticket_existant)):
-        client_redis.expire(cle_ticket(ticket_existant), duree_ticket)
-        client_redis.expire(cle_ticket_session, duree_ticket)
+        donnees_existant = _lire_donnees_ticket(client_redis, ticket_existant)
+        statut_existant = _statut_ticket(donnees_existant)
+        duree_effective = _timeout_ticket(configuration, statut_existant)
+        client_redis.hset(cle_ticket(ticket_existant), mapping={"updated_at": int(time.time())})
+        client_redis.expire(cle_ticket(ticket_existant), duree_effective)
+        client_redis.expire(cle_ticket_session, duree_effective)
         return _resume_ticket(client_redis, ticket_existant, identifiant_application)
 
     if ticket_existant:
@@ -451,12 +528,16 @@ def creer_ou_recuperer_ticket(client_redis, identifiant_session: str, applicatio
             "nom_application": configuration["label"],
             "cout_application": cout_application,
             "statut": statut,
+            "status": statut,
             "date_creation": int(time.time()),
+            "created_at": int(time.time()),
+            "updated_at": int(time.time()),
         },
     )
 
-    client_redis.expire(cle_ticket(identifiant_ticket), duree_ticket)
-    client_redis.setex(cle_ticket_session, duree_ticket, identifiant_ticket)
+    duree_effective = _timeout_ticket(configuration, statut)
+    client_redis.expire(cle_ticket(identifiant_ticket), duree_effective)
+    client_redis.setex(cle_ticket_session, duree_effective, identifiant_ticket)
 
     return _resume_ticket(client_redis, identifiant_ticket, identifiant_application)
 
@@ -472,8 +553,12 @@ def rafraichir_ticket(client_redis, identifiant_session: str, application_id: st
     if not identifiant_ticket or not client_redis.exists(cle_ticket(identifiant_ticket)):
         return None
 
-    client_redis.expire(cle_ticket(identifiant_ticket), duree_ticket)
-    client_redis.expire(cle_ticket_session, duree_ticket)
+    donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
+    statut = _statut_ticket(donnees)
+    duree_effective = _timeout_ticket(configuration, statut)
+    client_redis.hset(cle_ticket(identifiant_ticket), mapping={"updated_at": int(time.time())})
+    client_redis.expire(cle_ticket(identifiant_ticket), duree_effective)
+    client_redis.expire(cle_ticket_session, duree_effective)
     return _resume_ticket(client_redis, identifiant_ticket, identifiant_application)
 
 
