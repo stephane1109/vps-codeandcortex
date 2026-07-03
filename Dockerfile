@@ -21,6 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - REDIS_URL=redis://:motdepasse@redis:6379/0
 # - APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
 # - APP_TICKET_HIDDEN_RELEASE_SECONDS=300 pour liberer si onglet cache trop longtemps
+# - APP_TICKET_WAIT_STALE_SECONDS=120 pour nettoyer rapidement une attente abandonnee
 # - CAPACITE_SERVEUR=6 pour piloter la charge globale du VPS
 # - PORT=8501
 # - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=4096 pour les grosses videos
