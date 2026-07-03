@@ -17,7 +17,7 @@ except ModuleNotFoundError:  # pragma: no cover - depend de l'image Docker final
 
 
 """
-Controle d'acces Redis pour les applications Streamlit.
+Contrôle d'accès Redis pour les applications Streamlit.
 
 #### VARIABLES D'ENVIRONNEMENT A MODIFIER SI BESOIN
 
@@ -71,6 +71,11 @@ Variables d'environnement a modifier si besoin :
   Delai optionnel avant liberation automatique si l'onglet devient cache.
   Mettre 0 pour desactiver ce garde-fou.
 
+- APP_TICKET_WAIT_STALE_SECONDS
+  Delai maximal sans heartbeat pour un ticket en attente.
+  Permet de nettoyer plus vite une file d'attente abandonnee.
+  Exemple : 120 pour 2 minutes.
+
 Conseil pratique pour Coolify :
 - laisse APP_TICKET_MAX_ACTIVE=1 pour une grosse application monopolistique
 - augmente APP_TICKET_TTL_SECONDS si un traitement peut durer longtemps
@@ -122,20 +127,9 @@ TICKET_STATUS_STYLE = """
   color: #0f172a !important;
 }
 .ticket-status-card.is-active .ticket-status-meta,
-.ticket-status-card.is-active .ticket-status-meta * {
-  color: #15803d !important;
-}
+.ticket-status-card.is-active .ticket-status-meta *,
 .ticket-status-card.is-active .ticket-status-meta strong {
   color: #15803d !important;
-}
-.ticket-status-card.is-waiting .ticket-status-meta strong {
-  color: #b45309 !important;
-}
-.ticket-status-card.is-error .ticket-status-meta strong {
-  color: #b91c1c !important;
-}
-.ticket-status-card.is-released .ticket-status-meta strong {
-  color: #475569 !important;
 }
 @keyframes ticket-pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
@@ -166,6 +160,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
+    ttl_seconds = max(60, _env_int("APP_TICKET_TTL_SECONDS", 1800))
+    wait_stale_default = min(ttl_seconds, 120)
     return {
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
         "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
@@ -173,21 +169,22 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 1)),
         "cost": max(0, _env_int("APP_TICKET_COST", 4)),
         "global_capacity": max(1, _env_int("CAPACITE_SERVEUR", 6)),
-        "ttl_seconds": max(60, _env_int("APP_TICKET_TTL_SECONDS", 1800)),
+        "ttl_seconds": ttl_seconds,
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
         "heartbeat_ms": max(30000, _env_int("APP_TICKET_HEARTBEAT_MS", 300000)),
         "release_url": os.getenv("APP_TICKET_RELEASE_URL", "").strip(),
         "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0)),
+        "wait_stale_seconds": max(30, _env_int("APP_TICKET_WAIT_STALE_SECONDS", wait_stale_default)),
     }
 
 
 def _redis_client():
     if redis is None:
-        return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
+        return None, "Le paquet Python 'redis' n'est pas installé dans l'application."
     redis_url_env = os.getenv("REDIS_URL", "").strip()
     if not redis_url_env:
-        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
+        return None, "REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url_env, decode_responses=True)
         client.ping()
@@ -219,12 +216,49 @@ def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
 
 
+def _ticket_timeout_seconds(cfg: dict[str, Any], status: str) -> int:
+    if status == "attente":
+        return cfg["wait_stale_seconds"]
+    return cfg["ttl_seconds"]
+
+
+def _drop_ticket(client, cfg: dict[str, Any], ticket_id: str) -> None:
+    data = client.hgetall(_ticket_key(ticket_id)) or {}
+    session_id = str(data.get("session_id", "")).strip()
+    client.zrem(_keys(cfg["app_id"])["active"], ticket_id)
+    client.zrem(_keys(cfg["app_id"])["waiting"], ticket_id)
+    client.zrem(_global_active_key(), ticket_id)
+    client.delete(_ticket_key(ticket_id))
+    if session_id:
+        client.delete(_session_key(cfg["app_id"], session_id))
+
+
 def _cleanup_expired(client, cfg: dict[str, Any]) -> None:
     keys = _keys(cfg["app_id"])
+    seen_ticket_ids: set[str] = set()
+    now = int(time.time())
+
     for key in (keys["active"], keys["waiting"], _global_active_key()):
         for ticket_id in _list_members(client, key):
-            if not client.exists(_ticket_key(ticket_id)):
-                client.zrem(key, ticket_id)
+            if ticket_id in seen_ticket_ids:
+                continue
+            seen_ticket_ids.add(ticket_id)
+
+            ticket_key = _ticket_key(ticket_id)
+            if not client.exists(ticket_key):
+                client.zrem(keys["active"], ticket_id)
+                client.zrem(keys["waiting"], ticket_id)
+                client.zrem(_global_active_key(), ticket_id)
+                continue
+
+            data = client.hgetall(ticket_key) or {}
+            status = str(data.get("status", "")).strip() or "attente"
+            heartbeat_at = int(data.get("updated_at", data.get("created_at", now)) or now)
+            timeout_seconds = _ticket_timeout_seconds(cfg, status)
+
+            if now - heartbeat_at > timeout_seconds:
+                _drop_ticket(client, cfg, ticket_id)
+                continue
 
 
 def _active_load(client) -> int:
@@ -265,10 +299,25 @@ def _promote_waiting(client, cfg: dict[str, Any]) -> None:
         if not client.exists(_ticket_key(ticket_id)):
             client.zrem(waiting_key, ticket_id)
             continue
+        ticket_data = client.hgetall(_ticket_key(ticket_id)) or {}
+        session_id = str(ticket_data.get("session_id", "")).strip()
         client.hset(_ticket_key(ticket_id), mapping={"status": "actif", "updated_at": int(time.time())})
+        client.expire(_ticket_key(ticket_id), cfg["ttl_seconds"])
+        if session_id:
+            client.expire(_session_key(cfg["app_id"], session_id), cfg["ttl_seconds"])
         client.zrem(waiting_key, ticket_id)
         client.zadd(active_key, {ticket_id: time.time()})
         client.zadd(_global_active_key(), {ticket_id: time.time()})
+
+
+def _touch_existing_ticket(client, cfg: dict[str, Any], ticket_id: str, session_key: str) -> None:
+    data = client.hgetall(_ticket_key(ticket_id)) or {}
+    status = str(data.get("status", "")).strip() or "attente"
+    timeout_seconds = _ticket_timeout_seconds(cfg, status)
+    now = int(time.time())
+    client.hset(_ticket_key(ticket_id), mapping={"updated_at": now})
+    client.expire(_ticket_key(ticket_id), timeout_seconds)
+    client.expire(session_key, timeout_seconds)
 
 
 def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message: str | None = None) -> dict[str, Any]:
@@ -283,12 +332,12 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": bypass_message or "Controle d'acces desactive.",
+            "message": bypass_message or "Contrôle d'accès désactivé.",
         }
 
-    active = _active_count(client, cfg)
-    queued = _waiting_count(client, cfg)
     if not ticket_id:
+        active = _active_count(client, cfg)
+        queued = _waiting_count(client, cfg)
         return {
             "enabled": True,
             "ticket_id": None,
@@ -299,15 +348,35 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": "Aucun ticket associe a cette session.",
+            "message": "Aucun ticket associé à cette session.",
         }
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
+    status = data.get("status", "inconnu")
+    active_key = _keys(cfg["app_id"])["active"]
+    waiting_key = _keys(cfg["app_id"])["waiting"]
+
+    # Restaure la coherence Redis si un ticket existe mais n'apparait plus dans
+    # l'ensemble qui correspond a son statut courant.
+    if status == "actif":
+        if client.zscore(waiting_key, ticket_id) is not None:
+            client.zrem(waiting_key, ticket_id)
+        if client.zscore(active_key, ticket_id) is None:
+            client.zadd(active_key, {ticket_id: time.time()})
+        if client.zscore(_global_active_key(), ticket_id) is None:
+            client.zadd(_global_active_key(), {ticket_id: time.time()})
+    elif status == "attente" and client.zscore(waiting_key, ticket_id) is None:
+        waiting_score = float(data.get("created_at") or time.time())
+        client.zadd(waiting_key, {ticket_id: waiting_score})
+
+    active = _active_count(client, cfg)
+    queued = _waiting_count(client, cfg)
+    position = _waiting_position(client, cfg, ticket_id)
     return {
         "enabled": True,
         "ticket_id": ticket_id,
-        "statut": data.get("status", "inconnu"),
-        "position": _waiting_position(client, cfg, ticket_id),
+        "statut": status,
+        "position": position,
         "active": active,
         "queued": queued,
         "max_active": cfg["max_active"],
@@ -355,7 +424,7 @@ def _released_snapshot(client, cfg: dict[str, Any], message: str) -> dict[str, A
 
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de réserver un ticket.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -364,8 +433,7 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
     existing_ticket = client.get(session_key)
 
     if existing_ticket and client.exists(_ticket_key(existing_ticket)):
-        client.expire(session_key, cfg["ttl_seconds"])
-        client.expire(_ticket_key(existing_ticket), cfg["ttl_seconds"])
+        _touch_existing_ticket(client, cfg, existing_ticket, session_key)
         _promote_waiting(client, cfg)
         return _snapshot(client, cfg, existing_ticket)
 
@@ -404,8 +472,8 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
             "updated_at": int(time.time()),
         },
     )
-    client.expire(_ticket_key(ticket_id), cfg["ttl_seconds"])
-    client.setex(session_key, cfg["ttl_seconds"], ticket_id)
+    client.expire(_ticket_key(ticket_id), _ticket_timeout_seconds(cfg, status))
+    client.setex(session_key, _ticket_timeout_seconds(cfg, status), ticket_id)
 
     if status == "actif":
         client.zadd(active_key, {ticket_id: time.time()})
@@ -562,14 +630,14 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
 def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     if not cfg["enabled"]:
-        return _bypass_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _bypass_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     if st.session_state.get(RELEASED_STATE_KEY):
         return _released_snapshot(
             client,
             cfg,
-            "Acces libere pour cette page. Clique sur 'Reprendre l'acces' pour revenir dans la file.",
+            "Accès libéré pour cette page. Clique sur 'Reprendre l'accès' pour revenir dans la file.",
         )
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
@@ -587,7 +655,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         _install_release_hooks(cfg, session_id)
 
     with st.sidebar:
-        st.markdown("### Acces utilisateur")
+        st.markdown("### Accès utilisateur")
         st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
 
         if snapshot["statut"] == "actif":
@@ -600,27 +668,31 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 """,
                 unsafe_allow_html=True,
             )
-            st.success(f"Acces actif ({snapshot['active']} / {snapshot['max_active']}).")
-            if st.button("Liberer l'acces", use_container_width=True):
+            st.success(f"Accès actif ({snapshot['active']} / {snapshot['max_active']}).")
+            if st.button("Libérer l'accès", use_container_width=True):
                 if release_ticket_for_session(default_app_id, app_label):
                     st.rerun()
-                st.warning("Impossible de liberer le ticket courant pour le moment.")
+                st.warning("Impossible de libérer le ticket courant pour le moment.")
         elif snapshot["statut"] == "attente":
             position = snapshot["position"] or "?"
             st.markdown(
                 f"""
                 <div class="ticket-status-card is-waiting">
                   <span class="ticket-status-dot is-waiting"></span>
-                  <div class="ticket-status-meta"><strong>Application occupee</strong><br>Position actuelle dans la file : {position}.</div>
+                  <div class="ticket-status-meta"><strong>Application occupée</strong><br>Position actuelle dans la file : {position}.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.warning(f"Application occupee. Position dans la file : {position}.")
+            st.warning(f"Application occupée. Position dans la file : {position}.")
+            if st.button("Libérer l'accès", use_container_width=True):
+                if release_ticket_for_session(default_app_id, app_label):
+                    st.rerun()
+                st.warning("Impossible de libérer le ticket courant pour le moment.")
         elif snapshot["statut"] == "refuse":
             st.markdown(
                 """
-                <div class="ticket-status-card is-error">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-error"></span>
                   <div class="ticket-status-meta"><strong>File d'attente pleine</strong><br>Impossible d'ajouter un nouvel utilisateur pour le moment.</div>
                 </div>
@@ -631,28 +703,28 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         elif snapshot["statut"] == "released":
             st.markdown(
                 """
-                <div class="ticket-status-card is-released">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-released"></span>
-                  <div class="ticket-status-meta"><strong>Acces libere</strong><br>Cette page n'occupe plus l'application.</div>
+                  <div class="ticket-status-meta"><strong>Accès libéré</strong><br>Cette page n'occupe plus l'application.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.info("Acces libere pour cette page.")
-            if st.button("Reprendre l'acces", use_container_width=True):
+            st.info("Accès libéré pour cette page.")
+            if st.button("Reprendre l'accès", use_container_width=True):
                 _resume_local_ticket_state()
                 st.rerun()
         else:
             st.markdown(
                 """
-                <div class="ticket-status-card is-error">
+                <div class="ticket-status-card">
                   <span class="ticket-status-dot is-error"></span>
-                  <div class="ticket-status-meta"><strong>Acces indisponible</strong><br>Le ticket courant n'a pas pu etre valide.</div>
+                  <div class="ticket-status-meta"><strong>Accès indisponible</strong><br>Le ticket courant n'a pas pu être validé.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.error("Controle d'acces temporairement indisponible.")
+            st.error("Contrôle d'accès temporairement indisponible.")
             if snapshot["message"]:
                 st.error(snapshot["message"])
 
@@ -669,13 +741,13 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.stop()
 
     if snapshot["statut"] == "released":
-        st.info("Acces libere. Clique sur 'Reprendre l'acces' pour revenir dans la file.")
+        st.info("Accès libéré. Clique sur 'Reprendre l'accès' pour revenir dans la file.")
         st.stop()
 
     if snapshot["statut"] == "refuse":
         st.error("File d'attente pleine pour cette application.")
     else:
-        st.error("Controle d'acces temporairement indisponible.")
+        st.error("Contrôle d'accès temporairement indisponible.")
         if snapshot["message"]:
             st.error(snapshot["message"])
     st.stop()
