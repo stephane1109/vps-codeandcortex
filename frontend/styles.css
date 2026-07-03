@@ -490,6 +490,19 @@ progress {
   border-top: 1px solid var(--line);
 }
 
+.dialog-status {
+  margin: 0;
+  flex: 1;
+  line-height: 1.45;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.8rem;
+}
+
 .visual-plot {
   display: block;
   width: 100%;
@@ -716,6 +729,12 @@ progress {
   .dialog-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .dialog-actions {
+    width: 100%;
+    justify-content: stretch;
+    flex-direction: column;
   }
 
   .card--plot {

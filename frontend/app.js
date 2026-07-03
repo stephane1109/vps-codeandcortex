@@ -110,6 +110,7 @@ const chdConfigDialog = document.getElementById("chdConfigDialog");
 const chdConfigDialogContent = document.getElementById("chdConfigDialogContent");
 const closeChdDialogBtn = document.getElementById("closeChdDialogBtn");
 const launchChdDialogBtn = document.getElementById("launchChdDialogBtn");
+const chdDialogStatus = document.getElementById("chdDialogStatus");
 const chdConfigSourceCards = [...document.querySelectorAll("[data-chd-config-source]")];
 
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
@@ -272,6 +273,46 @@ function bindChdDialogInteractions() {
   toggleAdvancedUi(chdConfigDialogContent);
 }
 
+function updateChdDialogStatus(message = "") {
+  if (!chdDialogStatus) {
+    return;
+  }
+  chdDialogStatus.textContent = String(message || "").trim();
+  chdDialogStatus.hidden = !chdDialogStatus.textContent;
+}
+
+function currentLaunchBlockerMessage() {
+  if (!state.corpusText.trim()) {
+    return "Importez d'abord un corpus texte avant de lancer l'analyse.";
+  }
+
+  if (state.currentJobId) {
+    return "Une analyse est déjà en cours sur cette session.";
+  }
+
+  const snapshot = state.ticketSnapshot;
+  if (!snapshot || snapshot.enabled === false) {
+    return "";
+  }
+
+  if (snapshot.statut === "actif") {
+    return "";
+  }
+
+  if (snapshot.statut === "attente" || snapshot.statut === "occupee") {
+    const position = Number(snapshot.position || 0) > 0
+      ? ` Position actuelle dans la file : ${snapshot.position}.`
+      : "";
+    return `L'application est occupée. Attendez que votre ticket devienne actif avant de lancer l'analyse.${position}`;
+  }
+
+  if (snapshot.statut === "erreur") {
+    return String(snapshot.message || "Le contrôle d'accès est indisponible pour le moment.");
+  }
+
+  return String(snapshot.message || "Le ticket utilisateur n'est pas encore actif.");
+}
+
 function openChdConfigDialog() {
   if (!chdConfigDialog || !chdConfigDialogContent) {
     return;
@@ -287,12 +328,14 @@ function openChdConfigDialog() {
   } else {
     chdConfigDialog.setAttribute("open", "");
   }
+  updateChdDialogStatus(currentLaunchBlockerMessage());
 }
 
 function closeChdConfigDialog() {
   if (chdConfigDialog?.open) {
     chdConfigDialog.close();
   }
+  updateChdDialogStatus("");
 }
 
 function escapeHtml(value) {
@@ -719,7 +762,10 @@ function updateRunAvailability() {
     button.disabled = busy;
   });
   if (launchChdDialogBtn) {
-    launchChdDialogBtn.disabled = !canLaunch;
+    launchChdDialogBtn.disabled = busy;
+  }
+  if (chdConfigDialog?.open) {
+    updateChdDialogStatus(canLaunch ? "" : currentLaunchBlockerMessage());
   }
 }
 
@@ -829,12 +875,17 @@ async function releaseAccess() {
 }
 
 async function runAnalysis() {
-  if (!state.corpusText.trim()) {
-    els.runStatus.textContent = "Importez d’abord un corpus texte.";
-    return;
+  const blockerMessage = currentLaunchBlockerMessage();
+  if (blockerMessage) {
+    els.runStatus.textContent = blockerMessage;
+    els.statusMessage.textContent = blockerMessage;
+    updateChdDialogStatus(blockerMessage);
+    return false;
   }
+
   switchPanel("chd");
   els.runStatus.textContent = "Lancement du job CHD Rainette...";
+  updateChdDialogStatus("");
   state.currentJobId = "__launching__";
   updateRunAvailability();
   setProgress(5, "5%");
@@ -862,11 +913,15 @@ async function runAnalysis() {
     updateRunAvailability();
     addHistoryEntry(payload.jobId, state.corpusName || "corpus.txt");
     pollJobStatus(payload.jobId);
+    return true;
   } catch (error) {
     state.currentJobId = "";
-    els.runStatus.textContent = error instanceof Error ? error.message : "Lancement impossible.";
+    const message = error instanceof Error ? error.message : "Lancement impossible.";
+    els.runStatus.textContent = message;
+    updateChdDialogStatus(message);
     els.statusMessage.textContent = els.runStatus.textContent;
     updateRunAvailability();
+    return false;
   }
 }
 
@@ -1161,10 +1216,12 @@ function bindEvents() {
     button.addEventListener("click", openChdConfigDialog);
   });
   closeChdDialogBtn?.addEventListener("click", closeChdConfigDialog);
-  launchChdDialogBtn?.addEventListener("click", () => {
+  launchChdDialogBtn?.addEventListener("click", async () => {
     applyDialogValuesToSource();
-    closeChdConfigDialog();
-    runAnalysis();
+    const started = await runAnalysis();
+    if (started) {
+      closeChdConfigDialog();
+    }
   });
   els.releaseAccessBtn.addEventListener("click", releaseAccess);
   window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
