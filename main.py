@@ -237,7 +237,11 @@ def build_sidebar_notes() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title=APP_NAME, page_icon="🎙️", layout="centered")
+    st.set_page_config(page_title=APP_NAME, layout="centered")
+    st.markdown(
+        '<link rel="icon" href="data:,">',
+        unsafe_allow_html=True,
+    )
     # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
     # Variables a modifier dans Coolify si besoin :
     # - REDIS_URL
