@@ -19,6 +19,7 @@
 
         <nav class="top-nav" aria-label="Navigation principale">
           <button class="nav-link is-active" data-panel-target="analyse" type="button">Analyse</button>
+          <button class="nav-link" data-panel-target="chd" type="button">CHD</button>
           <button class="nav-link" data-panel-target="afc" type="button">AFC</button>
           <button class="nav-link" data-panel-target="ner" type="button">NER</button>
           <button class="nav-link" data-panel-target="corpus" type="button">Corpus</button>
@@ -47,194 +48,226 @@
             </button>
             <p id="accessMessage" class="muted sidebar-note"></p>
 
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">Paramètres CHD</p>
-              <div class="form-grid form-grid--single">
-                <label>
-                  Mode de découpage
-                  <select id="modeDecoupage">
-                    <option value="segment_size" selected>segment_size</option>
-                    <option value="ponctuation">ponctuation</option>
-                  </select>
-                </label>
-                <label>
-                  segment_size
-                  <input id="segmentSize" type="number" min="5" max="500" step="1" value="40" />
-                </label>
-                <label>
-                  k (nombre de classes)
-                  <input id="kValue" type="number" min="2" max="20" step="1" value="3" />
-                </label>
-                <label>
-                  Nombre minimal de termes par segment
-                  <input id="minSegmentSize" type="number" min="1" max="200" step="1" value="10" />
-                </label>
-                <label>
-                  Effectif minimal pour scinder une classe
-                  <input id="minSplitSegments" type="number" min="1" max="200" step="1" value="10" />
-                </label>
-                <label>
-                  Fréquence minimale des termes
-                  <input id="minDocfreq" type="number" min="1" max="50" step="1" value="3" />
-                </label>
-                <label>
-                  max_p (p-value)
-                  <input id="maxP" type="number" min="0" max="1" step="0.01" value="0.05" />
-                </label>
-              </div>
-            </div>
-
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">Dictionnaire spaCy</p>
-              <div class="form-grid form-grid--single">
-                <label>
-                  Langue du corpus
-                  <select id="spacyLangue">
-                    <option value="fr" selected>Français</option>
-                    <option value="en">Anglais</option>
-                    <option value="es">Espagnol</option>
-                  </select>
-                </label>
-                <p class="muted sidebar-note">
-                  Ce choix pilote spaCy, les stopwords et le NER.
-                </p>
-              </div>
-            </div>
-
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">Classification</p>
-              <div class="form-grid form-grid--single">
-                <label>
-                  Type de classification
-                  <select id="typeClassification">
-                    <option value="simple" selected>Classification simple (rainette)</option>
-                    <option value="double">Classification double (rainette2)</option>
-                  </select>
-                </label>
-                <div id="doubleClassificationOptions" class="stacked-fields" hidden>
+            <div id="chdConfigSources" class="config-source-deck" hidden>
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">CHD</p>
+                    <h3>Paramètres CHD</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
                   <label>
-                    min_segment_size (classification 2)
-                    <input id="minSegmentSize2" type="number" min="1" max="200" step="1" value="15" />
+                    Mode de découpage
+                    <select id="modeDecoupage">
+                      <option value="segment_size" selected>segment_size</option>
+                      <option value="ponctuation">ponctuation</option>
+                    </select>
                   </label>
                   <label>
-                    max_k (rainette2)
-                    <input id="maxKDouble" type="number" min="2" max="20" step="1" value="8" />
+                    segment_size
+                    <input id="segmentSize" type="number" min="5" max="500" step="1" value="40" />
+                  </label>
+                  <label>
+                    k (nombre de classes)
+                    <input id="kValue" type="number" min="2" max="20" step="1" value="3" />
+                  </label>
+                  <label>
+                    Nombre minimal de termes par segment
+                    <input id="minSegmentSize" type="number" min="1" max="200" step="1" value="10" />
+                  </label>
+                  <label>
+                    Effectif minimal pour scinder une classe
+                    <input id="minSplitSegments" type="number" min="1" max="200" step="1" value="10" />
+                  </label>
+                  <label>
+                    Fréquence minimale des termes
+                    <input id="minDocfreq" type="number" min="1" max="50" step="1" value="3" />
+                  </label>
+                  <label>
+                    max_p (p-value)
+                    <input id="maxP" type="number" min="0" max="1" step="0.01" value="0.05" />
                   </label>
                 </div>
-              </div>
-            </div>
+              </article>
 
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">Nettoyage</p>
-              <div class="form-grid form-grid--single">
-                <label class="checkbox-row">
-                  <input id="nettoyageCaracteres" type="checkbox" />
-                  <span>Nettoyage caractères (regex)</span>
-                </label>
-                <label class="checkbox-row">
-                  <input id="supprimerPonctuation" type="checkbox" />
-                  <span>Supprimer la ponctuation</span>
-                </label>
-                <label class="checkbox-row">
-                  <input id="supprimerChiffres" type="checkbox" />
-                  <span>Supprimer les chiffres</span>
-                </label>
-                <label class="checkbox-row">
-                  <input id="supprimerApostrophes" type="checkbox" />
-                  <span>Traiter les élisions françaises</span>
-                </label>
-                <label class="checkbox-row">
-                  <input id="forcerMinusculesAvant" type="checkbox" />
-                  <span>Forcer les minuscules avant traitement</span>
-                </label>
-                <label class="checkbox-row">
-                  <input id="retirerStopwords" type="checkbox" />
-                  <span>Retirer les stopwords (spaCy)</span>
-                </label>
-                <label class="checkbox-row">
-                  <input id="filtrageMorpho" type="checkbox" />
-                  <span>Filtrage morphosyntaxique (spaCy)</span>
-                </label>
-                <div id="posSection" class="stacked-fields" hidden>
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">spaCy</p>
+                    <h3>Dictionnaire spaCy</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
                   <label>
-                    POS à conserver
-                    <select id="uposSelection" multiple size="8">
-                      <option value="ADJ">ADJ</option>
-                      <option value="ADP">ADP</option>
-                      <option value="ADV">ADV</option>
-                      <option value="AUX">AUX</option>
-                      <option value="CCONJ">CCONJ</option>
-                      <option value="DET">DET</option>
-                      <option value="INTJ">INTJ</option>
-                      <option value="NOUN" selected>NOUN</option>
-                      <option value="NUM">NUM</option>
-                      <option value="PART">PART</option>
-                      <option value="PRON">PRON</option>
-                      <option value="PROPN">PROPN</option>
-                      <option value="PUNCT">PUNCT</option>
-                      <option value="SCONJ">SCONJ</option>
-                      <option value="SYM">SYM</option>
-                      <option value="VERB" selected>VERB</option>
-                      <option value="X">X</option>
+                    Langue du corpus
+                    <select id="spacyLangue">
+                      <option value="fr" selected>Français</option>
+                      <option value="en">Anglais</option>
+                      <option value="es">Espagnol</option>
+                    </select>
+                  </label>
+                  <p class="muted sidebar-note">
+                    Ce choix pilote spaCy, les stopwords et le NER.
+                  </p>
+                </div>
+              </article>
+
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">CHD</p>
+                    <h3>Classification</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
+                  <label>
+                    Type de classification
+                    <select id="typeClassification">
+                      <option value="simple" selected>Classification simple (rainette)</option>
+                      <option value="double">Classification double (rainette2)</option>
+                    </select>
+                  </label>
+                  <div id="doubleClassificationOptions" class="stacked-fields" hidden>
+                    <label>
+                      min_segment_size (classification 2)
+                      <input id="minSegmentSize2" type="number" min="1" max="200" step="1" value="15" />
+                    </label>
+                    <label>
+                      max_k (rainette2)
+                      <input id="maxKDouble" type="number" min="2" max="20" step="1" value="8" />
+                    </label>
+                  </div>
+                </div>
+              </article>
+
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">Texte</p>
+                    <h3>Nettoyage</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
+                  <label class="checkbox-row">
+                    <input id="nettoyageCaracteres" type="checkbox" />
+                    <span>Nettoyage caractères (regex)</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="supprimerPonctuation" type="checkbox" />
+                    <span>Supprimer la ponctuation</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="supprimerChiffres" type="checkbox" />
+                    <span>Supprimer les chiffres</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="supprimerApostrophes" type="checkbox" />
+                    <span>Traiter les élisions françaises</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="forcerMinusculesAvant" type="checkbox" />
+                    <span>Forcer les minuscules avant traitement</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="retirerStopwords" type="checkbox" />
+                    <span>Retirer les stopwords (spaCy)</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="filtrageMorpho" type="checkbox" />
+                    <span>Filtrage morphosyntaxique (spaCy)</span>
+                  </label>
+                  <div id="posSection" class="stacked-fields" hidden>
+                    <label>
+                      POS à conserver
+                      <select id="uposSelection" multiple size="8">
+                        <option value="ADJ">ADJ</option>
+                        <option value="ADP">ADP</option>
+                        <option value="ADV">ADV</option>
+                        <option value="AUX">AUX</option>
+                        <option value="CCONJ">CCONJ</option>
+                        <option value="DET">DET</option>
+                        <option value="INTJ">INTJ</option>
+                        <option value="NOUN" selected>NOUN</option>
+                        <option value="NUM">NUM</option>
+                        <option value="PART">PART</option>
+                        <option value="PRON">PRON</option>
+                        <option value="PROPN">PROPN</option>
+                        <option value="PUNCT">PUNCT</option>
+                        <option value="SCONJ">SCONJ</option>
+                        <option value="SYM">SYM</option>
+                        <option value="VERB" selected>VERB</option>
+                        <option value="X">X</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label class="checkbox-row">
+                    <input id="spacyUtiliserLemmes" type="checkbox" />
+                    <span>Lemmatisation (spaCy)</span>
+                  </label>
+                </div>
+              </article>
+
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">spaCy / NER</p>
+                    <h3>spaCy / NER</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
+                  <label class="checkbox-row">
+                    <input id="activerNer" type="checkbox" />
+                    <span>Activer NER (spaCy)</span>
+                  </label>
+                </div>
+              </article>
+
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">AFC</p>
+                    <h3>AFC</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
+                  <label class="checkbox-row">
+                    <input id="afcReduireChevauchement" type="checkbox" />
+                    <span>Réduire les chevauchements des mots</span>
+                  </label>
+                  <label>
+                    Taille des mots (AFC termes)
+                    <select id="afcTailleMots">
+                      <option value="frequency" selected>Fréquence</option>
+                      <option value="chi2">Chi2</option>
                     </select>
                   </label>
                 </div>
-                <label class="checkbox-row">
-                  <input id="spacyUtiliserLemmes" type="checkbox" />
-                  <span>Lemmatisation (spaCy)</span>
-                </label>
-              </div>
-            </div>
+              </article>
 
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">spaCy / NER</p>
-              <div class="form-grid form-grid--single">
-                <label class="checkbox-row">
-                  <input id="activerNer" type="checkbox" />
-                  <span>Activer NER (spaCy)</span>
-                </label>
-              </div>
+              <article class="card section-card" data-chd-config-source>
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">Cooccurrences</p>
+                    <h3>Cooccurrences</h3>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--single">
+                  <label>
+                    top_n (wordcloud)
+                    <input id="topN" type="number" min="5" max="150" step="1" value="20" />
+                  </label>
+                  <label>
+                    window (cooccurrences)
+                    <input id="windowCooc" type="number" min="1" max="20" step="1" value="5" />
+                  </label>
+                  <label>
+                    top_feat (cooccurrences)
+                    <input id="topFeat" type="number" min="5" max="150" step="1" value="20" />
+                  </label>
+                </div>
+              </article>
             </div>
-
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">AFC</p>
-              <div class="form-grid form-grid--single">
-                <label class="checkbox-row">
-                  <input id="afcReduireChevauchement" type="checkbox" />
-                  <span>Réduire les chevauchements des mots</span>
-                </label>
-                <label>
-                  Taille des mots (AFC termes)
-                  <select id="afcTailleMots">
-                    <option value="frequency" selected>Fréquence</option>
-                    <option value="chi2">Chi2</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div class="sidebar-section">
-              <p class="sidebar-kicker">Cooccurrences</p>
-              <div class="form-grid form-grid--single">
-                <label>
-                  top_n (wordcloud)
-                  <input id="topN" type="number" min="5" max="150" step="1" value="20" />
-                </label>
-                <label>
-                  window (cooccurrences)
-                  <input id="windowCooc" type="number" min="1" max="20" step="1" value="5" />
-                </label>
-                <label>
-                  top_feat (cooccurrences)
-                  <input id="topFeat" type="number" min="5" max="150" step="1" value="20" />
-                </label>
-              </div>
-            </div>
-
-            <button id="runAnalysisBtn" class="primary-button primary-button--launch" type="button">
-              Lancer l’analyse CHD Rainette
-            </button>
-            <p id="runStatus" class="muted sidebar-note"></p>
 
             <section class="sidebar-history-block" aria-labelledby="analysisHistoryTitle">
               <p id="analysisHistoryTitle" class="sidebar-kicker">Analyses lancées</p>
@@ -250,30 +283,102 @@
             <div class="page-heading">
               <div>
                 <p class="section-kicker">Analyse</p>
-                <h2>Suivi de l’analyse</h2>
+                <h2>Préparer l’analyse</h2>
               </div>
             </div>
 
-            <div class="metrics-grid">
-              <article class="metric-card">
-                <span class="metric-label">Documents importés</span>
-                <strong id="metricDocs">—</strong>
+            <div class="section-stack">
+              <article class="card section-card">
+                <div class="section-head">
+                  <div>
+                    <p class="card-kicker">Parcours</p>
+                    <h3>Ouvrir ensuite l’onglet CHD</h3>
+                  </div>
+                  <button class="secondary-button" type="button" data-panel-shortcut="chd">
+                    Aller à l'onglet CHD
+                  </button>
+                </div>
+                <p class="section-copy">
+                  Importez votre corpus dans la colonne de gauche, puis utilisez l’onglet CHD pour ouvrir la boîte
+                  de dialogue de paramétrage et lancer l’analyse.
+                </p>
               </article>
-              <article class="metric-card">
-                <span class="metric-label">Segments créés</span>
-                <strong id="metricSegments">—</strong>
+
+              <article class="card">
+                <h3>Logique de l’interface</h3>
+                <p class="section-copy">
+                  L’onglet Analyse sert d’accueil. Le pilotage de la CHD, la progression du calcul et le journal
+                  détaillé sont regroupés dans l’onglet CHD, dans l’esprit d’IRaMuTeQ Lite.
+                </p>
               </article>
-              <article class="metric-card">
-                <span class="metric-label">Segments analysés</span>
-                <strong id="metricAnalyzed">—</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Classes</span>
-                <strong id="metricClasses">—</strong>
-              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="chd" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">CHD</p>
+                <h2>Résultats CHD</h2>
+              </div>
             </div>
 
             <div class="section-stack">
+              <article class="card section-card section-card--highlight">
+                <div class="section-head section-head--hero">
+                  <div>
+                    <p class="card-kicker">Pilotage CHD</p>
+                    <h3>Paramétrer et lancer la CHD</h3>
+                  </div>
+                  <button class="primary-button primary-button--inline" type="button" data-open-chd-dialog>
+                    Paramètres de la CHD
+                  </button>
+                </div>
+                <p class="section-copy">
+                  Comme dans IRaMuTeQ Lite, le bouton à droite ouvre une boîte de dialogue dédiée pour régler la CHD
+                  avant le lancement du calcul.
+                </p>
+                <p id="runStatus" class="muted chd-run-note">
+                  Importez un corpus puis cliquez sur « Paramètres de la CHD » pour ouvrir la boîte de dialogue.
+                </p>
+              </article>
+
+              <div class="chd-control-grid">
+                <article class="card">
+                  <h3>Progression</h3>
+                  <div class="progress-wrap">
+                    <progress id="progress" max="100" value="0"></progress>
+                    <span id="progressLabel">0%</span>
+                  </div>
+                  <p id="statusMessage" class="muted chd-status-note">
+                    Importez un corpus puis ouvrez la fenêtre de paramétrage pour lancer l’analyse.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <h3>Logs</h3>
+                  <pre id="logs" class="logs">[info] Prêt.</pre>
+                </article>
+              </div>
+
+              <div class="metrics-grid">
+                <article class="metric-card">
+                  <span class="metric-label">Documents importés</span>
+                  <strong id="metricDocs">—</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Segments créés</span>
+                  <strong id="metricSegments">—</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Segments analysés</span>
+                  <strong id="metricAnalyzed">—</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Classes</span>
+                  <strong id="metricClasses">—</strong>
+                </article>
+              </div>
+
               <article class="card">
                 <h3>Résumé des classes</h3>
                 <div id="summaryTable" class="result-pane"></div>
@@ -282,20 +387,6 @@
               <article class="card">
                 <h3>Statistiques discriminantes</h3>
                 <div id="detailTable" class="result-pane"></div>
-              </article>
-
-              <article class="card">
-                <h3>Progression</h3>
-                <div class="progress-wrap">
-                  <progress id="progress" max="100" value="0"></progress>
-                  <span id="progressLabel">0%</span>
-                </div>
-                <p id="statusMessage" class="muted"></p>
-              </article>
-
-              <article class="card">
-                <h3>Logs</h3>
-                <pre id="logs" class="logs">[info] Prêt.</pre>
               </article>
             </div>
           </section>
@@ -531,12 +622,12 @@
                   interface web locale au conteneur pour éviter la dépendance à Shiny côté utilisateur.
                 </p>
                 <p>
-                  Les blocs latéraux couvrent maintenant les paramètres CHD, les choix spaCy, la classification simple ou double,
-                  le nettoyage, le NER, l’AFC et les cooccurrences.
+                  Les paramètres CHD, les choix spaCy, la classification simple ou double, le nettoyage, le NER,
+                  l’AFC et les cooccurrences sont maintenant regroupés dans une fenêtre de paramétrage dédiée.
                 </p>
                 <p>
                   L’onglet <strong>Explorateur</strong> reste le point d’entrée pour le graphe CHD interactif, tandis que
-                  <strong>Exports</strong> regroupe le ZIP global et les ZIP catégorisés.
+                  <strong>Exports</strong> regroupe le ZIP global.
                 </p>
               </article>
 
@@ -560,6 +651,22 @@
         </main>
       </div>
     </div>
+
+    <dialog id="chdConfigDialog" class="dialog-panel">
+      <form method="dialog" class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Paramétrage</p>
+            <h2>Paramètres de l'analyse CHD</h2>
+          </div>
+        </header>
+        <div id="chdConfigDialogContent" class="dialog-body"></div>
+        <footer class="dialog-footer">
+          <button id="closeChdDialogBtn" class="secondary-button" type="button">Fermer</button>
+          <button id="launchChdDialogBtn" class="primary-button primary-button--inline" type="button">Lancer la CHD</button>
+        </footer>
+      </form>
+    </dialog>
 
     <script type="module" src="./app.js"></script>
   </body>
