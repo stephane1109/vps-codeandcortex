@@ -39,6 +39,8 @@ const els = {
   explorerShinyFrame: document.getElementById("explorerShinyFrame"),
   explorerShinyPlaceholder: document.getElementById("explorerShinyPlaceholder"),
   explorerShinyReloadBtn: document.getElementById("explorerShinyReloadBtn"),
+  explorerStaticPlaceholder: document.getElementById("explorerStaticPlaceholder"),
+  explorerStaticPlot: document.getElementById("explorerStaticPlot"),
   plotPlaceholder: document.getElementById("plotPlaceholder"),
   explorerPlot: document.getElementById("explorerPlot"),
   explorerK: document.getElementById("explorerK"),
@@ -517,6 +519,10 @@ function explorerFallbackArtifact(result) {
     || artifactByRelativePath(artifacts, "rainette_plot.png")
     || null
   );
+}
+
+function explorerPlotUrl(jobId) {
+  return `/api/jobs/${encodeURIComponent(jobId)}/explorer/plot?${explorerPlotParams().toString()}&ts=${Date.now()}`;
 }
 
 function tableFromRows(rows) {
@@ -1224,11 +1230,34 @@ function renderNer(nerPayload) {
 
 function renderChd(result) {
   const artifact = explorerFallbackArtifact(result);
+  const jobId = result?.jobId || state.currentJobId || state.history[0]?.jobId || "";
+  const dynamicArtifact = jobId ? { downloadUrl: explorerPlotUrl(jobId) } : null;
   showImage(
     els.explorerPlot,
     els.plotPlaceholder,
-    artifact,
+    dynamicArtifact || artifact,
     "Aucun graphe CHD disponible pour cette analyse.",
+  );
+}
+
+function renderExplorerStaticPlot() {
+  if (!state.currentResult) {
+    showImage(
+      els.explorerStaticPlot,
+      els.explorerStaticPlaceholder,
+      null,
+      "Lancez une analyse pour afficher le graphe Rainette.",
+    );
+    return;
+  }
+
+  const jobId = state.currentResult.jobId || state.currentJobId || state.history[0]?.jobId || "";
+  const artifact = jobId ? { downloadUrl: explorerPlotUrl(jobId) } : explorerFallbackArtifact(state.currentResult);
+  showImage(
+    els.explorerStaticPlot,
+    els.explorerStaticPlaceholder,
+    artifact,
+    "Aucun graphe Rainette disponible pour cette analyse.",
   );
 }
 
@@ -1245,6 +1274,7 @@ function renderResult(result) {
   renderAfc(result.afc || {});
   renderNer(result.ner || {});
   configureExplorer(metadata);
+  renderExplorerStaticPlot();
   refreshExplorer();
 }
 
@@ -1262,6 +1292,12 @@ function configureExplorer(metadata) {
 
 async function refreshExplorer() {
   if (!state.currentResult) {
+    showImage(
+      els.explorerStaticPlot,
+      els.explorerStaticPlaceholder,
+      null,
+      "Lancez une analyse pour afficher le graphe Rainette.",
+    );
     if (els.explorerShinyFrame) {
       els.explorerShinyFrame.hidden = true;
       els.explorerShinyFrame.removeAttribute("src");
@@ -1276,6 +1312,7 @@ async function refreshExplorer() {
   if (!jobId) {
     return;
   }
+  renderExplorerStaticPlot();
   if (!els.explorerShinyFrame || !els.explorerShinyPlaceholder) {
     return;
   }
