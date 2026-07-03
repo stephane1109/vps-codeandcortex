@@ -244,6 +244,10 @@ input[type="checkbox"] {
   margin-top: 1rem;
 }
 
+.primary-button--inline {
+  width: auto;
+}
+
 .secondary-button {
   background: rgba(15, 23, 42, 0.08);
   color: var(--ink);
@@ -322,9 +326,43 @@ input[type="checkbox"] {
   font-size: 0.88rem;
 }
 
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-head--hero {
+  align-items: center;
+}
+
+.card-kicker,
+.dialog-kicker {
+  margin: 0 0 0.2rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.section-copy {
+  margin: 0.85rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .section-stack {
   display: grid;
   gap: 1rem;
+}
+
+.section-card--highlight {
+  border-color: rgba(207, 111, 45, 0.18);
+  background:
+    linear-gradient(135deg, rgba(207, 111, 45, 0.08), rgba(255, 255, 255, 0.96) 45%),
+    var(--panel);
 }
 
 .card {
@@ -383,6 +421,73 @@ progress {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.chd-control-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.chd-status-note {
+  margin-top: 0.85rem;
+}
+
+.chd-run-note {
+  margin: 0.9rem 0 0;
+}
+
+.config-source-deck[hidden] {
+  display: none !important;
+}
+
+.dialog-panel {
+  width: min(1120px, calc(100vw - 2rem));
+  max-width: 1120px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.dialog-panel::backdrop {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.dialog-card {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 1.2rem;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: rgba(248, 250, 252, 0.98);
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.24);
+}
+
+.dialog-header h2 {
+  margin: 0;
+}
+
+.dialog-body {
+  display: grid;
+  gap: 1rem;
+  max-height: 72vh;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.dialog-body .card {
+  padding: 1rem;
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
 }
 
 .visual-plot {
@@ -607,6 +712,12 @@ progress {
     grid-template-columns: 1fr;
   }
 
+  .section-head,
+  .dialog-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .card--plot {
     min-height: 40rem;
   }
@@ -623,6 +734,10 @@ progress {
 
 @media (max-width: 720px) {
   .app-shell {
+    width: min(100vw - 1rem, 100%);
+  }
+
+  .dialog-panel {
     width: min(100vw - 1rem, 100%);
   }
 
