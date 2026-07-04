@@ -291,7 +291,6 @@ register_events_lancer <- function(input, output, session, rv) {
           idx_ok <- !is.na(docvars(filtered_corpus)$Classes)
           filtered_corpus_ok <- filtered_corpus[idx_ok]
           dfm_ok <- dfm_obj[idx_ok, ]
-          tok_ok <- tok[idx_ok]
 
           if (ndoc(dfm_ok) < 2) stop("Après classification, il reste moins de 2 segments classés (hors NA).")
           if (nfeat(dfm_ok) < 2) stop("Après classification, le DFM classé est trop pauvre (moins de 2 termes).")
@@ -502,8 +501,6 @@ register_events_lancer <- function(input, output, session, rv) {
 
           wordcloud_dir <- file.path(rv$export_dir, "wordclouds")
           dir.create(wordcloud_dir, showWarnings = FALSE, recursive = TRUE)
-          cooc_dir <- file.path(rv$export_dir, "cooccurrences")
-          dir.create(cooc_dir, showWarnings = FALSE, recursive = TRUE)
 
           classes_uniques <- sort(unique(as.integer(docvars(filtered_corpus_ok)$Classes)))
           top_n_demande <- suppressWarnings(as.integer(input$top_n))
@@ -558,45 +555,6 @@ register_events_lancer <- function(input, output, session, rv) {
                 ajouter_log(rv, paste0("Wordcloud classe ", cl, " ignoré : aucun terme positif exploitable."))
               }
             }
-
-            tok_cl <- tok_ok[docvars(filtered_corpus_ok)$Classes == cl]
-            cooc_png <- file.path(cooc_dir, paste0("cluster_", cl, "_fcm_network.png"))
-
-            try({
-              if (length(tok_cl) > 0) {
-                fcm_cl <- fcm(tok_cl, context = "window", window = max(1, as.integer(input$window_cooc)), tri = FALSE)
-                term_freq <- sort(colSums(fcm_cl), decreasing = TRUE)
-                top_feat_demande <- suppressWarnings(as.integer(input$top_feat))
-                if (!is.finite(top_feat_demande) || is.na(top_feat_demande)) top_feat_demande <- 20L
-                top_feat_demande <- max(5L, top_feat_demande)
-
-                # On borne aussi par top_n pour garder une cohérence entre nuage de mots et graphe de cooccurrences.
-                top_feat_effectif <- min(top_feat_demande, top_n_demande)
-                feat_sel <- names(term_freq)[seq_len(min(top_feat_effectif, length(term_freq)))]
-                fcm_cl <- fcm_select(fcm_cl, feat_sel, selection = "keep")
-
-                adj <- as.matrix(fcm_cl)
-                g <- graph_from_adjacency_matrix(adj, mode = "undirected", weighted = TRUE, diag = FALSE)
-
-                num_nodes <- length(V(g))
-                palette_colors <- brewer.pal(min(8, num_nodes), "Set3")
-                V(g)$color <- palette_colors[seq_along(V(g))]
-
-                png(cooc_png, width = 1600, height = 1200)
-                plot(
-                  g,
-                  layout = layout_with_fr(g),
-                  main = paste("Cooccurrences - Classe", cl),
-                  vertex.size = 16,
-                  vertex.color = V(g)$color,
-                  vertex.label = V(g)$name,
-                  vertex.label.cex = 1,
-                  edge.width = E(g)$weight / 2,
-                  edge.color = "gray80"
-                )
-                dev.off()
-              }
-            }, silent = TRUE)
           }
 
           explor_assets <- NULL
@@ -627,24 +585,10 @@ register_events_lancer <- function(input, output, session, rv) {
             wordclouds_df <- data.frame(classe = character(0), src = character(0), stringsAsFactors = FALSE)
           }
 
-          cooc_files <- list.files(cooc_dir, pattern = "\\.png$", full.names = FALSE)
-          if (length(cooc_files) > 0) {
-            cooc_classes <- gsub("^cluster_([0-9]+)_fcm_network\\.png$", "\\1", cooc_files)
-            coocs_df <- data.frame(
-              classe = cooc_classes,
-              src = file.path("cooccurrences", cooc_files),
-              stringsAsFactors = FALSE
-            )
-            coocs_df <- coocs_df[order(suppressWarnings(as.integer(coocs_df$classe))), , drop = FALSE]
-          } else {
-            coocs_df <- data.frame(classe = character(0), src = character(0), stringsAsFactors = FALSE)
-          }
-
           explor_assets <- list(
             chd = chd_png_rel,
             chd_html = chd_html_rel,
-            wordclouds = wordclouds_df,
-            coocs = coocs_df
+            wordclouds = wordclouds_df
           )
           rv$explor_assets <- explor_assets
 

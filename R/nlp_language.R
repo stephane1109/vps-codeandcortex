@@ -97,12 +97,3 @@ verifier_coherence_dictionnaire_langue <- function(textes, langue_selectionnee, 
 
   invisible(est)
 }
-
-# Compatibilité avec les anciens appels internes du projet.
-configurer_langue_spacy <- function(langue) {
-  configurer_langue_corpus(langue)
-}
-
-obtenir_stopwords_spacy <- function(langue_spacy = "fr", rv = NULL) {
-  obtenir_stopwords_quanteda(langue = langue_spacy, rv = rv)
-}

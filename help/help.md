@@ -1,80 +1,54 @@
-### codeandcortex.fr - Stéphane Meurisse - version beta 0.3 - 12-02-2026
+### codeandcortex.fr - CHD Rainette
+
 - <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">codeandcortex.fr</a>
 - <a href="https://www.codeandcortex.fr/comprendre-chd-methode-reinert/" target="_blank" rel="noopener noreferrer">Comprendre la CHD</a>
+- <a href="https://cran.r-project.org/web/packages/rainette/vignettes/introduction_usage.html" target="_blank" rel="noopener noreferrer">Documentation officielle Rainette</a>
 
+### Base de cette reconstruction
 
-### IRaMuTeQ
-IRaMuTeQ, développé par Pierre Ratinaud, est un logiciel libre devenu une référence pour l’analyse textuelle en sciences humaines et sociales. Il met en œuvre la méthode de Reinert (CHD), l’AFC, ainsi que l’analyse de similitudes de Vergès, et propose de nombreux traitements complémentaires pour explorer la structure lexicale d’un corpus. Un atout est son dictionnaire de lemmes, plus précis et performant que beaucoup d’alternatives, ce qui améliore la stabilité des classes.
+Cette application VPS repart du script source historique `chdrainette` :
 
+- import IRaMuTeQ
+- découpage du corpus
+- DFM `quanteda`
+- CHD `rainette`
+- statistiques discriminantes
+- nuages de mots
+- concordancier HTML
+- exports CSV / TXT / ZIP
 
-### Méthode Reinert - CHD
+### Ce qui a été volontairement retiré
 
-La méthode de Reinert est une approche statistique d’analyse lexicale conçue pour dégager des « mondes lexicaux » dans un corpus. 
-L’idée est de repérer des ensembles de segments de texte qui partagent des vocabulaires proches. 
+- spaCy
+- reticulate
+- NER
+- cooccurrences
 
-La CHD, pour "classification hiérarchique descendante", est l’algorithme de partitionnement associé à cette méthode. 
-Il procède par divisions successives : on prend l’ensemble des segments, puis on le coupe en deux groupes maximisant leur différenciation lexicale. 
-Ensuite, chaque groupe peut être à nouveau subdivisé, et ainsi de suite, jusqu’à obtenir un nombre de classes jugé pertinent ou une limite imposée par les paramètres.
+L'objectif est d'avoir une base plus robuste et plus simple à déployer sur le VPS.
 
+### Paramètres principaux
 
-### Rainette développé par Julien Barnier
+- **Mode de découpage** : `segment_size` ou `ponctuation`
+- **segment_size** : taille des segments avant analyse
+- **k** : nombre de classes demandé
+- **min_segment_size** : taille minimale d'un segment pour Rainette
+- **min_split_members** : effectif minimal pour continuer à scinder une classe
+- **min_docfreq** : fréquence documentaire minimale des termes
+- **max_p** : seuil de p-value pour les termes discriminants
+- **top_n** : nombre de termes affichés dans les nuages de mots
 
-Rainette est un package R qui réalise une CHD selon la méthode Reinert.
-- <a href="https://github.com/juba/rainette/blob/main/vignettes/introduction_usage.Rmd" target="_blank" rel="noopener noreferrer">Doc Rainette</a>
-- <a href="https://cran.r-project.org/web/packages/rainette/vignettes/introduction_usage.html" target="_blank" rel="noopener noreferrer">Utilisation de rainette</a>
-- <a href="https://juba.r-universe.dev/builds" target="_blank" rel="noopener noreferrer">Builds r-universe</a>
+### Langue et stopwords
 
+Le choix de langue sert à :
 
-### Pourquoi vos fichiers peuvent disparaître sur Hugging Face
+- estimer grossièrement la langue du corpus
+- charger les stopwords `quanteda`
 
-Sur Hugging Face Spaces, le stockage local de ce conteneur est temporaire : si le serveur redémarre, ou si la page est rechargée après une déconnexion, les fichiers générés pendant une analyse précédente peuvent ne plus être disponibles.
+### À propos de `rainette_explor()`
 
-Conseil : télécharge l’archive ZIP des exports juste après la fin de l’analyse.
+La doc officielle présente `rainette_explor()` comme un **gadget Shiny**. Dans cette version VPS :
 
-
-# Logique générale de l’application
-
-Uploadez un fichier texte au format IRaMuTeQ. L’app segmente, construit une matrice termes-documents (DTM), lance la CHD avec rainette, calcule les statistiques, génère un HTML surligné (concordancier), puis produit la CHD, l’AFC, les nuages de mots et les réseaux de cooccurrences. L’onglet d’exploration (Explore_rainette) permet de visualiser la CHD.
-
-### Choix de la langue du corpus
-
-Vous avez le choix entre le français, l’anglais et l’espagnol. Ce choix sert à comparer la langue estimée du corpus avec la langue sélectionnée, et à charger la bonne liste de stopwords via quanteda.
-
-### Paramètres de l’analyse
-
-- **segment_size** : taille des segments lors du découpage du corpus. Plus petit donne plus de segments, plus grand donne des segments plus longs.
-- **k (nombre de classes)** : nombre de classes demandé pour la CHD.
-- Nombre minimal de termes par segment : **min_segment_size** : Lors de la tokenisation et du calcul de la dtm, certaines formes (mots-outils, mots trop peu fréquents) ont été supprimées, les segments peuvent donc varier en taille. 
-Avec `min_segment_size = 10`, les segments comportant moins de 10 formes sont regroupés avec le segment suivant ou précédent du même document jusqu'à atteindre la taille minimale souhaitée.
-- Effectif minimal pour scinder une classe : **min_split_members**. Nombre minimal de documents pour qu'une classe soit scindée en deux à l'étape suivante de la classification.
-- Fréquence minimale des termes : **dfm_trim min_docfreq** : fréquence minimale en nombre de segments pour conserver un terme dans le DFM. Plus "haut" enlève les termes rares. Par exemple si vous `dfm_trim = 3` cela supprime de la matrice les termes apparaissant dans moins de 3 segments.
-- **max_p (p-value)** : seuil de p-value pour filtrer les termes mis en avant dans les statistiques.
-- **top_n (wordcloud)** : nombre de termes affichés dans chaque nuage de mots.
-- **window (cooccurrences)** : taille de la fenêtre glissante pour calculer les cooccurrences.
-- **top_feat (cooccurrences)** : nombre de termes retenus pour construire le réseau de cooccurrences.
-
-### Classification double (rainette2)
-
-- **Classification double** : l’application combine deux classifications rainette (res1 et res2) via rainette2, puis découpe l’arbre final avec k.
-
-### Stopwords quanteda
-
-- **Retirer les stopwords** : enlève les mots-outils les plus fréquents à partir des listes de stopwords fournies par quanteda, selon la langue sélectionnée.
-
-### Exploration "Explore_rainette"
-
-- **Classe** : sélection de la classe pour afficher les images et la table de statistiques associées.
-- **CHD** : affichage graphique de la CHD dans l’application.
-- **Type** : bar (barres) ou cloud (nuage) pour l’affichage des termes par classe.
-- **Statistiques** : chi2, lr, frequency, selon le critère utilisé pour classer les termes.
-- Dans les exports CSV de type (`measure = "chi2"`), les colonnes suivantes sont importantes :
-  - **`n_target`** : nombre d’occurrences du terme dans la classe/cluster analysé.
-  - **`n_reference`** : nombre d’occurrences du même terme dans (tout) le corpus de référence (le reste des classes).
-  - **`chi2`** et **`p`** : test d’association entre cible et référence ; plus `chi2` est élevé et `p` petite, plus le terme est spécifiquement lié à la classe.
-- **Nombre de termes** : nombre de termes affichés par classe dans la visualisation.
-- **Afficher les valeurs négatives** : inclut les termes négativement associés à une classe.
-
-### Mise à jour automatique de rainette
-
-- **AUTO_UPDATE_RAINETTE** : par défaut (`AUTO_UPDATE_RAINETTE=true`), l’application tente `install.packages("rainette")` au démarrage du conteneur avant de lancer Shiny.
-- Pour désactiver ce comportement, définir `AUTO_UPDATE_RAINETTE=false`. La mise à jour automatique peut rallonger le temps de démarrage et dépend de la disponibilité réseau/CRAN.
+- la CHD est affichée dans l'application avec `rainette_plot()`
+- le vrai gadget n'est pas injecté dans l'interface serveur
+- un fichier `analysis_bundle.rds` est exporté
+- un script `ouvrir_rainette_explor.R` est fourni pour ouvrir le vrai gadget dans une session R locale

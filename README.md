@@ -1,47 +1,40 @@
 # CHD Rainette
 
-Refonte VPS de l'application `chdrainette`.
+Reconstruction VPS de `chdrainette` à partir du script source historique.
 
-Cette version démarre comme une vraie application **Shiny** et utilise le
-package **{bslib}** pour l'interface.
+## Principe
 
-## Architecture actuelle
+Cette version repart du script d'origine et garde un noyau volontairement simple :
 
-- application Shiny native (`app.R`, `ui.R`, `start.R`)
-- interface `bslib` avec sidebar, onglets, métriques, logs et exports
-- pipeline CHD / AFC / concordancier en R
-- gestion des stopwords par `quanteda`
-- Docker basé sur `rocker/r2u:jammy`
-
-## Options conservées
-
-- import d'un corpus texte compatible IRaMuTeQ
-- découpage par taille fixe ou par ponctuation
-- `k` (nombre de classes)
-- `min_segment_size`
-- `min_split_members`
-- `min_docfreq`
-- `max_p`
-- classification simple `rainette` ou double `rainette2`
-- nettoyage du corpus
+- import d'un corpus texte au format IRaMuTeQ
+- découpage en segments
+- nettoyage texte
 - stopwords `quanteda`
-- AFC classes / termes / variables étoilées
-- nuages de mots et cooccurrences
-- exports globaux, segments, stats, HTML et AFC
-- exploration Rainette après calcul
+- calcul CHD avec `rainette`
+- statistiques par classe
+- nuages de mots par classe
+- concordancier HTML
+- exports texte / CSV / ZIP
+- bundle `.rds` pour réouvrir le vrai `rainette_explor()` en local
+
+## Ce qui a été retiré
+
+- toute la couche `spaCy`
+- tout le pipeline `reticulate`
+- le NER
+- les cooccurrences
+
+## Note sur `rainette_explor`
+
+La documentation officielle de `rainette` présente `rainette_explor()` comme un **gadget Shiny** lancé pour ses effets de bord. Cette app VPS n'essaie donc plus de l'imbriquer dans une seconde interface Shiny serveur. À la place :
+
+- l'application affiche la CHD via `rainette_plot()`
+- elle exporte un bundle `analysis_bundle.rds`
+- elle fournit un script `ouvrir_rainette_explor.R` pour ouvrir le vrai gadget dans une session R locale
 
 ## Variables d'environnement Coolify
 
-### Variables applicatives
-
 - `PORT=8000`
-- `APP_DATA_DIR=/data/app`
-- `CHDRAINETTE_APP_DATA_DIR=/data/app`
-- `CHDRAINETTE_R_LIBS_USER=/data/app/r-library`
-- `CHDRAINETTE_CACHE_DIR=/data/app/cache`
-
-### Variables VPS / tickets
-
 - `REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0`
 - `APP_TICKET_ID=chdrainette`
 - `APP_TICKET_ENFORCED=1`
@@ -54,15 +47,3 @@ package **{bslib}** pour l'interface.
 - `APP_TICKET_HEARTBEAT_MS=300000`
 - `APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release`
 - `APP_TICKET_HIDDEN_RELEASE_SECONDS=300`
-
-## Dépendances de l'image
-
-Le Dockerfile installe :
-
-- `shiny`
-- `bslib`
-- `rainette`
-- `quanteda`
-- `FactoMineR`
-- `wordcloud`
-- les dépendances système R nécessaires au prétraitement et aux exports

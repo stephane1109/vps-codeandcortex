@@ -1,6 +1,6 @@
 # Module CHD/AFC - préparation des données et génération des artefacts CHD
 # Ce fichier centralise les fonctions de préparation DFM/docvars, l'ajustement de `k`,
-# les utilitaires de graphes d'adjacence/cooccurrence, et la génération des exports
+# les utilitaires nécessaires au pipeline CHD/AFC, et la génération des exports
 # CHD (PNG + HTML) afin d'alléger `app.R` sans modifier le comportement existant.
 
 extraire_classes_alignees <- function(corpus_obj, doc_ids, nom_colonne = "Classes") {
