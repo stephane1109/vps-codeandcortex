@@ -275,11 +275,63 @@ ecrire_csv_6_decimales <- function(df, chemin, row.names = FALSE) {
   write.csv(formater_df_csv_6_decimales(df), chemin, row.names = row.names, fileEncoding = "UTF-8")
 }
 
-safe_png <- function(file_path, expr) {
+safe_png <- function(file_path, expr, rv = NULL, label = NULL) {
+  err <- NULL
   grDevices::png(file_path, width = 1800, height = 1400, res = 180)
-  on.exit(try(grDevices::dev.off(), silent = TRUE), add = TRUE)
-  force(expr)
-  invisible(file_path)
+  tryCatch(
+    force(expr),
+    error = function(e) {
+      err <<- conditionMessage(e)
+      try({
+        graphics::plot.new()
+        graphics::text(
+          0.5,
+          0.5,
+          paste0("Export graphique indisponible", if (!is.null(label) && nzchar(label)) paste0(" : ", label) else "", "."),
+          cex = 1.1
+        )
+      }, silent = TRUE)
+    },
+    finally = {
+      try(grDevices::dev.off(), silent = TRUE)
+    }
+  )
+
+  if (!is.null(err) && !is.null(rv)) {
+    ajouter_log(
+      rv,
+      paste0(
+        "Export graphique ignoré",
+        if (!is.null(label) && nzchar(label)) paste0(" (", label, ")") else "",
+        " : ",
+        err
+      )
+    )
+  }
+
+  invisible(is.null(err))
+}
+
+preparer_wordcloud_data <- function(df, term_col, freq_col, top_n = NULL) {
+  if (is.null(df) || !nrow(df)) return(df[0, , drop = FALSE])
+
+  keep <- !is.na(df[[term_col]]) &
+    nzchar(trimws(as.character(df[[term_col]]))) &
+    is.finite(df[[freq_col]]) &
+    as.numeric(df[[freq_col]]) > 0
+
+  out <- df[keep, , drop = FALSE]
+  if (!nrow(out)) return(out)
+
+  out[[term_col]] <- trimws(as.character(out[[term_col]]))
+  out[[freq_col]] <- as.numeric(out[[freq_col]])
+  out <- out[order(-out[[freq_col]], out[[term_col]]), , drop = FALSE]
+
+  if (!is.null(top_n) && is.finite(top_n) && nrow(out) > top_n) {
+    out <- out[seq_len(top_n), , drop = FALSE]
+  }
+
+  out
 }
 
 rv <- new.env(parent = emptyenv())
@@ -395,7 +447,7 @@ tryCatch({
       tok_base = tok_base,
       min_docfreq = min_docfreq,
       retirer_stopwords = retirer_stopwords,
-      langue_spacy = spacy_langue,
+      langue_corpus = spacy_langue,
       rv = rv,
       libelle = "Standard"
     )
@@ -436,7 +488,7 @@ tryCatch({
       tok_base = tok_base,
       min_docfreq = min_docfreq,
       retirer_stopwords = retirer_stopwords,
-      langue_spacy = spacy_langue,
+      langue_corpus = spacy_langue,
       rv = rv,
       libelle = "spaCy"
     )
@@ -594,22 +646,13 @@ tryCatch({
   ecrire_csv_6_decimales(detail_df, detail_file, row.names = FALSE)
   ecrire_csv_6_decimales(detail_df[, intersect(c("Classe", "Terme", "Segment_texte"), names(detail_df)), drop = FALSE], detail_segments_file, row.names = FALSE)
 
-  top_terms_lookup <- split(
-    detail_df %>%
-      filter(!is.na(Classe), !is.na(Terme), nzchar(Terme)) %>%
-      group_by(Classe) %>%
-      arrange(desc(chi2), .by_group = TRUE) %>%
-      slice_head(n = top_n) %>%
-      summarise(termes = list(unique(Terme)), .groups = "drop") %>%
-      pull(termes),
-    detail_df %>%
-      filter(!is.na(Classe), !is.na(Terme), nzchar(Terme)) %>%
-      group_by(Classe) %>%
-      arrange(desc(chi2), .by_group = TRUE) %>%
-      slice_head(n = top_n) %>%
-      summarise(termes = list(unique(Terme)), .groups = "drop") %>%
-      pull(Classe)
-  )
+  top_terms_lookup_df <- detail_df %>%
+    filter(!is.na(Classe), !is.na(Terme), nzchar(Terme), is.finite(chi2), chi2 > 0) %>%
+    group_by(Classe) %>%
+    arrange(desc(chi2), .by_group = TRUE) %>%
+    slice_head(n = top_n) %>%
+    summarise(termes = paste(unique(Terme), collapse = ", "), .groups = "drop")
+  top_terms_lookup <- setNames(top_terms_lookup_df$termes, as.character(top_terms_lookup_df$Classe))
 
   classes_df <- as.data.frame(table(Classe = quanteda::docvars(filtered_corpus_ok)$Classes), stringsAsFactors = FALSE)
   classes_df$Classe <- as.character(classes_df$Classe)
@@ -617,7 +660,11 @@ tryCatch({
   classes_df$Pourcentage <- round(100 * classes_df$Segments / sum(classes_df$Segments), 2)
   classes_df$Top_termes <- vapply(
     classes_df$Classe,
-    function(cl) paste(top_terms_lookup[[cl]] %||% character(0), collapse = ", "),
+    function(cl) {
+      terme <- unname(top_terms_lookup[as.character(cl)])
+      if (!length(terme) || is.na(terme)) return("")
+      as.character(terme[[1]])
+    },
     character(1)
   )
   classes_df$Freq <- NULL
@@ -733,16 +780,24 @@ tryCatch({
     if (nrow(df_stats_cl) > 0) {
       df_stats_cl <- df_stats_cl[order(-df_stats_cl$chi2), , drop = FALSE]
       df_stats_cl <- head(df_stats_cl, top_n)
-      safe_png(file.path(wordcloud_dir, paste0("cluster_", cl, "_wordcloud.png")), {
-        suppressWarnings(wordcloud(
-          words = df_stats_cl$Terme,
-          freq = df_stats_cl$chi2,
-          scale = c(10, 0.5),
-          min.freq = 0,
-          max.words = nrow(df_stats_cl),
-          colors = brewer.pal(8, "Dark2")
-        ))
-      })
+      df_stats_cl <- preparer_wordcloud_data(df_stats_cl, "Terme", "chi2", top_n = top_n)
+      if (nrow(df_stats_cl) > 0) {
+        safe_png(
+          file.path(wordcloud_dir, paste0("cluster_", cl, "_wordcloud.png")),
+          {
+            suppressWarnings(wordcloud(
+              words = df_stats_cl$Terme,
+              freq = df_stats_cl$chi2,
+              scale = c(10, 0.5),
+              min.freq = 0,
+              max.words = nrow(df_stats_cl),
+              colors = brewer.pal(8, "Dark2")
+            ))
+          },
+          rv = rv,
+          label = paste0("wordcloud classe ", cl)
+        )
+      }
     }
 
     tok_cl <- tok_ok[quanteda::docvars(filtered_corpus_ok)$Classes == cl]
@@ -790,32 +845,46 @@ tryCatch({
     entites_globales <- rv$ner_df %>%
       count(ent_text, sort = TRUE, name = "Occurrences")
 
-    safe_png(file.path(ner_dir, "ner_wordcloud_global.png"), {
-      suppressWarnings(wordcloud(
-        words = entites_globales$ent_text,
-        freq = entites_globales$Occurrences,
-        scale = c(8, 0.7),
-        min.freq = 1,
-        max.words = min(120, nrow(entites_globales)),
-        colors = brewer.pal(8, "Dark2")
-      ))
-    })
+    entites_globales <- preparer_wordcloud_data(entites_globales, "ent_text", "Occurrences", top_n = min(120, nrow(entites_globales)))
+    if (nrow(entites_globales) > 0) {
+      safe_png(
+        file.path(ner_dir, "ner_wordcloud_global.png"),
+        {
+          suppressWarnings(wordcloud(
+            words = entites_globales$ent_text,
+            freq = entites_globales$Occurrences,
+            scale = c(8, 0.7),
+            min.freq = 1,
+            max.words = min(120, nrow(entites_globales)),
+            colors = brewer.pal(8, "Dark2")
+          ))
+        },
+        rv = rv,
+        label = "wordcloud NER global"
+      )
+    }
 
     for (cl in sort(unique(rv$ner_df$Classe))) {
       entites_cl <- rv$ner_df %>%
         filter(Classe == cl) %>%
         count(ent_text, sort = TRUE, name = "Occurrences")
+      entites_cl <- preparer_wordcloud_data(entites_cl, "ent_text", "Occurrences", top_n = min(100, nrow(entites_cl)))
       if (nrow(entites_cl) == 0) next
-      safe_png(file.path(ner_dir, paste0("ner_wordcloud_classe_", cl, ".png")), {
-        suppressWarnings(wordcloud(
-          words = entites_cl$ent_text,
-          freq = entites_cl$Occurrences,
-          scale = c(8, 0.7),
-          min.freq = 1,
-          max.words = min(100, nrow(entites_cl)),
-          colors = brewer.pal(8, "Set2")
-        ))
-      })
+      safe_png(
+        file.path(ner_dir, paste0("ner_wordcloud_classe_", cl, ".png")),
+        {
+          suppressWarnings(wordcloud(
+            words = entites_cl$ent_text,
+            freq = entites_cl$Occurrences,
+            scale = c(8, 0.7),
+            min.freq = 1,
+            max.words = min(100, nrow(entites_cl)),
+            colors = brewer.pal(8, "Set2")
+          ))
+        },
+        rv = rv,
+        label = paste0("wordcloud NER classe ", cl)
+      )
     }
   }
 
@@ -824,7 +893,13 @@ tryCatch({
   textes_index_ok <- rv$textes_indexation[quanteda::docnames(dfm_ok)]
   names(textes_index_ok) <- quanteda::docnames(dfm_ok)
 
-  ok_chd_png <- generer_chd_explor_si_absente(rv)
+  ok_chd_png <- tryCatch(
+    generer_chd_explor_si_absente(rv),
+    error = function(e) {
+      ajouter_log(rv, paste0("Export CHD ignoré : ", conditionMessage(e)))
+      FALSE
+    }
+  )
   if (isTRUE(ok_chd_png) && file.exists(file.path(output_dir, "explor", "chd.png"))) {
     file.copy(file.path(output_dir, "explor", "chd.png"), file.path(output_dir, "rainette_plot.png"), overwrite = TRUE)
   }

@@ -28,6 +28,66 @@ register_events_lancer <- function(input, output, session, rv) {
       value
     }
 
+    preparer_wordcloud_data <- function(df, term_col, freq_col, top_n = NULL) {
+      if (is.null(df) || !nrow(df)) return(df[0, , drop = FALSE])
+
+      keep <- !is.na(df[[term_col]]) &
+        nzchar(trimws(as.character(df[[term_col]]))) &
+        is.finite(df[[freq_col]]) &
+        as.numeric(df[[freq_col]]) > 0
+
+      out <- df[keep, , drop = FALSE]
+      if (!nrow(out)) return(out)
+
+      out[[term_col]] <- trimws(as.character(out[[term_col]]))
+      out[[freq_col]] <- as.numeric(out[[freq_col]])
+      out <- out[order(-out[[freq_col]], out[[term_col]]), , drop = FALSE]
+
+      if (!is.null(top_n) && is.finite(top_n) && nrow(out) > top_n) {
+        out <- out[seq_len(top_n), , drop = FALSE]
+      }
+
+      out
+    }
+
+    sauver_png_sans_casser <- function(path, expr, label = NULL) {
+      err <- NULL
+      grDevices::png(path, width = 1800, height = 1400, res = 180)
+      tryCatch(
+        force(expr),
+        error = function(e) {
+          err <<- conditionMessage(e)
+          try({
+            graphics::plot.new()
+            graphics::text(
+              0.5,
+              0.5,
+              paste0("Export graphique indisponible", if (!is.null(label) && nzchar(label)) paste0(" : ", label) else "", "."),
+              cex = 1.1
+            )
+          }, silent = TRUE)
+        },
+        finally = {
+          try(grDevices::dev.off(), silent = TRUE)
+        }
+      )
+
+      if (!is.null(err)) {
+        ajouter_log(
+          rv,
+          paste0(
+            "Export graphique ignoré",
+            if (!is.null(label) && nzchar(label)) paste0(" (", label, ")") else "",
+            " : ",
+            err
+          )
+        )
+        return(FALSE)
+      }
+
+      TRUE
+    }
+
     observeEvent(input$lancer, {
       rv$logs <- ""
       rv$statut <- "Vérification du fichier..."
@@ -446,30 +506,57 @@ register_events_lancer <- function(input, output, session, rv) {
           dir.create(cooc_dir, showWarnings = FALSE, recursive = TRUE)
 
           classes_uniques <- sort(unique(as.integer(docvars(filtered_corpus_ok)$Classes)))
+          top_n_demande <- suppressWarnings(as.integer(input$top_n))
+          if (!is.finite(top_n_demande) || is.na(top_n_demande)) top_n_demande <- 20L
+          top_n_demande <- max(5L, top_n_demande)
+
+          top_terms_lookup_df <- res_stats_df %>%
+            filter(!is.na(Classe), !is.na(Terme), nzchar(Terme), is.finite(chi2), chi2 > 0) %>%
+            group_by(Classe) %>%
+            arrange(desc(chi2), .by_group = TRUE) %>%
+            slice_head(n = top_n_demande) %>%
+            summarise(termes = paste(unique(Terme), collapse = ", "), .groups = "drop")
+
+          top_terms_lookup <- setNames(top_terms_lookup_df$termes, as.character(top_terms_lookup_df$Classe))
+
+          classes_df <- as.data.frame(table(Classe = docvars(filtered_corpus_ok)$Classes), stringsAsFactors = FALSE)
+          classes_df$Classe <- as.character(classes_df$Classe)
+          classes_df$Segments <- as.integer(classes_df$Freq)
+          classes_df$Pourcentage <- round(100 * classes_df$Segments / sum(classes_df$Segments), 2)
+          classes_df$Top_termes <- vapply(
+            classes_df$Classe,
+            function(cl) {
+              terme <- unname(top_terms_lookup[as.character(cl)])
+              if (!length(terme) || is.na(terme)) return("")
+              as.character(terme[[1]])
+            },
+            character(1)
+          )
+          classes_df$Freq <- NULL
 
           for (cl in classes_uniques) {
-            top_n_demande <- suppressWarnings(as.integer(input$top_n))
-            if (!is.finite(top_n_demande) || is.na(top_n_demande)) top_n_demande <- 20L
-            top_n_demande <- max(5L, top_n_demande)
-
             df_stats_cl <- subset(res_stats_df, Classe == cl & p <= input$max_p)
             if (nrow(df_stats_cl) > 0) {
-              df_stats_cl <- df_stats_cl[order(-df_stats_cl$chi2), , drop = FALSE]
-              df_stats_cl <- head(df_stats_cl, top_n_demande)
-
-              wc_png <- file.path(wordcloud_dir, paste0("cluster_", cl, "_wordcloud.png"))
-              try({
-                png(wc_png, width = 800, height = 600)
-                suppressWarnings(wordcloud(
-                  words = df_stats_cl$Terme,
-                  freq = df_stats_cl$chi2,
-                  scale = c(10, 0.5),
-                  min.freq = 0,
-                  max.words = nrow(df_stats_cl),
-                  colors = brewer.pal(8, "Dark2")
-                ))
-                dev.off()
-              }, silent = TRUE)
+              df_stats_cl <- preparer_wordcloud_data(df_stats_cl, "Terme", "chi2", top_n = top_n_demande)
+              if (nrow(df_stats_cl) > 0) {
+                wc_png <- file.path(wordcloud_dir, paste0("cluster_", cl, "_wordcloud.png"))
+                sauver_png_sans_casser(
+                  wc_png,
+                  {
+                    suppressWarnings(wordcloud(
+                      words = df_stats_cl$Terme,
+                      freq = df_stats_cl$chi2,
+                      scale = c(10, 0.5),
+                      min.freq = 0,
+                      max.words = nrow(df_stats_cl),
+                      colors = brewer.pal(8, "Dark2")
+                    ))
+                  },
+                  label = paste0("wordcloud classe ", cl)
+                )
+              } else {
+                ajouter_log(rv, paste0("Wordcloud classe ", cl, " ignoré : aucun terme positif exploitable."))
+              }
             }
 
             tok_cl <- tok_ok[docvars(filtered_corpus_ok)$Classes == cl]
@@ -513,7 +600,13 @@ register_events_lancer <- function(input, output, session, rv) {
           }
 
           explor_assets <- NULL
-          ok_chd_png <- generer_chd_explor_si_absente(rv)
+          ok_chd_png <- tryCatch(
+            generer_chd_explor_si_absente(rv),
+            error = function(e) {
+              ajouter_log(rv, paste0("Export CHD ignoré : ", conditionMessage(e)))
+              FALSE
+            }
+          )
 
           chd_png_rel <- NULL
           if (isTRUE(ok_chd_png) && file.exists(file.path(rv$export_dir, "explor", "chd.png"))) {
@@ -554,6 +647,14 @@ register_events_lancer <- function(input, output, session, rv) {
             coocs = coocs_df
           )
           rv$explor_assets <- explor_assets
+
+          output$table_classes <- renderTable({
+            classes_df
+          }, rownames = FALSE)
+
+          output$table_classes_chd <- renderTable({
+            classes_df
+          }, rownames = FALSE)
 
           args_concordancier <- list(
             chemin_sortie = html_file,

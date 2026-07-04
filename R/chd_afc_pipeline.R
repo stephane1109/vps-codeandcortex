@@ -191,6 +191,28 @@ generer_chd_explor_si_absente <- function(rv) {
   dfm_obj <- rv$dfm_chd
   err_msg <- NULL
 
+  fichier_png_valide <- function(path) {
+    if (!isTRUE(file.exists(path))) return(FALSE)
+    info <- tryCatch(file.info(path), error = function(e) NULL)
+    if (is.null(info) || !nrow(info)) return(FALSE)
+    taille <- suppressWarnings(as.numeric(info$size[[1]]))
+    isTRUE(is.finite(taille) && !is.na(taille) && taille > 0)
+  }
+
+  message_non_vide <- function(x) {
+    is.character(x) && length(x) >= 1 && !is.na(x[[1]]) && nzchar(x[[1]])
+  }
+
+  trouver_render_explorer_script <- function() {
+    candidats <- c(
+      file.path(getwd(), "backend", "render_explorer.R"),
+      file.path(getwd(), "VPS", "applications", "chdrainette", "backend", "render_explorer.R")
+    )
+    candidats <- candidats[file.exists(candidats)]
+    if (!length(candidats)) return(NULL)
+    normalizePath(candidats[[1]], winslash = "/", mustWork = TRUE)
+  }
+
   ecrire_png_secours <- function(message = NULL) {
     grDevices::png(chd_png, width = 2000, height = 1500, res = 180)
     tryCatch({
@@ -204,60 +226,97 @@ generer_chd_explor_si_absente <- function(rv) {
     }, finally = {
       try(grDevices::dev.off(), silent = TRUE)
     })
-    file.exists(chd_png) && is.finite(file.info(chd_png)$size) && file.info(chd_png)$size > 0
+    fichier_png_valide(chd_png)
   }
 
-  dessiner_chd <- function(avec_dfm = FALSE) {
-    grDevices::png(chd_png, width = 2000, height = 1500, res = 180)
-    ok_plot <- FALSE
+  dessiner_chd <- function() {
+    if (is.null(dfm_obj)) {
+      err_msg <<- "DFM indisponible pour l'export CHD."
+      return(FALSE)
+    }
+    render_script <- trouver_render_explorer_script()
+    rscript_bin <- Sys.which("Rscript")
+    if (is.null(render_script) || !nzchar(render_script)) {
+      err_msg <<- "render_explorer.R introuvable."
+      return(FALSE)
+    }
+    if (!nzchar(rscript_bin)) {
+      err_msg <<- "Rscript introuvable."
+      return(FALSE)
+    }
 
-    tryCatch({
-      if (isTRUE(avec_dfm) && !is.null(dfm_obj)) {
-        k_plot <- suppressWarnings(as.integer(rv$max_n_groups_chd))
-        if (!is.finite(k_plot) || is.na(k_plot) || k_plot < 2) {
-          if (!is.null(chd_obj$group)) {
-            k_plot <- suppressWarnings(max(as.integer(chd_obj$group), na.rm = TRUE))
-          }
-        }
-        if (!is.finite(k_plot) || is.na(k_plot) || k_plot < 2) k_plot <- 2L
-
-        args_plot <- list(
-          chd_obj,
-          dfm_obj,
-          k = k_plot,
-          measure = "chi2",
-          type = "bar",
-          n_terms = 20,
-          show_negative = FALSE,
-          text_size = 12
-        )
-
-        params_plot <- tryCatch(names(formals(rainette_plot)), error = function(e) character(0))
-        if ("same_scales" %in% params_plot) args_plot$same_scales <- TRUE
-        if ("free_scales" %in% params_plot) args_plot$free_scales <- FALSE
-
-        do.call(rainette_plot, args_plot)
-      } else {
-        rainette_plot(chd_obj)
+    k_plot <- suppressWarnings(as.integer(rv$max_n_groups_chd))
+    if (!is.finite(k_plot) || is.na(k_plot) || k_plot < 2) {
+      if (!is.null(chd_obj$group)) {
+        k_plot <- suppressWarnings(max(as.integer(chd_obj$group), na.rm = TRUE))
       }
-      ok_plot <- TRUE
-    }, error = function(e) {
-      err_msg <<- conditionMessage(e)
-    }, finally = {
-      try(grDevices::dev.off(), silent = TRUE)
-    })
+    }
+    if (!is.finite(k_plot) || is.na(k_plot) || k_plot < 2) k_plot <- 2L
 
-    isTRUE(ok_plot) && file.exists(chd_png) && is.finite(file.info(chd_png)$size) && file.info(chd_png)$size > 0
+    bundle_tmp <- tempfile("rainette_bundle_", tmpdir = explor_dir, fileext = ".rds")
+    params_tmp <- tempfile("rainette_params_", tmpdir = explor_dir, fileext = ".json")
+    log_tmp <- tempfile("rainette_render_", tmpdir = explor_dir, fileext = ".log")
+    on.exit(unlink(c(bundle_tmp, params_tmp, log_tmp), force = TRUE), add = TRUE)
+
+    saveRDS(
+      list(
+        plot_res = chd_obj,
+        plot_dtm = dfm_obj,
+        res = chd_obj,
+        dtm = dfm_obj,
+        max_k = k_plot,
+        max_k_plot = k_plot,
+        current_k = k_plot
+      ),
+      bundle_tmp
+    )
+
+    writeLines(
+      paste0(
+        "{\"k\":", k_plot,
+        ",\"measure\":\"chi2\",\"n_terms\":20,\"same_scales\":true,\"show_negative\":false,\"text_size\":12}"
+      ),
+      params_tmp,
+      useBytes = TRUE
+    )
+
+    status <- tryCatch(
+      system2(
+        rscript_bin,
+        c(render_script, "plot", bundle_tmp, params_tmp, chd_png),
+        stdout = log_tmp,
+        stderr = log_tmp
+      ),
+      error = function(e) {
+        err_msg <<- conditionMessage(e)
+        NA_integer_
+      }
+    )
+
+    if (is.na(status)) {
+      return(FALSE)
+    }
+    if (!identical(status, 0L)) {
+      log_lines <- tryCatch(readLines(log_tmp, warn = FALSE, encoding = "UTF-8"), error = function(e) character(0))
+      err_msg <<- paste(trimws(log_lines), collapse = "\n")
+      if (!message_non_vide(err_msg)) {
+        err_msg <<- paste0("render_explorer.R a échoué avec le code ", status, ".")
+      }
+      return(FALSE)
+    }
+
+    ok_plot <- fichier_png_valide(chd_png)
+    if (!ok_plot && !message_non_vide(err_msg)) {
+      err_msg <<- "Le rendu externe n'a pas produit de PNG exploitable."
+    }
+    ok_plot
   }
 
-  ok <- dessiner_chd(avec_dfm = FALSE)
-  if (!ok && !is.null(dfm_obj)) {
-    ok <- dessiner_chd(avec_dfm = TRUE)
-  }
+  ok <- dessiner_chd()
 
   if (!ok) {
     if (!is.null(rv)) {
-      msg <- if (!is.null(err_msg) && nzchar(err_msg)) err_msg else "raison inconnue"
+      msg <- if (message_non_vide(err_msg)) err_msg else "raison inconnue"
       ajouter_log(rv, paste0("CHD PNG non généré (", msg, ")."))
     }
     if (file.exists(chd_png)) unlink(chd_png)
