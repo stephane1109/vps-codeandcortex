@@ -109,6 +109,18 @@ server <- function(input, output, session) {
     max_k_double = reactive(rv$max_n_groups)
   )
 
+  rainette_explorer_module_server(
+    "explorer_tab",
+    res_type = reactive(rv$res_type),
+    plot_res = reactive(rv$res_chd),
+    cutree_res = reactive(rv$res),
+    plot_dtm = reactive(rv$dfm_chd),
+    explorer_dtm = reactive(rv$dfm),
+    corpus_src = reactive(rv$filtered_corpus),
+    max_k_plot = reactive(rv$max_n_groups_chd),
+    max_k_double = reactive(rv$max_n_groups)
+  )
+
   register_outputs_status(input, output, session, rv)
 
   observeEvent(input$fichier_corpus, {
@@ -315,6 +327,44 @@ server <- function(input, output, session) {
     )
   })
 
+  output$ui_exports_links <- renderUI({
+    tagList(
+      tags$p("Les exports apparaissent ici dès qu'une analyse est terminée."),
+      div(
+        class = "d-grid gap-2",
+        downloadButton("dl_zip_tab", "Télécharger export global (zip)"),
+        downloadButton("dl_afc_zip_tab", "Télécharger AFC (zip)"),
+        downloadButton("dl_segments_tab", "Télécharger segments"),
+        downloadButton("dl_stats_tab", "Télécharger statistiques"),
+        downloadButton("dl_html_tab", "Télécharger concordancier HTML")
+      ),
+      tags$hr(),
+      tags$ul(
+        class = "mb-0",
+        tags$li(
+          tags$strong("ZIP global : "),
+          tags$code(if (!is.null(rv$zip_file)) basename(rv$zip_file) else "non généré")
+        ),
+        tags$li(
+          tags$strong("Segments : "),
+          tags$code(if (!is.null(rv$segments_file)) basename(rv$segments_file) else "non généré")
+        ),
+        tags$li(
+          tags$strong("Statistiques : "),
+          tags$code(if (!is.null(rv$stats_file)) basename(rv$stats_file) else "non généré")
+        ),
+        tags$li(
+          tags$strong("Concordancier HTML : "),
+          tags$code(if (!is.null(rv$html_file)) basename(rv$html_file) else "non généré")
+        ),
+        tags$li(
+          tags$strong("Dossier AFC : "),
+          tags$code(if (!is.null(rv$afc_dir)) basename(rv$afc_dir) else "non généré")
+        )
+      )
+    )
+  })
+
   register_events_lancer(input, output, session, rv)
 
   open_rainette_explorer <- function() {
@@ -506,6 +556,52 @@ server <- function(input, output, session) {
   )
 
   output$dl_afc_zip <- downloadHandler(
+    filename = function() "afc_exports.zip",
+    content = function(file) {
+      req(rv$afc_dir)
+      zip_tmp <- tempfile(fileext = ".zip")
+      ancien <- getwd()
+      on.exit(setwd(ancien), add = TRUE)
+      setwd(dirname(rv$afc_dir))
+      if (file.exists(zip_tmp)) unlink(zip_tmp)
+      utils::zip(zipfile = zip_tmp, files = basename(rv$afc_dir))
+      file.copy(zip_tmp, file, overwrite = TRUE)
+    }
+  )
+
+  output$dl_segments_tab <- downloadHandler(
+    filename = function() "segments_par_classe.txt",
+    content = function(file) {
+      req(rv$segments_file)
+      file.copy(rv$segments_file, file, overwrite = TRUE)
+    }
+  )
+
+  output$dl_stats_tab <- downloadHandler(
+    filename = function() "stats_par_classe.csv",
+    content = function(file) {
+      req(rv$stats_file)
+      file.copy(rv$stats_file, file, overwrite = TRUE)
+    }
+  )
+
+  output$dl_html_tab <- downloadHandler(
+    filename = function() "segments_par_classe.html",
+    content = function(file) {
+      req(rv$html_file)
+      file.copy(rv$html_file, file, overwrite = TRUE)
+    }
+  )
+
+  output$dl_zip_tab <- downloadHandler(
+    filename = function() "exports_rainette.zip",
+    content = function(file) {
+      req(rv$zip_file)
+      file.copy(rv$zip_file, file, overwrite = TRUE)
+    }
+  )
+
+  output$dl_afc_zip_tab <- downloadHandler(
     filename = function() "afc_exports.zip",
     content = function(file) {
       req(rv$afc_dir)

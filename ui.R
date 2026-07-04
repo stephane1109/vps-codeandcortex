@@ -267,25 +267,14 @@ ui <- page_sidebar(
     ),
     nav_panel(
       "CHD",
-      layout_columns(
-        col_widths = c(8, 4),
-        card(
-          card_header("Graphe CHD"),
-          uiOutput("ui_chd_graph")
-        ),
-        card(
-          card_header("Résumé des classes"),
-          tableOutput("table_classes_chd")
-        )
+      card(
+        full_screen = TRUE,
+        card_header("Rainette Explor"),
+        rainette_explorer_module_ui("explorer_tab")
       ),
       card(
-        card_header("Concordancier par classe"),
-        uiOutput("ui_chd_segments_html")
-      ),
-      card(
-        card_header("Exploration Rainette"),
-        p("Le vrai explorateur Rainette reste accessible via le bouton dédié."),
-        actionButton("explor_chd", "Ouvrir Exploration Rainette", class = "btn-outline-secondary")
+        card_header("Résumé des classes"),
+        tableOutput("table_classes_chd")
       ),
       card(
         card_header("Fichiers générés"),
@@ -317,8 +306,7 @@ ui <- page_sidebar(
       "Exports",
       card(
         card_header("Exports disponibles"),
-        p("Utilise les boutons de téléchargement dans la colonne de gauche pour récupérer les exports globaux, l'AFC, les segments et le concordancier HTML."),
-        p("L'exploration Rainette reste disponible via le bouton « Exploration Rainette » après une analyse réussie.")
+        uiOutput("ui_exports_links")
       )
     ),
     nav_panel(
