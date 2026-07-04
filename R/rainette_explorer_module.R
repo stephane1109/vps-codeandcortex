@@ -23,10 +23,39 @@ rainette_explorer_module_server <- function(
   explorer_dtm,
   corpus_src,
   max_k_plot,
-  max_k_double
+  max_k_double,
+  min_segment_size_value = NULL
 ) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    normalize_rainette_result_for_docs <- function(res, min_segment_size_fallback = NULL) {
+      if (is.null(res) || inherits(res, "rainette2")) {
+        return(res)
+      }
+
+      res_copy <- res
+      current_value <- NULL
+
+      if (!is.null(res_copy$call$min_segment_size)) {
+        if (is.atomic(res_copy$call$min_segment_size) && length(res_copy$call$min_segment_size) == 1L) {
+          current_value <- suppressWarnings(as.numeric(res_copy$call$min_segment_size))
+        }
+      }
+
+      if ((!is.finite(current_value) || is.na(current_value)) &&
+          !is.null(min_segment_size_fallback) &&
+          is.atomic(min_segment_size_fallback) &&
+          length(min_segment_size_fallback) == 1L) {
+        current_value <- suppressWarnings(as.numeric(min_segment_size_fallback))
+      }
+
+      if (is.finite(current_value) && !is.na(current_value)) {
+        res_copy$call$min_segment_size <- current_value
+      }
+
+      res_copy
+    }
 
     explorer_payload <- shiny::reactive({
       current_type <- as.character(res_type() %||% "simple")
@@ -34,15 +63,18 @@ rainette_explorer_module_server <- function(
         list(
           type = "double",
           res = cutree_res(),
+          docs_res = cutree_res(),
           dtm = explorer_dtm(),
           corpus = corpus_src(),
           max_n_groups = as.integer(max_k_double() %||% 2L),
           criterion_choices = c("Sum of chi-squared" = "chi2", "Sum of sizes" = "n")
         )
       } else {
+        plot_res_value <- plot_res()
         list(
           type = "simple",
-          res = plot_res(),
+          res = plot_res_value,
+          docs_res = normalize_rainette_result_for_docs(plot_res_value, min_segment_size_value() %||% NULL),
           dtm = plot_dtm(),
           corpus = corpus_src(),
           max_n_groups = as.integer(max_k_plot() %||% 2L),
@@ -138,7 +170,7 @@ rainette_explorer_module_server <- function(
             icon = shiny::icon("file-alt"),
             miniUI::miniContentPanel(
               if (is.function(docs_sample_ui_proxy)) {
-                docs_sample_ui_proxy(ns("rainette_docs"), payload$res)
+                docs_sample_ui_proxy(ns("rainette_docs"), payload$docs_res)
               } else {
                 shiny::div(
                   class = "alert alert-warning",
@@ -248,7 +280,7 @@ rainette_explorer_module_server <- function(
             icon = shiny::icon("file-alt"),
             miniUI::miniContentPanel(
               if (is.function(docs_sample_ui_proxy)) {
-                docs_sample_ui_proxy(ns("rainette_docs"), payload$res)
+                docs_sample_ui_proxy(ns("rainette_docs"), payload$docs_res)
               } else {
                 shiny::div(
                   class = "alert alert-warning",
@@ -432,7 +464,7 @@ rainette_explorer_module_server <- function(
       }
 
       current_k <- shiny::reactive(input$k)
-      docs_sample_server_proxy("rainette_docs", payload$res, payload$corpus, current_k)
+      docs_sample_server_proxy("rainette_docs", payload$docs_res, payload$corpus, current_k)
     })
   })
 }

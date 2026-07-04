@@ -94,7 +94,8 @@ server <- function(input, output, session) {
     explor_assets = NULL,
     corpus_importe = NULL,
     corpus_segmente = NULL,
-    corpus_preview_text = ""
+    corpus_preview_text = "",
+    rainette_min_segment_size = NULL
   )
 
   rainette_explorer_module_server(
@@ -106,7 +107,8 @@ server <- function(input, output, session) {
     explorer_dtm = reactive(rv$dfm),
     corpus_src = reactive(rv$filtered_corpus),
     max_k_plot = reactive(rv$max_n_groups_chd),
-    max_k_double = reactive(rv$max_n_groups)
+    max_k_double = reactive(rv$max_n_groups),
+    min_segment_size_value = reactive(rv$rainette_min_segment_size)
   )
 
   register_outputs_status(input, output, session, rv)

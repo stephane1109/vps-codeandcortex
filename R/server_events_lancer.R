@@ -58,6 +58,7 @@ register_events_lancer <- function(input, output, session, rv) {
       rv$max_n_groups <- NULL
       rv$max_n_groups_chd <- NULL
       rv$explor_assets <- NULL
+      rv$rainette_min_segment_size <- NULL
 
       ajouter_log(rv, "Clic sur 'Lancer l'analyse' reçu.")
 
@@ -201,6 +202,7 @@ register_events_lancer <- function(input, output, session, rv) {
             rv$dfm_chd <- dfm_obj
             rv$max_n_groups <- max(res$group, na.rm = TRUE)
             rv$max_n_groups_chd <- rv$max_n_groups
+            rv$rainette_min_segment_size <- suppressWarnings(as.integer(input$min_segment_size))
 
           } else {
 
@@ -223,6 +225,7 @@ register_events_lancer <- function(input, output, session, rv) {
             rv$dfm_chd <- dfm_obj
             rv$max_n_groups <- input$max_k_double
             rv$max_n_groups_chd <- max(res1$group, na.rm = TRUE)
+            rv$rainette_min_segment_size <- suppressWarnings(as.integer(input$min_segment_size))
           }
 
           docvars(filtered_corpus)$Classes <- groupes
