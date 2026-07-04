@@ -224,7 +224,7 @@ ui <- page_sidebar(
     div(
       class = "sidebar-group d-grid gap-2",
       actionButton("lancer", "Lancer l'analyse", class = "btn-primary"),
-      actionButton("explor", "Exploration Rainette", class = "btn-outline-secondary"),
+      actionButton("explor", "Afficher l'onglet CHD", class = "btn-outline-secondary"),
       downloadButton("dl_zip", "Télécharger exports (zip)"),
       downloadButton("dl_afc_zip", "Télécharger AFC (zip)"),
       downloadButton("dl_segments", "Télécharger segments"),
@@ -275,6 +275,10 @@ ui <- page_sidebar(
       card(
         card_header("Résumé des classes"),
         tableOutput("table_classes_chd")
+      ),
+      card(
+        card_header("Exports CHD"),
+        uiOutput("ui_exports_links")
       ),
       card(
         card_header("Fichiers générés"),

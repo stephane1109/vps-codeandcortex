@@ -98,18 +98,6 @@ server <- function(input, output, session) {
   )
 
   rainette_explorer_module_server(
-    "explorer_modal",
-    res_type = reactive(rv$res_type),
-    plot_res = reactive(rv$res_chd),
-    cutree_res = reactive(rv$res),
-    plot_dtm = reactive(rv$dfm_chd),
-    explorer_dtm = reactive(rv$dfm),
-    corpus_src = reactive(rv$filtered_corpus),
-    max_k_plot = reactive(rv$max_n_groups_chd),
-    max_k_double = reactive(rv$max_n_groups)
-  )
-
-  rainette_explorer_module_server(
     "explorer_tab",
     res_type = reactive(rv$res_type),
     plot_res = reactive(rv$res_chd),
@@ -272,37 +260,6 @@ server <- function(input, output, session) {
     )
   })
 
-  output$ui_chd_graph <- renderUI({
-    if (!ensure_exports_resource_path(rv)) {
-      return(tags$p("Aucun export CHD disponible pour l'instant."))
-    }
-
-    src_rel <- file.path("explor", "chd.png")
-    src_abs <- file.path(rv$export_dir, src_rel)
-    if (!file.exists(src_abs)) {
-      return(tags$p("Le graphe CHD n'a pas encore été généré. Lance une analyse."))
-    }
-
-    tags$div(
-      style = "text-align:center;",
-      tags$img(
-        src = paste0("/", rv$exports_prefix, "/", src_rel),
-        style = "max-width:100%; height:auto; border:1px solid #ddd; border-radius: 12px;"
-      )
-    )
-  })
-
-  output$ui_chd_segments_html <- renderUI({
-    if (!ensure_exports_resource_path(rv) || is.null(rv$html_file) || !file.exists(rv$html_file)) {
-      return(tags$p("Le concordancier HTML n'est pas encore disponible."))
-    }
-
-    tags$iframe(
-      src = paste0("/", rv$exports_prefix, "/segments_par_classe.html"),
-      style = "width: 100%; height: 72vh; border: 1px solid #999; border-radius: 12px;"
-    )
-  })
-
   output$ui_exports_status <- renderUI({
     lignes <- list(
       list(label = "Export global ZIP", ok = !is.null(rv$zip_file) && file.exists(rv$zip_file)),
@@ -367,29 +324,8 @@ server <- function(input, output, session) {
 
   register_events_lancer(input, output, session, rv)
 
-  open_rainette_explorer <- function() {
-    if (is.null(rv$res) || is.null(rv$res_chd)) {
-      showNotification("Lance une analyse CHD avant d'ouvrir l'exploration Rainette.", type = "warning", duration = 8)
-      return(invisible(FALSE))
-    }
-
-    showModal(modalDialog(
-      title = "Exploration Rainette",
-      size = "l",
-      easyClose = TRUE,
-      footer = modalButton("Fermer"),
-      class = "rainette-explorer-modal",
-      rainette_explorer_module_ui("explorer_modal")
-    ))
-    invisible(TRUE)
-  }
-
   observeEvent(input$explor, {
-    open_rainette_explorer()
-  })
-
-  observeEvent(input$explor_chd, {
-    open_rainette_explorer()
+    try(updateTabsetPanel(session, "onglets_principaux", selected = "CHD"), silent = TRUE)
   })
 
   output$plot_afc_classes <- renderPlot({
