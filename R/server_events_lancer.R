@@ -71,14 +71,10 @@ register_events_lancer <- function(input, output, session, rv) {
         return(invisible(NULL))
       }
 
-      withProgress(message = "Analyse Rainette en cours", value = 0, {
-
-        p <- Progress$new(session, min = 0, max = 1)
-        on.exit(try(p$close(), silent = TRUE), add = TRUE)
-
+      local({
         avancer <- function(valeur, detail) {
           valeur <- max(0, min(1, valeur))
-          p$set(value = valeur, message = "Analyse Rainette en cours", detail = detail)
+          rv$statut <- detail
           rv$progression <- round(valeur * 100)
         }
 

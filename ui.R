@@ -268,6 +268,12 @@ ui <- page_sidebar(
     nav_panel(
       "CHD",
       card(
+        card_header("Statut CHD"),
+        p(textOutput("statut_chd")),
+        uiOutput("barre_progression_chd"),
+        uiOutput("ui_chd_statut")
+      ),
+      card(
         full_screen = TRUE,
         card_header("Rainette Explor"),
         rainette_explorer_module_ui("explorer_tab")
@@ -283,6 +289,11 @@ ui <- page_sidebar(
       card(
         card_header("Fichiers générés"),
         uiOutput("ui_exports_status")
+      ),
+      card(
+        class = "logs-box",
+        card_header("Journal CHD"),
+        verbatimTextOutput("logs_chd", placeholder = TRUE)
       )
     ),
     nav_panel(
