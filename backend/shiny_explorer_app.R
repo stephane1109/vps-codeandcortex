@@ -167,7 +167,7 @@ build_simple_explorer_app <- function(res, dtm, corpus_src = NULL) {
             ),
             fillCol(
               id = "main",
-              plotOutput("rainette_plot", height = "100%")
+              plotOutput("rainette_plot", height = "72vh")
             )
           )
         )
@@ -282,7 +282,7 @@ build_double_explorer_app <- function(res, dtm, corpus_src = NULL) {
             ),
             fillCol(
               id = "main",
-              plotOutput("rainette2_plot", height = "100%")
+              plotOutput("rainette2_plot", height = "72vh")
             )
           )
         )

@@ -266,6 +266,33 @@ ui <- page_sidebar(
       )
     ),
     nav_panel(
+      "CHD",
+      layout_columns(
+        col_widths = c(8, 4),
+        card(
+          card_header("Graphe CHD"),
+          uiOutput("ui_chd_graph")
+        ),
+        card(
+          card_header("Résumé des classes"),
+          tableOutput("table_classes_chd")
+        )
+      ),
+      card(
+        card_header("Concordancier par classe"),
+        uiOutput("ui_chd_segments_html")
+      ),
+      card(
+        card_header("Exploration Rainette"),
+        p("Le vrai explorateur Rainette reste accessible via le bouton dédié."),
+        actionButton("explor_chd", "Ouvrir Exploration Rainette", class = "btn-outline-secondary")
+      ),
+      card(
+        card_header("Fichiers générés"),
+        uiOutput("ui_exports_status")
+      )
+    ),
+    nav_panel(
       "AFC",
       card(card_header("Statut AFC"), uiOutput("ui_afc_statut"), uiOutput("ui_afc_erreurs")),
       layout_columns(

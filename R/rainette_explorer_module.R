@@ -128,7 +128,7 @@ rainette_explorer_module_server <- function(
                 ),
                 shiny::fillCol(
                   id = "main",
-                  shiny::plotOutput(ns("rainette_plot"), height = "100%")
+                  shiny::plotOutput(ns("rainette_plot"), height = "72vh")
                 )
               )
             )
@@ -238,7 +238,7 @@ rainette_explorer_module_server <- function(
                 ),
                 shiny::fillCol(
                   id = "main",
-                  shiny::plotOutput(ns("rainette2_plot"), height = "100%")
+                  shiny::plotOutput(ns("rainette2_plot"), height = "72vh")
                 )
               )
             )

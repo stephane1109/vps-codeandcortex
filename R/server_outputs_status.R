@@ -23,4 +23,10 @@ register_outputs_status <- function(input, output, session, rv) {
       tb <- table(docvars(rv$filtered_corpus)$Classes, useNA = "ifany")
       data.frame(Classe = names(tb), Effectif = as.integer(tb), stringsAsFactors = FALSE)
     }, rownames = FALSE)
+
+    output$table_classes_chd <- renderTable({
+      req(rv$filtered_corpus)
+      tb <- table(docvars(rv$filtered_corpus)$Classes, useNA = "ifany")
+      data.frame(Classe = names(tb), Effectif = as.integer(tb), stringsAsFactors = FALSE)
+    }, rownames = FALSE)
 }

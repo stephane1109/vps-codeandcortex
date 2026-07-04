@@ -45,6 +45,19 @@ render_markdown_or_message <- function(path, fallback) {
   tags$p(fallback)
 }
 
+ensure_exports_resource_path <- function(rv) {
+  if (is.null(rv$export_dir) || !nzchar(rv$export_dir)) {
+    return(FALSE)
+  }
+  if (is.null(rv$exports_prefix) || !nzchar(rv$exports_prefix)) {
+    return(FALSE)
+  }
+  if (!(rv$exports_prefix %in% names(shiny::resourcePaths()))) {
+    shiny::addResourcePath(rv$exports_prefix, rv$export_dir)
+  }
+  TRUE
+}
+
 server <- function(input, output, session) {
   rv <- reactiveValues(
     logs = "[info] Prêt.",
@@ -247,12 +260,67 @@ server <- function(input, output, session) {
     )
   })
 
+  output$ui_chd_graph <- renderUI({
+    if (!ensure_exports_resource_path(rv)) {
+      return(tags$p("Aucun export CHD disponible pour l'instant."))
+    }
+
+    src_rel <- file.path("explor", "chd.png")
+    src_abs <- file.path(rv$export_dir, src_rel)
+    if (!file.exists(src_abs)) {
+      return(tags$p("Le graphe CHD n'a pas encore été généré. Lance une analyse."))
+    }
+
+    tags$div(
+      style = "text-align:center;",
+      tags$img(
+        src = paste0("/", rv$exports_prefix, "/", src_rel),
+        style = "max-width:100%; height:auto; border:1px solid #ddd; border-radius: 12px;"
+      )
+    )
+  })
+
+  output$ui_chd_segments_html <- renderUI({
+    if (!ensure_exports_resource_path(rv) || is.null(rv$html_file) || !file.exists(rv$html_file)) {
+      return(tags$p("Le concordancier HTML n'est pas encore disponible."))
+    }
+
+    tags$iframe(
+      src = paste0("/", rv$exports_prefix, "/segments_par_classe.html"),
+      style = "width: 100%; height: 72vh; border: 1px solid #999; border-radius: 12px;"
+    )
+  })
+
+  output$ui_exports_status <- renderUI({
+    lignes <- list(
+      list(label = "Export global ZIP", ok = !is.null(rv$zip_file) && file.exists(rv$zip_file)),
+      list(label = "Segments par classe", ok = !is.null(rv$segments_file) && file.exists(rv$segments_file)),
+      list(label = "Statistiques CSV", ok = !is.null(rv$stats_file) && file.exists(rv$stats_file)),
+      list(label = "Concordancier HTML", ok = !is.null(rv$html_file) && file.exists(rv$html_file)),
+      list(label = "Dossier AFC", ok = !is.null(rv$afc_dir) && dir.exists(rv$afc_dir)),
+      list(label = "CHD PNG", ok = !is.null(rv$export_dir) && file.exists(file.path(rv$export_dir, "explor", "chd.png")))
+    )
+
+    tags$ul(
+      class = "mb-0",
+      lapply(lignes, function(item) {
+        couleur <- if (isTRUE(item$ok)) "#2f855a" else "#b7791f"
+        statut <- if (isTRUE(item$ok)) "disponible" else "en attente"
+        tags$li(
+          tags$strong(item$label),
+          HTML(" : "),
+          tags$span(style = paste0("color:", couleur, "; font-weight:600;"), statut)
+        )
+      })
+    )
+  })
+
   register_events_lancer(input, output, session, rv)
 
-  observeEvent(input$explor, {
+  open_rainette_explorer <- function() {
     if (is.null(rv$res) || is.null(rv$res_chd)) {
       showNotification("Lance une analyse CHD avant d'ouvrir l'exploration Rainette.", type = "warning", duration = 8)
-      return(invisible(NULL))
+      return(invisible(FALSE))
     }
 
     showModal(modalDialog(
@@ -263,6 +331,15 @@ server <- function(input, output, session) {
       class = "rainette-explorer-modal",
       rainette_explorer_module_ui("explorer_modal")
     ))
+    invisible(TRUE)
+  }
+
+  observeEvent(input$explor, {
+    open_rainette_explorer()
+  })
+
+  observeEvent(input$explor_chd, {
+    open_rainette_explorer()
   })
 
   output$plot_afc_classes <- renderPlot({
