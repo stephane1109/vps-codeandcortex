@@ -107,6 +107,14 @@ ui <- page_sidebar(
       .help-pane {
         max-width: 1000px;
       }
+      .rainette-explorer-modal .modal-dialog {
+        width: 96vw;
+        max-width: 96vw;
+      }
+      .rainette-explorer-modal .modal-body {
+        max-height: calc(100vh - 180px);
+        overflow-y: auto;
+      }
       @media (max-width: 980px) {
         .metrics-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));

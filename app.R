@@ -34,6 +34,7 @@ source("R/segmentation_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/afc_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/chd_afc_pipeline.R", encoding = "UTF-8", local = TRUE)
 source("R/nlp_language.R", encoding = "UTF-8", local = TRUE)
+source("R/rainette_explorer_module.R", encoding = "UTF-8", local = TRUE)
 source("R/server_outputs_status.R", encoding = "UTF-8", local = TRUE)
 source("R/server_events_lancer.R", encoding = "UTF-8", local = TRUE)
 
@@ -81,6 +82,18 @@ server <- function(input, output, session) {
     corpus_importe = NULL,
     corpus_segmente = NULL,
     corpus_preview_text = ""
+  )
+
+  rainette_explorer_module_server(
+    "explorer_modal",
+    res_type = reactive(rv$res_type),
+    plot_res = reactive(rv$res_chd),
+    cutree_res = reactive(rv$res),
+    plot_dtm = reactive(rv$dfm_chd),
+    explorer_dtm = reactive(rv$dfm),
+    corpus_src = reactive(rv$filtered_corpus),
+    max_k_plot = reactive(rv$max_n_groups_chd),
+    max_k_double = reactive(rv$max_n_groups)
   )
 
   register_outputs_status(input, output, session, rv)
@@ -237,64 +250,18 @@ server <- function(input, output, session) {
   register_events_lancer(input, output, session, rv)
 
   observeEvent(input$explor, {
-    req(rv$export_dir, rv$html_file, rv$clusters, rv$res_stats_df)
-
-    if (is.null(rv$exports_prefix) || !nzchar(rv$exports_prefix)) {
-      showNotification("Préfixe d'export invalide.", type = "error", duration = 8)
+    if (is.null(rv$res) || is.null(rv$res_chd)) {
+      showNotification("Lance une analyse CHD avant d'ouvrir l'exploration Rainette.", type = "warning", duration = 8)
       return(invisible(NULL))
     }
-    if (!(rv$exports_prefix %in% names(shiny::resourcePaths()))) {
-      shiny::addResourcePath(rv$exports_prefix, rv$export_dir)
-    }
-
-    classe_defaut <- as.character(rv$clusters[1])
 
     showModal(modalDialog(
       title = "Exploration Rainette",
       size = "l",
       easyClose = TRUE,
       footer = modalButton("Fermer"),
-      selectInput("classe_viz", "Classe", choices = as.character(rv$clusters), selected = classe_defaut),
-      tabsetPanel(
-        tabPanel(
-          "CHD (rainette_plot)",
-          fluidRow(
-            column(
-              4,
-              sliderInput("k_plot", "Nombre de classes (k)", min = 2, max = rv$max_n_groups_chd, value = min(rv$max_n_groups_chd, 8), step = 1),
-              selectInput(
-                "measure_plot", "Statistiques",
-                choices = c(
-                  "Keyness - Chi-squared" = "chi2",
-                  "Keyness - Likelihood ratio" = "lr",
-                  "Frequency - Terms" = "frequency",
-                  "Frequency - Documents proportion" = "docprop"
-                ),
-                selected = "chi2"
-              ),
-              selectInput("type_plot", "Type", choices = c("bar", "cloud"), selected = "bar"),
-              numericInput("n_terms_plot", "Nombre de termes", value = 20, min = 5, max = 200, step = 1),
-              conditionalPanel(
-                "input.measure_plot != 'docprop'",
-                checkboxInput("same_scales_plot", "Forcer les mêmes échelles", value = TRUE)
-              ),
-              checkboxInput("show_negative_plot", "Afficher les valeurs négatives", value = FALSE),
-              numericInput("text_size_plot", "Taille du texte", value = 12, min = 6, max = 30, step = 1)
-            ),
-            column(8, plotOutput("plot_chd", height = "70vh"))
-          )
-        ),
-        tabPanel(
-          "Concordancier HTML",
-          tags$iframe(
-            src = paste0("/", rv$exports_prefix, "/segments_par_classe.html"),
-            style = "width: 100%; height: 70vh; border: 1px solid #999;"
-          )
-        ),
-        tabPanel("Wordcloud", uiOutput("ui_wordcloud")),
-        tabPanel("Cooccurrences", uiOutput("ui_cooc")),
-        tabPanel("Statistiques", tableOutput("table_stats_classe"))
-      )
+      class = "rainette-explorer-modal",
+      rainette_explorer_module_ui("explorer_modal")
     ))
   })
 
@@ -311,60 +278,6 @@ server <- function(input, output, session) {
     }
     tracer_afc_classes_seules(rv$afc_obj, axes = c(1, 2), cex_labels = 1.05)
   })
-
-  output$plot_chd <- renderPlot({
-    req(rv$res_chd, rv$dfm_chd, input$k_plot, input$measure_plot, input$type_plot, input$n_terms_plot)
-    same_scales <- isTRUE(input$same_scales_plot)
-    show_negative <- isTRUE(input$show_negative_plot)
-    rainette_plot(
-      rv$res_chd,
-      rv$dfm_chd,
-      k = input$k_plot,
-      type = input$type_plot,
-      n_terms = input$n_terms_plot,
-      free_scales = !same_scales,
-      measure = input$measure_plot,
-      show_negative = show_negative,
-      text_size = input$text_size_plot
-    )
-  })
-
-  output$ui_wordcloud <- renderUI({
-    req(input$classe_viz, rv$exports_prefix, rv$export_dir)
-    src_rel <- file.path("wordclouds", paste0("cluster_", input$classe_viz, "_wordcloud.png"))
-    if (!file.exists(file.path(rv$export_dir, src_rel))) {
-      return(tags$p("Aucun nuage de mots disponible pour cette classe."))
-    }
-    tags$div(
-      style = "text-align: center;",
-      tags$img(
-        src = paste0("/", rv$exports_prefix, "/", src_rel),
-        style = "max-width: 100%; height: auto; border: 1px solid #999; display: inline-block;"
-      )
-    )
-  })
-
-  output$ui_cooc <- renderUI({
-    req(input$classe_viz, rv$exports_prefix, rv$export_dir)
-    src_rel <- file.path("cooccurrences", paste0("cluster_", input$classe_viz, "_fcm_network.png"))
-    if (!file.exists(file.path(rv$export_dir, src_rel))) {
-      return(tags$p("Aucune cooccurrence disponible pour cette classe."))
-    }
-    tags$img(src = paste0("/", rv$exports_prefix, "/", src_rel), style = "max-width: 100%; height: auto; border: 1px solid #999;")
-  })
-
-  output$table_stats_classe <- renderTable({
-    req(input$classe_viz, rv$res_stats_df)
-    cl <- as.numeric(input$classe_viz)
-    df <- rv$res_stats_df
-    df <- df[df$Classe == cl, , drop = FALSE]
-    colonnes_possibles <- intersect(c("Terme", "chi2", "lr", "frequency", "docprop", "p", "p_value_filter"), names(df))
-    df <- df[, colonnes_possibles, drop = FALSE]
-    if ("chi2" %in% names(df)) {
-      df <- df[order(-df$chi2), , drop = FALSE]
-    }
-    head(df, 50)
-  }, rownames = FALSE)
 
   output$plot_afc <- renderPlot({
     if (!is.null(rv$afc_erreur) && nzchar(rv$afc_erreur)) {
