@@ -2,19 +2,15 @@
 
 Refonte VPS de l'application `chdrainette`.
 
-Cette version démarre désormais comme une vraie application **Shiny** et utilise
-le package **{bslib}** pour l'interface.
-
-Le pipeline Python reste conservé, mais il n'est plus lancé en shell externe :
-les traitements **spaCy / NER / stopwords** sont appelés depuis R via
-**{reticulate}**.
+Cette version démarre comme une vraie application **Shiny** et utilise le
+package **{bslib}** pour l'interface.
 
 ## Architecture actuelle
 
 - application Shiny native (`app.R`, `ui.R`, `start.R`)
 - interface `bslib` avec sidebar, onglets, métriques, logs et exports
 - pipeline CHD / AFC / concordancier en R
-- pont Python via `reticulate` pour spaCy et le NER
+- gestion des stopwords par `quanteda`
 - Docker basé sur `rocker/r2u:jammy`
 
 ## Options conservées
@@ -28,11 +24,7 @@ les traitements **spaCy / NER / stopwords** sont appelés depuis R via
 - `max_p`
 - classification simple `rainette` ou double `rainette2`
 - nettoyage du corpus
-- stopwords spaCy
-- filtrage morphosyntaxique spaCy avec mode `keep` / `remove`
-- sélection des POS
-- lemmatisation spaCy
-- NER spaCy
+- stopwords `quanteda`
 - AFC classes / termes / variables étoilées
 - nuages de mots et cooccurrences
 - exports globaux, segments, stats, HTML et AFC
@@ -47,7 +39,6 @@ les traitements **spaCy / NER / stopwords** sont appelés depuis R via
 - `CHDRAINETTE_APP_DATA_DIR=/data/app`
 - `CHDRAINETTE_R_LIBS_USER=/data/app/r-library`
 - `CHDRAINETTE_CACHE_DIR=/data/app/cache`
-- `RETICULATE_PYTHON=/usr/bin/python3`
 
 ### Variables VPS / tickets
 
@@ -73,6 +64,5 @@ Le Dockerfile installe :
 - `rainette`
 - `quanteda`
 - `FactoMineR`
-- `reticulate`
 - `wordcloud`
-- les dépendances Python spaCy nécessaires au prétraitement et au NER
+- les dépendances système R nécessaires au prétraitement et aux exports

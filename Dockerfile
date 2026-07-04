@@ -1,11 +1,7 @@
 FROM rocker/r2u:jammy
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PORT=8000 \
-    RETICULATE_PYTHON=/usr/bin/python3 \
     APP_DATA_DIR=/data/app \
     CHDRAINETTE_APP_DATA_DIR=/data/app \
     CHDRAINETTE_R_LIBS_USER=/data/app/r-library \
@@ -31,16 +27,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_DATA_DIR=/data/app pour conserver les jobs et les sorties cote serveur
 # - CHDRAINETTE_APP_DATA_DIR=/data/app pour que le backend web et le R utilisent le meme volume
 # - CHDRAINETTE_R_LIBS_USER=/data/app/r-library pour les packages R persistants
-# - CHDRAINETTE_CACHE_DIR=/data/app/cache pour les caches NLP / spaCy
+# - CHDRAINETTE_CACHE_DIR=/data/app/cache pour les exports temporaires de l'application
 # - PORT=8000 pour l'application Shiny
 
 WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-venv \
         build-essential \
         gfortran \
         pkg-config \
@@ -78,7 +71,6 @@ RUN apt-get update \
       r-cran-quanteda \
       r-cran-quanteda.textstats \
       r-cran-rcolorbrewer \
-      r-cran-reticulate \
       r-cran-remotes \
       r-cran-shiny \
       r-cran-stopwords \
@@ -99,10 +91,6 @@ RUN apt-get update \
        fi \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /app/requirements.txt
-
 COPY backend/install-r-packages.R /tmp/install-r-packages.R
 RUN Rscript /tmp/install-r-packages.R
 
@@ -118,6 +106,6 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-  CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=3).read()"
+  CMD sh -c 'curl -fsS "http://127.0.0.1:${PORT:-8000}/" >/dev/null'
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

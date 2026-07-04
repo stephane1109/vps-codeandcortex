@@ -1,6 +1,6 @@
 # Module server - événement principal `input$lancer`
 # Ce fichier encapsule le pipeline principal lancé au clic sur "Lancer l'analyse"
-# (préparation, CHD/AFC/NER, exports) pour alléger `app.R` à comportement constant.
+# (préparation, CHD/AFC, exports) pour alléger `app.R` à comportement constant.
 
 register_events_lancer <- function(input, output, session, rv) {
     formater_df_csv_6_decimales <- function(df) {
@@ -33,10 +33,7 @@ register_events_lancer <- function(input, output, session, rv) {
       rv$statut <- "Vérification du fichier..."
       rv$progression <- 0
 
-      rv$spacy_tokens_df <- NULL
       rv$textes_indexation <- NULL
-      rv$ner_df <- NULL
-      rv$ner_nb_segments <- NA_integer_
       rv$afc_obj <- NULL
       rv$afc_erreur <- NULL
       rv$afc_vars_obj <- NULL
@@ -52,7 +49,6 @@ register_events_lancer <- function(input, output, session, rv) {
       rv$segments_file <- NULL
       rv$stats_file <- NULL
       rv$html_file <- NULL
-      rv$ner_file <- NULL
       rv$zip_file <- NULL
 
       rv$res <- NULL
@@ -131,108 +127,30 @@ register_events_lancer <- function(input, output, session, rv) {
           )
           names(textes_chd) <- ids_corpus
 
-          verifier_coherence_dictionnaire_langue(textes_chd, input$spacy_langue, rv = rv)
+          verifier_coherence_dictionnaire_langue(textes_chd, input$langue_corpus, rv = rv)
 
           avancer(0.22, "Prétraitement + DFM")
           rv$statut <- "Prétraitement et DFM..."
 
-          filtrage_morpho <- isTRUE(input$filtrage_morpho)
-          utiliser_lemmes <- isTRUE(input$spacy_utiliser_lemmes)
-          config_spacy <- configurer_langue_spacy(input$spacy_langue)
-          utiliser_pipeline_spacy <- filtrage_morpho || utiliser_lemmes
+          cfg_langue <- configurer_langue_corpus(input$langue_corpus)
+          ajouter_log(rv, paste0("Langue sélectionnée : ", cfg_langue$libelle, " | stopwords : quanteda"))
 
-          if (!utiliser_pipeline_spacy) {
+          tok_base <- tokens(
+            textes_chd,
+            remove_punct = isTRUE(input$supprimer_ponctuation),
+            remove_numbers = isTRUE(input$supprimer_chiffres)
+          )
 
-            ajouter_log(rv, "Filtrage morphosyntaxique désactivé : pipeline standard.")
-            tok_base <- tokens(
-              textes_chd,
-              remove_punct = isTRUE(input$supprimer_ponctuation),
-              remove_numbers = isTRUE(input$supprimer_chiffres)
-            )
-
-            res_dfm <- construire_dfm_avec_fallback_stopwords(
-              tok_base = tok_base,
-              min_docfreq = input$min_docfreq,
-              retirer_stopwords = isTRUE(input$retirer_stopwords),
-              langue_spacy = input$spacy_langue,
-              rv = rv,
-              libelle = "Standard"
-            )
-            tok <- res_dfm$tok
-            dfm_obj <- res_dfm$dfm
-
-          } else {
-
-            pos_a_conserver <- NULL
-            pos_mode <- tolower(trimws(as.character(valeur_input_par_defaut(input$pos_spacy_mode, "keep"))))
-            if (!pos_mode %in% c("keep", "remove")) pos_mode <- "keep"
-            all_pos_spacy <- c("ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN", "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X")
-            pos_selection <- character(0)
-            if (isTRUE(filtrage_morpho)) {
-              pos_selection <- toupper(trimws(as.character(valeur_input_par_defaut(input$pos_spacy_a_conserver, character(0)))))
-              pos_selection <- intersect(all_pos_spacy, pos_selection)
-              if (identical(pos_mode, "remove")) {
-                pos_a_conserver <- setdiff(all_pos_spacy, pos_selection)
-              } else {
-                pos_a_conserver <- pos_selection
-                if (is.null(pos_a_conserver) || length(pos_a_conserver) == 0) pos_a_conserver <- c("NOUN", "VERB")
-              }
-            }
-
-            ajouter_log(
-              rv,
-              paste0(
-                "spaCy (", config_spacy$modele, ", ", config_spacy$libelle, ") | filtrage POS=", ifelse(filtrage_morpho, "1", "0"),
-                ifelse(
-                  filtrage_morpho,
-                  paste0(
-                    " [mode=", ifelse(identical(pos_mode, "remove"), "supprimer", "conserver"),
-                    " | selection=", ifelse(length(pos_selection), paste(pos_selection, collapse = ", "), "aucune"),
-                    " | retenues=", paste(pos_a_conserver, collapse = ", "),
-                    "]"
-                  ),
-                  ""
-                ),
-                " | lemmes=", ifelse(utiliser_lemmes, "1", "0"),
-                " | stopwords: spaCy via reticulate"
-              )
-            )
-
-            avancer(0.28, "spaCy : exécution via reticulate")
-            rv$statut <- "spaCy : prétraitement..."
-
-            sp <- executer_spacy_filtrage(
-              ids = ids_corpus,
-              textes = unname(textes_chd),
-              pos_a_conserver = pos_a_conserver,
-              utiliser_lemmes = utiliser_lemmes,
-              lower_input = isTRUE(input$forcer_minuscules_avant),
-              modele_spacy = config_spacy$modele,
-              rv = rv
-            )
-
-            textes_spacy <- sp$textes
-            names(textes_spacy) <- ids_corpus
-            rv$spacy_tokens_df <- sp$tokens_df
-
-            avancer(0.40, "spaCy : tokens + DFM")
-            tok_base <- tokens(
-              textes_spacy,
-              remove_punct = isTRUE(input$supprimer_ponctuation),
-              remove_numbers = isTRUE(input$supprimer_chiffres)
-            )
-
-            res_dfm <- construire_dfm_avec_fallback_stopwords(
-              tok_base = tok_base,
-              min_docfreq = input$min_docfreq,
-              retirer_stopwords = isTRUE(input$retirer_stopwords),
-              langue_spacy = input$spacy_langue,
-              rv = rv,
-              libelle = "spaCy"
-            )
-            tok <- res_dfm$tok
-            dfm_obj <- res_dfm$dfm
-          }
+          res_dfm <- construire_dfm_avec_fallback_stopwords(
+            tok_base = tok_base,
+            min_docfreq = input$min_docfreq,
+            retirer_stopwords = isTRUE(input$retirer_stopwords),
+            langue_corpus = input$langue_corpus,
+            rv = rv,
+            libelle = "Quanteda"
+          )
+          tok <- res_dfm$tok
+          dfm_obj <- res_dfm$dfm
 
           included_segments <- docnames(dfm_obj)
           filtered_corpus <- corpus[included_segments]
@@ -323,34 +241,7 @@ register_events_lancer <- function(input, output, session, rv) {
           rv$filtered_corpus <- filtered_corpus_ok
           rv$res_stats_df <- NULL
 
-          avancer(0.58, "NER (si activé)")
-          rv$statut <- "NER (si activé)..."
-
-          if (isTRUE(input$activer_ner)) {
-            config_spacy_ner <- configurer_langue_spacy(input$spacy_langue)
-            ids_ner <- docnames(filtered_corpus_ok)
-            textes_ner <- as.character(filtered_corpus_ok)
-            rv$ner_nb_segments <- length(textes_ner)
-            ajouter_log(rv, paste0("NER spaCy : modèle ", config_spacy_ner$modele, " (", config_spacy_ner$libelle, ")."))
-
-            df_ent <- executer_spacy_ner(
-              ids_ner,
-              textes_ner,
-              modele_spacy = config_spacy_ner$modele,
-              rv = rv
-            )
-
-            classes_vec <- as.integer(docvars(filtered_corpus_ok)$Classes)
-            names(classes_vec) <- ids_ner
-
-            df_ent$Classe <- classes_vec[df_ent$doc_id]
-            df_ent$Classe <- as.integer(df_ent$Classe)
-            df_ent <- df_ent[!is.na(df_ent$Classe), , drop = FALSE]
-
-            rv$ner_df <- df_ent
-          }
-
-          avancer(0.62, "Exports + stats")
+          avancer(0.58, "Exports + stats")
           rv$statut <- "Exports et statistiques..."
 
           segments_vec <- as.character(filtered_corpus_ok)
@@ -669,7 +560,9 @@ register_events_lancer <- function(input, output, session, rv) {
             res_stats_df = res_stats_df,
             max_p = input$max_p,
             textes_indexation = textes_index_ok,
-            spacy_tokens_df = rv$spacy_tokens_df,
+            dfm_obj = dfm_ok,
+            classes_docs = docvars(filtered_corpus_ok)$Classes,
+            top_termes_keyness = 200,
             explor_assets = explor_assets,
             avancer = avancer,
             rv = rv

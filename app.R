@@ -3,6 +3,7 @@ library(dplyr)
 library(htmltools)
 library(igraph)
 library(quanteda)
+library(quanteda.textstats)
 library(rainette)
 library(shiny)
 library(wordcloud)
@@ -29,12 +30,10 @@ source("ui.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_general.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_logging.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_text.R", encoding = "UTF-8", local = TRUE)
-source("R/reticulate_bridge.R", encoding = "UTF-8", local = TRUE)
 source("R/segmentation_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/afc_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/chd_afc_pipeline.R", encoding = "UTF-8", local = TRUE)
 source("R/nlp_language.R", encoding = "UTF-8", local = TRUE)
-source("R/nlp_spacy.R", encoding = "UTF-8", local = TRUE)
 source("R/server_outputs_status.R", encoding = "UTF-8", local = TRUE)
 source("R/server_events_lancer.R", encoding = "UTF-8", local = TRUE)
 
@@ -55,7 +54,6 @@ server <- function(input, output, session) {
     segments_file = NULL,
     stats_file = NULL,
     html_file = NULL,
-    ner_file = NULL,
     zip_file = NULL,
     res = NULL,
     res_chd = NULL,
@@ -68,10 +66,7 @@ server <- function(input, output, session) {
     max_n_groups_chd = NULL,
     res_type = "simple",
     exports_prefix = paste0("exports_", session$token),
-    spacy_tokens_df = NULL,
     textes_indexation = NULL,
-    ner_df = NULL,
-    ner_nb_segments = NA_integer_,
     afc_obj = NULL,
     afc_erreur = NULL,
     afc_vars_obj = NULL,
@@ -127,10 +122,6 @@ server <- function(input, output, session) {
     render_markdown_or_message("help/help.md", "Le fichier help/help.md est introuvable.")
   })
 
-  output$help_pos <- renderUI({
-    render_markdown_or_message("help/pos_spacy.md", "Le fichier help/pos_spacy.md est introuvable.")
-  })
-
   output$metric_docs <- renderText({
     if (is.null(rv$filtered_corpus)) return("—")
     quanteda::ndoc(rv$corpus_importe %||% rv$filtered_corpus)
@@ -151,7 +142,7 @@ server <- function(input, output, session) {
     length(rv$clusters)
   })
 
-  output$ui_spacy_langue_detection <- renderUI({
+  output$ui_langue_detection <- renderUI({
     if (is.null(rv$filtered_corpus) && !nzchar(rv$corpus_preview_text)) {
       return(tags$p("Détection langue : importe et lance une analyse pour afficher une estimation."))
     }
@@ -167,8 +158,8 @@ server <- function(input, output, session) {
       return(tags$p("Détection langue : estimation indisponible."))
     }
 
-    cfg_est <- configurer_langue_spacy(est$code)
-    cfg_sel <- configurer_langue_spacy(input$spacy_langue)
+    cfg_est <- configurer_langue_corpus(est$code)
+    cfg_sel <- configurer_langue_corpus(input$langue_corpus)
 
     msg <- paste0(
       "Langue estimée du corpus : ", cfg_est$libelle,
@@ -178,98 +169,10 @@ server <- function(input, output, session) {
     )
 
     if (!identical(cfg_est$code, cfg_sel$code)) {
-      return(tags$div(class = "alert alert-warning", tags$p(style = "margin:0;", paste0(msg, " Dictionnaire sélectionné : ", cfg_sel$libelle, "."))))
+      return(tags$div(class = "alert alert-warning", tags$p(style = "margin:0;", paste0(msg, " Langue sélectionnée : ", cfg_sel$libelle, "."))))
     }
 
-    tags$div(class = "alert alert-success", tags$p(style = "margin:0;", paste0(msg, " Dictionnaire sélectionné : ", cfg_sel$libelle, ".")))
-  })
-
-  output$ui_ner_statut <- renderUI({
-    if (!isTRUE(input$activer_ner)) {
-      return(tags$p("NER désactivé. Active l’option spaCy / NER puis relance l’analyse."))
-    }
-    if (is.null(rv$ner_df)) {
-      return(tags$p("NER activé, mais aucun résultat n’est encore disponible."))
-    }
-    nb_ent <- nrow(rv$ner_df)
-    nb_seg <- ifelse(is.na(rv$ner_nb_segments), 0, rv$ner_nb_segments)
-    tags$p(paste0("NER calculé sur ", nb_seg, " segments. Entités détectées : ", nb_ent, "."))
-  })
-
-  output$table_ner_resume <- renderTable({
-    req(rv$ner_df)
-    if (nrow(rv$ner_df) == 0) {
-      return(data.frame(Message = "Aucune entité détectée.", stringsAsFactors = FALSE))
-    }
-    as.data.frame(sort(table(rv$ner_df$ent_label), decreasing = TRUE), stringsAsFactors = FALSE) |>
-      dplyr::rename(Type = Var1, Effectif = Freq)
-  }, rownames = FALSE)
-
-  output$table_ner_details <- renderTable({
-    req(rv$ner_df)
-    if (nrow(rv$ner_df) == 0) {
-      return(data.frame(Message = "Aucune entité détectée.", stringsAsFactors = FALSE))
-    }
-    df <- rv$ner_df[, intersect(c("Classe", "doc_id", "ent_text", "ent_label", "start_char", "end_char"), names(rv$ner_df)), drop = FALSE]
-    head(df, 200)
-  }, rownames = FALSE)
-
-  output$plot_ner_wordcloud <- renderPlot({
-    req(rv$ner_df)
-    if (nrow(rv$ner_df) == 0) {
-      plot.new()
-      text(0.5, 0.5, "Aucune entité détectée.", cex = 1.1)
-      return(invisible(NULL))
-    }
-    freq <- sort(table(rv$ner_df$ent_text), decreasing = TRUE)
-    suppressWarnings(wordcloud(
-      words = names(freq),
-      freq = as.numeric(freq),
-      min.freq = 1,
-      max.words = min(150, length(freq)),
-      random.order = FALSE,
-      colors = brewer.pal(8, "Dark2")
-    ))
-  })
-
-  output$ui_ner_wordcloud_par_classe <- renderUI({
-    req(rv$ner_df)
-    if (nrow(rv$ner_df) == 0 || !"Classe" %in% names(rv$ner_df)) {
-      return(tags$p("Aucune entité à afficher par classe."))
-    }
-
-    classes <- sort(unique(rv$ner_df$Classe))
-    if (length(classes) == 0) {
-      return(tags$p("Aucune classe disponible pour l’affichage."))
-    }
-
-    tagList(lapply(classes, function(cl) {
-      nm <- paste0("plot_ner_wordcloud_cl_", cl)
-      local({
-        cl_local <- cl
-        output[[nm]] <- renderPlot({
-          df_cl <- rv$ner_df[rv$ner_df$Classe == cl_local, , drop = FALSE]
-          if (nrow(df_cl) == 0) {
-            plot.new()
-            text(0.5, 0.5, paste0("Classe ", cl_local, " : aucune entité."), cex = 1.1)
-            return(invisible(NULL))
-          }
-          freq <- sort(table(df_cl$ent_text), decreasing = TRUE)
-          suppressWarnings(wordcloud(
-            words = names(freq),
-            freq = as.numeric(freq),
-            min.freq = 1,
-            max.words = min(120, length(freq)),
-            random.order = FALSE,
-            colors = brewer.pal(8, "Set2")
-          ))
-        })
-      })
-      card(
-        card_header(paste0("Classe ", cl)),
-        plotOutput(nm, height = "320px")
-      )
-    }))
+    tags$div(class = "alert alert-success", tags$p(style = "margin:0;", paste0(msg, " Langue sélectionnée : ", cfg_sel$libelle, ".")))
   })
 
   output$ui_chd_statut <- renderUI({

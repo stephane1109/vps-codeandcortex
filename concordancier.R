@@ -106,19 +106,74 @@ detecter_segments_contenant_termes_unicode <- function(textes_index, termes) {
   present
 }
 
+extraire_termes_significatifs_quanteda <- function(dfm_obj, classes_docs, classe_cible, max_p = 0.05, top_n = 200, rv = NULL) {
+  if (is.null(dfm_obj) || ndoc(dfm_obj) == 0) return(character(0))
+  if (is.null(classes_docs) || !length(classes_docs)) return(character(0))
+
+  classes_docs <- as.character(classes_docs)
+  if (length(classes_docs) != ndoc(dfm_obj)) return(character(0))
+
+  cible <- classes_docs == as.character(classe_cible)
+  cible[is.na(cible)] <- FALSE
+
+  if (sum(cible) == 0 || sum(!cible) == 0) return(character(0))
+
+  stats_keyness <- tryCatch(
+    as.data.frame(quanteda.textstats::textstat_keyness(dfm_obj, target = cible, measure = "chi2")),
+    error = function(e) {
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Concordancier : échec quanteda.textstats pour la classe ", classe_cible, " : ", conditionMessage(e)))
+      }
+      NULL
+    }
+  )
+
+  if (is.null(stats_keyness) || nrow(stats_keyness) == 0) return(character(0))
+
+  if ("chi2" %in% names(stats_keyness)) {
+    stats_keyness <- stats_keyness[is.finite(stats_keyness$chi2) & stats_keyness$chi2 > 0, , drop = FALSE]
+    stats_keyness <- stats_keyness[order(stats_keyness$chi2, decreasing = TRUE), , drop = FALSE]
+  }
+
+  if ("p" %in% names(stats_keyness)) {
+    stats_keyness <- stats_keyness[is.finite(stats_keyness$p) & stats_keyness$p <= max_p, , drop = FALSE]
+  }
+
+  if ("n_target" %in% names(stats_keyness)) {
+    stats_keyness <- stats_keyness[is.finite(stats_keyness$n_target) & stats_keyness$n_target > 0, , drop = FALSE]
+  }
+
+  if (!nrow(stats_keyness) || !"feature" %in% names(stats_keyness)) return(character(0))
+
+  if (is.finite(top_n) && !is.na(top_n) && top_n > 0) {
+    stats_keyness <- head(stats_keyness, as.integer(top_n))
+  }
+
+  termes <- unique(as.character(stats_keyness$feature))
+  termes <- termes[!is.na(termes) & nzchar(trimws(termes))]
+
+  if (!is.null(rv)) {
+    ajouter_log(rv, paste0("Concordancier : ", length(termes), " termes significatifs extraits via quanteda.textstats pour la classe ", classe_cible, "."))
+  }
+
+  termes
+}
+
 generer_concordancier_html <- function(
   chemin_sortie,
   segments_by_class,
   res_stats_df,
   max_p,
   textes_indexation,
-  spacy_tokens_df,
+  dfm_obj = NULL,
+  classes_docs = NULL,
+  top_termes_keyness = 200,
   explor_assets = NULL,
   avancer = NULL,
   rv = NULL,
   ...
 ) {
-  if (!is.null(rv)) ajouter_log(rv, "Concordancier : génération HTML (filtré + surlignage Unicode).")
+  if (!is.null(rv)) ajouter_log(rv, "Concordancier : génération HTML (filtré + surlignage Unicode via quanteda.textstats).")
 
   con <- file(chemin_sortie, open = "wt", encoding = "UTF-8")
   on.exit(try(close(con), silent = TRUE), add = TRUE)
@@ -130,7 +185,7 @@ generer_concordancier_html <- function(
   writeLines("<h1>Concordancier Rainette</h1>", con)
 
   writeLines("<h2>Segments par classe</h2>", con)
-  writeLines("<h3>Segments par classe (filtrés sur présence de termes significatifs)</h3>", con)
+  writeLines("<h3>Segments par classe (filtrés et surlignés à partir des termes significatifs calculés avec quanteda.textstats)</h3>", con)
 
   noms_classes <- names(segments_by_class)
   n_classes <- length(noms_classes)
@@ -142,9 +197,23 @@ generer_concordancier_html <- function(
     if (!is.null(avancer)) avancer(0.75 + (i / n_classes) * 0.08, paste0("HTML : classe ", cl))
     writeLines(paste0("<h2>Classe ", cl, "</h2>"), con)
 
-    termes_cl <- subset(res_stats_df, Classe == as.numeric(cl) & p <= max_p)$Terme
-    termes_cl <- unique(termes_cl)
-    termes_cl <- termes_cl[!is.na(termes_cl) & nzchar(termes_cl)]
+    termes_cl <- extraire_termes_significatifs_quanteda(
+      dfm_obj = dfm_obj,
+      classes_docs = classes_docs,
+      classe_cible = cl,
+      max_p = max_p,
+      top_n = top_termes_keyness,
+      rv = rv
+    )
+
+    if (!length(termes_cl)) {
+      termes_cl <- subset(res_stats_df, Classe == as.numeric(cl) & p <= max_p)$Terme
+      termes_cl <- unique(termes_cl)
+      termes_cl <- termes_cl[!is.na(termes_cl) & nzchar(termes_cl)]
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Concordancier : repli sur rainette_stats pour la classe ", cl, "."))
+      }
+    }
 
     segments <- segments_by_class[[cl]]
     ids_cl <- names(segments)
@@ -154,18 +223,7 @@ generer_concordancier_html <- function(
       next
     }
 
-    tokens_surface <- character(0)
-    if (!is.null(spacy_tokens_df) && nrow(spacy_tokens_df) > 0 && length(ids_cl) > 0) {
-      df_tok <- spacy_tokens_df
-      df_tok$doc_id <- as.character(df_tok$doc_id)
-      df_tok <- df_tok[df_tok$doc_id %in% ids_cl, , drop = FALSE]
-      if (nrow(df_tok) > 0) {
-        tokens_surface <- unique(df_tok$token[df_tok$lemma %in% termes_cl | df_tok$token %in% termes_cl])
-        tokens_surface <- tokens_surface[!is.na(tokens_surface) & nzchar(tokens_surface)]
-      }
-    }
-
-    termes_a_surligner <- unique(c(tokens_surface, termes_cl))
+    termes_a_surligner <- unique(termes_cl)
     termes_a_surligner <- termes_a_surligner[!is.na(termes_a_surligner) & nzchar(termes_a_surligner)]
 
     keep <- detecter_segments_contenant_termes_unicode(unname(segments), termes_a_surligner)

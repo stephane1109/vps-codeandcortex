@@ -34,11 +34,11 @@ Conseil : télécharge l’archive ZIP des exports juste après la fin de l’an
 
 # Logique générale de l’application
 
-Uploadez un fichier texte au format IRaMuTeQ. L’app segmente, construit une matrice termes-documents (DTM), lance la CHD avec rainette, calcule les statistiques, génère un HTML surligné (concordancier), puis produit la CHD, AFC, NER, nuages de mots et réseaux de cooccurrences. L’onglet d’exploration (Explore_rainette) permet de visualiser la CHD.
+Uploadez un fichier texte au format IRaMuTeQ. L’app segmente, construit une matrice termes-documents (DTM), lance la CHD avec rainette, calcule les statistiques, génère un HTML surligné (concordancier), puis produit la CHD, l’AFC, les nuages de mots et les réseaux de cooccurrences. L’onglet d’exploration (Explore_rainette) permet de visualiser la CHD.
 
-### Choix de la langue du dictionnaire spaCy
+### Choix de la langue du corpus
 
-Vous avez le choix entre le français, l’anglais, l’espagnol… On pourrait en ajouter, car ces dictionnaires sont ceux fournis par la librairie spaCy. Ici, nous utilisons (pour le moment) le modèle "medium" (md). Il existe quatre tailles de modèles : "sm", "md", "lg" et "trf" (basé sur la technologie "transformer"). Le script détecte la cohérence entre le choix du dictionnaire et votre corpus importé, sur la base des stopwords.
+Vous avez le choix entre le français, l’anglais et l’espagnol. Ce choix sert à comparer la langue estimée du corpus avec la langue sélectionnée, et à charger la bonne liste de stopwords via quanteda.
 
 ### Paramètres de l’analyse
 
@@ -57,15 +57,9 @@ Avec `min_segment_size = 10`, les segments comportant moins de 10 formes sont re
 
 - **Classification double** : l’application combine deux classifications rainette (res1 et res2) via rainette2, puis découpe l’arbre final avec k.
 
-### Lemmatisation (option)
+### Stopwords quanteda
 
-- **Lemmatisation** : si activée, le texte est lemmatisé avec Spacy... mais la lemmatisation est (beaucoup) plus efficace avec IRaMuTeQ.
-
-### Filtrage Morphosyntaxique
-- **Tokens à conserver** : filtre les tokens conservés selon leur catégorie grammaticale (ex : NOUN, ADJ, VERB, PROPN, ADV...).
-
-### Paramètres SpaCy/NER
-- Activer NER (spaCy) => Détections des entités nommées (NER) par spaCy (ex : "Paris" = "LOC"). Le modele spaCy "md" est un peu léger... pour cette tâche.
+- **Retirer les stopwords** : enlève les mots-outils les plus fréquents à partir des listes de stopwords fournies par quanteda, selon la langue sélectionnée.
 
 ### Exploration "Explore_rainette"
 

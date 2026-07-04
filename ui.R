@@ -134,7 +134,7 @@ ui <- page_sidebar(
     ),
     accordion(
       id = "sidebar_accordion",
-      open = c("param_chd", "param_spacy", "param_nettoyage"),
+      open = c("param_chd", "param_langue", "param_nettoyage"),
       accordion_panel(
         title = "Paramètres CHD",
         value = "param_chd",
@@ -152,16 +152,16 @@ ui <- page_sidebar(
         numericInput("max_p", "max_p (p-value)", value = 0.05, min = 0, max = 1, step = 0.01)
       ),
       accordion_panel(
-        title = "Dictionnaire spaCy",
-        value = "param_spacy",
+        title = "Langue du corpus et stopwords",
+        value = "param_langue",
         radioButtons(
-          "spacy_langue",
+          "langue_corpus",
           "Langue du corpus",
           choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
           selected = "fr"
         ),
-        p(class = "text-muted small", "Ce choix pilote spaCy, les stopwords et le NER."),
-        uiOutput("ui_spacy_langue_detection")
+        p(class = "text-muted small", "Ce choix pilote l'estimation de langue et la liste de stopwords quanteda."),
+        uiOutput("ui_langue_detection")
       ),
       accordion_panel(
         title = "Classification",
@@ -189,38 +189,8 @@ ui <- page_sidebar(
         checkboxInput("supprimer_chiffres", "Supprimer les chiffres", value = FALSE),
         checkboxInput("supprimer_apostrophes", "Traiter les élisions françaises", value = FALSE),
         checkboxInput("forcer_minuscules_avant", "Forcer les minuscules avant traitement", value = FALSE),
-        checkboxInput("retirer_stopwords", "Retirer les stopwords (spaCy)", value = FALSE),
-        checkboxInput("filtrage_morpho", "Filtrage morphosyntaxique (spaCy)", value = FALSE),
-        conditionalPanel(
-          condition = "input.filtrage_morpho == true",
-          selectInput(
-            "pos_spacy_mode",
-            "Mode de sélection des POS",
-            choices = c(
-              "Conserver les POS sélectionnés" = "keep",
-              "Supprimer les POS sélectionnés" = "remove"
-            ),
-            selected = "keep"
-          ),
-          selectizeInput(
-            "pos_spacy_a_conserver",
-            "POS sélectionnés",
-            choices = c(
-              "ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN",
-              "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X"
-            ),
-            selected = c("NOUN", "VERB"),
-            multiple = TRUE,
-            options = list(plugins = list("remove_button"))
-          )
-        ),
-        checkboxInput("spacy_utiliser_lemmes", "Lemmatisation (spaCy)", value = FALSE),
-        p(class = "text-muted small", "Le Python spaCy est maintenant piloté via reticulate dans R.")
-      ),
-      accordion_panel(
-        title = "spaCy / NER",
-        value = "param_ner",
-        checkboxInput("activer_ner", "Activer NER (spaCy)", value = FALSE)
+        checkboxInput("retirer_stopwords", "Retirer les stopwords (quanteda)", value = FALSE),
+        p(class = "text-muted small", "Les stopwords sont désormais gérés directement avec quanteda.")
       ),
       accordion_panel(
         title = "AFC",
@@ -301,17 +271,6 @@ ui <- page_sidebar(
       card(card_header("Valeurs propres"), tableOutput("table_afc_eig"))
     ),
     nav_panel(
-      "NER",
-      card(card_header("Statut NER"), uiOutput("ui_ner_statut")),
-      layout_columns(
-        col_widths = c(6, 6),
-        card(card_header("Résumé"), tableOutput("table_ner_resume")),
-        card(card_header("Nuage global"), plotOutput("plot_ner_wordcloud", height = "420px"))
-      ),
-      card(card_header("Détails"), tableOutput("table_ner_details")),
-      card(card_header("Nuages par classe"), uiOutput("ui_ner_wordcloud_par_classe"))
-    ),
-    nav_panel(
       "Corpus",
       card(card_header("Informations"), uiOutput("corpus_meta")),
       card(
@@ -333,7 +292,6 @@ ui <- page_sidebar(
         class = "help-pane",
         navset_pill(
           nav_panel("Aide générale", uiOutput("help_main")),
-          nav_panel("Aide POS / spaCy", uiOutput("help_pos")),
           nav_panel(
             "README Rainette",
             tags$p(

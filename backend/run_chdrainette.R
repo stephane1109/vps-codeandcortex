@@ -852,6 +852,9 @@ tryCatch({
     res_stats_df = res_stats_df,
     max_p = max_p,
     textes_indexation = textes_index_ok,
+    dfm_obj = dfm_ok,
+    classes_docs = quanteda::docvars(filtered_corpus_ok)$Classes,
+    top_termes_keyness = 200,
     spacy_tokens_df = rv$spacy_tokens_df,
     explor_assets = rv$explor_assets,
     rv = rv

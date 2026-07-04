@@ -45,15 +45,15 @@ assurer_docvars_dfm_minimal <- function(dfm_obj, corpus_aligne) {
   dfm_obj
 }
 
-construire_dfm_avec_fallback_stopwords <- function(tok_base, min_docfreq, retirer_stopwords, langue_spacy, rv, libelle) {
+construire_dfm_avec_fallback_stopwords <- function(tok_base, min_docfreq, retirer_stopwords, langue_corpus, rv, libelle) {
   n_base <- compter_tokens(tok_base)
   ajouter_log(rv, paste0(libelle, " : tokens (avant stopwords) = ", n_base))
 
   if (isTRUE(retirer_stopwords)) {
-    tok_sw <- tokens_remove(tok_base, obtenir_stopwords_spacy(langue_spacy = langue_spacy, rv = rv))
+    tok_sw <- tokens_remove(tok_base, obtenir_stopwords_quanteda(langue = langue_corpus, rv = rv))
     tok_sw <- tokens_tolower(tok_sw)
     n_sw <- compter_tokens(tok_sw)
-    ajouter_log(rv, paste0(libelle, " : tokens (après stopwords) = ", n_sw))
+    ajouter_log(rv, paste0(libelle, " : tokens (après stopwords quanteda) = ", n_sw))
     tok_final <- tok_sw
   } else {
     ajouter_log(rv, paste0(libelle, " : suppression des stopwords désactivée."))
@@ -67,7 +67,7 @@ construire_dfm_avec_fallback_stopwords <- function(tok_base, min_docfreq, retire
     paste0(
       libelle,
       " : DFM après trim = ", ndoc(dfm_obj), " docs ; ", nfeat(dfm_obj),
-      ifelse(isTRUE(retirer_stopwords), " termes (avec stopwords retirés)", " termes (sans suppression des stopwords)")
+      ifelse(isTRUE(retirer_stopwords), " termes (avec stopwords quanteda retirés)", " termes (sans suppression des stopwords)")
     )
   )
 
@@ -144,8 +144,8 @@ verifier_dfm_avant_rainette <- function(dfm_obj, input) {
   if (nfeat(dfm_obj) < 2) {
     stop(
       "Après filtrages, il reste moins de 2 termes dans le DFM. ",
-      "Même avec min_docfreq=1, cela arrive si le filtrage morphosyntaxique est trop strict et/ou si les stopwords retirent la majorité des formes. ",
-      "Élargis les catégories morphosyntaxiques ou augmente segment_size."
+      "Même avec min_docfreq=1, cela arrive si les stopwords retirent la majorité des formes. ",
+      "Réduis le filtrage des stopwords ou augmente segment_size."
     )
   }
 }
