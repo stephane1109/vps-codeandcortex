@@ -25,6 +25,7 @@ options(
 source("nettoyage.R", encoding = "UTF-8", local = TRUE)
 source("concordancier.R", encoding = "UTF-8", local = TRUE)
 source("afc.R", encoding = "UTF-8", local = TRUE)
+source("R/rainette_explorer_module.R", encoding = "UTF-8", local = TRUE)
 source("ui.R", encoding = "UTF-8", local = TRUE)
 
 source("R/utils_general.R", encoding = "UTF-8", local = TRUE)
@@ -34,7 +35,6 @@ source("R/segmentation_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/afc_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/chd_afc_pipeline.R", encoding = "UTF-8", local = TRUE)
 source("R/nlp_language.R", encoding = "UTF-8", local = TRUE)
-source("R/rainette_explorer_module.R", encoding = "UTF-8", local = TRUE)
 source("R/server_outputs_status.R", encoding = "UTF-8", local = TRUE)
 source("R/server_events_lancer.R", encoding = "UTF-8", local = TRUE)
 
@@ -95,7 +95,8 @@ server <- function(input, output, session) {
     corpus_importe = NULL,
     corpus_segmente = NULL,
     corpus_preview_text = "",
-    rainette_min_segment_size = NULL
+    rainette_min_segment_size = NULL,
+    explorer_corpus = NULL
   )
 
   rainette_explorer_module_server(
@@ -105,7 +106,7 @@ server <- function(input, output, session) {
     cutree_res = reactive(rv$res),
     plot_dtm = reactive(rv$dfm_chd),
     explorer_dtm = reactive(rv$dfm),
-    corpus_src = reactive(rv$filtered_corpus),
+    corpus_src = reactive(rv$explorer_corpus),
     max_k_plot = reactive(rv$max_n_groups_chd),
     max_k_double = reactive(rv$max_n_groups),
     min_segment_size_value = reactive(rv$rainette_min_segment_size)

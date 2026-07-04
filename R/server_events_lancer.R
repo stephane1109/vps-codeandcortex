@@ -59,6 +59,7 @@ register_events_lancer <- function(input, output, session, rv) {
       rv$max_n_groups_chd <- NULL
       rv$explor_assets <- NULL
       rv$rainette_min_segment_size <- NULL
+      rv$explorer_corpus <- NULL
 
       ajouter_log(rv, "Clic sur 'Lancer l'analyse' reçu.")
 
@@ -229,6 +230,7 @@ register_events_lancer <- function(input, output, session, rv) {
           }
 
           docvars(filtered_corpus)$Classes <- groupes
+          rv$explorer_corpus <- filtered_corpus
 
           idx_ok <- !is.na(docvars(filtered_corpus)$Classes)
           filtered_corpus_ok <- filtered_corpus[idx_ok]

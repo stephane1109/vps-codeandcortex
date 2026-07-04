@@ -64,7 +64,7 @@ rainette_explorer_module_server <- function(
           type = "double",
           res = cutree_res(),
           docs_res = cutree_res(),
-          dtm = explorer_dtm(),
+          dtm = plot_dtm(),
           corpus = corpus_src(),
           max_n_groups = as.integer(max_k_double() %||% 2L),
           criterion_choices = c("Sum of chi-squared" = "chi2", "Sum of sizes" = "n")
