@@ -31,6 +31,7 @@ system_candidates <- unique(c(
 packages_required <- c(
   "bslib",
   "dplyr",
+  "highr",
   "htmltools",
   "markdown",
   "quanteda",
@@ -40,6 +41,7 @@ packages_required <- c(
   "remotes",
   "shiny",
   "stopwords",
+  "stringr",
   "stringi",
   "wordcloud"
 )

@@ -215,13 +215,9 @@ ui <- page_sidebar(
     nav_panel(
       "CHD",
       card(
-        card_header("Paramètres du graphe CHD"),
-        uiOutput("ui_plot_controls")
-      ),
-      card(
         full_screen = TRUE,
-        card_header("Graphe CHD"),
-        plotOutput("plot_chd", height = "900px")
+        card_header("Rainette explor"),
+        rainette_explor_module_ui("rainette_explor")
       )
     ),
     nav_panel(

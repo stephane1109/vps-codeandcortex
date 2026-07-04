@@ -46,9 +46,9 @@ Le choix de langue sert à :
 
 ### À propos de `rainette_explor()`
 
-La doc officielle présente `rainette_explor()` comme un **gadget Shiny**. Dans cette version VPS :
+La doc officielle présente `rainette_explor()` comme un **gadget Shiny**. Dans cette version VPS, l'architecture a été refondue en vraie application Shiny native pour reprendre directement la logique de l'explorateur Rainette :
 
-- la CHD est affichée dans l'application avec `rainette_plot()`
-- le vrai gadget n'est pas injecté dans l'interface serveur
-- un fichier `analysis_bundle.rds` est exporté
-- un script `ouvrir_rainette_explor.R` est fourni pour ouvrir le vrai gadget dans une session R locale
+- onglet **Summary** avec les vrais réglages Rainette
+- onglet **Cluster documents** avec la navigation dans les segments de classes
+- bouton **Get R code** pour réexporter le code de la vue courante
+- un fichier `analysis_bundle.rds` reste exporté pour réouvrir la même analyse dans une session R locale si besoin

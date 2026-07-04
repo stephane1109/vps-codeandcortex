@@ -23,12 +23,13 @@ options(
 
 source("nettoyage.R", encoding = "UTF-8", local = TRUE)
 source("concordancier.R", encoding = "UTF-8", local = TRUE)
-source("ui.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_general.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_logging.R", encoding = "UTF-8", local = TRUE)
 source("R/segmentation_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/nlp_language.R", encoding = "UTF-8", local = TRUE)
 source("R/chdrainette_core.R", encoding = "UTF-8", local = TRUE)
+source("R/rainette_explor_native.R", encoding = "UTF-8", local = TRUE)
+source("ui.R", encoding = "UTF-8", local = TRUE)
 
 render_markdown_or_message <- function(path, fallback) {
   if (file.exists(path)) {
@@ -81,7 +82,8 @@ server <- function(input, output, session) {
     zip_file = NULL,
     bundle_file = NULL,
     bundle_script_file = NULL,
-    wordclouds = NULL
+    wordclouds = NULL,
+    params_used = NULL
   )
 
   observeEvent(input$fichier_corpus, {
@@ -120,6 +122,7 @@ server <- function(input, output, session) {
     rv$bundle_file <- NULL
     rv$bundle_script_file <- NULL
     rv$wordclouds <- NULL
+    rv$params_used <- NULL
 
     if (is.null(input$fichier_corpus) || is.null(input$fichier_corpus$datapath) || !file.exists(input$fichier_corpus$datapath)) {
       rv$statut <- "Aucun fichier texte n'a été importé."
@@ -172,6 +175,7 @@ server <- function(input, output, session) {
       rv$bundle_file <- result$bundle_file
       rv$bundle_script_file <- result$bundle_script_file
       rv$wordclouds <- result$wordclouds
+      rv$params_used <- result$params_used
 
       ensure_exports_resource_path(rv)
 
@@ -278,71 +282,6 @@ server <- function(input, output, session) {
     tags$div(class = "alert alert-success", tags$p(style = "margin:0;", paste0(message, " Langue sélectionnée : ", cfg_sel$libelle, ".")))
   })
 
-  output$ui_plot_controls <- renderUI({
-    if (is.null(rv$res) || is.null(rv$dfm)) {
-      return(tags$p("Lance une analyse pour afficher ici les réglages du graphe CHD."))
-    }
-
-    max_k <- max(2L, length(rv$clusters))
-
-    tagList(
-      layout_columns(
-        col_widths = c(3, 3, 2, 2, 2),
-        sliderInput("plot_k", "Nombre de classes affichées", min = 2, max = max_k, value = max_k, step = 1),
-        selectInput("plot_type", "Type de graphique", choices = c("Barres" = "bar", "Nuage" = "cloud"), selected = "bar"),
-        selectInput(
-          "plot_measure",
-          "Statistique",
-          choices = c("Chi2" = "chi2", "Likelihood ratio" = "lr", "Fréquence" = "frequency", "Proportion de documents" = "docprop"),
-          selected = "chi2"
-        ),
-        numericInput("plot_n_terms", "Nombre de termes", value = 20, min = 5, max = 40, step = 1),
-        sliderInput("plot_text_size", "Taille du texte", min = 8, max = 18, value = 11, step = 1)
-      ),
-      layout_columns(
-        col_widths = c(4, 4, 4),
-        checkboxInput("plot_same_scales", "Forcer les mêmes échelles", value = TRUE),
-        checkboxInput("plot_show_negative", "Afficher les valeurs négatives", value = FALSE),
-        tags$div(class = "text-muted small control-note", "La vue CHD utilise rainette_plot().")
-      )
-    )
-  })
-
-  output$plot_chd <- renderPlot({
-    req(rv$res, rv$dfm)
-
-    k_plot <- suppressWarnings(as.integer(input$plot_k %||% length(rv$clusters)))
-    if (!is.finite(k_plot) || is.na(k_plot)) {
-      k_plot <- max(2L, length(rv$clusters))
-    }
-    k_plot <- max(2L, min(k_plot, max(2L, length(rv$clusters))))
-
-    type_plot <- as.character(input$plot_type %||% "bar")
-    measure <- as.character(input$plot_measure %||% "chi2")
-    n_terms <- suppressWarnings(as.integer(input$plot_n_terms %||% 20L))
-    text_size <- suppressWarnings(as.integer(input$plot_text_size %||% 11L))
-    same_scales <- isTRUE(input$plot_same_scales)
-    show_negative <- isTRUE(input$plot_show_negative)
-
-    tryCatch(
-      rainette::rainette_plot(
-        rv$res,
-        rv$dfm,
-        k = k_plot,
-        type = type_plot,
-        n_terms = n_terms,
-        free_scales = !same_scales,
-        measure = measure,
-        show_negative = show_negative,
-        text_size = text_size
-      ),
-      error = function(e) {
-        plot.new()
-        text(0.5, 0.5, paste0("Erreur d'affichage CHD : ", conditionMessage(e)), cex = 1)
-      }
-    )
-  }, res = 140)
-
   output$table_classes <- renderTable({
     req(rv$classes_df)
     rv$classes_df
@@ -413,7 +352,7 @@ server <- function(input, output, session) {
         tags$li(paste0("Concordancier HTML : ", basename(rv$html_file %||% ""))),
         tags$li(paste0("Bundle rainette_explor : ", basename(rv$bundle_file %||% "")))
       ),
-      tags$p(class = "text-muted small", "Le bundle RDS permet d'ouvrir le vrai gadget rainette_explor dans une session R locale.")
+      tags$p(class = "text-muted small", "Le bundle RDS permet de réouvrir la même analyse Rainette dans une session R locale si besoin.")
     )
   })
 
@@ -450,6 +389,15 @@ server <- function(input, output, session) {
   output$dl_bundle <- downloadHandler(
     filename = function() basename(rv$bundle_file %||% paste0(rv$file_stem %||% "chdrainette", "_bundle.rds")),
     content = function(file) file.copy(rv$bundle_file, file, overwrite = TRUE)
+  )
+
+  rainette_explor_module_server(
+    "rainette_explor",
+    res_r = reactive(rv$res),
+    dtm_r = reactive(rv$dfm),
+    corpus_r = reactive(rv$filtered_corpus),
+    bundle_file_r = reactive(rv$bundle_file),
+    min_segment_size_r = reactive(if (is.null(rv$params_used)) 0L else rv$params_used$min_segment_size %||% 0L)
   )
 }
 

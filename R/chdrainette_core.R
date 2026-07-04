@@ -581,6 +581,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     zip_file = zip_file,
     bundle_file = bundle_info$bundle_file,
     bundle_script_file = bundle_info$script_file,
-    wordclouds = wordclouds
+    wordclouds = wordclouds,
+    params_used = params
   )
 }

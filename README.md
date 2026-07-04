@@ -26,11 +26,12 @@ Cette version repart du script d'origine et garde un noyau volontairement simple
 
 ## Note sur `rainette_explor`
 
-La documentation officielle de `rainette` présente `rainette_explor()` comme un **gadget Shiny** lancé pour ses effets de bord. Cette app VPS n'essaie donc plus de l'imbriquer dans une seconde interface Shiny serveur. À la place :
+La documentation officielle de `rainette` présente `rainette_explor()` comme un **gadget Shiny** lancé pour ses effets de bord. Cette version VPS adopte donc une architecture 100% Shiny native pour reprendre directement la logique officielle de l'explorateur :
 
-- l'application affiche la CHD via `rainette_plot()`
-- elle exporte un bundle `analysis_bundle.rds`
-- elle fournit un script `ouvrir_rainette_explor.R` pour ouvrir le vrai gadget dans une session R locale
+- onglet `Summary` avec les réglages Rainette
+- onglet `Cluster documents` avec l'exploration des segments de classes
+- bouton `Get R code`
+- export conservé du bundle `analysis_bundle.rds` pour réouvrir l'analyse dans une session R locale
 
 ## Variables d'environnement Coolify
 
