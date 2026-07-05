@@ -254,26 +254,37 @@ chdrainette_rainette_explor_ui <- function(request) {
 }
 
 run_rainette_explor_page_server <- function(input, output, session) {
-  query_string <- ""
+  request_query_string <- ""
   if (!is.null(session$request) && !is.null(session$request$QUERY_STRING)) {
-    query_string <- session$request$QUERY_STRING
-  } else {
-    query_string <- isolate(session$clientData$url_search %||% "")
+    request_query_string <- session$request$QUERY_STRING
   }
 
-  query <- chdrainette_parse_query(query_string)
-  if (!identical(query$view, "rainette_explor")) {
-    return(invisible(NULL))
-  }
+  query <- shiny::reactive({
+    # La requete WebSocket Shiny ne reprend pas toujours la query string de
+    # la page. url_search arrive apres l'initialisation de la session : il
+    # faut donc le lire de facon reactive au lieu de quitter le serveur.
+    client_query_string <- session$clientData$url_search %||% ""
+    query_string <- if (nzchar(client_query_string)) {
+      client_query_string
+    } else {
+      request_query_string
+    }
+    chdrainette_parse_query(query_string)
+  })
 
-  bundle <- chdrainette_bundle_from_query(query)
-  if (is.null(bundle) || is.null(bundle$res) || is.null(bundle$dtm)) {
-    return(invisible(NULL))
-  }
+  bundle_data <- shiny::reactive({
+    current_query <- query()
+    shiny::req(identical(current_query$view, "rainette_explor"))
 
-  res <- bundle$res
-  dtm <- bundle$dtm
-  corpus_src <- bundle$corpus %||% NULL
+    bundle <- chdrainette_bundle_from_query(current_query)
+    shiny::validate(
+      shiny::need(
+        !is.null(bundle) && !is.null(bundle$res) && !is.null(bundle$dtm),
+        "Le bundle Rainette est introuvable ou invalide."
+      )
+    )
+    bundle
+  })
 
   plot_code <- shiny::reactive({
     paste0(
@@ -301,9 +312,10 @@ run_rainette_explor_page_server <- function(input, output, session) {
   })
 
   output$rainette_plot <- shiny::renderPlot({
+    bundle <- bundle_data()
     rainette::rainette_plot(
-      res,
-      dtm,
+      bundle$res,
+      bundle$dtm,
       k = input$k,
       n_terms = input$n_terms,
       free_scales = !isTRUE(input$same_scales),
@@ -333,10 +345,20 @@ run_rainette_explor_page_server <- function(input, output, session) {
   })
 
   current_k <- shiny::reactive(input$k)
-  getFromNamespace("docs_sample_server", "rainette")(
-    "rainette1",
-    res,
-    corpus_src,
-    current_k
-  )
+  docs_server_started <- shiny::reactiveVal(FALSE)
+
+  shiny::observeEvent(bundle_data(), {
+    if (isTRUE(docs_server_started())) {
+      return(invisible(NULL))
+    }
+
+    bundle <- bundle_data()
+    getFromNamespace("docs_sample_server", "rainette")(
+      "rainette1",
+      bundle$res,
+      bundle$corpus %||% NULL,
+      current_k
+    )
+    docs_server_started(TRUE)
+  }, ignoreInit = FALSE, once = TRUE)
 }
