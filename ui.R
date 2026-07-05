@@ -21,101 +21,123 @@ ui <- page_sidebar(
   theme = bs_theme(
     version = 5,
     primary = "#d96b2b",
-    secondary = "#f4e5d5",
+    secondary = "#e7e2db",
     success = "#2f855a",
     info = "#2b6cb0",
     warning = "#b7791f",
     danger = "#c53030",
-    bg = "#f6f1ea",
-    fg = "#2f241c",
-    base_font = font_google("Source Sans 3"),
-    heading_font = font_google("Merriweather Sans")
+    bg = "#f3f1ed",
+    fg = "#1f2328",
+    base_font = font_google("IBM Plex Sans"),
+    heading_font = font_google("IBM Plex Serif")
   ),
   fillable = TRUE,
   tags$head(
     tags$style(HTML("
       body {
         background:
-          radial-gradient(circle at top left, rgba(239, 156, 69, 0.14), transparent 28%),
-          radial-gradient(circle at top right, rgba(217, 107, 43, 0.08), transparent 32%),
-          linear-gradient(180deg, #f8f4ed 0%, #f4ede4 100%);
+          linear-gradient(180deg, rgba(255,255,255,0.70) 0%, rgba(255,255,255,0.70) 100%),
+          repeating-linear-gradient(
+            0deg,
+            rgba(20, 24, 28, 0.028) 0,
+            rgba(20, 24, 28, 0.028) 1px,
+            transparent 1px,
+            transparent 40px
+          ),
+          linear-gradient(180deg, #f4f2ee 0%, #ece8e2 100%);
       }
-      .app-title-block h1 { margin: 0; font-size: 2.05rem; line-height: 1.04; }
+      .app-title-block h1 {
+        margin: 0;
+        font-size: 2rem;
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+      }
       .app-kicker {
         text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-size: 0.76rem;
+        letter-spacing: 0.16em;
+        font-size: 0.72rem;
         font-weight: 700;
-        color: #b4571f;
-        margin-bottom: 0.25rem;
+        color: #8d5d2b;
+        margin-bottom: 0.4rem;
       }
-      .app-subtitle { margin: 0.45rem 0 0; color: #6f5d4c; }
+      .app-subtitle {
+        margin: 0.55rem 0 0;
+        color: #5f6670;
+        max-width: 70ch;
+      }
       .app-subtitle a {
-        color: #a64f1b;
+        color: #9e5b22;
         font-weight: 700;
         text-decoration: none;
       }
       .app-subtitle a:hover { text-decoration: underline; }
       .bslib-sidebar-layout > .sidebar {
-        background: linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(248, 239, 226, 0.96) 100%);
-        border-right: 1px solid rgba(217, 107, 43, 0.10);
-        box-shadow: inset -1px 0 0 rgba(255,255,255,0.65);
+        background: rgba(247, 245, 241, 0.97);
+        border-right: 1px solid rgba(31, 35, 40, 0.08);
+        box-shadow: inset -1px 0 0 rgba(255,255,255,0.8);
       }
       .sidebar-group {
-        background: rgba(255, 253, 249, 0.82);
-        border: 1px solid rgba(47, 36, 28, 0.08);
-        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(31, 35, 40, 0.08);
+        border-radius: 12px;
         padding: 1rem 1rem 0.65rem;
-        box-shadow: 0 14px 30px rgba(47, 36, 28, 0.05);
+        box-shadow: 0 6px 18px rgba(24, 28, 33, 0.05);
       }
       .sidebar-group + .sidebar-group { margin-top: 1rem; }
       .shiny-input-container { margin-bottom: 0.85rem; }
       .btn-primary {
         font-weight: 700;
         border: none;
-        background: linear-gradient(135deg, #d96b2b 0%, #ef9c45 100%);
-        box-shadow: 0 12px 25px rgba(217, 107, 43, 0.22);
+        background: #d96b2b;
+        box-shadow: 0 6px 14px rgba(217, 107, 43, 0.14);
       }
-      .btn-primary:hover { filter: brightness(1.03); }
+      .btn-primary:hover { background: #c85d1b; }
+      .btn-secondary, .btn-default {
+        border: 1px solid rgba(31, 35, 40, 0.10);
+        background: #ffffff;
+        color: #1f2328;
+      }
       .accordion-item, .accordion-button {
-        border-radius: 16px !important;
+        border-radius: 10px !important;
       }
       .accordion-button {
         font-weight: 700;
-        color: #3f2c1f;
+        color: #1f2328;
+        background: #fbfaf8;
       }
       .accordion-body {
-        background: rgba(255,255,255,0.78);
+        background: #ffffff;
       }
       .logs-box pre, .logs-box code { white-space: pre-wrap; }
       .bslib-navs-card, .card {
-        border: 1px solid rgba(47, 36, 28, 0.08);
-        border-radius: 22px;
-        box-shadow: 0 18px 40px rgba(47, 36, 28, 0.06);
-        background: rgba(255, 253, 249, 0.96);
+        border: 1px solid rgba(31, 35, 40, 0.08);
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(24, 28, 33, 0.05);
+        background: rgba(255, 255, 255, 0.95);
       }
       .card-header {
         font-weight: 800;
-        color: #39281d;
-        background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,240,229,0.96) 100%);
-        border-bottom: 1px solid rgba(47, 36, 28, 0.06);
+        color: #1f2328;
+        background: #fbfaf8;
+        border-bottom: 1px solid rgba(31, 35, 40, 0.06);
       }
       .nav-tabs {
-        border-bottom: none;
-        gap: 0.45rem;
+        border-bottom: 1px solid rgba(31, 35, 40, 0.08);
+        gap: 0.25rem;
         padding: 0.45rem 0.45rem 0;
       }
       .nav-tabs .nav-link {
-        border: none;
-        border-radius: 999px;
-        background: rgba(244, 229, 213, 0.55);
-        color: #5c4535;
+        border: 1px solid transparent;
+        border-radius: 10px 10px 0 0;
+        background: transparent;
+        color: #5f6670;
         font-weight: 700;
       }
       .nav-tabs .nav-link.active {
-        background: linear-gradient(135deg, #d96b2b 0%, #ef9c45 100%);
-        color: #fff9f3;
-        box-shadow: 0 10px 20px rgba(217, 107, 43, 0.22);
+        background: #ffffff;
+        color: #1f2328;
+        border-color: rgba(31, 35, 40, 0.08) rgba(31, 35, 40, 0.08) #ffffff;
+        box-shadow: inset 0 3px 0 #d96b2b;
       }
       .metrics-grid {
         display: grid;
@@ -123,37 +145,36 @@ ui <- page_sidebar(
         gap: 1rem;
       }
       .metric-card {
-        background: #fffdf9;
-        border: 1px solid rgba(47, 36, 28, 0.08);
-        border-radius: 18px;
+        background: #fbfaf8;
+        border: 1px solid rgba(31, 35, 40, 0.08);
+        border-radius: 12px;
         padding: 1rem 1.1rem;
-        box-shadow: 0 12px 30px rgba(47, 36, 28, 0.04);
+        box-shadow: none;
       }
       .metric-card .label {
         font-size: 0.85rem;
-        color: #7a6858;
+        color: #66707a;
         display: block;
         margin-bottom: 0.35rem;
       }
       .metric-card .value {
-        font-size: 1.55rem;
+        font-size: 1.45rem;
         font-weight: 700;
-        color: #2f241c;
+        color: #1f2328;
       }
-      .hero-card {
-        background:
-          linear-gradient(135deg, rgba(217, 107, 43, 0.96) 0%, rgba(239, 156, 69, 0.94) 100%);
-        color: #fff8f2;
-        border: none;
+      .analysis-intro {
+        border-left: 4px solid #d96b2b;
+        background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(249,247,243,0.96) 100%);
       }
-      .hero-card h2 {
-        margin: 0 0 0.45rem;
-        font-size: 1.55rem;
+      .analysis-intro h2 {
+        margin: 0 0 0.55rem;
+        font-size: 1.35rem;
+        color: #1f2328;
       }
-      .hero-card p {
+      .analysis-intro p {
         margin: 0;
-        color: rgba(255, 248, 242, 0.88);
-        max-width: 70ch;
+        color: #4d5863;
+        max-width: 74ch;
       }
       .debug-strip {
         display: flex;
@@ -164,9 +185,9 @@ ui <- page_sidebar(
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
-        background: rgba(255,255,255,0.8);
-        border: 1px solid rgba(47, 36, 28, 0.08);
-        color: #4a3425;
+        background: #fbfaf8;
+        border: 1px solid rgba(31, 35, 40, 0.08);
+        color: #2d333b;
         border-radius: 999px;
         padding: 0.4rem 0.8rem;
         font-size: 0.88rem;
@@ -176,25 +197,25 @@ ui <- page_sidebar(
         min-height: 22rem;
         max-height: 42rem;
         overflow: auto;
-        background: #1e1d1a;
-        color: #f1eee6;
-        border-radius: 18px;
+        background: #14181c;
+        color: #eef2f6;
+        border-radius: 12px;
         padding: 1rem 1.05rem;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
       }
       .debug-terminal pre {
         white-space: pre-wrap;
         margin: 0;
-        color: #f1eee6;
+        color: #eef2f6;
       }
       .preview-box, .code-box {
         min-height: 22rem;
         max-height: 42rem;
         overflow: auto;
-        background: #fffdf9;
-        border: 1px solid rgba(47, 36, 28, 0.08);
-        border-radius: 18px;
+        background: #ffffff;
+        border: 1px solid rgba(31, 35, 40, 0.08);
+        border-radius: 12px;
         padding: 1rem;
         white-space: pre-wrap;
       }
@@ -202,9 +223,9 @@ ui <- page_sidebar(
         margin-top: 0.45rem;
         display: grid;
         gap: 0.15rem;
-        background: rgba(255,250,243,0.95);
-        border: 1px dashed rgba(217, 107, 43, 0.34);
-        border-radius: 14px;
+        background: #fbfaf8;
+        border: 1px dashed rgba(217, 107, 43, 0.4);
+        border-radius: 10px;
         padding: 0.65rem 0.8rem;
       }
       .input-help-label {
@@ -212,26 +233,26 @@ ui <- page_sidebar(
         font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: #a25725;
+        color: #9e5b22;
       }
       .input-help-value {
         font-size: 0.9rem;
-        color: #5b4638;
+        color: #4d5863;
       }
       .help-pane { max-width: 1000px; }
       .progress-wrapper { display: grid; gap: 0.5rem; }
-      .progress-label { font-size: 0.95rem; color: #6f5d4c; }
+      .progress-label { font-size: 0.95rem; color: #4d5863; }
       .progress-shell {
         width: 100%;
         height: 14px;
         border-radius: 999px;
-        background: rgba(47, 36, 28, 0.08);
+        background: rgba(31, 35, 40, 0.08);
         overflow: hidden;
       }
       .progress-bar-custom {
         height: 100%;
         border-radius: 999px;
-        background: linear-gradient(90deg, #d96b2b 0%, #ef9c45 100%);
+        background: linear-gradient(90deg, #d96b2b 0%, #e68f40 100%);
       }
       .wide-stack {
         display: grid;
@@ -241,6 +262,11 @@ ui <- page_sidebar(
         display: flex;
         align-items: end;
         min-height: 100%;
+      }
+      .lab-note {
+        font-size: 0.9rem;
+        color: #5f6670;
+        margin: 0;
       }
       @media (max-width: 980px) {
         .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -335,11 +361,15 @@ ui <- page_sidebar(
     nav_panel(
       "Analyse",
       card(
-        class = "hero-card",
+        class = "analysis-intro",
         full_screen = TRUE,
         card_body(
-          tags$h2("Suivre, diagnostiquer et explorer la CHD Rainette"),
-          tags$p("L’onglet Analyse centralise maintenant les indicateurs, l’état d’exécution et le journal détaillé du pipeline pour faciliter le debug sur le VPS.")
+          tags$h2("Pilotage de la CHD Rainette"),
+          tags$p("Cette vue regroupe l’état du calcul, les indicateurs de segmentation et le journal détaillé pour suivre l’analyse pas à pas sur le VPS."),
+          tags$p(
+            class = "lab-note",
+            "Le style de l’interface reste volontairement sobre : priorité aux sorties, aux paramètres et au diagnostic de calcul."
+          )
         )
       ),
       card(
