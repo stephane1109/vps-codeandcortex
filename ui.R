@@ -225,18 +225,25 @@ page_sidebar(
         padding: 1rem;
         white-space: pre-wrap;
       }
-      .afc-plot-scroll {
+      .afc-plot-host {
         width: 100%;
-        overflow-x: auto;
-        overflow-y: auto;
+        display: flex;
+        justify-content: center;
+        overflow: visible;
         padding: 0.4rem 0 1rem;
       }
       .afc-plot-canvas {
-        width: 1000px;
-        min-width: 1000px;
+        flex: 0 1 1000px;
+        width: min(100%, 1000px);
+        min-width: 0;
         max-width: 1000px;
-        height: 1000px;
+        height: auto;
+        aspect-ratio: 1 / 1;
         margin: 0 auto;
+      }
+      .afc-plot-canvas .shiny-plot-output {
+        width: 100% !important;
+        height: 100% !important;
       }
       .input-help-box {
         margin-top: 0.45rem;
@@ -658,10 +665,10 @@ page_sidebar(
         card_header("Projection des classes"),
         card_body(
           div(
-            class = "afc-plot-scroll",
+            class = "afc-plot-host",
             div(
               class = "afc-plot-canvas",
-              plotOutput("plot_afc_classes", width = "1000px", height = "1000px")
+              plotOutput("plot_afc_classes", width = "100%", height = "100%")
             )
           )
         )
@@ -671,10 +678,10 @@ page_sidebar(
         card_header("Projection des classes et des termes"),
         card_body(
           div(
-            class = "afc-plot-scroll",
+            class = "afc-plot-host",
             div(
               class = "afc-plot-canvas",
-              plotOutput("plot_afc_terms", width = "1000px", height = "1000px")
+              plotOutput("plot_afc_terms", width = "100%", height = "100%")
             )
           )
         )
