@@ -412,6 +412,34 @@ page_sidebar(
       )
     ),
     nav_panel(
+      "AFC",
+      card(
+        full_screen = TRUE,
+        card_header("Analyse factorielle des correspondances"),
+        uiOutput("ui_afc_status"),
+        layout_columns(
+          col_widths = c(6, 6),
+          numericInput("afc_top_terms", "Nombre de termes affichés", value = 80, min = 10, max = 200, step = 10),
+          selectInput("afc_size_by", "Taille des termes", choices = c("Chi2" = "Chi2", "Fréquence" = "Frequence"), selected = "Chi2")
+        )
+      ),
+      card(
+        full_screen = TRUE,
+        card_header("Projection des classes"),
+        plotOutput("plot_afc_classes", height = "720px")
+      ),
+      card(
+        full_screen = TRUE,
+        card_header("Projection des classes et des termes"),
+        plotOutput("plot_afc_terms", height = "820px")
+      ),
+      card(
+        full_screen = TRUE,
+        card_header("Valeurs propres et inertie"),
+        tableOutput("table_afc_eigenvalues")
+      )
+    ),
+    nav_panel(
       "Résultats",
       card(
         full_screen = TRUE,

@@ -554,6 +554,31 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   termes_significatifs <- construire_termes_significatifs(res_stats_df, params$max_p, params$top_n)
   classes_df <- construire_resume_classes(groupes, termes_significatifs)
 
+  afc_obj <- NULL
+  afc_error <- NULL
+  afc_files <- NULL
+  if (!is.null(rv)) {
+    rv$progression <- 60
+    rv$statut <- "Calcul de l'AFC classes-termes."
+    ajouter_etape(rv, "Construction de l'AFC à partir des classes de la CHD.")
+  }
+  tryCatch({
+    afc_obj <- chdrainette_compute_afc(
+      dfm_obj = dfm_ok,
+      groups = groupes,
+      max_terms = 400L
+    )
+    afc_files <- chdrainette_export_afc(afc_obj, export_dir = export_dir)
+    if (!is.null(rv)) {
+      ajouter_log(rv, "AFC classes-termes calculée et exportée.")
+    }
+  }, error = function(error) {
+    afc_error <<- paste0("AFC indisponible : ", conditionMessage(error))
+    if (!is.null(rv)) {
+      ajouter_log(rv, afc_error)
+    }
+  })
+
   if (!is.null(rv)) {
     rv$progression <- 65
     rv$statut <- "Exports texte et concordancier."
@@ -650,6 +675,9 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     bundle_file = bundle_info$bundle_file,
     bundle_script_file = bundle_info$script_file,
     wordclouds = wordclouds,
+    afc_obj = afc_obj,
+    afc_error = afc_error,
+    afc_files = afc_files,
     params_used = params
   )
 }

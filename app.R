@@ -27,6 +27,7 @@ source("R/utils_general.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_logging.R", encoding = "UTF-8", local = TRUE)
 source("R/segmentation_helpers.R", encoding = "UTF-8", local = TRUE)
 source("R/nlp_language.R", encoding = "UTF-8", local = TRUE)
+source("R/afc_chd.R", encoding = "UTF-8", local = TRUE)
 source("R/chdrainette_core.R", encoding = "UTF-8", local = TRUE)
 source("R/rainette_explor_native.R", encoding = "UTF-8", local = TRUE)
 source("ui.R", encoding = "UTF-8", local = TRUE)
@@ -93,6 +94,9 @@ server <- function(input, output, session) {
     bundle_file = NULL,
     bundle_script_file = NULL,
     wordclouds = NULL,
+    afc_obj = NULL,
+    afc_error = NULL,
+    afc_files = NULL,
     params_used = NULL
   )
 
@@ -133,6 +137,9 @@ server <- function(input, output, session) {
     rv$bundle_file <- NULL
     rv$bundle_script_file <- NULL
     rv$wordclouds <- NULL
+    rv$afc_obj <- NULL
+    rv$afc_error <- NULL
+    rv$afc_files <- NULL
     rv$params_used <- NULL
 
     if (is.null(input$fichier_corpus) || is.null(input$fichier_corpus$datapath) || !file.exists(input$fichier_corpus$datapath)) {
@@ -187,6 +194,9 @@ server <- function(input, output, session) {
       rv$bundle_file <- result$bundle_file
       rv$bundle_script_file <- result$bundle_script_file
       rv$wordclouds <- result$wordclouds
+      rv$afc_obj <- result$afc_obj
+      rv$afc_error <- result$afc_error
+      rv$afc_files <- result$afc_files
       rv$params_used <- result$params_used
 
       ensure_exports_resource_path(rv)
@@ -334,6 +344,35 @@ server <- function(input, output, session) {
     }
     sous_df[, intersect(c("Terme", "chi2", "p", "frequency", "docprop", "lr"), names(sous_df)), drop = FALSE]
   }, rownames = FALSE)
+
+  output$ui_afc_status <- renderUI({
+    if (!is.null(rv$afc_obj)) {
+      return(tags$div(class = "alert alert-success", "AFC calculée à partir des classes de la CHD."))
+    }
+    if (!is.null(rv$afc_error) && nzchar(rv$afc_error)) {
+      return(tags$div(class = "alert alert-warning", rv$afc_error))
+    }
+    tags$p("Lance une analyse CHD pour calculer l'AFC classes-termes.")
+  })
+
+  output$plot_afc_classes <- renderPlot({
+    req(rv$afc_obj)
+    chdrainette_plot_afc_classes(rv$afc_obj)
+  }, res = 120)
+
+  output$plot_afc_terms <- renderPlot({
+    req(rv$afc_obj)
+    chdrainette_plot_afc_terms(
+      rv$afc_obj,
+      top_terms = input$afc_top_terms %||% 80L,
+      size_by = input$afc_size_by %||% "Chi2"
+    )
+  }, res = 120)
+
+  output$table_afc_eigenvalues <- renderTable({
+    req(rv$afc_obj)
+    rv$afc_obj$eigenvalues
+  }, rownames = FALSE, digits = 3)
 
   output$ui_wordclouds <- renderUI({
     req(rv$wordclouds, input$classe_resultat)

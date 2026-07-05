@@ -51,6 +51,7 @@ RUN apt-get update \
     && binary_r_packages="\
       r-cran-bslib \
       r-cran-dplyr \
+      r-cran-factominer \
       r-cran-htmltools \
       r-cran-markdown \
       r-cran-quanteda \

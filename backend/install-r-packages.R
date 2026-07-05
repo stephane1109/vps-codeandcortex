@@ -31,6 +31,7 @@ system_candidates <- unique(c(
 packages_required <- c(
   "bslib",
   "dplyr",
+  "FactoMineR",
   "highr",
   "htmltools",
   "markdown",
