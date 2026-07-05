@@ -111,6 +111,77 @@ chdrainette_afc_palette <- function(classes) {
   stats::setNames(colors[seq_along(classes)], classes)
 }
 
+chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 600L) {
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  labels <- as.character(labels)
+  sizes <- rep_len(as.numeric(sizes), length(labels))
+  user <- graphics::par("usr")
+  range_x <- user[2L] - user[1L]
+  range_y <- user[4L] - user[3L]
+  placed <- vector("list", length(labels))
+  result_x <- x
+  result_y <- y
+
+  overlaps <- function(first, second) {
+    !(first$xmax < second$xmin || second$xmax < first$xmin ||
+      first$ymax < second$ymin || second$ymax < first$ymin)
+  }
+
+  for (index in seq_along(labels)) {
+    width <- graphics::strwidth(labels[index], units = "user", cex = sizes[index])
+    height <- graphics::strheight(labels[index], units = "user", cex = sizes[index])
+    width <- max(width, range_x * 0.008)
+    height <- max(height, range_y * 0.012)
+    selected <- NULL
+
+    for (iteration in 0:max_iterations) {
+      if (iteration == 0L) {
+        candidate_x <- x[index]
+        candidate_y <- y[index]
+      } else {
+        angle <- iteration * 2.399963
+        radius <- sqrt(iteration)
+        candidate_x <- x[index] + cos(angle) * radius * range_x * 0.0045
+        candidate_y <- y[index] + sin(angle) * radius * range_y * 0.006
+      }
+
+      candidate_x <- min(max(candidate_x, user[1L] + width / 2), user[2L] - width / 2)
+      candidate_y <- min(max(candidate_y, user[3L] + height / 2), user[4L] - height / 2)
+      rectangle <- list(
+        xmin = candidate_x - width / 2,
+        xmax = candidate_x + width / 2,
+        ymin = candidate_y - height / 2,
+        ymax = candidate_y + height / 2
+      )
+
+      collision <- any(vapply(
+        placed[seq_len(index - 1L)],
+        function(previous) !is.null(previous) && overlaps(rectangle, previous),
+        logical(1)
+      ))
+      if (!collision) {
+        selected <- rectangle
+        result_x[index] <- candidate_x
+        result_y[index] <- candidate_y
+        break
+      }
+    }
+
+    if (is.null(selected)) {
+      selected <- list(
+        xmin = x[index] - width / 2,
+        xmax = x[index] + width / 2,
+        ymin = y[index] - height / 2,
+        ymax = y[index] + height / 2
+      )
+    }
+    placed[[index]] <- selected
+  }
+
+  list(x = result_x, y = result_y)
+}
+
 chdrainette_plot_afc_classes <- function(afc) {
   coords <- afc$class_coords
   limit <- chdrainette_afc_limits(coords[, 1L], coords[, 2L])
@@ -131,7 +202,7 @@ chdrainette_plot_afc_classes <- function(afc) {
   graphics::text(coords[, 1L], coords[, 2L], labels = rownames(coords), pos = 3, cex = 1.05, col = colors[rownames(coords)])
 }
 
-chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2") {
+chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2", avoid_overlap = TRUE) {
   stats <- afc$term_stats
   top_terms <- max(5L, suppressWarnings(as.integer(top_terms)))
   stats <- utils::head(stats, top_terms)
@@ -170,8 +241,19 @@ chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2") {
   graphics::abline(h = 0, v = 0, col = "#c7c2bb", lty = 2)
   graphics::points(classes[, 1L], classes[, 2L], pch = 19, cex = 1.45, col = colors[rownames(classes)])
   graphics::text(classes[, 1L], classes[, 2L], labels = rownames(classes), pos = 3, cex = 1, font = 2, col = colors[rownames(classes)])
+  label_x <- terms[, 1L]
+  label_y <- terms[, 2L]
+  if (isTRUE(avoid_overlap)) {
+    placed <- chdrainette_afc_place_labels(label_x, label_y, stats$Terme, sizes)
+    moved <- abs(placed$x - label_x) + abs(placed$y - label_y) > .Machine$double.eps
+    if (any(moved)) {
+      graphics::segments(label_x[moved], label_y[moved], placed$x[moved], placed$y[moved], col = grDevices::adjustcolor(term_colors[moved], alpha.f = 0.35))
+    }
+    label_x <- placed$x
+    label_y <- placed$y
+  }
   graphics::points(terms[, 1L], terms[, 2L], pch = 16, cex = 0.45, col = term_colors)
-  graphics::text(terms[, 1L], terms[, 2L], labels = stats$Terme, cex = sizes, col = term_colors)
+  graphics::text(label_x, label_y, labels = stats$Terme, cex = sizes, col = term_colors)
 }
 
 chdrainette_export_afc <- function(afc, export_dir) {
@@ -190,7 +272,7 @@ chdrainette_export_afc <- function(afc, export_dir) {
 
   terms_png <- file.path(afc_dir, "afc_classes_termes.png")
   grDevices::png(terms_png, width = 2200, height = 1800, res = 180)
-  tryCatch(chdrainette_plot_afc_terms(afc, top_terms = 80L, size_by = "Chi2"), finally = grDevices::dev.off())
+  tryCatch(chdrainette_plot_afc_terms(afc, top_terms = 80L, size_by = "Chi2", avoid_overlap = TRUE), finally = grDevices::dev.off())
 
   list(directory = afc_dir, classes_png = classes_png, terms_png = terms_png)
 }

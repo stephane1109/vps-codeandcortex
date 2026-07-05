@@ -365,7 +365,8 @@ server <- function(input, output, session) {
     chdrainette_plot_afc_terms(
       rv$afc_obj,
       top_terms = input$afc_top_terms %||% 80L,
-      size_by = input$afc_size_by %||% "Chi2"
+      size_by = input$afc_size_by %||% "Chi2",
+      avoid_overlap = isTRUE(input$afc_avoid_overlap)
     )
   }, res = 160, execOnResize = TRUE)
 

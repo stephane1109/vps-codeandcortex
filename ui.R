@@ -223,15 +223,15 @@ page_sidebar(
       .afc-plot-scroll {
         width: 100%;
         overflow-x: auto;
-        overflow-y: hidden;
+        overflow-y: auto;
         padding: 0.4rem 0 1rem;
       }
       .afc-plot-canvas {
-        width: 100%;
-        min-width: 1280px;
-      }
-      .afc-plot-canvas.afc-terms {
-        min-width: 1650px;
+        width: 1000px;
+        min-width: 1000px;
+        max-width: 1000px;
+        height: 1000px;
+        margin: 0 auto;
       }
       .input-help-box {
         margin-top: 0.45rem;
@@ -309,7 +309,7 @@ page_sidebar(
     ),
     accordion(
       id = "sidebar_accordion",
-      open = c("param_chd", "param_langue", "param_nettoyage", "param_debug"),
+      open = c("param_chd", "param_langue", "param_nettoyage", "param_afc", "param_debug"),
       accordion_panel(
         title = "Paramètres CHD",
         value = "param_chd",
@@ -347,6 +347,11 @@ page_sidebar(
         checkboxInput("supprimer_chiffres", "Supprimer les chiffres", value = TRUE),
         checkboxInput("supprimer_apostrophes", "Traiter les élisions françaises", value = FALSE),
         checkboxInput("forcer_minuscules_avant", "Forcer les minuscules avant traitement", value = FALSE)
+      ),
+      accordion_panel(
+        title = "AFC",
+        value = "param_afc",
+        checkboxInput("afc_avoid_overlap", "Éviter les chevauchements des mots", value = TRUE)
       ),
       accordion_panel(
         title = "Nuages de mots",
@@ -444,7 +449,7 @@ page_sidebar(
             class = "afc-plot-scroll",
             div(
               class = "afc-plot-canvas",
-              plotOutput("plot_afc_classes", width = "100%", height = "1000px")
+              plotOutput("plot_afc_classes", width = "1000px", height = "1000px")
             )
           )
         )
@@ -456,8 +461,8 @@ page_sidebar(
           div(
             class = "afc-plot-scroll",
             div(
-              class = "afc-plot-canvas afc-terms",
-              plotOutput("plot_afc_terms", width = "100%", height = "1300px")
+              class = "afc-plot-canvas",
+              plotOutput("plot_afc_terms", width = "1000px", height = "1000px")
             )
           )
         )
