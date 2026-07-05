@@ -438,6 +438,22 @@ exporter_bundle_rainette <- function(res, dfm_obj, corpus_obj, classes_df, stats
   list(bundle_file = bundle_file, script_file = script_file)
 }
 
+chdrainette_normaliser_appel_rainette <- function(res, min_segment_size = 0L) {
+  if (is.null(res) || is.null(res$call)) {
+    return(res)
+  }
+
+  valeur <- suppressWarnings(as.integer(min_segment_size[[1]]))
+  if (!is.finite(valeur) || is.na(valeur) || valeur < 0L) {
+    valeur <- 0L
+  }
+
+  # rainette_explor() et docs_sample_ui() attendent ici une valeur evaluee,
+  # alors que match.call() peut avoir conserve un symbole ou un appel R.
+  res$call$min_segment_size <- valeur
+  res
+}
+
 creer_archive_exports <- function(base_dir, zip_name = "exports_rainette.zip") {
   zip_file <- file.path(base_dir, zip_name)
   if (file.exists(zip_file)) unlink(zip_file)
@@ -516,6 +532,10 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     min_segment_size = params$min_segment_size,
     min_split_members = max(3L, params$min_split_members),
     doc_id = "segment_source"
+  )
+  res <- chdrainette_normaliser_appel_rainette(
+    res,
+    min_segment_size = params$min_segment_size
   )
 
   groupes <- as.integer(res$group)

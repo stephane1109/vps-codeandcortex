@@ -105,7 +105,24 @@ chdrainette_bundle_from_query <- function(query) {
     return(NULL)
   }
 
-  tryCatch(readRDS(bundle_path), error = function(e) NULL)
+  bundle <- tryCatch(readRDS(bundle_path), error = function(e) NULL)
+  if (is.null(bundle)) {
+    return(NULL)
+  }
+
+  # rainette conserve les arguments dans `res$call`. Quand l'analyse a ete
+  # lancee avec `params$min_segment_size`, cet element est une expression R.
+  # docs_sample_ui() le compare directement a 1 et provoque alors :
+  # "comparison (>) is not possible for language types".
+  if (!is.null(bundle$res)) {
+    fallback <- bundle$params$min_segment_size %||% 0L
+    bundle$res <- chdrainette_normaliser_appel_rainette(
+      bundle$res,
+      min_segment_size = fallback
+    )
+  }
+
+  bundle
 }
 
 chdrainette_rainette_explor_ui <- function(request) {
