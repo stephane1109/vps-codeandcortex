@@ -2,49 +2,6 @@ rainette_explor_native_css <- function() {
   getFromNamespace("rainette_explor_css", "rainette")()
 }
 
-rainette_docs_sample_ui_native <- function(id, res, min_segment_size = 0L) {
-  if (is.null(min_segment_size) || !length(min_segment_size)) {
-    min_segment_size <- 0
-  } else {
-    min_segment_size <- min_segment_size[[1]]
-  }
-  min_segment_size <- suppressWarnings(as.numeric(min_segment_size))
-  if (!is.finite(min_segment_size) || is.na(min_segment_size)) {
-    min_segment_size <- 0
-  }
-
-  show_merged_segments <- !inherits(res, "rainette2") && min_segment_size > 1
-
-  ns <- shiny::NS(id)
-
-  shiny::fillRow(
-    flex = c(1, 3),
-    shiny::fillCol(
-      flex = 1,
-      id = "side",
-      div(
-        shiny::uiOutput(ns("group_ui")),
-        shiny::numericInput(ns("ndoc"), "Documents displayed", value = 100, min = 1),
-        shiny::checkboxInput(ns("random_sample"), "Random sample", value = FALSE),
-        shiny::numericInput(ns("nchar"), "Maximum text length", value = 1000, min = 10),
-        shiny::textInput(ns("filter_term"), "Filter by term", value = ""),
-        if (show_merged_segments) {
-          shiny::checkboxInput(ns("show_merged"), "Show merged segments", value = FALSE)
-        }
-      )
-    ),
-    shiny::fillCol(
-      flex = 1,
-      id = "docs",
-      shiny::fillCol(
-        flex = c(NA, 1),
-        div(id = "docs_sample_intro", shiny::htmlOutput(ns("docs_sample_intro"))),
-        div(id = "docs_sample", shiny::htmlOutput(ns("docs_sample")))
-      )
-    )
-  )
-}
-
 rainette_docs_sample_server_reactive <- function(id, res_r, corpus_src_r, current_k) {
   shiny::moduleServer(id, function(input, output, session) {
     output$group_ui <- shiny::renderUI({
@@ -197,49 +154,92 @@ rainette_docs_sample_server_reactive <- function(id, res_r, corpus_src_r, curren
 
 rainette_explor_module_ui <- function(id) {
   ns <- shiny::NS(id)
+  condition_same_scales <- sprintf("input['%s'] != 'docprop'", ns("measure"))
 
-  bslib::navset_card_tab(
-    id = ns("tabs"),
-    full_screen = TRUE,
-    bslib::nav_panel(
-      "Summary",
-      tags$style(shiny::HTML(rainette_explor_native_css())),
-      shiny::fillRow(
-        flex = c(1, 3),
-        shiny::fillCol(
-          flex = 1,
-          id = "side",
-          div(
-            shiny::sliderInput(ns("k"), "Number of clusters", value = 2, min = 2, max = 2, step = 1),
-            shiny::selectInput(
-              ns("measure"),
-              "Statistics",
-              choices = c(
-                "Keyness - Chi-squared" = "chi2",
-                "Keyness - Likelihood ratio" = "lr",
-                "Frequency - Terms" = "frequency",
-                "Frequency - Documents proportion" = "docprop"
+  shiny::tagList(
+    shiny::tags$style(shiny::HTML(rainette_explor_native_css())),
+    shiny::tags$style(shiny::HTML("
+      .rainette-original-shell .nav-tabs {
+        border-bottom: 1px solid #ddd;
+        gap: 0;
+        padding: 0;
+      }
+      .rainette-original-shell .nav-tabs .nav-link {
+        border: 1px solid transparent;
+        border-radius: 4px 4px 0 0;
+        background: transparent;
+        color: #337ab7;
+        font-weight: 400;
+        margin-bottom: -1px;
+        box-shadow: none;
+      }
+      .rainette-original-shell .nav-tabs .nav-link:hover {
+        border-color: #eee #eee #ddd;
+        background: #f9f9f9;
+        color: #23527c;
+      }
+      .rainette-original-shell .nav-tabs .nav-link.active,
+      .rainette-original-shell .nav-tabs .nav-link.active:hover {
+        color: #555;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-bottom-color: transparent;
+        box-shadow: none;
+      }
+      .rainette-original-shell .tab-content {
+        background: #fff;
+      }
+    ")),
+    htmltools::div(
+      class = "rainette-original-shell",
+      miniUI::miniTabstripPanel(
+        miniUI::miniTabPanel(
+          "Summary",
+          icon = shiny::icon("chart-bar"),
+          miniUI::miniContentPanel(
+            shiny::fillRow(
+              flex = c(1, 3),
+              shiny::fillCol(
+                flex = c(10, 1),
+                id = "side",
+                div(
+                  shiny::sliderInput(ns("k"), "Number of clusters", value = 2, min = 2, max = 2, step = 1),
+                  shiny::selectInput(
+                    ns("measure"),
+                    "Statistics",
+                    choices = c(
+                      "Keyness - Chi-squared" = "chi2",
+                      "Keyness - Likelihood ratio" = "lr",
+                      "Frequency - Terms" = "frequency",
+                      "Frequency - Documents proportion" = "docprop"
+                    ),
+                    selected = "chi2"
+                  ),
+                  shiny::numericInput(ns("n_terms"), "Number of terms to display", value = 20, min = 5, max = 30, step = 1),
+                  shiny::conditionalPanel(
+                    condition = condition_same_scales,
+                    shiny::checkboxInput(ns("same_scales"), "Force same scales", value = TRUE)
+                  ),
+                  shiny::checkboxInput(ns("show_negative"), "Show negative values", value = FALSE),
+                  shiny::sliderInput(ns("text_size"), "Text size", value = 8, min = 6, max = 20, step = 1),
+                  shiny::actionButton(ns("get_r_code"), class = "btn-success", icon = shiny::icon("code"), label = "Get R code")
+                )
               ),
-              selected = "chi2"
-            ),
-            shiny::numericInput(ns("n_terms"), "Number of terms to display", value = 20, min = 5, max = 30, step = 1),
-            shiny::checkboxInput(ns("same_scales"), "Force same scales", value = TRUE),
-            shiny::checkboxInput(ns("show_negative"), "Show negative values", value = FALSE),
-            shiny::sliderInput(ns("text_size"), "Text size", value = 8, min = 6, max = 20, step = 1),
-            shiny::actionButton(ns("get_r_code"), class = "btn-success", icon = shiny::icon("code"), label = "Get R code")
+              shiny::fillCol(
+                id = "main",
+                shiny::plotOutput(ns("rainette_plot"), height = "100%")
+              )
+            )
           )
         ),
-        shiny::fillCol(
-          flex = 1,
-          id = "main",
-          shiny::plotOutput(ns("rainette_plot"), height = "100%")
+        miniUI::miniTabPanel(
+          "Cluster documents",
+          icon = shiny::icon("file-alt"),
+          miniUI::miniContentPanel(
+            shiny::uiOutput(ns("docs_ui"))
+          )
         )
       )
-    ),
-    bslib::nav_panel(
-      "Cluster documents",
-      tags$style(shiny::HTML(rainette_explor_native_css())),
-      shiny::uiOutput(ns("docs_ui"))
     )
   )
 }
@@ -346,15 +346,15 @@ rainette_explor_module_server <- function(id, res_r, dtm_r, corpus_r, bundle_fil
       res <- res_r()
       corpus_src <- corpus_r()
       dtm <- dtm_r()
-      min_segment_size <- if (is.null(min_segment_size_r)) 0L else min_segment_size_r()
 
       if (is.null(res) || is.null(corpus_src) || is.null(dtm)) {
-        return(tags$p("Lance une analyse pour ouvrir ici le vrai explorateur Rainette des documents de classes."))
+        return(shiny::tags$p("Lance une analyse pour ouvrir ici le vrai explorateur Rainette des documents de classes."))
       }
 
-      # Le sous-module "docs" est imbrique dans rainette_explor :
-      # on passe donc l'id deja namespace par le module parent.
-      rainette_docs_sample_ui_native(session$ns("docs"), res, min_segment_size = min_segment_size)
+      getFromNamespace("docs_sample_ui", "rainette")(
+        session$ns("docs"),
+        res
+      )
     })
 
     rainette_docs_sample_server_reactive(
