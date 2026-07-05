@@ -15,7 +15,7 @@ ui <- page_sidebar(
         rel = "noopener noreferrer",
         "www.codeandcortex.fr"
       ),
-      HTML(" &middot; interface Shiny Rainette pour le VPS")
+      HTML(" &middot; version 0_3beta")
     )
   ),
   theme = bs_theme(
