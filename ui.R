@@ -268,6 +268,10 @@ ui <- page_sidebar(
         color: #5f6670;
         margin: 0;
       }
+      .rainette-host-shell {
+        min-height: 78vh;
+        height: 78vh;
+      }
       @media (max-width: 980px) {
         .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
@@ -396,7 +400,13 @@ ui <- page_sidebar(
       card(
         full_screen = TRUE,
         card_header("Rainette explor"),
-        rainette_explor_module_ui("rainette_explor")
+        card_body(
+          fill = TRUE,
+          div(
+            class = "rainette-host-shell",
+            rainette_explor_module_ui("rainette_explor")
+          )
+        )
       )
     ),
     nav_panel(

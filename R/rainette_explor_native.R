@@ -159,6 +159,24 @@ rainette_explor_module_ui <- function(id) {
   shiny::tagList(
     shiny::tags$style(shiny::HTML(rainette_explor_native_css())),
     shiny::tags$style(shiny::HTML("
+      .rainette-original-shell {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 72vh;
+      }
+      .rainette-original-shell > .gadget-tabs-content-container,
+      .rainette-original-shell > .gadget-tabs-content-container > .tab-content,
+      .rainette-original-shell > .gadget-tabs-content-container > .tab-content > .tab-pane,
+      .rainette-original-shell .gadget-tabs-content-inner,
+      .rainette-original-shell .gadget-scroll,
+      .rainette-original-shell .gadget-content {
+        height: 100% !important;
+        min-height: 100% !important;
+      }
+      .rainette-original-shell > .gadget-tabs-content-container > .tab-content > .tab-pane {
+        position: relative !important;
+      }
       .rainette-original-shell .nav-tabs {
         border-bottom: 1px solid #ddd;
         gap: 0;
