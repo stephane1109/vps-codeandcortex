@@ -317,7 +317,7 @@ ui <- page_sidebar(
           choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
           selected = "fr"
         ),
-        checkboxInput("retirer_stopwords", "Activer les stopwords quanteda", value = TRUE),
+        checkboxInput("retirer_stopwords", "Stopwords quanteda", value = TRUE),
         uiOutput("ui_stopwords_info"),
         uiOutput("ui_langue_detection")
       ),
