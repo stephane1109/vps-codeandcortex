@@ -352,7 +352,9 @@ rainette_explor_module_server <- function(id, res_r, dtm_r, corpus_r, bundle_fil
         return(tags$p("Lance une analyse pour ouvrir ici le vrai explorateur Rainette des documents de classes."))
       }
 
-      rainette_docs_sample_ui_native("docs", res, min_segment_size = min_segment_size)
+      # Le sous-module "docs" est imbrique dans rainette_explor :
+      # on passe donc l'id deja namespace par le module parent.
+      rainette_docs_sample_ui_native(session$ns("docs"), res, min_segment_size = min_segment_size)
     })
 
     rainette_docs_sample_server_reactive(
