@@ -457,8 +457,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   file_stem <- tools::file_path_sans_ext(basename(original_name %||% basename(input_path)))
   if (!nzchar(file_stem)) file_stem <- "chdrainette"
 
-  timestamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
-  base_dir <- file.path(tempdir(), paste0("chdrainette_", session_token, "_", timestamp))
+  base_dir <- chdrainette_new_job_dir(session_token = session_token)
   export_dir <- file.path(base_dir, "exports")
   dir.create(export_dir, recursive = TRUE, showWarnings = FALSE)
 

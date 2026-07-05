@@ -2,7 +2,8 @@ library(bslib)
 library(shiny)
 library(htmltools)
 
-ui <- page_sidebar(
+build_main_ui <- function() {
+page_sidebar(
   title = div(
     class = "app-title-block",
     tags$div(class = "app-kicker", "CHD Rainette"),
@@ -402,10 +403,7 @@ ui <- page_sidebar(
         card_header("Rainette explor"),
         card_body(
           fill = TRUE,
-          div(
-            class = "rainette-host-shell",
-            rainette_explor_module_ui("rainette_explor")
-          )
+          uiOutput("ui_rainette_explor_frame")
         )
       )
     ),
@@ -458,3 +456,4 @@ ui <- page_sidebar(
     )
   )
 )
+}

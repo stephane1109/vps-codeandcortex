@@ -31,6 +31,13 @@ source("R/chdrainette_core.R", encoding = "UTF-8", local = TRUE)
 source("R/rainette_explor_native.R", encoding = "UTF-8", local = TRUE)
 source("ui.R", encoding = "UTF-8", local = TRUE)
 
+ui <- function(request) {
+  if (isTRUE(chdrainette_is_rainette_explor_request(request))) {
+    return(chdrainette_rainette_explor_ui(request))
+  }
+  build_main_ui()
+}
+
 render_markdown_or_message <- function(path, fallback) {
   if (file.exists(path)) {
     return(includeMarkdown(path))
@@ -59,6 +66,8 @@ build_resource_url <- function(rv, relative_path) {
 }
 
 server <- function(input, output, session) {
+  run_rainette_explor_page_server(input, output, session)
+
   rv <- reactiveValues(
     logs = "[info] Prêt.",
     statut = "En attente.",
@@ -380,18 +389,41 @@ server <- function(input, output, session) {
     )
   })
 
+  output$ui_rainette_explor_frame <- renderUI({
+    if (is.null(rv$bundle_file) || !file.exists(rv$bundle_file)) {
+      return(tags$p("Lance une analyse pour ouvrir ici le vrai rainette_explor."))
+    }
+
+    src <- chdrainette_rainette_explor_url(rv$bundle_file)
+    if (is.null(src) || !nzchar(src)) {
+      return(tags$p("Le bundle Rainette n'a pas pu être préparé pour l'explorateur natif."))
+    }
+
+    tagList(
+      tags$p(
+        tags$a(
+          href = src,
+          target = "_blank",
+          rel = "noopener noreferrer",
+          "Ouvrir rainette_explor dans un nouvel onglet"
+        )
+      ),
+      tags$iframe(
+        src = src,
+        style = paste(
+          "width:100%;",
+          "min-height:82vh;",
+          "border:1px solid rgba(31, 35, 40, 0.08);",
+          "border-radius:16px;",
+          "background:#ffffff;"
+        )
+      )
+    )
+  })
+
   output$dl_zip <- downloadHandler(
     filename = function() paste0(rv$file_stem %||% "chdrainette", "_exports.zip"),
     content = function(file) file.copy(rv$zip_file, file, overwrite = TRUE)
-  )
-
-  rainette_explor_module_server(
-    "rainette_explor",
-    res_r = reactive(rv$res),
-    dtm_r = reactive(rv$dfm),
-    corpus_r = reactive(rv$filtered_corpus),
-    bundle_file_r = reactive(rv$bundle_file),
-    min_segment_size_r = reactive(if (is.null(rv$params_used)) 0L else rv$params_used$min_segment_size %||% 0L)
   )
 }
 
