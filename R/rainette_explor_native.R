@@ -225,7 +225,7 @@ rainette_explor_module_ui <- function(id) {
             shiny::numericInput(ns("n_terms"), "Number of terms to display", value = 20, min = 5, max = 30, step = 1),
             shiny::checkboxInput(ns("same_scales"), "Force same scales", value = TRUE),
             shiny::checkboxInput(ns("show_negative"), "Show negative values", value = FALSE),
-            shiny::sliderInput(ns("text_size"), "Text size", value = 12, min = 6, max = 20, step = 1),
+            shiny::sliderInput(ns("text_size"), "Text size", value = 8, min = 6, max = 20, step = 1),
             shiny::actionButton(ns("get_r_code"), class = "btn-success", icon = shiny::icon("code"), label = "Get R code")
           )
         ),
