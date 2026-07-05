@@ -348,11 +348,7 @@ ui <- page_sidebar(
     div(
       class = "sidebar-group d-grid gap-2",
       actionButton("lancer", "Lancer l'analyse", class = "btn-primary"),
-      downloadButton("dl_zip", "Télécharger exports (zip)"),
-      downloadButton("dl_segments", "Télécharger segments"),
-      downloadButton("dl_stats", "Télécharger stats"),
-      downloadButton("dl_html", "Télécharger concordancier HTML"),
-      downloadButton("dl_bundle", "Télécharger bundle rainette_explor")
+      downloadButton("dl_zip", "Télécharger l'archive globale (zip)")
     )
   ),
   navset_card_tab(
@@ -441,12 +437,9 @@ ui <- page_sidebar(
     nav_panel(
       "Exports",
       card(
-        card_header("Fichiers générés"),
+        full_screen = TRUE,
+        card_header("Archive globale"),
         uiOutput("ui_exports_links")
-      ),
-      card(
-        card_header("Code R pour rainette_explor"),
-        div(class = "code-box", verbatimTextOutput("bundle_code", placeholder = TRUE))
       )
     ),
     nav_panel(

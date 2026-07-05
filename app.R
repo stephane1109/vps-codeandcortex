@@ -347,7 +347,7 @@ server <- function(input, output, session) {
       )
     })
 
-    do.call(layout_columns, c(list(col_widths = rep(6, length(cards))), cards))
+    do.call(tagList, cards)
   })
 
   output$ui_concordancier <- renderUI({
@@ -369,53 +369,20 @@ server <- function(input, output, session) {
 
   output$ui_exports_links <- renderUI({
     if (is.null(rv$zip_file) || !file.exists(rv$zip_file)) {
-      return(tags$p("Les exports seront listés ici après la fin d'une analyse."))
+      return(tags$p("L'archive globale sera disponible ici après la fin d'une analyse."))
     }
     tagList(
-      tags$ul(
-        tags$li(paste0("Archive globale : ", basename(rv$zip_file))),
-        tags$li(paste0("Segments par classe : ", basename(rv$segments_file %||% ""))),
-        tags$li(paste0("Statistiques par classe : ", basename(rv$stats_file %||% ""))),
-        tags$li(paste0("Concordancier HTML : ", basename(rv$html_file %||% ""))),
-        tags$li(paste0("Bundle rainette_explor : ", basename(rv$bundle_file %||% "")))
-      ),
-      tags$p(class = "text-muted small", "Le bundle RDS permet de réouvrir la même analyse Rainette dans une session R locale si besoin.")
-    )
-  })
-
-  output$bundle_code <- renderText({
-    req(rv$bundle_file, rv$bundle_script_file)
-    paste(
-      "library(rainette)",
-      paste0("bundle <- readRDS('", basename(rv$bundle_file), "')"),
-      "rainette_explor(bundle$res, bundle$dtm, bundle$corpus)",
-      sep = "\n"
+      tags$p(tags$strong("Archive prête : "), basename(rv$zip_file)),
+      tags$p(
+        class = "text-muted small",
+        "Cette archive ZIP regroupe l'ensemble des sorties produites par l'analyse : tableaux, concordancier HTML, images et fichiers Rainette."
+      )
     )
   })
 
   output$dl_zip <- downloadHandler(
     filename = function() paste0(rv$file_stem %||% "chdrainette", "_exports.zip"),
     content = function(file) file.copy(rv$zip_file, file, overwrite = TRUE)
-  )
-
-  output$dl_segments <- downloadHandler(
-    filename = function() basename(rv$segments_file %||% paste0(rv$file_stem %||% "chdrainette", "_segments.txt")),
-    content = function(file) file.copy(rv$segments_file, file, overwrite = TRUE)
-  )
-
-  output$dl_stats <- downloadHandler(
-    filename = function() basename(rv$stats_file %||% paste0(rv$file_stem %||% "chdrainette", "_stats.csv")),
-    content = function(file) file.copy(rv$stats_file, file, overwrite = TRUE)
-  )
-
-  output$dl_html <- downloadHandler(
-    filename = function() basename(rv$html_file %||% paste0(rv$file_stem %||% "chdrainette", "_concordancier.html")),
-    content = function(file) file.copy(rv$html_file, file, overwrite = TRUE)
-  )
-
-  output$dl_bundle <- downloadHandler(
-    filename = function() basename(rv$bundle_file %||% paste0(rv$file_stem %||% "chdrainette", "_bundle.rds")),
-    content = function(file) file.copy(rv$bundle_file, file, overwrite = TRUE)
   )
 
   rainette_explor_module_server(
