@@ -220,6 +220,19 @@ page_sidebar(
         padding: 1rem;
         white-space: pre-wrap;
       }
+      .afc-plot-scroll {
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0.4rem 0 1rem;
+      }
+      .afc-plot-canvas {
+        width: 100%;
+        min-width: 1280px;
+      }
+      .afc-plot-canvas.afc-terms {
+        min-width: 1650px;
+      }
       .input-help-box {
         margin-top: 0.45rem;
         display: grid;
@@ -426,12 +439,28 @@ page_sidebar(
       card(
         full_screen = TRUE,
         card_header("Projection des classes"),
-        plotOutput("plot_afc_classes", height = "720px")
+        card_body(
+          div(
+            class = "afc-plot-scroll",
+            div(
+              class = "afc-plot-canvas",
+              plotOutput("plot_afc_classes", width = "100%", height = "1000px")
+            )
+          )
+        )
       ),
       card(
         full_screen = TRUE,
         card_header("Projection des classes et des termes"),
-        plotOutput("plot_afc_terms", height = "820px")
+        card_body(
+          div(
+            class = "afc-plot-scroll",
+            div(
+              class = "afc-plot-canvas afc-terms",
+              plotOutput("plot_afc_terms", width = "100%", height = "1300px")
+            )
+          )
+        )
       ),
       card(
         full_screen = TRUE,

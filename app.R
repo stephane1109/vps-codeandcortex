@@ -358,7 +358,7 @@ server <- function(input, output, session) {
   output$plot_afc_classes <- renderPlot({
     req(rv$afc_obj)
     chdrainette_plot_afc_classes(rv$afc_obj)
-  }, res = 120)
+  }, res = 160, execOnResize = TRUE)
 
   output$plot_afc_terms <- renderPlot({
     req(rv$afc_obj)
@@ -367,7 +367,7 @@ server <- function(input, output, session) {
       top_terms = input$afc_top_terms %||% 80L,
       size_by = input$afc_size_by %||% "Chi2"
     )
-  }, res = 120)
+  }, res = 160, execOnResize = TRUE)
 
   output$table_afc_eigenvalues <- renderTable({
     req(rv$afc_obj)
