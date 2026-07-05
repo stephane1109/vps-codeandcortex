@@ -4,19 +4,6 @@
 - <a href="https://www.codeandcortex.fr/comprendre-chd-methode-reinert/" target="_blank" rel="noopener noreferrer">Comprendre la CHD</a>
 - <a href="https://cran.r-project.org/web/packages/rainette/vignettes/introduction_usage.html" target="_blank" rel="noopener noreferrer">Documentation officielle Rainette</a>
 
-### Base de cette reconstruction
-
-Cette application VPS repart du script source historique `chdrainette` :
-
-- import IRaMuTeQ
-- découpage du corpus
-- DFM `quanteda`
-- CHD `rainette`
-- statistiques discriminantes
-- nuages de mots
-- concordancier HTML
-- exports CSV / TXT / ZIP
-
 ### Paramètres principaux
 
 - **Mode de découpage** : `segment_size` ou `ponctuation`
