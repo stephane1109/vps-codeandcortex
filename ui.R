@@ -15,7 +15,7 @@ ui <- page_sidebar(
         rel = "noopener noreferrer",
         "www.codeandcortex.fr"
       ),
-      HTML(" &middot; reconstruction VPS à partir du script source")
+      HTML(" &middot; interface Shiny Rainette pour le VPS")
     )
   ),
   theme = bs_theme(
@@ -34,8 +34,13 @@ ui <- page_sidebar(
   fillable = TRUE,
   tags$head(
     tags$style(HTML("
-      body { background: #f6f1ea; }
-      .app-title-block h1 { margin: 0; font-size: 2rem; line-height: 1.1; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(239, 156, 69, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(217, 107, 43, 0.08), transparent 32%),
+          linear-gradient(180deg, #f8f4ed 0%, #f4ede4 100%);
+      }
+      .app-title-block h1 { margin: 0; font-size: 2.05rem; line-height: 1.04; }
       .app-kicker {
         text-transform: uppercase;
         letter-spacing: 0.12em;
@@ -45,14 +50,73 @@ ui <- page_sidebar(
         margin-bottom: 0.25rem;
       }
       .app-subtitle { margin: 0.45rem 0 0; color: #6f5d4c; }
+      .app-subtitle a {
+        color: #a64f1b;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .app-subtitle a:hover { text-decoration: underline; }
       .bslib-sidebar-layout > .sidebar {
-        background: linear-gradient(180deg, #fbf6ef 0%, #f3e7d8 100%);
-        border-right: 1px solid rgba(217, 107, 43, 0.12);
+        background: linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(248, 239, 226, 0.96) 100%);
+        border-right: 1px solid rgba(217, 107, 43, 0.10);
+        box-shadow: inset -1px 0 0 rgba(255,255,255,0.65);
+      }
+      .sidebar-group {
+        background: rgba(255, 253, 249, 0.82);
+        border: 1px solid rgba(47, 36, 28, 0.08);
+        border-radius: 20px;
+        padding: 1rem 1rem 0.65rem;
+        box-shadow: 0 14px 30px rgba(47, 36, 28, 0.05);
       }
       .sidebar-group + .sidebar-group { margin-top: 1rem; }
       .shiny-input-container { margin-bottom: 0.85rem; }
-      .btn-primary { font-weight: 700; }
+      .btn-primary {
+        font-weight: 700;
+        border: none;
+        background: linear-gradient(135deg, #d96b2b 0%, #ef9c45 100%);
+        box-shadow: 0 12px 25px rgba(217, 107, 43, 0.22);
+      }
+      .btn-primary:hover { filter: brightness(1.03); }
+      .accordion-item, .accordion-button {
+        border-radius: 16px !important;
+      }
+      .accordion-button {
+        font-weight: 700;
+        color: #3f2c1f;
+      }
+      .accordion-body {
+        background: rgba(255,255,255,0.78);
+      }
       .logs-box pre, .logs-box code { white-space: pre-wrap; }
+      .bslib-navs-card, .card {
+        border: 1px solid rgba(47, 36, 28, 0.08);
+        border-radius: 22px;
+        box-shadow: 0 18px 40px rgba(47, 36, 28, 0.06);
+        background: rgba(255, 253, 249, 0.96);
+      }
+      .card-header {
+        font-weight: 800;
+        color: #39281d;
+        background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,240,229,0.96) 100%);
+        border-bottom: 1px solid rgba(47, 36, 28, 0.06);
+      }
+      .nav-tabs {
+        border-bottom: none;
+        gap: 0.45rem;
+        padding: 0.45rem 0.45rem 0;
+      }
+      .nav-tabs .nav-link {
+        border: none;
+        border-radius: 999px;
+        background: rgba(244, 229, 213, 0.55);
+        color: #5c4535;
+        font-weight: 700;
+      }
+      .nav-tabs .nav-link.active {
+        background: linear-gradient(135deg, #d96b2b 0%, #ef9c45 100%);
+        color: #fff9f3;
+        box-shadow: 0 10px 20px rgba(217, 107, 43, 0.22);
+      }
       .metrics-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -76,6 +140,54 @@ ui <- page_sidebar(
         font-weight: 700;
         color: #2f241c;
       }
+      .hero-card {
+        background:
+          linear-gradient(135deg, rgba(217, 107, 43, 0.96) 0%, rgba(239, 156, 69, 0.94) 100%);
+        color: #fff8f2;
+        border: none;
+      }
+      .hero-card h2 {
+        margin: 0 0 0.45rem;
+        font-size: 1.55rem;
+      }
+      .hero-card p {
+        margin: 0;
+        color: rgba(255, 248, 242, 0.88);
+        max-width: 70ch;
+      }
+      .debug-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+      }
+      .debug-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(255,255,255,0.8);
+        border: 1px solid rgba(47, 36, 28, 0.08);
+        color: #4a3425;
+        border-radius: 999px;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.88rem;
+        font-weight: 700;
+      }
+      .debug-terminal {
+        min-height: 22rem;
+        max-height: 42rem;
+        overflow: auto;
+        background: #1e1d1a;
+        color: #f1eee6;
+        border-radius: 18px;
+        padding: 1rem 1.05rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      }
+      .debug-terminal pre {
+        white-space: pre-wrap;
+        margin: 0;
+        color: #f1eee6;
+      }
       .preview-box, .code-box {
         min-height: 22rem;
         max-height: 42rem;
@@ -85,6 +197,26 @@ ui <- page_sidebar(
         border-radius: 18px;
         padding: 1rem;
         white-space: pre-wrap;
+      }
+      .input-help-box {
+        margin-top: 0.45rem;
+        display: grid;
+        gap: 0.15rem;
+        background: rgba(255,250,243,0.95);
+        border: 1px dashed rgba(217, 107, 43, 0.34);
+        border-radius: 14px;
+        padding: 0.65rem 0.8rem;
+      }
+      .input-help-label {
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #a25725;
+      }
+      .input-help-value {
+        font-size: 0.9rem;
+        color: #5b4638;
       }
       .help-pane { max-width: 1000px; }
       .progress-wrapper { display: grid; gap: 0.5rem; }
@@ -100,6 +232,10 @@ ui <- page_sidebar(
         height: 100%;
         border-radius: 999px;
         background: linear-gradient(90deg, #d96b2b 0%, #ef9c45 100%);
+      }
+      .wide-stack {
+        display: grid;
+        gap: 1rem;
       }
       .control-note {
         display: flex;
@@ -129,7 +265,7 @@ ui <- page_sidebar(
     ),
     accordion(
       id = "sidebar_accordion",
-      open = c("param_chd", "param_langue", "param_nettoyage"),
+      open = c("param_chd", "param_langue", "param_nettoyage", "param_debug"),
       accordion_panel(
         title = "Paramètres CHD",
         value = "param_chd",
@@ -155,7 +291,8 @@ ui <- page_sidebar(
           choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
           selected = "fr"
         ),
-        checkboxInput("retirer_stopwords", "Retirer les stopwords (quanteda)", value = TRUE),
+        checkboxInput("retirer_stopwords", "Activer les stopwords quanteda", value = TRUE),
+        uiOutput("ui_stopwords_info"),
         uiOutput("ui_langue_detection")
       ),
       accordion_panel(
@@ -171,6 +308,15 @@ ui <- page_sidebar(
         title = "Nuages de mots",
         value = "param_wordcloud",
         numericInput("top_n", "top_n (wordcloud)", value = 20, min = 5, step = 1)
+      ),
+      accordion_panel(
+        title = "Debug",
+        value = "param_debug",
+        checkboxInput("debug_mode", "Activer le mode debug détaillé", value = TRUE),
+        p(
+          class = "text-muted small",
+          "Quand il est activé, toutes les grandes étapes du pipeline sont journalisées de façon détaillée sur l’onglet Analyse."
+        )
       )
     ),
     div(
@@ -188,15 +334,21 @@ ui <- page_sidebar(
     full_screen = TRUE,
     nav_panel(
       "Analyse",
-      layout_columns(
-        col_widths = c(5, 7),
-        card(
-          card_header("Statut"),
+      card(
+        class = "hero-card",
+        full_screen = TRUE,
+        card_body(
+          tags$h2("Suivre, diagnostiquer et explorer la CHD Rainette"),
+          tags$p("L’onglet Analyse centralise maintenant les indicateurs, l’état d’exécution et le journal détaillé du pipeline pour faciliter le debug sur le VPS.")
+        )
+      ),
+      card(
+        full_screen = TRUE,
+        card_header("Statut et indicateurs"),
+        div(class = "wide-stack",
+          uiOutput("ui_debug_status"),
           p(textOutput("statut")),
-          uiOutput("barre_progression")
-        ),
-        card(
-          card_header("Indicateurs"),
+          uiOutput("barre_progression"),
           div(
             class = "metrics-grid",
             div(class = "metric-card", span(class = "label", "Documents"), span(class = "value", textOutput("metric_docs", inline = TRUE))),
@@ -208,8 +360,9 @@ ui <- page_sidebar(
       ),
       card(
         class = "logs-box",
-        card_header("Journal"),
-        verbatimTextOutput("logs", placeholder = TRUE)
+        full_screen = TRUE,
+        card_header("Mode debug et étapes de l’analyse"),
+        div(class = "debug-terminal", verbatimTextOutput("logs", placeholder = TRUE))
       )
     ),
     nav_panel(
@@ -222,17 +375,16 @@ ui <- page_sidebar(
     ),
     nav_panel(
       "Résultats",
-      layout_columns(
-        col_widths = c(5, 7),
-        card(
-          card_header("Résumé des classes"),
-          tableOutput("table_classes")
-        ),
-        card(
-          card_header("Statistiques par classe"),
-          selectInput("classe_resultat", "Classe", choices = NULL),
-          tableOutput("table_stats_classe")
-        )
+      card(
+        full_screen = TRUE,
+        card_header("Résumé des classes"),
+        tableOutput("table_classes")
+      ),
+      card(
+        full_screen = TRUE,
+        card_header("Statistiques par classe"),
+        selectInput("classe_resultat", "Classe", choices = NULL),
+        tableOutput("table_stats_classe")
       ),
       card(
         full_screen = TRUE,

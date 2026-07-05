@@ -17,15 +17,6 @@ Cette application VPS repart du script source historique `chdrainette` :
 - concordancier HTML
 - exports CSV / TXT / ZIP
 
-### Ce qui a été volontairement retiré
-
-- spaCy
-- reticulate
-- NER
-- cooccurrences
-
-L'objectif est d'avoir une base plus robuste et plus simple à déployer sur le VPS.
-
 ### Paramètres principaux
 
 - **Mode de découpage** : `segment_size` ou `ponctuation`

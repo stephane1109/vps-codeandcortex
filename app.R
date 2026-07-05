@@ -63,6 +63,7 @@ server <- function(input, output, session) {
     logs = "[info] Prêt.",
     statut = "En attente.",
     progression = 0,
+    debug_mode = FALSE,
     corpus_importe = NULL,
     corpus_segmente = NULL,
     filtered_corpus = NULL,
@@ -107,6 +108,7 @@ server <- function(input, output, session) {
     rv$logs <- "[info] Prêt."
     rv$statut <- "Préparation de l'analyse."
     rv$progression <- 0
+    rv$debug_mode <- isTRUE(input$debug_mode)
     rv$corpus_importe <- NULL
     rv$corpus_segmente <- NULL
     rv$filtered_corpus <- NULL
@@ -135,6 +137,7 @@ server <- function(input, output, session) {
       segment_size = as.integer(input$segment_size %||% 40L),
       langue_corpus = as.character(input$langue_corpus %||% "fr"),
       retirer_stopwords = isTRUE(input$retirer_stopwords),
+      debug_mode = isTRUE(input$debug_mode),
       nettoyage_caracteres = isTRUE(input$nettoyage_caracteres),
       supprimer_ponctuation = isTRUE(input$supprimer_ponctuation),
       supprimer_chiffres = isTRUE(input$supprimer_chiffres),
@@ -196,6 +199,7 @@ server <- function(input, output, session) {
   })
 
   output$statut <- renderText(rv$statut)
+  output$logs <- renderText(rv$logs)
 
   output$barre_progression <- renderUI({
     valeur <- max(0, min(100, as.integer(rv$progression %||% 0L)))
@@ -230,6 +234,20 @@ server <- function(input, output, session) {
     render_markdown_or_message("help/help.md", "Le fichier help/help.md est introuvable.")
   })
 
+  output$ui_stopwords_info <- renderUI({
+    cfg <- configurer_langue_corpus(input$langue_corpus %||% "fr")
+    if (!isTRUE(input$retirer_stopwords)) {
+      return(tags$p(class = "text-muted small", "Stopwords quanteda désactivés pour cette analyse."))
+    }
+
+    sw <- obtenir_stopwords_quanteda(cfg$code, rv = NULL)
+    tags$div(
+      class = "input-help-box",
+      tags$span(class = "input-help-label", "Stopwords quanteda"),
+      tags$span(class = "input-help-value", paste0(length(sw), " termes chargés en ", cfg$libelle, "."))
+    )
+  })
+
   output$metric_docs <- renderText({
     if (is.null(rv$corpus_importe)) return("—")
     quanteda::ndoc(rv$corpus_importe)
@@ -248,6 +266,15 @@ server <- function(input, output, session) {
   output$metric_classes <- renderText({
     if (!length(rv$clusters)) return("—")
     length(rv$clusters)
+  })
+
+  output$ui_debug_status <- renderUI({
+    badges <- list(
+      tags$span(class = "debug-pill", if (isTRUE(rv$debug_mode)) "Mode debug actif" else "Mode debug standard"),
+      tags$span(class = "debug-pill", paste0("Stopwords quanteda : ", if (isTRUE(input$retirer_stopwords)) "oui" else "non")),
+      tags$span(class = "debug-pill", paste0("Langue : ", configurer_langue_corpus(input$langue_corpus %||% "fr")$libelle))
+    )
+    tags$div(class = "debug-strip", badges)
   })
 
   output$ui_langue_detection <- renderUI({

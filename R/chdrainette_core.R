@@ -48,17 +48,18 @@ normaliser_parametres_chdrainette <- function(params) {
   if (!is.finite(params$max_p) || is.na(params$max_p)) params$max_p <- 0.05
   params$max_p <- min(max(params$max_p, 0), 1)
   params$top_n <- max(5L, as.integer(params$top_n %||% 20L))
+  params$debug_mode <- isTRUE(params$debug_mode)
 
   params
 }
 
 construire_corpus_segmente <- function(corpus_brut, params, rv = NULL) {
   if (identical(params$mode_decoupage, "ponctuation")) {
-    if (!is.null(rv)) ajouter_log(rv, "Découpage par ponctuation.")
+    if (!is.null(rv)) ajouter_etape(rv, "Découpage du corpus par ponctuation.")
     return(split_sentences_with_docvars(corpus_brut))
   }
 
-  if (!is.null(rv)) ajouter_log(rv, paste0("Découpage par segment_size = ", params$segment_size, "."))
+  if (!is.null(rv)) ajouter_etape(rv, paste0("Découpage du corpus avec segment_size = ", params$segment_size, "."))
   rainette::split_segments(corpus_brut, segment_size = params$segment_size)
 }
 
@@ -66,6 +67,8 @@ construire_dfm_rainette <- function(corpus_segmente, params, rv = NULL) {
   textes_orig <- as.character(corpus_segmente)
   doc_ids <- as.character(quanteda::docnames(corpus_segmente))
   names(textes_orig) <- doc_ids
+
+  ajouter_log_debug(rv, paste0("Prétraitement brut : ", length(textes_orig), " segments reçus en entrée."))
 
   textes_prepares <- appliquer_nettoyage_et_minuscules(
     textes = textes_orig,
@@ -76,6 +79,16 @@ construire_dfm_rainette <- function(corpus_segmente, params, rv = NULL) {
   )
   names(textes_prepares) <- doc_ids
 
+  ajouter_log_debug(
+    rv,
+    paste0(
+      "Nettoyage texte : regex=", as.integer(isTRUE(params$nettoyage_caracteres)),
+      " | minuscules=", as.integer(isTRUE(params$forcer_minuscules_avant)),
+      " | chiffres=", as.integer(isTRUE(params$supprimer_chiffres)),
+      " | apostrophes=", as.integer(isTRUE(params$supprimer_apostrophes))
+    )
+  )
+
   verifier_coherence_dictionnaire_langue(textes_prepares, params$langue_corpus, rv = rv)
 
   tok <- quanteda::tokens(
@@ -83,18 +96,25 @@ construire_dfm_rainette <- function(corpus_segmente, params, rv = NULL) {
     remove_punct = params$supprimer_ponctuation,
     remove_numbers = params$supprimer_chiffres
   )
+  ajouter_log_debug(rv, paste0("Tokenisation : ", length(tok), " documents tokenisés."))
   if (params$retirer_stopwords) {
-    tok <- quanteda::tokens_remove(tok, obtenir_stopwords_quanteda(params$langue_corpus, rv = rv))
+    sw <- obtenir_stopwords_quanteda(params$langue_corpus, rv = rv)
+    ajouter_log_debug(rv, paste0("Stopwords quanteda activés : ", length(sw), " termes chargés pour la langue ", params$langue_corpus, "."))
+    tok <- quanteda::tokens_remove(tok, sw)
+  } else {
+    ajouter_log_debug(rv, "Stopwords quanteda désactivés pour cette analyse.")
   }
   tok <- quanteda::tokens_split(tok, "'")
   tok <- quanteda::tokens_remove(tok, pattern = c("\\b[a-zA-Z]\\b", "^[^[:alpha:]]+$"), valuetype = "regex")
   tok <- quanteda::tokens_tolower(tok)
 
   dfm_obj <- quanteda::dfm(tok)
+  ajouter_log_debug(rv, paste0("DFM brute : ", quanteda::ndoc(dfm_obj), " segments x ", quanteda::nfeat(dfm_obj), " termes."))
   if (ncol(quanteda::docvars(corpus_segmente)) > 0) {
     quanteda::docvars(dfm_obj) <- quanteda::docvars(corpus_segmente)
   }
   dfm_obj <- quanteda::dfm_trim(dfm_obj, min_docfreq = params$min_docfreq)
+  ajouter_log_debug(rv, paste0("DFM après min_docfreq=", params$min_docfreq, " : ", quanteda::ndoc(dfm_obj), " segments x ", quanteda::nfeat(dfm_obj), " termes."))
 
   keep <- Matrix::rowSums(dfm_obj) > 0
   if (!any(keep)) {
@@ -103,6 +123,7 @@ construire_dfm_rainette <- function(corpus_segmente, params, rv = NULL) {
 
   dfm_ok <- dfm_obj[keep, ]
   corpus_ok <- corpus_segmente[quanteda::docnames(dfm_ok)]
+  ajouter_log_debug(rv, paste0("Segments conservés après filtrage final : ", quanteda::ndoc(dfm_ok), "."))
   list(dfm = dfm_ok, corpus = corpus_ok)
 }
 
@@ -117,6 +138,7 @@ calculer_k_effectif_rainette <- function(dfm_obj, k_demande, min_split_members, 
   if (!is.null(rv) && k_effectif < k_demande) {
     ajouter_log(rv, paste0("k ajusté automatiquement de ", k_demande, " à ", k_effectif, " pour respecter min_split_members."))
   }
+  ajouter_log_debug(rv, paste0("k effectif retenu : ", k_effectif, " | min_split_members=", min_split_members, " | segments=", n_docs, "."))
   k_effectif
 }
 
@@ -158,6 +180,7 @@ calculer_stats_rainette <- function(dfm_obj, groupes, max_p, rv = NULL) {
   if (!is.null(rv)) {
     ajouter_log(rv, paste0("Statistiques Rainette calculées pour ", length(unique(stats_df$Classe)), " classes."))
   }
+  ajouter_log_debug(rv, paste0("Statistiques Rainette : ", nrow(stats_df), " lignes de termes discriminants générées."))
   stats_df
 }
 
@@ -442,13 +465,30 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 3
     rv$statut <- "Import du corpus."
+    ajouter_etape(rv, "Initialisation du répertoire de travail.")
     ajouter_log(rv, paste0("Répertoire d'export : ", export_dir))
+    ajouter_log_debug(
+      rv,
+      paste0(
+        "Paramètres d'analyse : mode=", params$mode_decoupage,
+        " | segment_size=", params$segment_size,
+        " | k=", params$k,
+        " | min_segment_size=", params$min_segment_size,
+        " | min_split_members=", params$min_split_members,
+        " | min_docfreq=", params$min_docfreq,
+        " | max_p=", params$max_p,
+        " | top_n=", params$top_n,
+        " | stopwords_quanteda=", as.integer(isTRUE(params$retirer_stopwords)),
+        " | debug=", as.integer(isTRUE(params$debug_mode))
+      )
+    )
   }
 
   corpus_brut <- rainette::import_corpus_iramuteq(input_path)
   if (!is.null(rv)) {
     rv$progression <- 10
     rv$statut <- "Segmentation du corpus."
+    ajouter_etape(rv, "Import du corpus IRaMuTeQ terminé.")
     ajouter_log(rv, paste0("Documents importés : ", quanteda::ndoc(corpus_brut)))
   }
 
@@ -456,6 +496,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 20
     rv$statut <- "Prétraitement et DFM."
+    ajouter_etape(rv, "Segmentation du corpus terminée.")
     ajouter_log(rv, paste0("Segments créés : ", quanteda::ndoc(corpus_segmente)))
   }
 
@@ -465,6 +506,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 35
     rv$statut <- "Classification Rainette."
+    ajouter_etape(rv, "Prétraitement et DFM terminés.")
     ajouter_log(rv, paste0("DFM prête : ", quanteda::ndoc(dfm_ok), " segments x ", quanteda::nfeat(dfm_ok), " termes."))
   }
 
@@ -484,7 +526,9 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 50
     rv$statut <- "Calcul des statistiques."
+    ajouter_etape(rv, "Classification Rainette terminée.")
     ajouter_log(rv, paste0("Classes obtenues : ", paste(clusters, collapse = ", ")))
+    ajouter_log_debug(rv, paste0("Taille des classes : ", paste(as.integer(table(groupes)), collapse = ", "), "."))
   }
 
   res_stats_df <- calculer_stats_rainette(dfm_ok, groupes, params$max_p, rv = rv)
@@ -494,6 +538,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 65
     rv$statut <- "Exports texte et concordancier."
+    ajouter_etape(rv, "Calcul des statistiques discriminantes terminé.")
   }
 
   segments_info <- construire_segments_exportables(corpus_ok, groupes, termes_significatifs)
@@ -520,6 +565,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 80
     rv$statut <- "Nuages de mots et exports détaillés."
+    ajouter_etape(rv, "Exports texte et concordancier générés.")
   }
 
   wordclouds <- exporter_wordclouds(
@@ -554,13 +600,16 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   if (!is.null(rv)) {
     rv$progression <- 92
     rv$statut <- "Création de l'archive ZIP."
+    ajouter_etape(rv, "Nuages de mots et exports détaillés terminés.")
   }
 
   zip_file <- creer_archive_exports(base_dir = base_dir)
+  ajouter_log_debug(rv, paste0("Archive ZIP finale : ", zip_file))
 
   if (!is.null(rv)) {
     rv$progression <- 100
     rv$statut <- "Analyse terminée."
+    ajouter_etape(rv, "Archive ZIP générée, analyse finalisée.")
   }
 
   list(
