@@ -314,7 +314,7 @@ page_sidebar(
         numericInput("max_p", "max_p (p-value)", value = 0.05, min = 0, max = 1, step = 0.01)
       ),
       accordion_panel(
-        title = "Langue et stopwords",
+        title = "Langue du corpus",
         value = "param_langue",
         radioButtons(
           "langue_corpus",
@@ -322,13 +322,13 @@ page_sidebar(
           choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
           selected = "fr"
         ),
-        checkboxInput("retirer_stopwords", "Stopwords quanteda", value = TRUE),
-        uiOutput("ui_stopwords_info"),
         uiOutput("ui_langue_detection")
       ),
       accordion_panel(
         title = "Nettoyage",
         value = "param_nettoyage",
+        checkboxInput("retirer_stopwords", "Stopwords quanteda", value = TRUE),
+        uiOutput("ui_stopwords_info"),
         checkboxInput("nettoyage_caracteres", "Nettoyage caractères (regex)", value = FALSE),
         checkboxInput("supprimer_ponctuation", "Supprimer la ponctuation", value = TRUE),
         checkboxInput("supprimer_chiffres", "Supprimer les chiffres", value = TRUE),
@@ -362,18 +362,6 @@ page_sidebar(
     nav_panel(
       "Analyse",
       card(
-        class = "analysis-intro",
-        full_screen = TRUE,
-        card_body(
-          tags$h2("Pilotage de la CHD Rainette"),
-          tags$p("Cette vue regroupe l’état du calcul, les indicateurs de segmentation et le journal détaillé pour suivre l’analyse pas à pas sur le VPS."),
-          tags$p(
-            class = "lab-note",
-            "Le style de l’interface reste volontairement sobre : priorité aux sorties, aux paramètres et au diagnostic de calcul."
-          )
-        )
-      ),
-      card(
         full_screen = TRUE,
         card_header("Statut et indicateurs"),
         div(class = "wide-stack",
@@ -394,6 +382,22 @@ page_sidebar(
         full_screen = TRUE,
         card_header("Mode debug et étapes de l’analyse"),
         div(class = "debug-terminal", verbatimTextOutput("logs", placeholder = TRUE))
+      )
+    ),
+    nav_panel(
+      "Corpus",
+      card(
+        card_header("Informations"),
+        uiOutput("corpus_meta")
+      ),
+      card(
+        card_header("Aperçu du corpus importé"),
+        div(class = "preview-box", verbatimTextOutput("corpus_preview", placeholder = TRUE))
+      ),
+      card(
+        full_screen = TRUE,
+        card_header("Concordancier HTML"),
+        uiOutput("ui_concordancier")
       )
     ),
     nav_panel(
@@ -424,22 +428,6 @@ page_sidebar(
         full_screen = TRUE,
         card_header("Nuages de mots"),
         uiOutput("ui_wordclouds")
-      )
-    ),
-    nav_panel(
-      "Corpus",
-      card(
-        card_header("Informations"),
-        uiOutput("corpus_meta")
-      ),
-      card(
-        card_header("Aperçu du corpus importé"),
-        div(class = "preview-box", verbatimTextOutput("corpus_preview", placeholder = TRUE))
-      ),
-      card(
-        full_screen = TRUE,
-        card_header("Concordancier HTML"),
-        uiOutput("ui_concordancier")
       )
     ),
     nav_panel(
