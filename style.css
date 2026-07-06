@@ -131,13 +131,18 @@ h1 {
 
 .aide-rapide {
     margin-bottom: 22px;
-    padding: 18px;
+    padding: 14px 16px;
     background: linear-gradient(135deg, rgba(255, 75, 75, 0.06), rgba(17, 17, 17, 0.03));
     border: 1px solid rgba(255, 75, 75, 0.14);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 16px;
+    align-items: center;
 }
 
 .aide-rapide-intro {
-    margin-bottom: 16px;
+    margin: 0;
+    grid-column: 1 / 2;
 }
 
 .aide-rapide-surtitre {
@@ -151,7 +156,7 @@ h1 {
 
 .aide-rapide-titre {
     margin: 0;
-    font-size: 22px;
+    font-size: 19px;
     line-height: 1.1;
     letter-spacing: -0.03em;
     color: var(--couleur-principale);
@@ -165,20 +170,15 @@ h1 {
     color: var(--couleur-secondaire);
 }
 
-.aide-rapide-regles {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 16px;
-}
-
 .aide-regle {
     display: block;
-    padding: 12px 13px;
+    margin: 0;
+    grid-column: 1 / 2;
+    padding: 10px 12px;
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid rgba(17, 17, 17, 0.08);
-    font-size: 13px;
-    line-height: 1.45;
+    font-size: 12.5px;
+    line-height: 1.4;
     color: var(--couleur-secondaire);
 }
 
@@ -213,11 +213,15 @@ h1 {
 
 .aide-rapide-lien {
     display: inline-flex;
-    margin-top: 16px;
+    margin-top: 0;
+    grid-column: 2 / 3;
+    grid-row: 1 / span 2;
     color: var(--couleur-accent);
     text-decoration: none;
     font-size: 13px;
     font-weight: 700;
+    white-space: nowrap;
+    align-self: center;
 }
 
 .aide-rapide-lien:hover {
@@ -524,17 +528,27 @@ h1 {
         grid-template-columns: 1fr;
     }
 
-    .aide-rapide-regles {
-        grid-template-columns: 1fr;
-    }
-
-    .aide-rapide-grille {
-        grid-template-columns: 1fr;
-    }
-
     .entete {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+@media (max-width: 860px) {
+    .aide-rapide {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+    }
+
+    .aide-rapide-intro,
+    .aide-regle,
+    .aide-rapide-lien {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    .aide-rapide-lien {
+        justify-self: flex-start;
     }
 }
 
@@ -568,5 +582,9 @@ h1 {
 
     .actions-entete {
         width: 100%;
+    }
+
+    .aide-rapide {
+        padding: 12px 14px;
     }
 }
