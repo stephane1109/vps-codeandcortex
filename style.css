@@ -135,7 +135,7 @@ h1 {
     background: linear-gradient(135deg, rgba(255, 75, 75, 0.06), rgba(17, 17, 17, 0.03));
     border: 1px solid rgba(255, 75, 75, 0.14);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px 16px;
     align-items: center;
 }
@@ -213,15 +213,15 @@ h1 {
 
 .aide-rapide-lien {
     display: inline-flex;
-    margin-top: 0;
-    grid-column: 2 / 3;
-    grid-row: 1 / span 2;
+    margin-top: 2px;
+    grid-column: 1;
+    grid-row: auto;
     color: var(--couleur-accent);
     text-decoration: none;
     font-size: 13px;
     font-weight: 700;
     white-space: nowrap;
-    align-self: center;
+    justify-self: start;
 }
 
 .aide-rapide-lien:hover {
