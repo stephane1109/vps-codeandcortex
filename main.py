@@ -30,13 +30,15 @@ from sklearn.preprocessing import StandardScaler
 from yt_dlp import YoutubeDL
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from ticket_gate import enforce_streamlit_access
+from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 
 EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi"}
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
+APP_NAME = "Vecteur émotionnel"
+APP_TICKET_DEFAULT_ID = "vecteur-emotionnel"
 
 
 def env_int(name: str, default: int) -> int:
@@ -409,6 +411,7 @@ def analyser_video(
     status_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     def status(message: str) -> None:
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
         if status_callback:
             status_callback(message)
 
@@ -815,8 +818,12 @@ def file_bytes(path: str | Path) -> bytes:
     return Path(path).read_bytes()
 
 
-st.set_page_config(page_title="Vecteur emotionnel", layout="wide")
-enforce_streamlit_access("vecteur-emotionnel", "Vecteur emotionnel")
+st.set_page_config(
+    page_title="Vecteur emotionnel",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 session_dir = SESSIONS_DIR / session_id
