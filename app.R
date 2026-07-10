@@ -287,15 +287,6 @@ server <- function(input, output, session) {
     length(rv$clusters)
   })
 
-  output$ui_debug_status <- renderUI({
-    badges <- list(
-      tags$span(class = "debug-pill", if (isTRUE(rv$debug_mode)) "Mode debug actif" else "Mode debug standard"),
-      tags$span(class = "debug-pill", paste0("Stopwords quanteda : ", if (isTRUE(input$retirer_stopwords)) "oui" else "non")),
-      tags$span(class = "debug-pill", paste0("Langue : ", configurer_langue_corpus(input$langue_corpus %||% "fr")$libelle))
-    )
-    tags$div(class = "debug-strip", badges)
-  })
-
   output$ui_langue_detection <- renderUI({
     textes <- NULL
     if (!is.null(rv$filtered_corpus)) {

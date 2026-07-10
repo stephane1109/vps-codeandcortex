@@ -605,7 +605,6 @@ page_sidebar(
         full_screen = TRUE,
         card_header("Statut et indicateurs"),
         div(class = "wide-stack",
-          uiOutput("ui_debug_status"),
           p(textOutput("statut")),
           uiOutput("barre_progression"),
           div(
