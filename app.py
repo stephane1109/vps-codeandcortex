@@ -452,6 +452,20 @@ def afficher_interface_europresse():
         unsafe_allow_html=True
     )
 
+    st.markdown(
+        """
+        <div style="text-align:center; margin:8px 0 14px;">
+            <a href="https://www.codeandcortex.fr/europresse-to-iramuteq-v4/"
+               target="_blank"
+               rel="noopener noreferrer"
+               style="color:#ff1f00; font-weight:700; text-decoration:none;">
+                Aide
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # Ligne de séparation
     st.markdown(
         '<hr style="margin-top:10px;margin-bottom:15px;">',
