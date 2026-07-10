@@ -30,6 +30,7 @@ source("R/nlp_language.R", encoding = "UTF-8", local = TRUE)
 source("R/afc_chd.R", encoding = "UTF-8", local = TRUE)
 source("R/chdrainette_core.R", encoding = "UTF-8", local = TRUE)
 source("R/rainette_explor_native.R", encoding = "UTF-8", local = TRUE)
+source("R/ticket_gate.R", encoding = "UTF-8", local = TRUE)
 source("ui.R", encoding = "UTF-8", local = TRUE)
 
 ui <- function(request) {
@@ -69,6 +70,20 @@ build_resource_url <- function(rv, relative_path) {
 server <- function(input, output, session) {
   run_rainette_explor_page_server(input, output, session)
 
+  ticket_cfg <- ticket_config("chdrainette", "CHD Rainette")
+  ticket_snapshot_state <- reactiveVal(list(
+    enabled = ticket_cfg$enabled,
+    ticket_id = NULL,
+    statut = "boot",
+    position = NULL,
+    active = 0L,
+    queued = 0L,
+    max_active = ticket_cfg$max_active,
+    wait_refresh_ms = ticket_cfg$wait_refresh_ms,
+    heartbeat_ms = ticket_cfg$heartbeat_ms,
+    message = "Initialisation du contrôle d'accès."
+  ))
+
   rv <- reactiveValues(
     logs = "[info] Prêt.",
     statut = "En attente.",
@@ -100,6 +115,85 @@ server <- function(input, output, session) {
     params_used = NULL
   )
 
+  refresh_ticket_snapshot <- function(force_resume = FALSE) {
+    if (!isTRUE(ticket_cfg$enabled)) {
+      snap <- ticket_disabled_snapshot(ticket_cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
+      ticket_snapshot_state(snap)
+      return(snap)
+    }
+
+    if (force_resume) {
+      ticket_set_released(session, FALSE)
+    } else if (ticket_is_released(session)) {
+      snap <- ticket_released_snapshot(ticket_cfg, "Accès libéré pour cette page.")
+      ticket_snapshot_state(snap)
+      return(snap)
+    }
+
+    snap <- tryCatch(
+      ticket_claim_or_refresh(ticket_cfg, ticket_session_id(session)),
+      error = function(exc) ticket_error_snapshot(ticket_cfg, conditionMessage(exc))
+    )
+    ticket_snapshot_state(snap)
+    snap
+  }
+
+  output$ui_ticket_sidebar <- renderUI({
+    ticket_sidebar_ui(ticket_snapshot_state())
+  })
+
+  output$ui_ticket_release_hook <- renderUI({
+    ticket_snapshot_state()
+    ticket_release_hook_ui(ticket_cfg, session)
+  })
+
+  refresh_ticket_snapshot()
+
+  ticket_refresh_timer <- reactiveTimer(max(2000L, min(ticket_cfg$wait_refresh_ms, ticket_cfg$heartbeat_ms)), session)
+
+  observe({
+    ticket_refresh_timer()
+    snap <- isolate(ticket_snapshot_state())
+    if (!isTRUE(ticket_cfg$enabled)) {
+      return(invisible(NULL))
+    }
+    if (identical(snap$statut, "released")) {
+      return(invisible(NULL))
+    }
+    refresh_ticket_snapshot()
+  })
+
+  observeEvent(input$ticket_release_btn, {
+    released <- ticket_release(ticket_cfg, ticket_session_id(session))
+    if (isTRUE(released)) {
+      ticket_set_released(session, TRUE)
+      ticket_snapshot_state(ticket_released_snapshot(ticket_cfg, "Accès libéré pour cette page."))
+      showNotification("Accès libéré.", type = "message", duration = 4)
+    } else {
+      showNotification("Impossible de libérer le ticket courant pour le moment.", type = "warning", duration = 6)
+    }
+  })
+
+  observeEvent(input$ticket_leave_waiting_btn, {
+    released <- ticket_release(ticket_cfg, ticket_session_id(session))
+    if (isTRUE(released)) {
+      ticket_set_released(session, TRUE)
+      ticket_snapshot_state(ticket_released_snapshot(ticket_cfg, "File d'attente quittée pour cette page."))
+      showNotification("File d'attente quittée.", type = "message", duration = 4)
+    } else {
+      showNotification("Impossible de quitter la file d'attente pour le moment.", type = "warning", duration = 6)
+    }
+  })
+
+  observeEvent(input$ticket_resume_btn, {
+    ticket_resume_session(session)
+    refresh_ticket_snapshot(force_resume = TRUE)
+  })
+
+  session$onSessionEnded(function() {
+    try(ticket_release(ticket_cfg, ticket_session_id(session)), silent = TRUE)
+  })
+
   observeEvent(input$fichier_corpus, {
     req(input$fichier_corpus$datapath)
     if (!file.exists(input$fichier_corpus$datapath)) {
@@ -118,6 +212,13 @@ server <- function(input, output, session) {
   }, ignoreNULL = TRUE)
 
   observeEvent(input$lancer, {
+    current_ticket <- isolate(ticket_snapshot_state())
+    if (isTRUE(ticket_cfg$enabled) && !identical(current_ticket$statut, "actif")) {
+      rv$statut <- "Attente du ticket utilisateur."
+      showNotification("L'application n'est pas encore disponible pour cette session.", type = "warning", duration = 6)
+      return(invisible(NULL))
+    }
+
     rv$logs <- "[info] Prêt."
     rv$statut <- "Préparation de l'analyse."
     rv$progression <- 0

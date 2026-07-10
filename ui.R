@@ -373,6 +373,106 @@ page_sidebar(
         background: rgba(255, 253, 249, 0.94);
         box-shadow: 0 12px 28px rgba(76, 49, 31, 0.07);
       }
+      .ticket-access-group { padding-bottom: 1rem; }
+      .ticket-access-title {
+        margin: 0 0 0.85rem;
+        color: var(--rainette-ink);
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.02rem;
+        font-weight: 760;
+      }
+      .ticket-status-shell {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .ticket-status-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.78rem;
+        padding: 0.92rem 1rem;
+        border-radius: 14px;
+        border: 1px solid var(--rainette-line);
+        background: #fffdf9;
+      }
+      .ticket-status-dot {
+        width: 0.78rem;
+        height: 0.78rem;
+        flex: 0 0 0.78rem;
+        margin-top: 0.22rem;
+        border-radius: 999px;
+        box-shadow: 0 0 0 3px rgba(255,255,255,0.78);
+      }
+      .ticket-status-meta {
+        color: #27303a;
+        line-height: 1.45;
+      }
+      .ticket-status-meta strong {
+        display: inline-block;
+        margin-bottom: 0.2rem;
+      }
+      .ticket-status-note,
+      .ticket-status-message {
+        margin: 0;
+        line-height: 1.45;
+      }
+      .ticket-status-note {
+        color: #4d5863;
+        font-size: 0.92rem;
+      }
+      .ticket-status-message {
+        color: #a53d2d;
+        font-size: 0.9rem;
+      }
+      .ticket-actions {
+        display: grid;
+        gap: 0.55rem;
+      }
+      .ticket-actions .btn { width: 100%; }
+      .ticket-status-card.is-active {
+        background: #eef9f1;
+        border-color: rgba(47, 133, 90, 0.22);
+      }
+      .ticket-status-card.is-active .ticket-status-meta,
+      .ticket-status-card.is-active .ticket-status-meta strong,
+      .ticket-status-card.is-active + .ticket-status-note {
+        color: #23683f;
+      }
+      .ticket-status-dot.is-active { background: #2f855a; }
+      .ticket-status-card.is-waiting {
+        background: #fff4e8;
+        border-color: rgba(217, 107, 43, 0.25);
+      }
+      .ticket-status-card.is-waiting .ticket-status-meta,
+      .ticket-status-card.is-waiting .ticket-status-meta strong,
+      .ticket-status-card.is-waiting + .ticket-status-note {
+        color: #9e5b22;
+      }
+      .ticket-status-dot.is-waiting { background: #d96b2b; }
+      .ticket-status-card.is-error {
+        background: #fff0ef;
+        border-color: rgba(197, 48, 48, 0.22);
+      }
+      .ticket-status-card.is-error .ticket-status-meta,
+      .ticket-status-card.is-error .ticket-status-meta strong,
+      .ticket-status-card.is-error + .ticket-status-note {
+        color: #a53d2d;
+      }
+      .ticket-status-dot.is-error { background: #c53030; }
+      .ticket-status-card.is-released,
+      .ticket-status-card.is-disabled {
+        background: #f4f6f8;
+        border-color: rgba(95, 102, 112, 0.18);
+      }
+      .ticket-status-card.is-released .ticket-status-meta,
+      .ticket-status-card.is-released .ticket-status-meta strong,
+      .ticket-status-card.is-released + .ticket-status-note,
+      .ticket-status-card.is-disabled .ticket-status-meta,
+      .ticket-status-card.is-disabled .ticket-status-meta strong,
+      .ticket-status-card.is-disabled + .ticket-status-note {
+        color: #4d5863;
+      }
+      .ticket-status-dot.is-released,
+      .ticket-status-dot.is-disabled { background: #6b7280; }
       .form-control, .form-select, .selectize-input {
         min-height: 2.75rem;
         border: 1px solid rgba(87, 63, 47, 0.18) !important;
@@ -516,9 +616,11 @@ page_sidebar(
       }
     "))
   ),
+  uiOutput("ui_ticket_release_hook"),
   sidebar = sidebar(
     width = 420,
     open = "desktop",
+    uiOutput("ui_ticket_sidebar"),
     div(
       class = "sidebar-group",
       fileInput("fichier_corpus", "Importer un corpus IRaMuTeQ (.txt)", accept = c(".txt")),

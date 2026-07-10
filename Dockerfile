@@ -36,6 +36,7 @@ RUN apt-get update \
         gfortran \
         pkg-config \
         curl \
+        redis-tools \
         zip \
         libcurl4-openssl-dev \
         libssl-dev \
