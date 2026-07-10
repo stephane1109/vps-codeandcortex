@@ -640,7 +640,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,

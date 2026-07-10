@@ -284,16 +284,16 @@ def main() -> None:
     stopwords_fr = charger_stopwords_francais()
 
     with st.sidebar:
-        st.header("Parametres")
-        top_n = st.slider("Nombre de mots affiches", min_value=5, max_value=100, value=25, step=5)
+        st.header("Paramètres")
+        top_n = st.slider("Nombre de mots affichés", min_value=5, max_value=100, value=25, step=5)
         min_length = st.slider("Longueur minimale des mots", min_value=2, max_value=8, value=3)
-        appliquer_stopwords = st.checkbox("Retirer les stopwords francais", value=True)
+        appliquer_stopwords = st.checkbox("Retirer les stopwords français", value=True)
         stopwords_personnalises = st.text_area(
             "Stopwords additionnels",
             value="",
-            help="Separez les termes par des espaces, virgules ou points-virgules.",
+            help="Séparez les termes par des espaces, virgules ou points-virgules.",
         )
-        st.caption("Les stopwords NLTK sont utilises si disponibles, sinon une liste de secours est appliquee.")
+        st.caption("Les stopwords NLTK sont utilisés si disponibles, sinon une liste de secours est appliquée.")
 
     col_a, col_b = st.columns(2)
     with col_a:
