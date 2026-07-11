@@ -86,7 +86,7 @@ def extraire_video_id(url_video: str) -> str:
     if match:
         return match.group(1)
 
-    raise ValueError("Impossible d'extraire un identifiant video YouTube valide.")
+    raise ValueError("Impossible d'extraire un identifiant vidéo YouTube valide.")
 
 
 def ensure_directory(path: Path) -> Path:
@@ -157,7 +157,7 @@ def pick_downloaded_video(job_dir: Path) -> Path:
         if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
     ]
     if not candidates:
-        raise RuntimeError("Aucun fichier video n'a ete telecharge par yt-dlp.")
+        raise RuntimeError("Aucun fichier vidéo n'a été téléchargé par yt-dlp.")
     return candidates[0]
 
 
@@ -420,13 +420,13 @@ def analyser_video(
     exports_dir = ensure_directory(job_dir / "exports")
     images_dir = ensure_directory(job_dir / "images_25fps")
 
-    status("Telechargement de la video YouTube...")
+    status("Téléchargement de la vidéo YouTube...")
     video_path, video_title = telecharger_video(video_url, job_dir)
 
     status("Chargement du detecteur FER...")
     detector = charger_detecteur_fer()
 
-    status("Recuperation des sous-titres YouTube...")
+    status("Récupération des sous-titres YouTube...")
     sous_titres = obtenir_sous_titres_youtube(video_url)
 
     results_25fps: list[dict[str, object]] = []
@@ -834,22 +834,47 @@ touch_session(session_dir)
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
 
-st.title("Vecteur emotionnel")
+st.title("Vecteur émotionnel")
 st.caption(
-    "Analyse emotionnelle d'une video YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
+    "Analyse émotionnelle d'une vidéo YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
+)
+st.markdown(
+    """
+    <a
+      href="https://www.codeandcortex.fr/vecteurs-fer-pca-kmeans/"
+      target="_blank"
+      rel="noopener noreferrer"
+      style="
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        margin:0.25rem 0 1rem;
+        padding:0.55rem 0.9rem;
+        border-radius:0.7rem;
+        border:1px solid rgba(47, 133, 90, 0.28);
+        background:#f0fff4;
+        color:#23683f;
+        font-weight:700;
+        text-decoration:none;
+      "
+    >
+      Aide
+    </a>
+    """,
+    unsafe_allow_html=True,
 )
 
 st.info(
-    "Cette version VPS gere automatiquement les repertoires de travail par session. "
-    "Les exports sont prepares dans un dossier temporaire puis telechargeables depuis l'interface."
+    "Cette version VPS gère automatiquement les répertoires de travail par session. "
+    "Les exports sont préparés dans un dossier temporaire puis téléchargeables depuis l'interface."
 )
 
 video_url = st.text_input(
-    "URL de la video YouTube",
+    "URL de la vidéo YouTube",
     placeholder="https://www.youtube.com/watch?v=...",
 )
 job_label = st.text_input(
-    "Nom du repertoire de travail (optionnel)",
+    "Nom du répertoire de travail (optionnel)",
     placeholder="analyse_video_1",
 )
 
@@ -897,7 +922,7 @@ if st.button("Lancer l'analyse", type="primary", use_container_width=True):
                 )
             )
             st.session_state.analysis_result = result
-            status_box.success("Analyse terminee. Les resultats sont pret a etre consultes et telecharges.")
+            status_box.success("Analyse terminée. Les résultats sont prêts à être consultés et téléchargés.")
         except Exception as exc:
             status_box.empty()
             st.error(f"Erreur lors de l'analyse : {exc}")
@@ -916,13 +941,13 @@ if result:
     metric_col_1, metric_col_2, metric_col_3, metric_col_4 = st.columns(4)
     metric_col_1.metric("Secondes analysees", value=str(len(df_seconds)))
     metric_col_2.metric("Frames analysees", value=str(len(df_emotions)))
-    metric_col_3.metric("Sous-titres recuperes", value=str(result["sous_titres_count"]))
+    metric_col_3.metric("Sous-titres récupérés", value=str(result["sous_titres_count"]))
     metric_col_4.metric("Plage analysee", value=f"{result['start_time']}s - {result['end_time']}s")
 
     st.markdown(f"**Titre video** : {result['video_title']}")
     st.markdown(f"**ID video** : `{result['video_id']}`")
 
-    st.markdown("### Telechargements")
+    st.markdown("### Téléchargements")
     download_col_1, download_col_2, download_col_3, download_col_4 = st.columns(4)
     with download_col_1:
         st.download_button(
