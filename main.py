@@ -30,7 +30,11 @@ def render_download_button(path_str: str, label: str, mime: str) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title=APP_NAME, layout="centered")
+    st.set_page_config(
+        page_title=APP_NAME,
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL
