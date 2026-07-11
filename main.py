@@ -24,39 +24,38 @@ DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=WDQqDOXAUIM"
 DEFAULT_LANGUAGE = "fr"
 DEFAULT_MODEL = "base"
 DEFAULT_PROFILE = (os.getenv("WHISPER_PROFILE_DEFAULT", "faster-whisper") or "faster-whisper").strip().lower()
-MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large"]
+MODEL_OPTIONS = ["tiny", "base", "small", "medium"]
+VISIBLE_MODEL_CHOICES = ["fast-whisper", "sm", "md", "tiny", "base", "small", "medium"]
 UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
-WHISPER_MODEL_ALIASES = {
-    "large": "large-v3",
-}
+WHISPER_MODEL_ALIASES: dict[str, str] = {}
 MODEL_PROFILES = {
     # #### PROFILS DE MODELES AFFICHES DANS L'APPLICATION
     # L'utilisateur voit explicitement ces trois choix dans l'interface.
     "faster-whisper": {
         "backend": "faster-whisper",
         "model_size": "base",
-        "label": "faster-whisper",
-        "description": "Profil rapide et leger, recommande par defaut sur le VPS.",
+        "label": "fast-whisper",
+        "description": "Profil rapide et léger, recommandé par défaut sur le VPS.",
     },
     "sm": {
         "backend": "faster-whisper",
         "model_size": "small",
         "label": "sm",
-        "description": "Modele small, meilleur compromis qualite/temps.",
+        "description": "Modèle small, meilleur compromis qualité/temps.",
     },
     "md": {
         "backend": "faster-whisper",
         "model_size": "medium",
         "label": "md",
-        "description": "Modele medium, plus lourd mais souvent plus precis.",
+        "description": "Modèle medium, plus lourd mais souvent plus précis.",
     },
 }
 
 
 class ApplicationError(RuntimeError):
-    """Erreur metier a afficher proprement dans l'interface."""
+    """Erreur métier à afficher proprement dans l'interface."""
 
 
 def ensure_directory(path: Path) -> Path:
@@ -80,7 +79,7 @@ def find_downloaded_mp3(run_dir: Path) -> Path:
     candidates = sorted(run_dir.glob("*.mp3"), key=lambda item: item.stat().st_mtime, reverse=True)
     if candidates:
         return candidates[0]
-    raise ApplicationError("Le telechargement YouTube est termine mais aucun fichier MP3 n'a ete trouve.")
+    raise ApplicationError("Le téléchargement YouTube est terminé mais aucun fichier MP3 n'a été trouvé.")
 
 
 def telecharger_audio_youtube(url: str, run_dir: Path) -> Path:
@@ -107,9 +106,9 @@ def telecharger_audio_youtube(url: str, run_dir: Path) -> Path:
         with YoutubeDL(options_ydl) as ydl:
             ydl.extract_info(url.strip(), download=True)
     except DownloadError as exc:
-        raise ApplicationError(f"Erreur lors du telechargement YouTube : {exc}") from exc
-    except Exception as exc:  # pragma: no cover - depend du reseau/runtime
-        raise ApplicationError(f"Telechargement YouTube impossible : {exc}") from exc
+        raise ApplicationError(f"Erreur lors du téléchargement YouTube : {exc}") from exc
+    except Exception as exc:  # pragma: no cover - dépend du réseau/runtime
+        raise ApplicationError(f"Téléchargement YouTube impossible : {exc}") from exc
 
     return find_downloaded_mp3(run_dir)
 
@@ -133,6 +132,10 @@ def load_whisper_model(model_size: str):
     if WhisperModel is None:
         raise ApplicationError("Le backend faster-whisper n'est pas disponible dans l'application.")
     ensure_directory(WHISPER_CACHE_DIR)
+    if model_size not in MODEL_OPTIONS:
+        raise ApplicationError(
+            f"Le modèle '{model_size}' n'est pas autorisé sur ce VPS. Choisissez tiny, base, small ou medium."
+        )
     resolved_model_size = WHISPER_MODEL_ALIASES.get(model_size, model_size)
     compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip() or "int8"
     return WhisperModel(
@@ -163,27 +166,29 @@ def transcrire_audio(audio_path: Path, model_size: str, language_code: str) -> s
         raise ApplicationError(f"Erreur lors de la transcription Whisper : {exc}") from exc
 
     if not text:
-        raise ApplicationError("Whisper n'a renvoye aucun texte exploitable.")
+        raise ApplicationError("Whisper n'a renvoyé aucun texte exploitable.")
     return text
 
 
-def resolve_model_profile(profile_key: str, advanced_mode: bool, advanced_model_size: str) -> tuple[str, str, str]:
-    normalized_key = (profile_key or DEFAULT_PROFILE).strip().lower()
-    if advanced_mode:
-        model_size = (advanced_model_size or DEFAULT_MODEL).strip().lower() or DEFAULT_MODEL
-        return "faster-whisper", model_size, f"avance ({model_size})"
-
-    profile = MODEL_PROFILES.get(normalized_key) or MODEL_PROFILES["faster-whisper"]
-    return (
-        str(profile["backend"]),
-        str(profile["model_size"]),
-        str(profile["label"]),
-    )
+def normalize_model_choice(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized == "fast-whisper":
+        return "faster-whisper"
+    return normalized
 
 
-def format_profile_option(profile_key: str) -> str:
-    profile = MODEL_PROFILES.get(profile_key, MODEL_PROFILES["faster-whisper"])
-    return f"{profile['label']} - {profile['description']}"
+def resolve_selected_model(selected_choice: str) -> tuple[str, str, str]:
+    normalized_key = normalize_model_choice(selected_choice or DEFAULT_PROFILE)
+    if normalized_key in MODEL_PROFILES:
+        profile = MODEL_PROFILES[normalized_key]
+        return (
+            str(profile["backend"]),
+            str(profile["model_size"]),
+            str(profile["label"]),
+        )
+    if normalized_key in MODEL_OPTIONS:
+        return "faster-whisper", normalized_key, f"avance ({normalized_key})"
+    return resolve_selected_model("fast-whisper")
 
 
 def save_transcription(transcription_text: str, audio_path: Path) -> Path:
@@ -210,24 +215,23 @@ def run_transcription_with_progress(audio_path: Path, model_size: str, language_
                 # dans Coolify ou garde ce heartbeat actif pour ne pas perdre le ticket.
                 keep_ticket_alive("mp3_to_text", APP_NAME)
             if debug_mode:
-                progress_text.text(f"Progression estimee : {progress}%")
+                progress_text.text(f"Progression estimée : {progress}%")
 
         transcription_text = future.result()
         progress_bar.progress(100)
-        progress_text.text("Progression estimee : 100%")
+        progress_text.text("Progression estimée : 100%")
         return transcription_text
 
 
 def build_sidebar_notes() -> None:
     with st.sidebar:
-        st.header("Execution VPS")
-        st.caption("Le modele choisi est telecharge au premier usage puis reutilise depuis le cache du conteneur.")
+        st.header("Exécution VPS")
+        st.caption("Le modèle choisi est téléchargé au premier usage puis réutilisé depuis le cache du conteneur.")
         st.markdown(
             "\n".join(
                 [
                     "- Source audio : YouTube ou fichier local",
-                    "- Choix visibles : faster-whisper, sm, md",
-                    "- Mode avance : tiny, base, small, medium, large",
+                    "- Modèle utilisé : profil Whisper configuré pour le VPS",
                     "- Backend Docker : Whisper CPU compatible VPS",
                     "- Export final : transcription `.txt`",
                     "- Dossier temporaire : `APP_WORKDIR`",
@@ -237,13 +241,13 @@ def build_sidebar_notes() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title=APP_NAME, layout="centered")
+    st.set_page_config(page_title=APP_NAME, layout="wide")
     st.markdown(
         '<link rel="icon" href="data:,">',
         unsafe_allow_html=True,
     )
-    # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
-    # Variables a modifier dans Coolify si besoin :
+    # #### VARIABLES D'ENVIRONNEMENT - CONTRÔLE D'ACCÈS REDIS POUR LE VPS
+    # Variables à modifier dans Coolify si besoin :
     # - REDIS_URL
     # - APP_TICKET_MAX_ACTIVE (laisser 1 pour une application lourde)
     # - APP_TICKET_COST
@@ -256,62 +260,36 @@ def main() -> None:
         """
         Cette version VPS permet de :
 
-        - telecharger l'audio d'une video YouTube
+        - télécharger l'audio d'une vidéo YouTube
         - importer un fichier audio local
-        - choisir le profil visible `faster-whisper`, `sm` ou `md`
-        - garder un mode avance pour choisir directement `tiny`, `base`, `small`, `medium`, `large`
-        - transcrire automatiquement en texte puis telecharger le resultat
+        - transcrire automatiquement en texte puis télécharger le résultat
         """
     )
     build_sidebar_notes()
 
-    debug_mode = st.checkbox("Mode debug", value=False)
+    debug_mode = st.checkbox("Mode diagnostic", value=False)
     source = st.radio("Choisissez la source de l'audio", options=["URL YouTube", "Fichier audio"])
 
     youtube_url = ""
     uploaded_audio = None
 
     if source == "URL YouTube":
-        youtube_url = st.text_input("Entrez l'URL de la video YouTube", value=DEFAULT_YOUTUBE_URL)
+        youtube_url = st.text_input("Entrez l'URL de la vidéo YouTube", value=DEFAULT_YOUTUBE_URL)
     else:
         uploaded_audio = st.file_uploader(
             "Importer un fichier audio",
             type=UPLOAD_EXTENSIONS,
-            help="Formats conseilles : mp3, wav, m4a, mp4, webm.",
+            help="Formats conseillés : mp3, wav, m4a, mp4, webm.",
         )
 
-    profile_options = list(MODEL_PROFILES.keys())
-    default_profile = DEFAULT_PROFILE if DEFAULT_PROFILE in MODEL_PROFILES else "faster-whisper"
-    profile_index = profile_options.index(default_profile)
-    selected_profile = st.selectbox(
-        "Choisissez le profil de modele",
-        options=profile_options,
-        index=profile_index,
-        format_func=format_profile_option,
-        help="Choix visibles demandes dans l'application : faster-whisper, sm, md.",
-    )
-    advanced_mode = st.checkbox(
-        "Afficher le mode avance pour choisir directement tiny/base/small/medium/large",
-        value=False,
-    )
-    advanced_model_size = st.selectbox(
-        "Choisissez la taille exacte du modele Whisper",
-        options=MODEL_OPTIONS,
-        index=1,
-        disabled=not advanced_mode,
-    )
-    backend_name, model_size, resolved_profile = resolve_model_profile(
-        selected_profile,
-        advanced_mode,
-        advanced_model_size,
-    )
+    backend_name, model_size, resolved_profile = resolve_selected_model(DEFAULT_PROFILE)
     language_code = st.text_input(
         "Code langue pour la transcription",
         value=DEFAULT_LANGUAGE,
-        help="Exemple : fr, en, es. Laissez vide pour laisser Whisper detecter la langue.",
+        help="Exemple : fr, en, es. Laissez vide pour laisser Whisper détecter la langue.",
     )
 
-    st.caption(f"Profil actif : `{resolved_profile}` · Backend : `{backend_name}` · Modele charge : `{model_size}`")
+    st.caption(f"Profil actif : `{resolved_profile}` · Backend : `{backend_name}` · Modèle chargé : `{model_size}`")
 
     if st.button("Lancer la transcription", type="primary"):
         run_dir = create_run_directory()
@@ -319,18 +297,18 @@ def main() -> None:
 
         try:
             if source == "URL YouTube":
-                with st.spinner("Telechargement de l'audio depuis YouTube..."):
+                with st.spinner("Téléchargement de l'audio depuis YouTube..."):
                     audio_path = telecharger_audio_youtube(youtube_url, run_dir)
             else:
                 audio_path = save_uploaded_audio(uploaded_audio, run_dir)
 
-            st.success(f"Audio pret : {audio_path.name}")
+            st.success(f"Audio prêt : {audio_path.name}")
 
             with st.spinner("Transcription en cours..."):
                 transcription_text = run_transcription_with_progress(audio_path, model_size, language_code, debug_mode)
 
             transcription_path = save_transcription(transcription_text, audio_path)
-            st.success(f"Transcription enregistree : {transcription_path.name}")
+            st.success(f"Transcription enregistrée : {transcription_path.name}")
 
             if debug_mode:
                 st.info(f"Dossier de travail : {run_dir}")
@@ -338,11 +316,10 @@ def main() -> None:
                     "\n".join(
                         [
                             f"Audio : {audio_path}",
-                            f"Profil choisi : {selected_profile}",
-                            f"Profil resolu : {resolved_profile}",
+                            f"Profil résolu : {resolved_profile}",
                             f"Backend : {backend_name}",
                             f"Transcription : {transcription_path}",
-                            f"Modele : {model_size}",
+                            f"Modèle : {model_size}",
                             f"Langue : {language_code or 'auto'}",
                             f"Cache Whisper : {WHISPER_CACHE_DIR}",
                         ]
@@ -352,7 +329,7 @@ def main() -> None:
             st.subheader("Transcription")
             st.text_area("Texte de la transcription", transcription_text, height=320)
             st.download_button(
-                "Telecharger la transcription",
+                "Télécharger la transcription",
                 data=transcription_text,
                 file_name=transcription_path.name,
                 mime="text/plain",

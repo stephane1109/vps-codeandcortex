@@ -663,7 +663,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -735,7 +735,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
     if snapshot["statut"] == "attente":
         st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
         st.warning(
-            f"{app_label} est actuellement utilisee par un autre utilisateur. "
+            f"{app_label} est actuellement utilisée par un autre utilisateur. "
             f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
         )
         st.stop()
