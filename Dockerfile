@@ -3,6 +3,8 @@ FROM python:3.10-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
@@ -32,10 +34,11 @@ RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
 COPY requirements.txt /app/requirements.txt
 
-RUN pip install --upgrade pip "setuptools<81" wheel \
-    && pip install -r /app/requirements.txt \
-    && pip install --no-deps fer==22.4.0 \
-    && python -c "import pkg_resources; from fer import FER"
+RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel \
+    && pip install --no-cache-dir -r /app/requirements.txt \
+    && pip install --no-cache-dir --no-deps fer==22.4.0 \
+    && python -c "import pkg_resources; from fer import FER" \
+    && rm -rf /root/.cache/pip /tmp/*
 
 COPY . /app
 
