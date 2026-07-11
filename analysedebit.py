@@ -127,15 +127,41 @@ def telecharger_video(video_url: str, repertoire: str | Path) -> Path:
 @lru_cache(maxsize=2)
 def load_whisper_model(model_name: str):
     try:
-        import whisper
+        from faster_whisper import WhisperModel
     except ImportError as exc:
-        raise ImportError("Installez 'openai-whisper' avec pip install -U openai-whisper") from exc
-    return whisper.load_model(model_name)
+        raise ImportError(
+            "Installez 'faster-whisper' dans le conteneur pour activer la transcription sur le VPS."
+        ) from exc
+    return WhisperModel(model_name, device="cpu", compute_type="int8")
 
 
 def transcrire_clip_whisper(clip_path: Path) -> dict:
     model = load_whisper_model(WHISPER_MODEL_NAME)
-    return model.transcribe(os.fspath(clip_path), language="fr")
+    segments, _info = model.transcribe(
+        os.fspath(clip_path),
+        language="fr",
+        beam_size=5,
+        vad_filter=True,
+        vad_parameters={"min_silence_duration_ms": 300},
+    )
+    normalized_segments = []
+    full_text_parts = []
+    for segment in segments:
+        text = (segment.text or "").strip()
+        if not text:
+            continue
+        normalized_segments.append(
+            {
+                "start": float(segment.start),
+                "end": float(segment.end),
+                "text": text,
+            }
+        )
+        full_text_parts.append(text)
+    return {
+        "text": " ".join(full_text_parts).strip(),
+        "segments": normalized_segments,
+    }
 
 
 # =============================================================================
