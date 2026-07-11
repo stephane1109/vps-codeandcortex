@@ -417,7 +417,22 @@ def document_html_kwic(titre: str, lignes_html):
 # ================================
 # INTERFACE — TITRE + EXPLICATIONS
 # ================================
-st.set_page_config(page_title="Cooccurrences mot pivot", layout="centered")
+st.set_page_config(page_title="Cooccurrences mot pivot", layout="wide")
+st.markdown(
+    """
+    <style>
+      .main .block-container {
+        max-width: 100% !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+      }
+      section[data-testid="stSidebar"] {
+        flex-shrink: 0;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 enforce_streamlit_access("cooccurrencesmotpivot", "Cooccurrences mot pivot")
 st.markdown("<h1 style='color:#e63946'>Cooccurrences autour d’un mot pivot : fréquences et log-likelihood</h1>", unsafe_allow_html=True)
 st.caption("Stéphane Meurisse — Version beta 1.1 - 27/07/2025 \\- [www.codeandcortex.fr](https://www.codeandcortex.fr)")
