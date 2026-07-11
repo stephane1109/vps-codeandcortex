@@ -114,6 +114,21 @@ def downsample_by_second(data: np.ndarray, times: np.ndarray, samplerate: int):
 
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, layout="wide")
+    st.markdown(
+        """
+        <style>
+          .main .block-container {
+            max-width: 100% !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+          }
+          section[data-testid="stSidebar"] {
+            flex-shrink: 0;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
