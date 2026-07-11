@@ -24,6 +24,20 @@ ticket_mask_redis_url <- function(value) {
 }
 
 
+ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis indisponible.") {
+  text <- trimws(value %||% "")
+  if (!nzchar(text)) {
+    return(fallback)
+  }
+  lines <- trimws(strsplit(text, "\n", fixed = TRUE)[[1]])
+  lines <- lines[nzchar(lines)]
+  if (!length(lines)) {
+    return(fallback)
+  }
+  lines[[1]]
+}
+
+
 ticket_runtime_diagnostic <- function(cfg, base_message = "") {
   redis_url <- trimws(Sys.getenv("REDIS_URL", unset = ""))
   redis_cli <- Sys.which("redis-cli")
@@ -578,6 +592,7 @@ ticket_release_hook_ui <- function(cfg, session) {
 
 ticket_sidebar_ui <- function(snapshot) {
   status <- snapshot$statut %||% "erreur"
+  diagnostic_summary <- ticket_first_diagnostic_line(snapshot$message)
   card_class <- switch(
     status,
     disabled = "ticket-status-card is-disabled",
@@ -611,7 +626,7 @@ ticket_sidebar_ui <- function(snapshot) {
     attente = sprintf("Position actuelle dans la file : %s.", snapshot$position %||% "?"),
     refuse = "Impossible d'ajouter un nouvel utilisateur pour le moment.",
     released = "Cette page n'occupe plus l'application.",
-    "Le ticket courant n'a pas pu être validé."
+    sprintf("Le ticket courant n'a pas pu être validé : %s", diagnostic_summary)
   )
   note <- switch(
     status,
@@ -620,7 +635,7 @@ ticket_sidebar_ui <- function(snapshot) {
     attente = sprintf("Application occupée. Position dans la file : %s.", snapshot$position %||% "?"),
     refuse = "File d'attente pleine pour cette application.",
     released = "Accès libéré pour cette page.",
-    "Contrôle d'accès temporairement indisponible."
+    "Contrôle d'accès temporairement indisponible. Le diagnostic Redis complet est affiché ci-dessous."
   )
   actions <- switch(
     status,
@@ -656,7 +671,11 @@ ticket_sidebar_ui <- function(snapshot) {
       ),
       tags$p(class = "ticket-status-note", note),
       if (nzchar(snapshot$message %||% "") && status %in% c("refuse", "erreur")) {
-        tags$pre(class = "ticket-status-message", snapshot$message)
+        tags$div(
+          class = "ticket-status-message",
+          tags$strong("Diagnostic Redis"),
+          tags$pre(snapshot$message)
+        )
       },
       actions
     )

@@ -422,12 +422,24 @@ page_sidebar(
       .ticket-status-message {
         color: #a53d2d;
         font-size: 0.9rem;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
         background: rgba(255, 255, 255, 0.72);
         border: 1px dashed rgba(165, 61, 45, 0.22);
         border-radius: 10px;
         padding: 0.7rem 0.8rem;
+      }
+      .ticket-status-message strong {
+        display: block;
+        margin-bottom: 0.35rem;
+        color: #7f1d1d;
+      }
+      .ticket-status-message pre {
+        margin: 0;
+        color: #7f1d1d;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
       .ticket-actions {
         display: grid;
