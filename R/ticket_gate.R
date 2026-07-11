@@ -38,6 +38,15 @@ ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic d'environ
 }
 
 
+ticket_error_summary <- function() {
+  redis_url <- ticket_mask_redis_url(Sys.getenv("REDIS_URL", unset = ""))
+  app_id <- Sys.getenv("APP_TICKET_ID", unset = "(absent)")
+  helper <- Sys.getenv("APP_TICKET_REDIS_HELPER", unset = "/app/backend/redis_ticket_cli.py")
+  helper_status <- if (file.exists(helper)) "helper présent" else sprintf("helper absent: %s", helper)
+  sprintf("REDIS_URL=%s | APP_TICKET_ID=%s | %s", redis_url, app_id, helper_status)
+}
+
+
 ticket_runtime_diagnostic <- function(cfg, base_message = "") {
   redis_url <- trimws(Sys.getenv("REDIS_URL", unset = ""))
   redis_cli <- Sys.which("redis-cli")
@@ -751,7 +760,11 @@ ticket_sidebar_ui <- function(snapshot) {
       diagnostic_base
     )
   }
-  diagnostic_summary <- ticket_first_diagnostic_line(diagnostic_message)
+  diagnostic_summary <- if (status %in% c("refuse", "erreur")) {
+    ticket_error_summary()
+  } else {
+    ticket_first_diagnostic_line(diagnostic_message)
+  }
   card_class <- switch(
     status,
     disabled = "ticket-status-card is-disabled",
