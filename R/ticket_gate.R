@@ -45,7 +45,7 @@ ticket_random_id <- function(length = 32L) {
 
 
 ticket_config <- function(default_app_id, app_label) {
-  ttl_seconds <- max(60L, ticket_env_int("APP_TICKET_TTL_SECONDS", 1800L))
+  ttl_seconds <- max(60L, ticket_env_int("APP_TICKET_TTL_SECONDS", 300L))
   wait_stale_default <- min(ttl_seconds, 120L)
   list(
     enabled = ticket_env_bool("APP_TICKET_ENFORCED", TRUE),
@@ -57,7 +57,7 @@ ticket_config <- function(default_app_id, app_label) {
     ttl_seconds = ttl_seconds,
     max_waiting = max(0L, ticket_env_int("APP_TICKET_MAX_WAITING", 20L)),
     wait_refresh_ms = max(2000L, ticket_env_int("APP_TICKET_WAIT_REFRESH_MS", 10000L)),
-    heartbeat_ms = max(30000L, ticket_env_int("APP_TICKET_HEARTBEAT_MS", 300000L)),
+    heartbeat_ms = max(30000L, ticket_env_int("APP_TICKET_HEARTBEAT_MS", 30000L)),
     release_url = trimws(Sys.getenv("APP_TICKET_RELEASE_URL", unset = "")),
     hidden_release_seconds = max(0L, ticket_env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0L)),
     wait_stale_seconds = max(30L, ticket_env_int("APP_TICKET_WAIT_STALE_SECONDS", wait_stale_default))
