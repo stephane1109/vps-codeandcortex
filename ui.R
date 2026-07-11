@@ -422,6 +422,12 @@ page_sidebar(
       .ticket-status-message {
         color: #a53d2d;
         font-size: 0.9rem;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px dashed rgba(165, 61, 45, 0.22);
+        border-radius: 10px;
+        padding: 0.7rem 0.8rem;
       }
       .ticket-actions {
         display: grid;

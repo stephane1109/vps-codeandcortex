@@ -16,6 +16,28 @@ ticket_env_bool <- function(name, default) {
 }
 
 
+ticket_mask_redis_url <- function(value) {
+  if (is.null(value) || !nzchar(trimws(value))) {
+    return("(absente)")
+  }
+  sub("://([^@/]+)@", "://***@", trimws(value))
+}
+
+
+ticket_runtime_diagnostic <- function(cfg, base_message = "") {
+  redis_url <- trimws(Sys.getenv("REDIS_URL", unset = ""))
+  redis_cli <- Sys.which("redis-cli")
+  details <- c(
+    if (nzchar(trimws(base_message))) trimws(base_message),
+    sprintf("APP_TICKET_ID=%s", cfg$app_id),
+    sprintf("REDIS_URL=%s", ticket_mask_redis_url(redis_url)),
+    sprintf("redis-cli=%s", if (nzchar(redis_cli)) redis_cli else "(absent)"),
+    sprintf("APP_TICKET_ENFORCED=%s", if (isTRUE(cfg$enabled)) "1" else "0")
+  )
+  paste(details, collapse = "\n")
+}
+
+
 ticket_random_id <- function(length = 32L) {
   alphabet <- c(letters[1:6], as.character(0:9))
   paste(sample(alphabet, size = length, replace = TRUE), collapse = "")
@@ -634,7 +656,7 @@ ticket_sidebar_ui <- function(snapshot) {
       ),
       tags$p(class = "ticket-status-note", note),
       if (nzchar(snapshot$message %||% "") && status %in% c("refuse", "erreur")) {
-        tags$p(class = "ticket-status-message", snapshot$message)
+        tags$pre(class = "ticket-status-message", snapshot$message)
       },
       actions
     )

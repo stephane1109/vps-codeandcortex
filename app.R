@@ -132,7 +132,10 @@ server <- function(input, output, session) {
 
     snap <- tryCatch(
       ticket_claim_or_refresh(ticket_cfg, ticket_session_id(session)),
-      error = function(exc) ticket_error_snapshot(ticket_cfg, conditionMessage(exc))
+      error = function(exc) ticket_error_snapshot(
+        ticket_cfg,
+        ticket_runtime_diagnostic(ticket_cfg, conditionMessage(exc))
+      )
     )
     ticket_snapshot_state(snap)
     snap
