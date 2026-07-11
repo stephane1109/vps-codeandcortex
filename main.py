@@ -22,7 +22,7 @@ from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 st.set_page_config(
     page_title="Extraction multimedia",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
