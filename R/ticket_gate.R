@@ -56,6 +56,38 @@ ticket_runtime_diagnostic <- function(cfg, base_message = "") {
 }
 
 
+ticket_safe_runtime_diagnostic <- function(cfg, base_message = "") {
+  tryCatch(
+    {
+      diagnostic <- ticket_runtime_diagnostic(cfg, base_message)
+      if (nzchar(trimws(diagnostic))) {
+        return(diagnostic)
+      }
+      stop("Diagnostic Redis vide.", call. = FALSE)
+    },
+    error = function(exc) {
+      redis_url <- trimws(Sys.getenv("REDIS_URL", unset = ""))
+      configured_helper <- trimws(Sys.getenv("APP_TICKET_REDIS_HELPER", unset = ""))
+      default_helper <- "/app/backend/redis_ticket_cli.py"
+      fallback_helper <- if (nzchar(configured_helper)) configured_helper else default_helper
+      paste(
+        c(
+          if (nzchar(trimws(base_message))) trimws(base_message),
+          sprintf("Erreur pendant la construction du diagnostic Redis : %s", conditionMessage(exc)),
+          sprintf("APP_TICKET_ID=%s", cfg$app_id %||% "(inconnu)"),
+          sprintf("REDIS_URL=%s", ticket_mask_redis_url(redis_url)),
+          sprintf("python3=%s", if (nzchar(Sys.which("python3"))) Sys.which("python3") else "(absent)"),
+          sprintf("redis-helper=%s", if (file.exists(fallback_helper)) fallback_helper else sprintf("(absent: %s)", fallback_helper)),
+          sprintf("redis-cli=%s", if (nzchar(Sys.which("redis-cli"))) Sys.which("redis-cli") else "(absent)"),
+          sprintf("APP_TICKET_ENFORCED=%s", Sys.getenv("APP_TICKET_ENFORCED", unset = "(absent)"))
+        ),
+        collapse = "\n"
+      )
+    }
+  )
+}
+
+
 ticket_random_id <- function(length = 32L) {
   alphabet <- c(letters[1:6], as.character(0:9))
   paste(sample(alphabet, size = length, replace = TRUE), collapse = "")
@@ -487,6 +519,10 @@ ticket_disabled_snapshot <- function(cfg, message) {
 
 
 ticket_error_snapshot <- function(cfg, message) {
+  safe_message <- trimws(message %||% "")
+  if (!nzchar(safe_message)) {
+    safe_message <- ticket_safe_runtime_diagnostic(cfg, "Erreur ticket sans message exploitable.")
+  }
   list(
     enabled = TRUE,
     ticket_id = NULL,
@@ -497,7 +533,7 @@ ticket_error_snapshot <- function(cfg, message) {
     max_active = cfg$max_active,
     wait_refresh_ms = cfg$wait_refresh_ms,
     heartbeat_ms = cfg$heartbeat_ms,
-    message = message
+    message = safe_message
   )
 }
 
@@ -673,7 +709,15 @@ ticket_release_hook_ui <- function(cfg, session) {
 
 ticket_sidebar_ui <- function(snapshot) {
   status <- snapshot$statut %||% "erreur"
-  diagnostic_summary <- ticket_first_diagnostic_line(snapshot$message)
+  diagnostic_message <- trimws(snapshot$message %||% "")
+  if (!nzchar(diagnostic_message) && status %in% c("refuse", "erreur")) {
+    diagnostic_message <- paste(
+      "Diagnostic Redis non transmis au composant d'interface.",
+      "Vérifie que CHD Rainette est bien redéployée sur le dernier commit deploy-chdrainette.",
+      sep = "\n"
+    )
+  }
+  diagnostic_summary <- ticket_first_diagnostic_line(diagnostic_message)
   card_class <- switch(
     status,
     disabled = "ticket-status-card is-disabled",
@@ -751,11 +795,11 @@ ticket_sidebar_ui <- function(snapshot) {
         )
       ),
       tags$p(class = "ticket-status-note", note),
-      if (nzchar(snapshot$message %||% "") && status %in% c("refuse", "erreur")) {
+      if (nzchar(diagnostic_message) && status %in% c("refuse", "erreur")) {
         tags$div(
           class = "ticket-status-message",
           tags$strong("Diagnostic Redis"),
-          tags$pre(snapshot$message)
+          tags$pre(diagnostic_message)
         )
       },
       actions
