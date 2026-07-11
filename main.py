@@ -95,7 +95,7 @@ def downsample_by_second(data: np.ndarray, times: np.ndarray, samplerate: int):
 
 
 def main() -> None:
-    st.set_page_config(page_title=APP_NAME, layout="centered")
+    st.set_page_config(page_title=APP_NAME, layout="wide")
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
