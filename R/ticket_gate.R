@@ -24,7 +24,7 @@ ticket_mask_redis_url <- function(value) {
 }
 
 
-ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis indisponible.") {
+ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis non transmis - build ticket 2026-07-11-0918.") {
   text <- trimws(value %||% "")
   if (!nzchar(text)) {
     return(fallback)

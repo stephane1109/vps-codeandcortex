@@ -638,6 +638,12 @@ page_sidebar(
   sidebar = sidebar(
     width = 420,
     open = "desktop",
+    div(
+      class = "sidebar-group",
+      tags$strong("Ticket build"),
+      tags$br(),
+      tags$code("chdrainette-redis-2026-07-11-0918")
+    ),
     uiOutput("ui_ticket_sidebar"),
     div(
       class = "sidebar-group",
