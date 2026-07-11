@@ -385,7 +385,7 @@ def load_help_markdown() -> str:
         return "Le fichier `aide.md` est introuvable pour cette application."
 
 
-st.set_page_config(page_title="Extract Comments YouTube", layout="centered")
+st.set_page_config(page_title="Extract Comments YouTube", layout="wide")
 enforce_streamlit_access("extract_comments_youtube", APP_DISPLAY_NAME)
 st.markdown(APP_SHELL_STYLE, unsafe_allow_html=True)
 
