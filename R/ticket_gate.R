@@ -24,7 +24,7 @@ ticket_mask_redis_url <- function(value) {
 }
 
 
-ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis non transmis - build ticket 2026-07-11-1110.") {
+ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic d'environnement Redis CHD Rainette.") {
   text <- trimws(value %||% "")
   if (!nzchar(text)) {
     return(fallback)
@@ -738,11 +738,17 @@ ticket_release_hook_ui <- function(cfg, session) {
 ticket_sidebar_ui <- function(snapshot) {
   status <- snapshot$statut %||% "erreur"
   diagnostic_message <- trimws(snapshot$message %||% "")
-  diagnostic_missing <- !nzchar(diagnostic_message) ||
-    grepl("Diagnostic Redis non transmis", diagnostic_message, fixed = TRUE)
-  if (diagnostic_missing && status %in% c("refuse", "erreur")) {
+  if (status %in% c("refuse", "erreur")) {
+    diagnostic_base <- if (
+      nzchar(diagnostic_message) &&
+        !grepl("Diagnostic Redis non transmis", diagnostic_message, fixed = TRUE)
+    ) {
+      diagnostic_message
+    } else {
+      "Diagnostic d'environnement Redis CHD Rainette."
+    }
     diagnostic_message <- ticket_environment_diagnostic(
-      "Diagnostic Redis non transmis par le snapshot ticket."
+      diagnostic_base
     )
   }
   diagnostic_summary <- ticket_first_diagnostic_line(diagnostic_message)
