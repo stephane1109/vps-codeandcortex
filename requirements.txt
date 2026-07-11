@@ -6,8 +6,10 @@ pandas==2.2.2
 matplotlib==3.9.1
 seaborn==0.13.2
 altair==5.3.0
+vl-convert-python==1.6.0
 opencv-python-headless==4.10.0.84
 scikit-learn==1.5.1
+tensorflow-cpu==2.15.1
 requests==2.32.3
 tqdm==4.66.5
 Pillow==10.4.0

@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.15.1
+FROM python:3.10-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -30,7 +30,7 @@ WORKDIR /app
 # `ffmpeg` reste disponible dans le conteneur via le package Python
 # `imageio-ffmpeg`, ce qui evite l'etape `apt-get` qui cassait le build.
 
-RUN groupadd --system app && useradd --system --gid app --home-dir /home/app --create-home app
+RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
 COPY requirements.txt /app/requirements.txt
 
