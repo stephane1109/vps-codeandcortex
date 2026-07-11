@@ -38,9 +38,9 @@ def transcrire_audio_whisper(uploaded_file) -> list[dict]:
     Le fichier audio est sauvegardé temporairement côté serveur pour la transcription.
     """
     try:
-        import whisper
+        from faster_whisper import WhisperModel
     except ImportError:
-        st.error("Le module 'whisper' n'est pas installé dans l'image Docker.")
+        st.error("Le module 'faster-whisper' n'est pas installé dans l'image Docker.")
         return []
 
     model_name = os.getenv("WHISPER_MODEL_NAME", "small").strip() or "small"
@@ -53,9 +53,27 @@ def transcrire_audio_whisper(uploaded_file) -> list[dict]:
         temp_audio_path = temp_file.name
 
     try:
-        model = whisper.load_model(model_name, download_root=download_root)
-        result = model.transcribe(temp_audio_path, language=language)
-        return result.get("segments", [])
+        model = WhisperModel(model_name, device="cpu", compute_type="int8", download_root=download_root)
+        segments, _info = model.transcribe(
+            temp_audio_path,
+            language=language,
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 300},
+        )
+        normalized_segments = []
+        for segment in segments:
+            text = (segment.text or "").strip()
+            if not text:
+                continue
+            normalized_segments.append(
+                {
+                    "start": float(segment.start),
+                    "end": float(segment.end),
+                    "text": text,
+                }
+            )
+        return normalized_segments
     finally:
         try:
             os.remove(temp_audio_path)
