@@ -38,6 +38,8 @@ RUN apt-get update \
         gfortran \
         pkg-config \
         curl \
+        python3 \
+        python3-redis \
         redis-tools \
         zip \
         libcurl4-openssl-dev \

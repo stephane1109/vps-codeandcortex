@@ -41,10 +41,14 @@ ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis ind
 ticket_runtime_diagnostic <- function(cfg, base_message = "") {
   redis_url <- trimws(Sys.getenv("REDIS_URL", unset = ""))
   redis_cli <- Sys.which("redis-cli")
+  python3 <- Sys.which("python3")
+  redis_helper <- ticket_redis_helper_path()
   details <- c(
     if (nzchar(trimws(base_message))) trimws(base_message),
     sprintf("APP_TICKET_ID=%s", cfg$app_id),
     sprintf("REDIS_URL=%s", ticket_mask_redis_url(redis_url)),
+    sprintf("python3=%s", if (nzchar(python3)) python3 else "(absent)"),
+    sprintf("redis-helper=%s", if (file.exists(redis_helper)) redis_helper else sprintf("(absent: %s)", redis_helper)),
     sprintf("redis-cli=%s", if (nzchar(redis_cli)) redis_cli else "(absent)"),
     sprintf("APP_TICKET_ENFORCED=%s", if (isTRUE(cfg$enabled)) "1" else "0")
   )
@@ -79,6 +83,28 @@ ticket_config <- function(default_app_id, app_label) {
 }
 
 
+ticket_redis_helper_path <- function() {
+  configured <- trimws(Sys.getenv("APP_TICKET_REDIS_HELPER", unset = ""))
+  if (nzchar(configured)) {
+    return(configured)
+  }
+  default_path <- "/app/backend/redis_ticket_cli.py"
+  if (file.exists(default_path)) {
+    return(default_path)
+  }
+  "backend/redis_ticket_cli.py"
+}
+
+
+ticket_python3 <- function() {
+  python3 <- Sys.which("python3")
+  if (!nzchar(python3)) {
+    stop("python3 absent : installe python3 dans l'image Docker CHD Rainette.", call. = FALSE)
+  }
+  python3
+}
+
+
 ticket_redis_cli <- function() {
   redis_cli <- Sys.which("redis-cli")
   if (!nzchar(redis_cli)) {
@@ -97,7 +123,32 @@ ticket_redis_url <- function() {
 }
 
 
-ticket_redis_exec <- function(args) {
+ticket_redis_exec_python <- function(args) {
+  helper_path <- ticket_redis_helper_path()
+  if (!file.exists(helper_path)) {
+    stop(sprintf("Helper Redis Python absent : %s", helper_path), call. = FALSE)
+  }
+  output <- tryCatch(
+    system2(
+      ticket_python3(),
+      c(helper_path, args),
+      stdout = TRUE,
+      stderr = TRUE
+    ),
+    error = function(exc) structure(c(conditionMessage(exc)), status = 1L)
+  )
+  status <- attr(output, "status")
+  if (is.null(status)) {
+    status <- 0L
+  }
+  if (!identical(as.integer(status), 0L)) {
+    stop(sprintf("Connexion Redis impossible via le helper Python : %s", paste(output, collapse = "\n")), call. = FALSE)
+  }
+  output
+}
+
+
+ticket_redis_exec_cli <- function(args) {
   output <- tryCatch(
     system2(
       ticket_redis_cli(),
@@ -115,6 +166,36 @@ ticket_redis_exec <- function(args) {
     stop(sprintf("Connexion Redis impossible via REDIS_URL : %s", paste(output, collapse = "\n")), call. = FALSE)
   }
   output
+}
+
+
+ticket_redis_exec <- function(args) {
+  python_error <- NULL
+  python_output <- tryCatch(
+    ticket_redis_exec_python(args),
+    error = function(exc) {
+      python_error <<- conditionMessage(exc)
+      NULL
+    }
+  )
+  if (!is.null(python_output)) {
+    return(python_output)
+  }
+
+  cli_output <- tryCatch(
+    ticket_redis_exec_cli(args),
+    error = function(exc) {
+      stop(
+        sprintf(
+          "Redis indisponible. Erreur helper Python : %s\nErreur redis-cli : %s",
+          python_error %||% "(non disponible)",
+          conditionMessage(exc)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  cli_output
 }
 
 
