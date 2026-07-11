@@ -25,7 +25,7 @@ DEFAULT_LANGUAGE = "fr"
 DEFAULT_MODEL = "base"
 DEFAULT_PROFILE = (os.getenv("WHISPER_PROFILE_DEFAULT", "faster-whisper") or "faster-whisper").strip().lower()
 MODEL_OPTIONS = ["tiny", "base", "small", "medium"]
-VISIBLE_MODEL_CHOICES = ["fast-whisper", "sm", "md", "tiny", "base", "small", "medium"]
+VISIBLE_MODEL_CHOICES = ["fast-whisper", "sm", "md"]
 UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
@@ -82,7 +82,17 @@ def find_downloaded_mp3(run_dir: Path) -> Path:
     raise ApplicationError("Le téléchargement YouTube est terminé mais aucun fichier MP3 n'a été trouvé.")
 
 
-def telecharger_audio_youtube(url: str, run_dir: Path) -> Path:
+def save_youtube_cookies(uploaded_cookies, run_dir: Path) -> Path | None:
+    if uploaded_cookies is None:
+        return None
+    cookies_path = run_dir / "youtube_cookies.txt"
+    cookies_path.write_bytes(uploaded_cookies.getbuffer())
+    if not cookies_path.read_text(encoding="utf-8", errors="ignore").strip():
+        raise ApplicationError("Le fichier cookies YouTube est vide.")
+    return cookies_path
+
+
+def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None = None) -> Path:
     if not url.strip():
         raise ApplicationError("Veuillez entrer une URL YouTube.")
 
@@ -101,6 +111,8 @@ def telecharger_audio_youtube(url: str, run_dir: Path) -> Path:
         "quiet": True,
         "no_warnings": True,
     }
+    if cookies_path is not None:
+        options_ydl["cookiefile"] = str(cookies_path)
 
     try:
         with YoutubeDL(options_ydl) as ydl:
@@ -174,6 +186,8 @@ def normalize_model_choice(value: str) -> str:
     normalized = (value or "").strip().lower()
     if normalized == "fast-whisper":
         return "faster-whisper"
+    if normalized == "sms":
+        return "sm"
     return normalized
 
 
@@ -231,8 +245,6 @@ def build_sidebar_notes() -> None:
             "\n".join(
                 [
                     "- Source audio : YouTube ou fichier local",
-                    "- Modèle utilisé : profil Whisper configuré pour le VPS",
-                    "- Backend Docker : Whisper CPU compatible VPS",
                     "- Export final : transcription `.txt`",
                     "- Dossier temporaire : `APP_WORKDIR`",
                 ]
@@ -272,9 +284,15 @@ def main() -> None:
 
     youtube_url = ""
     uploaded_audio = None
+    uploaded_cookies = None
 
     if source == "URL YouTube":
         youtube_url = st.text_input("Entrez l'URL de la vidéo YouTube", value=DEFAULT_YOUTUBE_URL)
+        uploaded_cookies = st.file_uploader(
+            "Importer un fichier cookies.txt YouTube si YouTube bloque le téléchargement",
+            type=["txt"],
+            help="Exportez les cookies YouTube avec l'extension cookies.txt depuis Chrome ou Firefox.",
+        )
     else:
         uploaded_audio = st.file_uploader(
             "Importer un fichier audio",
@@ -282,7 +300,17 @@ def main() -> None:
             help="Formats conseillés : mp3, wav, m4a, mp4, webm.",
         )
 
-    backend_name, model_size, resolved_profile = resolve_selected_model(DEFAULT_PROFILE)
+    default_choice = MODEL_PROFILES.get(normalize_model_choice(DEFAULT_PROFILE), MODEL_PROFILES["faster-whisper"])["label"]
+    if default_choice not in VISIBLE_MODEL_CHOICES:
+        default_choice = "fast-whisper"
+    selected_model_choice = st.radio(
+        "Modèle de transcription",
+        options=VISIBLE_MODEL_CHOICES,
+        index=VISIBLE_MODEL_CHOICES.index(default_choice),
+        horizontal=True,
+        help="fast-whisper charge le profil rapide par défaut, sm charge small, md charge medium.",
+    )
+    backend_name, model_size, resolved_profile = resolve_selected_model(selected_model_choice)
     language_code = st.text_input(
         "Code langue pour la transcription",
         value=DEFAULT_LANGUAGE,
@@ -298,7 +326,8 @@ def main() -> None:
         try:
             if source == "URL YouTube":
                 with st.spinner("Téléchargement de l'audio depuis YouTube..."):
-                    audio_path = telecharger_audio_youtube(youtube_url, run_dir)
+                    cookies_path = save_youtube_cookies(uploaded_cookies, run_dir)
+                    audio_path = telecharger_audio_youtube(youtube_url, run_dir, cookies_path)
             else:
                 audio_path = save_uploaded_audio(uploaded_audio, run_dir)
 
