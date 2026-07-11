@@ -502,7 +502,25 @@ def calculer_llr_et_pval(paires_freq: dict, fenetres):
 # ================================
 # INTERFACE — PARAMÈTRES ET EXPLICATIONS
 # ================================
-st.set_page_config(page_title="Cooccurrences globales (sans mot pivot) — Graphe, Likelihood, Nuage, Concordancier")
+st.set_page_config(
+    page_title="Cooccurrences globales (sans mot pivot) — Graphe, Likelihood, Nuage, Concordancier",
+    layout="wide",
+)
+st.markdown(
+    """
+    <style>
+      .main .block-container {
+        max-width: 100% !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+      }
+      section[data-testid="stSidebar"] {
+        flex-shrink: 0;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.markdown("<h1 style='color:#e63946'>Cooccurrences globales (sans mot pivot)</h1>", unsafe_allow_html=True)
 st.caption("Stéphane Meurisse — version beta 1.1 - 26/07/2025 \\- [www.codeandcortex.fr](https://www.codeandcortex.fr)")
