@@ -736,7 +736,9 @@ ticket_release_hook_ui <- function(cfg, session) {
 ticket_sidebar_ui <- function(snapshot) {
   status <- snapshot$statut %||% "erreur"
   diagnostic_message <- trimws(snapshot$message %||% "")
-  if (!nzchar(diagnostic_message) && status %in% c("refuse", "erreur")) {
+  diagnostic_missing <- !nzchar(diagnostic_message) ||
+    grepl("Diagnostic Redis non transmis", diagnostic_message, fixed = TRUE)
+  if (diagnostic_missing && status %in% c("refuse", "erreur")) {
     diagnostic_message <- ticket_environment_diagnostic(
       "Diagnostic Redis non transmis par le snapshot ticket."
     )
