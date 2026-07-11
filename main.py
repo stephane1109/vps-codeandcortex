@@ -35,6 +35,21 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    st.markdown(
+        """
+        <style>
+          .main .block-container {
+            max-width: 100% !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+          }
+          section[data-testid="stSidebar"] {
+            flex-shrink: 0;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL
