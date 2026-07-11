@@ -95,10 +95,8 @@ ticket_environment_diagnostic <- function(base_message = "") {
   fallback_helper <- if (nzchar(configured_helper)) configured_helper else default_helper
   paste(
     c(
-      if (nzchar(trimws(base_message))) trimws(base_message),
-      "Diagnostic direct depuis l'interface CHD Rainette.",
-      sprintf("APP_TICKET_ID=%s", Sys.getenv("APP_TICKET_ID", unset = "(absent)")),
       sprintf("REDIS_URL=%s", ticket_mask_redis_url(redis_url)),
+      sprintf("APP_TICKET_ID=%s", Sys.getenv("APP_TICKET_ID", unset = "(absent)")),
       sprintf("python3=%s", if (nzchar(Sys.which("python3"))) Sys.which("python3") else "(absent)"),
       sprintf("redis-helper=%s", if (file.exists(fallback_helper)) fallback_helper else sprintf("(absent: %s)", fallback_helper)),
       sprintf("redis-cli=%s", if (nzchar(Sys.which("redis-cli"))) Sys.which("redis-cli") else "(absent)"),
@@ -107,7 +105,9 @@ ticket_environment_diagnostic <- function(base_message = "") {
       sprintf("APP_TICKET_COST=%s", Sys.getenv("APP_TICKET_COST", unset = "(absent)")),
       sprintf("CAPACITE_SERVEUR=%s", Sys.getenv("CAPACITE_SERVEUR", unset = "(absent)")),
       sprintf("APP_TICKET_TTL_SECONDS=%s", Sys.getenv("APP_TICKET_TTL_SECONDS", unset = "(absent)")),
-      sprintf("APP_TICKET_RELEASE_URL=%s", Sys.getenv("APP_TICKET_RELEASE_URL", unset = "(absent)"))
+      sprintf("APP_TICKET_RELEASE_URL=%s", Sys.getenv("APP_TICKET_RELEASE_URL", unset = "(absent)")),
+      "Diagnostic direct depuis l'interface CHD Rainette.",
+      if (nzchar(trimws(base_message))) trimws(base_message)
     ),
     collapse = "\n"
   )
