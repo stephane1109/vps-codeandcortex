@@ -6,10 +6,8 @@ build_main_ui <- function() {
 page_sidebar(
   title = div(
     class = "app-title-block",
-    tags$div(class = "app-monogram", "R"),
     tags$div(
       class = "app-title-copy",
-      tags$div(class = "app-kicker", "Laboratoire textuel"),
       tags$h1("CHD Rainette"),
       tags$p(
         class = "app-subtitle",
@@ -56,14 +54,6 @@ page_sidebar(
         font-size: 2rem;
         line-height: 1.08;
         letter-spacing: -0.02em;
-      }
-      .app-kicker {
-        text-transform: uppercase;
-        letter-spacing: 0.16em;
-        font-size: 0.72rem;
-        font-weight: 700;
-        color: #8d5d2b;
-        margin-bottom: 0.4rem;
       }
       .app-subtitle {
         margin: 0.55rem 0 0;
@@ -333,32 +323,12 @@ page_sidebar(
         gap: 0.95rem;
         padding: 0.2rem 0;
       }
-      .app-monogram {
-        display: grid;
-        place-items: center;
-        width: 3.1rem;
-        height: 3.1rem;
-        flex: 0 0 3.1rem;
-        border-radius: 7px;
-        color: #ffffff;
-        background: var(--rainette-orange);
-        box-shadow: 0 5px 12px rgba(76, 49, 31, 0.15);
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.55rem;
-        font-weight: 800;
-      }
       .app-title-copy { min-width: 0; }
       .app-title-block h1 {
         color: var(--rainette-ink);
         font-size: clamp(1.55rem, 2.2vw, 2.15rem);
         font-weight: 760;
         letter-spacing: -0.045em;
-      }
-      .app-kicker {
-        margin-bottom: 0.22rem;
-        color: var(--rainette-orange-dark);
-        font-size: 0.68rem;
-        letter-spacing: 0.19em;
       }
       .app-subtitle { margin-top: 0.28rem; }
       .app-subtitle a { color: var(--rainette-orange-dark); }
@@ -628,7 +598,6 @@ page_sidebar(
         .btn:not(.btn-close) { transition: none; }
       }
       @media (max-width: 640px) {
-        .app-monogram { width: 2.65rem; height: 2.65rem; flex-basis: 2.65rem; }
         .nav-tabs { gap: 0.3rem; }
         .nav-tabs .nav-link { padding: 0.55rem 0.75rem; }
       }
