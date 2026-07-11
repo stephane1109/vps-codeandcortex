@@ -88,6 +88,32 @@ ticket_safe_runtime_diagnostic <- function(cfg, base_message = "") {
 }
 
 
+ticket_environment_diagnostic <- function(base_message = "") {
+  redis_url <- trimws(Sys.getenv("REDIS_URL", unset = ""))
+  configured_helper <- trimws(Sys.getenv("APP_TICKET_REDIS_HELPER", unset = ""))
+  default_helper <- "/app/backend/redis_ticket_cli.py"
+  fallback_helper <- if (nzchar(configured_helper)) configured_helper else default_helper
+  paste(
+    c(
+      if (nzchar(trimws(base_message))) trimws(base_message),
+      "Diagnostic direct depuis l'interface CHD Rainette.",
+      sprintf("APP_TICKET_ID=%s", Sys.getenv("APP_TICKET_ID", unset = "(absent)")),
+      sprintf("REDIS_URL=%s", ticket_mask_redis_url(redis_url)),
+      sprintf("python3=%s", if (nzchar(Sys.which("python3"))) Sys.which("python3") else "(absent)"),
+      sprintf("redis-helper=%s", if (file.exists(fallback_helper)) fallback_helper else sprintf("(absent: %s)", fallback_helper)),
+      sprintf("redis-cli=%s", if (nzchar(Sys.which("redis-cli"))) Sys.which("redis-cli") else "(absent)"),
+      sprintf("APP_TICKET_ENFORCED=%s", Sys.getenv("APP_TICKET_ENFORCED", unset = "(absent)")),
+      sprintf("APP_TICKET_MAX_ACTIVE=%s", Sys.getenv("APP_TICKET_MAX_ACTIVE", unset = "(absent)")),
+      sprintf("APP_TICKET_COST=%s", Sys.getenv("APP_TICKET_COST", unset = "(absent)")),
+      sprintf("CAPACITE_SERVEUR=%s", Sys.getenv("CAPACITE_SERVEUR", unset = "(absent)")),
+      sprintf("APP_TICKET_TTL_SECONDS=%s", Sys.getenv("APP_TICKET_TTL_SECONDS", unset = "(absent)")),
+      sprintf("APP_TICKET_RELEASE_URL=%s", Sys.getenv("APP_TICKET_RELEASE_URL", unset = "(absent)"))
+    ),
+    collapse = "\n"
+  )
+}
+
+
 ticket_random_id <- function(length = 32L) {
   alphabet <- c(letters[1:6], as.character(0:9))
   paste(sample(alphabet, size = length, replace = TRUE), collapse = "")
@@ -711,10 +737,8 @@ ticket_sidebar_ui <- function(snapshot) {
   status <- snapshot$statut %||% "erreur"
   diagnostic_message <- trimws(snapshot$message %||% "")
   if (!nzchar(diagnostic_message) && status %in% c("refuse", "erreur")) {
-    diagnostic_message <- paste(
-      "Diagnostic Redis non transmis au composant d'interface.",
-      "Vérifie que CHD Rainette est bien redéployée sur le dernier commit deploy-chdrainette.",
-      sep = "\n"
+    diagnostic_message <- ticket_environment_diagnostic(
+      "Diagnostic Redis non transmis par le snapshot ticket."
     )
   }
   diagnostic_summary <- ticket_first_diagnostic_line(diagnostic_message)
