@@ -1,5 +1,9 @@
 # Aide - cookies YouTube pour extraction-multimedia
 
+Article du blog :
+
+- https://www.codeandcortex.fr/extraction-multimedia-youtube/
+
 Ce document explique comment generer un `cookies.txt` pour aider `yt-dlp`
 quand YouTube affiche un blocage du type :
 

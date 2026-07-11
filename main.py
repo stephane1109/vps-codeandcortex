@@ -95,6 +95,21 @@ def load_help_markdown() -> str:
         return "Le fichier `aide.md` est introuvable pour cette application."
 
 
+def render_help_tab() -> None:
+    st.markdown(
+        """
+        <p>
+          <a href="https://www.codeandcortex.fr/extraction-multimedia-youtube/"
+             target="_blank" rel="noopener noreferrer">
+            Lire l'article du blog : Extraction multimédia YouTube
+          </a>
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(load_help_markdown())
+
+
 def initialiser_repertoires_session() -> None:
     for repertoire in (SESSIONS_DIR, SESSION_DIR, REPERTOIRE_SORTIE, REPERTOIRE_TEMP):
         repertoire.mkdir(parents=True, exist_ok=True)
@@ -630,8 +645,9 @@ st.caption(
     "Si YouTube affiche un blocage anti-bot, il faut en pratique un cookies.txt récent, "
     "exporté depuis le navigateur qui vient d'ouvrir la vidéo, avec un User-Agent cohérent."
 )
-with st.expander("Aide"):
-    st.markdown(load_help_markdown())
+aide_tab = st.tabs(["Aide"])[0]
+with aide_tab:
+    render_help_tab()
 
 with st.expander("Diagnostic systeme"):
     try:
