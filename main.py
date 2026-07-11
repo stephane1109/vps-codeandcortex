@@ -299,7 +299,7 @@ def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
 # l'état utilisateur / file d'attente / libération d'accès.
 st.set_page_config(
     page_title="Extraction infos YouTube",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
