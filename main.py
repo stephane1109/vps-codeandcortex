@@ -132,6 +132,19 @@ def create_job_directory(jobs_dir: Path, base_name: str) -> Path:
     return job_dir
 
 
+def save_cookies_upload(uploaded_file: object | None, job_dir: Path) -> Path | None:
+    if uploaded_file is None:
+        return None
+
+    raw = uploaded_file.getvalue()
+    if not raw:
+        raise ValueError("Le fichier cookies.txt transmis est vide.")
+
+    cookies_path = job_dir / "cookies.txt"
+    cookies_path.write_bytes(raw)
+    return cookies_path
+
+
 def ffmpeg_binary() -> str:
     system_binary = shutil.which("ffmpeg")
     if system_binary:
@@ -161,7 +174,7 @@ def pick_downloaded_video(job_dir: Path) -> Path:
     return candidates[0]
 
 
-def telecharger_video(video_url: str, job_dir: Path) -> tuple[Path, str]:
+def telecharger_video(video_url: str, job_dir: Path, cookies_path: Path | None = None) -> tuple[Path, str]:
     video_id = extraire_video_id(video_url)
     options = {
         "outtmpl": str(job_dir / "video.%(ext)s"),
@@ -174,6 +187,8 @@ def telecharger_video(video_url: str, job_dir: Path) -> tuple[Path, str]:
         "merge_output_format": "mp4",
         "format": "bestvideo*+bestaudio/best",
     }
+    if cookies_path and cookies_path.exists():
+        options["cookiefile"] = str(cookies_path)
 
     with YoutubeDL(options) as ydl:
         info = ydl.extract_info(video_url, download=True)
@@ -408,6 +423,7 @@ def analyser_video(
     end_time: int,
     jobs_dir: Path,
     job_label: str,
+    cookies_upload: object | None = None,
     status_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     def status(message: str) -> None:
@@ -419,9 +435,10 @@ def analyser_video(
     job_dir = create_job_directory(jobs_dir, job_label or video_id)
     exports_dir = ensure_directory(job_dir / "exports")
     images_dir = ensure_directory(job_dir / "images_25fps")
+    cookies_path = save_cookies_upload(cookies_upload, job_dir)
 
     status("Téléchargement de la vidéo YouTube...")
-    video_path, video_title = telecharger_video(video_url, job_dir)
+    video_path, video_title = telecharger_video(video_url, job_dir, cookies_path)
 
     status("Chargement du detecteur FER...")
     detector = charger_detecteur_fer()
@@ -877,6 +894,14 @@ job_label = st.text_input(
     "Nom du répertoire de travail (optionnel)",
     placeholder="analyse_video_1",
 )
+cookies_upload = st.file_uploader(
+    "Fichier cookies.txt YouTube (optionnel)",
+    type=["txt"],
+    help=(
+        "À utiliser si YouTube affiche 'Sign in to confirm you're not a bot'. "
+        "Exportez vos cookies YouTube au format Netscape cookies.txt, puis importez le fichier ici."
+    ),
+)
 
 time_col_1, time_col_2 = st.columns(2)
 with time_col_1:
@@ -910,6 +935,7 @@ if st.button("Lancer l'analyse", type="primary", use_container_width=True):
                 end_time=int(end_time),
                 jobs_dir=jobs_dir,
                 job_label=job_label.strip(),
+                cookies_upload=cookies_upload,
                 status_callback=lambda message: status_box.info(message),
             )
             save_visual_exports(result)
