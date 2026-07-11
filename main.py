@@ -43,6 +43,29 @@ _dictionary_import = import_module("import")
 APP_VERSION = "0.3.0-beta"
 
 
+def render_help_tab() -> None:
+    st.subheader("Aide")
+    st.markdown(
+        """
+        <ul>
+          <li>
+            <a href="https://www.codeandcortex.fr/symbolic-connectors/"
+               target="_blank" rel="noopener noreferrer">
+              Article du blog décrivant l'application Symbolic Connectors
+            </a>
+          </li>
+          <li>
+            <a href="https://www.codeandcortex.fr/lexicometrie-llm-crise-suicidaire/"
+               target="_blank" rel="noopener noreferrer">
+              Article de mise en application : lexicométrie, LLM et crise suicidaire
+            </a>
+          </li>
+        </ul>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _load_uploaded_content(
     uploaded_file: st.runtime.uploaded_file_manager.UploadedFile | None,
 ) -> str | None:
@@ -148,8 +171,12 @@ def main() -> None:
             "TF-IDF",
             "Simi cosinus",
             "Test du chi2",
+            "Aide",
         ]
     )
+
+    with tabs[-1]:
+        render_help_tab()
 
     if content is None:
         upload_message = (
@@ -160,7 +187,7 @@ def main() -> None:
             st.subheader("Données importées")
             st.info(upload_message)
 
-        for tab in tabs[1:]:
+        for tab in tabs[1:-1]:
             with tab:
                 st.info(upload_message)
 
