@@ -837,8 +837,23 @@ def file_bytes(path: str | Path) -> bytes:
 
 st.set_page_config(
     page_title="Vecteur emotionnel",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
+)
+st.markdown(
+    """
+    <style>
+      .main .block-container {
+        max-width: 100% !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+      }
+      section[data-testid="stSidebar"] {
+        flex-shrink: 0;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
