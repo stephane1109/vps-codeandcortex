@@ -855,31 +855,12 @@ st.title("Vecteur émotionnel")
 st.caption(
     "Analyse émotionnelle d'une vidéo YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
 )
-st.markdown(
-    """
-    <a
-      href="https://www.codeandcortex.fr/vecteurs-fer-pca-kmeans/"
-      target="_blank"
-      rel="noopener noreferrer"
-      style="
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        margin:0.25rem 0 1rem;
-        padding:0.55rem 0.9rem;
-        border-radius:0.7rem;
-        border:1px solid rgba(47, 133, 90, 0.28);
-        background:#f0fff4;
-        color:#23683f;
-        font-weight:700;
-        text-decoration:none;
-      "
-    >
-      Aide
-    </a>
-    """,
-    unsafe_allow_html=True,
+st.link_button(
+    "Aide",
+    "https://www.codeandcortex.fr/vecteurs-fer-pca-kmeans/",
+    use_container_width=False,
 )
+st.write("")
 
 st.info(
     "Cette version VPS gère automatiquement les répertoires de travail par session. "
