@@ -24,7 +24,7 @@ ticket_mask_redis_url <- function(value) {
 }
 
 
-ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis non transmis - build ticket 2026-07-11-0918.") {
+ticket_first_diagnostic_line <- function(value, fallback = "Diagnostic Redis non transmis - build ticket 2026-07-11-1110.") {
   text <- trimws(value %||% "")
   if (!nzchar(text)) {
     return(fallback)
@@ -546,8 +546,10 @@ ticket_disabled_snapshot <- function(cfg, message) {
 
 ticket_error_snapshot <- function(cfg, message) {
   safe_message <- trimws(message %||% "")
-  if (!nzchar(safe_message)) {
-    safe_message <- ticket_safe_runtime_diagnostic(cfg, "Erreur ticket sans message exploitable.")
+  if (!nzchar(safe_message) || grepl("Diagnostic Redis non transmis", safe_message, fixed = TRUE)) {
+    safe_message <- ticket_environment_diagnostic(
+      "Erreur ticket sans diagnostic Redis exploitable."
+    )
   }
   list(
     enabled = TRUE,
