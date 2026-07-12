@@ -5,6 +5,8 @@ import cv2
 import os
 import tempfile
 import subprocess
+import time
+import uuid
 from pathlib import Path
 
 from ticket_gate import enforce_streamlit_access
@@ -17,6 +19,8 @@ DEFAULT_YOUTUBE_USER_AGENT = (
 )
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
+APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
+COOKIES_ROOT = APP_DATA_DIR / "youtube-cookies"
 
 
 def load_help_markdown() -> str:
@@ -25,18 +29,28 @@ def load_help_markdown() -> str:
     return HELP_PATH.read_text(encoding="utf-8")
 
 
-def enregistrer_cookies_upload(fichier_streamlit, dossier_temporaire):
-    """
-    Enregistre un cookies.txt temporaire pour yt-dlp.
-    """
-    if fichier_streamlit is None:
-        return None
+def dossier_cookies_session():
+    session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
+    dossier = COOKIES_ROOT / session_id
+    dossier.mkdir(parents=True, exist_ok=True)
+    return dossier
 
-    suffixe = Path(fichier_streamlit.name or "cookies.txt").suffix or ".txt"
-    chemin_cookies = os.path.join(dossier_temporaire, f"youtube_cookies{suffixe}")
+
+def chemin_cookies_session():
+    return dossier_cookies_session() / "cookies.txt"
+
+
+def enregistrer_cookies_upload(fichier_streamlit, dossier_temporaire=None):
+    """
+    Enregistre un cookies.txt persistant pour la session Streamlit courante.
+    """
+    chemin_cookies = chemin_cookies_session()
+    if fichier_streamlit is None:
+        return str(chemin_cookies) if chemin_cookies.exists() and chemin_cookies.stat().st_size > 0 else None
+
     with open(chemin_cookies, "wb") as fichier_sortie:
         fichier_sortie.write(fichier_streamlit.getvalue())
-    return chemin_cookies
+    return str(chemin_cookies)
 
 
 def diagnostiquer_cookies(chemin_cookies):
@@ -55,7 +69,32 @@ def diagnostiquer_cookies(chemin_cookies):
         return "Le fichier cookies ne contient aucune entrée YouTube détectée."
     if len(contenu) < 1000:
         return "Le fichier cookies semble très court ; l'export est peut-être incomplet."
-    return "Fichier cookies chargé."
+    expirations = []
+    maintenant = int(time.time())
+    for ligne in contenu.splitlines():
+        ligne = ligne.strip()
+        if not ligne or ligne.startswith("#") and not ligne.startswith("#HttpOnly_"):
+            continue
+        colonnes = ligne.replace("#HttpOnly_", "", 1).split("\t")
+        if len(colonnes) < 7:
+            continue
+        domaine = colonnes[0].lower()
+        if "youtube.com" not in domaine and "google.com" not in domaine:
+            continue
+        try:
+            expiration = int(colonnes[4])
+        except ValueError:
+            continue
+        if expiration > 0:
+            expirations.append(expiration)
+    if expirations:
+        restant = max(expirations) - maintenant
+        if restant <= 0:
+            return "Fichier cookies chargé, mais ses expirations utiles semblent dépassées."
+        if restant < 3600:
+            return f"Fichier cookies chargé ; attention, expiration utile dans environ {max(1, int(restant / 60))} min."
+        return f"Fichier cookies chargé ; expiration utile dans environ {int(restant / 3600)} h."
+    return "Fichier cookies chargé ; entrées YouTube détectées sans expiration exploitable."
 
 
 def telecharger_video_yt_dlp(url, dossier_temporaire, cookies_path=None, user_agent=None):
@@ -214,6 +253,11 @@ if mode == "YouTube (yt-dlp)":
         "Fichier cookies YouTube (optionnel mais utile si YouTube bloque)",
         type=["txt", "cookies"],
     )
+    cookies_session_path = chemin_cookies_session()
+    if cookies_session_path.exists() and cookies_session_path.stat().st_size > 0:
+        st.caption(diagnostiquer_cookies(str(cookies_session_path)))
+    else:
+        st.caption("Aucun cookies.txt mémorisé pour cette session.")
     user_agent_youtube = st.text_input(
         "User-Agent navigateur (utile si YouTube bloque)",
         value=DEFAULT_YOUTUBE_USER_AGENT,
@@ -239,7 +283,7 @@ if st.button("Créer la vidéo Stop Motion"):
                 cookies_path = enregistrer_cookies_upload(cookies_file, tmpdir)
                 diagnostic_cookies = diagnostiquer_cookies(cookies_path)
                 if diagnostic_cookies:
-                    if diagnostic_cookies == "Fichier cookies chargé.":
+                    if diagnostic_cookies.startswith("Fichier cookies chargé") and "attention" not in diagnostic_cookies.lower() and "dépassées" not in diagnostic_cookies.lower():
                         st.success(diagnostic_cookies)
                     else:
                         st.warning(diagnostic_cookies)
