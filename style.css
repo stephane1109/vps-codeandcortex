@@ -422,8 +422,8 @@ h1 {
 }
 
 .pastille-etat.occupee {
-    background: #ef4444;
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
+    background: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
     animation: pulse 0.8s infinite;
 }
 

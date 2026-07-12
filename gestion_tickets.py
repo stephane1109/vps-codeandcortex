@@ -90,6 +90,12 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 1,
         "cout": 4,
     },
+    "chdrainette": {
+        "label": "CHD Rainette",
+        "max_active": 1,
+        "cout": 4,
+        "duree_ticket": 300,
+    },
     "divergence-jensen-shannon": {
         "label": "Divergence Jensen-Shannon",
         "max_active": 1,
