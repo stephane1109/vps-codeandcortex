@@ -490,7 +490,7 @@ tab_data, tab_analyse, tab_anomalies, tab_tests, tab_attitudes, tab_emotions, ta
 with st.sidebar:
     st.header("Paramètres")
     nlp = None
-    st.caption("Le modele spaCy Transformer sera charge uniquement au lancement de l'analyse.")
+    st.caption("Le modèle spaCy Transformer sera chargé uniquement au lancement de l'analyse.")
     locuteur_global = st.text_input("Identifiant locuteur", value="locuteur_1")
     use_whisper = st.checkbox("Transcrire l'audio avec Whisper (si installé)", value=False)
     fichiers_txt = st.file_uploader("Fichiers texte (.txt)", type=["txt"], accept_multiple_files=True)
