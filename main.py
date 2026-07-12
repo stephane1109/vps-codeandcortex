@@ -29,7 +29,9 @@ APP_DISPLAY_NAME = "Extraction des commentaires YouTube"
 APP_SHELL_STYLE = """
 <style>
 div[data-testid="stMainBlockContainer"] {
-    max-width: 980px;
+    max-width: 100% !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
 }
 </style>
 """
