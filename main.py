@@ -30,9 +30,21 @@ UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
 WHISPER_MODEL_ALIASES: dict[str, str] = {}
+USER_AGENT_YOUTUBE_DEFAULT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/137.0.0.0 Safari/537.36"
+)
 YOUTUBE_FORMAT_FALLBACKS: list[str | None] = [
+    # Format progressif YouTube très fréquent : vidéo + audio dans un MP4.
+    # Il est indispensable pour certaines vidéos qui n'exposent aucun bestaudio.
+    "18",
+    "22",
     "bestaudio[acodec!=none]/best[acodec!=none]/best",
     "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=mp4]/bestaudio/best",
+    "best[height<=720][acodec!=none][vcodec!=none]/best[height<=480][acodec!=none][vcodec!=none]/best[height<=360][acodec!=none][vcodec!=none]",
+    "best[ext=mp4]/best",
+    "best[protocol^=http]/best",
     "best[acodec!=none][vcodec!=none]/best[acodec!=none]/best",
     "worst[acodec!=none]/worst/best",
     None,
@@ -122,13 +134,28 @@ def _yt_dlp_base_options(output_template: str) -> dict:
         ],
         "quiet": True,
         "no_warnings": True,
-        "retries": 3,
-        "fragment_retries": 3,
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 3,
+        "continuedl": True,
+        "concurrent_fragment_downloads": 1,
+        "sleep_interval_requests": 1,
+        "sleep_interval": 2,
+        "max_sleep_interval": 5,
         "socket_timeout": 30,
-        "check_formats": "selected",
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "restrictfilenames": True,
+        "trim_file_name": 100,
+        "http_headers": {
+            "User-Agent": USER_AGENT_YOUTUBE_DEFAULT,
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://www.youtube.com/",
+        },
         # YouTube change souvent les clients autorisés. On donne plusieurs
         # clients à yt-dlp pour maximiser les chances de récupérer les formats.
-        "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
     }
 
 
@@ -161,10 +188,27 @@ def _youtube_format_score(fmt: dict) -> float:
     return audio_only_bonus + ext_bonus + abr + min(filesize / 1_000_000, 100) + protocol_penalty
 
 
+def _youtube_format_is_usable(fmt: dict) -> bool:
+    format_id = str(fmt.get("format_id") or "").strip().lower()
+    ext = str(fmt.get("ext") or "").lower()
+    protocol = str(fmt.get("protocol") or "").lower()
+    vcodec = str(fmt.get("vcodec") or "none").lower()
+    acodec = str(fmt.get("acodec") or "none").lower()
+    if not format_id:
+        return False
+    if ext in {"mhtml", "html", "json"}:
+        return False
+    if "storyboard" in format_id or "mhtml" in protocol:
+        return False
+    return acodec != "none" or vcodec != "none"
+
+
 def _youtube_audio_format_candidates(url: str, base_options: dict) -> list[str]:
     probe_options = dict(base_options)
     probe_options.pop("format", None)
     probe_options.pop("postprocessors", None)
+    probe_options.pop("check_formats", None)
+    probe_options["skip_download"] = True
 
     try:
         with YoutubeDL(probe_options) as ydl:
@@ -177,7 +221,7 @@ def _youtube_audio_format_candidates(url: str, base_options: dict) -> list[str]:
     for fmt in formats:
         format_id = str(fmt.get("format_id") or "").strip()
         acodec = str(fmt.get("acodec") or "none").lower()
-        if not format_id or acodec == "none":
+        if not format_id or acodec == "none" or not _youtube_format_is_usable(fmt):
             continue
         audio_formats.append(fmt)
 
@@ -202,6 +246,7 @@ def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None
     last_error: Exception | None = None
     format_candidates = _youtube_audio_format_candidates(url, options_ydl_base)
     format_candidates.extend(YOUTUBE_FORMAT_FALLBACKS)
+    attempted_formats: list[str] = []
 
     already_tried: set[str] = set()
     for format_choice in format_candidates:
@@ -209,6 +254,7 @@ def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None
         if marker in already_tried:
             continue
         already_tried.add(marker)
+        attempted_formats.append(marker)
 
         options_ydl = dict(options_ydl_base)
         if format_choice is not None:
@@ -229,6 +275,7 @@ def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None
 
     raise ApplicationError(
         "Erreur lors du téléchargement YouTube : aucun format audio/vidéo compatible n'a été trouvé. "
+        f"{len(attempted_formats)} stratégie(s) tentée(s) : {', '.join(attempted_formats)}. "
         f"Dernière erreur yt-dlp : {last_error}"
     )
 
