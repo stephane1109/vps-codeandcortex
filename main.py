@@ -29,6 +29,7 @@ VISIBLE_MODEL_CHOICES = ["fast-whisper", "sm", "md"]
 UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
+YOUTUBE_COOKIES_DIR = Path(os.getenv("YOUTUBE_COOKIES_DIR", str(WORKDIR / "youtube-cookies"))).resolve()
 WHISPER_MODEL_ALIASES: dict[str, str] = {}
 USER_AGENT_YOUTUBE_DEFAULT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -104,6 +105,57 @@ def create_run_directory() -> Path:
     return ensure_directory(run_dir)
 
 
+def session_cookie_dir() -> Path:
+    session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
+    return ensure_directory(YOUTUBE_COOKIES_DIR / session_id)
+
+
+def persisted_youtube_cookies_path() -> Path:
+    return session_cookie_dir() / "cookies.txt"
+
+
+def youtube_cookie_expiration_diagnostic(cookies_path: Path) -> str:
+    if not cookies_path.exists():
+        return "Aucun cookies.txt mémorisé pour cette session."
+    try:
+        content = cookies_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Lecture cookies impossible : {exc}"
+    if "youtube.com" not in content and ".youtube.com" not in content:
+        return "Le cookies.txt ne contient aucune entrée YouTube détectée."
+
+    now = int(time.time())
+    expirations: list[int] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") and not line.startswith("#HttpOnly_"):
+            continue
+        columns = line.replace("#HttpOnly_", "", 1).split("\t")
+        if len(columns) < 7:
+            continue
+        domain = columns[0].lower()
+        if "youtube.com" not in domain and "google.com" not in domain:
+            continue
+        try:
+            expires = int(columns[4])
+        except ValueError:
+            continue
+        if expires > 0:
+            expirations.append(expires)
+
+    size = cookies_path.stat().st_size
+    if size < 1024:
+        return f"cookies.txt mémorisé ({size} octets), mais il semble très court : export possiblement incomplet."
+    if not expirations:
+        return f"cookies.txt mémorisé ({size} octets) ; cookies YouTube/Google détectés sans expiration exploitable."
+    remaining = max(expirations) - now
+    if remaining <= 0:
+        return f"cookies.txt mémorisé ({size} octets), mais les expirations utiles semblent dépassées."
+    if remaining < 3600:
+        return f"cookies.txt mémorisé ({size} octets) ; attention, expiration utile dans environ {max(1, int(remaining / 60))} min."
+    return f"cookies.txt mémorisé ({size} octets) ; expiration utile dans environ {int(remaining / 3600)} h."
+
+
 def find_downloaded_mp3(run_dir: Path) -> Path:
     candidates = sorted(run_dir.glob("*.mp3"), key=lambda item: item.stat().st_mtime, reverse=True)
     if candidates:
@@ -112,9 +164,9 @@ def find_downloaded_mp3(run_dir: Path) -> Path:
 
 
 def save_youtube_cookies(uploaded_cookies, run_dir: Path) -> Path | None:
+    cookies_path = persisted_youtube_cookies_path()
     if uploaded_cookies is None:
-        return None
-    cookies_path = run_dir / "youtube_cookies.txt"
+        return cookies_path if cookies_path.exists() and cookies_path.stat().st_size > 0 else None
     cookies_path.write_bytes(uploaded_cookies.getbuffer())
     if not cookies_path.read_text(encoding="utf-8", errors="ignore").strip():
         raise ApplicationError("Le fichier cookies YouTube est vide.")
@@ -455,6 +507,7 @@ def main() -> None:
             type=["txt"],
             help="Exportez les cookies YouTube avec l'extension cookies.txt depuis Chrome ou Firefox.",
         )
+        st.caption(youtube_cookie_expiration_diagnostic(persisted_youtube_cookies_path()))
     else:
         uploaded_audio = st.file_uploader(
             "Importer un fichier audio",
