@@ -4,11 +4,19 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import streamlit as st
 
-from analysedebit import analyser_debit, format_timestamp, resolve_storage_directory
+from analysedebit import (
+    analyser_debit,
+    diagnostic_youtube_cookies,
+    format_timestamp,
+    resolve_storage_directory,
+    save_youtube_cookies,
+    youtube_cookies_path,
+)
 from analysepauses import analyser_pauses, generer_export_pauses, graph_pauses
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
@@ -60,7 +68,9 @@ def main() -> None:
     # - APP_TICKET_TTL_SECONDS
     # - APP_DATA_DIR
     # - WHISPER_MODEL_NAME
+    # - YOUTUBE_COOKIES_DIR
     enforce_streamlit_access("analyse_debit_parole", APP_NAME)
+    session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 
     st.title("Analyse du débit de parole d'une vidéo YouTube")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
@@ -91,6 +101,15 @@ def main() -> None:
             options=["whisper", "ponctuation"],
             help="Choisissez la méthode de segmentation.",
         )
+        cookies_upload = st.file_uploader(
+            "Fichier cookies.txt YouTube (optionnel)",
+            type=["txt", "cookies"],
+            help=(
+                "Exportez un cookies.txt récent depuis le navigateur connecté à YouTube. "
+                "Le fichier est mémorisé côté serveur pour cette session afin d'éviter de le renvoyer à chaque analyse."
+            ),
+        )
+        st.caption(diagnostic_youtube_cookies(youtube_cookies_path(session_id)))
         submit_button = st.form_submit_button(label="Analyser la vidéo")
 
     if submit_button:
@@ -98,6 +117,9 @@ def main() -> None:
             keep_ticket_alive("analyse_debit_parole", APP_NAME)
             output_dir = resolve_storage_directory(repertoire)
             st.info(f"Analyse en cours... Les fichiers seront stockés dans : {output_dir}")
+            cookies_path = save_youtube_cookies(cookies_upload, session_id)
+            if cookies_path is not None:
+                st.caption(diagnostic_youtube_cookies(cookies_path))
 
             with st.spinner("Traitement de la vidéo et transcription Whisper..."):
                 results = analyser_debit(
@@ -106,6 +128,7 @@ def main() -> None:
                     float(end_time),
                     repertoire,
                     segmentation_mode=segmentation_mode,
+                    cookies_path=cookies_path,
                 )
 
             keep_ticket_alive("analyse_debit_parole", APP_NAME)

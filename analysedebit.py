@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import time
 import unicodedata
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +22,12 @@ from yt_dlp import YoutubeDL
 # - WHISPER_MODEL_NAME : modele Whisper charge dans le conteneur (small par defaut)
 APP_STORAGE_ROOT = Path(os.getenv("APP_DATA_DIR", "/data/app")).resolve()
 WHISPER_MODEL_NAME = (os.getenv("WHISPER_MODEL_NAME", "small") or "small").strip() or "small"
+YOUTUBE_COOKIES_DIR = Path(os.getenv("YOUTUBE_COOKIES_DIR", str(APP_STORAGE_ROOT / "youtube-cookies"))).resolve()
+DEFAULT_YOUTUBE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/137.0.0.0 Safari/537.36"
+)
 
 
 def ensure_directory(path: Path) -> Path:
@@ -70,6 +77,73 @@ def resolve_storage_directory(repertoire: str) -> Path:
     return ensure_directory(output_dir)
 
 
+def youtube_cookies_path(session_id: str) -> Path:
+    """
+    Retourne le cookies.txt persistant de la session utilisateur.
+
+    Le fichier est stocké sous APP_DATA_DIR pour éviter qu'il disparaisse à
+    chaque analyse ou dans un dossier temporaire Docker.
+    """
+    safe_session_id = sanitize_directory_name(session_id, fallback="session")
+    return ensure_directory(YOUTUBE_COOKIES_DIR / safe_session_id) / "cookies.txt"
+
+
+def save_youtube_cookies(uploaded_cookies, session_id: str) -> Path | None:
+    cookies_path = youtube_cookies_path(session_id)
+    if uploaded_cookies is None:
+        return cookies_path if cookies_path.exists() and cookies_path.stat().st_size > 0 else None
+
+    raw = uploaded_cookies.getbuffer() if hasattr(uploaded_cookies, "getbuffer") else uploaded_cookies.read()
+    raw_bytes = bytes(raw)
+    if not raw_bytes.strip():
+        raise ValueError("Le fichier cookies.txt transmis est vide.")
+    cookies_path.write_bytes(raw_bytes)
+    return cookies_path
+
+
+def diagnostic_youtube_cookies(cookies_path: Path) -> str:
+    if not cookies_path.exists():
+        return "Aucun cookies.txt mémorisé pour cette session."
+    try:
+        content = cookies_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Lecture cookies impossible : {exc}"
+    if "youtube.com" not in content and ".youtube.com" not in content and "google.com" not in content:
+        return "Le cookies.txt ne contient aucune entrée YouTube/Google détectée."
+
+    size = cookies_path.stat().st_size
+    if size < 1024:
+        return f"cookies.txt mémorisé ({size} octets), mais il semble très court : export possiblement incomplet."
+
+    now = int(time.time())
+    expirations = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") and not line.startswith("#HttpOnly_"):
+            continue
+        columns = line.replace("#HttpOnly_", "", 1).split("\t")
+        if len(columns) < 7:
+            continue
+        domain = columns[0].lower()
+        if "youtube.com" not in domain and "google.com" not in domain:
+            continue
+        try:
+            expires = int(columns[4])
+        except ValueError:
+            continue
+        if expires > 0:
+            expirations.append(expires)
+
+    if not expirations:
+        return f"cookies.txt mémorisé ({size} octets) ; entrées YouTube/Google détectées sans expiration exploitable."
+    remaining = max(expirations) - now
+    if remaining <= 0:
+        return f"cookies.txt mémorisé ({size} octets), mais ses expirations utiles semblent dépassées."
+    if remaining < 3600:
+        return f"cookies.txt mémorisé ({size} octets) ; attention, expiration utile dans environ {max(1, int(remaining / 60))} min."
+    return f"cookies.txt mémorisé ({size} octets) ; expiration utile dans environ {int(remaining / 3600)} h."
+
+
 # =============================================================================
 # Extraction d'un sous-clip vidéo avec ré-encodage (vidéo et audio)
 # =============================================================================
@@ -102,17 +176,30 @@ def extract_subclip_custom(input_path: str | Path, t1: float, t2: float, output_
 # =============================================================================
 # Téléchargement de la vidéo YouTube et renommage
 # =============================================================================
-def telecharger_video(video_url: str, repertoire: str | Path) -> Path:
+def telecharger_video(video_url: str, repertoire: str | Path, cookies_path: str | Path | None = None) -> Path:
     """
     Télécharge la vidéo YouTube via yt-dlp et la sauvegarde dans le répertoire spécifié
     avec un nom basé sur le titre (après nettoyage).
     """
     output_dir = ensure_directory(Path(repertoire))
     options = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+        "format": "18/22/bestvideo*+bestaudio/best[acodec!=none][vcodec!=none]/best",
         "outtmpl": str(output_dir / "%(title)s.%(ext)s"),
         "quiet": True,
+        "noplaylist": True,
+        "merge_output_format": "mp4",
+        "retries": 5,
+        "fragment_retries": 5,
+        "http_headers": {
+            "User-Agent": DEFAULT_YOUTUBE_USER_AGENT,
+            "Accept": "*/*",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.youtube.com/",
+        },
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
     }
+    if cookies_path is not None and Path(cookies_path).exists():
+        options["cookiefile"] = os.fspath(cookies_path)
     with YoutubeDL(options) as ydl:
         info = ydl.extract_info(video_url, download=True)
         original_filename = Path(ydl.prepare_filename(info))
@@ -349,7 +436,7 @@ def exporter_rapport(export_text: str, repertoire: str | Path, nom_fichier: str 
 # =============================================================================
 # Fonction principale d'analyse du débit de parole
 # =============================================================================
-def analyser_debit(video_url, start_time, end_time, repertoire, segmentation_mode="whisper"):
+def analyser_debit(video_url, start_time, end_time, repertoire, segmentation_mode="whisper", cookies_path=None):
     """
     Analyse complète du débit de parole pour une vidéo YouTube en utilisant Whisper.
 
@@ -373,7 +460,7 @@ def analyser_debit(video_url, start_time, end_time, repertoire, segmentation_mod
       - output_dir : Répertoire serveur dans lequel les exports sont stockés.
     """
     output_dir = resolve_storage_directory(repertoire)
-    video_path = telecharger_video(video_url, output_dir)
+    video_path = telecharger_video(video_url, output_dir, cookies_path=cookies_path)
     dialogue_file = ""
 
     if segmentation_mode == "whisper":
