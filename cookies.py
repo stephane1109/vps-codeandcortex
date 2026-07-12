@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import time
 
 import streamlit as st
 
@@ -21,6 +22,45 @@ def info_cookies(repertoire_sortie: Path) -> str:
     return f"cookies.txt present ({chemin.stat().st_size} octets) - mis a jour le {horodatage}"
 
 
+def diagnostic_expiration_cookies(contenu: str) -> str:
+    maintenant = int(time.time())
+    expirations = []
+    youtube_entries = 0
+    for ligne in contenu.splitlines():
+        ligne = ligne.strip()
+        if not ligne or ligne.startswith("#") and not ligne.startswith("#HttpOnly_"):
+            continue
+        ligne_parse = ligne.replace("#HttpOnly_", "", 1)
+        colonnes = ligne_parse.split("\t")
+        if len(colonnes) < 7:
+            continue
+        domaine = colonnes[0].lower()
+        if "youtube.com" not in domaine and "google.com" not in domaine:
+            continue
+        youtube_entries += 1
+        try:
+            expiration = int(colonnes[4])
+        except ValueError:
+            continue
+        if expiration > 0:
+            expirations.append(expiration)
+
+    if youtube_entries == 0:
+        return "Aucune entree YouTube/Google exploitable detectee dans le cookies.txt."
+    if not expirations:
+        return "Cookies YouTube/Google detectes ; plusieurs entrees sont des cookies de session sans date d'expiration."
+
+    expires_max = max(expirations)
+    secondes_restantes = expires_max - maintenant
+    if secondes_restantes <= 0:
+        return "Cookies YouTube/Google detectes mais toutes les dates d'expiration utiles semblent depassees."
+    minutes = max(1, int(secondes_restantes / 60))
+    if secondes_restantes < 3600:
+        return f"Attention : le cookies.txt contient des cookies YouTube/Google qui expirent bientot (~{minutes} min)."
+    heures = int(secondes_restantes / 3600)
+    return f"Cookies YouTube/Google detectes ; expiration utile la plus lointaine dans environ {heures} h."
+
+
 def diagnostic_cookies(chemin: Path) -> str:
     if not chemin.exists():
         return "Aucun cookies present."
@@ -36,7 +76,7 @@ def diagnostic_cookies(chemin: Path) -> str:
         return "Le cookies.txt ne contient aucune entree YouTube detectee."
     if chemin.stat().st_size < 1024:
         return "Le cookies.txt semble tres court ; export probablement incomplet."
-    return "Format cookies.txt plausible pour yt-dlp."
+    return "Format cookies.txt plausible pour yt-dlp. " + diagnostic_expiration_cookies(contenu)
 
 
 def memoriser_cookies_depuis_upload(fichier_streamlit, repertoire_sortie: Path, forcer: bool):
@@ -47,11 +87,12 @@ def memoriser_cookies_depuis_upload(fichier_streamlit, repertoire_sortie: Path, 
 
     destination = chemin_cookies_session(repertoire_sortie)
     if destination.exists() and not forcer:
-        return destination, "Un cookies.txt est deja memorise. Cochez 'Forcer le remplacement' pour le remplacer."
+        return destination, "Un cookies.txt est deja memorise. Cochez 'Remplacer le cookies existant' pour le remplacer."
 
     try:
-        destination.write_bytes(fichier_streamlit.read())
-        return destination, "cookies.txt memorise dans l'espace temporaire de cette session."
+        contenu = fichier_streamlit.getbuffer() if hasattr(fichier_streamlit, "getbuffer") else fichier_streamlit.read()
+        destination.write_bytes(bytes(contenu))
+        return destination, "cookies.txt mis a jour dans l'espace temporaire de cette session."
     except Exception as e:
         return None, f"Echec de la memorisation du cookies.txt : {e}"
 
@@ -70,7 +111,7 @@ def afficher_section_cookies(repertoire_sortie: Path):
     with col1:
         cookies_file = st.file_uploader("Fichier cookies.txt", type=["txt"], key="cookies_file")
     with col2:
-        forcer = st.checkbox("Forcer le remplacement", value=False, key="forcer_remplacement_cookies")
+        forcer = st.checkbox("Remplacer le cookies existant", value=True, key="forcer_remplacement_cookies")
 
     st.caption(info_cookies(repertoire_sortie))
 
