@@ -330,6 +330,94 @@ def lister_sorties(prefix: str) -> List[Path]:
     return fichiers
 
 
+def fichiers_valides(fichiers: List[Path]) -> List[Path]:
+    """Ne conserver que les fichiers réellement écrits et non vides."""
+    valides: List[Path] = []
+    deja_vus = set()
+    for fichier in fichiers:
+        fichier = Path(fichier)
+        try:
+            cle = str(fichier.resolve())
+            if cle in deja_vus:
+                continue
+            if fichier.is_file() and fichier.stat().st_size > 0:
+                valides.append(fichier)
+                deja_vus.add(cle)
+        except Exception:
+            continue
+    return valides
+
+
+def diagnostic_contenu_sortie(max_items: int = 80) -> str:
+    lignes: List[str] = []
+    try:
+        elements = sorted(REPERTOIRE_SORTIE.rglob("*"), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    except Exception as exc:
+        return f"Impossible de lire le dossier de sortie : {exc}"
+
+    for element in elements[:max_items]:
+        try:
+            type_element = "dir" if element.is_dir() else "file"
+            taille = element.stat().st_size if element.is_file() else 0
+            rel = element.relative_to(REPERTOIRE_SORTIE)
+            lignes.append(f"{type_element}\t{taille} octets\t{rel}")
+        except Exception:
+            continue
+    return "\n".join(lignes) if lignes else "Le dossier de sortie est vide."
+
+
+def enregistrer_resultats_generes(zip_path: Path, fichiers: List[Path], message: str) -> None:
+    st.session_state["dernier_zip_path"] = str(zip_path)
+    st.session_state["derniers_fichiers"] = [str(path) for path in fichiers_valides(fichiers)]
+    st.session_state["dernier_message_resultats"] = message
+    st.session_state["derniere_erreur_resultats"] = ""
+
+
+def enregistrer_erreur_resultats(message: str) -> None:
+    st.session_state["derniere_erreur_resultats"] = message
+
+
+def afficher_resultats_generes() -> None:
+    zip_path_brut = st.session_state.get("dernier_zip_path")
+    fichiers = fichiers_valides([Path(path) for path in st.session_state.get("derniers_fichiers", [])])
+    if not zip_path_brut and not fichiers and not st.session_state.get("derniere_erreur_resultats"):
+        return
+
+    st.subheader("Derniers fichiers générés")
+    if st.session_state.get("derniere_erreur_resultats"):
+        st.warning(st.session_state["derniere_erreur_resultats"])
+
+    zip_path = Path(zip_path_brut) if zip_path_brut else None
+    if zip_path and zip_path.is_file() and zip_path.stat().st_size > 0:
+        taille_zip = zip_path.stat().st_size / (1024 * 1024)
+        st.success(st.session_state.get("dernier_message_resultats") or f"Archive prête : {zip_path.name}")
+        with open(zip_path, "rb") as archive:
+            st.download_button(
+                "Télécharger les résultats (.zip)",
+                data=archive,
+                file_name=zip_path.name,
+                mime="application/zip",
+                key=f"download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
+            )
+        st.caption(f"Archive : {zip_path.name} · {taille_zip:.1f} Mo")
+    elif zip_path:
+        st.error(f"Archive introuvable ou vide : {zip_path}")
+
+    if fichiers:
+        with st.expander(f"Voir les fichiers inclus ({len(fichiers)})", expanded=False):
+            for fichier in fichiers[:200]:
+                try:
+                    rel = fichier.relative_to(REPERTOIRE_SORTIE)
+                except ValueError:
+                    rel = fichier.name
+                taille = (taille_fichier(fichier) or 0) / (1024 * 1024)
+                st.write(f"- `{rel}` · {taille:.2f} Mo")
+    else:
+        st.info("Aucun fichier exploitable n'est actuellement mémorisé pour cette session.")
+        with st.expander("Diagnostic du dossier de sortie", expanded=True):
+            st.code(diagnostic_contenu_sortie())
+
+
 def hash_job(source_id: str, fps: int, intervalle: Optional[tuple[int, int]]) -> str:
     hachage = hashlib.sha1()
     hachage.update(source_id.encode("utf-8"))
@@ -873,6 +961,10 @@ st.session_state.setdefault("base_court", None)
 st.session_state.setdefault("upload_signature", None)
 st.session_state.setdefault("local_temp_path", None)
 st.session_state.setdefault("local_name_base", None)
+st.session_state.setdefault("dernier_zip_path", None)
+st.session_state.setdefault("derniers_fichiers", [])
+st.session_state.setdefault("dernier_message_resultats", "")
+st.session_state.setdefault("derniere_erreur_resultats", "")
 
 st.subheader("Source")
 url = st.text_input("URL YouTube")
@@ -949,8 +1041,13 @@ if afficher_apercu and not opt_timelapse:
 if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+        st.session_state["dernier_zip_path"] = None
+        st.session_state["derniers_fichiers"] = []
+        st.session_state["dernier_message_resultats"] = ""
+        st.session_state["derniere_erreur_resultats"] = ""
         if not ffmpeg_disponible():
             st.error("ffmpeg introuvable et fallback impossible. Verifie l'image Docker et les dependances systeme.")
+            enregistrer_erreur_resultats("ffmpeg est introuvable : aucune extraction ne peut être lancée.")
         else:
             if url:
                 video_base, base_court, info, erreur = telecharger_preparer_video(
@@ -1018,24 +1115,28 @@ if st.button("Lancer le traitement"):
                         )
                         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
                         st.success(f"Timelapse genere ({nb_images} images).")
-                        with open(out_path, "rb") as sortie:
-                            st.download_button(
-                                "Télécharger le timelapse (.mp4)",
-                                data=sortie,
-                                file_name=Path(out_path).name,
-                                mime="video/mp4",
-                            )
                         zip_path = REPERTOIRE_SORTIE / f"resultats_{base_court}_timelapse.zip"
-                        zipper_sur_disque([Path(out_path)], zip_path)
-                        with open(zip_path, "rb") as archive:
-                            st.download_button(
-                                "Télécharger les résultats (.zip)",
-                                data=archive,
-                                file_name=zip_path.name,
-                                mime="application/zip",
-                            )
+                        fichiers_timelapse = fichiers_valides([Path(out_path)])
+                        if not fichiers_timelapse:
+                            message_erreur = "Timelapse terminé, mais aucun fichier vidéo exploitable n'a été retrouvé."
+                            st.error(message_erreur)
+                            enregistrer_erreur_resultats(message_erreur)
+                            st.code(diagnostic_contenu_sortie())
+                        else:
+                            zipper_sur_disque(fichiers_timelapse, zip_path)
+                            taille_zip = taille_fichier(zip_path) or 0
+                            if taille_zip <= 0:
+                                message_erreur = f"Archive timelapse générée mais vide : {zip_path.name}"
+                                st.error(message_erreur)
+                                enregistrer_erreur_resultats(message_erreur)
+                            else:
+                                message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
+                                st.success(message_ok)
+                                enregistrer_resultats_generes(zip_path, fichiers_timelapse, message_ok)
                     except Exception as e:
-                        st.error(f"Echec du timelapse : {e}")
+                        message_erreur = f"Echec du timelapse : {e}"
+                        st.error(message_erreur)
+                        enregistrer_erreur_resultats(message_erreur)
                 else:
                     if utiliser_intervalle:
                         debut_eff = st.session_state["debut_secs"]
@@ -1054,9 +1155,14 @@ if st.button("Lancer le traitement"):
 
                     if any(options.values()):
                         st.info("Extraction des ressources sélectionnées en cours...")
-                        erreur_extraction = extraire_ressources(video_path, debut_eff, fin_eff, base_court, options, utiliser_intervalle)
+                        try:
+                            erreur_extraction = extraire_ressources(video_path, debut_eff, fin_eff, base_court, options, utiliser_intervalle)
+                        except Exception as exc:
+                            erreur_extraction = str(exc) or repr(exc)
                         if erreur_extraction:
-                            st.error(f"Erreur pendant l'extraction : {erreur_extraction}")
+                            message_erreur = f"Erreur pendant l'extraction : {erreur_extraction}"
+                            st.error(message_erreur)
+                            enregistrer_erreur_resultats(message_erreur)
                         else:
                             st.success("Ressources generees.")
                             keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
@@ -1064,17 +1170,31 @@ if st.button("Lancer le traitement"):
                         st.info("Aucune ressource supplémentaire sélectionnée : seul le fichier vidéo de base sera mis dans l'archive.")
 
                     fichiers = lister_sorties(base_court)
-                    if Path(video_path) not in fichiers:
-                        fichiers.append(Path(video_path))
+                    video_base_path = Path(video_path)
+                    if video_base_path not in fichiers:
+                        fichiers.append(video_base_path)
+                    fichiers = fichiers_valides(fichiers)
+                    if not fichiers:
+                        message_erreur = (
+                            "Aucun fichier exploitable n'a été généré. "
+                            "Le diagnostic du dossier de sortie est affiché ci-dessous."
+                        )
+                        st.error(message_erreur)
+                        enregistrer_erreur_resultats(message_erreur)
+                        st.code(diagnostic_contenu_sortie())
+                        st.stop()
                     st.info(f"Préparation de l'archive ZIP : {len(fichiers)} fichier(s).")
                     zip_path = REPERTOIRE_SORTIE / f"resultats_{base_court}.zip"
                     zipper_sur_disque(fichiers, zip_path)
                     taille_zip = taille_fichier(zip_path) or 0
-                    st.success(f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo).")
-                    with open(zip_path, "rb") as archive:
-                        st.download_button(
-                            "Télécharger les résultats (.zip)",
-                            data=archive,
-                            file_name=zip_path.name,
-                            mime="application/zip",
-                        )
+                    if taille_zip <= 0:
+                        message_erreur = f"Archive générée mais vide : {zip_path.name}"
+                        st.error(message_erreur)
+                        enregistrer_erreur_resultats(message_erreur)
+                        st.code(diagnostic_contenu_sortie())
+                    else:
+                        message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
+                        st.success(message_ok)
+                        enregistrer_resultats_generes(zip_path, fichiers, message_ok)
+
+afficher_resultats_generes()
