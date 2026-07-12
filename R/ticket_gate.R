@@ -134,6 +134,7 @@ ticket_config <- function(default_app_id, app_label) {
   wait_stale_default <- min(ttl_seconds, 120L)
   list(
     enabled = ticket_env_bool("APP_TICKET_ENFORCED", TRUE),
+    fail_open = ticket_env_bool("APP_TICKET_FAIL_OPEN", TRUE),
     app_id = trimws(Sys.getenv("APP_TICKET_ID", unset = default_app_id)) %||% default_app_id,
     app_label = app_label,
     max_active = max(1L, ticket_env_int("APP_TICKET_MAX_ACTIVE", 1L)),
@@ -575,6 +576,23 @@ ticket_error_snapshot <- function(cfg, message) {
 }
 
 
+ticket_local_fallback_snapshot <- function(cfg, message) {
+  list(
+    enabled = TRUE,
+    local_fallback = TRUE,
+    ticket_id = NULL,
+    statut = "actif",
+    position = NULL,
+    active = 1L,
+    queued = 0L,
+    max_active = cfg$max_active,
+    wait_refresh_ms = cfg$wait_refresh_ms,
+    heartbeat_ms = cfg$heartbeat_ms,
+    message = trimws(message %||% "Redis indisponible : accès local de secours activé.")
+  )
+}
+
+
 ticket_released_snapshot <- function(cfg, message) {
   active <- 0L
   queued <- 0L
@@ -746,6 +764,7 @@ ticket_release_hook_ui <- function(cfg, session) {
 
 ticket_sidebar_ui <- function(snapshot) {
   status <- snapshot$statut %||% "erreur"
+  local_fallback <- isTRUE(snapshot$local_fallback)
   diagnostic_message <- trimws(snapshot$message %||% "")
   if (status %in% c("refuse", "erreur")) {
     diagnostic_base <- if (
@@ -794,7 +813,11 @@ ticket_sidebar_ui <- function(snapshot) {
   detail <- switch(
     status,
     disabled = "Le contrôle d'accès n'est pas appliqué pour cette application.",
-    actif = sprintf("%s utilisateur(s) actif(s) sur %s autorisé(s).", snapshot$active, snapshot$max_active),
+    actif = if (local_fallback) {
+      "Redis est indisponible : accès local de secours activé, l'application reste utilisable."
+    } else {
+      sprintf("%s utilisateur(s) actif(s) sur %s autorisé(s).", snapshot$active, snapshot$max_active)
+    },
     attente = sprintf("Position actuelle dans la file : %s.", snapshot$position %||% "?"),
     refuse = "Impossible d'ajouter un nouvel utilisateur pour le moment.",
     released = "Cette page n'occupe plus l'application.",
@@ -803,7 +826,11 @@ ticket_sidebar_ui <- function(snapshot) {
   note <- switch(
     status,
     disabled = "Contrôle d'accès désactivé pour cette application.",
-    actif = sprintf("Accès actif (%s / %s).", snapshot$active, snapshot$max_active),
+    actif = if (local_fallback) {
+      "Contrôle Redis indisponible : le ticket n'est pas bloquant sur cette session."
+    } else {
+      sprintf("Accès actif (%s / %s).", snapshot$active, snapshot$max_active)
+    },
     attente = sprintf("Application occupée. Position dans la file : %s.", snapshot$position %||% "?"),
     refuse = "File d'attente pleine pour cette application.",
     released = "Accès libéré pour cette page.",
@@ -811,7 +838,7 @@ ticket_sidebar_ui <- function(snapshot) {
   )
   actions <- switch(
     status,
-    actif = tags$div(
+    actif = if (local_fallback) NULL else tags$div(
       class = "ticket-actions",
       actionButton("ticket_release_btn", "Libérer l'accès", class = "btn-primary")
     ),
