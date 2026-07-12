@@ -177,6 +177,13 @@ ticket_python3 <- function() {
 }
 
 
+ticket_shell_args <- function(args) {
+  # system2() passe par le shell dans le conteneur Shiny : les valeurs contenant
+  # des espaces, comme "CHD Rainette", doivent donc être protégées explicitement.
+  shQuote(as.character(args), type = "sh")
+}
+
+
 ticket_redis_cli <- function() {
   redis_cli <- Sys.which("redis-cli")
   if (!nzchar(redis_cli)) {
@@ -203,7 +210,7 @@ ticket_redis_exec_python <- function(args) {
   output <- tryCatch(
     system2(
       ticket_python3(),
-      c(helper_path, args),
+      ticket_shell_args(c(helper_path, args)),
       stdout = TRUE,
       stderr = TRUE
     ),
@@ -224,7 +231,7 @@ ticket_redis_exec_cli <- function(args) {
   output <- tryCatch(
     system2(
       ticket_redis_cli(),
-      c("-u", ticket_redis_url(), "--raw", args),
+      ticket_shell_args(c("-u", ticket_redis_url(), "--raw", args)),
       stdout = TRUE,
       stderr = TRUE
     ),
@@ -295,7 +302,7 @@ ticket_cli_exec_json <- function(args) {
   output <- tryCatch(
     system2(
       ticket_python3(),
-      c(cli_path, args),
+      ticket_shell_args(c(cli_path, args)),
       stdout = TRUE,
       stderr = TRUE
     ),
