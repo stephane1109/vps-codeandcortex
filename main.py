@@ -30,6 +30,11 @@ UPLOAD_EXTENSIONS = ["mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "webm"]
 WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
 WHISPER_MODEL_ALIASES: dict[str, str] = {}
+YOUTUBE_FORMAT_FALLBACKS: list[str | None] = [
+    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
+    "best[acodec!=none]/best",
+    None,
+]
 MODEL_PROFILES = {
     # #### PROFILS DE MODELES AFFICHES DANS L'APPLICATION
     # L'utilisateur voit explicitement ces trois choix dans l'interface.
@@ -97,8 +102,7 @@ def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None
         raise ApplicationError("Veuillez entrer une URL YouTube.")
 
     output_template = str(run_dir / "%(title).120s.%(ext)s")
-    options_ydl = {
-        "format": "bestaudio/best",
+    options_ydl_base = {
         "noplaylist": True,
         "outtmpl": output_template,
         "postprocessors": [
@@ -112,17 +116,31 @@ def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None
         "no_warnings": True,
     }
     if cookies_path is not None:
-        options_ydl["cookiefile"] = str(cookies_path)
+        options_ydl_base["cookiefile"] = str(cookies_path)
 
-    try:
-        with YoutubeDL(options_ydl) as ydl:
-            ydl.extract_info(url.strip(), download=True)
-    except DownloadError as exc:
-        raise ApplicationError(f"Erreur lors du téléchargement YouTube : {exc}") from exc
-    except Exception as exc:  # pragma: no cover - dépend du réseau/runtime
-        raise ApplicationError(f"Téléchargement YouTube impossible : {exc}") from exc
+    last_error: Exception | None = None
+    for format_choice in YOUTUBE_FORMAT_FALLBACKS:
+        options_ydl = dict(options_ydl_base)
+        if format_choice is not None:
+            options_ydl["format"] = format_choice
+        try:
+            with YoutubeDL(options_ydl) as ydl:
+                ydl.extract_info(url.strip(), download=True)
+            return find_downloaded_mp3(run_dir)
+        except DownloadError as exc:
+            last_error = exc
+            message = str(exc).lower()
+            if "requested format is not available" in message:
+                continue
+            raise ApplicationError(f"Erreur lors du téléchargement YouTube : {exc}") from exc
+        except Exception as exc:  # pragma: no cover - dépend du réseau/runtime
+            last_error = exc
+            raise ApplicationError(f"Téléchargement YouTube impossible : {exc}") from exc
 
-    return find_downloaded_mp3(run_dir)
+    raise ApplicationError(
+        "Erreur lors du téléchargement YouTube : aucun format audio/vidéo compatible n'a été trouvé. "
+        f"Dernière erreur yt-dlp : {last_error}"
+    )
 
 
 def save_uploaded_audio(uploaded_file, run_dir: Path) -> Path:
