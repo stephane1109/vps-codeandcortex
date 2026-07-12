@@ -60,6 +60,7 @@ RUN apt-get update \
       r-cran-dplyr \
       r-cran-factominer \
       r-cran-htmltools \
+      r-cran-jsonlite \
       r-cran-markdown \
       r-cran-quanteda \
       r-cran-quanteda.textstats \
@@ -89,7 +90,7 @@ RUN Rscript /tmp/install-r-packages.R
 COPY . /app
 
 RUN useradd --create-home --shell /bin/bash app \
-    && chmod +x /app/docker-entrypoint.sh \
+    && chmod +x /app/docker-entrypoint.sh /app/backend/ticket_gate_cli.py \
     && mkdir -p /data/app /data/app/r-library /data/app/cache \
     && chown -R app:app /app /home/app /data/app
 

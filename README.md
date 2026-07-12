@@ -35,6 +35,10 @@ La documentation officielle de `rainette` présente `rainette_explor()` comme un
 
 ## Variables d'environnement Coolify
 
+La file d'attente utilise maintenant un helper Python direct (`backend/ticket_gate_cli.py`)
+sur le même principe que `iramuteq-lite` : la logique `claim / release / cleanup`
+parle directement à Redis, puis Shiny affiche uniquement l'état retourné.
+
 - `PORT=8000`
 - `REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0`
 - `APP_TICKET_ID=chdrainette`

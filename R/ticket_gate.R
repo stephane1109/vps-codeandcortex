@@ -269,6 +269,89 @@ ticket_redis_exec <- function(args) {
 }
 
 
+ticket_gate_cli_path <- function() {
+  configured <- trimws(Sys.getenv("APP_TICKET_GATE_CLI", unset = ""))
+  if (nzchar(configured)) {
+    return(configured)
+  }
+  default_path <- "/app/backend/ticket_gate_cli.py"
+  if (file.exists(default_path)) {
+    return(default_path)
+  }
+  "backend/ticket_gate_cli.py"
+}
+
+
+ticket_cli_exec_json <- function(args) {
+  cli_path <- ticket_gate_cli_path()
+  if (!file.exists(cli_path)) {
+    stop(sprintf("Helper ticket Python absent : %s", cli_path), call. = FALSE)
+  }
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("Package R jsonlite absent : installe r-cran-jsonlite dans l'image Docker.", call. = FALSE)
+  }
+  output <- tryCatch(
+    system2(
+      ticket_python3(),
+      c(cli_path, args),
+      stdout = TRUE,
+      stderr = TRUE
+    ),
+    error = function(exc) structure(c(conditionMessage(exc)), status = 1L)
+  )
+  status <- attr(output, "status")
+  if (is.null(status)) {
+    status <- 0L
+  }
+  json_line <- tail(grep("^\\{.*\\}$", output, value = TRUE), 1L)
+  if (!identical(as.integer(status), 0L) || !length(json_line)) {
+    stop(sprintf("Ticket Python indisponible : %s", paste(output, collapse = "\n")), call. = FALSE)
+  }
+  jsonlite::fromJSON(json_line, simplifyVector = FALSE)
+}
+
+
+ticket_snapshot_from_python <- function(cfg, raw) {
+  list(
+    enabled = isTRUE(raw$enabled %||% TRUE),
+    local_fallback = isTRUE(raw$local_fallback %||% FALSE),
+    ticket_id = raw$ticket_id %||% NULL,
+    statut = trimws(raw$statut %||% "inconnu"),
+    position = raw$position %||% NULL,
+    active = ticket_safe_int(raw$active %||% 0L, 0L),
+    queued = ticket_safe_int(raw$queued %||% 0L, 0L),
+    max_active = ticket_safe_int(raw$max_active %||% cfg$max_active, cfg$max_active),
+    wait_refresh_ms = ticket_safe_int(raw$wait_refresh_ms %||% cfg$wait_refresh_ms, cfg$wait_refresh_ms),
+    heartbeat_ms = ticket_safe_int(raw$heartbeat_ms %||% cfg$heartbeat_ms, cfg$heartbeat_ms),
+    message = trimws(raw$message %||% "")
+  )
+}
+
+
+ticket_python_claim_or_refresh <- function(cfg, session_id) {
+  raw <- ticket_cli_exec_json(c(
+    "claim",
+    "--session-id",
+    session_id,
+    "--app-label",
+    cfg$app_label
+  ))
+  ticket_snapshot_from_python(cfg, raw)
+}
+
+
+ticket_python_release <- function(cfg, session_id) {
+  raw <- ticket_cli_exec_json(c(
+    "release",
+    "--session-id",
+    session_id,
+    "--app-label",
+    cfg$app_label
+  ))
+  ticket_snapshot_from_python(cfg, raw)
+}
+
+
 ticket_safe_int <- function(value, default = 0L) {
   parsed <- suppressWarnings(as.integer(value))
   if (is.na(parsed)) {
@@ -620,68 +703,9 @@ ticket_released_snapshot <- function(cfg, message) {
 
 
 ticket_claim_or_refresh <- function(cfg, session_id) {
-  ticket_redis_exec(c("PING"))
-  ticket_cleanup_expired(cfg)
-  ticket_promote_waiting(cfg)
-
-  session_key <- ticket_session_key(cfg$app_id, session_id)
-  existing_ticket <- trimws(ticket_get(session_key))
-
-  if (nzchar(existing_ticket) && ticket_exists(ticket_ticket_key(existing_ticket))) {
-    ticket_touch_existing(cfg, existing_ticket, session_key)
-    ticket_promote_waiting(cfg)
-    return(ticket_snapshot(cfg, existing_ticket))
-  }
-
-  if (nzchar(existing_ticket)) {
-    ticket_del(session_key)
-  }
-
-  if (ticket_waiting_count(cfg) >= cfg$max_waiting) {
-    return(list(
-      enabled = TRUE,
-      ticket_id = NULL,
-      statut = "refuse",
-      position = NULL,
-      active = ticket_active_count(cfg),
-      queued = ticket_waiting_count(cfg),
-      max_active = cfg$max_active,
-      wait_refresh_ms = cfg$wait_refresh_ms,
-      heartbeat_ms = cfg$heartbeat_ms,
-      message = "File d'attente pleine pour cette application."
-    ))
-  }
-
-  ticket_id <- ticket_random_id()
-  status <- if (ticket_waiting_count(cfg) == 0L && ticket_can_activate(cfg)) "actif" else "attente"
-  now <- as.integer(Sys.time())
-  ticket_hset_map(
-    ticket_ticket_key(ticket_id),
-    c(
-      ticket_id = ticket_id,
-      session_id = session_id,
-      application_id = cfg$app_id,
-      application_label = cfg$app_label,
-      cost = cfg$cost,
-      status = status,
-      created_at = now,
-      updated_at = now
-    )
-  )
-  timeout <- ticket_timeout_seconds(cfg, status)
-  ticket_expire(ticket_ticket_key(ticket_id), timeout)
-  ticket_setex(session_key, timeout, ticket_id)
-
-  keys <- ticket_keys(cfg$app_id)
-  if (identical(status, "actif")) {
-    ticket_zadd(keys$active, as.numeric(now), ticket_id)
-    ticket_zadd(ticket_global_active_key(), as.numeric(now), ticket_id)
-  } else {
-    ticket_zadd(keys$waiting, as.numeric(now), ticket_id)
-  }
-
-  ticket_promote_waiting(cfg)
-  ticket_snapshot(cfg, ticket_id)
+  # Alignement avec IRaMuTeQ Lite : le calcul de file d'attente est fait par
+  # un helper Python haut niveau qui parle directement à Redis.
+  ticket_python_claim_or_refresh(cfg, session_id)
 }
 
 
@@ -691,17 +715,7 @@ ticket_release <- function(cfg, session_id) {
   }
   tryCatch(
     {
-      ticket_redis_exec(c("PING"))
-      session_key <- ticket_session_key(cfg$app_id, session_id)
-      ticket_id <- trimws(ticket_get(session_key))
-      if (nzchar(ticket_id)) {
-        keys <- ticket_keys(cfg$app_id)
-        ticket_zrem(keys$active, ticket_id)
-        ticket_zrem(keys$waiting, ticket_id)
-        ticket_zrem(ticket_global_active_key(), ticket_id)
-        ticket_del(ticket_ticket_key(ticket_id), session_key)
-      }
-      ticket_promote_waiting(cfg)
+      ticket_python_release(cfg, session_id)
       TRUE
     },
     error = function(...) FALSE

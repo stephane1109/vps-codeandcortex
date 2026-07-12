@@ -611,7 +611,7 @@ page_sidebar(
       class = "sidebar-group",
       tags$strong("Ticket build"),
       tags$br(),
-      tags$code("chdrainette-redis-2026-07-12-0001")
+      tags$code("chdrainette-ticket-python-2026-07-12-0100")
     ),
     uiOutput("ui_ticket_sidebar"),
     div(
