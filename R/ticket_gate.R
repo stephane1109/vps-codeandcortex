@@ -134,9 +134,11 @@ ticket_config <- function(default_app_id, app_label) {
   wait_stale_default <- min(ttl_seconds, 120L)
   list(
     enabled = ticket_env_bool("APP_TICKET_ENFORCED", TRUE),
-    # CHD Rainette ne doit jamais être bloquée par une panne Redis : si le
-    # contrôle central est indisponible, l'interface reste utilisable en secours local.
-    fail_open = TRUE,
+    # #### APP_TICKET_FAIL_OPEN
+    # 0 = mode normal VPS : Redis est obligatoire et la home voit l'occupation.
+    # 1 = secours exceptionnel : l'app reste utilisable si Redis tombe, mais la
+    # home ne peut pas synchroniser l'état de cette session.
+    fail_open = ticket_env_bool("APP_TICKET_FAIL_OPEN", FALSE),
     app_id = trimws(Sys.getenv("APP_TICKET_ID", unset = default_app_id)) %||% default_app_id,
     app_label = app_label,
     max_active = max(1L, ticket_env_int("APP_TICKET_MAX_ACTIVE", 1L)),
@@ -314,6 +316,7 @@ ticket_cli_exec_json <- function(args) {
 ticket_snapshot_from_python <- function(cfg, raw) {
   list(
     enabled = isTRUE(raw$enabled %||% TRUE),
+    app_id = cfg$app_id,
     local_fallback = isTRUE(raw$local_fallback %||% FALSE),
     ticket_id = raw$ticket_id %||% NULL,
     statut = trimws(raw$statut %||% "inconnu"),
@@ -596,6 +599,7 @@ ticket_snapshot <- function(cfg, ticket_id = NULL, message = "") {
   if (is.null(ticket_id) || !nzchar(ticket_id)) {
     return(list(
       enabled = TRUE,
+      app_id = cfg$app_id,
       ticket_id = NULL,
       statut = "inconnu",
       position = NULL,
@@ -610,6 +614,7 @@ ticket_snapshot <- function(cfg, ticket_id = NULL, message = "") {
   data <- ticket_hgetall(ticket_ticket_key(ticket_id))
   list(
     enabled = TRUE,
+    app_id = cfg$app_id,
     ticket_id = ticket_id,
     statut = trimws(data$status %||% "inconnu"),
     position = ticket_waiting_position(cfg, ticket_id),
@@ -626,6 +631,7 @@ ticket_snapshot <- function(cfg, ticket_id = NULL, message = "") {
 ticket_disabled_snapshot <- function(cfg, message) {
   list(
     enabled = FALSE,
+    app_id = cfg$app_id,
     ticket_id = NULL,
     statut = "disabled",
     position = NULL,
@@ -648,6 +654,7 @@ ticket_error_snapshot <- function(cfg, message) {
   }
   list(
     enabled = TRUE,
+    app_id = cfg$app_id,
     ticket_id = NULL,
     statut = "erreur",
     position = NULL,
@@ -664,6 +671,7 @@ ticket_error_snapshot <- function(cfg, message) {
 ticket_local_fallback_snapshot <- function(cfg, message) {
   list(
     enabled = TRUE,
+    app_id = cfg$app_id,
     local_fallback = TRUE,
     ticket_id = NULL,
     statut = "actif",
@@ -689,6 +697,7 @@ ticket_released_snapshot <- function(cfg, message) {
   queued <- safe_counts$queued
   list(
     enabled = TRUE,
+    app_id = cfg$app_id,
     ticket_id = NULL,
     statut = "released",
     position = NULL,
@@ -774,6 +783,16 @@ ticket_release_hook_ui <- function(cfg, session) {
     shQuote(cfg$app_id, type = "sh"),
     shQuote(session_id, type = "sh"),
     as.character(hidden_ms)
+  )))
+}
+
+
+ticket_parent_notify_script <- function(cfg, status) {
+  app_id <- trimws(cfg$app_id %||% "")
+  tags$script(HTML(sprintf(
+    "(function(){try{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'codeandcortex-ticket:changed',applicationId:%s,status:%s},'*');}}catch(error){}})();",
+    shQuote(app_id, type = "sh"),
+    shQuote(status %||% "", type = "sh")
   )))
 }
 
@@ -893,6 +912,9 @@ ticket_sidebar_ui <- function(snapshot) {
         )
       },
       actions
-    )
+    ),
+    if (status %in% c("actif", "attente", "released")) {
+      ticket_parent_notify_script(snapshot, status)
+    }
   )
 }

@@ -51,5 +51,6 @@ parle directement à Redis, puis Shiny affiche uniquement l'état retourné.
 - `APP_TICKET_WAIT_REFRESH_MS=10000`
 - `APP_TICKET_HEARTBEAT_MS=30000`
 - `APP_TICKET_WAIT_STALE_SECONDS=120`
+- `APP_TICKET_FAIL_OPEN=0`
 - `APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release`
 - `APP_TICKET_HIDDEN_RELEASE_SECONDS=300`

@@ -134,7 +134,11 @@ server <- function(input, output, session) {
       ticket_claim_or_refresh(ticket_cfg, ticket_session_id(session)),
       error = function(exc) {
         diagnostic <- ticket_safe_runtime_diagnostic(ticket_cfg, conditionMessage(exc))
-        ticket_local_fallback_snapshot(ticket_cfg, diagnostic)
+        if (isTRUE(ticket_cfg$fail_open)) {
+          ticket_local_fallback_snapshot(ticket_cfg, diagnostic)
+        } else {
+          ticket_error_snapshot(ticket_cfg, diagnostic)
+        }
       }
     )
     ticket_snapshot_state(snap)

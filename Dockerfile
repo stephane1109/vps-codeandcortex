@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APP_TICKET_WAIT_REFRESH_MS=10000 \
     APP_TICKET_HEARTBEAT_MS=30000 \
     APP_TICKET_WAIT_STALE_SECONDS=120 \
-    APP_TICKET_FAIL_OPEN=1 \
+    APP_TICKET_FAIL_OPEN=0 \
     APP_TICKET_ENFORCED=1
 
 # #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
@@ -29,7 +29,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - CAPACITE_SERVEUR=6
 # - APP_TICKET_TTL_SECONDS=300
 # - APP_TICKET_WAIT_STALE_SECONDS=120
-# - APP_TICKET_FAIL_OPEN=1 pour ne pas bloquer l'application si Redis est temporairement indisponible
+# - APP_TICKET_FAIL_OPEN=0 pour forcer le ticket Redis et synchroniser la home
+# - APP_TICKET_FAIL_OPEN=1 uniquement en secours manuel si Redis est indisponible
 # - PORT=8000
 
 WORKDIR /app
