@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover - depend de l'image Docker finale
 
 APP_NAME = "MP3 to Text"
 DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=WDQqDOXAUIM"
-DEFAULT_LANGUAGE = "fr"
+DEFAULT_LANGUAGE = (os.getenv("WHISPER_LANGUAGE_DEFAULT", "fr") or "fr").strip().lower()
 DEFAULT_MODEL = "base"
 DEFAULT_PROFILE = (os.getenv("WHISPER_PROFILE_DEFAULT", "faster-whisper") or "faster-whisper").strip().lower()
 MODEL_OPTIONS = ["tiny", "base", "small", "medium"]
@@ -31,10 +31,22 @@ WORKDIR = Path(os.getenv("APP_WORKDIR", "/tmp/mp3-to-text")).resolve()
 WHISPER_CACHE_DIR = Path(os.getenv("WHISPER_CACHE_DIR", str(WORKDIR / "whisper-cache"))).resolve()
 WHISPER_MODEL_ALIASES: dict[str, str] = {}
 YOUTUBE_FORMAT_FALLBACKS: list[str | None] = [
-    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
-    "best[acodec!=none]/best",
+    "bestaudio[acodec!=none]/best[acodec!=none]/best",
+    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=mp4]/bestaudio/best",
+    "best[acodec!=none][vcodec!=none]/best[acodec!=none]/best",
+    "worst[acodec!=none]/worst/best",
     None,
 ]
+LANGUAGE_OPTIONS = {
+    "Auto-détection": "",
+    "Français": "fr",
+    "Anglais": "en",
+    "Espagnol": "es",
+    "Allemand": "de",
+    "Italien": "it",
+    "Portugais": "pt",
+    "Arabe": "ar",
+}
 MODEL_PROFILES = {
     # #### PROFILS DE MODELES AFFICHES DANS L'APPLICATION
     # L'utilisateur voit explicitement ces trois choix dans l'interface.
@@ -97,12 +109,8 @@ def save_youtube_cookies(uploaded_cookies, run_dir: Path) -> Path | None:
     return cookies_path
 
 
-def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None = None) -> Path:
-    if not url.strip():
-        raise ApplicationError("Veuillez entrer une URL YouTube.")
-
-    output_template = str(run_dir / "%(title).120s.%(ext)s")
-    options_ydl_base = {
+def _yt_dlp_base_options(output_template: str) -> dict:
+    return {
         "noplaylist": True,
         "outtmpl": output_template,
         "postprocessors": [
@@ -114,12 +122,94 @@ def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None
         ],
         "quiet": True,
         "no_warnings": True,
+        "retries": 3,
+        "fragment_retries": 3,
+        "socket_timeout": 30,
+        "check_formats": "selected",
+        # YouTube change souvent les clients autorisés. On donne plusieurs
+        # clients à yt-dlp pour maximiser les chances de récupérer les formats.
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
     }
+
+
+def _format_number(value, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _youtube_format_score(fmt: dict) -> float:
+    ext = str(fmt.get("ext") or "").lower()
+    protocol = str(fmt.get("protocol") or "").lower()
+    vcodec = str(fmt.get("vcodec") or "none").lower()
+    acodec = str(fmt.get("acodec") or "none").lower()
+    audio_only_bonus = 600 if vcodec == "none" and acodec != "none" else 0
+    ext_bonus = {
+        "m4a": 500,
+        "mp4": 450,
+        "webm": 360,
+        "opus": 340,
+        "mp3": 320,
+        "mkv": 180,
+    }.get(ext, 80)
+    protocol_penalty = -120 if "m3u8" in protocol else 0
+    abr = _format_number(fmt.get("abr") or fmt.get("tbr"), 0)
+    filesize = _format_number(fmt.get("filesize") or fmt.get("filesize_approx"), 0)
+    return audio_only_bonus + ext_bonus + abr + min(filesize / 1_000_000, 100) + protocol_penalty
+
+
+def _youtube_audio_format_candidates(url: str, base_options: dict) -> list[str]:
+    probe_options = dict(base_options)
+    probe_options.pop("format", None)
+    probe_options.pop("postprocessors", None)
+
+    try:
+        with YoutubeDL(probe_options) as ydl:
+            info = ydl.extract_info(url.strip(), download=False)
+    except Exception:
+        return []
+
+    formats = info.get("formats") or []
+    audio_formats = []
+    for fmt in formats:
+        format_id = str(fmt.get("format_id") or "").strip()
+        acodec = str(fmt.get("acodec") or "none").lower()
+        if not format_id or acodec == "none":
+            continue
+        audio_formats.append(fmt)
+
+    audio_formats.sort(key=_youtube_format_score, reverse=True)
+    candidates = []
+    for fmt in audio_formats:
+        format_id = str(fmt.get("format_id") or "").strip()
+        if format_id and format_id not in candidates:
+            candidates.append(format_id)
+    return candidates
+
+
+def telecharger_audio_youtube(url: str, run_dir: Path, cookies_path: Path | None = None) -> Path:
+    if not url.strip():
+        raise ApplicationError("Veuillez entrer une URL YouTube.")
+
+    output_template = str(run_dir / "%(title).120s.%(ext)s")
+    options_ydl_base = _yt_dlp_base_options(output_template)
     if cookies_path is not None:
         options_ydl_base["cookiefile"] = str(cookies_path)
 
     last_error: Exception | None = None
-    for format_choice in YOUTUBE_FORMAT_FALLBACKS:
+    format_candidates = _youtube_audio_format_candidates(url, options_ydl_base)
+    format_candidates.extend(YOUTUBE_FORMAT_FALLBACKS)
+
+    already_tried: set[str] = set()
+    for format_choice in format_candidates:
+        marker = "__default__" if format_choice is None else str(format_choice)
+        if marker in already_tried:
+            continue
+        already_tried.add(marker)
+
         options_ydl = dict(options_ydl_base)
         if format_choice is not None:
             options_ydl["format"] = format_choice
@@ -221,6 +311,13 @@ def resolve_selected_model(selected_choice: str) -> tuple[str, str, str]:
     if normalized_key in MODEL_OPTIONS:
         return "faster-whisper", normalized_key, f"avance ({normalized_key})"
     return resolve_selected_model("fast-whisper")
+
+
+def default_language_label() -> str:
+    for label, code in LANGUAGE_OPTIONS.items():
+        if code == DEFAULT_LANGUAGE:
+            return label
+    return "Auto-détection"
 
 
 def save_transcription(transcription_text: str, audio_path: Path) -> Path:
@@ -329,13 +426,21 @@ def main() -> None:
         help="fast-whisper charge le profil rapide par défaut, sm charge small, md charge medium.",
     )
     backend_name, model_size, resolved_profile = resolve_selected_model(selected_model_choice)
-    language_code = st.text_input(
-        "Code langue pour la transcription",
-        value=DEFAULT_LANGUAGE,
-        help="Exemple : fr, en, es. Laissez vide pour laisser Whisper détecter la langue.",
+    selected_language_label = st.selectbox(
+        "Langue de transcription",
+        options=list(LANGUAGE_OPTIONS.keys()),
+        index=list(LANGUAGE_OPTIONS.keys()).index(default_language_label()),
+        help=(
+            "Le modèle Whisper est multilingue. Ce choix force la langue de transcription ; "
+            "Auto-détection laisse Whisper détecter la langue."
+        ),
     )
+    language_code = LANGUAGE_OPTIONS[selected_language_label]
 
-    st.caption(f"Profil actif : `{resolved_profile}` · Backend : `{backend_name}` · Modèle chargé : `{model_size}`")
+    st.caption(
+        f"Profil actif : `{resolved_profile}` · Backend : `{backend_name}` · "
+        f"Modèle chargé : `{model_size}` · Langue : `{selected_language_label}`"
+    )
 
     if st.button("Lancer la transcription", type="primary"):
         run_dir = create_run_directory()

@@ -11,6 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XDG_CACHE_HOME=/home/app/.cache \
     WHISPER_CACHE_DIR=/home/app/.cache/whisper \
     WHISPER_PROFILE_DEFAULT=faster-whisper \
+    WHISPER_LANGUAGE_DEFAULT=fr \
     WHISPER_COMPUTE_TYPE=int8 \
     APP_TICKET_ID=mp3_to_text \
     APP_TICKET_MAX_ACTIVE=1 \
@@ -27,6 +28,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
 # - APP_TICKET_HIDDEN_RELEASE_SECONDS=0 pour desactiver, sinon liberation auto si onglet cache
 # - WHISPER_PROFILE_DEFAULT=faster-whisper pour choisir le profil par defaut visible dans l'application
+# - WHISPER_LANGUAGE_DEFAULT=fr pour preselectionner la langue, utiliser en pour l'anglais
 # - WHISPER_COMPUTE_TYPE=int8 pour le CPU, a augmenter seulement si le serveur suit
 # - APP_TICKET_MAX_ACTIVE pour autoriser plus d'un utilisateur
 # - APP_TICKET_COST pour ajuster la charge serveur
