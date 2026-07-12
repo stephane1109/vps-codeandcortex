@@ -134,7 +134,9 @@ ticket_config <- function(default_app_id, app_label) {
   wait_stale_default <- min(ttl_seconds, 120L)
   list(
     enabled = ticket_env_bool("APP_TICKET_ENFORCED", TRUE),
-    fail_open = ticket_env_bool("APP_TICKET_FAIL_OPEN", TRUE),
+    # CHD Rainette ne doit jamais être bloquée par une panne Redis : si le
+    # contrôle central est indisponible, l'interface reste utilisable en secours local.
+    fail_open = TRUE,
     app_id = trimws(Sys.getenv("APP_TICKET_ID", unset = default_app_id)) %||% default_app_id,
     app_label = app_label,
     max_active = max(1L, ticket_env_int("APP_TICKET_MAX_ACTIVE", 1L)),
