@@ -8,6 +8,7 @@
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -82,17 +83,57 @@ def afficher_message_cookies(rep_sortie: Path) -> Optional[str]:
         try:
             rep_sortie.mkdir(parents=True, exist_ok=True)
             with open(cible, "wb") as f:
-                f.write(cookies_file.read())
-            st.success(f"Fichier cookies enregistré : {cible}")
+                f.write(cookies_file.getbuffer())
+            st.success(f"Fichier cookies mis à jour : {cible}")
+            st.caption(_diagnostic_cookies(cible))
             return str(cible)
         except Exception as e:
             st.error(f"Impossible d’enregistrer cookies.txt : {e}")
             return None
     if cible.exists():
-        st.info(f"Un fichier cookies.txt existe déjà : {cible}")
+        st.info(f"Un fichier cookies.txt est mémorisé : {cible}")
+        st.caption(_diagnostic_cookies(cible))
         return str(cible)
     st.caption("Aucun fichier cookies.txt importé.")
     return None
+
+
+def _diagnostic_cookies(cible: Path) -> str:
+    try:
+        contenu = cible.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Lecture cookies impossible : {exc}"
+    if "youtube.com" not in contenu and ".youtube.com" not in contenu:
+        return "Le cookies.txt ne contient aucune entrée YouTube détectée."
+    if cible.stat().st_size < 1024:
+        return f"cookies.txt très court ({cible.stat().st_size} octets) : export possiblement incomplet."
+
+    maintenant = int(time.time())
+    expirations = []
+    for ligne in contenu.splitlines():
+        ligne = ligne.strip()
+        if not ligne or ligne.startswith("#") and not ligne.startswith("#HttpOnly_"):
+            continue
+        colonnes = ligne.replace("#HttpOnly_", "", 1).split("\t")
+        if len(colonnes) < 7:
+            continue
+        domaine = colonnes[0].lower()
+        if "youtube.com" not in domaine and "google.com" not in domaine:
+            continue
+        try:
+            expiration = int(colonnes[4])
+        except ValueError:
+            continue
+        if expiration > 0:
+            expirations.append(expiration)
+    if not expirations:
+        return f"cookies.txt plausible ({cible.stat().st_size} octets), sans expiration exploitable."
+    restant = max(expirations) - maintenant
+    if restant <= 0:
+        return f"cookies.txt plausible ({cible.stat().st_size} octets), mais expirations utiles dépassées."
+    if restant < 3600:
+        return f"cookies.txt plausible ({cible.stat().st_size} octets) ; attention, expiration utile dans environ {max(1, int(restant / 60))} min."
+    return f"cookies.txt plausible ({cible.stat().st_size} octets) ; expiration utile dans environ {int(restant / 3600)} h."
 
 def _trouver_ytdlp() -> Optional[str]:
     """Trouve yt-dlp (recommandé) ou youtube-dl. Retourne le chemin ou None."""
