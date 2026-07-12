@@ -761,6 +761,7 @@ def sauvegarder_upload_local(fichier_local) -> Optional[Path]:
 
 st.title("Extraction multimedia (video, audio, images)")
 st.markdown("**[www.codeandcortex.fr](http://www.codeandcortex.fr)**")
+st.caption("modifié le 12-09-2026")
 st.markdown(
     "Par défaut, l'extraction porte sur toute la vidéo. "
     "Vous pouvez activer un intervalle personnalisé si besoin. "
@@ -801,12 +802,17 @@ st.subheader("Source")
 url = st.text_input("URL YouTube")
 cookies_path_eff = ck.afficher_section_cookies(REPERTOIRE_SORTIE)
 user_agent_youtube = st.text_input(
-    "User-Agent navigateur",
+    "User-Agent navigateur (optionnel)",
     value=os.environ.get("YTDLP_BROWSER_USER_AGENT", USER_AGENT_YOUTUBE_DEFAUT),
     help=(
-        "Colle ici le User-Agent exact du navigateur ayant servi à ouvrir YouTube "
-        "et à exporter le cookies.txt. Si tu n'es pas bloqué, laisse la valeur par défaut."
+        "Chrome et Firefox fonctionnent. Si YouTube bloque la vidéo et que tu fournis un cookies.txt, "
+        "colle idéalement le User-Agent du même navigateur que celui utilisé pour exporter les cookies. "
+        "Sinon, laisse la valeur par défaut."
     ),
+)
+st.caption(
+    "Le User-Agent indique à YouTube quel navigateur est utilisé. "
+    "Chrome et Firefox sont compatibles ; il sert surtout à rester cohérent avec le cookies.txt en cas de blocage anti-bot."
 )
 fichier_local = st.file_uploader(
     "Ou importer un fichier vidéo",
@@ -863,8 +869,6 @@ if afficher_apercu and not opt_timelapse:
         tmp = sauvegarder_upload_local(fichier_local)
         if tmp is not None:
             afficher_video_bytes(tmp)
-    elif url:
-        st.info("Aperçu indisponible pour une URL tant que le traitement n'a pas été lancé.")
 
 if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
@@ -890,6 +894,8 @@ if st.button("Lancer le traitement"):
                     st.session_state["video_base"] = video_base
                     st.session_state["base_court"] = base_court
                     st.success(f"Vidéo prête : {Path(video_base).name}")
+                    if afficher_apercu and not opt_timelapse:
+                        afficher_video_bytes(Path(video_base))
             elif fichier_local is not None or st.session_state.get("local_temp_path"):
                 base_court = st.session_state.get("local_name_base") or generer_nom_base("local", "video")
                 try:
@@ -910,6 +916,8 @@ if st.button("Lancer le traitement"):
                     st.session_state["video_base"] = cible
                     st.session_state["base_court"] = base_court
                     st.success(f"Vidéo prête : {Path(cible).name}")
+                    if afficher_apercu and not opt_timelapse:
+                        afficher_video_bytes(Path(cible))
                 except Exception as e:
                     st.error(f"Echec du traitement local : {e}")
             else:
