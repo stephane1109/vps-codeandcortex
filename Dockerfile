@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     PORT=8501 \
     APP_DATA_DIR=/tmp/appdata \
+    APP_FFMPEG_TIMEOUT_SECONDS=3600 \
     APP_TICKET_ID=extraction-multimedia \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
@@ -24,6 +25,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_MAX_ACTIVE=1 pour reserver cette application a un seul utilisateur a la fois
 # - APP_TICKET_COST=4 et CAPACITE_SERVEUR=6 pour rester coherent avec le reste du VPS
 # - APP_TICKET_TTL_SECONDS si tu veux allonger ou raccourcir la duree d'un ticket
+# - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
 
 WORKDIR /app
 

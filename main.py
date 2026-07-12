@@ -117,6 +117,9 @@ def _env_int(nom: str, valeur_defaut: int) -> int:
         return valeur_defaut
 
 
+FFMPEG_TIMEOUT_SECONDS = max(60, _env_int("APP_FFMPEG_TIMEOUT_SECONDS", 3600))
+
+
 def load_help_markdown() -> str:
     try:
         return HELP_PATH.read_text(encoding="utf-8")
@@ -245,11 +248,62 @@ def duree_video_seconds(video_path: Path) -> Optional[int]:
         return None
 
 
+def executer_ffmpeg(args: List[str], description: str) -> None:
+    commande = list(args)
+    if "-nostdin" not in commande:
+        commande.insert(1, "-nostdin")
+    if "-hide_banner" not in commande:
+        commande.insert(2, "-hide_banner")
+    if "-loglevel" not in commande:
+        commande.insert(3, "-loglevel")
+        commande.insert(4, "error")
+
+    try:
+        subprocess.run(
+            commande,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"{description} a dépassé le délai maximal ffmpeg ({FFMPEG_TIMEOUT_SECONDS}s). "
+            "Réduis l'intervalle ou les options d'images."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or "").strip()
+        if len(details) > 1200:
+            details = details[-1200:]
+        raise RuntimeError(f"{description} a échoué avec ffmpeg : {details or exc}") from exc
+    finally:
+        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+
+
 def zipper_sur_disque(fichiers: List[Path], chemin_zip: Path) -> Path:
-    with zipfile.ZipFile(str(chemin_zip), "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for fichier in fichiers:
+    fichiers_uniques: List[Path] = []
+    deja_vus = set()
+    for fichier in fichiers:
+        fichier = Path(fichier)
+        cle = str(fichier.resolve()) if fichier.exists() else str(fichier)
+        if cle in deja_vus:
+            continue
+        fichiers_uniques.append(fichier)
+        deja_vus.add(cle)
+
+    # Les médias sont déjà compressés. ZIP_STORED évite une recompaction lente
+    # qui peut donner l'impression que l'application tourne sans fin.
+    with zipfile.ZipFile(str(chemin_zip), "w", compression=zipfile.ZIP_STORED) as archive:
+        for index, fichier in enumerate(fichiers_uniques, start=1):
             if fichier.is_file():
-                archive.write(str(fichier), arcname=fichier.name)
+                try:
+                    arcname = str(fichier.relative_to(REPERTOIRE_SORTIE))
+                except ValueError:
+                    arcname = fichier.name
+                archive.write(str(fichier), arcname=arcname)
+            if index % 100 == 0:
+                keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     return chemin_zip
 
 
@@ -519,19 +573,19 @@ def telecharger_preparer_video(
     except Exception as e:
         return None, None, None, f"ffmpeg introuvable : {e}"
 
-    def _run_ffmpeg(args: List[str]) -> None:
-        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    def _run_ffmpeg(args: List[str], description: str) -> None:
+        executer_ffmpeg(args, description)
 
     try:
         if utiliser_intervalle:
-            _run_ffmpeg([ffmpeg, "-y", "-ss", str(debut), "-to", str(fin), "-i", str(chemin_source_propre), "-c", "copy", "-movflags", "+faststart", str(cible)])
+            _run_ffmpeg([ffmpeg, "-y", "-ss", str(debut), "-to", str(fin), "-i", str(chemin_source_propre), "-c", "copy", "-movflags", "+faststart", str(cible)], "Découpe/remux YouTube")
         else:
-            _run_ffmpeg([ffmpeg, "-y", "-i", str(chemin_source_propre), "-c", "copy", "-movflags", "+faststart", str(cible)])
+            _run_ffmpeg([ffmpeg, "-y", "-i", str(chemin_source_propre), "-c", "copy", "-movflags", "+faststart", str(cible)], "Remux YouTube")
     except Exception:
         try:
             if qualite == "Compressee (1280p, CRF 28)":
                 filtre_video = ["-vf", "scale=1280:-2"]
-                codec_video = ["-c:v", "libx264", "-preset", "slow", "-crf", "28"]
+                codec_video = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"]
                 codec_audio = ["-c:a", "aac", "-b:a", "96k"]
             else:
                 filtre_video = []
@@ -541,7 +595,7 @@ def telecharger_preparer_video(
             if utiliser_intervalle:
                 args += ["-ss", str(debut), "-to", str(fin)]
             args += ["-i", str(chemin_source_propre), *filtre_video, *codec_video, *codec_audio, "-movflags", "+faststart", str(cible)]
-            _run_ffmpeg(args)
+            _run_ffmpeg(args, "Transcodage YouTube")
         except Exception as e:
             return None, None, None, f"Echec du remux/transcodage : {e}"
 
@@ -565,8 +619,8 @@ def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_inter
 
     cible = REPERTOIRE_SORTIE / f"{base_court}_video.mp4"
 
-    def _run_ffmpeg(args: List[str]) -> None:
-        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    def _run_ffmpeg(args: List[str], description: str) -> None:
+        executer_ffmpeg(args, description)
 
     if qualite == "Compressee (1280p, CRF 28)":
         args = [ffmpeg, "-y"]
@@ -580,7 +634,7 @@ def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_inter
             "-c:v",
             "libx264",
             "-preset",
-            "slow",
+            "veryfast",
             "-crf",
             "28",
             "-c:a",
@@ -591,14 +645,14 @@ def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_inter
             "+faststart",
             str(cible),
         ]
-        _run_ffmpeg(args)
+        _run_ffmpeg(args, "Transcodage du fichier local")
     else:
         try:
             args = [ffmpeg, "-y"]
             if utiliser_intervalle:
                 args += ["-ss", str(debut), "-to", str(fin)]
             args += ["-i", str(src_local), "-c", "copy", "-movflags", "+faststart", str(cible)]
-            _run_ffmpeg(args)
+            _run_ffmpeg(args, "Remux du fichier local")
         except Exception:
             args = [ffmpeg, "-y"]
             if utiliser_intervalle:
@@ -620,7 +674,7 @@ def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_inter
                 "+faststart",
                 str(cible),
             ]
-            _run_ffmpeg(args)
+            _run_ffmpeg(args, "Transcodage du fichier local")
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     return str(cible)
 
@@ -632,8 +686,8 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
     except Exception as e:
         return f"ffmpeg introuvable : {e}"
 
-    def _run_ffmpeg(args: List[str]) -> None:
-        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    def _run_ffmpeg(args: List[str], description: str) -> None:
+        executer_ffmpeg(args, description)
 
     def cmd_segment(sortie: Path) -> List[str]:
         args = [ffmpeg, "-y"]
@@ -647,7 +701,7 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
             "-c:v",
             "libx264",
             "-preset",
-            "slow",
+            "veryfast",
             "-crf",
             "28",
             "-c:a",
@@ -664,7 +718,7 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
         args = [ffmpeg, "-y"]
         if utiliser_intervalle:
             args += ["-ss", str(debut), "-to", str(fin)]
-        args += ["-i", video_path, *codec_args, "-movflags", "+faststart", str(sortie)]
+        args += ["-i", video_path, *codec_args, str(sortie)]
         return args
 
     def cmd_images(output_pattern: str, fps: int) -> List[str]:
@@ -676,17 +730,17 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
 
     if options.get("mp4"):
         nom = f"{base_court}_seg.mp4" if utiliser_intervalle else f"{base_court}_full.mp4"
-        _run_ffmpeg(cmd_segment(REPERTOIRE_SORTIE / nom))
+        _run_ffmpeg(cmd_segment(REPERTOIRE_SORTIE / nom), "Export MP4")
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     if options.get("mp3"):
         nom = f"{base_court}_seg.mp3" if utiliser_intervalle else f"{base_court}_full.mp3"
-        _run_ffmpeg(cmd_audio(REPERTOIRE_SORTIE / nom, ["-vn", "-acodec", "libmp3lame", "-q:a", "5"]))
+        _run_ffmpeg(cmd_audio(REPERTOIRE_SORTIE / nom, ["-vn", "-acodec", "libmp3lame", "-q:a", "5"]), "Export MP3")
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     if options.get("wav"):
         nom = f"{base_court}_seg.wav" if utiliser_intervalle else f"{base_court}_full.wav"
-        _run_ffmpeg(cmd_audio(REPERTOIRE_SORTIE / nom, ["-vn", "-acodec", "adpcm_ima_wav"]))
+        _run_ffmpeg(cmd_audio(REPERTOIRE_SORTIE / nom, ["-vn", "-acodec", "adpcm_ima_wav"]), "Export WAV")
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     if options.get("img1") or options.get("img25"):
@@ -696,7 +750,7 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
                 rep = REPERTOIRE_SORTIE / dossier
                 rep.mkdir(parents=True, exist_ok=True)
                 tmp_pattern = str(rep / "tmp_%06d.jpg")
-                _run_ffmpeg(cmd_images(tmp_pattern, fps))
+                _run_ffmpeg(cmd_images(tmp_pattern, fps), f"Export images {fps} FPS")
                 images_gen = sorted(rep.glob("tmp_*.jpg"))
                 start_offset = debut if utiliser_intervalle else 0
                 for index, src in enumerate(images_gen):
@@ -977,18 +1031,24 @@ if st.button("Lancer le traitement"):
                     }
 
                     if any(options.values()):
+                        st.info("Extraction des ressources sélectionnées en cours...")
                         erreur_extraction = extraire_ressources(video_path, debut_eff, fin_eff, base_court, options, utiliser_intervalle)
                         if erreur_extraction:
                             st.error(f"Erreur pendant l'extraction : {erreur_extraction}")
                         else:
                             st.success("Ressources generees.")
                             keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+                    else:
+                        st.info("Aucune ressource supplémentaire sélectionnée : seul le fichier vidéo de base sera mis dans l'archive.")
 
                     fichiers = lister_sorties(base_court)
                     if Path(video_path) not in fichiers:
                         fichiers.append(Path(video_path))
+                    st.info(f"Préparation de l'archive ZIP : {len(fichiers)} fichier(s).")
                     zip_path = REPERTOIRE_SORTIE / f"resultats_{base_court}.zip"
                     zipper_sur_disque(fichiers, zip_path)
+                    taille_zip = taille_fichier(zip_path) or 0
+                    st.success(f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo).")
                     with open(zip_path, "rb") as archive:
                         st.download_button(
                             "Télécharger les résultats (.zip)",
