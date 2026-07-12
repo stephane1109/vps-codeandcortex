@@ -348,6 +348,98 @@ def fichiers_valides(fichiers: List[Path]) -> List[Path]:
     return valides
 
 
+def fichiers_exportables_session() -> List[Path]:
+    """Liste les fichiers produits par l'application, sans réinclure les archives."""
+    candidats: List[Path] = []
+    try:
+        for fichier in REPERTOIRE_SORTIE.rglob("*"):
+            if not fichier.is_file():
+                continue
+            if fichier.suffix.lower() == ".zip":
+                continue
+            if fichier.name.lower() == "cookies.txt":
+                continue
+            candidats.append(fichier)
+    except Exception:
+        return []
+    candidats.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    return fichiers_valides(candidats)
+
+
+def dernier_zip_disponible() -> Optional[Path]:
+    zip_path_brut = st.session_state.get("dernier_zip_path")
+    if zip_path_brut:
+        zip_path = Path(zip_path_brut)
+        if zip_path.is_file() and zip_path.stat().st_size > 0:
+            return zip_path
+
+    try:
+        zips = sorted(
+            REPERTOIRE_SORTIE.glob("resultats*.zip"),
+            key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            reverse=True,
+        )
+    except Exception:
+        return None
+    for zip_path in zips:
+        if zip_path.is_file() and zip_path.stat().st_size > 0:
+            return zip_path
+    return None
+
+
+def preparer_archive_session() -> tuple[Optional[Path], List[Path], str]:
+    fichiers = fichiers_valides([Path(path) for path in st.session_state.get("derniers_fichiers", [])])
+    if not fichiers:
+        fichiers = fichiers_exportables_session()
+    if not fichiers:
+        return None, [], "Aucun fichier résultat exportable n'a été trouvé dans cette session."
+
+    zip_path = REPERTOIRE_SORTIE / f"resultats_session_{SESSION_ID[:8]}.zip"
+    zipper_sur_disque(fichiers, zip_path)
+    if not zip_path.is_file() or zip_path.stat().st_size <= 0:
+        return None, fichiers, f"Archive générée mais vide : {zip_path.name}"
+
+    message = f"Archive prête : {zip_path.name} ({zip_path.stat().st_size / (1024 * 1024):.1f} Mo)."
+    enregistrer_resultats_generes(zip_path, fichiers, message)
+    return zip_path, fichiers, message
+
+
+def afficher_bouton_telechargement_resultats(key_prefix: str, titre: bool = False) -> None:
+    if titre:
+        st.subheader("Télécharger les résultats")
+
+    zip_path = dernier_zip_disponible()
+    if zip_path is not None:
+        taille_zip = zip_path.stat().st_size / (1024 * 1024)
+        st.download_button(
+            "Télécharger les résultats (.zip)",
+            data=zip_path.read_bytes(),
+            file_name=zip_path.name,
+            mime="application/zip",
+            key=f"{key_prefix}_download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
+            use_container_width=True,
+        )
+        st.caption(f"Archive disponible : {zip_path.name} · {taille_zip:.1f} Mo")
+        return
+
+    fichiers = fichiers_exportables_session()
+    if fichiers:
+        if st.button(
+            f"Préparer l'archive des résultats ({len(fichiers)} fichier(s))",
+            key=f"{key_prefix}_prepare_archive",
+            use_container_width=True,
+        ):
+            zip_path, _fichiers, message = preparer_archive_session()
+            if zip_path is not None:
+                st.success(message)
+                st.rerun()
+            else:
+                st.warning(message)
+        return
+
+    st.caption("Aucun résultat téléchargeable pour le moment.")
+
+
 def diagnostic_contenu_sortie(max_items: int = 80) -> str:
     lignes: List[str] = []
     try:
@@ -391,14 +483,14 @@ def afficher_resultats_generes() -> None:
     if zip_path and zip_path.is_file() and zip_path.stat().st_size > 0:
         taille_zip = zip_path.stat().st_size / (1024 * 1024)
         st.success(st.session_state.get("dernier_message_resultats") or f"Archive prête : {zip_path.name}")
-        with open(zip_path, "rb") as archive:
-            st.download_button(
-                "Télécharger les résultats (.zip)",
-                data=archive,
-                file_name=zip_path.name,
-                mime="application/zip",
-                key=f"download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
-            )
+        st.download_button(
+            "Télécharger les résultats (.zip)",
+            data=zip_path.read_bytes(),
+            file_name=zip_path.name,
+            mime="application/zip",
+            key=f"download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
+            use_container_width=True,
+        )
         st.caption(f"Archive : {zip_path.name} · {taille_zip:.1f} Mo")
     elif zip_path:
         st.error(f"Archive introuvable ou vide : {zip_path}")
@@ -965,6 +1057,9 @@ st.session_state.setdefault("dernier_zip_path", None)
 st.session_state.setdefault("derniers_fichiers", [])
 st.session_state.setdefault("dernier_message_resultats", "")
 st.session_state.setdefault("derniere_erreur_resultats", "")
+
+with st.container(border=True):
+    afficher_bouton_telechargement_resultats("top_results", titre=True)
 
 st.subheader("Source")
 url = st.text_input("URL YouTube")
