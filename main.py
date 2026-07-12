@@ -11,8 +11,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import altair as alt
-import spacy
-import librosa
 
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 from timestamp import (
@@ -30,18 +28,13 @@ from dictionnaire import (
     connecteurs_causaux,
 )
 from tests import ui_tests_auto, ui_tests_croises
-from attitudes import calculer_attitudes_depuis_images, ui_attitudes_images
-from emotions import ui_emotions_images
-from vecteuremo import ui_vecteur_emotionnel
-from images import ui_images
-from anomalies import ui_anomalies
 
-# whisper optionnel
-try:
-    from faster_whisper import WhisperModel
-    _whisper_ok = True
-except Exception:
-    _whisper_ok = False
+def _import_whisper_model():
+    try:
+        from faster_whisper import WhisperModel
+        return WhisperModel, ""
+    except Exception as exc:
+        return None, str(exc)
 
 
 # =========================
@@ -85,6 +78,7 @@ def lister_termes(texte: str, lexique: set) -> list:
 def charger_spacy_transformer():
     """charger spaCy transformer fr_dep_news_trf (CamemBERT)."""
     try:
+        import spacy
         nlp = spacy.load("fr_dep_news_trf")
         return nlp, "Modèle spaCy Transformer (CamemBERT) chargé."
     except Exception as e:
@@ -202,6 +196,7 @@ def segments_texte(doc, fichier, locuteur):
 def charger_audio_bytes(file_bytes, sr_target=16000):
     """charger mono à sr_target."""
     try:
+        import librosa
         y, sr = librosa.load(io.BytesIO(file_bytes), sr=sr_target, mono=True)
         return y, sr, None
     except Exception as e:
@@ -209,6 +204,8 @@ def charger_audio_bytes(file_bytes, sr_target=16000):
 
 def timeline_pauses_et_debit(y, sr, seuil_quantile=25, seuil_pause_s=0.3, fenetre_activite_s=1.0):
     """intensité dB normalisée, pauses longues, activité vocale et débit par seconde."""
+    import librosa
+
     hop = int(0.01 * sr)
     frame = int(0.03 * sr)
     e = librosa.feature.rms(y=y, frame_length=frame, hop_length=hop).flatten()
@@ -393,8 +390,9 @@ def chart_parole_pause(df_parole_pause_sec):
 @st.cache_resource(show_spinner=False)
 def _load_whisper_model():
     """Charge Whisper une seule fois pour limiter le coût mémoire/CPU sur le VPS."""
-    if not _whisper_ok:
-        return None, "faster-whisper indisponible."
+    WhisperModel, import_error = _import_whisper_model()
+    if WhisperModel is None:
+        return None, f"faster-whisper indisponible : {import_error}"
     try:
         model = WhisperModel("small", device="cpu", compute_type="int8")
         return model, "Modèle Whisper prêt."
@@ -403,8 +401,6 @@ def _load_whisper_model():
 
 def transcrire_whisper_en_segments(file_bytes: bytes, langue: str = "fr") -> list[tuple[float, float, str]]:
     """renvoie [(t_debut,t_fin,texte)] ; utilisé uniquement pour construire df_align."""
-    if not _whisper_ok:
-        return []
     try:
         model, _ = _load_whisper_model()
         if model is None:
@@ -740,6 +736,8 @@ with tab_analyse:
         with col_opts[2]:
             k_apres = st.number_input("Mots après", value=6, min_value=0, max_value=20, step=1)
 
+        from images import ui_images
+
         ui_images(
             df_images,
             df_mots_aligne=df_align_mots,
@@ -802,6 +800,8 @@ with tab_anomalies:
         df_audio_resumes = st.session_state.get("df_audio")
     df_sync_nv = st.session_state.get("df_attitudes")
     try:
+        from anomalies import ui_anomalies
+
         ui_anomalies(
             df_texte=df_txt_segments,
             df_audio=df_audio_resumes,
@@ -858,6 +858,8 @@ with tab_attitudes:
                     continue
 
         try:
+            from attitudes import calculer_attitudes_depuis_images, ui_attitudes_images
+
             df_att_images, df_att_agrege = calculer_attitudes_depuis_images(store_norm)
         except Exception as e:
             st.error(f"Erreur attitudes: {e}")
@@ -875,16 +877,29 @@ with tab_attitudes:
 
 with tab_emotions:
     df_images = st.session_state.get("df_images")
-    try:
-        ui_emotions_images(df_images)
-    except Exception as e:
-        st.error(f"Erreur interface émotions : {e}")
+    if df_images is None or getattr(df_images, "empty", True):
+        st.info("Importez d’abord des images pour lancer l’analyse des émotions.")
+    else:
+        try:
+            from emotions import ui_emotions_images
+
+            ui_emotions_images(df_images)
+        except Exception as e:
+            st.error(f"Erreur interface émotions : {e}")
 
 with tab_vecteuremo:
-    try:
-        ui_vecteur_emotionnel()
-    except Exception as e:
-        st.error(f"Erreur interface vecteur émotionnel : {e}")
+    if not any(
+        isinstance(st.session_state.get(key), pd.DataFrame) and not st.session_state[key].empty
+        for key in ("df_emotions", "df_attitudes", "df_audio", "df_segt", "df_align_sec")
+    ):
+        st.info("Lancez une analyse multimodale pour préparer les données du vecteur émotionnel.")
+    else:
+        try:
+            from vecteuremo import ui_vecteur_emotionnel
+
+            ui_vecteur_emotionnel()
+        except Exception as e:
+            st.error(f"Erreur interface vecteur émotionnel : {e}")
 
 with tab_legend:
     afficher_legendes()

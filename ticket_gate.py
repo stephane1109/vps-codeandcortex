@@ -98,6 +98,16 @@ TICKET_STATUS_STYLE = """
   background: rgba(248, 250, 252, 0.96);
   color: #0f172a !important;
 }
+.ticket-status-card,
+.ticket-status-card *,
+.ticket-status-note,
+.ticket-status-note * {
+  color: #0f172a !important;
+}
+.ticket-status-card.is-active {
+  background: #f0fdf4 !important;
+  border-color: rgba(22, 163, 74, 0.28) !important;
+}
 .ticket-status-dot {
   width: 0.8rem;
   height: 0.8rem;
@@ -129,6 +139,10 @@ TICKET_STATUS_STYLE = """
 .ticket-status-card.is-active .ticket-status-meta,
 .ticket-status-card.is-active .ticket-status-meta *,
 .ticket-status-card.is-active .ticket-status-meta strong {
+  color: #15803d !important;
+}
+.ticket-status-note.is-active,
+.ticket-status-note.is-active * {
   color: #15803d !important;
 }
 @keyframes ticket-pulse-green {
@@ -663,12 +677,12 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
                 </div>
+                <p class="ticket-status-note is-active">Accès actif ({snapshot['active']} / {snapshot['max_active']}).</p>
                 """,
                 unsafe_allow_html=True,
             )
-            st.success(f"Accès actif ({snapshot['active']} / {snapshot['max_active']}).")
             if st.button("Libérer l'accès", use_container_width=True):
                 if release_ticket_for_session(default_app_id, app_label):
                     st.rerun()
