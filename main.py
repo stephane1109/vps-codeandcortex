@@ -60,12 +60,34 @@ USER_AGENT_YOUTUBE_DEFAUT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/137.0.0.0 Safari/537.36"
 )
-FORMATS_YOUTUBE_FALLBACK = [
-    "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[ext=mp4]/b",
-    "bv*+ba/b",
+FORMATS_YOUTUBE_FALLBACK: List[Optional[str]] = [
+    # None = laisser yt-dlp choisir lui-même son meilleur format compatible.
+    None,
     "bestvideo*+bestaudio/best",
+    "bv*+ba/b",
+    "bestvideo+bestaudio/best",
+    "best[ext=mp4]/best",
+    "best[protocol^=http]/best",
     "best[acodec!=none][vcodec!=none]/best[acodec!=none]/best",
-    "worst[acodec!=none][vcodec!=none]/worst/bestaudio/best",
+    "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[ext=mp4]/b",
+    "worstvideo*+worstaudio/worst",
+    "worst[acodec!=none][vcodec!=none]/worst",
+    "bestaudio/best",
+]
+UPLOAD_VIDEO_EXTENSIONS = [
+    "mp4",
+    "mov",
+    "mkv",
+    "webm",
+    "avi",
+    "m4v",
+    "flv",
+    "wmv",
+    "mpeg",
+    "mpg",
+    "3gp",
+    "ts",
+    "m2ts",
 ]
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
@@ -103,18 +125,19 @@ def load_help_markdown() -> str:
 
 
 def render_help_tab() -> None:
-    st.markdown(
-        """
-        <p>
-          <a href="https://www.codeandcortex.fr/extraction-multimedia-youtube/"
-             target="_blank" rel="noopener noreferrer">
-            Lire l'article du blog : Extraction multimédia YouTube
-          </a>
-        </p>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(load_help_markdown())
+    with st.expander("Aide - cookies YouTube et formats", expanded=False):
+        st.markdown(
+            """
+            <p>
+              <a href="https://www.codeandcortex.fr/extraction-multimedia-youtube/"
+                 target="_blank" rel="noopener noreferrer">
+                Lire l'article du blog : Extraction multimédia YouTube
+              </a>
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(load_help_markdown())
 
 
 def initialiser_repertoires_session() -> None:
@@ -299,9 +322,8 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "nocheckcertificate": True,
         "restrictfilenames": True,
         "trim_file_name": 80,
-        "check_formats": "selected",
         "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
-        "format": FORMATS_YOUTUBE_FALLBACK[0],
+        "merge_output_format": "mp4",
     }
     logger = _logger_silencieux(verbose)
     if logger is not None:
@@ -333,7 +355,12 @@ def _format_id(format_info: Dict[str, Any]) -> Optional[str]:
 def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[str]:
     probe_opts = dict(opts_base)
     probe_opts.pop("format", None)
+    probe_opts.pop("download_sections", None)
+    probe_opts.pop("force_keyframes_at_cuts", None)
+    probe_opts.pop("merge_output_format", None)
+    probe_opts.pop("check_formats", None)
     probe_opts["skip_download"] = True
+    probe_opts["listformats"] = True
     with YoutubeDL(probe_opts) as ydl:
         info = ydl.extract_info(url, download=False)
 
@@ -360,17 +387,21 @@ def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[st
     combined.sort(key=_format_score, reverse=True)
 
     candidates: List[str] = []
-    for video_format in video_only[:8]:
+    for video_format in video_only:
         video_id = _format_id(video_format)
-        for audio_format in audio_only[:4]:
+        for audio_format in audio_only:
             audio_id = _format_id(audio_format)
             if video_id and audio_id:
                 candidates.append(f"{video_id}+{audio_id}")
-    for format_info in combined[:12]:
+    for format_info in combined:
         format_id = _format_id(format_info)
         if format_id:
             candidates.append(format_id)
-    for format_info in audio_only[:6]:
+    for format_info in audio_only:
+        format_id = _format_id(format_info)
+        if format_id:
+            candidates.append(format_id)
+    for format_info in video_only:
         format_id = _format_id(format_info)
         if format_id:
             candidates.append(format_id)
@@ -429,24 +460,25 @@ def telecharger_preparer_video(
                 return None, None, None, "HTTP 403 detecte. La video est restreinte. Fournis un cookies.txt puis relance."
             return None, None, None, "HTTP 403 persistant malgre les cookies. Verifie le cookies.txt."
         if "Requested format is not available" in message or "format not available" in message.lower():
-            st.info("Format restreint indisponible, tentative avec d'autres formats.")
-            formats_alternatifs: List[str] = []
+            formats_alternatifs: List[Optional[str]] = []
             try:
                 formats_alternatifs.extend(_formats_disponibles_youtube(url, ydl_opts))
-            except Exception as e_probe:
-                erreurs_probe = str(e_probe) or repr(e_probe)
-                formats_alternatifs.append(FORMATS_YOUTUBE_FALLBACK[0])
-                st.caption(f"Lecture de la liste des formats indisponible : {erreurs_probe}")
+            except Exception:
+                pass
             formats_alternatifs.extend(FORMATS_YOUTUBE_FALLBACK)
             erreurs_fallback: List[str] = []
             info = None
-            deja_tentes = {str(ydl_opts.get("format", ""))}
+            deja_tentes = {"__default__"}
             for fmt in formats_alternatifs:
-                if not fmt or fmt in deja_tentes:
+                marqueur = "__default__" if fmt is None else str(fmt)
+                if marqueur in deja_tentes:
                     continue
-                deja_tentes.add(fmt)
+                deja_tentes.add(marqueur)
                 ydl_opts_fallback = dict(ydl_opts)
-                ydl_opts_fallback["format"] = fmt
+                if fmt is None:
+                    ydl_opts_fallback.pop("format", None)
+                else:
+                    ydl_opts_fallback["format"] = fmt
                 ydl_opts_fallback.pop("merge_output_format", None)
                 try:
                     info = _telecharger(ydl_opts_fallback)
@@ -454,7 +486,13 @@ def telecharger_preparer_video(
                 except Exception as e2:
                     erreurs_fallback.append(str(e2) or repr(e2))
             if info is None:
-                return None, None, None, "Echec du fallback universel : " + (" | ".join(erreurs_fallback) or message)
+                return None, None, None, (
+                    "Aucun format YouTube exploitable n'a pu être téléchargé par yt-dlp. "
+                    f"{len(deja_tentes)} stratégies ont été tentées. "
+                    "Si la vidéo se lit dans le navigateur, réexporte un cookies.txt récent "
+                    "puis relance. Dernière erreur : "
+                    + (erreurs_fallback[-1] if erreurs_fallback else message)
+                )
         else:
             return None, None, None, message
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
@@ -733,9 +771,7 @@ st.caption(
     "Si YouTube affiche un blocage anti-bot, il faut en pratique un cookies.txt récent, "
     "exporté depuis le navigateur qui vient d'ouvrir la vidéo, avec un User-Agent cohérent."
 )
-aide_tab = st.tabs(["Aide"])[0]
-with aide_tab:
-    render_help_tab()
+render_help_tab()
 
 with st.expander("Diagnostic systeme"):
     try:
@@ -761,20 +797,22 @@ st.session_state.setdefault("upload_signature", None)
 st.session_state.setdefault("local_temp_path", None)
 st.session_state.setdefault("local_name_base", None)
 
+st.subheader("Source")
 url = st.text_input("URL YouTube")
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### YouTube")
-    cookies_path_eff = ck.afficher_section_cookies(REPERTOIRE_SORTIE)
-    user_agent_youtube = st.text_input(
-        "User-Agent navigateur",
-        value=os.environ.get("YTDLP_BROWSER_USER_AGENT", USER_AGENT_YOUTUBE_DEFAUT),
-        help=(
-            "Colle ici le User-Agent exact du navigateur ayant servi à ouvrir YouTube "
-            "et à exporter le cookies.txt. Si tu n'es pas bloqué, laisse la valeur par défaut."
-        ),
-    )
-fichier_local = st.file_uploader("Ou importer un fichier vidéo (.mp4)", type=["mp4"])
+cookies_path_eff = ck.afficher_section_cookies(REPERTOIRE_SORTIE)
+user_agent_youtube = st.text_input(
+    "User-Agent navigateur",
+    value=os.environ.get("YTDLP_BROWSER_USER_AGENT", USER_AGENT_YOUTUBE_DEFAUT),
+    help=(
+        "Colle ici le User-Agent exact du navigateur ayant servi à ouvrir YouTube "
+        "et à exporter le cookies.txt. Si tu n'es pas bloqué, laisse la valeur par défaut."
+    ),
+)
+fichier_local = st.file_uploader(
+    "Ou importer un fichier vidéo",
+    type=UPLOAD_VIDEO_EXTENSIONS,
+    help="ffmpeg accepte de nombreux conteneurs : mp4, mov, mkv, webm, avi, m4v, flv, wmv, mpg, ts, etc.",
+)
 
 mode_verbose = st.checkbox("Mode diagnostic yt-dlp", value=False)
 qualite = st.radio("Qualité de la vidéo de base", ["Compressée (1280p, CRF 28)", "HD (max qualité dispo)"], index=0)
