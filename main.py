@@ -37,8 +37,14 @@ EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi"}
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
+YOUTUBE_COOKIES_DIR = APP_DATA_DIR / "youtube-cookies"
 APP_NAME = "Vecteur émotionnel"
 APP_TICKET_DEFAULT_ID = "vecteur-emotionnel"
+DEFAULT_YOUTUBE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/137.0.0.0 Safari/537.36"
+)
 
 
 def env_int(name: str, default: int) -> int:
@@ -132,15 +138,62 @@ def create_job_directory(jobs_dir: Path, base_name: str) -> Path:
     return job_dir
 
 
+def youtube_cookies_session_path() -> Path:
+    session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
+    session_dir = YOUTUBE_COOKIES_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir / "cookies.txt"
+
+
+def diagnostic_youtube_cookies(cookies_path: Path) -> str:
+    if not cookies_path.exists():
+        return "Aucun cookies.txt mémorisé pour cette session."
+    try:
+        content = cookies_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Lecture cookies impossible : {exc}"
+    if "youtube.com" not in content and ".youtube.com" not in content:
+        return "Le cookies.txt ne contient aucune entrée YouTube détectée."
+    if cookies_path.stat().st_size < 1024:
+        return f"cookies.txt mémorisé ({cookies_path.stat().st_size} octets), mais l'export semble incomplet."
+
+    now = int(time.time())
+    expirations: list[int] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") and not line.startswith("#HttpOnly_"):
+            continue
+        columns = line.replace("#HttpOnly_", "", 1).split("\t")
+        if len(columns) < 7:
+            continue
+        domain = columns[0].lower()
+        if "youtube.com" not in domain and "google.com" not in domain:
+            continue
+        try:
+            expires = int(columns[4])
+        except ValueError:
+            continue
+        if expires > 0:
+            expirations.append(expires)
+    if not expirations:
+        return f"cookies.txt mémorisé ({cookies_path.stat().st_size} octets) ; entrées YouTube détectées sans expiration exploitable."
+    remaining = max(expirations) - now
+    if remaining <= 0:
+        return f"cookies.txt mémorisé ({cookies_path.stat().st_size} octets), mais ses expirations utiles semblent dépassées."
+    if remaining < 3600:
+        return f"cookies.txt mémorisé ({cookies_path.stat().st_size} octets) ; attention, expiration utile dans environ {max(1, int(remaining / 60))} min."
+    return f"cookies.txt mémorisé ({cookies_path.stat().st_size} octets) ; expiration utile dans environ {int(remaining / 3600)} h."
+
+
 def save_cookies_upload(uploaded_file: object | None, job_dir: Path) -> Path | None:
+    cookies_path = youtube_cookies_session_path()
     if uploaded_file is None:
-        return None
+        return cookies_path if cookies_path.exists() and cookies_path.stat().st_size > 0 else None
 
     raw = uploaded_file.getvalue()
     if not raw:
         raise ValueError("Le fichier cookies.txt transmis est vide.")
 
-    cookies_path = job_dir / "cookies.txt"
     cookies_path.write_bytes(raw)
     return cookies_path
 
@@ -185,7 +238,14 @@ def telecharger_video(video_url: str, job_dir: Path, cookies_path: Path | None =
         "fragment_retries": 5,
         "restrictfilenames": True,
         "merge_output_format": "mp4",
-        "format": "bestvideo*+bestaudio/best",
+        "format": "18/22/bestvideo*+bestaudio/best[acodec!=none][vcodec!=none]/best",
+        "http_headers": {
+            "User-Agent": DEFAULT_YOUTUBE_USER_AGENT,
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://www.youtube.com/",
+        },
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
     }
     if cookies_path and cookies_path.exists():
         options["cookiefile"] = str(cookies_path)
@@ -898,6 +958,7 @@ cookies_upload = st.file_uploader(
         "Exportez vos cookies YouTube au format Netscape cookies.txt, puis importez le fichier ici."
     ),
 )
+st.caption(diagnostic_youtube_cookies(youtube_cookies_session_path()))
 
 time_col_1, time_col_2 = st.columns(2)
 with time_col_1:
