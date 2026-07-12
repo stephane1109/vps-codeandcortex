@@ -63,6 +63,12 @@ USER_AGENT_YOUTUBE_DEFAUT = (
 FORMATS_YOUTUBE_FALLBACK: List[Optional[str]] = [
     # None = laisser yt-dlp choisir lui-même son meilleur format compatible.
     None,
+    # Formats YouTube progressifs très fréquents. Le format 18 est souvent le
+    # dernier format MP4 audio+vidéo encore disponible sur les vidéos contraintes.
+    "18",
+    "22",
+    "best[height<=1080][acodec!=none][vcodec!=none]/best[height<=720][acodec!=none][vcodec!=none]/best[height<=480][acodec!=none][vcodec!=none]/best[height<=360][acodec!=none][vcodec!=none]",
+    "best[height<=720][ext=mp4]/best[height<=480][ext=mp4]/best[height<=360][ext=mp4]/best[ext=mp4]/best",
     "bestvideo*+bestaudio/best",
     "bv*+ba/b",
     "bestvideo+bestaudio/best",
@@ -406,6 +412,21 @@ def _format_id(format_info: Dict[str, Any]) -> Optional[str]:
     return value or None
 
 
+def _format_est_exploitable(format_info: Dict[str, Any]) -> bool:
+    format_id = _format_id(format_info)
+    if not format_id:
+        return False
+    ext = str(format_info.get("ext") or "").lower()
+    protocol = str(format_info.get("protocol") or "").lower()
+    vcodec = str(format_info.get("vcodec") or "none").lower()
+    acodec = str(format_info.get("acodec") or "none").lower()
+    if ext in {"mhtml", "html", "json"}:
+        return False
+    if "storyboard" in format_id.lower() or "mhtml" in protocol:
+        return False
+    return vcodec != "none" or acodec != "none"
+
+
 def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[str]:
     probe_opts = dict(opts_base)
     probe_opts.pop("format", None)
@@ -414,7 +435,6 @@ def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[st
     probe_opts.pop("merge_output_format", None)
     probe_opts.pop("check_formats", None)
     probe_opts["skip_download"] = True
-    probe_opts["listformats"] = True
     with YoutubeDL(probe_opts) as ydl:
         info = ydl.extract_info(url, download=False)
 
@@ -424,6 +444,8 @@ def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[st
     combined: List[Dict[str, Any]] = []
 
     for format_info in formats:
+        if not _format_est_exploitable(format_info):
+            continue
         format_id = _format_id(format_info)
         if not format_id:
             continue
