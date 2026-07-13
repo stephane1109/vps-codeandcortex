@@ -566,10 +566,6 @@ def afficher_bouton_telechargement_resultats(key_prefix: str, titre: bool = Fals
     zip_path, message = obtenir_zip_telechargeable()
     if zip_path is not None:
         afficher_telechargement_zip(zip_path, key_prefix, message)
-        with st.expander("Où sont les résultats ?", expanded=False):
-            st.write(f"Dossier de session : `{SESSION_DIR}`")
-            st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
-            st.write(f"Archive ZIP : `{zip_path}`")
         return
 
     st.caption(message)
