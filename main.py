@@ -628,16 +628,7 @@ def afficher_resultats_generes() -> None:
     elif fichiers:
         st.warning(message_zip)
 
-    if fichiers:
-        with st.expander(f"Voir les fichiers inclus ({len(fichiers)})", expanded=False):
-            for fichier in fichiers[:200]:
-                try:
-                    rel = fichier.relative_to(REPERTOIRE_SORTIE)
-                except ValueError:
-                    rel = fichier.name
-                taille = (taille_fichier(fichier) or 0) / (1024 * 1024)
-                st.write(f"- `{rel}` · {taille:.2f} Mo")
-    else:
+    if not fichiers:
         st.info("Aucun fichier exploitable n'est actuellement mémorisé pour cette session.")
         with st.expander("Diagnostic du dossier de sortie", expanded=True):
             st.write(f"Dossier de session : `{SESSION_DIR}`")
