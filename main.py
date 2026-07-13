@@ -51,6 +51,8 @@ SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
 REPERTOIRE_SORTIE = SESSION_DIR / "fichiers"
 REPERTOIRE_TEMP = SESSION_DIR / "tmp"
+LATEST_RESULTS_DIR = APP_DATA_DIR / "latest_results" / APP_TICKET_DEFAULT_ID
+LATEST_ZIP_PATH = LATEST_RESULTS_DIR / "derniers_resultats.zip"
 
 SEUIL_APERCU_OCTETS = 160 * 1024 * 1024
 LONGUEUR_TITRE_MAX = 24
@@ -160,7 +162,7 @@ def render_help_tab() -> None:
 
 
 def initialiser_repertoires_session() -> None:
-    for repertoire in (SESSIONS_DIR, SESSION_DIR, REPERTOIRE_SORTIE, REPERTOIRE_TEMP):
+    for repertoire in (SESSIONS_DIR, SESSION_DIR, REPERTOIRE_SORTIE, REPERTOIRE_TEMP, LATEST_RESULTS_DIR):
         repertoire.mkdir(parents=True, exist_ok=True)
         os.utime(repertoire, None)
 
@@ -181,6 +183,25 @@ def nettoyer_sessions_expirees() -> None:
                 shutil.rmtree(session_dir, ignore_errors=True)
         except Exception:
             continue
+
+
+def nettoyer_derniere_archive_stable() -> None:
+    try:
+        if LATEST_ZIP_PATH.exists():
+            LATEST_ZIP_PATH.unlink()
+    except Exception:
+        pass
+
+
+def memoriser_archive_stable(zip_path: Path) -> Optional[Path]:
+    try:
+        LATEST_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(zip_path, LATEST_ZIP_PATH)
+        if LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0:
+            return LATEST_ZIP_PATH
+    except Exception:
+        return None
+    return None
 
 
 initialiser_repertoires_session()
@@ -394,10 +415,12 @@ def dernier_zip_disponible() -> Optional[Path]:
             reverse=True,
         )
     except Exception:
-        return None
+        zips = []
     for zip_path in zips:
         if zip_path.is_file() and zip_path.stat().st_size > 0:
             return zip_path
+    if LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0:
+        return LATEST_ZIP_PATH
     return None
 
 
@@ -455,6 +478,8 @@ def afficher_bouton_telechargement_resultats(key_prefix: str, titre: bool = Fals
             st.write(f"Dossier de session : `{SESSION_DIR}`")
             st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
             st.write(f"Archive ZIP : `{zip_path}`")
+            if LATEST_ZIP_PATH.is_file():
+                st.write(f"Copie stable : `{LATEST_ZIP_PATH}`")
         return
 
     st.caption(message)
@@ -479,7 +504,10 @@ def diagnostic_contenu_sortie(max_items: int = 80) -> str:
 
 
 def enregistrer_resultats_generes(zip_path: Path, fichiers: List[Path], message: str) -> None:
+    zip_stable = memoriser_archive_stable(zip_path)
     st.session_state["dernier_zip_path"] = str(zip_path)
+    if zip_stable is not None:
+        st.session_state["dernier_zip_stable_path"] = str(zip_stable)
     st.session_state["derniers_fichiers"] = [str(path) for path in fichiers_valides(fichiers)]
     st.session_state["dernier_message_resultats"] = message
     st.session_state["derniere_erreur_resultats"] = ""
@@ -519,6 +547,8 @@ def afficher_resultats_generes() -> None:
             st.write(f"Dossier de session : `{SESSION_DIR}`")
             st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
             st.write(f"Archive ZIP : `{zip_path}`")
+            if LATEST_ZIP_PATH.is_file():
+                st.write(f"Copie stable : `{LATEST_ZIP_PATH}`")
     elif fichiers:
         st.warning(message_zip)
 
@@ -534,6 +564,7 @@ def afficher_resultats_generes() -> None:
     else:
         st.info("Aucun fichier exploitable n'est actuellement mémorisé pour cette session.")
         with st.expander("Diagnostic du dossier de sortie", expanded=True):
+            st.write(f"Dernière archive stable : `{LATEST_ZIP_PATH}`")
             st.code(diagnostic_contenu_sortie())
 
 
@@ -1123,6 +1154,7 @@ st.session_state.setdefault("upload_signature", None)
 st.session_state.setdefault("local_temp_path", None)
 st.session_state.setdefault("local_name_base", None)
 st.session_state.setdefault("dernier_zip_path", None)
+st.session_state.setdefault("dernier_zip_stable_path", None)
 st.session_state.setdefault("derniers_fichiers", [])
 st.session_state.setdefault("dernier_message_resultats", "")
 st.session_state.setdefault("derniere_erreur_resultats", "")
@@ -1207,9 +1239,11 @@ if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
         st.session_state["dernier_zip_path"] = None
+        st.session_state["dernier_zip_stable_path"] = None
         st.session_state["derniers_fichiers"] = []
         st.session_state["dernier_message_resultats"] = ""
         st.session_state["derniere_erreur_resultats"] = ""
+        nettoyer_derniere_archive_stable()
         if not ffmpeg_disponible():
             st.error("ffmpeg introuvable et fallback impossible. Verifie l'image Docker et les dependances systeme.")
             enregistrer_erreur_resultats("ffmpeg est introuvable : aucune extraction ne peut être lancée.")
