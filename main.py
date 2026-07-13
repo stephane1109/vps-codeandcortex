@@ -451,6 +451,10 @@ def afficher_bouton_telechargement_resultats(key_prefix: str, titre: bool = Fals
             use_container_width=True,
         )
         st.caption(f"{message} · {taille_zip:.1f} Mo")
+        with st.expander("Où sont les résultats ?", expanded=False):
+            st.write(f"Dossier de session : `{SESSION_DIR}`")
+            st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
+            st.write(f"Archive ZIP : `{zip_path}`")
         return
 
     st.caption(message)
@@ -479,6 +483,7 @@ def enregistrer_resultats_generes(zip_path: Path, fichiers: List[Path], message:
     st.session_state["derniers_fichiers"] = [str(path) for path in fichiers_valides(fichiers)]
     st.session_state["dernier_message_resultats"] = message
     st.session_state["derniere_erreur_resultats"] = ""
+    st.session_state["resultats_revision"] = int(st.session_state.get("resultats_revision", 0)) + 1
 
 
 def enregistrer_erreur_resultats(message: str) -> None:
@@ -510,6 +515,10 @@ def afficher_resultats_generes() -> None:
             use_container_width=True,
         )
         st.caption(f"Archive : {zip_path.name} · {taille_zip:.1f} Mo")
+        with st.expander("Emplacement des résultats sur le serveur", expanded=False):
+            st.write(f"Dossier de session : `{SESSION_DIR}`")
+            st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
+            st.write(f"Archive ZIP : `{zip_path}`")
     elif fichiers:
         st.warning(message_zip)
 
@@ -1117,9 +1126,10 @@ st.session_state.setdefault("dernier_zip_path", None)
 st.session_state.setdefault("derniers_fichiers", [])
 st.session_state.setdefault("dernier_message_resultats", "")
 st.session_state.setdefault("derniere_erreur_resultats", "")
+st.session_state.setdefault("resultats_revision", 0)
 
 with st.container(border=True):
-    afficher_bouton_telechargement_resultats("top_results", titre=True)
+    afficher_bouton_telechargement_resultats(f"top_results_{st.session_state['resultats_revision']}", titre=True)
 
 st.subheader("Source")
 url = st.text_input("URL YouTube")
@@ -1288,6 +1298,7 @@ if st.button("Lancer le traitement"):
                                 message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                                 st.success(message_ok)
                                 enregistrer_resultats_generes(zip_path, fichiers_timelapse, message_ok)
+                                st.rerun()
                     except Exception as e:
                         message_erreur = f"Echec du timelapse : {e}"
                         st.error(message_erreur)
@@ -1351,5 +1362,6 @@ if st.button("Lancer le traitement"):
                         message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                         st.success(message_ok)
                         enregistrer_resultats_generes(zip_path, fichiers, message_ok)
+                        st.rerun()
 
 afficher_resultats_generes()
