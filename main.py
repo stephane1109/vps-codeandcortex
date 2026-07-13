@@ -1358,7 +1358,6 @@ if st.button("Lancer le traitement"):
                                 message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                                 st.success(message_ok)
                                 enregistrer_resultats_generes(zip_path, fichiers_timelapse, message_ok)
-                                st.rerun()
                     except Exception as e:
                         message_erreur = f"Echec du timelapse : {e}"
                         st.error(message_erreur)
@@ -1422,6 +1421,5 @@ if st.button("Lancer le traitement"):
                         message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                         st.success(message_ok)
                         enregistrer_resultats_generes(zip_path, fichiers, message_ok)
-                        st.rerun()
 
 afficher_resultats_generes()
