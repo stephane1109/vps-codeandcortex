@@ -80,6 +80,16 @@ FORMATS_YOUTUBE_FALLBACK: List[Optional[str]] = [
     "worst[acodec!=none][vcodec!=none]/worst",
     "bestaudio/best",
 ]
+YOUTUBE_CLIENT_FALLBACKS: List[tuple[str, Optional[List[str]]]] = [
+    # `auto` laisse yt-dlp choisir ses clients. C'est le profil le plus robuste
+    # face aux changements YouTube, PO Token et SABR.
+    ("auto", None),
+    ("android_vr", ["android_vr"]),
+    ("web", ["web"]),
+    ("mweb", ["mweb"]),
+    ("android", ["android"]),
+    ("legacy_forced", ["android", "ios", "mweb", "web"]),
+]
 UPLOAD_VIDEO_EXTENSIONS = [
     "mp4",
     "mov",
@@ -239,6 +249,10 @@ def taille_fichier(chemin: Path) -> Optional[int]:
         return chemin.stat().st_size
     except Exception:
         return None
+
+
+def qualite_compressee(qualite: str) -> bool:
+    return "1280p" in (qualite or "") and "CRF 28" in (qualite or "")
 
 
 def duree_video_seconds(video_path: Path) -> Optional[int]:
@@ -562,14 +576,35 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "nocheckcertificate": True,
         "restrictfilenames": True,
         "trim_file_name": 80,
-        "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
         "merge_output_format": "mp4",
     }
+    clients_env = [
+        client.strip()
+        for client in os.environ.get("YTDLP_PLAYER_CLIENTS", "").split(",")
+        if client.strip()
+    ]
+    if clients_env:
+        opts["extractor_args"] = {"youtube": {"player_client": clients_env}}
     logger = _logger_silencieux(verbose)
     if logger is not None:
         opts["logger"] = logger
     if cookies_path:
         opts["cookiefile"] = str(cookies_path)
+    return opts
+
+
+def _opts_avec_clients_youtube(opts_base: Dict[str, Any], clients: Optional[List[str]]) -> Dict[str, Any]:
+    opts = dict(opts_base)
+    extractor_args = dict(opts.get("extractor_args") or {})
+    if clients:
+        extractor_args["youtube"] = {"player_client": clients}
+        opts["extractor_args"] = extractor_args
+    else:
+        extractor_args.pop("youtube", None)
+        if extractor_args:
+            opts["extractor_args"] = extractor_args
+        else:
+            opts.pop("extractor_args", None)
     return opts
 
 
@@ -614,9 +649,13 @@ def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[st
     probe_opts.pop("force_keyframes_at_cuts", None)
     probe_opts.pop("merge_output_format", None)
     probe_opts.pop("check_formats", None)
+    probe_opts["ignore_no_formats_error"] = True
+    probe_opts["simulate"] = True
     probe_opts["skip_download"] = True
     with YoutubeDL(probe_opts) as ydl:
         info = ydl.extract_info(url, download=False)
+    if not info:
+        return []
 
     formats = info.get("formats") or []
     video_only: List[Dict[str, Any]] = []
@@ -669,6 +708,36 @@ def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[st
     return deduped
 
 
+def _strategies_youtube(url: str, opts_base: Dict[str, Any]) -> List[tuple[str, Optional[str], Dict[str, Any]]]:
+    strategies: List[tuple[str, Optional[str], Dict[str, Any]]] = []
+    deja_vus = set()
+
+    for label_client, clients in YOUTUBE_CLIENT_FALLBACKS:
+        opts_client = _opts_avec_clients_youtube(opts_base, clients)
+        formats_reels: List[Optional[str]] = []
+        try:
+            formats_reels.extend(_formats_disponibles_youtube(url, opts_client))
+        except Exception:
+            pass
+        formats_reels.extend(FORMATS_YOUTUBE_FALLBACK)
+
+        for fmt in formats_reels:
+            cle = (label_client, "__default__" if fmt is None else str(fmt))
+            if cle in deja_vus:
+                continue
+            deja_vus.add(cle)
+            opts = dict(opts_client)
+            if fmt is None:
+                opts.pop("format", None)
+            else:
+                opts["format"] = fmt
+            # Le remux MP4 est fait ensuite par ffmpeg. On ne bloque donc pas
+            # yt-dlp sur un conteneur précis pendant les tentatives de secours.
+            opts.pop("merge_output_format", None)
+            strategies.append((label_client, fmt, opts))
+    return strategies
+
+
 def telecharger_preparer_video(
     url: str,
     cookies_path: Optional[Path],
@@ -716,37 +785,24 @@ def telecharger_preparer_video(
                 return None, None, None, "HTTP 403 detecte. La video est restreinte. Fournis un cookies.txt puis relance."
             return None, None, None, "HTTP 403 persistant malgre les cookies. Verifie le cookies.txt."
         if "Requested format is not available" in message or "format not available" in message.lower():
-            formats_alternatifs: List[Optional[str]] = []
-            try:
-                formats_alternatifs.extend(_formats_disponibles_youtube(url, ydl_opts))
-            except Exception:
-                pass
-            formats_alternatifs.extend(FORMATS_YOUTUBE_FALLBACK)
             erreurs_fallback: List[str] = []
             info = None
-            deja_tentes = {"__default__"}
-            for fmt in formats_alternatifs:
-                marqueur = "__default__" if fmt is None else str(fmt)
-                if marqueur in deja_tentes:
-                    continue
-                deja_tentes.add(marqueur)
-                ydl_opts_fallback = dict(ydl_opts)
-                if fmt is None:
-                    ydl_opts_fallback.pop("format", None)
-                else:
-                    ydl_opts_fallback["format"] = fmt
-                ydl_opts_fallback.pop("merge_output_format", None)
+            tentatives: List[str] = []
+            for label_client, fmt, ydl_opts_fallback in _strategies_youtube(url, ydl_opts):
+                tentatives.append(f"{label_client}:{fmt or 'auto'}")
                 try:
                     info = _telecharger(ydl_opts_fallback)
                     break
                 except Exception as e2:
-                    erreurs_fallback.append(str(e2) or repr(e2))
+                    erreurs_fallback.append(f"{tentatives[-1]} -> {str(e2) or repr(e2)}")
             if info is None:
                 return None, None, None, (
                     "Aucun format YouTube exploitable n'a pu être téléchargé par yt-dlp. "
-                    f"{len(deja_tentes)} stratégies ont été tentées. "
+                    f"{len(tentatives)} stratégies ont été tentées sur plusieurs profils YouTube. "
                     "Si la vidéo se lit dans le navigateur, réexporte un cookies.txt récent "
-                    "puis relance. Dernière erreur : "
+                    "puis relance. Dernière stratégie : "
+                    + (tentatives[-1] if tentatives else "aucune")
+                    + ". Dernière erreur : "
                     + (erreurs_fallback[-1] if erreurs_fallback else message)
                 )
         else:
@@ -785,7 +841,7 @@ def telecharger_preparer_video(
             _run_ffmpeg([ffmpeg, "-y", "-i", str(chemin_source_propre), "-c", "copy", "-movflags", "+faststart", str(cible)], "Remux YouTube")
     except Exception:
         try:
-            if qualite == "Compressee (1280p, CRF 28)":
+            if qualite_compressee(qualite):
                 filtre_video = ["-vf", "scale=1280:-2"]
                 codec_video = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"]
                 codec_audio = ["-c:a", "aac", "-b:a", "96k"]
@@ -824,7 +880,7 @@ def traiter_local(src_local: Path, base_court: str, qualite: str, utiliser_inter
     def _run_ffmpeg(args: List[str], description: str) -> None:
         executer_ffmpeg(args, description)
 
-    if qualite == "Compressee (1280p, CRF 28)":
+    if qualite_compressee(qualite):
         args = [ffmpeg, "-y"]
         if utiliser_intervalle:
             args += ["-ss", str(debut), "-to", str(fin)]
