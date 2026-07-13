@@ -763,6 +763,9 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "trim_file_name": 80,
         "merge_output_format": "mp4",
     }
+    impersonate_client = os.environ.get("YTDLP_IMPERSONATE", "chrome").strip()
+    if impersonate_client:
+        opts["impersonate"] = impersonate_client
     clients_env = [
         client.strip()
         for client in os.environ.get("YTDLP_PLAYER_CLIENTS", "").split(",")
@@ -948,6 +951,7 @@ def telecharger_preparer_video(
 
     ydl_opts = _opts_communs(verbose, cookies_path, user_agent)
     journal_debug(f"Arguments YouTube yt-dlp : {ydl_opts.get('extractor_args', {}).get('youtube', {})}")
+    journal_debug(f"Impersonation yt-dlp : {ydl_opts.get('impersonate') or 'désactivée'}")
     if utiliser_intervalle:
         ydl_opts["download_sections"] = [{"section": f"*{debut}-{fin}"}]
         ydl_opts["force_keyframes_at_cuts"] = True
@@ -961,57 +965,55 @@ def telecharger_preparer_video(
                 pass
         return info_local
 
-    try:
-        journal_debug("yt-dlp tentative principale")
-        info = _telecharger(ydl_opts)
-        journal_debug("yt-dlp téléchargement principal OK")
-    except Exception as e:
-        message = str(e) or repr(e)
-        journal_debug(f"yt-dlp erreur principale : {message[:500]}")
-        if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-            if not cookies_path:
+    erreurs_fallback: List[str] = []
+    tentatives: List[str] = []
+    info = None
+    max_strategies = max(1, _env_int("YTDLP_MAX_STRATEGIES", 80))
+    strategies = _strategies_youtube(url, ydl_opts)[:max_strategies]
+    journal_debug(f"yt-dlp stratégies préparées : {len(strategies)}")
+
+    for label_client, fmt, ydl_opts_fallback in strategies:
+        tentatives.append(f"{label_client}:{fmt or 'auto'}")
+        try:
+            journal_debug(f"yt-dlp essai : {tentatives[-1]}")
+            info = _telecharger(ydl_opts_fallback)
+            journal_debug(f"yt-dlp téléchargement OK : {tentatives[-1]}")
+            break
+        except Exception as e:
+            message = str(e) or repr(e)
+            journal_debug(f"yt-dlp erreur : {tentatives[-1]} | {message[:500]}")
+            erreurs_fallback.append(f"{tentatives[-1]} -> {message}")
+            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                if not cookies_path:
+                    return None, None, None, (
+                        "YouTube bloque la requête comme anti-bot. "
+                        "Ajoute un cookies.txt recent exporte depuis le meme navigateur "
+                        "et idealement la meme IP publique, puis relance."
+                    )
                 return None, None, None, (
-                    "YouTube bloque la requête comme anti-bot. "
-                    "Ajoute un cookies.txt recent exporte depuis le meme navigateur "
-                    "et idealement la meme IP publique, puis relance."
+                    "YouTube refuse encore la requête malgré le cookies.txt. "
+                    "Cause probable : cookies trop anciens, export incomplet, compte non reconnecte "
+                    "recemment, ou User-Agent non coherent avec le navigateur d'origine. "
+                    "Recharge YouTube dans ton navigateur, re-exporte le cookies.txt, puis colle "
+                    "le User-Agent exact du navigateur dans le champ dedie."
                 )
-            return None, None, None, (
-                "YouTube refuse encore la requête malgré le cookies.txt. "
-                "Cause probable : cookies trop anciens, export incomplet, compte non reconnecte "
-                "recemment, ou User-Agent non coherent avec le navigateur d'origine. "
-                "Recharge YouTube dans ton navigateur, re-exporte le cookies.txt, puis colle "
-                "le User-Agent exact du navigateur dans le champ dedie."
-            )
-        if "403" in message or "Forbidden" in message:
-            if not cookies_path:
-                return None, None, None, "HTTP 403 detecte. La video est restreinte. Fournis un cookies.txt puis relance."
-            return None, None, None, "HTTP 403 persistant malgre les cookies. Verifie le cookies.txt."
-        if "Requested format is not available" in message or "format not available" in message.lower():
-            erreurs_fallback: List[str] = []
-            info = None
-            tentatives: List[str] = []
-            for label_client, fmt, ydl_opts_fallback in _strategies_youtube(url, ydl_opts):
-                tentatives.append(f"{label_client}:{fmt or 'auto'}")
-                try:
-                    journal_debug(f"yt-dlp fallback : {tentatives[-1]}")
-                    info = _telecharger(ydl_opts_fallback)
-                    journal_debug(f"yt-dlp fallback OK : {tentatives[-1]}")
-                    break
-                except Exception as e2:
-                    journal_debug(f"yt-dlp fallback erreur : {tentatives[-1]} | {(str(e2) or repr(e2))[:500]}")
-                    erreurs_fallback.append(f"{tentatives[-1]} -> {str(e2) or repr(e2)}")
-            if info is None:
-                return None, None, None, (
-                    "Aucun format YouTube exploitable n'a pu être téléchargé par yt-dlp. "
-                    f"{len(tentatives)} stratégies ont été tentées sur plusieurs profils YouTube. "
-                    "Si la vidéo se lit dans le navigateur, réexporte un cookies.txt récent "
-                    "puis relance. Dernière stratégie : "
-                    + (tentatives[-1] if tentatives else "aucune")
-                    + ". Dernière erreur : "
-                    + (erreurs_fallback[-1] if erreurs_fallback else message)
-                )
-        else:
-            return None, None, None, message
+            if "403" in message or "Forbidden" in message:
+                if not cookies_path:
+                    return None, None, None, "HTTP 403 detecte. La video est restreinte. Fournis un cookies.txt puis relance."
+                return None, None, None, "HTTP 403 persistant malgre les cookies. Verifie le cookies.txt."
+
+    if info is None:
+        return None, None, None, (
+            "Aucun format YouTube exploitable n'a pu être téléchargé par yt-dlp. "
+            f"{len(tentatives)} stratégie(s) ont été tentées sur plusieurs profils YouTube. "
+            "Si la vidéo se lit dans le navigateur, réexporte un cookies.txt récent depuis le même navigateur. "
+            "Si l'erreur persiste, YouTube exige probablement un PO token : ajoute "
+            "YTDLP_YOUTUBE_PO_TOKEN_ARGS=web.gvs+TON_TOKEN dans Coolify. "
+            "Dernière stratégie : "
+            + (tentatives[-1] if tentatives else "aucune")
+            + ". Dernière erreur : "
+            + (erreurs_fallback[-1] if erreurs_fallback else "aucune")
+        )
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     candidats = chemins_depuis_info_ytdlp(info)
