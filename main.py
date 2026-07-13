@@ -452,18 +452,7 @@ def run_transcription_with_progress(audio_path: Path, model_size: str, language_
 
 
 def build_sidebar_notes() -> None:
-    with st.sidebar:
-        st.header("Exécution VPS")
-        st.caption("Le modèle choisi est téléchargé au premier usage puis réutilisé depuis le cache du conteneur.")
-        st.markdown(
-            "\n".join(
-                [
-                    "- Source audio : YouTube ou fichier local",
-                    "- Export final : transcription `.txt`",
-                    "- Dossier temporaire : `APP_WORKDIR`",
-                ]
-            )
-        )
+    return None
 
 
 def main() -> None:
