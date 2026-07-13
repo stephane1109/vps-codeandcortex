@@ -625,12 +625,6 @@ def afficher_resultats_generes() -> None:
     if zip_path and zip_path.is_file() and zip_path.stat().st_size > 0:
         st.success(message_zip)
         afficher_telechargement_zip(zip_path, "download_zip", f"Archive : {zip_path.name}")
-        with st.expander("Emplacement des résultats sur le serveur", expanded=False):
-            st.write(f"Dossier de session : `{SESSION_DIR}`")
-            st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
-            st.write(f"Archive ZIP : `{zip_path}`")
-            if LATEST_ZIP_PATH.is_file():
-                st.write(f"Copie stable : `{LATEST_ZIP_PATH}`")
     elif fichiers:
         st.warning(message_zip)
 
