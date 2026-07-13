@@ -37,10 +37,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        ffmpeg \
+        unzip \
     && rm -rf /var/lib/apt/lists/* \
     && addgroup --system app \
     && adduser --system --ingroup app --home /home/app app
+
+# Deno est le runtime JavaScript recommande par yt-dlp pour les challenges YouTube recents.
+RUN curl -fsSL -o /tmp/deno.zip \
+        https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/deno \
+    && rm -f /tmp/deno.zip \
+    && deno --version
 
 COPY requirements.txt /app/requirements.txt
 
@@ -48,7 +60,11 @@ COPY requirements.txt /app/requirements.txt
 # L'interface permet ensuite de choisir explicitement les profils
 # `faster-whisper`, `sm` et `md`, sans figer l'utilisateur dans un seul
 # modele visible.
-RUN pip install -r /app/requirements.txt
+ARG YTDLP_REFRESH=2026-07-13
+RUN pip install -r /app/requirements.txt \
+    && echo "yt-dlp refresh ${YTDLP_REFRESH}" \
+    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
+    && python -m yt_dlp --version
 
 COPY . /app
 
