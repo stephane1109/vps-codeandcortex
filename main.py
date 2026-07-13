@@ -109,6 +109,50 @@ UPLOAD_VIDEO_EXTENSIONS = [
     "ts",
     "m2ts",
 ]
+MEDIA_EXTENSIONS_DETECTION = {
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".webm",
+    ".avi",
+    ".m4v",
+    ".flv",
+    ".wmv",
+    ".mpeg",
+    ".mpg",
+    ".3gp",
+    ".ts",
+    ".m2ts",
+    ".m4a",
+    ".mp3",
+    ".wav",
+    ".aac",
+    ".ogg",
+    ".opus",
+    ".mka",
+    ".jpg",
+    ".jpeg",
+    ".png",
+}
+
+
+def journal_debug(message: str) -> None:
+    horodatage = time.strftime("%H:%M:%S")
+    lignes = st.session_state.setdefault("debug_extraction_lignes", [])
+    lignes.append(f"[{horodatage}] {message}")
+    st.session_state["debug_extraction_lignes"] = lignes[-250:]
+
+
+def reinitialiser_debug() -> None:
+    st.session_state["debug_extraction_lignes"] = []
+
+
+def afficher_debug_extraction(expanded: bool = False) -> None:
+    lignes = st.session_state.get("debug_extraction_lignes", [])
+    if not lignes:
+        return
+    with st.expander("Debug extraction", expanded=expanded):
+        st.code("\n".join(lignes))
 
 
 def _import_module_local(nom_module: str):
@@ -197,11 +241,9 @@ def memoriser_archive_stable(zip_path: Path) -> Optional[Path]:
     try:
         LATEST_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(zip_path, LATEST_ZIP_PATH)
-        if LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0:
-            return LATEST_ZIP_PATH
+        return LATEST_ZIP_PATH if LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0 else None
     except Exception:
         return None
-    return None
 
 
 initialiser_repertoires_session()
@@ -272,6 +314,55 @@ def taille_fichier(chemin: Path) -> Optional[int]:
         return None
 
 
+def fichier_media_exploitable(chemin: Path) -> bool:
+    try:
+        if not chemin.is_file() or chemin.stat().st_size <= 0:
+            return False
+        if chemin.name.lower() == "cookies.txt":
+            return False
+        if chemin.suffix.lower() in {".zip", ".part", ".ytdl", ".tmp"}:
+            return False
+        return chemin.suffix.lower() in MEDIA_EXTENSIONS_DETECTION
+    except Exception:
+        return False
+
+
+def fichiers_media_sortie(depuis_timestamp: Optional[float] = None) -> List[Path]:
+    fichiers: List[Path] = []
+    try:
+        for fichier in REPERTOIRE_SORTIE.rglob("*"):
+            if not fichier_media_exploitable(fichier):
+                continue
+            if depuis_timestamp is not None and fichier.stat().st_mtime < depuis_timestamp:
+                continue
+            fichiers.append(fichier)
+    except Exception:
+        return []
+    fichiers.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    return fichiers_valides(fichiers)
+
+
+def chemins_depuis_info_ytdlp(info: Any) -> List[Path]:
+    chemins: List[Path] = []
+
+    def collecter(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for cle in ("filepath", "filename", "_filename", "__filename", "_prepared_filename"):
+                valeur = obj.get(cle)
+                if isinstance(valeur, str) and valeur.strip():
+                    chemins.append(Path(valeur))
+            for cle in ("requested_downloads", "entries", "requested_formats"):
+                valeur = obj.get(cle)
+                if isinstance(valeur, (list, tuple, dict)):
+                    collecter(valeur)
+        elif isinstance(obj, (list, tuple)):
+            for item in obj:
+                collecter(item)
+
+    collecter(info)
+    return fichiers_valides([chemin for chemin in chemins if fichier_media_exploitable(chemin)])
+
+
 def qualite_compressee(qualite: str) -> bool:
     return "1280p" in (qualite or "") and "CRF 28" in (qualite or "")
 
@@ -299,6 +390,7 @@ def executer_ffmpeg(args: List[str], description: str) -> None:
         commande.insert(3, "-loglevel")
         commande.insert(4, "error")
 
+    journal_debug(f"ffmpeg démarrage : {description}")
     try:
         subprocess.run(
             commande,
@@ -308,7 +400,9 @@ def executer_ffmpeg(args: List[str], description: str) -> None:
             check=True,
             timeout=FFMPEG_TIMEOUT_SECONDS,
         )
+        journal_debug(f"ffmpeg OK : {description}")
     except subprocess.TimeoutExpired as exc:
+        journal_debug(f"ffmpeg timeout : {description}")
         raise RuntimeError(
             f"{description} a dépassé le délai maximal ffmpeg ({FFMPEG_TIMEOUT_SECONDS}s). "
             "Réduis l'intervalle ou les options d'images."
@@ -317,6 +411,7 @@ def executer_ffmpeg(args: List[str], description: str) -> None:
         details = (exc.stderr or exc.stdout or "").strip()
         if len(details) > 1200:
             details = details[-1200:]
+        journal_debug(f"ffmpeg erreur : {description} | {details or exc}")
         raise RuntimeError(f"{description} a échoué avec ffmpeg : {details or exc}") from exc
     finally:
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
@@ -339,6 +434,7 @@ def zipper_sur_disque(fichiers: List[Path], chemin_zip: Path) -> Path:
     if chemin_zip.exists():
         chemin_zip.unlink()
 
+    journal_debug(f"Création ZIP : {chemin_zip.name} avec {len(fichiers_uniques)} fichier(s)")
     # Les médias sont déjà compressés. ZIP_STORED évite une recompaction lente
     # qui peut donner l'impression que l'application tourne sans fin.
     with zipfile.ZipFile(str(chemin_zip), "w", compression=zipfile.ZIP_STORED) as archive:
@@ -350,22 +446,27 @@ def zipper_sur_disque(fichiers: List[Path], chemin_zip: Path) -> Path:
             archive.write(str(fichier), arcname=arcname)
             if index % 100 == 0:
                 keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+    journal_debug(f"ZIP écrit : {chemin_zip} ({chemin_zip.stat().st_size if chemin_zip.exists() else 0} octets)")
     return chemin_zip
 
 
 def nettoyer_resultats_session() -> None:
     """Nettoie les anciens médias sans supprimer le cookies.txt de la session."""
     REPERTOIRE_SORTIE.mkdir(parents=True, exist_ok=True)
+    nb_supprimes = 0
     for element in REPERTOIRE_SORTIE.iterdir():
         if element.name.lower() == "cookies.txt":
             continue
         try:
             if element.is_dir():
                 shutil.rmtree(element, ignore_errors=True)
+                nb_supprimes += 1
             elif element.is_file():
                 element.unlink()
+                nb_supprimes += 1
         except Exception:
             continue
+    journal_debug(f"Nettoyage dossier résultats : {nb_supprimes} élément(s) supprimé(s), cookies conservé")
 
 
 def lister_sorties(prefix: str) -> List[Path]:
@@ -408,11 +509,7 @@ def fichiers_exportables_session() -> List[Path]:
     candidats: List[Path] = []
     try:
         for fichier in REPERTOIRE_SORTIE.rglob("*"):
-            if not fichier.is_file():
-                continue
-            if fichier.suffix.lower() == ".zip":
-                continue
-            if fichier.name.lower() == "cookies.txt":
+            if not fichier_media_exploitable(fichier):
                 continue
             candidats.append(fichier)
     except Exception:
@@ -503,8 +600,6 @@ def afficher_bouton_telechargement_resultats(key_prefix: str, titre: bool = Fals
             st.write(f"Dossier de session : `{SESSION_DIR}`")
             st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
             st.write(f"Archive ZIP : `{zip_path}`")
-            if LATEST_ZIP_PATH.is_file():
-                st.write(f"Copie stable : `{LATEST_ZIP_PATH}`")
         return
 
     st.caption(message)
@@ -585,6 +680,8 @@ def afficher_resultats_generes() -> None:
     else:
         st.info("Aucun fichier exploitable n'est actuellement mémorisé pour cette session.")
         with st.expander("Diagnostic du dossier de sortie", expanded=True):
+            st.write(f"Dossier de session : `{SESSION_DIR}`")
+            st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
             st.write(f"Dernière archive stable : `{LATEST_ZIP_PATH}`")
             st.code(diagnostic_contenu_sortie())
 
@@ -815,6 +912,9 @@ def telecharger_preparer_video(
 ):
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     st.write("Téléchargement / préparation de la vidéo en cours...")
+    journal_debug("Début préparation YouTube")
+    journal_debug(f"URL renseignée : {'oui' if url else 'non'} | cookies : {'oui' if cookies_path else 'non'} | intervalle : {utiliser_intervalle}")
+    debut_telechargement = time.time() - 2
 
     ydl_opts = _opts_communs(verbose, cookies_path, user_agent)
     if utiliser_intervalle:
@@ -824,13 +924,19 @@ def telecharger_preparer_video(
     def _telecharger(opts: Dict[str, Any]):
         with YoutubeDL(opts) as ydl:
             info_local = ydl.extract_info(url, download=True)
-            _ = ydl.prepare_filename(info_local)
+            try:
+                info_local["_prepared_filename"] = ydl.prepare_filename(info_local)
+            except Exception:
+                pass
         return info_local
 
     try:
+        journal_debug("yt-dlp tentative principale")
         info = _telecharger(ydl_opts)
+        journal_debug("yt-dlp téléchargement principal OK")
     except Exception as e:
         message = str(e) or repr(e)
+        journal_debug(f"yt-dlp erreur principale : {message[:500]}")
         if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
             if not cookies_path:
                 return None, None, None, (
@@ -856,9 +962,12 @@ def telecharger_preparer_video(
             for label_client, fmt, ydl_opts_fallback in _strategies_youtube(url, ydl_opts):
                 tentatives.append(f"{label_client}:{fmt or 'auto'}")
                 try:
+                    journal_debug(f"yt-dlp fallback : {tentatives[-1]}")
                     info = _telecharger(ydl_opts_fallback)
+                    journal_debug(f"yt-dlp fallback OK : {tentatives[-1]}")
                     break
                 except Exception as e2:
+                    journal_debug(f"yt-dlp fallback erreur : {tentatives[-1]} | {(str(e2) or repr(e2))[:500]}")
                     erreurs_fallback.append(f"{tentatives[-1]} -> {str(e2) or repr(e2)}")
             if info is None:
                 return None, None, None, (
@@ -874,10 +983,14 @@ def telecharger_preparer_video(
             return None, None, None, message
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
-    candidats: List[Path] = []
-    for ext in ["mp4", "mkv", "webm", "m4a", "mp3"]:
-        candidats.extend(REPERTOIRE_SORTIE.glob(f"*.{ext}"))
+    candidats = chemins_depuis_info_ytdlp(info)
+    candidats.extend(fichiers_media_sortie(depuis_timestamp=debut_telechargement))
+    candidats = fichiers_valides(candidats)
+    journal_debug(f"Fichiers détectés après yt-dlp : {len(candidats)}")
+    for candidat in candidats[:20]:
+        journal_debug(f" - {candidat.name} ({candidat.stat().st_size} octets)")
     if not candidats:
+        journal_debug("Aucun fichier média détecté après yt-dlp")
         return None, None, None, "Téléchargement terminé mais aucun fichier détecté."
     candidats.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     fichier_final = candidats[0]
@@ -1207,6 +1320,7 @@ fichier_local = st.file_uploader(
 )
 
 mode_verbose = st.checkbox("Mode diagnostic yt-dlp", value=False)
+debug_affiche = st.checkbox("Afficher le debug extraction", value=True)
 qualite = st.radio("Qualité de la vidéo de base", ["Compressée (1280p, CRF 28)", "HD (max qualité dispo)"], index=0)
 
 st.subheader("Ressources à produire")
@@ -1259,18 +1373,24 @@ if afficher_apercu and not opt_timelapse:
 if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+        reinitialiser_debug()
+        journal_debug("Clic sur Lancer le traitement")
         st.session_state["dernier_zip_path"] = None
         st.session_state["dernier_zip_stable_path"] = None
         st.session_state["derniers_fichiers"] = []
         st.session_state["dernier_message_resultats"] = ""
         st.session_state["derniere_erreur_resultats"] = ""
+        st.session_state["video_base"] = None
+        st.session_state["base_court"] = None
         nettoyer_derniere_archive_stable()
         nettoyer_resultats_session()
         if not ffmpeg_disponible():
             st.error("ffmpeg introuvable et fallback impossible. Verifie l'image Docker et les dependances systeme.")
             enregistrer_erreur_resultats("ffmpeg est introuvable : aucune extraction ne peut être lancée.")
+            journal_debug("Arrêt : ffmpeg indisponible")
         else:
             if url:
+                journal_debug("Source choisie : URL YouTube")
                 video_base, base_court, info, erreur = telecharger_preparer_video(
                     url,
                     cookies_path_eff,
@@ -1283,14 +1403,18 @@ if st.button("Lancer le traitement"):
                 )
                 if erreur:
                     st.error(f"Erreur : {erreur}")
+                    enregistrer_erreur_resultats(erreur)
+                    journal_debug(f"Préparation YouTube échouée : {erreur}")
                     video_base = None
                 else:
                     st.session_state["video_base"] = video_base
                     st.session_state["base_court"] = base_court
+                    journal_debug(f"Vidéo préparée : {video_base}")
                     st.success(f"Vidéo prête : {Path(video_base).name}")
                     if afficher_apercu and not opt_timelapse:
                         afficher_video_bytes(Path(video_base))
             elif fichier_local is not None or st.session_state.get("local_temp_path"):
+                journal_debug("Source choisie : fichier local")
                 base_court = st.session_state.get("local_name_base") or generer_nom_base("local", "video")
                 try:
                     local_path = sauvegarder_upload_local(fichier_local) if fichier_local is not None else None
@@ -1309,17 +1433,23 @@ if st.button("Lancer le traitement"):
                     )
                     st.session_state["video_base"] = cible
                     st.session_state["base_court"] = base_court
+                    journal_debug(f"Vidéo locale préparée : {cible}")
                     st.success(f"Vidéo prête : {Path(cible).name}")
                     if afficher_apercu and not opt_timelapse:
                         afficher_video_bytes(Path(cible))
                 except Exception as e:
                     st.error(f"Echec du traitement local : {e}")
+                    enregistrer_erreur_resultats(f"Echec du traitement local : {e}")
+                    journal_debug(f"Préparation locale échouée : {e}")
             else:
                 st.warning("Veuillez fournir une URL YouTube ou un fichier local.")
+                enregistrer_erreur_resultats("Aucune source fournie : URL YouTube ou fichier local requis.")
+                journal_debug("Arrêt : aucune source fournie")
 
             if st.session_state.get("video_base") and Path(st.session_state["video_base"]).exists():
                 base_court = st.session_state["base_court"]
                 video_path = st.session_state["video_base"]
+                journal_debug(f"Début extraction depuis : {video_path}")
 
                 if opt_timelapse:
                     try:
@@ -1377,6 +1507,7 @@ if st.button("Lancer le traitement"):
 
                     if any(options.values()):
                         st.info("Extraction des ressources sélectionnées en cours...")
+                        journal_debug(f"Options extraction : {options}")
                         try:
                             erreur_extraction = extraire_ressources(video_path, debut_eff, fin_eff, base_court, options, utiliser_intervalle)
                         except Exception as exc:
@@ -1385,17 +1516,23 @@ if st.button("Lancer le traitement"):
                             message_erreur = f"Erreur pendant l'extraction : {erreur_extraction}"
                             st.error(message_erreur)
                             enregistrer_erreur_resultats(message_erreur)
+                            journal_debug(message_erreur)
                         else:
                             st.success("Ressources generees.")
+                            journal_debug("Extraction des ressources terminée sans erreur")
                             keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
                     else:
                         st.info("Aucune ressource supplémentaire sélectionnée : seul le fichier vidéo de base sera mis dans l'archive.")
+                        journal_debug("Aucune option d'extraction cochée : archivage vidéo de base seulement")
 
                     fichiers = fichiers_exportables_session()
                     video_base_path = Path(video_path)
                     if video_base_path.is_file() and video_base_path not in fichiers:
                         fichiers.append(video_base_path)
                     fichiers = fichiers_valides(fichiers)
+                    journal_debug(f"Fichiers exportables avant ZIP : {len(fichiers)}")
+                    for fichier in fichiers[:30]:
+                        journal_debug(f" - exportable : {fichier.relative_to(REPERTOIRE_SORTIE) if fichier.is_relative_to(REPERTOIRE_SORTIE) else fichier.name} ({fichier.stat().st_size} octets)")
                     if not fichiers:
                         message_erreur = (
                             "Aucun fichier exploitable n'a été généré. "
@@ -1404,6 +1541,7 @@ if st.button("Lancer le traitement"):
                         st.error(message_erreur)
                         enregistrer_erreur_resultats(message_erreur)
                         st.code(diagnostic_contenu_sortie())
+                        afficher_debug_extraction(expanded=True)
                         st.stop()
                     st.info(f"Préparation de l'archive ZIP : {len(fichiers)} fichier(s).")
                     zip_path = REPERTOIRE_SORTIE / f"resultats_{base_court}.zip"
@@ -1419,5 +1557,12 @@ if st.button("Lancer le traitement"):
                         st.success(message_ok)
                         enregistrer_resultats_generes(zip_path, fichiers, message_ok)
                         afficher_telechargement_zip(zip_path, "direct_extraction", message_ok)
+            else:
+                message_erreur = "Aucune vidéo source prête : l'extraction n'a pas démarré."
+                st.error(message_erreur)
+                enregistrer_erreur_resultats(message_erreur)
+                journal_debug(message_erreur)
+                st.code(diagnostic_contenu_sortie())
 
+afficher_debug_extraction(expanded=debug_affiche or bool(st.session_state.get("derniere_erreur_resultats")))
 afficher_resultats_generes()
