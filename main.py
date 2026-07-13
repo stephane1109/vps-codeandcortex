@@ -771,11 +771,10 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "nocheckcertificate": True,
         "restrictfilenames": True,
         "trim_file_name": 80,
-        # Comme dans l'application source : yt-dlp choisit le meilleur conteneur
-        # disponible, puis ffmpeg normalise ensuite vers MP4.
-        "format": os.environ.get("YTDLP_FORMAT", "bestvideo*+bestaudio/best").strip()
-        or "bestvideo*+bestaudio/best",
     }
+    format_env = os.environ.get("YTDLP_FORMAT", "").strip()
+    if format_env:
+        opts["format"] = format_env
     # YTDLP_IMPERSONATE reste volontairement optionnel : force a "chrome" par
     # defaut, il peut provoquer un AssertionError dans l'API Python de yt-dlp.
     impersonate_client = os.environ.get("YTDLP_IMPERSONATE", "").strip()
@@ -788,6 +787,13 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
     ]
     if clients_env:
         youtube_args["player_client"] = clients_env
+    remote_components_env = [
+        item.strip()
+        for item in os.environ.get("YTDLP_REMOTE_COMPONENTS", "").split(",")
+        if item.strip()
+    ]
+    if remote_components_env:
+        opts["remote_components"] = set(remote_components_env)
     if youtube_args:
         opts["extractor_args"] = {"youtube": youtube_args}
     logger = _logger_silencieux(verbose)
@@ -831,17 +837,6 @@ def telecharger_preparer_video(
                 pass
         return info_local
 
-    formats_a_tenter = [
-        ydl_opts.get("format") or "bestvideo*+bestaudio/best",
-        "bestvideo+bestaudio/best",
-        "best",
-        "bestaudio/best",
-    ]
-    formats_uniques: List[str] = []
-    for fmt in formats_a_tenter:
-        if fmt and fmt not in formats_uniques:
-            formats_uniques.append(str(fmt))
-
     profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None)]
     clients_forces = (
         ydl_opts.get("extractor_args", {})
@@ -868,38 +863,33 @@ def telecharger_preparer_video(
             "yt-dlp profil client : "
             + f"{label_client} ({opts_client.get('extractor_args', {}).get('youtube', {}).get('player_client') or 'auto'})"
         )
-        for fmt in formats_uniques:
-            ydl_opts_fallback = dict(opts_client)
-            ydl_opts_fallback["format"] = fmt
-            ydl_opts_fallback.pop("merge_output_format", None)
-            try:
-                journal_debug(f"yt-dlp essai : {label_client}:{fmt}")
-                info = _telecharger(ydl_opts_fallback)
-                journal_debug(f"yt-dlp téléchargement OK : {label_client}:{fmt}")
-                break
-            except Exception as exc:
-                message = str(exc) or repr(exc)
-                journal_debug(f"yt-dlp erreur : {label_client}:{fmt} | {message[:500]}")
-                erreurs_fallback.append(f"{label_client}:{fmt} -> {message}")
-                if isinstance(exc, AssertionError):
+        try:
+            journal_debug(f"yt-dlp essai automatique : {label_client}")
+            info = _telecharger(opts_client)
+            journal_debug(f"yt-dlp téléchargement OK : {label_client}")
+        except Exception as exc:
+            message = str(exc) or repr(exc)
+            journal_debug(f"yt-dlp erreur : {label_client} | {message[:500]}")
+            erreurs_fallback.append(f"{label_client} -> {message}")
+            if isinstance(exc, AssertionError):
+                return None, None, None, (
+                    "yt-dlp a échoué avec AssertionError. Supprime YTDLP_IMPERSONATE "
+                    "dans Coolify ou laisse cette variable vide."
+                )
+            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                if not cookies_path:
                     return None, None, None, (
-                        "yt-dlp a échoué avec AssertionError. Supprime YTDLP_IMPERSONATE "
-                        "dans Coolify ou laisse cette variable vide."
+                        "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                        "récent exporté depuis le même navigateur, puis relance."
                     )
-                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                    if not cookies_path:
-                        return None, None, None, (
-                            "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
-                            "récent exporté depuis le même navigateur, puis relance."
-                        )
-                    return None, None, None, (
-                        "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
-                        "dans le navigateur, réexporte un cookies.txt récent, puis relance."
-                    )
-                if "403" in message or "Forbidden" in message:
-                    if not cookies_path:
-                        return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
-                    return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
+                return None, None, None, (
+                    "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
+                    "dans le navigateur, réexporte un cookies.txt récent, puis relance."
+                )
+            if "403" in message or "Forbidden" in message:
+                if not cookies_path:
+                    return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
+                return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
         if info is not None:
             break
 

@@ -35,10 +35,22 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
         ffmpeg \
         libgl1 \
         libglib2.0-0 \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Deno est le runtime JavaScript recommande par yt-dlp pour yt-dlp-ejs.
+# Cela permet a yt-dlp de traiter les challenges JavaScript YouTube récents.
+RUN curl -fsSL -o /tmp/deno.zip \
+        https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/deno \
+    && rm -f /tmp/deno.zip \
+    && deno --version
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
@@ -51,7 +63,7 @@ RUN pip install --upgrade pip setuptools wheel \
 # séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
 ARG YTDLP_REFRESH=2026-07-13
 RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
-    && python -m pip install --upgrade --no-cache-dir yt-dlp \
+    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
     && python -m yt_dlp --version
 
 COPY . /app

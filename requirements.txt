@@ -1,8 +1,7 @@
 streamlit>=1.36,<2
 streamlit-autorefresh>=1,<2
 # YouTube change souvent ses formats : garder cette couche rafraichie au build.
-yt-dlp
-curl-cffi>=0.7
+yt-dlp[default,curl-cffi]
 ffmpeg-python
 opencv-python-headless
 numpy
