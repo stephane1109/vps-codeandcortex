@@ -43,6 +43,13 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip setuptools wheel \
     && pip install -r /app/requirements.txt
 
+# YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
+# séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
+ARG YTDLP_REFRESH=2026-07-13
+RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
+    && python -m pip install --upgrade --no-cache-dir yt-dlp \
+    && python -m yt_dlp --version
+
 COPY . /app
 
 RUN chmod +x /app/docker-entrypoint.sh \

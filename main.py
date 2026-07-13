@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import cv2
 import streamlit as st
+import yt_dlp
 from yt_dlp import YoutubeDL
 
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
@@ -89,10 +90,17 @@ YOUTUBE_CLIENT_FALLBACKS: List[tuple[str, Optional[List[str]]]] = [
     # face aux changements YouTube, PO Token et SABR.
     ("auto", None),
     ("android_vr", ["android_vr"]),
+    ("web_safari", ["web_safari"]),
+    ("web_creator", ["web_creator"]),
+    ("web_embedded", ["web_embedded"]),
     ("web", ["web"]),
     ("mweb", ["mweb"]),
+    ("ios", ["ios"]),
     ("android", ["android"]),
-    ("legacy_forced", ["android", "ios", "mweb", "web"]),
+    ("tv", ["tv"]),
+    ("tv_simply", ["tv_simply"]),
+    ("tv_downgraded", ["tv_downgraded"]),
+    ("legacy_forced", ["android", "ios", "mweb", "web", "web_safari"]),
 ]
 UPLOAD_VIDEO_EXTENSIONS = [
     "mp4",
@@ -714,6 +722,21 @@ def _logger_silencieux(actif: bool):
 
 def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) -> Dict[str, Any]:
     user_agent_final = (user_agent or "").strip() or USER_AGENT_YOUTUBE_DEFAUT
+    youtube_args: Dict[str, List[str]] = {}
+    formats_args = [
+        item.strip()
+        for item in os.environ.get("YTDLP_YOUTUBE_FORMATS", "missing_pot").split(",")
+        if item.strip()
+    ]
+    if formats_args:
+        youtube_args["formats"] = formats_args
+    po_token_args = [
+        item.strip()
+        for item in os.environ.get("YTDLP_YOUTUBE_PO_TOKEN_ARGS", "").split(",")
+        if item.strip()
+    ]
+    if po_token_args:
+        youtube_args["po_token"] = po_token_args
     opts: Dict[str, Any] = {
         "paths": {"home": str(REPERTOIRE_SORTIE)},
         "outtmpl": {"default": "%(id)s.%(ext)s"},
@@ -746,7 +769,9 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         if client.strip()
     ]
     if clients_env:
-        opts["extractor_args"] = {"youtube": {"player_client": clients_env}}
+        youtube_args["player_client"] = clients_env
+    if youtube_args:
+        opts["extractor_args"] = {"youtube": youtube_args}
     logger = _logger_silencieux(verbose)
     if logger is not None:
         opts["logger"] = logger
@@ -758,15 +783,19 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
 def _opts_avec_clients_youtube(opts_base: Dict[str, Any], clients: Optional[List[str]]) -> Dict[str, Any]:
     opts = dict(opts_base)
     extractor_args = dict(opts.get("extractor_args") or {})
+    youtube_args = dict(extractor_args.get("youtube") or {})
     if clients:
-        extractor_args["youtube"] = {"player_client": clients}
-        opts["extractor_args"] = extractor_args
+        youtube_args["player_client"] = clients
+    else:
+        youtube_args.pop("player_client", None)
+    if youtube_args:
+        extractor_args["youtube"] = youtube_args
     else:
         extractor_args.pop("youtube", None)
-        if extractor_args:
-            opts["extractor_args"] = extractor_args
-        else:
-            opts.pop("extractor_args", None)
+    if extractor_args:
+        opts["extractor_args"] = extractor_args
+    else:
+        opts.pop("extractor_args", None)
     return opts
 
 
@@ -914,9 +943,11 @@ def telecharger_preparer_video(
     st.write("Téléchargement / préparation de la vidéo en cours...")
     journal_debug("Début préparation YouTube")
     journal_debug(f"URL renseignée : {'oui' if url else 'non'} | cookies : {'oui' if cookies_path else 'non'} | intervalle : {utiliser_intervalle}")
+    journal_debug(f"yt-dlp version : {getattr(yt_dlp.version, '__version__', 'inconnue')}")
     debut_telechargement = time.time() - 2
 
     ydl_opts = _opts_communs(verbose, cookies_path, user_agent)
+    journal_debug(f"Arguments YouTube yt-dlp : {ydl_opts.get('extractor_args', {}).get('youtube', {})}")
     if utiliser_intervalle:
         ydl_opts["download_sections"] = [{"section": f"*{debut}-{fin}"}]
         ydl_opts["force_keyframes_at_cuts"] = True
