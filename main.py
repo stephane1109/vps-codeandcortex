@@ -1068,6 +1068,62 @@ def extraire_ressources(video_path: str, debut: int, fin: int, base_court: str, 
     return None
 
 
+def chemin_apercu_video(chemin_video: Path) -> Path:
+    try:
+        stat = chemin_video.stat()
+        signature_base = f"{chemin_video.resolve()}:{stat.st_size}:{stat.st_mtime_ns}"
+    except Exception:
+        signature_base = str(chemin_video)
+    signature = hashlib.sha1(signature_base.encode("utf-8")).hexdigest()[:16]
+    return REPERTOIRE_TEMP / f"preview_{signature}.mp4"
+
+
+def creer_apercu_video(chemin_video: Path) -> Path:
+    """Crée un MP4 web-compatible pour éviter les codecs non lisibles navigateur."""
+    apercu = chemin_apercu_video(chemin_video)
+    if apercu.is_file() and apercu.stat().st_size > 0:
+        journal_debug(f"Aperçu vidéo réutilisé : {apercu.name} ({apercu.stat().st_size} octets)")
+        return apercu
+
+    try:
+        ffmpeg = tl.chemin_ffmpeg()
+    except Exception as exc:
+        raise RuntimeError(f"ffmpeg introuvable pour l'aperçu : {exc}") from exc
+
+    journal_debug(f"Création aperçu vidéo web-compatible : {chemin_video.name} -> {apercu.name}")
+    executer_ffmpeg(
+        [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(chemin_video),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-vf",
+            "scale=min(1280\\,iw):-2,format=yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "26",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            str(apercu),
+        ],
+        "Création aperçu vidéo",
+    )
+    if not apercu.is_file() or apercu.stat().st_size <= 0:
+        raise RuntimeError("le fichier d'aperçu MP4 n'a pas été créé")
+    return apercu
+
+
 def afficher_video_bytes(chemin_video: Path) -> None:
     if not chemin_video.exists() or not chemin_video.is_file():
         st.info("Aperçu indisponible : fichier absent.")
@@ -1080,10 +1136,12 @@ def afficher_video_bytes(chemin_video: Path) -> None:
         st.info("Fichier volumineux : aperçu désactivé.")
         return
     try:
-        journal_debug(f"Aperçu vidéo : {chemin_video.name} ({taille} octets)")
-        st.video(str(chemin_video), start_time=0)
+        apercu = creer_apercu_video(chemin_video)
+        journal_debug(f"Affichage aperçu vidéo : {apercu.name} ({apercu.stat().st_size} octets)")
+        with open(apercu, "rb") as fichier:
+            st.video(fichier.read(), format="video/mp4", start_time=0)
     except Exception as e:
-        journal_debug(f"Aperçu via chemin impossible : {e}")
+        journal_debug(f"Aperçu web-compatible impossible : {e}")
         try:
             with open(chemin_video, "rb") as fichier:
                 st.video(fichier.read(), format="video/mp4", start_time=0)
