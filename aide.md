@@ -55,13 +55,6 @@ Lien souvent utilise :
 5. Exporte le fichier.
 6. Verifie que le fichier se nomme bien `cookies.txt`.
 
-### Importer dans l'application
-
-1. Ouvre l'application `Extraction multimedia`.
-2. Dans la section `Cookies YouTube (optionnel)`, envoie le fichier `cookies.txt`.
-3. Si un ancien cookies est deja present, coche `Forcer le remplacement`.
-4. Relance le traitement.
-
 ## Chrome - extension cookies.txt
 
 Oui, **Chrome marche aussi**, si tu utilises une extension capable d'exporter
@@ -88,69 +81,3 @@ Important :
 4. Clique sur l'extension.
 5. Exporte le fichier `cookies.txt`.
 6. Enregistre-le sur ton ordinateur.
-
-### Importer dans l'application
-
-1. Ouvre l'application `Extraction multimedia`.
-2. Envoie le nouveau `cookies.txt`.
-3. Coche `Forcer le remplacement` si un ancien fichier est memorise.
-4. Relance le traitement.
-
-## Conseils si YouTube bloque encore
-
-Si l'erreur persiste, essaye dans cet ordre :
-
-1. Recharge YouTube dans le navigateur.
-2. Verifie que la video est bien lisible a la main.
-3. Re-exporte un **nouveau** `cookies.txt`.
-4. Reimporte-le dans l'application avec `Forcer le remplacement`.
-5. Utilise le meme navigateur pour recuperer aussi le `User-Agent`.
-6. Colle ce `User-Agent` dans le champ prevu dans l'application.
-
-## Recuperer le User-Agent du navigateur
-
-Quand YouTube est strict, il vaut mieux utiliser un `User-Agent` coherent avec
-le navigateur qui a servi a exporter le cookies.
-
-Exemple de methode simple :
-
-1. Ouvre le navigateur utilise pour exporter le cookies.
-2. Va sur un site qui affiche le `User-Agent`.
-3. Copie la valeur complete.
-4. Colle-la dans le champ `User-Agent navigateur` de l'application.
-
-## Erreurs frequentes
-
-### 1. Le cookies est trop ancien
-
-YouTube peut refuser un cookies exporte il y a plusieurs heures ou plusieurs
-jours. Refaire un export recent resout souvent le probleme.
-
-### 2. Mauvais format de fichier
-
-Si le fichier n'est pas un vrai `cookies.txt` Netscape, `yt-dlp` ne pourra pas
-l'utiliser correctement.
-
-### 3. Ancien cookies conserve dans la session
-
-Si tu importes un nouveau fichier sans cocher `Forcer le remplacement`, l'ancien
-cookies peut rester en place.
-
-### 4. Video testee sur un autre navigateur
-
-Le meilleur resultat est obtenu quand :
-
-- la video a ete ouverte dans le meme navigateur
-- le cookies vient de ce meme navigateur
-- le `User-Agent` vient aussi de ce meme navigateur
-
-## Resume rapide
-
-Pour maximiser les chances de succes :
-
-1. ouvre la video sur YouTube dans Firefox ou Chrome
-2. exporte un `cookies.txt` recent avec l'extension `cookies.txt`
-3. importe ce fichier dans l'application
-4. coche `Forcer le remplacement` si besoin
-5. colle le `User-Agent` du meme navigateur
-6. relance l'extraction
