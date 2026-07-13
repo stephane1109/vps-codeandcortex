@@ -61,47 +61,9 @@ SEUIL_APERCU_OCTETS = 160 * 1024 * 1024
 LONGUEUR_TITRE_MAX = 24
 LONGUEUR_PREFIX_ID = 8
 USER_AGENT_YOUTUBE_DEFAUT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/137.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) "
+    "Gecko/20100101 Firefox/115.0"
 )
-FORMATS_YOUTUBE_FALLBACK: List[Optional[str]] = [
-    # None = laisser yt-dlp choisir lui-même son meilleur format compatible.
-    None,
-    # Formats YouTube progressifs très fréquents. Le format 18 est souvent le
-    # dernier format MP4 audio+vidéo encore disponible sur les vidéos contraintes.
-    "18",
-    "22",
-    "best[height<=1080][acodec!=none][vcodec!=none]/best[height<=720][acodec!=none][vcodec!=none]/best[height<=480][acodec!=none][vcodec!=none]/best[height<=360][acodec!=none][vcodec!=none]",
-    "best[height<=720][ext=mp4]/best[height<=480][ext=mp4]/best[height<=360][ext=mp4]/best[ext=mp4]/best",
-    "bestvideo*+bestaudio/best",
-    "bv*+ba/b",
-    "bestvideo+bestaudio/best",
-    "best[ext=mp4]/best",
-    "best[protocol^=http]/best",
-    "best[acodec!=none][vcodec!=none]/best[acodec!=none]/best",
-    "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[ext=mp4]/b",
-    "worstvideo*+worstaudio/worst",
-    "worst[acodec!=none][vcodec!=none]/worst",
-    "bestaudio/best",
-]
-YOUTUBE_CLIENT_FALLBACKS: List[tuple[str, Optional[List[str]]]] = [
-    # `auto` laisse yt-dlp choisir ses clients. C'est le profil le plus robuste
-    # face aux changements YouTube, PO Token et SABR.
-    ("auto", None),
-    ("android_vr", ["android_vr"]),
-    ("web_safari", ["web_safari"]),
-    ("web_creator", ["web_creator"]),
-    ("web_embedded", ["web_embedded"]),
-    ("web", ["web"]),
-    ("mweb", ["mweb"]),
-    ("ios", ["ios"]),
-    ("android", ["android"]),
-    ("tv", ["tv"]),
-    ("tv_simply", ["tv_simply"]),
-    ("tv_downgraded", ["tv_downgraded"]),
-    ("legacy_forced", ["android", "ios", "mweb", "web", "web_safari"]),
-]
 UPLOAD_VIDEO_EXTENSIONS = [
     "mp4",
     "mov",
@@ -725,11 +687,9 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
     youtube_args: Dict[str, List[str]] = {}
     formats_args = [
         item.strip()
-        for item in os.environ.get("YTDLP_YOUTUBE_FORMATS", "missing_pot").split(",")
+        for item in os.environ.get("YTDLP_YOUTUBE_FORMATS", "").split(",")
         if item.strip()
     ]
-    if formats_args:
-        youtube_args["formats"] = formats_args
     po_token_args = [
         item.strip()
         for item in os.environ.get("YTDLP_YOUTUBE_PO_TOKEN_ARGS", "").split(",")
@@ -737,6 +697,8 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
     ]
     if po_token_args:
         youtube_args["po_token"] = po_token_args
+        if formats_args:
+            youtube_args["formats"] = formats_args
     opts: Dict[str, Any] = {
         "paths": {"home": str(REPERTOIRE_SORTIE)},
         "outtmpl": {"default": "%(id)s.%(ext)s"},
@@ -761,7 +723,10 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "nocheckcertificate": True,
         "restrictfilenames": True,
         "trim_file_name": 80,
-        "merge_output_format": "mp4",
+        # Comme dans l'application source : yt-dlp choisit le meilleur conteneur
+        # disponible, puis ffmpeg normalise ensuite vers MP4.
+        "format": os.environ.get("YTDLP_FORMAT", "bestvideo*+bestaudio/best").strip()
+        or "bestvideo*+bestaudio/best",
     }
     # YTDLP_IMPERSONATE reste volontairement optionnel : force a "chrome" par
     # defaut, il peut provoquer un AssertionError dans l'API Python de yt-dlp.
@@ -773,8 +738,7 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         for client in os.environ.get("YTDLP_PLAYER_CLIENTS", "").split(",")
         if client.strip()
     ]
-    if clients_env:
-        youtube_args["player_client"] = clients_env
+    youtube_args["player_client"] = clients_env or ["android", "ios", "mweb", "web"]
     if youtube_args:
         opts["extractor_args"] = {"youtube": youtube_args}
     logger = _logger_silencieux(verbose)
@@ -783,155 +747,6 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
     if cookies_path:
         opts["cookiefile"] = str(cookies_path)
     return opts
-
-
-def _opts_avec_clients_youtube(opts_base: Dict[str, Any], clients: Optional[List[str]]) -> Dict[str, Any]:
-    opts = dict(opts_base)
-    extractor_args = dict(opts.get("extractor_args") or {})
-    youtube_args = dict(extractor_args.get("youtube") or {})
-    if clients:
-        youtube_args["player_client"] = clients
-    else:
-        youtube_args.pop("player_client", None)
-    if youtube_args:
-        extractor_args["youtube"] = youtube_args
-    else:
-        extractor_args.pop("youtube", None)
-    if extractor_args:
-        opts["extractor_args"] = extractor_args
-    else:
-        opts.pop("extractor_args", None)
-    return opts
-
-
-def _format_score(format_info: Dict[str, Any], prefer_audio: bool = False) -> float:
-    height = float(format_info.get("height") or 0)
-    width = float(format_info.get("width") or 0)
-    tbr = float(format_info.get("tbr") or 0)
-    abr = float(format_info.get("abr") or 0)
-    filesize = float(format_info.get("filesize") or format_info.get("filesize_approx") or 0)
-    if prefer_audio:
-        return (abr * 1000) + tbr + (filesize / 1000000000)
-    return (height * 1000000) + (width * 1000) + tbr + (filesize / 1000000000)
-
-
-def _format_id(format_info: Dict[str, Any]) -> Optional[str]:
-    value = format_info.get("format_id")
-    if value is None:
-        return None
-    value = str(value).strip()
-    return value or None
-
-
-def _format_est_exploitable(format_info: Dict[str, Any]) -> bool:
-    format_id = _format_id(format_info)
-    if not format_id:
-        return False
-    ext = str(format_info.get("ext") or "").lower()
-    protocol = str(format_info.get("protocol") or "").lower()
-    vcodec = str(format_info.get("vcodec") or "none").lower()
-    acodec = str(format_info.get("acodec") or "none").lower()
-    if ext in {"mhtml", "html", "json"}:
-        return False
-    if "storyboard" in format_id.lower() or "mhtml" in protocol:
-        return False
-    return vcodec != "none" or acodec != "none"
-
-
-def _formats_disponibles_youtube(url: str, opts_base: Dict[str, Any]) -> List[str]:
-    probe_opts = dict(opts_base)
-    probe_opts.pop("format", None)
-    probe_opts.pop("download_sections", None)
-    probe_opts.pop("force_keyframes_at_cuts", None)
-    probe_opts.pop("merge_output_format", None)
-    probe_opts.pop("check_formats", None)
-    probe_opts["ignore_no_formats_error"] = True
-    probe_opts["simulate"] = True
-    probe_opts["skip_download"] = True
-    with YoutubeDL(probe_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    if not info:
-        return []
-
-    formats = info.get("formats") or []
-    video_only: List[Dict[str, Any]] = []
-    audio_only: List[Dict[str, Any]] = []
-    combined: List[Dict[str, Any]] = []
-
-    for format_info in formats:
-        if not _format_est_exploitable(format_info):
-            continue
-        format_id = _format_id(format_info)
-        if not format_id:
-            continue
-        vcodec = str(format_info.get("vcodec") or "none")
-        acodec = str(format_info.get("acodec") or "none")
-        if vcodec != "none" and acodec != "none":
-            combined.append(format_info)
-        elif vcodec != "none":
-            video_only.append(format_info)
-        elif acodec != "none":
-            audio_only.append(format_info)
-
-    video_only.sort(key=_format_score, reverse=True)
-    audio_only.sort(key=lambda item: _format_score(item, prefer_audio=True), reverse=True)
-    combined.sort(key=_format_score, reverse=True)
-
-    candidates: List[str] = []
-    for video_format in video_only:
-        video_id = _format_id(video_format)
-        for audio_format in audio_only:
-            audio_id = _format_id(audio_format)
-            if video_id and audio_id:
-                candidates.append(f"{video_id}+{audio_id}")
-    for format_info in combined:
-        format_id = _format_id(format_info)
-        if format_id:
-            candidates.append(format_id)
-    for format_info in audio_only:
-        format_id = _format_id(format_info)
-        if format_id:
-            candidates.append(format_id)
-    for format_info in video_only:
-        format_id = _format_id(format_info)
-        if format_id:
-            candidates.append(format_id)
-
-    deduped: List[str] = []
-    for candidate in candidates:
-        if candidate not in deduped:
-            deduped.append(candidate)
-    return deduped
-
-
-def _strategies_youtube(url: str, opts_base: Dict[str, Any]) -> List[tuple[str, Optional[str], Dict[str, Any]]]:
-    strategies: List[tuple[str, Optional[str], Dict[str, Any]]] = []
-    deja_vus = set()
-
-    for label_client, clients in YOUTUBE_CLIENT_FALLBACKS:
-        opts_client = _opts_avec_clients_youtube(opts_base, clients)
-        formats_reels: List[Optional[str]] = []
-        try:
-            formats_reels.extend(_formats_disponibles_youtube(url, opts_client))
-        except Exception:
-            pass
-        formats_reels.extend(FORMATS_YOUTUBE_FALLBACK)
-
-        for fmt in formats_reels:
-            cle = (label_client, "__default__" if fmt is None else str(fmt))
-            if cle in deja_vus:
-                continue
-            deja_vus.add(cle)
-            opts = dict(opts_client)
-            if fmt is None:
-                opts.pop("format", None)
-            else:
-                opts["format"] = fmt
-            # Le remux MP4 est fait ensuite par ffmpeg. On ne bloque donc pas
-            # yt-dlp sur un conteneur précis pendant les tentatives de secours.
-            opts.pop("merge_output_format", None)
-            strategies.append((label_client, fmt, opts))
-    return strategies
 
 
 def telecharger_preparer_video(
@@ -967,61 +782,61 @@ def telecharger_preparer_video(
                 pass
         return info_local
 
-    erreurs_fallback: List[str] = []
-    tentatives: List[str] = []
-    info = None
-    max_strategies = max(1, _env_int("YTDLP_MAX_STRATEGIES", 80))
-    strategies = _strategies_youtube(url, ydl_opts)[:max_strategies]
-    journal_debug(f"yt-dlp stratégies préparées : {len(strategies)}")
-
-    for label_client, fmt, ydl_opts_fallback in strategies:
-        tentatives.append(f"{label_client}:{fmt or 'auto'}")
-        try:
-            journal_debug(f"yt-dlp essai : {tentatives[-1]}")
-            info = _telecharger(ydl_opts_fallback)
-            journal_debug(f"yt-dlp téléchargement OK : {tentatives[-1]}")
-            break
-        except Exception as e:
-            if isinstance(e, AssertionError):
-                message = (
-                    "AssertionError yt-dlp. Cause probable : YTDLP_IMPERSONATE "
-                    "force dans l'environnement. Supprime cette variable ou laisse-la vide."
-                )
-            else:
-                message = str(e) or repr(e)
-            journal_debug(f"yt-dlp erreur : {tentatives[-1]} | {message[:500]}")
-            erreurs_fallback.append(f"{tentatives[-1]} -> {message}")
-            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                if not cookies_path:
-                    return None, None, None, (
-                        "YouTube bloque la requête comme anti-bot. "
-                        "Ajoute un cookies.txt recent exporte depuis le meme navigateur "
-                        "et idealement la meme IP publique, puis relance."
-                    )
+    try:
+        journal_debug(f"yt-dlp tentative principale : {ydl_opts.get('format')}")
+        info = _telecharger(ydl_opts)
+        journal_debug("yt-dlp téléchargement OK : tentative principale")
+    except Exception as e:
+        message = str(e) or repr(e)
+        journal_debug(f"yt-dlp erreur principale : {message[:500]}")
+        if isinstance(e, AssertionError):
+            return None, None, None, (
+                "yt-dlp a échoué avec AssertionError. Supprime YTDLP_IMPERSONATE "
+                "dans Coolify ou laisse cette variable vide."
+            )
+        if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+            if not cookies_path:
                 return None, None, None, (
-                    "YouTube refuse encore la requête malgré le cookies.txt. "
-                    "Cause probable : cookies trop anciens, export incomplet, compte non reconnecte "
-                    "recemment, ou User-Agent non coherent avec le navigateur d'origine. "
-                    "Recharge YouTube dans ton navigateur, re-exporte le cookies.txt, puis colle "
-                    "le User-Agent exact du navigateur dans le champ dedie."
+                    "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                    "récent exporté depuis le même navigateur, puis relance."
                 )
-            if "403" in message or "Forbidden" in message:
-                if not cookies_path:
-                    return None, None, None, "HTTP 403 detecte. La video est restreinte. Fournis un cookies.txt puis relance."
-                return None, None, None, "HTTP 403 persistant malgre les cookies. Verifie le cookies.txt."
+            return None, None, None, (
+                "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
+                "dans le navigateur, réexporte un cookies.txt récent, puis relance."
+            )
+        if "403" in message or "Forbidden" in message:
+            if not cookies_path:
+                return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
+            return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
+        if "Requested format is not available" not in message and "format not available" not in message.lower():
+            return None, None, None, message
 
-    if info is None:
-        return None, None, None, (
-            "Aucun format YouTube exploitable n'a pu être téléchargé par yt-dlp. "
-            f"{len(tentatives)} stratégie(s) ont été tentées sur plusieurs profils YouTube. "
-            "Si la vidéo se lit dans le navigateur, réexporte un cookies.txt récent depuis le même navigateur. "
-            "Si l'erreur persiste, YouTube exige probablement un PO token : ajoute "
-            "YTDLP_YOUTUBE_PO_TOKEN_ARGS=web.gvs+TON_TOKEN dans Coolify. "
-            "Dernière stratégie : "
-            + (tentatives[-1] if tentatives else "aucune")
-            + ". Dernière erreur : "
-            + (erreurs_fallback[-1] if erreurs_fallback else "aucune")
-        )
+        formats_alternatifs = [
+            "bestvideo+bestaudio/best",
+            "best",
+            "bestaudio/best",
+        ]
+        erreurs_fallback: List[str] = []
+        info = None
+        journal_debug("Format principal indisponible : retour aux fallbacks de l'application source")
+        for fmt in formats_alternatifs:
+            if fmt == ydl_opts.get("format"):
+                continue
+            ydl_opts_fallback = dict(ydl_opts)
+            ydl_opts_fallback["format"] = fmt
+            ydl_opts_fallback.pop("merge_output_format", None)
+            try:
+                journal_debug(f"yt-dlp fallback : {fmt}")
+                info = _telecharger(ydl_opts_fallback)
+                journal_debug(f"yt-dlp téléchargement OK : {fmt}")
+                break
+            except Exception as e2:
+                message2 = str(e2) or repr(e2)
+                erreurs_fallback.append(message2)
+                journal_debug(f"yt-dlp erreur fallback {fmt} : {message2[:500]}")
+        if info is None:
+            detail_erreur = " | ".join(erreurs_fallback) or message
+            return None, None, None, f"Echec du fallback universel : {detail_erreur}"
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     candidats = chemins_depuis_info_ytdlp(info)
