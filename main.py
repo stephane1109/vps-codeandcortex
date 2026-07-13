@@ -372,6 +372,66 @@ def build_sidebar_notes() -> None:
     return None
 
 
+def save_transcription_result_state(
+    transcription_text: str,
+    transcription_path: Path,
+    run_dir: Path,
+    audio_path: Path,
+    resolved_profile: str,
+    backend_name: str,
+    model_size: str,
+    language_code: str,
+) -> None:
+    st.session_state["last_transcription_result"] = {
+        "result_id": run_dir.name,
+        "text": transcription_text,
+        "file_name": transcription_path.name,
+        "run_dir": str(run_dir),
+        "audio_path": str(audio_path),
+        "transcription_path": str(transcription_path),
+        "resolved_profile": resolved_profile,
+        "backend_name": backend_name,
+        "model_size": model_size,
+        "language_code": language_code or "auto",
+        "whisper_cache_dir": str(WHISPER_CACHE_DIR),
+    }
+
+
+def render_transcription_result(debug_mode: bool) -> None:
+    result = st.session_state.get("last_transcription_result")
+    if not result:
+        return
+
+    st.subheader("Transcription")
+    st.success(f"Transcription enregistrée : {result['file_name']}")
+
+    if debug_mode:
+        st.info(f"Dossier de travail : {result['run_dir']}")
+        st.code(
+            "\n".join(
+                [
+                    f"Audio : {result['audio_path']}",
+                    f"Profil résolu : {result['resolved_profile']}",
+                    f"Backend : {result['backend_name']}",
+                    f"Transcription : {result['transcription_path']}",
+                    f"Modèle : {result['model_size']}",
+                    f"Langue : {result['language_code']}",
+                    f"Cache Whisper : {result['whisper_cache_dir']}",
+                ]
+            )
+        )
+
+    result_id = result.get("result_id", "current")
+    st.text_area("Texte de la transcription", result["text"], height=320, key=f"transcription_text_{result_id}")
+    st.download_button(
+        "Télécharger la transcription",
+        data=result["text"],
+        file_name=result["file_name"],
+        mime="text/plain",
+        key=f"download_transcription_{result_id}",
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, layout="wide")
     st.markdown(
@@ -459,36 +519,22 @@ def main() -> None:
                 transcription_text = run_transcription_with_progress(audio_path, model_size, language_code, debug_mode)
 
             transcription_path = save_transcription(transcription_text, audio_path)
-            st.success(f"Transcription enregistrée : {transcription_path.name}")
-
-            if debug_mode:
-                st.info(f"Dossier de travail : {run_dir}")
-                st.code(
-                    "\n".join(
-                        [
-                            f"Audio : {audio_path}",
-                            f"Profil résolu : {resolved_profile}",
-                            f"Backend : {backend_name}",
-                            f"Transcription : {transcription_path}",
-                            f"Modèle : {model_size}",
-                            f"Langue : {language_code or 'auto'}",
-                            f"Cache Whisper : {WHISPER_CACHE_DIR}",
-                        ]
-                    )
-                )
-
-            st.subheader("Transcription")
-            st.text_area("Texte de la transcription", transcription_text, height=320)
-            st.download_button(
-                "Télécharger la transcription",
-                data=transcription_text,
-                file_name=transcription_path.name,
-                mime="text/plain",
+            save_transcription_result_state(
+                transcription_text,
+                transcription_path,
+                run_dir,
+                audio_path,
+                resolved_profile,
+                backend_name,
+                model_size,
+                language_code,
             )
         except ApplicationError as exc:
             st.error(str(exc))
         except Exception as exc:  # pragma: no cover - garde-fou Streamlit
             st.error(f"Erreur inattendue : {exc}")
+
+    render_transcription_result(debug_mode)
 
 
 if __name__ == "__main__":
