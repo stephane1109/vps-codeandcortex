@@ -669,17 +669,65 @@ def _logger_silencieux(actif: bool):
     if actif:
         return None
 
-    class SilentLogger:
+    class DebugLogger:
         def debug(self, msg):  # noqa: ANN001
             pass
 
         def warning(self, msg):  # noqa: ANN001
-            pass
+            journal_debug(f"yt-dlp warning : {msg}")
 
         def error(self, msg):  # noqa: ANN001
-            pass
+            journal_debug(f"yt-dlp error : {msg}")
 
-    return SilentLogger()
+    return DebugLogger()
+
+
+def _appliquer_clients_youtube(opts_base: Dict[str, Any], clients: Optional[List[str]]) -> Dict[str, Any]:
+    opts = dict(opts_base)
+    extractor_args = dict(opts.get("extractor_args") or {})
+    youtube_args = dict(extractor_args.get("youtube") or {})
+    if clients:
+        youtube_args["player_client"] = clients
+    else:
+        youtube_args.pop("player_client", None)
+    if youtube_args:
+        extractor_args["youtube"] = youtube_args
+    else:
+        extractor_args.pop("youtube", None)
+    if extractor_args:
+        opts["extractor_args"] = extractor_args
+    else:
+        opts.pop("extractor_args", None)
+    return opts
+
+
+def diagnostiquer_formats_youtube(url: str, opts_base: Dict[str, Any]) -> str:
+    probe_opts = _appliquer_clients_youtube(opts_base, None)
+    for cle in ("format", "download_sections", "force_keyframes_at_cuts", "merge_output_format"):
+        probe_opts.pop(cle, None)
+    probe_opts["simulate"] = True
+    probe_opts["skip_download"] = True
+    probe_opts["ignore_no_formats_error"] = True
+    try:
+        with YoutubeDL(probe_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        return f"Diagnostic formats impossible : {str(exc) or repr(exc)}"
+
+    formats = (info or {}).get("formats") or []
+    medias = []
+    for fmt in formats:
+        vcodec = str(fmt.get("vcodec") or "none")
+        acodec = str(fmt.get("acodec") or "none")
+        if vcodec != "none" or acodec != "none":
+            medias.append(fmt)
+    exemples = []
+    for fmt in medias[:8]:
+        exemples.append(
+            f"{fmt.get('format_id')}:{fmt.get('ext')} v={fmt.get('vcodec')} a={fmt.get('acodec')} h={fmt.get('height')}"
+        )
+    suffixe = " | exemples : " + " ; ".join(exemples) if exemples else ""
+    return f"Formats détectés : {len(formats)} total, {len(medias)} média téléchargeable(s){suffixe}"
 
 
 def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) -> Dict[str, Any]:
@@ -738,7 +786,8 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         for client in os.environ.get("YTDLP_PLAYER_CLIENTS", "").split(",")
         if client.strip()
     ]
-    youtube_args["player_client"] = clients_env or ["android", "ios", "mweb", "web"]
+    if clients_env:
+        youtube_args["player_client"] = clients_env
     if youtube_args:
         opts["extractor_args"] = {"youtube": youtube_args}
     logger = _logger_silencieux(verbose)
@@ -782,61 +831,86 @@ def telecharger_preparer_video(
                 pass
         return info_local
 
-    try:
-        journal_debug(f"yt-dlp tentative principale : {ydl_opts.get('format')}")
-        info = _telecharger(ydl_opts)
-        journal_debug("yt-dlp téléchargement OK : tentative principale")
-    except Exception as e:
-        message = str(e) or repr(e)
-        journal_debug(f"yt-dlp erreur principale : {message[:500]}")
-        if isinstance(e, AssertionError):
-            return None, None, None, (
-                "yt-dlp a échoué avec AssertionError. Supprime YTDLP_IMPERSONATE "
-                "dans Coolify ou laisse cette variable vide."
-            )
-        if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-            if not cookies_path:
-                return None, None, None, (
-                    "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
-                    "récent exporté depuis le même navigateur, puis relance."
-                )
-            return None, None, None, (
-                "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
-                "dans le navigateur, réexporte un cookies.txt récent, puis relance."
-            )
-        if "403" in message or "Forbidden" in message:
-            if not cookies_path:
-                return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
-            return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
-        if "Requested format is not available" not in message and "format not available" not in message.lower():
-            return None, None, None, message
+    formats_a_tenter = [
+        ydl_opts.get("format") or "bestvideo*+bestaudio/best",
+        "bestvideo+bestaudio/best",
+        "best",
+        "bestaudio/best",
+    ]
+    formats_uniques: List[str] = []
+    for fmt in formats_a_tenter:
+        if fmt and fmt not in formats_uniques:
+            formats_uniques.append(str(fmt))
 
-        formats_alternatifs = [
-            "bestvideo+bestaudio/best",
-            "best",
-            "bestaudio/best",
+    profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None)]
+    clients_forces = (
+        ydl_opts.get("extractor_args", {})
+        .get("youtube", {})
+        .get("player_client")
+    )
+    if isinstance(clients_forces, list) and clients_forces:
+        profils_clients.append(("coolify", [str(client) for client in clients_forces]))
+    profils_clients.extend(
+        [
+            ("source", ["android", "ios", "mweb", "web"]),
+            ("web", ["web"]),
+            ("mweb", ["mweb"]),
+            ("ios", ["ios"]),
+            ("android", ["android"]),
         ]
-        erreurs_fallback: List[str] = []
-        info = None
-        journal_debug("Format principal indisponible : retour aux fallbacks de l'application source")
-        for fmt in formats_alternatifs:
-            if fmt == ydl_opts.get("format"):
-                continue
-            ydl_opts_fallback = dict(ydl_opts)
+    )
+
+    erreurs_fallback: List[str] = []
+    info = None
+    for label_client, clients in profils_clients:
+        opts_client = _appliquer_clients_youtube(ydl_opts, clients)
+        journal_debug(
+            "yt-dlp profil client : "
+            + f"{label_client} ({opts_client.get('extractor_args', {}).get('youtube', {}).get('player_client') or 'auto'})"
+        )
+        for fmt in formats_uniques:
+            ydl_opts_fallback = dict(opts_client)
             ydl_opts_fallback["format"] = fmt
             ydl_opts_fallback.pop("merge_output_format", None)
             try:
-                journal_debug(f"yt-dlp fallback : {fmt}")
+                journal_debug(f"yt-dlp essai : {label_client}:{fmt}")
                 info = _telecharger(ydl_opts_fallback)
-                journal_debug(f"yt-dlp téléchargement OK : {fmt}")
+                journal_debug(f"yt-dlp téléchargement OK : {label_client}:{fmt}")
                 break
-            except Exception as e2:
-                message2 = str(e2) or repr(e2)
-                erreurs_fallback.append(message2)
-                journal_debug(f"yt-dlp erreur fallback {fmt} : {message2[:500]}")
-        if info is None:
-            detail_erreur = " | ".join(erreurs_fallback) or message
-            return None, None, None, f"Echec du fallback universel : {detail_erreur}"
+            except Exception as exc:
+                message = str(exc) or repr(exc)
+                journal_debug(f"yt-dlp erreur : {label_client}:{fmt} | {message[:500]}")
+                erreurs_fallback.append(f"{label_client}:{fmt} -> {message}")
+                if isinstance(exc, AssertionError):
+                    return None, None, None, (
+                        "yt-dlp a échoué avec AssertionError. Supprime YTDLP_IMPERSONATE "
+                        "dans Coolify ou laisse cette variable vide."
+                    )
+                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                    if not cookies_path:
+                        return None, None, None, (
+                            "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                            "récent exporté depuis le même navigateur, puis relance."
+                        )
+                    return None, None, None, (
+                        "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
+                        "dans le navigateur, réexporte un cookies.txt récent, puis relance."
+                    )
+                if "403" in message or "Forbidden" in message:
+                    if not cookies_path:
+                        return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
+                    return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
+        if info is not None:
+            break
+
+    if info is None:
+        diagnostic_formats = diagnostiquer_formats_youtube(url, ydl_opts)
+        journal_debug(diagnostic_formats)
+        detail_erreur = " | ".join(erreurs_fallback[-4:]) if erreurs_fallback else "aucune erreur yt-dlp détaillée"
+        return None, None, None, (
+            "Echec du téléchargement YouTube : aucun format média exploitable n'a été obtenu. "
+            f"{diagnostic_formats}. Dernières erreurs : {detail_erreur}"
+        )
     keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     candidats = chemins_depuis_info_ytdlp(info)
