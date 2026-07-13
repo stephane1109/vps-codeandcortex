@@ -763,7 +763,9 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "trim_file_name": 80,
         "merge_output_format": "mp4",
     }
-    impersonate_client = os.environ.get("YTDLP_IMPERSONATE", "chrome").strip()
+    # YTDLP_IMPERSONATE reste volontairement optionnel : force a "chrome" par
+    # defaut, il peut provoquer un AssertionError dans l'API Python de yt-dlp.
+    impersonate_client = os.environ.get("YTDLP_IMPERSONATE", "").strip()
     if impersonate_client:
         opts["impersonate"] = impersonate_client
     clients_env = [
@@ -980,7 +982,13 @@ def telecharger_preparer_video(
             journal_debug(f"yt-dlp téléchargement OK : {tentatives[-1]}")
             break
         except Exception as e:
-            message = str(e) or repr(e)
+            if isinstance(e, AssertionError):
+                message = (
+                    "AssertionError yt-dlp. Cause probable : YTDLP_IMPERSONATE "
+                    "force dans l'environnement. Supprime cette variable ou laisse-la vide."
+                )
+            else:
+                message = str(e) or repr(e)
             journal_debug(f"yt-dlp erreur : {tentatives[-1]} | {message[:500]}")
             erreurs_fallback.append(f"{tentatives[-1]} -> {message}")
             if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
@@ -1257,10 +1265,16 @@ def afficher_video_bytes(chemin_video: Path) -> None:
         st.info("Fichier volumineux : aperçu désactivé.")
         return
     try:
-        with open(chemin_video, "rb") as fichier:
-            st.video(fichier.read(), format="video/mp4", start_time=0)
+        journal_debug(f"Aperçu vidéo : {chemin_video.name} ({taille} octets)")
+        st.video(str(chemin_video), start_time=0)
     except Exception as e:
-        st.warning(f"Aperçu impossible : {e}")
+        journal_debug(f"Aperçu via chemin impossible : {e}")
+        try:
+            with open(chemin_video, "rb") as fichier:
+                st.video(fichier.read(), format="video/mp4", start_time=0)
+        except Exception as e2:
+            journal_debug(f"Aperçu vidéo impossible : {e2}")
+            st.warning(f"Aperçu impossible : {e2}")
 
 
 def sauvegarder_upload_local(fichier_local) -> Optional[Path]:

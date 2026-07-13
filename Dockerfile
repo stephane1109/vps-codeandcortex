@@ -9,7 +9,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8501 \
     APP_DATA_DIR=/tmp/appdata \
     APP_FFMPEG_TIMEOUT_SECONDS=3600 \
-    YTDLP_IMPERSONATE=chrome \
     YTDLP_YOUTUBE_FORMATS=missing_pot \
     APP_TICKET_ID=extraction-multimedia \
     APP_TICKET_MAX_ACTIVE=1 \
@@ -28,7 +27,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_COST=4 et CAPACITE_SERVEUR=6 pour rester coherent avec le reste du VPS
 # - APP_TICKET_TTL_SECONDS si tu veux allonger ou raccourcir la duree d'un ticket
 # - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
-# - YTDLP_IMPERSONATE=chrome pour utiliser les requetes navigateur via curl-cffi
+# - YTDLP_IMPERSONATE=chrome est optionnel. Ne pas le mettre par defaut :
+#   certaines versions de l'API Python yt-dlp peuvent echouer avec AssertionError.
 # - YTDLP_YOUTUBE_FORMATS=missing_pot pour ne pas masquer les formats YouTube sans PO token
 # - YTDLP_YOUTUBE_PO_TOKEN_ARGS=web.gvs+XXX si YouTube impose un PO token manuel
 
