@@ -46,6 +46,8 @@ st.markdown(
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
+APP_NAME = "Extraction multimedia"
+APP_TICKET_DEFAULT_ID = "extraction-multimedia"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -107,8 +109,6 @@ UPLOAD_VIDEO_EXTENSIONS = [
     "ts",
     "m2ts",
 ]
-APP_NAME = "Extraction multimedia"
-APP_TICKET_DEFAULT_ID = "extraction-multimedia"
 
 
 def _import_module_local(nom_module: str):
