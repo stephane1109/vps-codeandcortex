@@ -327,25 +327,45 @@ def zipper_sur_disque(fichiers: List[Path], chemin_zip: Path) -> Path:
     deja_vus = set()
     for fichier in fichiers:
         fichier = Path(fichier)
+        if not fichier.is_file() or fichier.stat().st_size <= 0:
+            continue
         cle = str(fichier.resolve()) if fichier.exists() else str(fichier)
         if cle in deja_vus:
             continue
         fichiers_uniques.append(fichier)
         deja_vus.add(cle)
 
+    chemin_zip.parent.mkdir(parents=True, exist_ok=True)
+    if chemin_zip.exists():
+        chemin_zip.unlink()
+
     # Les médias sont déjà compressés. ZIP_STORED évite une recompaction lente
     # qui peut donner l'impression que l'application tourne sans fin.
     with zipfile.ZipFile(str(chemin_zip), "w", compression=zipfile.ZIP_STORED) as archive:
         for index, fichier in enumerate(fichiers_uniques, start=1):
-            if fichier.is_file():
-                try:
-                    arcname = str(fichier.relative_to(REPERTOIRE_SORTIE))
-                except ValueError:
-                    arcname = fichier.name
-                archive.write(str(fichier), arcname=arcname)
+            try:
+                arcname = str(fichier.relative_to(REPERTOIRE_SORTIE))
+            except ValueError:
+                arcname = fichier.name
+            archive.write(str(fichier), arcname=arcname)
             if index % 100 == 0:
                 keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
     return chemin_zip
+
+
+def nettoyer_resultats_session() -> None:
+    """Nettoie les anciens médias sans supprimer le cookies.txt de la session."""
+    REPERTOIRE_SORTIE.mkdir(parents=True, exist_ok=True)
+    for element in REPERTOIRE_SORTIE.iterdir():
+        if element.name.lower() == "cookies.txt":
+            continue
+        try:
+            if element.is_dir():
+                shutil.rmtree(element, ignore_errors=True)
+            elif element.is_file():
+                element.unlink()
+        except Exception:
+            continue
 
 
 def lister_sorties(prefix: str) -> List[Path]:
@@ -523,7 +543,12 @@ def afficher_resultats_generes() -> None:
     fichiers = fichiers_valides([Path(path) for path in st.session_state.get("derniers_fichiers", [])])
     if not fichiers:
         fichiers = fichiers_exportables_session()
-    if not zip_path_brut and not fichiers and not st.session_state.get("derniere_erreur_resultats"):
+    if (
+        not zip_path_brut
+        and not fichiers
+        and not st.session_state.get("derniere_erreur_resultats")
+        and not (LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0)
+    ):
         return
 
     st.subheader("Derniers fichiers générés")
@@ -1244,6 +1269,7 @@ if st.button("Lancer le traitement"):
         st.session_state["dernier_message_resultats"] = ""
         st.session_state["derniere_erreur_resultats"] = ""
         nettoyer_derniere_archive_stable()
+        nettoyer_resultats_session()
         if not ffmpeg_disponible():
             st.error("ffmpeg introuvable et fallback impossible. Verifie l'image Docker et les dependances systeme.")
             enregistrer_erreur_resultats("ffmpeg est introuvable : aucune extraction ne peut être lancée.")
@@ -1369,9 +1395,9 @@ if st.button("Lancer le traitement"):
                     else:
                         st.info("Aucune ressource supplémentaire sélectionnée : seul le fichier vidéo de base sera mis dans l'archive.")
 
-                    fichiers = lister_sorties(base_court)
+                    fichiers = fichiers_exportables_session()
                     video_base_path = Path(video_path)
-                    if video_base_path not in fichiers:
+                    if video_base_path.is_file() and video_base_path not in fichiers:
                         fichiers.append(video_base_path)
                     fichiers = fichiers_valides(fichiers)
                     if not fichiers:
