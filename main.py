@@ -478,22 +478,27 @@ def obtenir_zip_telechargeable() -> tuple[Optional[Path], str]:
     return None, message
 
 
+def afficher_telechargement_zip(zip_path: Path, key_prefix: str, message: str) -> None:
+    taille_zip = zip_path.stat().st_size / (1024 * 1024)
+    with zip_path.open("rb") as flux_zip:
+        st.download_button(
+            "Télécharger les résultats (.zip)",
+            data=flux_zip,
+            file_name=zip_path.name,
+            mime="application/zip",
+            key=f"{key_prefix}_download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
+            use_container_width=True,
+        )
+    st.caption(f"{message} · {taille_zip:.1f} Mo")
+
+
 def afficher_bouton_telechargement_resultats(key_prefix: str, titre: bool = False) -> None:
     if titre:
         st.subheader("Télécharger les résultats")
 
     zip_path, message = obtenir_zip_telechargeable()
     if zip_path is not None:
-        taille_zip = zip_path.stat().st_size / (1024 * 1024)
-        st.download_button(
-            "Télécharger les résultats (.zip)",
-            data=zip_path.read_bytes(),
-            file_name=zip_path.name,
-            mime="application/zip",
-            key=f"{key_prefix}_download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
-            use_container_width=True,
-        )
-        st.caption(f"{message} · {taille_zip:.1f} Mo")
+        afficher_telechargement_zip(zip_path, key_prefix, message)
         with st.expander("Où sont les résultats ?", expanded=False):
             st.write(f"Dossier de session : `{SESSION_DIR}`")
             st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
@@ -557,17 +562,8 @@ def afficher_resultats_generes() -> None:
 
     zip_path, message_zip = obtenir_zip_telechargeable()
     if zip_path and zip_path.is_file() and zip_path.stat().st_size > 0:
-        taille_zip = zip_path.stat().st_size / (1024 * 1024)
         st.success(message_zip)
-        st.download_button(
-            "Télécharger les résultats (.zip)",
-            data=zip_path.read_bytes(),
-            file_name=zip_path.name,
-            mime="application/zip",
-            key=f"download_zip_{zip_path.name}_{int(zip_path.stat().st_mtime)}",
-            use_container_width=True,
-        )
-        st.caption(f"Archive : {zip_path.name} · {taille_zip:.1f} Mo")
+        afficher_telechargement_zip(zip_path, "download_zip", f"Archive : {zip_path.name}")
         with st.expander("Emplacement des résultats sur le serveur", expanded=False):
             st.write(f"Dossier de session : `{SESSION_DIR}`")
             st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
@@ -1358,6 +1354,7 @@ if st.button("Lancer le traitement"):
                                 message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                                 st.success(message_ok)
                                 enregistrer_resultats_generes(zip_path, fichiers_timelapse, message_ok)
+                                afficher_telechargement_zip(zip_path, "direct_timelapse", message_ok)
                     except Exception as e:
                         message_erreur = f"Echec du timelapse : {e}"
                         st.error(message_erreur)
@@ -1421,5 +1418,6 @@ if st.button("Lancer le traitement"):
                         message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                         st.success(message_ok)
                         enregistrer_resultats_generes(zip_path, fichiers, message_ok)
+                        afficher_telechargement_zip(zip_path, "direct_extraction", message_ok)
 
 afficher_resultats_generes()
