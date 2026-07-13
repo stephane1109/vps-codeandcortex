@@ -1,6 +1,7 @@
 import io
 import re
 from datetime import date, datetime
+from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
@@ -29,6 +30,8 @@ RESULT_COLUMNS = [
 INTERNAL_DATE_COLUMN = "_date_publication_utc"
 APP_NAME = "Extraction d'informations YouTube"
 APP_TICKET_DEFAULT_ID = "Extraction_infos_YouTube"
+APP_DIR = Path(__file__).resolve().parent
+HELP_PATH = APP_DIR / "aide.md"
 
 REGION_OPTIONS = {
     "Toutes": None,
@@ -295,6 +298,18 @@ def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
+def load_help_markdown() -> str:
+    try:
+        return HELP_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return "Le fichier `aide.md` est introuvable pour cette application."
+
+
+def render_help_tab() -> None:
+    with st.expander("Aide - clé API YouTube Data v3", expanded=False):
+        st.markdown(load_help_markdown(), unsafe_allow_html=True)
+
+
 # La sidebar doit rester visible par défaut pour afficher nettement
 # l'état utilisateur / file d'attente / libération d'accès.
 st.set_page_config(
@@ -311,6 +326,7 @@ if "nom_fichier_export" not in st.session_state:
 
 st.title("Extraction d'informations YouTube")
 st.caption("Recherche de vidéos YouTube par mot-clé avec export Excel.")
+render_help_tab()
 
 st.markdown("### 1. Paramètres de recherche")
 
