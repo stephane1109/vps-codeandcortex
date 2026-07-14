@@ -1,11 +1,13 @@
 import io
 import re
 from datetime import date, datetime
+from html import escape
 from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
@@ -132,21 +134,160 @@ def render_evolution_charts(df: pd.DataFrame) -> None:
 
     chart_df = evolution_df.set_index("Date")
 
-    chart_col_1, chart_col_2 = st.columns(2)
-    with chart_col_1:
-        st.markdown("#### Nombre de videos par date")
-        st.bar_chart(chart_df["Nombre de videos"])
-    with chart_col_2:
-        st.markdown("#### Vues par date")
-        st.line_chart(chart_df["Vues"])
+    st.markdown("#### Nombre de vidéos par date")
+    st.bar_chart(chart_df["Nombre de videos"], use_container_width=True)
 
-    chart_col_3, chart_col_4 = st.columns(2)
-    with chart_col_3:
-        st.markdown("#### Likes par date")
-        st.line_chart(chart_df["Likes"])
-    with chart_col_4:
-        st.markdown("#### Commentaires par date")
-        st.line_chart(chart_df["Commentaires"])
+    st.markdown("#### Vues par date")
+    st.line_chart(chart_df["Vues"], use_container_width=True)
+
+    st.markdown("#### Likes par date")
+    st.line_chart(chart_df["Likes"], use_container_width=True)
+
+    st.markdown("#### Commentaires par date")
+    st.line_chart(chart_df["Commentaires"], use_container_width=True)
+
+
+def truncate_label(value: object, limit: int = 42) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1].rstrip()}…"
+
+
+def render_network_graph(df: pd.DataFrame) -> None:
+    if df.empty or "Nom de la chaine" not in df.columns or "Titre" not in df.columns:
+        st.info("Le graphe réseau n'est pas disponible pour ces résultats.")
+        return
+
+    graph_df = df.copy()
+    graph_df["Nom de la chaine"] = graph_df["Nom de la chaine"].fillna("Chaîne inconnue").replace("", "Chaîne inconnue")
+    graph_df["Titre"] = graph_df["Titre"].fillna("Vidéo sans titre").replace("", "Vidéo sans titre")
+    graph_df["Vues"] = pd.to_numeric(graph_df.get("Vues", 0), errors="coerce").fillna(0)
+    graph_df = graph_df.sort_values("Vues", ascending=False).head(60).reset_index(drop=True)
+
+    if graph_df.empty:
+        st.info("Le graphe réseau n'est pas disponible pour ces résultats.")
+        return
+
+    channels = list(dict.fromkeys(graph_df["Nom de la chaine"].tolist()))
+    width = 1180
+    height = max(620, min(1400, 240 + max(len(channels), len(graph_df)) * 22))
+    left_x = 220
+    right_x = 900
+    channel_step = height / (len(channels) + 1)
+    video_step = height / (len(graph_df) + 1)
+    max_views = max(float(graph_df["Vues"].max()), 1.0)
+
+    channel_positions = {
+        channel: (left_x, int((index + 1) * channel_step))
+        for index, channel in enumerate(channels)
+    }
+
+    edges_svg: list[str] = []
+    channels_svg: list[str] = []
+    videos_svg: list[str] = []
+
+    for channel, (x, y) in channel_positions.items():
+        count = int((graph_df["Nom de la chaine"] == channel).sum())
+        radius = min(34, 14 + count * 3)
+        label = escape(truncate_label(channel, 34))
+        channel_title = escape(str(channel))
+        channels_svg.append(
+            f"""
+            <g class="node channel-node">
+                <circle cx="{x}" cy="{y}" r="{radius}"></circle>
+                <text x="{x - radius - 12}" y="{y + 5}" text-anchor="end">{label}</text>
+                <title>{channel_title} - {count} vidéo(s)</title>
+            </g>
+            """
+        )
+
+    for index, row in graph_df.iterrows():
+        video_x = right_x
+        video_y = int((index + 1) * video_step)
+        channel_x, channel_y = channel_positions[row["Nom de la chaine"]]
+        views = float(row["Vues"])
+        radius = 7 + (views / max_views) * 18
+        title = str(row["Titre"])
+        label = escape(truncate_label(title, 46))
+        escaped_title = escape(title)
+        url = escape(str(row.get("URL", "") or ""), quote=True)
+        stroke_width = 1.2 + (views / max_views) * 3
+
+        edges_svg.append(
+            f"""
+            <line
+                class="edge"
+                x1="{channel_x + 24}"
+                y1="{channel_y}"
+                x2="{video_x - 24}"
+                y2="{video_y}"
+                stroke-width="{stroke_width:.2f}"
+            />
+            """
+        )
+        videos_svg.append(
+            f"""
+            <a href="{url}" target="_blank" rel="noopener noreferrer">
+                <g class="node video-node">
+                    <circle cx="{video_x}" cy="{video_y}" r="{radius:.1f}"></circle>
+                    <text x="{video_x + radius + 10}" y="{video_y + 5}">{label}</text>
+                    <title>{escaped_title} - {int(views):,} vue(s)</title>
+                </g>
+            </a>
+            """
+        )
+
+    html = f"""
+    <style>
+        .youtube-network {{
+            width: 100%;
+            min-height: {height}px;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #fffaf2 0%, #f8fafc 58%, #eef7ff 100%);
+            overflow: auto;
+        }}
+        .youtube-network svg {{
+            width: 100%;
+            min-width: 1120px;
+            height: {height}px;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }}
+        .youtube-network .edge {{
+            stroke: rgba(234, 88, 12, 0.34);
+        }}
+        .youtube-network .channel-node circle {{
+            fill: #fff7ed;
+            stroke: #ea580c;
+            stroke-width: 2.5;
+        }}
+        .youtube-network .video-node circle {{
+            fill: #2563eb;
+            fill-opacity: 0.82;
+            stroke: #1d4ed8;
+            stroke-width: 1.5;
+        }}
+        .youtube-network text {{
+            fill: #1f2937;
+            font-size: 13px;
+            font-weight: 650;
+        }}
+    </style>
+    <div class="youtube-network" role="img" aria-label="Graphe réseau des chaînes YouTube et des vidéos récupérées">
+        <svg viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMin meet">
+            <text x="{left_x}" y="34" text-anchor="middle" style="font-size:18px;fill:#9a3412;">Chaînes</text>
+            <text x="{right_x}" y="34" text-anchor="middle" style="font-size:18px;fill:#1d4ed8;">Vidéos</text>
+            {"".join(edges_svg)}
+            {"".join(channels_svg)}
+            {"".join(videos_svg)}
+        </svg>
+    </div>
+    """
+
+    st.markdown("### 4. Graphe réseau chaînes / vidéos")
+    st.caption("Chaque lien relie une chaîne aux vidéos récupérées. La taille des vidéos dépend du nombre de vues.")
+    components.html(html, height=min(height + 40, 1500), scrolling=True)
 
 
 def build_category_mapping(youtube, region_code: str | None) -> dict[str, str]:
@@ -444,3 +585,4 @@ if df_resultats is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         render_evolution_charts(df_resultats)
+        render_network_graph(df_resultats)
