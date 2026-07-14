@@ -339,7 +339,7 @@ def run_lda_analysis(
 st.set_page_config(page_title="LDA", layout="wide", initial_sidebar_state="expanded")
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
-st.title("Test LDA")
+st.title("analyse discriminante linéaire (LDA)")
 st.caption("version VPS - www.codeandcortex.fr")
 st.markdown("<br>", unsafe_allow_html=True)
 
