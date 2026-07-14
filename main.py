@@ -259,56 +259,138 @@ def appliquer_optical_flow(images):
     images_avec_flow.append(images[-1])  # Dernière image sans flow
     return images_avec_flow
 
+
+def executer_commande_video(commande, contexte):
+    processus = subprocess.run(
+        commande,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if processus.returncode != 0:
+        sortie = "\n".join(
+            ligne.strip()
+            for ligne in (processus.stderr or processus.stdout or "").splitlines()[-20:]
+            if ligne.strip()
+        )
+        raise RuntimeError(f"{contexte} a échoué : {sortie or 'aucun détail ffmpeg disponible'}")
+    return processus
+
+
+def detecter_fps_video(chemin_video):
+    commande = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=avg_frame_rate,r_frame_rate",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        chemin_video,
+    ]
+    try:
+        processus = subprocess.run(
+            commande,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        for ligne in (processus.stdout or "").splitlines():
+            valeur = ligne.strip()
+            if not valeur or valeur == "0/0":
+                continue
+            if "/" in valeur:
+                numerateur, denominateur = valeur.split("/", 1)
+                fps = float(numerateur) / float(denominateur)
+            else:
+                fps = float(valeur)
+            if fps > 0:
+                return int(round(fps))
+    except Exception:
+        pass
+
+    cap = cv2.VideoCapture(chemin_video)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+    return int(round(fps)) if fps and fps > 0 else 0
+
+
 def extraire_images_echantillonnées(chemin_video, dossier_sortie, fps_cible, avec_flow=False):
     """
-    Extrait les images à intervalle régulier (effet stop motion), avec option Optical Flow.
+    Extrait les images via ffmpeg pour éviter les échecs OpenCV sur certains
+    fichiers YouTube récents, puis applique éventuellement l'Optical Flow.
     """
-    cap = cv2.VideoCapture(chemin_video)
-    fps_original = cap.get(cv2.CAP_PROP_FPS)
-    ratio_saut = max(1, int(round(fps_original / fps_cible)))
+    os.makedirs(dossier_sortie, exist_ok=True)
+    fps_original = detecter_fps_video(chemin_video)
+    motif_images = os.path.join(dossier_sortie, "image_%05d.jpg")
+    commande = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        chemin_video,
+        "-vf",
+        f"fps={fps_cible}",
+        "-q:v",
+        "2",
+        motif_images,
+    ]
+    executer_commande_video(commande, "Extraction des images avec ffmpeg")
 
-    images_extraites = []
-    compteur = 0
-    index = 0
+    fichiers_images = sorted(Path(dossier_sortie).glob("image_*.jpg"))
+    if not fichiers_images:
+        raise RuntimeError(
+            "Aucune image n'a été extraite. Le fichier vidéo téléchargé est probablement illisible "
+            "ou ne contient pas de flux vidéo exploitable."
+        )
 
-    while cap.isOpened():
-        succès, image = cap.read()
-        if not succès:
-            break
-        if index % ratio_saut == 0:
-            images_extraites.append(image)
-            compteur += 1
-        index += 1
-    cap.release()
+    if avec_flow and len(fichiers_images) > 1:
+        images = []
+        for chemin_image in fichiers_images:
+            image = cv2.imread(str(chemin_image))
+            if image is None:
+                raise RuntimeError(f"Image extraite illisible : {chemin_image.name}")
+            images.append(image)
+        images_avec_flow = appliquer_optical_flow(images)
+        for chemin_image, image in zip(fichiers_images, images_avec_flow):
+            cv2.imwrite(str(chemin_image), image)
 
-    if avec_flow and len(images_extraites) > 1:
-        images_extraites = appliquer_optical_flow(images_extraites)
-
-    for i, img in enumerate(images_extraites):
-        nom = os.path.join(dossier_sortie, f"image_{i:05d}.jpg")
-        cv2.imwrite(nom, img)
-
-    return int(fps_original), len(images_extraites)
+    return fps_original, len(fichiers_images)
 
 def créer_vidéo_depuis_images(dossier_images, chemin_sortie, fps=12):
     """
-    Construit une vidéo à partir d’images extraites.
+    Construit une vidéo MP4 à partir des images extraites via ffmpeg.
     """
     fichiers = sorted([f for f in os.listdir(dossier_images) if f.endswith(".jpg")])
     if not fichiers:
-        return None
+        raise RuntimeError("Impossible de créer la vidéo : aucune image extraite.")
 
-    image_exemple = cv2.imread(os.path.join(dossier_images, fichiers[0]))
-    h, w, _ = image_exemple.shape
-    codec = cv2.VideoWriter_fourcc(*'mp4v')
-    video = cv2.VideoWriter(chemin_sortie, codec, fps, (w, h))
-
-    for f in fichiers:
-        img = cv2.imread(os.path.join(dossier_images, f))
-        img = cv2.resize(img, (w, h))
-        video.write(img)
-
-    video.release()
+    motif_images = os.path.join(dossier_images, "image_%05d.jpg")
+    commande = [
+        "ffmpeg",
+        "-y",
+        "-framerate",
+        str(fps),
+        "-i",
+        motif_images,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-preset",
+        "fast",
+        chemin_sortie,
+    ]
+    executer_commande_video(commande, "Création de la vidéo stop motion")
+    if not os.path.exists(chemin_sortie) or os.path.getsize(chemin_sortie) == 0:
+        raise RuntimeError("ffmpeg n'a pas produit de vidéo stop motion exploitable.")
     return chemin_sortie
 
 def reencoder_video_h264(chemin_entrée, chemin_sortie):
@@ -324,7 +406,9 @@ def reencoder_video_h264(chemin_entrée, chemin_sortie):
         "-crf", "23",
         chemin_sortie
     ]
-    subprocess.run(commande, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    executer_commande_video(commande, "Réencodage final H.264")
+    if not os.path.exists(chemin_sortie) or os.path.getsize(chemin_sortie) == 0:
+        raise RuntimeError("ffmpeg n'a pas produit la vidéo finale H.264.")
 
 # Interface Streamlit
 st.set_page_config(page_title="StopMotion", layout="wide")
