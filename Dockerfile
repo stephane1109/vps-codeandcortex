@@ -30,17 +30,33 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
         ffmpeg \
         libgl1 \
         libglib2.0-0 \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
+# Deno est le runtime JavaScript recommandé par yt-dlp pour résoudre les
+# challenges YouTube récents avant l'exposition des formats vidéo.
+RUN curl -fsSL -o /tmp/deno.zip \
+        https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/deno \
+    && rm -f /tmp/deno.zip \
+    && deno --version
+
 COPY requirements.txt /app/requirements.txt
 
+ARG YTDLP_REFRESH=2026-07-14
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r /app/requirements.txt
+    && pip install -r /app/requirements.txt \
+    && echo "yt-dlp refresh ${YTDLP_REFRESH}" \
+    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
+    && python -m yt_dlp --version
 
 COPY . /app
 

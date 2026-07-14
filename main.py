@@ -10,6 +10,8 @@ import uuid
 from pathlib import Path
 
 from ticket_gate import enforce_streamlit_access
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 
 DEFAULT_YOUTUBE_USER_AGENT = (
@@ -21,6 +23,7 @@ APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 COOKIES_ROOT = APP_DATA_DIR / "youtube-cookies"
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
 
 
 def load_help_markdown() -> str:
@@ -97,55 +100,142 @@ def diagnostiquer_cookies(chemin_cookies):
     return "Fichier cookies chargé ; entrées YouTube détectées sans expiration exploitable."
 
 
+def trouver_video_telechargee(dossier_temporaire):
+    candidats = []
+    for chemin in Path(dossier_temporaire).iterdir():
+        if chemin.suffix.lower() in VIDEO_EXTENSIONS and chemin.is_file() and chemin.stat().st_size > 0:
+            candidats.append(chemin)
+    if not candidats:
+        return None
+    return str(max(candidats, key=lambda item: item.stat().st_size))
+
+
+def construire_options_ytdlp(dossier_temporaire, cookies_path=None, user_agent=None, clients_youtube=None):
+    output_template = os.path.join(dossier_temporaire, "video_originale.%(ext)s")
+    options = {
+        "outtmpl": output_template,
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": False,
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 3,
+        "continuedl": True,
+        "concurrent_fragment_downloads": 1,
+        "sleep_interval_requests": 1,
+        "sleep_interval": 2,
+        "max_sleep_interval": 5,
+        "socket_timeout": 30,
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "restrictfilenames": True,
+        "trim_file_name": 120,
+        "http_headers": {
+            "User-Agent": user_agent or DEFAULT_YOUTUBE_USER_AGENT,
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://www.youtube.com/",
+        },
+    }
+
+    format_env = os.environ.get("YTDLP_FORMAT", "").strip()
+    if format_env:
+        options["format"] = format_env
+
+    youtube_args = {}
+    clients_env = [
+        client.strip()
+        for client in os.environ.get("YTDLP_PLAYER_CLIENTS", "").split(",")
+        if client.strip()
+    ]
+    if clients_youtube is not None:
+        youtube_args["player_client"] = clients_youtube
+    elif clients_env:
+        youtube_args["player_client"] = clients_env
+
+    po_token_args = [
+        item.strip()
+        for item in os.environ.get("YTDLP_YOUTUBE_PO_TOKEN_ARGS", "").split(",")
+        if item.strip()
+    ]
+    if po_token_args:
+        youtube_args["po_token"] = po_token_args
+
+    if youtube_args:
+        options["extractor_args"] = {"youtube": youtube_args}
+
+    impersonate = os.environ.get("YTDLP_IMPERSONATE", "").strip()
+    if impersonate:
+        options["impersonate"] = impersonate
+
+    remote_components = [
+        item.strip()
+        for item in os.environ.get("YTDLP_REMOTE_COMPONENTS", "").split(",")
+        if item.strip()
+    ]
+    if remote_components:
+        options["remote_components"] = set(remote_components)
+
+    if cookies_path:
+        options["cookiefile"] = cookies_path
+    return options
+
+
 def telecharger_video_yt_dlp(url, dossier_temporaire, cookies_path=None, user_agent=None):
     """
     Télécharge une vidéo YouTube avec yt-dlp.
     """
-    commande = [
-        "yt-dlp",
-        "-f", "bv*[ext=mp4]+ba[ext=m4a]/mp4/best[ext=mp4]/best",
-        "--merge-output-format", "mp4",
-        "-o", os.path.join(dossier_temporaire, "video_originale.%(ext)s"),
-        url
+    if not url or not url.strip():
+        raise RuntimeError("Veuillez fournir une URL YouTube.")
+
+    profils_clients = [
+        ("auto", None),
+        ("source", ["android", "ios", "mweb", "web"]),
+        ("web", ["web"]),
+        ("mweb", ["mweb"]),
+        ("ios", ["ios"]),
+        ("android", ["android"]),
     ]
+    erreurs = []
 
-    if cookies_path:
-        commande.extend(["--cookies", cookies_path])
-    if user_agent:
-        commande.extend(["--user-agent", user_agent])
-
-    processus = subprocess.run(
-        commande,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    if processus.returncode != 0:
-        details = "\n".join(
-            ligne.strip()
-            for ligne in (processus.stderr or processus.stdout or "").splitlines()
-            if ligne.strip()
+    for libelle, clients in profils_clients:
+        options = construire_options_ytdlp(
+            dossier_temporaire,
+            cookies_path=cookies_path,
+            user_agent=user_agent,
+            clients_youtube=clients,
         )
-        message = details or "yt-dlp a échoué."
-        if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-            if not cookies_path:
+        try:
+            with YoutubeDL(options) as ydl:
+                ydl.extract_info(url.strip(), download=True)
+            chemin_video = trouver_video_telechargee(dossier_temporaire)
+            if chemin_video:
+                return chemin_video
+            erreurs.append(f"{libelle} : yt-dlp a terminé sans fichier vidéo exploitable.")
+        except DownloadError as erreur:
+            message = str(erreur) or repr(erreur)
+            erreurs.append(f"{libelle} : {message}")
+            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                if not cookies_path:
+                    raise RuntimeError(
+                        "YouTube bloque le téléchargement. Ajoute un fichier cookies.txt récent "
+                        "exporté depuis le navigateur qui vient d'ouvrir la vidéo, puis relance."
+                    ) from erreur
                 raise RuntimeError(
-                    "YouTube bloque le téléchargement. Ajoute un fichier cookies.txt récent "
-                    "exporté depuis le navigateur qui vient d'ouvrir la vidéo, puis relance."
-                )
-            raise RuntimeError(
-                "YouTube bloque encore malgré le cookies fourni. Réexporte un cookies.txt récent "
-                "depuis le même navigateur et remplace aussi le User-Agent par celui de ce navigateur."
-            )
-        raise RuntimeError(message)
+                    "YouTube bloque encore malgré le cookies fourni. Réexporte un cookies.txt récent "
+                    "depuis le même navigateur et remplace aussi le User-Agent par celui de ce navigateur."
+                ) from erreur
+        except Exception as erreur:
+            erreurs.append(f"{libelle} : {str(erreur) or repr(erreur)}")
 
-    for fichier in os.listdir(dossier_temporaire):
-        if fichier.endswith(".mp4"):
-            return os.path.join(dossier_temporaire, fichier)
-    raise RuntimeError("yt-dlp a terminé sans produire de fichier MP4 exploitable.")
+    detail = " | ".join(erreurs[-4:]) if erreurs else "aucun détail yt-dlp disponible"
+    raise RuntimeError(
+        "Aucun format vidéo YouTube exploitable n'a pu être téléchargé par yt-dlp. "
+        "Si la vidéo se lit dans le navigateur, réexporte un cookies.txt récent depuis le même navigateur. "
+        "Si YouTube exige un PO token, ajoute YTDLP_YOUTUBE_PO_TOKEN_ARGS dans Coolify. "
+        f"Dernières erreurs : {detail}"
+    )
 
 def appliquer_optical_flow(images):
     """
@@ -323,9 +413,10 @@ if st.button("Créer la vidéo Stop Motion"):
             reencoder_video_h264(chemin_brut, chemin_final)
 
             with open(chemin_final, "rb") as f:
+                video_bytes = f.read()
                 st.success("Vidéo générée avec succès.")
-                st.video(f.read())
-                st.download_button("Télécharger la vidéo", data=f, file_name="stopmotion.mp4", mime="video/mp4")
+                st.video(video_bytes)
+                st.download_button("Télécharger la vidéo", data=video_bytes, file_name="stopmotion.mp4", mime="video/mp4")
 
         except subprocess.CalledProcessError:
             st.error("Erreur lors de l'utilisation de yt-dlp ou ffmpeg. Vérifiez leur installation.")

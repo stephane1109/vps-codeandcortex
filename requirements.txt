@@ -1,5 +1,5 @@
 streamlit
 streamlit-autorefresh>=1,<2
 opencv-python-headless
-yt-dlp
+yt-dlp[default,curl-cffi]
 redis>=5,<6
