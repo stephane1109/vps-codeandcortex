@@ -86,42 +86,6 @@ def format_published_at(date_iso: str) -> str:
         return date_iso
 
 
-def build_date_filter_labels(df: pd.DataFrame) -> list[str]:
-    if df.empty or "Date de publication" not in df.columns:
-        return []
-
-    labels = (
-        pd.to_datetime(df["Date de publication"], errors="coerce")
-        .dt.strftime("%Y-%m-%d")
-        .dropna()
-        .drop_duplicates()
-        .sort_values()
-    )
-    return labels.tolist()
-
-
-def filter_dataframe_by_checked_dates(df: pd.DataFrame) -> pd.DataFrame:
-    available_dates = build_date_filter_labels(df)
-    if not available_dates:
-        return df
-
-    st.markdown("### 3. Filtrage fin par date")
-    st.caption("Décoche une date pour l'exclure du tableau, de l'export et des graphiques.")
-
-    selected_dates: list[str] = []
-    columns = st.columns(4)
-    for index, date_label in enumerate(available_dates):
-        with columns[index % 4]:
-            if st.checkbox(date_label, value=True, key=f"youtube_date_filter_{date_label}"):
-                selected_dates.append(date_label)
-
-    if not selected_dates:
-        return df.iloc[0:0].copy()
-
-    publication_dates = pd.to_datetime(df["Date de publication"], errors="coerce").dt.strftime("%Y-%m-%d")
-    return df[publication_dates.isin(selected_dates)].reset_index(drop=True)
-
-
 def build_evolution_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or "Date de publication" not in df.columns:
         return pd.DataFrame()
@@ -163,7 +127,7 @@ def render_evolution_charts(df: pd.DataFrame) -> None:
         st.info("Les graphiques d'évolution ne sont pas disponibles pour ces résultats.")
         return
 
-    st.markdown("### 4. Graphiques d'évolution")
+    st.markdown("### 3. Graphiques d'évolution")
     st.caption("Les valeurs sont regroupées par date de publication à partir des vidéos actuellement affichées.")
 
     chart_df = evolution_df.set_index("Date")
@@ -471,15 +435,12 @@ if df_resultats is not None:
                 for message in st.session_state.youtube_search_diagnostic:
                     st.write(message)
     else:
-        df_resultats_filtres = filter_dataframe_by_checked_dates(df_resultats)
-        if df_resultats_filtres.empty:
-            st.warning("Aucune date n'est actuellement sélectionnée. Coche au moins une date pour afficher des résultats.")
-        st.success(f"{len(df_resultats_filtres)} vidéo(s) affichée(s) sur {len(df_resultats)} récupérée(s).")
-        st.dataframe(df_resultats_filtres, use_container_width=True)
+        st.success(f"{len(df_resultats)} vidéo(s) récupérée(s).")
+        st.dataframe(df_resultats, use_container_width=True)
         st.download_button(
             label="Télécharger les résultats au format Excel",
-            data=dataframe_to_excel_bytes(df_resultats_filtres),
+            data=dataframe_to_excel_bytes(df_resultats),
             file_name=st.session_state.nom_fichier_export,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        render_evolution_charts(df_resultats_filtres)
+        render_evolution_charts(df_resultats)
