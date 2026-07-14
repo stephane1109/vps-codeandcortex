@@ -392,10 +392,50 @@ with st.sidebar:
     no_above = st.slider("no_above", min_value=0.05, max_value=1.0, value=0.6, step=0.05)
 
     st.subheader("Modèle")
-    num_topics = st.number_input("Nombre de topics", min_value=2, max_value=50, value=12, step=1)
-    passes = st.number_input("Passes", min_value=1, max_value=100, value=15, step=1)
-    random_state = st.number_input("Random state", min_value=0, max_value=999999, value=42, step=1)
-    words_per_topic = st.number_input("Mots affichés par topic", min_value=5, max_value=60, value=20, step=5)
+    num_topics = st.number_input(
+        "Nombre de topics",
+        min_value=2,
+        max_value=50,
+        value=12,
+        step=1,
+        help=(
+            "Nombre de thèmes que le modèle LDA doit extraire du corpus. "
+            "Un nombre trop faible regroupe des thèmes différents ; un nombre trop élevé fragmente les résultats."
+        ),
+    )
+    passes = st.number_input(
+        "Passes",
+        min_value=1,
+        max_value=100,
+        value=15,
+        step=1,
+        help=(
+            "Nombre de passages d'apprentissage sur le corpus. "
+            "Plus la valeur est élevée, plus le modèle peut se stabiliser, mais le calcul devient plus long."
+        ),
+    )
+    random_state = st.number_input(
+        "Random state",
+        min_value=0,
+        max_value=999999,
+        value=42,
+        step=1,
+        help=(
+            "Graine aléatoire utilisée pour rendre les résultats reproductibles. "
+            "Garde la même valeur pour comparer plusieurs essais avec les mêmes paramètres."
+        ),
+    )
+    words_per_topic = st.number_input(
+        "Mots affichés par topic",
+        min_value=5,
+        max_value=60,
+        value=20,
+        step=5,
+        help=(
+            "Nombre de mots affichés pour décrire chaque topic dans les tableaux et nuages de mots. "
+            "Cela ne change pas le modèle, seulement la quantité de mots montrés dans les résultats."
+        ),
+    )
 
 uploaded_files = st.file_uploader(
     "Importer un ou plusieurs corpus texte",
