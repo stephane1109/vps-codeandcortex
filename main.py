@@ -447,8 +447,18 @@ fps_cible = st.selectbox("FPS cible (effet Stop Motion)", [4, 6, 8, 10, 12, 14, 
 avec_optical_flow = st.checkbox("Ajouter le flux optique (mouvement entre images)")
 
 if st.button("Créer la vidéo Stop Motion"):
+    progression = st.progress(0, text="Initialisation du traitement...")
+    journal = st.empty()
+    journal_lignes = []
+
+    def actualiser_progression(pourcentage, message):
+        journal_lignes.append(message)
+        progression.progress(pourcentage, text=message)
+        journal.info("\n".join(f"- {ligne}" for ligne in journal_lignes[-8:]))
+
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
+            actualiser_progression(5, "Préparation de l'espace temporaire.")
             # Charger la vidéo
             if mode == "YouTube (yt-dlp)":
                 if not url:
@@ -461,14 +471,15 @@ if st.button("Créer la vidéo Stop Motion"):
                         st.success(diagnostic_cookies)
                     else:
                         st.warning(diagnostic_cookies)
-                st.info("Téléchargement de la vidéo...")
+                actualiser_progression(15, "Téléchargement de la vidéo YouTube en cours avec yt-dlp.")
                 chemin_video = telecharger_video_yt_dlp(
                     url,
                     tmpdir,
                     cookies_path=cookies_path,
                     user_agent=user_agent_youtube.strip() or None,
                 )
-                st.success("Téléchargement terminé.")
+                taille_video = os.path.getsize(chemin_video) / (1024 * 1024)
+                actualiser_progression(25, f"Téléchargement terminé : {Path(chemin_video).name} ({taille_video:.1f} Mo).")
             else:
                 if not fichier:
                     st.error("Veuillez téléverser une vidéo.")
@@ -476,28 +487,31 @@ if st.button("Créer la vidéo Stop Motion"):
                 chemin_video = os.path.join(tmpdir, "video_originale.mp4")
                 with open(chemin_video, "wb") as f:
                     f.write(fichier.read())
-                st.success("Vidéo téléversée.")
+                taille_video = os.path.getsize(chemin_video) / (1024 * 1024)
+                actualiser_progression(25, f"Vidéo téléversée : {taille_video:.1f} Mo.")
 
             # Extraction images
             dossier_images = os.path.join(tmpdir, "images")
             os.makedirs(dossier_images, exist_ok=True)
 
-            st.info("Extraction des images en cours...")
+            actualiser_progression(40, "Extraction des images en cours avec ffmpeg.")
             fps_origine, nb = extraire_images_echantillonnées(
                 chemin_video, dossier_images, fps_cible, avec_flow=avec_optical_flow)
-            st.success(f"{nb} images extraites (FPS origine : {fps_origine})")
+            actualiser_progression(60, f"{nb} images extraites (FPS origine : {fps_origine or 'inconnu'}).")
 
             # Création de la vidéo temporaire
             chemin_brut = os.path.join(tmpdir, "video_brute.mp4")
+            actualiser_progression(75, "Création de la vidéo stop motion intermédiaire.")
             créer_vidéo_depuis_images(dossier_images, chemin_brut, fps=fps_cible)
 
             # Réencodage final
             chemin_final = os.path.join(tmpdir, "video_finale.mp4")
-            st.info("Réencodage final (H.264)...")
+            actualiser_progression(90, "Réencodage final H.264 en cours.")
             reencoder_video_h264(chemin_brut, chemin_final)
 
             with open(chemin_final, "rb") as f:
                 video_bytes = f.read()
+                actualiser_progression(100, "Vidéo générée avec succès.")
                 st.success("Vidéo générée avec succès.")
                 st.video(video_bytes)
                 st.download_button("Télécharger la vidéo", data=video_bytes, file_name="stopmotion.mp4", mime="video/mp4")
