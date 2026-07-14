@@ -352,11 +352,43 @@ with st.sidebar:
     min_token_length = st.number_input("Longueur minimale des mots", min_value=1, max_value=10, value=2, step=1)
 
     st.subheader("Bigrammes")
-    bigram_min_count = st.number_input("min_count", min_value=1, max_value=50, value=5, step=1)
-    bigram_threshold = st.number_input("threshold", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+    bigram_min_count = st.number_input(
+        "min_count",
+        min_value=1,
+        max_value=50,
+        value=5,
+        step=1,
+        help=(
+            "Nombre minimal d'apparitions pour qu'une association de deux mots puisse devenir un bigramme. "
+            "Plus la valeur est basse, plus l'application détecte de bigrammes rares ; plus elle est haute, "
+            "plus seuls les bigrammes fréquents sont conservés."
+        ),
+    )
+    bigram_threshold = st.number_input(
+        "threshold",
+        min_value=1.0,
+        max_value=100.0,
+        value=10.0,
+        step=1.0,
+        help=(
+            "Seuil de solidité statistique des bigrammes dans Gensim. "
+            "Une valeur basse crée davantage de bigrammes ; une valeur élevée garde uniquement les associations fortes."
+        ),
+    )
 
     st.subheader("Filtrage dictionnaire")
-    no_below = st.number_input("no_below", min_value=0, max_value=100, value=1, step=1)
+    no_below = st.number_input(
+        "no_below",
+        min_value=0,
+        max_value=100,
+        value=1,
+        step=1,
+        help=(
+            "Fréquence documentaire minimale d'un terme. "
+            "Par exemple, no_below=3 supprime les mots présents dans moins de 3 documents. "
+            "Augmenter cette valeur nettoie le dictionnaire, mais peut supprimer des termes rares importants."
+        ),
+    )
     no_above = st.slider("no_above", min_value=0.05, max_value=1.0, value=0.6, step=0.05)
 
     st.subheader("Modèle")
