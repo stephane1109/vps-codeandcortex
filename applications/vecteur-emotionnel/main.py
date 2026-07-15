@@ -832,11 +832,6 @@ st.caption(
     "Analyse emotionnelle d'une video YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
 )
 
-st.info(
-    "Cette version VPS gere automatiquement les repertoires de travail par session. "
-    "Les exports sont prepares dans un dossier temporaire puis telechargeables depuis l'interface."
-)
-
 video_url = st.text_input(
     "URL de la video YouTube",
     placeholder="https://www.youtube.com/watch?v=...",
