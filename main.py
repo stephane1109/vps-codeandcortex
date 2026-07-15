@@ -414,15 +414,64 @@ with st.sidebar:
     uploaded_file = st.file_uploader(
         "Importer une vidéo",
         type=["mp4", "mov", "mkv", "avi", "webm", "m4v"],
-        help="Pour une première analyse, privilégie une vidéo courte ou un extrait.",
+        help=(
+            "Charge une vidéo locale à analyser. Formats acceptés : MP4, MOV, MKV, AVI, WEBM, M4V. "
+            "Pour un premier test, privilégie un extrait court : l'analyse optical flow peut être coûteuse."
+        ),
     )
 
     st.divider()
-    sample_every_n_frames = st.slider("Analyser une frame sur", 1, 25, 5)
-    max_pairs = st.slider("Nombre maximum de paires analysées", 20, 600, 160, step=20)
-    resize_width = st.slider("Largeur de travail", 320, 1280, 640, step=80)
-    algorithm = st.selectbox("Méthode optical flow", ["Farneback robuste", "DIS rapide"], index=0)
-    candidate_count = st.slider("Frames suspectes à conserver", 3, 12, 6)
+    sample_every_n_frames = st.slider(
+        "Analyser une frame sur",
+        1,
+        25,
+        5,
+        help=(
+            "Définit l'échantillonnage temporel. 1 analyse presque toutes les frames et donne une analyse fine, "
+            "mais lente. Une valeur plus élevée accélère le calcul, au risque de manquer des ruptures courtes."
+        ),
+    )
+    max_pairs = st.slider(
+        "Nombre maximum de paires analysées",
+        20,
+        600,
+        160,
+        step=20,
+        help=(
+            "Nombre maximal de paires de frames consécutives utilisées pour mesurer le mouvement. "
+            "Augmenter cette valeur stabilise les indicateurs, mais augmente le temps de calcul."
+        ),
+    )
+    resize_width = st.slider(
+        "Largeur de travail",
+        320,
+        1280,
+        640,
+        step=80,
+        help=(
+            "Largeur, en pixels, à laquelle les frames sont redimensionnées avant analyse. "
+            "Une largeur faible est plus rapide ; une largeur élevée conserve davantage de détails visuels."
+        ),
+    )
+    algorithm = st.selectbox(
+        "Méthode optical flow",
+        ["Farneback robuste", "DIS rapide"],
+        index=0,
+        help=(
+            "Farneback robuste est plus stable pour l'analyse exploratoire, mais plus lent. "
+            "DIS rapide accélère le calcul et convient aux pré-tests ou aux vidéos longues."
+        ),
+    )
+    candidate_count = st.slider(
+        "Frames suspectes à conserver",
+        3,
+        12,
+        6,
+        help=(
+            "Nombre de moments considérés comme les plus suspects à afficher et exporter. "
+            "Ces frames sont sélectionnées selon les signaux de résidu, flicker et rupture de mouvement."
+        ),
+    )
 
     st.divider()
     with st.expander("Aide", expanded=False):
