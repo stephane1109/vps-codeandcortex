@@ -266,6 +266,16 @@ def main() -> None:
     # - APP_TICKET_TTL_SECONDS
     enforce_streamlit_access("divergence-jensen-shannon", "Divergence Jensen-Shannon")
     st.title("Divergence de Jensen-Shannon")
+    onglet_aide, = st.tabs(["Aide"])
+    with onglet_aide:
+        st.markdown(
+            'Article de blog : '
+            '<a href="https://www.codeandcortex.fr/divergence-jensen-shannon/" '
+            'target="_blank" rel="noopener noreferrer">'
+            'https://www.codeandcortex.fr/divergence-jensen-shannon/'
+            '</a>',
+            unsafe_allow_html=True,
+        )
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
     st.markdown(
         """
