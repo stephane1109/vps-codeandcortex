@@ -937,11 +937,6 @@ st.link_button(
 )
 st.write("")
 
-st.info(
-    "Cette version VPS gère automatiquement les répertoires de travail par session. "
-    "Les exports sont préparés dans un dossier temporaire puis téléchargeables depuis l'interface."
-)
-
 video_url = st.text_input(
     "URL de la vidéo YouTube",
     placeholder="https://www.youtube.com/watch?v=...",
