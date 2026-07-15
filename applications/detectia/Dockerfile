@@ -1,8 +1,10 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
+    PIP_NO_COMPILE=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
@@ -15,8 +17,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r /app/requirements.txt
+RUN pip install --no-cache-dir --no-compile --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir --no-compile -r /app/requirements.txt \
+    && rm -rf /root/.cache/pip /tmp/*
 
 COPY . /app
 RUN chmod +x /app/docker-entrypoint.sh
