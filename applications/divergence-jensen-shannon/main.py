@@ -186,7 +186,7 @@ def construire_resultats_dataframe(
                 "pA": float(p[indice]),
                 "pB": float(q[indice]),
                 "Dominant": determiner_dominant(float(p[indice]), float(q[indice])),
-                "Score oriente": float(valeurs[indice]),
+                "Score orienté": float(valeurs[indice]),
             }
         )
 
@@ -197,9 +197,9 @@ def tracer_jsd_figure(resultats_df: pd.DataFrame) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(9, max(5, len(resultats_df) * 0.38)))
 
     donnees = resultats_df.iloc[::-1]
-    couleurs = ["#8aa84f" if valeur < 0 else "#4f5f3a" for valeur in donnees["Score oriente"]]
+    couleurs = ["#8aa84f" if valeur < 0 else "#4f5f3a" for valeur in donnees["Score orienté"]]
 
-    ax.barh(donnees["Mot"], donnees["Score oriente"], color=couleurs)
+    ax.barh(donnees["Mot"], donnees["Score orienté"], color=couleurs)
     ax.axvline(0, color="black", linewidth=0.8)
     ax.set_title("Divergence de Jensen-Shannon", fontsize=12)
     ax.set_xlabel("Gauche = Texte A | Droite = Texte B", fontsize=9)
@@ -270,10 +270,10 @@ def main() -> None:
     st.markdown(
         """
         Cette application compare deux textes, calcule la divergence de Jensen-Shannon sur les distributions lexicales,
-        identifie les mots qui contribuent le plus a l'ecart, et genere un graphique oriente :
+        identifie les mots qui contribuent le plus à l'écart, et génère un graphique orienté :
 
-        - gauche : mots davantage portes par le texte A
-        - droite : mots davantage portes par le texte B
+        - gauche : mots davantage portés par le texte A
+        - droite : mots davantage portés par le texte B
         """
     )
 
@@ -322,10 +322,10 @@ def main() -> None:
                 resultats_df=resultats_df,
             )
 
-            st.subheader("Informations generales")
+            st.subheader("Informations générales")
             info1, info2, info3, info4 = st.columns(4)
-            info1.metric("Mots conserves A", taille_a)
-            info2.metric("Mots conserves B", taille_b)
+            info1.metric("Mots conservés A", taille_a)
+            info2.metric("Mots conservés B", taille_b)
             info3.metric("Vocabulaire total", len(vocabulaire))
             info4.metric("Score JSD", f"{score_jsd:.6f}")
 
@@ -334,11 +334,11 @@ def main() -> None:
             fig.savefig(png_buffer, format="png", dpi=300, bbox_inches="tight")
             png_buffer.seek(0)
 
-            tab_resultats, tab_graphique, tab_exports = st.tabs(["Resultats", "Graphique", "Exports"])
+            tab_resultats, tab_graphique, tab_exports = st.tabs(["Résultats", "Graphique", "Exports"])
 
             with tab_resultats:
                 st.dataframe(
-                    resultats_df.drop(columns=["Score oriente"]),
+                    resultats_df.drop(columns=["Score orienté"]),
                     use_container_width=True,
                     hide_index=True,
                 )
@@ -348,19 +348,19 @@ def main() -> None:
 
             with tab_exports:
                 st.download_button(
-                    "Telecharger les resultats TXT",
+                    "Télécharger les résultats TXT",
                     data=rapport_txt,
                     file_name="resultats_jsd.txt",
                     mime="text/plain",
                 )
                 st.download_button(
-                    "Telecharger les resultats CSV",
-                    data=resultats_df.drop(columns=["Score oriente"]).to_csv(index=False).encode("utf-8"),
+                    "Télécharger les résultats CSV",
+                    data=resultats_df.drop(columns=["Score orienté"]).to_csv(index=False).encode("utf-8"),
                     file_name="resultats_jsd.csv",
                     mime="text/csv",
                 )
                 st.download_button(
-                    "Telecharger le graphique PNG",
+                    "Télécharger le graphique PNG",
                     data=png_buffer.getvalue(),
                     file_name="jsd_texte_a_vs_b.png",
                     mime="image/png",
