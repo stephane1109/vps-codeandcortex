@@ -4,3 +4,6 @@ pandas
 google-api-python-client
 XlsxWriter
 redis>=5,<6
+scikit-learn
+networkx
+pyvis

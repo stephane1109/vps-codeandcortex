@@ -1,18 +1,32 @@
 import io
+import hashlib
+import math
+import json
 import re
+import tempfile
+from collections import defaultdict
 from datetime import date, datetime
+from html import escape
+from itertools import combinations
+from pathlib import Path
 from typing import Iterable
 
+import networkx as nx
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from pyvis.network import Network
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 
 RESULT_COLUMNS = [
     "Titre",
     "Description",
+    "Tags",
     "Date de publication",
     "URL",
     "Channel ID",
@@ -41,6 +55,22 @@ LANGUAGE_OPTIONS = {
     "fr": "fr",
     "en": "en",
 }
+NETWORK_STOPWORDS = {
+    "avec", "dans", "des", "les", "pour", "sur", "une", "aux", "par", "que", "qui", "est", "sont", "plus", "moins",
+    "this", "that", "with", "from", "your", "have", "video", "youtube", "vous", "nous", "leur", "leurs", "the",
+    "and", "for", "are", "www", "http", "https", "com", "comment", "comme", "tout", "tous", "toutes",
+}
+NETWORK_COLORS = [
+    "#ea580c", "#2563eb", "#16a34a", "#9333ea", "#dc2626", "#0891b2", "#ca8a04", "#be185d",
+    "#4f46e5", "#0f766e", "#a16207", "#7c3aed", "#15803d", "#b91c1c", "#0369a1",
+]
+
+
+def safe_int(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def normaliser_fragment_nom_fichier(value: str) -> str:
@@ -167,6 +197,333 @@ def render_evolution_charts(df: pd.DataFrame) -> None:
         st.line_chart(chart_df["Commentaires"])
 
 
+def extraire_video_id_youtube(value: object) -> str:
+    text = str(value or "")
+    patterns = [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/embed/)([A-Za-z0-9_-]{6,})",
+        r"[?&]v=([A-Za-z0-9_-]{6,})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def extraire_liens_youtube_description(value: object) -> set[str]:
+    text = str(value or "")
+    ids = set()
+    for pattern in [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/embed/)([A-Za-z0-9_-]{6,})",
+        r"[?&]v=([A-Za-z0-9_-]{6,})",
+    ]:
+        ids.update(re.findall(pattern, text))
+    return ids
+
+
+def extraire_mots_cles_reseau(*values: object) -> set[str]:
+    text = " ".join(str(value or "") for value in values).lower()
+    tokens = re.findall(r"[a-zà-ÿ0-9][a-zà-ÿ0-9_-]{2,}", text)
+    return {token.strip("_-") for token in tokens if token.strip("_-") not in NETWORK_STOPWORDS}
+
+
+def couleur_stable(value: object) -> str:
+    digest = hashlib.md5(str(value or "inconnu").encode("utf-8")).hexdigest()
+    return NETWORK_COLORS[int(digest, 16) % len(NETWORK_COLORS)]
+
+
+def truncate_label(value: object, limit: int = 42) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1].rstrip()}…"
+
+
+def calculer_matrice_similarite_textuelle(graph_df: pd.DataFrame) -> list[list[float]]:
+    textes = (
+        graph_df["Titre"].fillna("").astype(str)
+        + " "
+        + graph_df["Description"].fillna("").astype(str)
+        + " "
+        + graph_df.get("Tags", pd.Series([""] * len(graph_df))).fillna("").astype(str)
+    ).tolist()
+    if len(textes) < 2 or not any(texte.strip() for texte in textes):
+        return [[0.0 for _ in textes] for _ in textes]
+    try:
+        matrix = TfidfVectorizer(max_features=2500, ngram_range=(1, 2), min_df=1).fit_transform(textes)
+        return cosine_similarity(matrix).tolist()
+    except ValueError:
+        return [[0.0 for _ in textes] for _ in textes]
+
+
+def score_proximite_dates(date_a: object, date_b: object, fenetre_jours: int) -> float:
+    if fenetre_jours <= 0:
+        return 0.0
+    parsed_a = pd.to_datetime(date_a, errors="coerce")
+    parsed_b = pd.to_datetime(date_b, errors="coerce")
+    if pd.isna(parsed_a) or pd.isna(parsed_b):
+        return 0.0
+    delta = abs((parsed_a - parsed_b).days)
+    if delta > fenetre_jours:
+        return 0.0
+    return max(0.0, 1.0 - (delta / fenetre_jours))
+
+
+def construire_reseau_video(
+    df: pd.DataFrame,
+    type_relation: str,
+    seuil: float,
+    max_liens_par_video: int,
+    fenetre_jours: int,
+    max_videos: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    graph_df = df.copy().head(max_videos).reset_index(drop=True)
+    if graph_df.empty:
+        return graph_df, pd.DataFrame()
+
+    graph_df["video_id"] = graph_df["URL"].apply(extraire_video_id_youtube)
+    graph_df.loc[graph_df["video_id"].eq(""), "video_id"] = graph_df.index.map(lambda index: f"video_{index}")
+    graph_df["Titre"] = graph_df["Titre"].fillna("Vidéo sans titre").replace("", "Vidéo sans titre")
+    graph_df["Description"] = graph_df["Description"].fillna("")
+    graph_df["Tags"] = graph_df.get("Tags", pd.Series([""] * len(graph_df))).fillna("")
+    graph_df["Nom de la chaine"] = graph_df["Nom de la chaine"].fillna("Chaîne inconnue").replace("", "Chaîne inconnue")
+
+    similarites = calculer_matrice_similarite_textuelle(graph_df)
+    mots_cles = [
+        extraire_mots_cles_reseau(row["Titre"], row["Description"], row.get("Tags", ""))
+        for _, row in graph_df.iterrows()
+    ]
+    liens_description = [extraire_liens_youtube_description(value) for value in graph_df["Description"]]
+
+    candidates: list[dict[str, object]] = []
+    for source, target in combinations(range(len(graph_df)), 2):
+        row_a = graph_df.iloc[source]
+        row_b = graph_df.iloc[target]
+
+        score_texte = float(similarites[source][target])
+        meme_chaine = 1.0 if row_a["Channel ID"] and row_a["Channel ID"] == row_b["Channel ID"] else 0.0
+        union_mots = mots_cles[source] | mots_cles[target]
+        score_mots = (len(mots_cles[source] & mots_cles[target]) / len(union_mots)) if union_mots else 0.0
+        score_dates = score_proximite_dates(row_a["Date de publication"], row_b["Date de publication"], fenetre_jours)
+        score_liens = 1.0 if row_a["video_id"] in liens_description[target] or row_b["video_id"] in liens_description[source] else 0.0
+
+        if type_relation == "Similarité texte":
+            score = score_texte
+        elif type_relation == "Même chaîne":
+            score = meme_chaine
+        elif type_relation == "Mots-clés communs":
+            score = score_mots
+        elif type_relation == "Proximité temporelle":
+            score = score_dates
+        elif type_relation == "Liens descriptions":
+            score = score_liens
+        else:
+            score = (0.45 * score_texte) + (0.20 * meme_chaine) + (0.15 * score_mots) + (0.10 * score_dates) + (0.10 * score_liens)
+            if score_liens:
+                score = max(score, 0.85)
+            if meme_chaine and score_texte < 0.05:
+                score = max(score, 0.35)
+            if score_mots >= 0.20:
+                score = max(score, 0.40 + (0.30 * score_mots))
+
+        if score < seuil:
+            continue
+
+        raisons = []
+        if score_texte > 0:
+            raisons.append(f"texte={score_texte:.2f}")
+        if meme_chaine:
+            raisons.append("même chaîne")
+        if score_mots > 0:
+            raisons.append(f"mots-clés={score_mots:.2f}")
+        if score_dates > 0:
+            raisons.append(f"dates={score_dates:.2f}")
+        if score_liens:
+            raisons.append("lien description")
+
+        candidates.append(
+            {
+                "source": row_a["video_id"],
+                "target": row_b["video_id"],
+                "source_title": row_a["Titre"],
+                "target_title": row_b["Titre"],
+                "poids": round(float(score), 4),
+                "relation": ", ".join(raisons) or type_relation,
+                "similarite_texte": round(score_texte, 4),
+                "meme_chaine": int(meme_chaine),
+                "mots_cles_communs": round(score_mots, 4),
+                "proximite_temporelle": round(score_dates, 4),
+                "liens_description": int(score_liens),
+            }
+        )
+
+    candidates = sorted(candidates, key=lambda edge: float(edge["poids"]), reverse=True)
+    degres: defaultdict[str, int] = defaultdict(int)
+    edges: list[dict[str, object]] = []
+    for edge in candidates:
+        source = str(edge["source"])
+        target = str(edge["target"])
+        if degres[source] >= max_liens_par_video or degres[target] >= max_liens_par_video:
+            continue
+        edges.append(edge)
+        degres[source] += 1
+        degres[target] += 1
+
+    return graph_df, pd.DataFrame(edges)
+
+
+def rendre_html_pyvis(graph_df: pd.DataFrame, edges_df: pd.DataFrame, taille_noeud: str, couleur_noeud: str) -> tuple[str, nx.Graph]:
+    graph = nx.Graph()
+    for _, row in graph_df.iterrows():
+        graph.add_node(row["video_id"], **row.to_dict())
+    for _, edge in edges_df.iterrows():
+        graph.add_edge(edge["source"], edge["target"], weight=float(edge["poids"]), label=edge["relation"])
+
+    if couleur_noeud == "Cluster" and graph.number_of_edges() > 0:
+        try:
+            communautes = nx.algorithms.community.greedy_modularity_communities(graph)
+        except Exception:
+            communautes = [set(component) for component in nx.connected_components(graph)]
+        cluster_map = {node: index for index, cluster in enumerate(communautes) for node in cluster}
+    else:
+        cluster_map = {}
+
+    max_metric = max(float(pd.to_numeric(graph_df.get(taille_noeud, 0), errors="coerce").fillna(0).max()), 1.0)
+    network = Network(height="760px", width="100%", bgcolor="#ffffff", font_color="#1f2937", cdn_resources="in_line")
+    network.barnes_hut(gravity=-26000, central_gravity=0.22, spring_length=180, spring_strength=0.025, damping=0.82)
+
+    url_map: dict[str, str] = {}
+    for _, row in graph_df.iterrows():
+        metric_value = float(pd.to_numeric(pd.Series([row.get(taille_noeud, 0)]), errors="coerce").fillna(0).iloc[0])
+        size = 14 + 34 * math.sqrt(metric_value / max_metric)
+        if couleur_noeud == "Chaîne":
+            color = couleur_stable(row["Nom de la chaine"])
+            group_label = row["Nom de la chaine"]
+        elif couleur_noeud == "Période":
+            date_value = pd.to_datetime(row["Date de publication"], errors="coerce")
+            group_label = date_value.strftime("%Y-%m") if not pd.isna(date_value) else "Date inconnue"
+            color = couleur_stable(group_label)
+        else:
+            group_label = f"Cluster {cluster_map.get(row['video_id'], 0) + 1}"
+            color = couleur_stable(group_label)
+
+        url = str(row.get("URL", "") or "")
+        url_map[str(row["video_id"])] = url
+        title = (
+            f"<b>{escape(str(row['Titre']))}</b><br>"
+            f"Chaîne : {escape(str(row['Nom de la chaine']))}<br>"
+            f"Date : {escape(str(row.get('Date de publication', '')))}<br>"
+            f"Vues : {safe_int(row.get('Vues', 0)):,}<br>"
+            f"Likes : {safe_int(row.get('Likes', 0)):,}<br>"
+            f"Commentaires : {safe_int(row.get('Commentaires', 0)):,}<br>"
+            f"{escape(str(group_label))}<br>"
+            "Double-clic : ouvrir la vidéo"
+        )
+        network.add_node(
+            str(row["video_id"]),
+            label=truncate_label(row["Titre"], 34),
+            title=title,
+            size=size,
+            color=color,
+            borderWidth=2,
+        )
+
+    for _, edge in edges_df.iterrows():
+        network.add_edge(
+            str(edge["source"]),
+            str(edge["target"]),
+            value=max(float(edge["poids"]) * 10, 1.0),
+            title=f"{escape(str(edge['relation']))}<br>Score : {float(edge['poids']):.2f}",
+            color="rgba(234, 88, 12, 0.42)",
+        )
+
+    with tempfile.NamedTemporaryFile("w+", suffix=".html", delete=False, encoding="utf-8") as tmp:
+        output_path = Path(tmp.name)
+    network.save_graph(str(output_path))
+    html = output_path.read_text(encoding="utf-8")
+    output_path.unlink(missing_ok=True)
+    script = f"""
+    <script>
+    const codexVideoUrls = {json.dumps(url_map)};
+    if (typeof network !== "undefined") {{
+        network.on("doubleClick", function(params) {{
+            if (params.nodes.length > 0) {{
+                const url = codexVideoUrls[params.nodes[0]];
+                if (url) {{
+                    window.open(url, "_blank", "noopener,noreferrer");
+                }}
+            }}
+        }});
+    }}
+    </script>
+    """
+    return html.replace("</body>", script + "</body>"), graph
+
+
+def render_dynamic_video_network(df: pd.DataFrame) -> None:
+    if df.empty or len(df) < 2:
+        st.info("Le réseau dynamique nécessite au moins deux vidéos.")
+        return
+
+    st.markdown("### Réseau dynamique de similarité entre vidéos")
+    st.caption("Les liens sont calculés à partir des métadonnées récupérées : titre, description, tags, chaîne, dates et liens YouTube cités.")
+
+    col_1, col_2, col_3 = st.columns(3)
+    with col_1:
+        type_relation = st.selectbox(
+            "Type de relation",
+            ["Mixte", "Similarité texte", "Même chaîne", "Mots-clés communs", "Proximité temporelle", "Liens descriptions"],
+        )
+        taille_noeud = st.selectbox("Taille des nœuds selon", ["Vues", "Likes", "Commentaires"])
+    with col_2:
+        seuil = st.slider("Seuil de similarité", min_value=0.0, max_value=1.0, value=0.25, step=0.05)
+        couleur_noeud = st.selectbox("Couleur selon", ["Chaîne", "Période", "Cluster"])
+    with col_3:
+        max_liens = st.slider("Nombre maximum de liens par vidéo", min_value=1, max_value=12, value=4)
+        max_videos = st.slider("Nombre maximum de vidéos dans le graphe", min_value=10, max_value=min(200, max(10, len(df))), value=min(80, max(10, len(df))), step=1)
+
+    fenetre_jours = st.slider("Fenêtre de proximité temporelle (jours)", min_value=1, max_value=365, value=30)
+
+    graph_df, edges_df = construire_reseau_video(
+        df,
+        type_relation=type_relation,
+        seuil=float(seuil),
+        max_liens_par_video=int(max_liens),
+        fenetre_jours=int(fenetre_jours),
+        max_videos=int(max_videos),
+    )
+
+    if graph_df.empty:
+        st.info("Aucune vidéo exploitable pour le réseau.")
+        return
+    if edges_df.empty:
+        st.warning("Aucun lien ne passe le seuil actuel. Diminue le seuil ou choisis le mode Mixte.")
+
+    html, graph = rendre_html_pyvis(graph_df, edges_df, taille_noeud, couleur_noeud)
+    st.caption(f"{graph.number_of_nodes()} nœud(s), {graph.number_of_edges()} lien(s). Double-clique sur un nœud pour ouvrir la vidéo YouTube.")
+    components.html(html, height=820, scrolling=True)
+
+    export_col_1, export_col_2 = st.columns(2)
+    with export_col_1:
+        st.download_button(
+            "Télécharger le graphe HTML",
+            data=html.encode("utf-8"),
+            file_name="reseau_videos_youtube.html",
+            mime="text/html",
+        )
+    with export_col_2:
+        st.download_button(
+            "Télécharger les relations CSV",
+            data=edges_df.to_csv(index=False).encode("utf-8"),
+            file_name="relations_videos_youtube.csv",
+            mime="text/csv",
+            disabled=edges_df.empty,
+        )
+
+    with st.expander("Voir les relations calculées", expanded=False):
+        st.dataframe(edges_df, use_container_width=True, hide_index=True)
+
+
 def build_category_mapping(youtube, region_code: str | None) -> dict[str, str]:
     if not region_code:
         return {}
@@ -246,6 +603,7 @@ def rechercher_videos_youtube(
                     {
                         "Titre": snippet.get("title", ""),
                         "Description": snippet.get("description", ""),
+                        "Tags": ", ".join(snippet.get("tags", []) or []),
                         "Date de publication": format_published_at(date_iso),
                         "URL": f"https://www.youtube.com/watch?v={video_id}",
                         "Channel ID": snippet.get("channelId", ""),
@@ -409,11 +767,19 @@ if df_resultats is not None:
         if df_resultats_filtres.empty:
             st.warning("Aucune date n'est actuellement sélectionnée. Coche au moins une date pour afficher des résultats.")
         st.success(f"{len(df_resultats_filtres)} vidéo(s) affichée(s) sur {len(df_resultats)} récupérée(s).")
-        st.dataframe(df_resultats_filtres, use_container_width=True)
-        st.download_button(
-            label="Télécharger les résultats au format Excel",
-            data=dataframe_to_excel_bytes(df_resultats_filtres),
-            file_name=st.session_state.nom_fichier_export,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        render_evolution_charts(df_resultats_filtres)
+        tab_resultats, tab_graphiques, tab_reseau = st.tabs(["Résultats", "Graphiques", "Réseau dynamique"])
+
+        with tab_resultats:
+            st.dataframe(df_resultats_filtres, use_container_width=True)
+            st.download_button(
+                label="Télécharger les résultats au format Excel",
+                data=dataframe_to_excel_bytes(df_resultats_filtres),
+                file_name=st.session_state.nom_fichier_export,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        with tab_graphiques:
+            render_evolution_charts(df_resultats_filtres)
+
+        with tab_reseau:
+            render_dynamic_video_network(df_resultats_filtres)
