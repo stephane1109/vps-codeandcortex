@@ -341,6 +341,16 @@ enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 st.title("Analyse discriminante linéaire (LDA)")
 st.caption("version VPS - www.codeandcortex.fr")
+onglet_aide, = st.tabs(["Aide"])
+with onglet_aide:
+    st.markdown(
+        'Article de blog sur LDA : '
+        '<a href="https://www.codeandcortex.fr/analyse-latent-dirichlet-allocation-analyse-textuelle/" '
+        'target="_blank" rel="noopener noreferrer">'
+        'https://www.codeandcortex.fr/analyse-latent-dirichlet-allocation-analyse-textuelle/'
+        '</a>',
+        unsafe_allow_html=True,
+    )
 st.markdown("<br>", unsafe_allow_html=True)
 
 with st.sidebar:
