@@ -109,8 +109,8 @@ TICKET_STATUS_STYLE = """
   animation: ticket-pulse-green 1.25s infinite;
 }
 .ticket-status-dot.is-waiting {
-  background: #f59e0b;
-  animation: ticket-pulse-orange 1.25s infinite;
+  background: #2563eb;
+  animation: ticket-pulse-blue 1.25s infinite;
 }
 .ticket-status-dot.is-error {
   background: #dc2626;
@@ -131,15 +131,20 @@ TICKET_STATUS_STYLE = """
 .ticket-status-card.is-active .ticket-status-meta strong {
   color: #15803d !important;
 }
+.ticket-status-card.is-waiting .ticket-status-meta,
+.ticket-status-card.is-waiting .ticket-status-meta *,
+.ticket-status-card.is-waiting .ticket-status-meta strong {
+  color: #1d4ed8 !important;
+}
 @keyframes ticket-pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
   70% { box-shadow: 0 0 0 12px rgba(22, 163, 74, 0); }
   100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
-@keyframes ticket-pulse-orange {
-  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45); }
-  70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+@keyframes ticket-pulse-blue {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.42); }
+  70% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
 }
 </style>
 """
@@ -216,6 +221,13 @@ def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
 
 
+def _safe_timestamp(value: object) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _ticket_timeout_seconds(cfg: dict[str, Any], status: str) -> int:
     if status == "attente":
         return cfg["wait_stale_seconds"]
@@ -253,10 +265,19 @@ def _cleanup_expired(client, cfg: dict[str, Any]) -> None:
 
             data = client.hgetall(ticket_key) or {}
             status = str(data.get("status", "")).strip() or "attente"
-            heartbeat_at = int(data.get("updated_at", data.get("created_at", now)) or now)
+            heartbeat_at = _safe_timestamp(data.get("updated_at")) or _safe_timestamp(data.get("created_at"))
             timeout_seconds = _ticket_timeout_seconds(cfg, status)
+            session_id = str(data.get("session_id", "")).strip()
+            app_id = str(data.get("application_id", cfg["app_id"])).strip() or cfg["app_id"]
+            linked_ticket_id = client.get(_session_key(app_id, session_id)) if session_id else None
 
-            if now - heartbeat_at > timeout_seconds:
+            if (
+                heartbeat_at <= 0
+                or heartbeat_at > now + 300
+                or now - heartbeat_at > timeout_seconds
+                or (status == "actif" and session_id and linked_ticket_id != ticket_id)
+                or (status == "actif" and not session_id)
+            ):
                 _drop_ticket(client, cfg, ticket_id)
                 continue
 
@@ -684,7 +705,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 """,
                 unsafe_allow_html=True,
             )
-            st.warning(f"Application occupée. Position dans la file : {position}.")
+            st.info(f"Application occupée. Position dans la file : {position}.")
             if st.button("Libérer l'accès", use_container_width=True):
                 if release_ticket_for_session(default_app_id, app_label):
                     st.rerun()
@@ -734,8 +755,8 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
 
     if snapshot["statut"] == "attente":
         st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
-        st.warning(
-            f"{app_label} est actuellement utilisee par un autre utilisateur. "
+        st.info(
+            f"{app_label} est actuellement utilisée par un autre utilisateur. "
             f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
         )
         st.stop()
