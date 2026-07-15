@@ -87,12 +87,47 @@ def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
 
 
+def _safe_timestamp(value: object) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _drop_ticket(client, cfg: dict[str, Any], ticket_id: str) -> None:
+    data = client.hgetall(_ticket_key(ticket_id)) or {}
+    session_id = str(data.get("session_id", "")).strip()
+    client.zrem(_keys(cfg["app_id"])["active"], ticket_id)
+    client.zrem(_keys(cfg["app_id"])["waiting"], ticket_id)
+    client.zrem(_global_active_key(), ticket_id)
+    client.delete(_ticket_key(ticket_id))
+    if session_id:
+        client.delete(_session_key(cfg["app_id"], session_id))
+
+
 def _cleanup_expired(client, cfg: dict[str, Any]) -> None:
     keys = _keys(cfg["app_id"])
+    now = int(time.time())
     for key in (keys["active"], keys["waiting"], _global_active_key()):
         for ticket_id in _list_members(client, key):
             if not client.exists(_ticket_key(ticket_id)):
                 client.zrem(key, ticket_id)
+                continue
+            data = client.hgetall(_ticket_key(ticket_id)) or {}
+            status = str(data.get("status", "")).strip() or "attente"
+            heartbeat_at = _safe_timestamp(data.get("updated_at")) or _safe_timestamp(data.get("created_at"))
+            timeout_seconds = min(cfg["ttl_seconds"], 120) if status == "attente" else cfg["ttl_seconds"]
+            session_id = str(data.get("session_id", "")).strip()
+            app_id = str(data.get("application_id", cfg["app_id"])).strip() or cfg["app_id"]
+            linked_ticket_id = client.get(_session_key(app_id, session_id)) if session_id else None
+            if (
+                heartbeat_at <= 0
+                or heartbeat_at > now + 300
+                or now - heartbeat_at > timeout_seconds
+                or (status == "actif" and session_id and linked_ticket_id != ticket_id)
+                or (status == "actif" and not session_id)
+            ):
+                _drop_ticket(client, cfg, ticket_id)
 
 
 def _active_load(client) -> int:
@@ -340,7 +375,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         if snapshot["statut"] == "actif":
             st.success(f"Application active ({snapshot['active']} / {snapshot['max_active']}).")
         elif snapshot["statut"] == "attente":
-            st.warning(f"Application occupee. Position dans la file : {snapshot['position'] or '?'}.")
+            st.info(f"Application occupee. Position dans la file : {snapshot['position'] or '?'}.")
         elif snapshot["statut"] == "refuse":
             st.error("File d'attente pleine pour cette application.")
         elif snapshot["message"]:
@@ -364,4 +399,3 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
     if snapshot["message"]:
         st.error(snapshot["message"])
     st.stop()
-
