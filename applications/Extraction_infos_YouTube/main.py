@@ -64,6 +64,13 @@ NETWORK_COLORS = [
     "#ea580c", "#2563eb", "#16a34a", "#9333ea", "#dc2626", "#0891b2", "#ca8a04", "#be185d",
     "#4f46e5", "#0f766e", "#a16207", "#7c3aed", "#15803d", "#b91c1c", "#0369a1",
 ]
+COMMENTER_COLUMNS = [
+    "Commentateurs",
+    "Auteurs commentaires",
+    "Auteurs des commentaires",
+    "Comment authors",
+    "Commentateurs communs",
+]
 
 
 def safe_int(value: object) -> int:
@@ -227,6 +234,14 @@ def extraire_mots_cles_reseau(*values: object) -> set[str]:
     return {token.strip("_-") for token in tokens if token.strip("_-") not in NETWORK_STOPWORDS}
 
 
+def extraire_commentateurs_reseau(row: pd.Series) -> set[str]:
+    values = [row.get(column, "") for column in COMMENTER_COLUMNS if column in row.index]
+    text = " ".join(str(value or "") for value in values)
+    if not text.strip():
+        return set()
+    return {item.strip().lower() for item in re.split(r"[,;|\n\r\t]+", text) if item.strip()}
+
+
 def couleur_stable(value: object) -> str:
     digest = hashlib.md5(str(value or "inconnu").encode("utf-8")).hexdigest()
     return NETWORK_COLORS[int(digest, 16) % len(NETWORK_COLORS)]
@@ -294,6 +309,7 @@ def construire_reseau_video(
         for _, row in graph_df.iterrows()
     ]
     liens_description = [extraire_liens_youtube_description(value) for value in graph_df["Description"]]
+    commentateurs = [extraire_commentateurs_reseau(row) for _, row in graph_df.iterrows()]
 
     candidates: list[dict[str, object]] = []
     for source, target in combinations(range(len(graph_df)), 2):
@@ -306,6 +322,11 @@ def construire_reseau_video(
         score_mots = (len(mots_cles[source] & mots_cles[target]) / len(union_mots)) if union_mots else 0.0
         score_dates = score_proximite_dates(row_a["Date de publication"], row_b["Date de publication"], fenetre_jours)
         score_liens = 1.0 if row_a["video_id"] in liens_description[target] or row_b["video_id"] in liens_description[source] else 0.0
+        union_commentateurs = commentateurs[source] | commentateurs[target]
+        score_commentateurs = (
+            len(commentateurs[source] & commentateurs[target]) / len(union_commentateurs)
+            if union_commentateurs else 0.0
+        )
 
         if type_relation == "Similarité texte":
             score = score_texte
@@ -317,14 +338,25 @@ def construire_reseau_video(
             score = score_dates
         elif type_relation == "Liens descriptions":
             score = score_liens
+        elif type_relation == "Même commentateur":
+            score = score_commentateurs
         else:
-            score = (0.45 * score_texte) + (0.20 * meme_chaine) + (0.15 * score_mots) + (0.10 * score_dates) + (0.10 * score_liens)
+            score = (
+                (0.40 * score_texte)
+                + (0.18 * meme_chaine)
+                + (0.14 * score_mots)
+                + (0.10 * score_dates)
+                + (0.08 * score_liens)
+                + (0.10 * score_commentateurs)
+            )
             if score_liens:
                 score = max(score, 0.85)
             if meme_chaine and score_texte < 0.05:
                 score = max(score, 0.35)
             if score_mots >= 0.20:
                 score = max(score, 0.40 + (0.30 * score_mots))
+            if score_commentateurs > 0:
+                score = max(score, 0.55 + (0.35 * score_commentateurs))
 
         if score < seuil:
             continue
@@ -340,6 +372,8 @@ def construire_reseau_video(
             raisons.append(f"dates={score_dates:.2f}")
         if score_liens:
             raisons.append("lien description")
+        if score_commentateurs > 0:
+            raisons.append(f"commentateurs={score_commentateurs:.2f}")
 
         candidates.append(
             {
@@ -354,6 +388,7 @@ def construire_reseau_video(
                 "mots_cles_communs": round(score_mots, 4),
                 "proximite_temporelle": round(score_dates, 4),
                 "liens_description": int(score_liens),
+                "commentateurs_communs": round(score_commentateurs, 4),
             }
         )
 
@@ -472,17 +507,69 @@ def render_dynamic_video_network(df: pd.DataFrame) -> None:
     with col_1:
         type_relation = st.selectbox(
             "Type de relation",
-            ["Mixte", "Similarité texte", "Même chaîne", "Mots-clés communs", "Proximité temporelle", "Liens descriptions"],
+            [
+                "Mixte",
+                "Similarité texte",
+                "Même chaîne",
+                "Mots-clés communs",
+                "Proximité temporelle",
+                "Liens descriptions",
+                "Même commentateur",
+            ],
+            help=(
+                "Choisit la logique des liens entre vidéos. Mixte combine texte, chaîne, mots-clés, dates, liens cités "
+                "et commentateurs si ces données existent. Même commentateur nécessite une colonne de commentateurs, "
+                "car l'API vidéo standard ne fournit pas les auteurs de commentaires."
+            ),
         )
-        taille_noeud = st.selectbox("Taille des nœuds selon", ["Vues", "Likes", "Commentaires"])
+        taille_noeud = st.selectbox(
+            "Taille des nœuds selon",
+            ["Vues", "Likes", "Commentaires"],
+            help="Détermine la taille visuelle de chaque vidéo : plus la métrique choisie est élevée, plus le nœud est grand.",
+        )
     with col_2:
-        seuil = st.slider("Seuil de similarité", min_value=0.0, max_value=1.0, value=0.25, step=0.05)
-        couleur_noeud = st.selectbox("Couleur selon", ["Chaîne", "Période", "Cluster"])
+        seuil = st.slider(
+            "Seuil de similarité",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.25,
+            step=0.05,
+            help="Filtre les liens faibles. Une valeur basse affiche plus de liens ; une valeur haute garde seulement les relations fortes.",
+        )
+        couleur_noeud = st.selectbox(
+            "Couleur selon",
+            ["Chaîne", "Période", "Cluster"],
+            help="Définit la couleur des nœuds : chaîne YouTube, mois de publication ou communauté calculée dans le graphe.",
+        )
     with col_3:
-        max_liens = st.slider("Nombre maximum de liens par vidéo", min_value=1, max_value=12, value=4)
-        max_videos = st.slider("Nombre maximum de vidéos dans le graphe", min_value=10, max_value=min(200, max(10, len(df))), value=min(80, max(10, len(df))), step=1)
+        max_liens = st.slider(
+            "Nombre maximum de liens par vidéo",
+            min_value=1,
+            max_value=12,
+            value=4,
+            help="Limite le nombre d'arêtes par vidéo pour éviter un graphe illisible quand beaucoup de vidéos sont proches.",
+        )
+        max_videos = st.slider(
+            "Nombre maximum de vidéos dans le graphe",
+            min_value=10,
+            max_value=min(200, max(10, len(df))),
+            value=min(80, max(10, len(df))),
+            step=1,
+            help="Limite le nombre de vidéos affichées pour préserver la lisibilité et les performances du graphe interactif.",
+        )
 
-    fenetre_jours = st.slider("Fenêtre de proximité temporelle (jours)", min_value=1, max_value=365, value=30)
+    fenetre_jours = st.slider(
+        "Fenêtre de proximité temporelle (jours)",
+        min_value=1,
+        max_value=365,
+        value=30,
+        help="Deux vidéos sont considérées proches dans le temps si leurs dates de publication sont dans cette fenêtre.",
+    )
+    if type_relation == "Même commentateur" and not any(column in df.columns for column in COMMENTER_COLUMNS):
+        st.info(
+            "L'option Même commentateur est prête, mais les résultats actuels ne contiennent pas encore les auteurs de commentaires. "
+            "Pour l'activer réellement, il faudra ajouter une collecte de commentaires YouTube avec l'API commentThreads."
+        )
 
     graph_df, edges_df = construire_reseau_video(
         df,
