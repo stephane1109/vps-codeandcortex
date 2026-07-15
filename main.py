@@ -74,6 +74,17 @@ def main() -> None:
 
     st.title("Analyse du débit de parole d'une vidéo YouTube")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
+    with st.expander("Aide", expanded=False):
+        st.markdown(
+            """
+            <a href="https://www.codeandcortex.fr/decrypter-discours-debit-parole/"
+               target="_blank"
+               rel="noopener noreferrer">
+              Décrypter le discours : approche par le débit de parole
+            </a>
+            """,
+            unsafe_allow_html=True,
+        )
     st.markdown(
         """
         Cette application télécharge une vidéo YouTube, découpe un sous-clip et le transcrit avec Whisper.
