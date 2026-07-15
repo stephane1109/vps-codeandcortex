@@ -49,6 +49,10 @@ Variables d'environnement a modifier si besoin :
   Duree de vie d'un ticket si le navigateur ne donne plus signe de vie.
   Exemple : 1800 pour 30 minutes.
 
+- APP_TICKET_ACTIVE_STALE_SECONDS
+  Delai maximal sans heartbeat pour un ticket actif avant nettoyage automatique.
+  Exemple : 900 pour 15 minutes. Laisse une valeur superieure a APP_TICKET_HEARTBEAT_MS.
+
 - APP_TICKET_MAX_WAITING
   Taille maximale de la file d'attente par application.
 
@@ -176,7 +180,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
     ttl_seconds = max(60, _env_int("APP_TICKET_TTL_SECONDS", 1800))
+    heartbeat_ms = max(30000, _env_int("APP_TICKET_HEARTBEAT_MS", 300000))
     wait_stale_default = min(ttl_seconds, 120)
+    active_stale_default = min(ttl_seconds, max(900, int(heartbeat_ms / 1000) * 2 + 60))
     return {
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
         "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
@@ -185,9 +191,10 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "cost": max(0, _env_int("APP_TICKET_COST", 4)),
         "global_capacity": max(1, _env_int("CAPACITE_SERVEUR", 6)),
         "ttl_seconds": ttl_seconds,
+        "active_stale_seconds": max(0, _env_int("APP_TICKET_ACTIVE_STALE_SECONDS", active_stale_default)),
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
-        "heartbeat_ms": max(30000, _env_int("APP_TICKET_HEARTBEAT_MS", 300000)),
+        "heartbeat_ms": heartbeat_ms,
         "release_url": os.getenv("APP_TICKET_RELEASE_URL", "").strip(),
         "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0)),
         "wait_stale_seconds": max(30, _env_int("APP_TICKET_WAIT_STALE_SECONDS", wait_stale_default)),
@@ -234,6 +241,8 @@ def _list_members(client, key: str) -> list[str]:
 def _ticket_timeout_seconds(cfg: dict[str, Any], status: str) -> int:
     if status == "attente":
         return cfg["wait_stale_seconds"]
+    if status == "actif" and cfg.get("active_stale_seconds", 0) > 0:
+        return min(cfg["ttl_seconds"], cfg["active_stale_seconds"])
     return cfg["ttl_seconds"]
 
 
@@ -572,22 +581,47 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
             }}, current.hiddenReleaseMs);
           }}
 
-          document.addEventListener("visibilitychange", () => {{
-            if (document.visibilityState === "hidden") {{
-              scheduleHiddenRelease();
-            }} else {{
-              clearHiddenTimer();
-              window.__ticketGateReleaseSent = false;
+          function installReleaseListeners(targetWindow, targetDocument) {{
+            if (!targetWindow) {{
+              return;
             }}
-          }});
 
-          window.addEventListener("pagehide", () => {{
-            sendRelease();
-          }});
+            try {{
+              targetWindow.addEventListener("pagehide", () => {{
+                sendRelease();
+              }});
+              targetWindow.addEventListener("beforeunload", () => {{
+                sendRelease();
+              }});
+            }} catch (error) {{}}
 
-          window.addEventListener("beforeunload", () => {{
-            sendRelease();
-          }});
+            if (!targetDocument) {{
+              return;
+            }}
+
+            try {{
+              targetDocument.addEventListener("visibilitychange", () => {{
+                if (targetDocument.visibilityState === "hidden") {{
+                  scheduleHiddenRelease();
+                }} else {{
+                  clearHiddenTimer();
+                  window.__ticketGateReleaseSent = false;
+                }}
+              }});
+            }} catch (error) {{}}
+          }}
+
+          installReleaseListeners(window, document);
+          try {{
+            if (window.parent && window.parent !== window) {{
+              installReleaseListeners(window.parent, window.parent.document);
+            }}
+          }} catch (error) {{}}
+          try {{
+            if (window.top && window.top !== window && window.top !== window.parent) {{
+              installReleaseListeners(window.top, window.top.document);
+            }}
+          }} catch (error) {{}}
         }})();
         </script>
         """,
@@ -607,6 +641,7 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
         return False
 
     session_key = _session_key(cfg["app_id"], session_id)
+    _cleanup_expired(client, cfg)
     ticket_id = client.get(session_key)
     if ticket_id:
         client.zrem(_keys(cfg["app_id"])["active"], ticket_id)
@@ -614,6 +649,7 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
         client.zrem(_global_active_key(), ticket_id)
         client.delete(_ticket_key(ticket_id))
         client.delete(session_key)
+    _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
     _reset_local_ticket_state(mark_released=persist_local_release)
     return True
