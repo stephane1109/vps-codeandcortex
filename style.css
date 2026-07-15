@@ -348,6 +348,16 @@ h1 {
     box-shadow: var(--ombre-carte);
 }
 
+.carte-application.en-construction {
+    cursor: not-allowed;
+}
+
+.carte-application.en-construction:hover {
+    transform: none;
+    border-color: rgba(115, 115, 115, 0.24);
+    box-shadow: 0 12px 24px rgba(115, 115, 115, 0.08);
+}
+
 .icone {
     height: 34px;
     line-height: 34px;
