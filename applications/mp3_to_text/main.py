@@ -256,16 +256,8 @@ def main() -> None:
     enforce_streamlit_access("mp3_to_text", APP_NAME)
     st.title("Speech to text avec Whisper - OpenAI")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
-    st.markdown(
-        """
-        Cette version VPS permet de :
-
-        - télécharger l'audio d'une vidéo YouTube
-        - importer un fichier audio local
-        - choisir directement `fast-whisper`, `sm`, `md`, `tiny`, `base`, `small`, `medium`
-        - transcrire automatiquement en texte puis télécharger le résultat
-        """
-    )
+    st.caption("version modifié le 13-07-2026")
+    st.markdown("<hr style='margin:0.35rem 0 1.2rem; border:0; border-top:1px solid rgba(15,23,42,0.12);'>", unsafe_allow_html=True)
     build_sidebar_notes()
 
     debug_mode = st.checkbox("Mode diagnostic", value=False)
