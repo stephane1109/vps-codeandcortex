@@ -444,11 +444,6 @@ uploaded_files = st.file_uploader(
     help="Les lignes commençant par **** sont reconnues comme séparateurs de documents IRaMuTeQ.",
 )
 
-st.info(
-    "Le script source est adapté pour le VPS : import texte, segmentation IRaMuTeQ, "
-    "prétraitement spaCy, bigrammes, filtrage du dictionnaire, LDA, pyLDAvis, CSV et wordclouds."
-)
-
 if "lda_result" not in st.session_state:
     st.session_state.lda_result = None
 
