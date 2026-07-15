@@ -930,11 +930,17 @@ st.title("Vecteur émotionnel")
 st.caption(
     "Analyse émotionnelle d'une vidéo YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
 )
-st.link_button(
-    "Aide",
-    "https://www.codeandcortex.fr/vecteurs-fer-pca-kmeans/",
-    use_container_width=False,
-)
+with st.expander("Aide", expanded=False):
+    st.markdown(
+        """
+        <a href="https://www.codeandcortex.fr/vecteurs-fer-pca-kmeans/"
+           target="_blank"
+           rel="noopener noreferrer">
+          Vecteurs émotionnels avec FER, PCA et K-means
+        </a>
+        """,
+        unsafe_allow_html=True,
+    )
 st.write("")
 
 video_url = st.text_input(
