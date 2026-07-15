@@ -15,6 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
     APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_ACTIVE_STALE_SECONDS=900 \
     APP_TICKET_MAX_WAITING=20 \
     APP_TICKET_WAIT_REFRESH_MS=10000 \
     APP_TICKET_HEARTBEAT_MS=300000 \
@@ -28,6 +29,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_COST=4 pour une application relativement lourde
 # - CAPACITE_SERVEUR=6 pour coller a la capacite globale du VPS
 # - APP_TICKET_TTL_SECONDS=3600 si une analyse longue doit garder son ticket
+# - APP_TICKET_ACTIVE_STALE_SECONDS=900 pour nettoyer un ancien ticket actif sans heartbeat apres 15 minutes
 # - APP_DATA_DIR=/data/app pour conserver les exports sur le serveur
 # - WHISPER_MODEL_NAME=small pour conserver le comportement d'origine
 
