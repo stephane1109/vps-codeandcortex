@@ -34,6 +34,11 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 2,
         "cout": 2,
     },
+    "rendreaudible": {
+        "label": "Rendre audible l'inaudible",
+        "max_active": 1,
+        "cout": 2,
+    },
     "extract_comments_youtube": {
         "label": "Extraction YouTube",
         "max_active": 2,
