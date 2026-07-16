@@ -19,11 +19,22 @@ ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
 STYLE_FILE = ROOT / "style.css"
 AIDE_FILE = ROOT / "aide.md"
+SOCIAL_PREVIEW_FILE = ROOT / "assets" / "social-preview.png"
+FAVICON_FILE = ROOT / "assets" / "favicon.ico"
+FAVICON_16_FILE = ROOT / "assets" / "favicon-16x16.png"
+FAVICON_32_FILE = ROOT / "assets" / "favicon-32x32.png"
+APPLE_TOUCH_ICON_FILE = ROOT / "assets" / "apple-touch-icon.png"
 STATIC_FILES = {
     "/": (INDEX_FILE, "text/html; charset=utf-8"),
     "/index.html": (INDEX_FILE, "text/html; charset=utf-8"),
     "/style.css": (STYLE_FILE, "text/css; charset=utf-8"),
     "/aide.md": (AIDE_FILE, "text/markdown; charset=utf-8"),
+    "/assets/social-preview.png": (SOCIAL_PREVIEW_FILE, "image/png"),
+    "/favicon.ico": (FAVICON_FILE, "image/x-icon"),
+    "/assets/favicon.ico": (FAVICON_FILE, "image/x-icon"),
+    "/assets/favicon-16x16.png": (FAVICON_16_FILE, "image/png"),
+    "/assets/favicon-32x32.png": (FAVICON_32_FILE, "image/png"),
+    "/assets/apple-touch-icon.png": (APPLE_TOUCH_ICON_FILE, "image/png"),
 }
 
 
