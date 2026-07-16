@@ -296,9 +296,9 @@ def _session_ticket(donnees: dict[str, Any]) -> str:
 def _heartbeat_ticket(donnees: dict[str, Any], maintenant: int) -> int:
     brute = donnees.get("updated_at") or donnees.get("created_at") or donnees.get("date_creation") or maintenant
     try:
-        return int(brute)
+        return int(float(brute))
     except (TypeError, ValueError):
-        return maintenant
+        return 0
 
 
 def _timeout_ticket(configuration: dict[str, Any], statut: str) -> int:
@@ -343,7 +343,16 @@ def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
                 donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
                 statut = _statut_ticket(donnees)
                 heartbeat = _heartbeat_ticket(donnees, maintenant)
-                if maintenant - heartbeat > _timeout_ticket(configuration, statut):
+                session_id = _session_ticket(donnees)
+                cle_session_ticket = cle_session(identifiant_application, session_id) if session_id else ""
+                ticket_session = client_redis.get(cle_session_ticket) if cle_session_ticket else None
+                if (
+                    heartbeat <= 0
+                    or heartbeat > maintenant + 300
+                    or maintenant - heartbeat > _timeout_ticket(configuration, statut)
+                    or (statut == "actif" and session_id and ticket_session != identifiant_ticket)
+                    or (statut == "actif" and not session_id)
+                ):
                     _supprimer_ticket(client_redis, identifiant_ticket, identifiant_application, donnees)
 
     for identifiant_ticket in _lister_tickets(client_redis, _zset_actifs_globale()):
