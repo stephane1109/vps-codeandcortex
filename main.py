@@ -160,7 +160,7 @@ def load_help_markdown() -> str:
 
 
 def render_help_tab() -> None:
-    with st.expander("Aide - cookies YouTube et formats", expanded=False):
+    with st.expander("Aide", expanded=False):
         st.markdown(
             """
             <p>
