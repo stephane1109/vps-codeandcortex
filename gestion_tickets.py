@@ -269,16 +269,67 @@ def _lister_tickets(client_redis, key: str) -> list[str]:
     return [str(item) for item in client_redis.zrange(key, 0, -1)]
 
 
+def _lire_donnees_ticket(client_redis, identifiant_ticket: str) -> dict[str, Any]:
+    return client_redis.hgetall(cle_ticket(identifiant_ticket)) or {}
+
+
+def _statut_ticket(donnees: dict[str, Any]) -> str:
+    return str(donnees.get("status") or donnees.get("statut") or "attente").strip() or "attente"
+
+
+def _session_ticket(donnees: dict[str, Any]) -> str:
+    return str(donnees.get("session_id") or donnees.get("identifiant_session") or "").strip()
+
+
+def _heartbeat_ticket(donnees: dict[str, Any]) -> int:
+    brute = donnees.get("updated_at") or donnees.get("created_at") or donnees.get("date_creation")
+    try:
+        return int(float(brute))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _supprimer_ticket(client_redis, identifiant_ticket: str, application_id: str, donnees: dict[str, Any] | None = None) -> None:
+    donnees_ticket = donnees or _lire_donnees_ticket(client_redis, identifiant_ticket)
+    session_id = _session_ticket(donnees_ticket)
+    client_redis.zrem(cles_redis_application(application_id)["tickets_actifs"], identifiant_ticket)
+    client_redis.zrem(cles_redis_application(application_id)["tickets_attente"], identifiant_ticket)
+    client_redis.zrem(_zset_actifs_globale(), identifiant_ticket)
+    client_redis.delete(cle_ticket(identifiant_ticket))
+    if session_id:
+        client_redis.delete(cle_session(application_id, session_id))
+
+
 def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
-    """Supprimer des index les tickets dont la clé Redis a expiré."""
+    """Supprimer des index les tickets dont la clé Redis a expiré ou dont la session a disparu."""
     applications = [normaliser_identifiant_application(application_id)] if application_id else _application_ids_configures()
+    maintenant = int(time.time())
 
     for identifiant_application in applications:
+        configuration = lire_configuration_tickets(identifiant_application)
         cles = cles_redis_application(identifiant_application)
         for key in (cles["tickets_actifs"], cles["tickets_attente"]):
             for identifiant_ticket in _lister_tickets(client_redis, key):
                 if not client_redis.exists(cle_ticket(identifiant_ticket)):
                     client_redis.zrem(key, identifiant_ticket)
+                    client_redis.zrem(_zset_actifs_globale(), identifiant_ticket)
+                    continue
+
+                donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
+                statut = _statut_ticket(donnees)
+                heartbeat = _heartbeat_ticket(donnees)
+                session_id = _session_ticket(donnees)
+                cle_session_ticket = cle_session(identifiant_application, session_id) if session_id else ""
+                ticket_session = client_redis.get(cle_session_ticket) if cle_session_ticket else None
+                timeout = min(configuration["duree_ticket"], 120) if statut == "attente" else configuration["duree_ticket"]
+                if (
+                    heartbeat <= 0
+                    or heartbeat > maintenant + 300
+                    or maintenant - heartbeat > timeout
+                    or (statut == "actif" and session_id and ticket_session != identifiant_ticket)
+                    or (statut == "actif" and not session_id)
+                ):
+                    _supprimer_ticket(client_redis, identifiant_ticket, identifiant_application, donnees)
 
     for identifiant_ticket in _lister_tickets(client_redis, _zset_actifs_globale()):
         if not client_redis.exists(cle_ticket(identifiant_ticket)):
