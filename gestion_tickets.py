@@ -26,12 +26,12 @@ APPLICATIONS_TICKETS_JSON = "APPLICATIONS_TICKETS_JSON"
 APPLICATIONS_PAR_DEFAUT = {
     "europresse-to-iramuteq": {
         "label": "Europresse → IRaMuTeQ",
-        "max_active": 2,
+        "max_active": 4,
         "cout": 1,
     },
     "extraction-multimedia": {
         "label": "Extraction Multimédia",
-        "max_active": 2,
+        "max_active": 1,
         "cout": 4,
     },
     "rendreaudible": {
@@ -42,7 +42,7 @@ APPLICATIONS_PAR_DEFAUT = {
     "extract_comments_youtube": {
         "label": "Extraction YouTube",
         "max_active": 2,
-        "cout": 2,
+        "cout": 1,
     },
     "scraping_reddit": {
         "label": "Scraping Reddit",
@@ -51,6 +51,11 @@ APPLICATIONS_PAR_DEFAUT = {
     },
     "Extraction_infos_YouTube": {
         "label": "Réseau de vidéo YouTube",
+        "max_active": 2,
+        "cout": 1,
+    },
+    "pdf-to-text-to-iramuteq": {
+        "label": "PDF to Text",
         "max_active": 2,
         "cout": 1,
     },
@@ -63,6 +68,11 @@ APPLICATIONS_PAR_DEFAUT = {
         "label": "Cooccurrences mot pivot",
         "max_active": 2,
         "cout": 2,
+    },
+    "lda": {
+        "label": "Analyse Discriminante Linéaire (LDA)",
+        "max_active": 2,
+        "cout": 3,
     },
     "symbolic_connectors": {
         "label": "Symbolic Connectors",
@@ -93,6 +103,17 @@ APPLICATIONS_PAR_DEFAUT = {
         "label": "Analyses multi-modales",
         "max_active": 1,
         "cout": 4,
+    },
+    "analyse_debit_parole": {
+        "label": "Analyse du débit de parole",
+        "max_active": 1,
+        "cout": 4,
+    },
+    "chdrainette": {
+        "label": "CHD Rainette",
+        "max_active": 1,
+        "cout": 4,
+        "duree_ticket": 300,
     },
     "divergence-jensen-shannon": {
         "label": "Divergence Jensen-Shannon",
