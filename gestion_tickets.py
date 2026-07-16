@@ -32,7 +32,7 @@ APPLICATIONS_PAR_DEFAUT = {
     "extraction-multimedia": {
         "label": "Extraction Multimédia",
         "max_active": 2,
-        "cout": 2,
+        "cout": 4,
     },
     "rendreaudible": {
         "label": "Rendre audible l'inaudible",
@@ -301,6 +301,19 @@ def _heartbeat_ticket(donnees: dict[str, Any], maintenant: int) -> int:
         return 0
 
 
+def _cout_ticket_depuis_donnees(donnees: dict[str, Any], configuration: dict[str, Any] | None = None) -> int:
+    """Lire le coût depuis les deux formats de tickets utilisés par les apps."""
+    cout_defaut = int(configuration["cout"]) if configuration else 1
+    for champ in ("cout_application", "cost"):
+        try:
+            valeur = donnees.get(champ)
+            if valeur not in (None, ""):
+                return max(0, int(float(valeur)))
+        except (TypeError, ValueError):
+            continue
+    return max(0, cout_defaut)
+
+
 def _timeout_ticket(configuration: dict[str, Any], statut: str) -> int:
     if statut == "attente":
         return int(configuration.get("duree_attente", min(configuration["duree_ticket"], 120)))
@@ -367,7 +380,9 @@ def calculer_charge_active(client_redis):
     for identifiant_ticket in _lister_tickets(client_redis, _zset_actifs_globale()):
         donnees = client_redis.hgetall(cle_ticket(identifiant_ticket))
         if donnees:
-            charge += int(donnees.get("cout_application", 1))
+            application_id = str(donnees.get("application_id", "")).strip()
+            configuration = lire_configuration_tickets(application_id) if application_id else None
+            charge += _cout_ticket_depuis_donnees(donnees, configuration)
     return charge
 
 
@@ -462,7 +477,7 @@ def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = N
             continue
 
         configuration = lire_configuration_tickets(application_id)
-        cout_application = int(donnees.get("cout_application", configuration["cout"]))
+        cout_application = _cout_ticket_depuis_donnees(donnees, configuration)
         charge_active = calculer_charge_active(client_redis)
         actifs_application = compter_tickets_actifs_application(client_redis, application_id)
 
