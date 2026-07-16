@@ -872,7 +872,7 @@ def load_help_markdown() -> str:
 
 
 def render_help_tab() -> None:
-    with st.expander("Aide - clé API YouTube Data v3", expanded=False):
+    with st.expander("Aide", expanded=False):
         st.markdown(load_help_markdown(), unsafe_allow_html=True)
 
 
