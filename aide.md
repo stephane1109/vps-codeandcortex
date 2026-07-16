@@ -1,5 +1,3 @@
-# Aide - StopMotion
-
 Pour comprendre pas a pas le fonctionnement de cette application Stop Motion,
 consulter l'article complet :
 
