@@ -811,11 +811,6 @@ sort_by = st.radio(
     horizontal=True,
 )
 
-st.info(
-    "Une clé API YouTube Data v3 est nécessaire. "
-    "Le nombre réel de résultats dépend de la disponibilité de l'API et des métadonnées exposées par YouTube."
-)
-
 if st.button("Lancer la recherche", type="primary", disabled=not date_range_valid):
     if not cle_api_input or not mot_cle_input.strip():
         st.error("Renseignez la clé API et le mot-clé de recherche.")
