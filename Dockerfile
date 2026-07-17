@@ -28,8 +28,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
 # - YTDLP_IMPERSONATE=chrome est optionnel. Ne pas le mettre par defaut :
 #   certaines versions de l'API Python yt-dlp peuvent echouer avec AssertionError.
-# - YTDLP_YOUTUBE_FORMATS=missing_pot uniquement si YTDLP_YOUTUBE_PO_TOKEN_ARGS est aussi renseigne
 # - YTDLP_YOUTUBE_PO_TOKEN_ARGS=web.gvs+XXX si YouTube impose un PO token manuel
+# - Ne pas definir YTDLP_YOUTUBE_FORMATS=missing_pot pour cette application :
+#   cela peut masquer les formats MP4 classiques et bloquer l'extraction.
 
 WORKDIR /app
 

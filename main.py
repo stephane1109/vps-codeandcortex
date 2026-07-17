@@ -711,14 +711,67 @@ def diagnostiquer_formats_youtube(url: str, opts_base: Dict[str, Any]) -> str:
     return f"Formats détectés : {len(formats)} total, {len(medias)} média téléchargeable(s){suffixe}"
 
 
+def _selecteurs_format_youtube(qualite: str) -> List[tuple[str, str]]:
+    """Ordre volontairement robuste : progressif MP4 d'abord, haute qualité ensuite.
+
+    YouTube expose parfois uniquement certains clients/formats au VPS. Le format
+    18 est ancien mais très stable : MP4 360p avec audio, donc directement
+    exploitable pour produire les exports et l'aperçu.
+    """
+    selecteurs: List[tuple[str, str]] = []
+    format_env = os.environ.get("YTDLP_FORMAT", "").strip()
+    if format_env:
+        selecteurs.append(("variable YTDLP_FORMAT", format_env))
+
+    if qualite_compressee(qualite):
+        selecteurs.extend(
+            [
+                ("mp4 progressif 360p", "18"),
+                (
+                    "mp4 progressif <=720p",
+                    "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]/"
+                    "best[height<=720][acodec!=none][vcodec!=none]",
+                ),
+                (
+                    "mp4 video+audio <=720p",
+                    "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/"
+                    "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+                ),
+                ("universel <=720p", "bestvideo[height<=720]+bestaudio/best[height<=720]/best"),
+                ("universel", "bestvideo+bestaudio/best"),
+            ]
+        )
+    else:
+        selecteurs.extend(
+            [
+                (
+                    "haute qualite mp4",
+                    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+                    "best[ext=mp4][acodec!=none][vcodec!=none]",
+                ),
+                ("haute qualite universelle", "bestvideo+bestaudio/best"),
+                ("mp4 progressif 360p secours", "18"),
+                (
+                    "mp4 progressif <=720p secours",
+                    "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]/"
+                    "best[height<=720][acodec!=none][vcodec!=none]",
+                ),
+            ]
+        )
+
+    uniques: List[tuple[str, str]] = []
+    vus = set()
+    for label, selecteur in selecteurs:
+        if selecteur in vus:
+            continue
+        uniques.append((label, selecteur))
+        vus.add(selecteur)
+    return uniques
+
+
 def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) -> Dict[str, Any]:
     user_agent_final = (user_agent or "").strip() or USER_AGENT_YOUTUBE_DEFAUT
     youtube_args: Dict[str, List[str]] = {}
-    formats_args = [
-        item.strip()
-        for item in os.environ.get("YTDLP_YOUTUBE_FORMATS", "").split(",")
-        if item.strip()
-    ]
     po_token_args = [
         item.strip()
         for item in os.environ.get("YTDLP_YOUTUBE_PO_TOKEN_ARGS", "").split(",")
@@ -726,8 +779,9 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
     ]
     if po_token_args:
         youtube_args["po_token"] = po_token_args
-        if formats_args:
-            youtube_args["formats"] = formats_args
+        # Ne pas forcer youtube:formats=missing_pot ici : cela peut masquer
+        # les formats MP4 classiques et provoquer "Requested format is not
+        # available" alors que YouTube expose bien un format exploitable.
     opts: Dict[str, Any] = {
         "paths": {"home": str(REPERTOIRE_SORTIE)},
         "outtmpl": {"default": "%(id)s.%(ext)s"},
@@ -753,9 +807,9 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "restrictfilenames": True,
         "trim_file_name": 80,
     }
-    format_env = os.environ.get("YTDLP_FORMAT", "").strip()
-    if format_env:
-        opts["format"] = format_env
+    # Le format est choisi dans telecharger_preparer_video(), tentative par
+    # tentative, pour pouvoir ignorer proprement une variable YTDLP_FORMAT
+    # invalide et retomber sur un MP4 progressif fiable.
     # YTDLP_IMPERSONATE reste volontairement optionnel : force a "chrome" par
     # defaut, il peut provoquer un AssertionError dans l'API Python de yt-dlp.
     impersonate_client = os.environ.get("YTDLP_IMPERSONATE", "").strip()
@@ -818,7 +872,7 @@ def telecharger_preparer_video(
                 pass
         return info_local
 
-    profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None)]
+    profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None), ("android", ["android"])]
     clients_forces = (
         ydl_opts.get("extractor_args", {})
         .get("youtube", {})
@@ -832,7 +886,6 @@ def telecharger_preparer_video(
             ("web", ["web"]),
             ("mweb", ["mweb"]),
             ("ios", ["ios"]),
-            ("android", ["android"]),
         ]
     )
 
@@ -840,37 +893,37 @@ def telecharger_preparer_video(
     info = None
     for label_client, clients in profils_clients:
         opts_client = _appliquer_clients_youtube(ydl_opts, clients)
-        journal_debug(
-            "yt-dlp profil client : "
-            + f"{label_client} ({opts_client.get('extractor_args', {}).get('youtube', {}).get('player_client') or 'auto'})"
-        )
-        try:
-            journal_debug(f"yt-dlp essai automatique : {label_client}")
-            info = _telecharger(opts_client)
-            journal_debug(f"yt-dlp téléchargement OK : {label_client}")
-        except Exception as exc:
-            message = str(exc) or repr(exc)
-            journal_debug(f"yt-dlp erreur : {label_client} | {message[:500]}")
-            erreurs_fallback.append(f"{label_client} -> {message}")
-            if isinstance(exc, AssertionError):
-                return None, None, None, (
-                    "yt-dlp a échoué avec AssertionError. Supprime YTDLP_IMPERSONATE "
-                    "dans Coolify ou laisse cette variable vide."
-                )
-            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                if not cookies_path:
+        clients_journal = opts_client.get("extractor_args", {}).get("youtube", {}).get("player_client") or "auto"
+        journal_debug(f"yt-dlp profil client : {label_client} ({clients_journal})")
+        for label_format, selecteur_format in _selecteurs_format_youtube(qualite):
+            opts_essai = dict(opts_client)
+            opts_essai["format"] = selecteur_format
+            if "+" in selecteur_format:
+                opts_essai.setdefault("merge_output_format", "mp4")
+            try:
+                journal_debug(f"yt-dlp essai : client={label_client} | format={label_format} | {selecteur_format}")
+                info = _telecharger(opts_essai)
+                journal_debug(f"yt-dlp téléchargement OK : client={label_client} | format={label_format}")
+            except Exception as exc:
+                message = str(exc) or repr(exc)
+                journal_debug(f"yt-dlp erreur : client={label_client} | format={label_format} | {message[:500]}")
+                erreurs_fallback.append(f"{label_client}/{label_format} -> {message}")
+                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                    if not cookies_path:
+                        return None, None, None, (
+                            "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                            "récent exporté depuis le même navigateur, puis relance."
+                        )
                     return None, None, None, (
-                        "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
-                        "récent exporté depuis le même navigateur, puis relance."
+                        "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
+                        "dans le navigateur, réexporte un cookies.txt récent, puis relance."
                     )
-                return None, None, None, (
-                    "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
-                    "dans le navigateur, réexporte un cookies.txt récent, puis relance."
-                )
-            if "403" in message or "Forbidden" in message:
-                if not cookies_path:
-                    return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
-                return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
+                if "403" in message or "Forbidden" in message:
+                    if not cookies_path:
+                        return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
+                    return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
+            if info is not None:
+                break
         if info is not None:
             break
 
