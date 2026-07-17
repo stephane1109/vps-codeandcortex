@@ -62,7 +62,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
 # séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
-ARG YTDLP_REFRESH=2026-07-17-format-analyzer-cookie-fallback-02
+ARG YTDLP_REFRESH=2026-07-17-ui-preview-results-03
 RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
     && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
     && python -m yt_dlp --version

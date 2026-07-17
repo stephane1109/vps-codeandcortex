@@ -49,7 +49,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-format-analyzer-cookie-fallback-2026-07-17-02"
+APP_BUILD = "extraction-multimedia-ui-preview-results-2026-07-17-03"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1434,23 +1434,6 @@ st.caption(
 )
 render_help_tab()
 
-with st.expander("Diagnostic systeme"):
-    st.write("Build application : " + APP_BUILD)
-    try:
-        chemin_ffmpeg = tl.chemin_ffmpeg()
-        version = subprocess.run([chemin_ffmpeg, "-version"], capture_output=True, text=True, check=False)
-        st.write(f"ffmpeg : {chemin_ffmpeg}")
-        if version.stdout:
-            st.code(version.stdout.splitlines()[0])
-    except Exception as e:
-        st.write(f"ffmpeg : introuvable ({e})")
-    st.write(f"Session : {SESSION_ID[:8]}")
-    st.write(f"Workspace temporaire : {SESSION_DIR}")
-    try:
-        st.write(ck.info_cookies(REPERTOIRE_SORTIE))
-    except Exception:
-        pass
-
 st.session_state.setdefault("debut_secs", 0)
 st.session_state.setdefault("fin_secs", 10)
 st.session_state.setdefault("video_base", None)
@@ -1464,9 +1447,6 @@ st.session_state.setdefault("derniers_fichiers", [])
 st.session_state.setdefault("dernier_message_resultats", "")
 st.session_state.setdefault("derniere_erreur_resultats", "")
 st.session_state.setdefault("resultats_revision", 0)
-
-with st.container(border=True):
-    afficher_bouton_telechargement_resultats(f"top_results_{st.session_state['resultats_revision']}", titre=True)
 
 st.subheader("Source")
 url = st.text_input("URL YouTube")
@@ -1490,8 +1470,13 @@ fichier_local = st.file_uploader(
     help="ffmpeg accepte de nombreux conteneurs : mp4, mov, mkv, webm, avi, m4v, flv, wmv, mpg, ts, etc.",
 )
 
-mode_verbose = st.checkbox("Mode diagnostic yt-dlp", value=False)
-debug_affiche = st.checkbox("Afficher le debug extraction", value=True)
+mode_diagnostic = st.checkbox(
+    "Mode diagnostic",
+    value=False,
+    help="Affiche les logs détaillés et active les messages yt-dlp complets.",
+)
+mode_verbose = mode_diagnostic
+debug_affiche = mode_diagnostic
 qualite = st.radio("Qualité de la vidéo de base", ["Compressée (1280p, CRF 28)", "HD (max qualité dispo)"], index=0)
 
 st.subheader("Ressources à produire")
@@ -1533,13 +1518,32 @@ else:
     utiliser_intervalle = False
 
 afficher_apercu = st.checkbox("Afficher l'aperçu vidéo", value=True, disabled=opt_timelapse)
+preview_slot = st.empty()
+with preview_slot.container(border=True):
+    st.subheader("Aperçu vidéo")
 if afficher_apercu and not opt_timelapse:
     if st.session_state.get("video_base") and Path(st.session_state["video_base"]).exists():
-        afficher_video_bytes(Path(st.session_state["video_base"]))
+        with preview_slot.container(border=True):
+            st.subheader("Aperçu vidéo")
+            afficher_video_bytes(Path(st.session_state["video_base"]))
     elif fichier_local is not None:
         tmp = sauvegarder_upload_local(fichier_local)
         if tmp is not None:
-            afficher_video_bytes(tmp)
+            with preview_slot.container(border=True):
+                st.subheader("Aperçu vidéo")
+                afficher_video_bytes(tmp)
+    else:
+        with preview_slot.container(border=True):
+            st.subheader("Aperçu vidéo")
+            st.info("L'aperçu s'affichera ici après préparation de la vidéo.")
+elif opt_timelapse:
+    with preview_slot.container(border=True):
+        st.subheader("Aperçu vidéo")
+        st.info("Aperçu désactivé pendant le mode timelapse.")
+else:
+    with preview_slot.container(border=True):
+        st.subheader("Aperçu vidéo")
+        st.info("Aperçu vidéo désactivé.")
 
 if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
@@ -1584,7 +1588,9 @@ if st.button("Lancer le traitement"):
                     journal_debug(f"Vidéo préparée : {video_base}")
                     st.success(f"Vidéo prête : {Path(video_base).name}")
                     if afficher_apercu and not opt_timelapse:
-                        afficher_video_bytes(Path(video_base))
+                        with preview_slot.container(border=True):
+                            st.subheader("Aperçu vidéo")
+                            afficher_video_bytes(Path(video_base))
             elif fichier_local is not None or st.session_state.get("local_temp_path"):
                 journal_debug("Source choisie : fichier local")
                 base_court = st.session_state.get("local_name_base") or generer_nom_base("local", "video")
@@ -1608,7 +1614,9 @@ if st.button("Lancer le traitement"):
                     journal_debug(f"Vidéo locale préparée : {cible}")
                     st.success(f"Vidéo prête : {Path(cible).name}")
                     if afficher_apercu and not opt_timelapse:
-                        afficher_video_bytes(Path(cible))
+                        with preview_slot.container(border=True):
+                            st.subheader("Aperçu vidéo")
+                            afficher_video_bytes(Path(cible))
                 except Exception as e:
                     st.error(f"Echec du traitement local : {e}")
                     enregistrer_erreur_resultats(f"Echec du traitement local : {e}")
@@ -1656,7 +1664,6 @@ if st.button("Lancer le traitement"):
                                 message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                                 st.success(message_ok)
                                 enregistrer_resultats_generes(zip_path, fichiers_timelapse, message_ok)
-                                afficher_telechargement_zip(zip_path, "direct_timelapse", message_ok)
                     except Exception as e:
                         message_erreur = f"Echec du timelapse : {e}"
                         st.error(message_erreur)
@@ -1728,7 +1735,6 @@ if st.button("Lancer le traitement"):
                         message_ok = f"Archive prête : {zip_path.name} ({taille_zip / (1024 * 1024):.1f} Mo)."
                         st.success(message_ok)
                         enregistrer_resultats_generes(zip_path, fichiers, message_ok)
-                        afficher_telechargement_zip(zip_path, "direct_extraction", message_ok)
             else:
                 message_erreur = "Aucune vidéo source prête : l'extraction n'a pas démarré."
                 st.error(message_erreur)
