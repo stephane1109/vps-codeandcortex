@@ -49,7 +49,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-ui-preview-results-2026-07-17-03"
+APP_BUILD = "extraction-multimedia-direct-format-priority-2026-07-17-04"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -773,10 +773,12 @@ def _score_video_youtube(fmt: Dict[str, Any], qualite: str) -> float:
         score += 1800
     elif vcodec.startswith(("vp9", "vp09", "av01")):
         score += 900
-    if protocole.startswith("https") or protocole == "http":
-        score += 500
-    elif "m3u8" in protocole:
-        score += 250
+    if "m3u8" in protocole:
+        score -= 15000
+    elif protocole.startswith("https") or protocole == "http":
+        score += 30000
+    else:
+        score += 1000
     return score
 
 
@@ -842,6 +844,7 @@ def analyser_formats_youtube(info: Dict[str, Any], qualite: str) -> tuple[Option
         label = (
             f"fusion {_id_format(video)}+{_id_format(audio)} "
             f"video={video.get('ext')} {video.get('height') or '?'}p "
+            f"proto={video.get('protocol') or '?'} "
             f"audio={audio.get('ext')} {audio.get('abr') or audio.get('tbr') or '?'}k"
         )
         return selecteur, label, resume
@@ -853,6 +856,7 @@ def analyser_formats_youtube(info: Dict[str, Any], qualite: str) -> tuple[Option
         label = (
             f"progressif {selecteur} "
             f"{choix.get('ext')} {choix.get('height') or '?'}p "
+            f"proto={choix.get('protocol') or '?'} "
             f"v={choix.get('vcodec')} a={choix.get('acodec')}"
         )
         return selecteur, label, resume
@@ -866,6 +870,7 @@ def analyser_formats_youtube(info: Dict[str, Any], qualite: str) -> tuple[Option
         label = (
             f"fusion {_id_format(video)}+{_id_format(audio)} "
             f"video={video.get('ext')} {video.get('height') or '?'}p "
+            f"proto={video.get('protocol') or '?'} "
             f"audio={audio.get('ext')} {audio.get('abr') or audio.get('tbr') or '?'}k"
         )
         return selecteur, label, resume
