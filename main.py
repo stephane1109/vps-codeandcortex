@@ -711,62 +711,175 @@ def diagnostiquer_formats_youtube(url: str, opts_base: Dict[str, Any]) -> str:
     return f"Formats détectés : {len(formats)} total, {len(medias)} média téléchargeable(s){suffixe}"
 
 
-def _selecteurs_format_youtube(qualite: str) -> List[tuple[str, str]]:
-    """Ordre volontairement robuste : progressif MP4 d'abord, haute qualité ensuite.
+def _int_format(fmt: Dict[str, Any], cle: str, defaut: int = 0) -> int:
+    try:
+        valeur = fmt.get(cle)
+        if valeur is None:
+            return defaut
+        return int(float(valeur))
+    except Exception:
+        return defaut
 
-    YouTube expose parfois uniquement certains clients/formats au VPS. Le format
-    18 est ancien mais très stable : MP4 360p avec audio, donc directement
-    exploitable pour produire les exports et l'aperçu.
+
+def _float_format(fmt: Dict[str, Any], cle: str, defaut: float = 0.0) -> float:
+    try:
+        valeur = fmt.get(cle)
+        if valeur is None:
+            return defaut
+        return float(valeur)
+    except Exception:
+        return defaut
+
+
+def _id_format(fmt: Dict[str, Any]) -> str:
+    return str(fmt.get("format_id") or "").strip()
+
+
+def _est_media_youtube(fmt: Dict[str, Any]) -> bool:
+    """Exclut les storyboards/images et garde tout format audio/vidéo réel."""
+    ext = str(fmt.get("ext") or "").lower()
+    vcodec = str(fmt.get("vcodec") or "none").lower()
+    acodec = str(fmt.get("acodec") or "none").lower()
+    format_id = _id_format(fmt)
+    if not format_id or ext in {"mhtml", "html", "json"}:
+        return False
+    if vcodec == "none" and acodec == "none":
+        return False
+    return True
+
+
+def _score_video_youtube(fmt: Dict[str, Any], qualite: str) -> float:
+    hauteur = _int_format(fmt, "height")
+    largeur = _int_format(fmt, "width")
+    fps = _float_format(fmt, "fps")
+    tbr = _float_format(fmt, "tbr")
+    ext = str(fmt.get("ext") or "").lower()
+    vcodec = str(fmt.get("vcodec") or "").lower()
+    protocole = str(fmt.get("protocol") or "").lower()
+    compresse = qualite_compressee(qualite)
+
+    if compresse:
+        score_hauteur = min(hauteur or 360, 720) * 6 - max(0, hauteur - 720) * 30
+    else:
+        score_hauteur = (hauteur or 360) * 8
+
+    score = score_hauteur + min(largeur, 3840) * 0.2 + min(fps, 60) * 4 + min(tbr, 8000) * 0.1
+    if ext == "mp4":
+        score += 3500
+    elif ext in {"webm", "mkv"}:
+        score += 1200
+    if vcodec.startswith(("avc", "h264")):
+        score += 1800
+    elif vcodec.startswith(("vp9", "vp09", "av01")):
+        score += 900
+    if protocole.startswith("https") or protocole == "http":
+        score += 500
+    elif "m3u8" in protocole:
+        score += 250
+    return score
+
+
+def _score_audio_youtube(fmt: Dict[str, Any]) -> float:
+    ext = str(fmt.get("ext") or "").lower()
+    acodec = str(fmt.get("acodec") or "").lower()
+    abr = _float_format(fmt, "abr")
+    tbr = _float_format(fmt, "tbr")
+    score = min(abr or tbr, 512) * 10
+    if ext in {"m4a", "mp4"}:
+        score += 2500
+    elif ext in {"webm", "opus"}:
+        score += 1800
+    if acodec.startswith("mp4a"):
+        score += 1000
+    elif "opus" in acodec:
+        score += 800
+    return score
+
+
+def analyser_formats_youtube(info: Dict[str, Any], qualite: str) -> tuple[Optional[str], str, str]:
+    """Analyse la liste réelle des formats YouTube et retourne un sélecteur yt-dlp.
+
+    Cette fonction évite la logique fragile "un format fixe pour toutes les
+    vidéos". Elle lit tous les formats renvoyés par yt-dlp pour l'URL courante,
+    exclut les storyboards, puis choisit soit un format progressif audio+vidéo,
+    soit une paire vidéo+audio à fusionner par ffmpeg.
     """
-    selecteurs: List[tuple[str, str]] = []
+    formats = [fmt for fmt in (info.get("formats") or []) if isinstance(fmt, dict) and _est_media_youtube(fmt)]
+    progressifs = [
+        fmt
+        for fmt in formats
+        if str(fmt.get("vcodec") or "none").lower() != "none"
+        and str(fmt.get("acodec") or "none").lower() != "none"
+    ]
+    videos = [
+        fmt
+        for fmt in formats
+        if str(fmt.get("vcodec") or "none").lower() != "none"
+        and str(fmt.get("acodec") or "none").lower() == "none"
+    ]
+    audios = [
+        fmt
+        for fmt in formats
+        if str(fmt.get("vcodec") or "none").lower() == "none"
+        and str(fmt.get("acodec") or "none").lower() != "none"
+    ]
+
+    resume = (
+        f"{len(formats)} format(s) média analysé(s) : "
+        f"{len(progressifs)} progressif(s), {len(videos)} vidéo seule, {len(audios)} audio seul."
+    )
     format_env = os.environ.get("YTDLP_FORMAT", "").strip()
     if format_env:
-        selecteurs.append(("variable YTDLP_FORMAT", format_env))
+        return format_env, "variable YTDLP_FORMAT", resume
 
-    if qualite_compressee(qualite):
-        selecteurs.extend(
-            [
-                ("mp4 progressif 360p", "18"),
-                (
-                    "mp4 progressif <=720p",
-                    "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]/"
-                    "best[height<=720][acodec!=none][vcodec!=none]",
-                ),
-                (
-                    "mp4 video+audio <=720p",
-                    "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/"
-                    "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-                ),
-                ("universel <=720p", "bestvideo[height<=720]+bestaudio/best[height<=720]/best"),
-                ("universel", "bestvideo+bestaudio/best"),
-            ]
+    if not qualite_compressee(qualite) and videos and audios:
+        videos.sort(key=lambda fmt: _score_video_youtube(fmt, qualite), reverse=True)
+        audios.sort(key=_score_audio_youtube, reverse=True)
+        video = videos[0]
+        audio = audios[0]
+        selecteur = f"{_id_format(video)}+{_id_format(audio)}"
+        label = (
+            f"fusion {_id_format(video)}+{_id_format(audio)} "
+            f"video={video.get('ext')} {video.get('height') or '?'}p "
+            f"audio={audio.get('ext')} {audio.get('abr') or audio.get('tbr') or '?'}k"
         )
-    else:
-        selecteurs.extend(
-            [
-                (
-                    "haute qualite mp4",
-                    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
-                    "best[ext=mp4][acodec!=none][vcodec!=none]",
-                ),
-                ("haute qualite universelle", "bestvideo+bestaudio/best"),
-                ("mp4 progressif 360p secours", "18"),
-                (
-                    "mp4 progressif <=720p secours",
-                    "best[ext=mp4][height<=720][acodec!=none][vcodec!=none]/"
-                    "best[height<=720][acodec!=none][vcodec!=none]",
-                ),
-            ]
-        )
+        return selecteur, label, resume
 
-    uniques: List[tuple[str, str]] = []
-    vus = set()
-    for label, selecteur in selecteurs:
-        if selecteur in vus:
-            continue
-        uniques.append((label, selecteur))
-        vus.add(selecteur)
-    return uniques
+    if progressifs:
+        progressifs.sort(key=lambda fmt: _score_video_youtube(fmt, qualite), reverse=True)
+        choix = progressifs[0]
+        selecteur = _id_format(choix)
+        label = (
+            f"progressif {selecteur} "
+            f"{choix.get('ext')} {choix.get('height') or '?'}p "
+            f"v={choix.get('vcodec')} a={choix.get('acodec')}"
+        )
+        return selecteur, label, resume
+
+    if videos and audios:
+        videos.sort(key=lambda fmt: _score_video_youtube(fmt, qualite), reverse=True)
+        audios.sort(key=_score_audio_youtube, reverse=True)
+        video = videos[0]
+        audio = audios[0]
+        selecteur = f"{_id_format(video)}+{_id_format(audio)}"
+        label = (
+            f"fusion {_id_format(video)}+{_id_format(audio)} "
+            f"video={video.get('ext')} {video.get('height') or '?'}p "
+            f"audio={audio.get('ext')} {audio.get('abr') or audio.get('tbr') or '?'}k"
+        )
+        return selecteur, label, resume
+
+    if videos:
+        videos.sort(key=lambda fmt: _score_video_youtube(fmt, qualite), reverse=True)
+        choix = videos[0]
+        return _id_format(choix), f"vidéo seule {_id_format(choix)} {choix.get('ext')}", resume
+
+    if audios:
+        audios.sort(key=_score_audio_youtube, reverse=True)
+        choix = audios[0]
+        return _id_format(choix), f"audio seul {_id_format(choix)} {choix.get('ext')}", resume
+
+    return None, "aucun format audio/vidéo exploitable", resume
 
 
 def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) -> Dict[str, Any]:
@@ -872,6 +985,16 @@ def telecharger_preparer_video(
                 pass
         return info_local
 
+    def _analyser_info(opts: Dict[str, Any]) -> Dict[str, Any]:
+        opts_probe = dict(opts)
+        for cle in ("format", "download_sections", "force_keyframes_at_cuts", "merge_output_format"):
+            opts_probe.pop(cle, None)
+        opts_probe["simulate"] = True
+        opts_probe["skip_download"] = True
+        opts_probe["ignore_no_formats_error"] = True
+        with YoutubeDL(opts_probe) as ydl:
+            return ydl.extract_info(url, download=False) or {}
+
     profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None), ("android", ["android"])]
     clients_forces = (
         ydl_opts.get("extractor_args", {})
@@ -895,35 +1018,47 @@ def telecharger_preparer_video(
         opts_client = _appliquer_clients_youtube(ydl_opts, clients)
         clients_journal = opts_client.get("extractor_args", {}).get("youtube", {}).get("player_client") or "auto"
         journal_debug(f"yt-dlp profil client : {label_client} ({clients_journal})")
-        for label_format, selecteur_format in _selecteurs_format_youtube(qualite):
-            opts_essai = dict(opts_client)
-            opts_essai["format"] = selecteur_format
-            if "+" in selecteur_format:
-                opts_essai.setdefault("merge_output_format", "mp4")
-            try:
-                journal_debug(f"yt-dlp essai : client={label_client} | format={label_format} | {selecteur_format}")
-                info = _telecharger(opts_essai)
-                journal_debug(f"yt-dlp téléchargement OK : client={label_client} | format={label_format}")
-            except Exception as exc:
-                message = str(exc) or repr(exc)
-                journal_debug(f"yt-dlp erreur : client={label_client} | format={label_format} | {message[:500]}")
-                erreurs_fallback.append(f"{label_client}/{label_format} -> {message}")
-                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                    if not cookies_path:
-                        return None, None, None, (
-                            "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
-                            "récent exporté depuis le même navigateur, puis relance."
-                        )
+        try:
+            info_probe = _analyser_info(opts_client)
+            selecteur_format, label_format, resume_formats = analyser_formats_youtube(info_probe, qualite)
+            journal_debug(f"Analyse formats {label_client} : {resume_formats}")
+        except Exception as exc:
+            message = str(exc) or repr(exc)
+            journal_debug(f"Analyse formats impossible : client={label_client} | {message[:500]}")
+            erreurs_fallback.append(f"{label_client}/analyse -> {message}")
+            continue
+
+        if not selecteur_format:
+            journal_debug(f"Aucun sélecteur retenu : client={label_client} | {label_format}")
+            erreurs_fallback.append(f"{label_client}/analyse -> {label_format}")
+            continue
+
+        opts_essai = dict(opts_client)
+        opts_essai["format"] = selecteur_format
+        if "+" in selecteur_format:
+            opts_essai.setdefault("merge_output_format", "mp4")
+        try:
+            journal_debug(f"yt-dlp téléchargement : client={label_client} | format={label_format} | {selecteur_format}")
+            info = _telecharger(opts_essai)
+            journal_debug(f"yt-dlp téléchargement OK : client={label_client} | format={label_format}")
+        except Exception as exc:
+            message = str(exc) or repr(exc)
+            journal_debug(f"yt-dlp erreur : client={label_client} | format={label_format} | {message[:500]}")
+            erreurs_fallback.append(f"{label_client}/{label_format} -> {message}")
+            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                if not cookies_path:
                     return None, None, None, (
-                        "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
-                        "dans le navigateur, réexporte un cookies.txt récent, puis relance."
+                        "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                        "récent exporté depuis le même navigateur, puis relance."
                     )
-                if "403" in message or "Forbidden" in message:
-                    if not cookies_path:
-                        return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
-                    return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
-            if info is not None:
-                break
+                return None, None, None, (
+                    "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
+                    "dans le navigateur, réexporte un cookies.txt récent, puis relance."
+                )
+            if "403" in message or "Forbidden" in message:
+                if not cookies_path:
+                    return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
+                return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
         if info is not None:
             break
 
