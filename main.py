@@ -49,7 +49,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-format-analyzer-2026-07-17-01"
+APP_BUILD = "extraction-multimedia-format-analyzer-cookie-fallback-2026-07-17-02"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -996,6 +996,11 @@ def telecharger_preparer_video(
         with YoutubeDL(opts_probe) as ydl:
             return ydl.extract_info(url, download=False) or {}
 
+    def _sans_cookiefile(opts: Dict[str, Any]) -> Dict[str, Any]:
+        opts_sans_cookies = dict(opts)
+        opts_sans_cookies.pop("cookiefile", None)
+        return opts_sans_cookies
+
     profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None), ("android", ["android"])]
     clients_forces = (
         ydl_opts.get("extractor_args", {})
@@ -1015,56 +1020,67 @@ def telecharger_preparer_video(
 
     erreurs_fallback: List[str] = []
     info = None
-    for label_client, clients in profils_clients:
-        opts_client = _appliquer_clients_youtube(ydl_opts, clients)
-        clients_journal = opts_client.get("extractor_args", {}).get("youtube", {}).get("player_client") or "auto"
-        journal_debug(f"yt-dlp profil client : {label_client} ({clients_journal})")
-        try:
-            info_probe = _analyser_info(opts_client)
-            selecteur_format, label_format, resume_formats = analyser_formats_youtube(info_probe, qualite)
-            journal_debug(f"Analyse formats {label_client} : {resume_formats}")
-        except Exception as exc:
-            message = str(exc) or repr(exc)
-            journal_debug(f"Analyse formats impossible : client={label_client} | {message[:500]}")
-            erreurs_fallback.append(f"{label_client}/analyse -> {message}")
-            continue
+    bases_ytdlp: List[tuple[str, Dict[str, Any]]] = [("avec-cookies" if cookies_path else "sans-cookies", ydl_opts)]
+    if cookies_path:
+        bases_ytdlp.append(("sans-cookies", _sans_cookiefile(ydl_opts)))
+        journal_debug("Fallback activé : si le cookies est invalide, essai automatique sans cookies.")
 
-        if not selecteur_format:
-            journal_debug(f"Aucun sélecteur retenu : client={label_client} | {label_format}")
-            erreurs_fallback.append(f"{label_client}/analyse -> {label_format}")
-            continue
+    for label_acces, opts_base_acces in bases_ytdlp:
+        journal_debug(f"Mode accès YouTube : {label_acces}")
+        for label_client, clients in profils_clients:
+            opts_client = _appliquer_clients_youtube(opts_base_acces, clients)
+            clients_journal = opts_client.get("extractor_args", {}).get("youtube", {}).get("player_client") or "auto"
+            journal_debug(f"yt-dlp profil client : {label_acces}/{label_client} ({clients_journal})")
+            try:
+                info_probe = _analyser_info(opts_client)
+                selecteur_format, label_format, resume_formats = analyser_formats_youtube(info_probe, qualite)
+                journal_debug(f"Analyse formats {label_acces}/{label_client} : {resume_formats}")
+            except Exception as exc:
+                message = str(exc) or repr(exc)
+                journal_debug(f"Analyse formats impossible : client={label_acces}/{label_client} | {message[:500]}")
+                erreurs_fallback.append(f"{label_acces}/{label_client}/analyse -> {message}")
+                continue
 
-        opts_essai = dict(opts_client)
-        opts_essai["format"] = selecteur_format
-        if "+" in selecteur_format:
-            opts_essai.setdefault("merge_output_format", "mp4")
-        try:
-            journal_debug(f"yt-dlp téléchargement : client={label_client} | format={label_format} | {selecteur_format}")
-            info = _telecharger(opts_essai)
-            journal_debug(f"yt-dlp téléchargement OK : client={label_client} | format={label_format}")
-        except Exception as exc:
-            message = str(exc) or repr(exc)
-            journal_debug(f"yt-dlp erreur : client={label_client} | format={label_format} | {message[:500]}")
-            erreurs_fallback.append(f"{label_client}/{label_format} -> {message}")
-            if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                if not cookies_path:
+            if not selecteur_format:
+                journal_debug(f"Aucun sélecteur retenu : client={label_acces}/{label_client} | {label_format}")
+                erreurs_fallback.append(f"{label_acces}/{label_client}/analyse -> {label_format}")
+                continue
+
+            opts_essai = dict(opts_client)
+            opts_essai["format"] = selecteur_format
+            if "+" in selecteur_format:
+                opts_essai.setdefault("merge_output_format", "mp4")
+            try:
+                journal_debug(f"yt-dlp téléchargement : client={label_acces}/{label_client} | format={label_format} | {selecteur_format}")
+                info = _telecharger(opts_essai)
+                journal_debug(f"yt-dlp téléchargement OK : client={label_acces}/{label_client} | format={label_format}")
+            except Exception as exc:
+                message = str(exc) or repr(exc)
+                journal_debug(f"yt-dlp erreur : client={label_acces}/{label_client} | format={label_format} | {message[:500]}")
+                erreurs_fallback.append(f"{label_acces}/{label_client}/{label_format} -> {message}")
+                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                    if cookies_path and label_acces == "avec-cookies":
+                        journal_debug("Cookies rejetés par YouTube : poursuite avec le fallback sans cookies.")
+                        break
                     return None, None, None, (
                         "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
                         "récent exporté depuis le même navigateur, puis relance."
                     )
-                return None, None, None, (
-                    "YouTube refuse encore la requête malgré le cookies.txt. Recharge la vidéo "
-                    "dans le navigateur, réexporte un cookies.txt récent, puis relance."
-                )
-            if "403" in message or "Forbidden" in message:
-                if not cookies_path:
+                if "403" in message or "Forbidden" in message:
+                    if cookies_path and label_acces == "avec-cookies":
+                        journal_debug("HTTP 403 avec cookies : poursuite avec le fallback sans cookies.")
+                        break
                     return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
-                return None, None, None, "HTTP 403 persistant malgré les cookies. Vérifie le cookies.txt."
+            if info is not None:
+                break
         if info is not None:
             break
 
     if info is None:
-        diagnostic_formats = diagnostiquer_formats_youtube(url, ydl_opts)
+        diagnostic_opts = _sans_cookiefile(ydl_opts) if cookies_path else ydl_opts
+        diagnostic_formats = diagnostiquer_formats_youtube(url, diagnostic_opts)
+        if cookies_path:
+            diagnostic_formats = "Diagnostic final sans cookies : " + diagnostic_formats
         journal_debug(diagnostic_formats)
         detail_erreur = " | ".join(erreurs_fallback[-4:]) if erreurs_fallback else "aucune erreur yt-dlp détaillée"
         return None, None, None, (
