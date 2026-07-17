@@ -49,6 +49,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
+APP_BUILD = "extraction-multimedia-format-analyzer-2026-07-17-01"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1418,6 +1419,7 @@ st.caption(
 render_help_tab()
 
 with st.expander("Diagnostic systeme"):
+    st.write("Build application : " + APP_BUILD)
     try:
         chemin_ffmpeg = tl.chemin_ffmpeg()
         version = subprocess.run([chemin_ffmpeg, "-version"], capture_output=True, text=True, check=False)
@@ -1528,6 +1530,7 @@ if st.button("Lancer le traitement"):
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
         reinitialiser_debug()
         journal_debug("Clic sur Lancer le traitement")
+        journal_debug("Build application : " + APP_BUILD)
         st.session_state["dernier_zip_path"] = None
         st.session_state["dernier_zip_stable_path"] = None
         st.session_state["derniers_fichiers"] = []
