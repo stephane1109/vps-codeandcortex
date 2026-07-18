@@ -51,7 +51,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-cdn-fallback-2026-07-18-11"
+APP_BUILD = "extraction-multimedia-proxy-egress-2026-07-18-12"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -157,6 +157,12 @@ def _env_bool(nom: str, valeur_defaut: bool) -> bool:
     if valeur is None:
         return valeur_defaut
     return valeur.strip().lower() not in {"0", "false", "non", "no", "off"}
+
+
+def _masquer_url_sensible(url: str) -> str:
+    if not url:
+        return ""
+    return re.sub(r"://([^:@/]+):([^@/]+)@", r"://\1:***@", url)
 
 
 FFMPEG_TIMEOUT_SECONDS = max(60, _env_int("APP_FFMPEG_TIMEOUT_SECONDS", 3600))
@@ -1063,6 +1069,13 @@ def telecharger_preparer_video(
         socket_timeout_seconds = max(5, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 10))
         retries = max(1, _env_int("YTDLP_RETRIES", 1))
         fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 1))
+        proxy_url = (
+            os.environ.get("YTDLP_PROXY_URL", "").strip()
+            or os.environ.get("HTTPS_PROXY", "").strip()
+            or os.environ.get("HTTP_PROXY", "").strip()
+        )
+        geo_proxy_url = os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
+        source_address = os.environ.get("YTDLP_SOURCE_ADDRESS", "").strip()
         selecteur_effectif = selecteur_format
         commande = [
             sys.executable,
@@ -1096,6 +1109,12 @@ def telecharger_preparer_video(
             commande.append("--force-ipv4")
         if _env_bool("YTDLP_FORCE_IPV6", False):
             commande.append("--force-ipv6")
+        if proxy_url:
+            commande += ["--proxy", proxy_url]
+        if geo_proxy_url:
+            commande += ["--geo-verification-proxy", geo_proxy_url]
+        if source_address:
+            commande += ["--source-address", source_address]
         if "+" in selecteur_effectif:
             # MKV accepte mieux les couples vidéo/audio hétérogènes. Le MP4
             # final est ensuite produit par notre étape ffmpeg contrôlée.
@@ -1118,7 +1137,8 @@ def telecharger_preparer_video(
             f"format={selecteur_effectif} timeout={timeout_seconds}s "
             f"socket={socket_timeout_seconds}s retries={retries}/{fragment_retries} "
             f"ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non'} "
-            f"ipv6={'oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non'}"
+            f"ipv6={'oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non'} "
+            f"proxy={'oui ' + _masquer_url_sensible(proxy_url) if proxy_url else 'non'}"
         )
         statut_ytdlp = st.empty()
         lignes_sortie: List[str] = []
