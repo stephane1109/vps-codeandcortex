@@ -26,6 +26,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_COST=4 et CAPACITE_SERVEUR=6 pour rester coherent avec le reste du VPS
 # - APP_TICKET_TTL_SECONDS si tu veux allonger ou raccourcir la duree d'un ticket
 # - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
+# - YTDLP_FORCE_IPV4=1 force IPv4 pour éviter certains timeouts googlevideo depuis Docker/VPS
+# - YTDLP_SOCKET_TIMEOUT_SECONDS=15, YTDLP_RETRIES=2, YTDLP_FRAGMENT_RETRIES=2 ajustent les timeouts réseau yt-dlp
 # - YTDLP_IMPERSONATE=chrome est optionnel. Ne pas le mettre par defaut :
 #   certaines versions de l'API Python yt-dlp peuvent echouer avec AssertionError.
 # - YTDLP_YOUTUBE_PO_TOKEN_ARGS=web.gvs+XXX si YouTube impose un PO token manuel
@@ -62,7 +64,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
 # séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
-ARG YTDLP_REFRESH=2026-07-18-streamed-ytdlp-09
+ARG YTDLP_REFRESH=2026-07-18-progressive-first-ipv4-10
 RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
     && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
     && python -m yt_dlp --version

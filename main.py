@@ -51,7 +51,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-streamed-ytdlp-2026-07-18-09"
+APP_BUILD = "extraction-multimedia-progressive-first-ipv4-2026-07-18-10"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -150,6 +150,13 @@ def _env_int(nom: str, valeur_defaut: int) -> int:
         return int(os.environ.get(nom, str(valeur_defaut)))
     except Exception:
         return valeur_defaut
+
+
+def _env_bool(nom: str, valeur_defaut: bool) -> bool:
+    valeur = os.environ.get(nom)
+    if valeur is None:
+        return valeur_defaut
+    return valeur.strip().lower() not in {"0", "false", "non", "no", "off"}
 
 
 FFMPEG_TIMEOUT_SECONDS = max(60, _env_int("APP_FFMPEG_TIMEOUT_SECONDS", 3600))
@@ -1014,22 +1021,32 @@ def telecharger_preparer_video(
         sélecteurs génériques afin de laisser ffmpeg fusionner/remuxer proprement
         tous les conteneurs exposés par YouTube.
         """
-        if qualite_compressee(qualite_video):
-            candidats = [
-                "bv*[height<=720]+ba/b[height<=720]/best[height<=720]/best",
-                "bv*[height<=480]+ba/b[height<=480]/best[height<=480]/best",
-                "18/best[ext=mp4]/best",
-            ]
-        else:
-            candidats = [
-                "bv*+ba/b",
-                "bestvideo*+bestaudio/best",
-                "best[ext=mp4]/best",
-            ]
+        candidats: List[str] = []
         if selecteur_analyse:
-            candidats.append(selecteur_analyse)
-            if "/" not in selecteur_analyse and not os.environ.get("YTDLP_FORMAT", "").strip():
+            # Si l'analyse trouve un format progressif audio+vidéo comme 18,
+            # on le tente en premier : un seul téléchargement est plus fiable
+            # sur un VPS qu'une fusion vidéo+audio en deux connexions CDN.
+            if "/" not in selecteur_analyse and "+" not in selecteur_analyse and not os.environ.get("YTDLP_FORMAT", "").strip():
                 candidats.append(f"{selecteur_analyse}/best[ext=mp4]/best")
+            candidats.append(selecteur_analyse)
+
+        if qualite_compressee(qualite_video):
+            candidats.extend(
+                [
+                    "18/best[height<=720][ext=mp4]/best[height<=720]/best",
+                    "best[height<=480][ext=mp4]/best[height<=480]/best",
+                    "bv*[height<=720]+ba/b[height<=720]/best[height<=720]/best",
+                    "bv*[height<=480]+ba/b[height<=480]/best[height<=480]/best",
+                ]
+            )
+        else:
+            candidats.extend(
+                [
+                    "best[ext=mp4]/best",
+                    "bv*+ba/b",
+                    "bestvideo*+bestaudio/best",
+                ]
+            )
 
         selecteurs: List[str] = []
         deja_vus = set()
@@ -1043,6 +1060,9 @@ def telecharger_preparer_video(
     def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
         headers = opts.get("http_headers") or {}
         timeout_seconds = max(60, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 180))
+        socket_timeout_seconds = max(5, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 15))
+        retries = max(1, _env_int("YTDLP_RETRIES", 2))
+        fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 2))
         selecteur_effectif = selecteur_format
         commande = [
             sys.executable,
@@ -1057,11 +1077,11 @@ def telecharger_preparer_video(
             "--no-mtime",
             "--newline",
             "--retries",
-            "5",
+            str(retries),
             "--fragment-retries",
-            "5",
+            str(fragment_retries),
             "--socket-timeout",
-            "30",
+            str(socket_timeout_seconds),
             "--restrict-filenames",
             "--trim-filenames",
             "80",
@@ -1072,6 +1092,8 @@ def telecharger_preparer_video(
             "-f",
             selecteur_effectif,
         ]
+        if _env_bool("YTDLP_FORCE_IPV4", True):
+            commande.append("--force-ipv4")
         if "+" in selecteur_effectif:
             # MKV accepte mieux les couples vidéo/audio hétérogènes. Le MP4
             # final est ensuite produit par notre étape ffmpeg contrôlée.
@@ -1089,7 +1111,12 @@ def telecharger_preparer_video(
         commande += _extractor_args_cli(opts)
         commande.append(url)
 
-        journal_debug(f"yt-dlp CLI démarrage : format={selecteur_effectif} timeout={timeout_seconds}s")
+        journal_debug(
+            "yt-dlp CLI démarrage : "
+            f"format={selecteur_effectif} timeout={timeout_seconds}s "
+            f"socket={socket_timeout_seconds}s retries={retries}/{fragment_retries} "
+            f"ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', True) else 'non'}"
+        )
         statut_ytdlp = st.empty()
         lignes_sortie: List[str] = []
         debut_process = time.time()
