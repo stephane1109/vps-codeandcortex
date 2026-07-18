@@ -51,7 +51,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-progressive-first-ipv4-2026-07-18-10"
+APP_BUILD = "extraction-multimedia-cdn-fallback-2026-07-18-11"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1059,10 +1059,10 @@ def telecharger_preparer_video(
 
     def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
         headers = opts.get("http_headers") or {}
-        timeout_seconds = max(60, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 180))
-        socket_timeout_seconds = max(5, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 15))
-        retries = max(1, _env_int("YTDLP_RETRIES", 2))
-        fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 2))
+        timeout_seconds = max(45, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 120))
+        socket_timeout_seconds = max(5, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 10))
+        retries = max(1, _env_int("YTDLP_RETRIES", 1))
+        fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 1))
         selecteur_effectif = selecteur_format
         commande = [
             sys.executable,
@@ -1092,8 +1092,10 @@ def telecharger_preparer_video(
             "-f",
             selecteur_effectif,
         ]
-        if _env_bool("YTDLP_FORCE_IPV4", True):
+        if _env_bool("YTDLP_FORCE_IPV4", False):
             commande.append("--force-ipv4")
+        if _env_bool("YTDLP_FORCE_IPV6", False):
+            commande.append("--force-ipv6")
         if "+" in selecteur_effectif:
             # MKV accepte mieux les couples vidéo/audio hétérogènes. Le MP4
             # final est ensuite produit par notre étape ffmpeg contrôlée.
@@ -1115,7 +1117,8 @@ def telecharger_preparer_video(
             "yt-dlp CLI démarrage : "
             f"format={selecteur_effectif} timeout={timeout_seconds}s "
             f"socket={socket_timeout_seconds}s retries={retries}/{fragment_retries} "
-            f"ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', True) else 'non'}"
+            f"ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non'} "
+            f"ipv6={'oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non'}"
         )
         statut_ytdlp = st.empty()
         lignes_sortie: List[str] = []
@@ -1220,6 +1223,20 @@ def telecharger_preparer_video(
         info_local["_format_selector"] = selecteur_effectif
         return info_local
 
+    def _erreur_reseau_cdn(message: str) -> bool:
+        message_min = (message or "").lower()
+        marqueurs = [
+            "googlevideo.com",
+            "failed to resolve",
+            "address family for hostname not supported",
+            "connect timeout",
+            "timed out",
+            "temporary failure in name resolution",
+            "network is unreachable",
+            "name or service not known",
+        ]
+        return any(marqueur in message_min for marqueur in marqueurs)
+
     def _analyser_info(opts: Dict[str, Any]) -> Dict[str, Any]:
         opts_probe = dict(opts)
         for cle in ("format", "download_sections", "force_keyframes_at_cuts", "merge_output_format"):
@@ -1313,6 +1330,12 @@ def telecharger_preparer_video(
                             f"client={label_acces}/{label_client} | "
                             f"selector={selecteur_tentative} | {message_selecteur[:500]}"
                         )
+                        if _erreur_reseau_cdn(message_selecteur):
+                            journal_debug(
+                                "Erreur réseau CDN détectée : passage au client YouTube suivant "
+                                "sans retenter tous les formats sur le même host googlevideo."
+                            )
+                            break
                 if info is None:
                     detail_selecteurs = " | ".join(erreurs_selecteurs[-3:]) or "aucun sélecteur essayé"
                     raise RuntimeError(detail_selecteurs)
