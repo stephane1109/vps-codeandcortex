@@ -50,7 +50,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-simple-ytdlp-cli-2026-07-18-05"
+APP_BUILD = "extraction-multimedia-no-mtime-download-2026-07-18-07"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -926,6 +926,10 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         "nocheckcertificate": True,
         "restrictfilenames": True,
         "trim_file_name": 80,
+        # yt-dlp peut recopier la date YouTube d'origine sur le fichier final.
+        # On désactive ce comportement pour que la détection post-téléchargement
+        # retrouve bien le média créé pendant la session courante.
+        "updatetime": False,
     }
     # Le format est choisi dans telecharger_preparer_video(), tentative par
     # tentative, pour pouvoir ignorer proprement une variable YTDLP_FORMAT
@@ -1011,6 +1015,7 @@ def telecharger_preparer_video(
             "--no-part",
             "--force-overwrites",
             "--no-progress",
+            "--no-mtime",
             "--newline",
             "--retries",
             "5",
@@ -1066,9 +1071,61 @@ def telecharger_preparer_video(
             detail = sortie.splitlines()[-1] if sortie.splitlines() else f"code retour {resultat.returncode}"
             raise RuntimeError(detail)
 
+        fichiers_cli = fichiers_media_sortie(depuis_timestamp=debut_telechargement)
+        if not fichiers_cli:
+            fichiers_cli = fichiers_media_sortie()
+        journal_debug(f"yt-dlp CLI terminé : {len(fichiers_cli)} fichier(s) média visible(s)")
+        for fichier in fichiers_cli[:8]:
+            journal_debug(f" - CLI : {fichier.name} ({fichier.stat().st_size} octets)")
+        if not fichiers_cli:
+            journal_debug("Diagnostic dossier après yt-dlp CLI :")
+            for ligne in diagnostic_contenu_sortie(25).splitlines():
+                journal_debug(ligne[:500])
+            raise RuntimeError("yt-dlp CLI terminé sans fichier média détecté dans le dossier de sortie.")
+
         info_local = dict(info_probe)
         info_local["_format_selector"] = selecteur_format
         return info_local
+
+    def _telecharger_python(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
+        """Télécharge avec l'API Python yt-dlp, comme le script source original.
+
+        Le CLI reste disponible en secours, mais la première voie reprend la
+        logique historique de l'application : yt-dlp télécharge le média, puis
+        l'application normalise en MP4 avec ffmpeg.
+        """
+        opts_python = dict(opts)
+        opts_python["format"] = selecteur_format
+        if "+" in selecteur_format:
+            opts_python.setdefault("merge_output_format", "mp4")
+
+        journal_debug(f"yt-dlp Python démarrage : format={selecteur_format}")
+        with YoutubeDL(opts_python) as ydl:
+            info_local = ydl.extract_info(url, download=True) or {}
+            try:
+                chemin_prepare = ydl.prepare_filename(info_local)
+                if chemin_prepare:
+                    journal_debug(f"yt-dlp Python fichier préparé : {chemin_prepare}")
+            except Exception as exc:
+                journal_debug(f"yt-dlp Python prepare_filename indisponible : {exc}")
+
+        fichiers_python = fichiers_media_sortie(depuis_timestamp=debut_telechargement)
+        if not fichiers_python:
+            fichiers_python = fichiers_media_sortie()
+        journal_debug(f"yt-dlp Python terminé : {len(fichiers_python)} fichier(s) média visible(s)")
+        for fichier in fichiers_python[:8]:
+            journal_debug(f" - Python : {fichier.name} ({fichier.stat().st_size} octets)")
+        if not fichiers_python:
+            journal_debug("Diagnostic dossier après yt-dlp Python :")
+            for ligne in diagnostic_contenu_sortie(25).splitlines():
+                journal_debug(ligne[:500])
+            raise RuntimeError("yt-dlp Python terminé sans fichier média détecté dans le dossier de sortie.")
+
+        info_resultat = dict(info_probe)
+        if isinstance(info_local, dict):
+            info_resultat.update({cle: valeur for cle, valeur in info_local.items() if cle in {"id", "title", "filepath", "filename", "_filename", "__filename", "_prepared_filename", "requested_downloads"}})
+        info_resultat["_format_selector"] = selecteur_format
+        return info_resultat
 
     def _analyser_info(opts: Dict[str, Any]) -> Dict[str, Any]:
         opts_probe = dict(opts)
@@ -1140,8 +1197,14 @@ def telecharger_preparer_video(
                 opts_essai.setdefault("merge_output_format", "mp4")
             try:
                 journal_debug(f"yt-dlp téléchargement : client={label_acces}/{label_client} | format={label_format} | {selecteur_format}")
-                info = _telecharger_cli(opts_essai, selecteur_format, info_probe)
-                journal_debug(f"yt-dlp téléchargement OK : client={label_acces}/{label_client} | format={label_format}")
+                try:
+                    info = _telecharger_python(opts_essai, selecteur_format, info_probe)
+                    methode_telechargement = "Python"
+                except Exception as exc_python:
+                    journal_debug(f"yt-dlp Python échec : {str(exc_python)[:500]} | essai CLI")
+                    info = _telecharger_cli(opts_essai, selecteur_format, info_probe)
+                    methode_telechargement = "CLI"
+                journal_debug(f"yt-dlp téléchargement OK ({methode_telechargement}) : client={label_acces}/{label_client} | format={label_format}")
             except Exception as exc:
                 message = str(exc) or repr(exc)
                 journal_debug(f"yt-dlp erreur : client={label_acces}/{label_client} | format={label_format} | {message[:500]}")
@@ -1179,6 +1242,8 @@ def telecharger_preparer_video(
 
     candidats = chemins_depuis_info_ytdlp(info)
     candidats.extend(fichiers_media_sortie(depuis_timestamp=debut_telechargement))
+    if not candidats:
+        candidats.extend(fichiers_media_sortie())
     candidats = fichiers_valides(candidats)
     journal_debug(f"Fichiers détectés après yt-dlp : {len(candidats)}")
     for candidat in candidats[:20]:
