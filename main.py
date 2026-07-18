@@ -17,6 +17,7 @@ from PIL import Image
 
 APP_NAME = "DetectIA vidéo"
 APP_VERSION = "0.1.0 - 14/07/2026"
+APP_BUILD = "detectia-rerun-stable-tempfile-2026-07-18-01"
 HELP_PATH = Path(__file__).resolve().parent / "aide.md"
 
 
@@ -187,6 +188,21 @@ def update_top_candidates(candidates: list[dict[str, Any]], candidate: dict[str,
     del candidates[limit:]
 
 
+def log_analysis(message: str) -> None:
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    lines = st.session_state.setdefault("analysis_log", [])
+    lines.append(f"[{timestamp}] {message}")
+    st.session_state.analysis_log = lines[-180:]
+
+
+def render_analysis_log(expanded: bool = False) -> None:
+    lines = st.session_state.get("analysis_log", [])
+    if not lines:
+        return
+    with st.expander("Journal d'analyse", expanded=expanded):
+        st.code("\n".join(lines))
+
+
 def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -305,8 +321,17 @@ def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
 
     capture.release()
     progress.progress(1.0, text="Analyse terminée")
+    status_box.caption(f"Analyse terminée : {sampled_pairs} paire(s) de frames exploitée(s).")
 
     metrics_df = pd.DataFrame(metrics)
+    if metrics_df.empty or sampled_pairs <= 0:
+        raise RuntimeError(
+            "Aucune paire de frames exploitable n'a été analysée. "
+            f"Frames détectées : {total_frames}. FPS : {fps:.2f}. "
+            "Réduisez 'Analyser une frame sur', augmentez le nombre maximum de paires, "
+            "ou essayez un extrait vidéo plus long/non corrompu."
+        )
+
     score = compute_global_score(metrics_df)
 
     heatmaps: dict[str, np.ndarray] = {}
@@ -488,8 +513,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if "analysis_result" not in st.session_state:
-    st.session_state.analysis_result = None
+st.session_state.setdefault("analysis_result", None)
+st.session_state.setdefault("analysis_error", "")
+st.session_state.setdefault("analysis_log", [])
 
 if uploaded_file is None:
     st.info("Importe une vidéo dans la colonne de gauche pour lancer l'analyse.")
@@ -508,18 +534,42 @@ config = AnalysisConfig(
 
 if st.button("Lancer l'analyse DetectIA", type="primary", use_container_width=True):
     suffix = Path(uploaded_file.name).suffix or ".mp4"
-    with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as temp_video:
-        temp_video.write(video_bytes)
-        temp_video.flush()
+    st.session_state.analysis_result = None
+    st.session_state.analysis_error = ""
+    st.session_state.analysis_log = []
+    log_analysis(f"Build application : {APP_BUILD}")
+    log_analysis(
+        f"Fichier reçu : {uploaded_file.name} | taille={len(video_bytes) / (1024 * 1024):.1f} Mo | "
+        f"sample_every={config.sample_every_n_frames} | max_pairs={config.max_pairs} | "
+        f"resize_width={config.resize_width} | algorithm={config.algorithm}"
+    )
+    with tempfile.TemporaryDirectory(prefix="detectia_") as tmpdir:
+        temp_path = Path(tmpdir) / f"video_source{suffix}"
+        temp_path.write_bytes(video_bytes)
+        log_analysis(f"Vidéo temporaire écrite : {temp_path.name} ({temp_path.stat().st_size} octets)")
         try:
-            st.session_state.analysis_result = analyze_video(Path(temp_video.name), config)
+            with st.spinner("Analyse DetectIA en cours..."):
+                st.session_state.analysis_result = analyze_video(temp_path, config)
+            metadata_done = st.session_state.analysis_result["metadata"]
+            log_analysis(
+                f"Analyse terminée : {metadata_done['sampled_pairs']} paire(s), "
+                f"durée={metadata_done['duration_seconds']}s, fps={metadata_done['fps']}"
+            )
         except Exception as exc:
             st.session_state.analysis_result = None
-            st.error(f"Erreur pendant l'analyse : {exc}")
+            st.session_state.analysis_error = str(exc) or repr(exc)
+            log_analysis(f"Erreur pendant l'analyse : {st.session_state.analysis_error}")
+            st.error(f"Erreur pendant l'analyse : {st.session_state.analysis_error}")
+            render_analysis_log(expanded=True)
 
 result = st.session_state.analysis_result
 if result is None:
+    if st.session_state.get("analysis_error"):
+        st.warning("Aucun résultat n'a été produit pour cette analyse.")
+        render_analysis_log(expanded=True)
     st.stop()
+
+render_analysis_log(expanded=False)
 
 metadata = result["metadata"]
 score = result["score"]
