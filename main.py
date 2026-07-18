@@ -7,6 +7,7 @@ import importlib.util
 import re
 import shutil
 import subprocess
+import sys
 import time
 import unicodedata
 import uuid
@@ -49,7 +50,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-direct-format-priority-2026-07-17-04"
+APP_BUILD = "extraction-multimedia-simple-ytdlp-cli-2026-07-18-05"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -982,13 +983,91 @@ def telecharger_preparer_video(
         ydl_opts["download_sections"] = [{"section": f"*{debut}-{fin}"}]
         ydl_opts["force_keyframes_at_cuts"] = True
 
-    def _telecharger(opts: Dict[str, Any]):
-        with YoutubeDL(opts) as ydl:
-            info_local = ydl.extract_info(url, download=True)
-            try:
-                info_local["_prepared_filename"] = ydl.prepare_filename(info_local)
-            except Exception:
-                pass
+    def _extractor_args_cli(opts: Dict[str, Any]) -> List[str]:
+        youtube_args = (opts.get("extractor_args") or {}).get("youtube") or {}
+        fragments: List[str] = []
+        for cle in ("player_client", "po_token"):
+            valeur = youtube_args.get(cle)
+            if isinstance(valeur, (list, tuple, set)):
+                valeurs = [str(item).strip() for item in valeur if str(item).strip()]
+            elif valeur:
+                valeurs = [str(valeur).strip()]
+            else:
+                valeurs = []
+            if valeurs:
+                fragments.append(f"{cle}={','.join(valeurs)}")
+        if not fragments:
+            return []
+        return ["--extractor-args", "youtube:" + ";".join(fragments)]
+
+    def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
+        headers = opts.get("http_headers") or {}
+        timeout_seconds = max(60, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+        commande = [
+            sys.executable,
+            "-m",
+            "yt_dlp",
+            "--no-playlist",
+            "--no-part",
+            "--force-overwrites",
+            "--no-progress",
+            "--newline",
+            "--retries",
+            "5",
+            "--fragment-retries",
+            "5",
+            "--socket-timeout",
+            "30",
+            "--restrict-filenames",
+            "--trim-filenames",
+            "80",
+            "-P",
+            str(REPERTOIRE_SORTIE),
+            "-o",
+            "yt_%(id)s.%(ext)s",
+            "-f",
+            selecteur_format,
+        ]
+        if "+" in selecteur_format:
+            commande += ["--merge-output-format", "mp4"]
+        if opts.get("cookiefile"):
+            commande += ["--cookies", str(opts["cookiefile"])]
+        if headers.get("User-Agent"):
+            commande += ["--user-agent", str(headers["User-Agent"])]
+        if headers.get("Referer"):
+            commande += ["--referer", str(headers["Referer"])]
+        if headers.get("Accept-Language"):
+            commande += ["--add-header", f"Accept-Language:{headers['Accept-Language']}"]
+        commande += _extractor_args_cli(opts)
+        commande.append(url)
+
+        journal_debug(f"yt-dlp CLI démarrage : format={selecteur_format} timeout={timeout_seconds}s")
+        try:
+            resultat = subprocess.run(
+                commande,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            sortie = (exc.stdout or "").strip() if isinstance(exc.stdout, str) else ""
+            if sortie:
+                for ligne in sortie.splitlines()[-8:]:
+                    journal_debug(f"yt-dlp CLI : {ligne[:500]}")
+            raise RuntimeError(f"yt-dlp CLI timeout après {timeout_seconds}s") from exc
+
+        sortie = (resultat.stdout or "").strip()
+        if sortie:
+            for ligne in sortie.splitlines()[-12:]:
+                journal_debug(f"yt-dlp CLI : {ligne[:500]}")
+        if resultat.returncode != 0:
+            detail = sortie.splitlines()[-1] if sortie.splitlines() else f"code retour {resultat.returncode}"
+            raise RuntimeError(detail)
+
+        info_local = dict(info_probe)
+        info_local["_format_selector"] = selecteur_format
         return info_local
 
     def _analyser_info(opts: Dict[str, Any]) -> Dict[str, Any]:
@@ -1025,10 +1104,14 @@ def telecharger_preparer_video(
 
     erreurs_fallback: List[str] = []
     info = None
-    bases_ytdlp: List[tuple[str, Dict[str, Any]]] = [("avec-cookies" if cookies_path else "sans-cookies", ydl_opts)]
     if cookies_path:
-        bases_ytdlp.append(("sans-cookies", _sans_cookiefile(ydl_opts)))
-        journal_debug("Fallback activé : si le cookies est invalide, essai automatique sans cookies.")
+        bases_ytdlp: List[tuple[str, Dict[str, Any]]] = [
+            ("sans-cookies", _sans_cookiefile(ydl_opts)),
+            ("avec-cookies", ydl_opts),
+        ]
+        journal_debug("Cookies fournis : essai public sans cookies d'abord, cookies seulement en secours.")
+    else:
+        bases_ytdlp = [("sans-cookies", ydl_opts)]
 
     for label_acces, opts_base_acces in bases_ytdlp:
         journal_debug(f"Mode accès YouTube : {label_acces}")
@@ -1057,23 +1140,23 @@ def telecharger_preparer_video(
                 opts_essai.setdefault("merge_output_format", "mp4")
             try:
                 journal_debug(f"yt-dlp téléchargement : client={label_acces}/{label_client} | format={label_format} | {selecteur_format}")
-                info = _telecharger(opts_essai)
+                info = _telecharger_cli(opts_essai, selecteur_format, info_probe)
                 journal_debug(f"yt-dlp téléchargement OK : client={label_acces}/{label_client} | format={label_format}")
             except Exception as exc:
                 message = str(exc) or repr(exc)
                 journal_debug(f"yt-dlp erreur : client={label_acces}/{label_client} | format={label_format} | {message[:500]}")
                 erreurs_fallback.append(f"{label_acces}/{label_client}/{label_format} -> {message}")
                 if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                    if cookies_path and label_acces == "avec-cookies":
-                        journal_debug("Cookies rejetés par YouTube : poursuite avec le fallback sans cookies.")
+                    if cookies_path and label_acces == "sans-cookies":
+                        journal_debug("YouTube demande une authentification : essai avec cookies.")
                         break
                     return None, None, None, (
                         "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
                         "récent exporté depuis le même navigateur, puis relance."
                     )
                 if "403" in message or "Forbidden" in message:
-                    if cookies_path and label_acces == "avec-cookies":
-                        journal_debug("HTTP 403 avec cookies : poursuite avec le fallback sans cookies.")
+                    if cookies_path and label_acces == "sans-cookies":
+                        journal_debug("HTTP 403 sans cookies : essai avec cookies.")
                         break
                     return None, None, None, "HTTP 403 détecté. La vidéo est restreinte. Fournis un cookies.txt puis relance."
             if info is not None:
