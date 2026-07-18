@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-youtube-timeline-2026-07-18-18"
+APP_BUILD = "extraction-multimedia-stopmotion-download-first-2026-07-18-19"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1316,6 +1316,49 @@ def telecharger_preparer_video(
         opts_sans_cookies.pop("cookiefile", None)
         return opts_sans_cookies
 
+    def _telecharger_api_simple_stopmotion(opts: Dict[str, Any], label: str) -> Optional[Dict[str, Any]]:
+        """Téléchargement prioritaire calé sur StopMotion.
+
+        StopMotion fonctionne mieux sur le VPS parce qu'il laisse yt-dlp choisir
+        directement le flux et écrire une vidéo source simple. On reprend cette
+        stratégie avant l'analyse fine des formats.
+        """
+        opts_simple = dict(opts)
+        opts_simple["outtmpl"] = {"default": "video_originale.%(ext)s"}
+        opts_simple["merge_output_format"] = "mp4"
+        opts_simple["socket_timeout"] = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
+        opts_simple["retries"] = max(10, _env_int("YTDLP_RETRIES", 10))
+        opts_simple["fragment_retries"] = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        opts_simple["extractor_retries"] = max(3, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
+        opts_simple["quiet"] = not verbose
+        opts_simple["no_warnings"] = False
+        opts_simple["updatetime"] = False
+        if not os.environ.get("YTDLP_FORMAT", "").strip():
+            opts_simple.pop("format", None)
+
+        clients_journal = (
+            opts_simple.get("extractor_args", {})
+            .get("youtube", {})
+            .get("player_client")
+            or "auto"
+        )
+        journal_debug(
+            "yt-dlp téléchargement simple type StopMotion : "
+            f"{label} | clients={clients_journal} | "
+            f"socket={opts_simple['socket_timeout']}s retries={opts_simple['retries']}/{opts_simple['fragment_retries']}"
+        )
+        with YoutubeDL(opts_simple) as ydl:
+            info_simple = ydl.extract_info(url.strip(), download=True) or {}
+        candidats_simple = chemins_depuis_info_ytdlp(info_simple)
+        candidats_simple.extend(fichiers_media_sortie(depuis_timestamp=debut_telechargement))
+        candidats_simple = fichiers_valides(candidats_simple)
+        journal_debug(f"Téléchargement simple terminé : {len(candidats_simple)} fichier(s) média détecté(s)")
+        for fichier in candidats_simple[:8]:
+            journal_debug(f" - simple : {fichier.name} ({fichier.stat().st_size} octets)")
+        if not candidats_simple:
+            raise RuntimeError("yt-dlp simple terminé sans fichier média détecté.")
+        return info_simple
+
     profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None), ("android", ["android"])]
     clients_forces = (
         ydl_opts.get("extractor_args", {})
@@ -1343,6 +1386,34 @@ def telecharger_preparer_video(
         journal_debug("Cookies fournis : essai avec cookies d'abord, puis secours public sans cookies.")
     else:
         bases_ytdlp = [("sans-cookies", ydl_opts)]
+
+    for label_acces, opts_base_acces in bases_ytdlp:
+        for label_client, clients in profils_clients:
+            opts_client = _appliquer_clients_youtube(opts_base_acces, clients)
+            try:
+                info = _telecharger_api_simple_stopmotion(opts_client, f"{label_acces}/{label_client}")
+                if info is not None:
+                    journal_debug(f"Téléchargement simple OK : {label_acces}/{label_client}")
+                    break
+            except Exception as exc:
+                message = str(exc) or repr(exc)
+                journal_debug(f"Téléchargement simple échoué : {label_acces}/{label_client} | {message[:500]}")
+                erreurs_fallback.append(f"{label_acces}/{label_client}/simple -> {message}")
+                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                    if not cookies_path:
+                        return None, None, None, (
+                            "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                            "récent exporté depuis le même navigateur, puis relance."
+                        )
+                    break
+        if info is not None:
+            break
+
+    if info is not None:
+        # Le téléchargement façon StopMotion a produit une source exploitable :
+        # on évite l'ancienne boucle CLI qui peut retomber sur un host CDN
+        # incompatible avec la famille IP du conteneur.
+        bases_ytdlp = []
 
     for label_acces, opts_base_acces in bases_ytdlp:
         journal_debug(f"Mode accès YouTube : {label_acces}")
