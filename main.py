@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-stopmotion-ytdlp-timeouts-2026-07-18-15"
+APP_BUILD = "extraction-multimedia-enforced-ytdlp-timeouts-2026-07-18-16"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1067,10 +1067,10 @@ def telecharger_preparer_video(
 
     def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
         headers = opts.get("http_headers") or {}
-        timeout_seconds = max(180, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
-        socket_timeout_seconds = max(10, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        retries = max(1, _env_int("YTDLP_RETRIES", 10))
-        fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+        socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
+        retries = max(10, _env_int("YTDLP_RETRIES", 10))
+        fragment_retries = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
         proxy_url = (
             os.environ.get("YTDLP_PROXY_URL", "").strip()
             or os.environ.get("HTTPS_PROXY", "").strip()
@@ -1255,9 +1255,9 @@ def telecharger_preparer_video(
         opts_api = dict(opts)
         opts_api["format"] = selecteur_format or "18/22/bestvideo*+bestaudio/best[acodec!=none][vcodec!=none]/best"
         opts_api["merge_output_format"] = "mp4"
-        opts_api["socket_timeout"] = max(10, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        opts_api["retries"] = max(1, _env_int("YTDLP_RETRIES", 10))
-        opts_api["fragment_retries"] = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        opts_api["socket_timeout"] = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
+        opts_api["retries"] = max(10, _env_int("YTDLP_RETRIES", 10))
+        opts_api["fragment_retries"] = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
         opts_api["extractor_retries"] = max(1, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
         opts_api["quiet"] = not verbose
         opts_api["no_warnings"] = False
