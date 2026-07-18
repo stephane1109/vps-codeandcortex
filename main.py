@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-ytdlp-network-diagnostics-2026-07-18-17"
+APP_BUILD = "extraction-multimedia-youtube-timeline-2026-07-18-18"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1800,21 +1800,155 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
     if not video_id:
         st.info("URL renseignée : l'aperçu intégré s'affichera si l'URL YouTube est reconnue.")
         return
-    embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}"
+    embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}?controls=1&rel=0&modestbranding=1&enablejsapi=1"
     components.html(
         f"""
-        <div style="width:100%; border-radius:16px; overflow:hidden; background:#111;">
+        <style>
+          .yt-preview-card {{
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #111;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+          }}
+          .yt-time-helper {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 0.75rem;
+            padding: 0.8rem 0.95rem;
+            border-radius: 14px;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.10);
+            color: #111827;
+            font-family: sans-serif;
+          }}
+          .yt-time-value {{
+            font-weight: 800;
+            color: #0f766e;
+          }}
+          .yt-copy-button {{
+            border: 1px solid rgba(234, 88, 12, 0.35);
+            border-radius: 999px;
+            background: #fff7ed;
+            color: #9a3412;
+            font-weight: 700;
+            padding: 0.45rem 0.8rem;
+            cursor: pointer;
+          }}
+          .yt-copy-button:hover {{
+            background: #ffedd5;
+          }}
+          .yt-help-text {{
+            margin: 0.55rem 0 0;
+            color: #475569;
+            font-size: 0.9rem;
+            font-family: sans-serif;
+          }}
+        </style>
+        <div class="yt-preview-card">
           <iframe
+            id="yt-frame-{video_id}"
             src="{embed_url}"
-            title="Aperçu YouTube"
+            title="Aperçu YouTube avec timeline"
             style="width:100%; height:420px; border:0;"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             referrerpolicy="strict-origin-when-cross-origin"
             allowfullscreen>
           </iframe>
         </div>
+        <div class="yt-time-helper">
+          <div>
+            <div>Position courante : <span id="yt-time-formatted-{video_id}" class="yt-time-value">00:00</span></div>
+            <div>Seconde exacte : <span id="yt-time-seconds-{video_id}" class="yt-time-value">0</span>s</div>
+          </div>
+          <button id="yt-copy-seconds-{video_id}" class="yt-copy-button" type="button">
+            Copier la seconde
+          </button>
+        </div>
+        <p class="yt-help-text">
+          Utilisez la timeline du lecteur YouTube pour repérer le début et la fin,
+          puis recopiez les secondes dans l'intervalle personnalisé de l'application.
+        </p>
+        <script>
+          (function() {{
+            const frameId = "yt-frame-{video_id}";
+            const secondsEl = document.getElementById("yt-time-seconds-{video_id}");
+            const formattedEl = document.getElementById("yt-time-formatted-{video_id}");
+            const copyButton = document.getElementById("yt-copy-seconds-{video_id}");
+            let player = null;
+            let lastSeconds = 0;
+
+            function formatSeconds(totalSeconds) {{
+              const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+              const hours = Math.floor(safeSeconds / 3600);
+              const minutes = Math.floor((safeSeconds % 3600) / 60);
+              const seconds = safeSeconds % 60;
+              const mm = String(minutes).padStart(2, "0");
+              const ss = String(seconds).padStart(2, "0");
+              if (hours > 0) {{
+                return String(hours).padStart(2, "0") + ":" + mm + ":" + ss;
+              }}
+              return mm + ":" + ss;
+            }}
+
+            function updateTime() {{
+              try {{
+                if (!player || typeof player.getCurrentTime !== "function") return;
+                lastSeconds = Math.floor(player.getCurrentTime() || 0);
+                secondsEl.textContent = String(lastSeconds);
+                formattedEl.textContent = formatSeconds(lastSeconds);
+              }} catch (error) {{
+                // Le lecteur YouTube garde sa timeline native même si l'API JS est indisponible.
+              }}
+            }}
+
+            function attachPlayer() {{
+              try {{
+                if (!window.YT || !window.YT.Player || player) return;
+                player = new window.YT.Player(frameId, {{
+                  events: {{
+                    onReady: function() {{
+                      updateTime();
+                      window.setInterval(updateTime, 500);
+                    }},
+                    onStateChange: updateTime
+                  }}
+                }});
+              }} catch (error) {{
+                // Fallback silencieux : l'iframe YouTube reste utilisable avec ses contrôles.
+              }}
+            }}
+
+            copyButton.addEventListener("click", function() {{
+              const value = String(lastSeconds || secondsEl.textContent || "0");
+              if (navigator.clipboard && navigator.clipboard.writeText) {{
+                navigator.clipboard.writeText(value);
+              }}
+              copyButton.textContent = "Seconde copiée : " + value;
+              window.setTimeout(function() {{
+                copyButton.textContent = "Copier la seconde";
+              }}, 1600);
+            }});
+
+            const previousReady = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = function() {{
+              if (typeof previousReady === "function") previousReady();
+              attachPlayer();
+            }};
+            if (window.YT && window.YT.Player) {{
+              attachPlayer();
+            }} else if (!document.querySelector("script[src='https://www.youtube.com/iframe_api']")) {{
+              const script = document.createElement("script");
+              script.src = "https://www.youtube.com/iframe_api";
+              document.head.appendChild(script);
+            }}
+          }})();
+        </script>
         """,
-        height=430,
+        height=545,
     )
 
 
