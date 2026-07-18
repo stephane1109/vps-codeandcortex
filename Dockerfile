@@ -13,6 +13,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     YTDLP_SOCKET_TIMEOUT_SECONDS=30 \
     YTDLP_RETRIES=10 \
     YTDLP_FRAGMENT_RETRIES=10 \
+    YTDLP_FORCE_IPV4=1 \
+    YTDLP_FORCE_IPV6=0 \
     APP_TICKET_ID=extraction-multimedia \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
@@ -32,7 +34,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
 # - APP_DATA_DIR=/data/app pour conserver les cookies et les derniers resultats dans l'image active
 # - APP_COOKIES_DIR=/data/app/cookies/extraction-multimedia si tu veux fixer explicitement le dossier cookies
-# - YTDLP_FORCE_IPV4=1 ou YTDLP_FORCE_IPV6=1 seulement si le réseau Docker/VPS l'exige
+# - YTDLP_FORCE_IPV4=1 et YTDLP_FORCE_IPV6=0 sont recommandes ici :
+#   les logs VPS ont montre des timeouts vers googlevideo.com.
 # - YTDLP_DOWNLOAD_TIMEOUT_SECONDS=900, YTDLP_SOCKET_TIMEOUT_SECONDS=30,
 #   YTDLP_RETRIES=10, YTDLP_FRAGMENT_RETRIES=10 ajustent les timeouts réseau yt-dlp
 # - YTDLP_PROXY_URL=http://user:pass@host:port ou socks5://user:pass@host:port fait sortir yt-dlp via un proxy
@@ -74,7 +77,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
 # séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
-ARG YTDLP_REFRESH=2026-07-18-stopmotion-ytdlp-timeouts-15
+ARG YTDLP_REFRESH=2026-07-18-ytdlp-network-diagnostics-17
 RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
     && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
     && python -m yt_dlp --version

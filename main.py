@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-enforced-ytdlp-timeouts-2026-07-18-16"
+APP_BUILD = "extraction-multimedia-ytdlp-network-diagnostics-2026-07-18-17"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -168,6 +168,24 @@ def _masquer_url_sensible(url: str) -> str:
 
 
 FFMPEG_TIMEOUT_SECONDS = max(60, _env_int("APP_FFMPEG_TIMEOUT_SECONDS", 3600))
+
+
+def _resume_configuration_ytdlp() -> str:
+    """Résume les variables réseau réellement appliquées à yt-dlp."""
+    proxy_url = (
+        os.environ.get("YTDLP_PROXY_URL", "").strip()
+        or os.environ.get("HTTPS_PROXY", "").strip()
+        or os.environ.get("HTTP_PROXY", "").strip()
+    )
+    return (
+        f"download_timeout={max(900, _env_int('YTDLP_DOWNLOAD_TIMEOUT_SECONDS', 900))}s | "
+        f"socket_timeout={max(30, _env_int('YTDLP_SOCKET_TIMEOUT_SECONDS', 30))}s | "
+        f"retries={max(10, _env_int('YTDLP_RETRIES', 10))} | "
+        f"fragment_retries={max(10, _env_int('YTDLP_FRAGMENT_RETRIES', 10))} | "
+        f"force_ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non'} | "
+        f"force_ipv6={'oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non'} | "
+        f"proxy={'oui ' + _masquer_url_sensible(proxy_url) if proxy_url else 'non'}"
+    )
 
 
 def load_help_markdown() -> str:
@@ -1955,6 +1973,7 @@ if st.button("Lancer le traitement"):
         reinitialiser_debug()
         journal_debug("Clic sur Lancer le traitement")
         journal_debug("Build application : " + APP_BUILD)
+        journal_debug("Configuration réseau yt-dlp : " + _resume_configuration_ytdlp())
         st.session_state["dernier_zip_path"] = None
         st.session_state["dernier_zip_stable_path"] = None
         st.session_state["derniers_fichiers"] = []
