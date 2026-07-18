@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-youtube-native-player-only-2026-07-18-22"
+APP_BUILD = "extraction-multimedia-beta-version-label-2026-07-18-23"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1987,7 +1987,7 @@ def sauvegarder_upload_local(fichier_local) -> Optional[Path]:
 
 st.title("Extraction multimedia (video, audio, images)")
 st.markdown("**[www.codeandcortex.fr](http://www.codeandcortex.fr)**")
-st.caption("modifié le 12-09-2026")
+st.caption("version beta 0.2 - modifiée le 18-07-2026")
 st.markdown(
     "Par défaut, l'extraction porte sur toute la vidéo. "
     "Vous pouvez activer un intervalle personnalisé si besoin. "
