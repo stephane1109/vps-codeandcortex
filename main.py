@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-youtube-preview-2026-07-18-14"
+APP_BUILD = "extraction-multimedia-stopmotion-ytdlp-timeouts-2026-07-18-15"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1067,10 +1067,10 @@ def telecharger_preparer_video(
 
     def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
         headers = opts.get("http_headers") or {}
-        timeout_seconds = max(45, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 120))
-        socket_timeout_seconds = max(5, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 10))
-        retries = max(1, _env_int("YTDLP_RETRIES", 1))
-        fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 1))
+        timeout_seconds = max(180, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+        socket_timeout_seconds = max(10, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
+        retries = max(1, _env_int("YTDLP_RETRIES", 10))
+        fragment_retries = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
         proxy_url = (
             os.environ.get("YTDLP_PROXY_URL", "").strip()
             or os.environ.get("HTTPS_PROXY", "").strip()
@@ -1245,6 +1245,30 @@ def telecharger_preparer_video(
         info_local["_format_selector"] = selecteur_effectif
         return info_local
 
+    def _telecharger_api_ytdlp(opts: Dict[str, Any], selecteur_format: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Fallback proche de StopMotion : laisser YoutubeDL gérer le téléchargement.
+
+        La CLI donne un suivi fin, mais elle est volontairement bornée. Si le VPS
+        met longtemps à joindre le CDN YouTube, ce fallback reprend la logique
+        plus tolérante utilisée par StopMotion.
+        """
+        opts_api = dict(opts)
+        opts_api["format"] = selecteur_format or "18/22/bestvideo*+bestaudio/best[acodec!=none][vcodec!=none]/best"
+        opts_api["merge_output_format"] = "mp4"
+        opts_api["socket_timeout"] = max(10, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
+        opts_api["retries"] = max(1, _env_int("YTDLP_RETRIES", 10))
+        opts_api["fragment_retries"] = max(1, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        opts_api["extractor_retries"] = max(1, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
+        opts_api["quiet"] = not verbose
+        opts_api["no_warnings"] = False
+        journal_debug(
+            "yt-dlp API fallback démarrage : "
+            f"format={opts_api['format']} socket={opts_api['socket_timeout']}s "
+            f"retries={opts_api['retries']}/{opts_api['fragment_retries']}"
+        )
+        with YoutubeDL(opts_api) as ydl:
+            return ydl.extract_info(url, download=True) or {}
+
     def _erreur_reseau_cdn(message: str) -> bool:
         message_min = (message or "").lower()
         marqueurs = [
@@ -1382,6 +1406,22 @@ def telecharger_preparer_video(
                 break
         if info is not None:
             break
+
+    if info is None:
+        for label_acces, opts_base_acces in bases_ytdlp:
+            try:
+                journal_debug(f"Tentative fallback API Python yt-dlp : {label_acces}")
+                info_probe = _analyser_info(opts_base_acces)
+                selecteur_format, label_format, resume_formats = analyser_formats_youtube(info_probe, qualite)
+                journal_debug(f"Fallback API analyse : {resume_formats} | {label_format}")
+                info = _telecharger_api_ytdlp(opts_base_acces, selecteur_format)
+                if info is not None:
+                    journal_debug("Fallback API Python yt-dlp OK")
+                    break
+            except Exception as exc:
+                message = str(exc) or repr(exc)
+                journal_debug(f"Fallback API Python yt-dlp échoué : {message[:500]}")
+                erreurs_fallback.append(f"{label_acces}/api -> {message}")
 
     if info is None:
         diagnostic_opts = _sans_cookiefile(ydl_opts) if cookies_path else ydl_opts

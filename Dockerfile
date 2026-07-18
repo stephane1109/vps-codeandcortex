@@ -9,6 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8501 \
     APP_DATA_DIR=/data/app \
     APP_FFMPEG_TIMEOUT_SECONDS=3600 \
+    YTDLP_DOWNLOAD_TIMEOUT_SECONDS=900 \
+    YTDLP_SOCKET_TIMEOUT_SECONDS=30 \
+    YTDLP_RETRIES=10 \
+    YTDLP_FRAGMENT_RETRIES=10 \
     APP_TICKET_ID=extraction-multimedia \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
@@ -29,7 +33,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_DATA_DIR=/data/app pour conserver les cookies et les derniers resultats dans l'image active
 # - APP_COOKIES_DIR=/data/app/cookies/extraction-multimedia si tu veux fixer explicitement le dossier cookies
 # - YTDLP_FORCE_IPV4=1 ou YTDLP_FORCE_IPV6=1 seulement si le réseau Docker/VPS l'exige
-# - YTDLP_SOCKET_TIMEOUT_SECONDS=10, YTDLP_RETRIES=1, YTDLP_FRAGMENT_RETRIES=1 ajustent les timeouts réseau yt-dlp
+# - YTDLP_DOWNLOAD_TIMEOUT_SECONDS=900, YTDLP_SOCKET_TIMEOUT_SECONDS=30,
+#   YTDLP_RETRIES=10, YTDLP_FRAGMENT_RETRIES=10 ajustent les timeouts réseau yt-dlp
 # - YTDLP_PROXY_URL=http://user:pass@host:port ou socks5://user:pass@host:port fait sortir yt-dlp via un proxy
 # - YTDLP_GEO_VERIFICATION_PROXY_URL peut utiliser un proxy uniquement pour la vérification géographique yt-dlp
 # - YTDLP_SOURCE_ADDRESS permet de fixer l'adresse source si plusieurs IP sont configurées sur le VPS
@@ -69,7 +74,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
 # séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
-ARG YTDLP_REFRESH=2026-07-18-proxy-egress-12
+ARG YTDLP_REFRESH=2026-07-18-stopmotion-ytdlp-timeouts-15
 RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
     && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
     && python -m yt_dlp --version
