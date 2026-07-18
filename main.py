@@ -15,9 +15,11 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlparse
 
 import cv2
 import streamlit as st
+import streamlit.components.v1 as components
 import yt_dlp
 from yt_dlp import YoutubeDL
 
@@ -51,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-persistent-cookies-2026-07-18-13"
+APP_BUILD = "extraction-multimedia-youtube-preview-2026-07-18-14"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1707,6 +1709,57 @@ def afficher_video_bytes(chemin_video: Path) -> None:
             st.warning(f"Aperçu impossible : {e2}")
 
 
+def extraire_id_youtube(url_video: str) -> Optional[str]:
+    url_video = (url_video or "").strip()
+    if not url_video:
+        return None
+    if not re.match(r"^https?://", url_video, flags=re.IGNORECASE):
+        url_video = "https://" + url_video
+    try:
+        parsed = urlparse(url_video)
+    except Exception:
+        return None
+    host = parsed.netloc.lower()
+    host = host[4:] if host.startswith("www.") else host
+    video_id = None
+    if host == "youtu.be":
+        video_id = parsed.path.strip("/").split("/")[0]
+    elif "youtube.com" in host or "youtube-nocookie.com" in host:
+        if parsed.path == "/watch":
+            video_id = (parse_qs(parsed.query).get("v") or [None])[0]
+        else:
+            for prefix in ("/embed/", "/shorts/", "/live/"):
+                if parsed.path.startswith(prefix):
+                    video_id = parsed.path[len(prefix):].strip("/").split("/")[0]
+                    break
+    if video_id and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        return video_id
+    return None
+
+
+def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
+    video_id = extraire_id_youtube(url_video)
+    if not video_id:
+        st.info("URL renseignée : l'aperçu intégré s'affichera si l'URL YouTube est reconnue.")
+        return
+    embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}"
+    components.html(
+        f"""
+        <div style="width:100%; border-radius:16px; overflow:hidden; background:#111;">
+          <iframe
+            src="{embed_url}"
+            title="Aperçu YouTube"
+            style="width:100%; height:420px; border:0;"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen>
+          </iframe>
+        </div>
+        """,
+        height=430,
+    )
+
+
 def sauvegarder_upload_local(fichier_local) -> Optional[Path]:
     if fichier_local is None:
         return None
@@ -1757,6 +1810,10 @@ st.session_state.setdefault("resultats_revision", 0)
 
 st.subheader("Source")
 url = st.text_input("URL YouTube")
+if url.strip():
+    with st.container(border=True):
+        st.subheader("Aperçu YouTube")
+        afficher_apercu_youtube_depuis_url(url)
 cookies_path_eff = ck.afficher_section_cookies(REPERTOIRE_SORTIE)
 user_agent_youtube = st.text_input(
     "User-Agent navigateur (optionnel)",
