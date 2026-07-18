@@ -48,10 +48,10 @@ st.markdown(
 
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
-APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
+APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-proxy-egress-2026-07-18-12"
+APP_BUILD = "extraction-multimedia-persistent-cookies-2026-07-18-13"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID

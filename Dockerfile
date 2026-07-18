@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     PORT=8501 \
-    APP_DATA_DIR=/tmp/appdata \
+    APP_DATA_DIR=/data/app \
     APP_FFMPEG_TIMEOUT_SECONDS=3600 \
     APP_TICKET_ID=extraction-multimedia \
     APP_TICKET_MAX_ACTIVE=1 \
@@ -26,6 +26,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_COST=4 et CAPACITE_SERVEUR=6 pour rester coherent avec le reste du VPS
 # - APP_TICKET_TTL_SECONDS si tu veux allonger ou raccourcir la duree d'un ticket
 # - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
+# - APP_DATA_DIR=/data/app pour conserver les cookies et les derniers resultats dans l'image active
+# - APP_COOKIES_DIR=/data/app/cookies/extraction-multimedia si tu veux fixer explicitement le dossier cookies
 # - YTDLP_FORCE_IPV4=1 ou YTDLP_FORCE_IPV6=1 seulement si le réseau Docker/VPS l'exige
 # - YTDLP_SOCKET_TIMEOUT_SECONDS=10, YTDLP_RETRIES=1, YTDLP_FRAGMENT_RETRIES=1 ajustent les timeouts réseau yt-dlp
 # - YTDLP_PROXY_URL=http://user:pass@host:port ou socks5://user:pass@host:port fait sortir yt-dlp via un proxy
@@ -75,8 +77,8 @@ RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
 COPY . /app
 
 RUN chmod +x /app/docker-entrypoint.sh \
-    && mkdir -p /tmp/appdata /home/app/.streamlit \
-    && chown -R app:app /app /tmp/appdata /home/app
+    && mkdir -p /data/app /tmp/appdata /home/app/.streamlit \
+    && chown -R app:app /app /data/app /tmp/appdata /home/app
 
 USER app
 

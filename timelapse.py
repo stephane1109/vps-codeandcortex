@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 import cv2
 
 
-BASE_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
+BASE_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 TIMELAPSE_DIR = BASE_DIR / "timelapse_jobs"
 TIMELAPSE_DIR.mkdir(parents=True, exist_ok=True)
 
