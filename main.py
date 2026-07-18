@@ -5,6 +5,7 @@ import glob
 import hashlib
 import importlib.util
 import re
+import select
 import shutil
 import subprocess
 import sys
@@ -50,7 +51,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-cli-only-timeout-2026-07-18-08"
+APP_BUILD = "extraction-multimedia-streamed-ytdlp-2026-07-18-09"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1004,28 +1005,57 @@ def telecharger_preparer_video(
             return []
         return ["--extractor-args", "youtube:" + ";".join(fragments)]
 
+    def _selecteurs_telechargement(selecteur_analyse: Optional[str], qualite_video: str) -> List[str]:
+        """Construit une liste de sélecteurs yt-dlp robustes.
+
+        yt-dlp recommande les sélecteurs génériques `bestvideo*+bestaudio/best`
+        plutôt qu'une liste fermée de formats numériques YouTube. L'application
+        garde le sélecteur détecté par analyse, mais elle le place derrière les
+        sélecteurs génériques afin de laisser ffmpeg fusionner/remuxer proprement
+        tous les conteneurs exposés par YouTube.
+        """
+        if qualite_compressee(qualite_video):
+            candidats = [
+                "bv*[height<=720]+ba/b[height<=720]/best[height<=720]/best",
+                "bv*[height<=480]+ba/b[height<=480]/best[height<=480]/best",
+                "18/best[ext=mp4]/best",
+            ]
+        else:
+            candidats = [
+                "bv*+ba/b",
+                "bestvideo*+bestaudio/best",
+                "best[ext=mp4]/best",
+            ]
+        if selecteur_analyse:
+            candidats.append(selecteur_analyse)
+            if "/" not in selecteur_analyse and not os.environ.get("YTDLP_FORMAT", "").strip():
+                candidats.append(f"{selecteur_analyse}/best[ext=mp4]/best")
+
+        selecteurs: List[str] = []
+        deja_vus = set()
+        for candidat in candidats:
+            candidat = (candidat or "").strip()
+            if candidat and candidat not in deja_vus:
+                selecteurs.append(candidat)
+                deja_vus.add(candidat)
+        return selecteurs
+
     def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
         headers = opts.get("http_headers") or {}
-        timeout_seconds = max(60, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 300))
+        timeout_seconds = max(60, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 180))
         selecteur_effectif = selecteur_format
-        if "/" not in selecteur_format and not os.environ.get("YTDLP_FORMAT", "").strip():
-            if "+" in selecteur_format:
-                selecteur_effectif = f"{selecteur_format}/bestvideo*+bestaudio/best"
-            else:
-                selecteur_effectif = f"{selecteur_format}/best[ext=mp4]/best"
         commande = [
             sys.executable,
             "-m",
             "yt_dlp",
             "--no-playlist",
+            "--no-simulate",
             "--force-overwrites",
             "--progress",
             "--progress-delta",
-            "10",
+            "5",
             "--no-mtime",
             "--newline",
-            "--print",
-            "after_move:filepath",
             "--retries",
             "5",
             "--fragment-retries",
@@ -1043,7 +1073,11 @@ def telecharger_preparer_video(
             selecteur_effectif,
         ]
         if "+" in selecteur_effectif:
-            commande += ["--merge-output-format", "mp4"]
+            # MKV accepte mieux les couples vidéo/audio hétérogènes. Le MP4
+            # final est ensuite produit par notre étape ffmpeg contrôlée.
+            commande += ["--merge-output-format", "mkv"]
+        if utiliser_intervalle:
+            commande += ["--download-sections", f"*{debut}-{fin}", "--force-keyframes-at-cuts"]
         if opts.get("cookiefile"):
             commande += ["--cookies", str(opts["cookiefile"])]
         if headers.get("User-Agent"):
@@ -1056,28 +1090,91 @@ def telecharger_preparer_video(
         commande.append(url)
 
         journal_debug(f"yt-dlp CLI démarrage : format={selecteur_effectif} timeout={timeout_seconds}s")
-        try:
-            resultat = subprocess.run(
-                commande,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                check=False,
-                timeout=timeout_seconds,
-            )
-        except subprocess.TimeoutExpired as exc:
-            sortie = (exc.stdout or "").strip() if isinstance(exc.stdout, str) else ""
-            if sortie:
-                for ligne in sortie.splitlines()[-8:]:
-                    journal_debug(f"yt-dlp CLI : {ligne[:500]}")
-            raise RuntimeError(f"yt-dlp CLI timeout après {timeout_seconds}s") from exc
+        statut_ytdlp = st.empty()
+        lignes_sortie: List[str] = []
+        debut_process = time.time()
+        dernier_keepalive = 0.0
+        dernier_scan_partiel = 0.0
+        processus = subprocess.Popen(
+            commande,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
 
-        sortie = (resultat.stdout or "").strip()
-        if sortie:
-            for ligne in sortie.splitlines()[-12:]:
+        def _journaliser_ligne_cli(ligne: str) -> None:
+            ligne = ligne.strip()
+            if not ligne:
+                return
+            lignes_sortie.append(ligne)
+            ligne_min = ligne.lower()
+            utile = (
+                "[download]" in ligne_min
+                or "destination" in ligne_min
+                or "merging" in ligne_min
+                or "deleting original" in ligne_min
+                or "has already been downloaded" in ligne_min
+                or "error" in ligne_min
+                or "warning" in ligne_min
+                or "ffmpeg" in ligne_min
+            )
+            if utile:
                 journal_debug(f"yt-dlp CLI : {ligne[:500]}")
-        if resultat.returncode != 0:
-            detail = sortie.splitlines()[-1] if sortie.splitlines() else f"code retour {resultat.returncode}"
+                statut_ytdlp.caption(ligne[:500])
+
+        try:
+            while True:
+                if processus.stdout is not None:
+                    prets, _, _ = select.select([processus.stdout], [], [], 0.5)
+                    if prets:
+                        ligne = processus.stdout.readline()
+                        if ligne:
+                            _journaliser_ligne_cli(ligne)
+
+                code_retour = processus.poll()
+                if code_retour is not None:
+                    if processus.stdout is not None:
+                        reste = processus.stdout.read()
+                        if reste:
+                            for ligne_reste in reste.splitlines():
+                                _journaliser_ligne_cli(ligne_reste)
+                    break
+
+                maintenant = time.time()
+                if maintenant - dernier_keepalive >= 15:
+                    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+                    dernier_keepalive = maintenant
+
+                if maintenant - dernier_scan_partiel >= 20:
+                    partiels = sorted(
+                        list(REPERTOIRE_SORTIE.rglob("*.part")) + list(REPERTOIRE_SORTIE.rglob("*.ytdl")),
+                        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                        reverse=True,
+                    )
+                    if partiels:
+                        for partiel in partiels[:3]:
+                            try:
+                                journal_debug(f"yt-dlp partiel : {partiel.name} ({partiel.stat().st_size} octets)")
+                            except Exception:
+                                pass
+                    dernier_scan_partiel = maintenant
+
+                if maintenant - debut_process > timeout_seconds:
+                    processus.kill()
+                    try:
+                        processus.communicate(timeout=5)
+                    except Exception:
+                        pass
+                    raise RuntimeError(f"yt-dlp CLI timeout après {timeout_seconds}s")
+        finally:
+            try:
+                statut_ytdlp.empty()
+            except Exception:
+                pass
+
+        if processus.returncode != 0:
+            detail = lignes_sortie[-1] if lignes_sortie else f"code retour {processus.returncode}"
             raise RuntimeError(detail)
 
         fichiers_cli = fichiers_media_sortie(depuis_timestamp=debut_telechargement)
@@ -1165,9 +1262,33 @@ def telecharger_preparer_video(
             if "+" in selecteur_format:
                 opts_essai.setdefault("merge_output_format", "mp4")
             try:
-                journal_debug(f"yt-dlp téléchargement : client={label_acces}/{label_client} | format={label_format} | {selecteur_format}")
-                info = _telecharger_cli(opts_essai, selecteur_format, info_probe)
-                journal_debug(f"yt-dlp téléchargement OK (CLI) : client={label_acces}/{label_client} | format={label_format}")
+                selecteurs_a_tenter = _selecteurs_telechargement(selecteur_format, qualite)
+                erreurs_selecteurs: List[str] = []
+                for index_selecteur, selecteur_tentative in enumerate(selecteurs_a_tenter, start=1):
+                    try:
+                        journal_debug(
+                            "yt-dlp téléchargement : "
+                            f"client={label_acces}/{label_client} | "
+                            f"stratégie={index_selecteur}/{len(selecteurs_a_tenter)} | "
+                            f"analyse={label_format} | selector={selecteur_tentative}"
+                        )
+                        info = _telecharger_cli(opts_essai, selecteur_tentative, info_probe)
+                        journal_debug(
+                            "yt-dlp téléchargement OK (CLI) : "
+                            f"client={label_acces}/{label_client} | selector={selecteur_tentative}"
+                        )
+                        break
+                    except Exception as exc_selecteur:
+                        message_selecteur = str(exc_selecteur) or repr(exc_selecteur)
+                        erreurs_selecteurs.append(f"{selecteur_tentative} -> {message_selecteur}")
+                        journal_debug(
+                            "yt-dlp sélecteur échoué : "
+                            f"client={label_acces}/{label_client} | "
+                            f"selector={selecteur_tentative} | {message_selecteur[:500]}"
+                        )
+                if info is None:
+                    detail_selecteurs = " | ".join(erreurs_selecteurs[-3:]) or "aucun sélecteur essayé"
+                    raise RuntimeError(detail_selecteurs)
             except Exception as exc:
                 message = str(exc) or repr(exc)
                 journal_debug(f"yt-dlp erreur : client={label_acces}/{label_client} | format={label_format} | {message[:500]}")
