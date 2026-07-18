@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-visible-youtube-timeline-2026-07-18-20"
+APP_BUILD = "extraction-multimedia-python-api-ipv4-progress-2026-07-18-21"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -167,16 +167,32 @@ def _masquer_url_sensible(url: str) -> str:
     return re.sub(r"://([^:@/]+):([^@/]+)@", r"://\1:***@", url)
 
 
+def _proxy_ytdlp() -> str:
+    return (
+        os.environ.get("YTDLP_PROXY_URL", "").strip()
+        or os.environ.get("HTTPS_PROXY", "").strip()
+        or os.environ.get("HTTP_PROXY", "").strip()
+    )
+
+
+def _source_address_ytdlp() -> str:
+    source_address = os.environ.get("YTDLP_SOURCE_ADDRESS", "").strip()
+    if source_address:
+        return source_address
+    if _env_bool("YTDLP_FORCE_IPV4", False):
+        return "0.0.0.0"
+    if _env_bool("YTDLP_FORCE_IPV6", False):
+        return "::"
+    return ""
+
+
 FFMPEG_TIMEOUT_SECONDS = max(60, _env_int("APP_FFMPEG_TIMEOUT_SECONDS", 3600))
 
 
 def _resume_configuration_ytdlp() -> str:
     """Résume les variables réseau réellement appliquées à yt-dlp."""
-    proxy_url = (
-        os.environ.get("YTDLP_PROXY_URL", "").strip()
-        or os.environ.get("HTTPS_PROXY", "").strip()
-        or os.environ.get("HTTP_PROXY", "").strip()
-    )
+    proxy_url = _proxy_ytdlp()
+    source_address = _source_address_ytdlp()
     return (
         f"download_timeout={max(900, _env_int('YTDLP_DOWNLOAD_TIMEOUT_SECONDS', 900))}s | "
         f"socket_timeout={max(30, _env_int('YTDLP_SOCKET_TIMEOUT_SECONDS', 30))}s | "
@@ -184,6 +200,7 @@ def _resume_configuration_ytdlp() -> str:
         f"fragment_retries={max(10, _env_int('YTDLP_FRAGMENT_RETRIES', 10))} | "
         f"force_ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non'} | "
         f"force_ipv6={'oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non'} | "
+        f"source_address={source_address or 'auto'} | "
         f"proxy={'oui ' + _masquer_url_sensible(proxy_url) if proxy_url else 'non'}"
     )
 
@@ -989,6 +1006,15 @@ def _opts_communs(verbose: bool, cookies_path: Optional[Path], user_agent: str) 
         opts["remote_components"] = set(remote_components_env)
     if youtube_args:
         opts["extractor_args"] = {"youtube": youtube_args}
+    proxy_url = _proxy_ytdlp()
+    if proxy_url:
+        opts["proxy"] = proxy_url
+    geo_proxy_url = os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
+    if geo_proxy_url:
+        opts["geo_verification_proxy"] = geo_proxy_url
+    source_address = _source_address_ytdlp()
+    if source_address:
+        opts["source_address"] = source_address
     logger = _logger_silencieux(verbose)
     if logger is not None:
         opts["logger"] = logger
@@ -1333,6 +1359,39 @@ def telecharger_preparer_video(
         opts_simple["quiet"] = not verbose
         opts_simple["no_warnings"] = False
         opts_simple["updatetime"] = False
+        statut_simple = st.empty()
+        dernier_hook = {"time": 0.0}
+
+        def _progress_hook(d: Dict[str, Any]) -> None:
+            statut = str(d.get("status") or "")
+            maintenant = time.time()
+            if statut == "downloading" and maintenant - dernier_hook["time"] < 2:
+                return
+            dernier_hook["time"] = maintenant
+            filename = Path(str(d.get("filename") or "video_originale")).name
+            downloaded = d.get("downloaded_bytes") or 0
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            speed = d.get("speed") or 0
+            if statut == "downloading":
+                if total:
+                    pct = min(100.0, (float(downloaded) / float(total)) * 100.0)
+                    message = f"Téléchargement yt-dlp : {filename} · {pct:.1f}%"
+                else:
+                    message = f"Téléchargement yt-dlp : {filename} · {downloaded / (1024 * 1024):.1f} Mo"
+                if speed:
+                    message += f" · {float(speed) / (1024 * 1024):.2f} Mo/s"
+                statut_simple.caption(message)
+                journal_debug(message)
+            elif statut == "finished":
+                message = f"Téléchargement yt-dlp terminé : {filename}"
+                statut_simple.caption(message)
+                journal_debug(message)
+            elif statut:
+                message = f"yt-dlp statut : {statut} · {filename}"
+                statut_simple.caption(message)
+                journal_debug(message)
+
+        opts_simple["progress_hooks"] = [_progress_hook]
         if not os.environ.get("YTDLP_FORMAT", "").strip():
             opts_simple.pop("format", None)
 
@@ -1345,10 +1404,17 @@ def telecharger_preparer_video(
         journal_debug(
             "yt-dlp téléchargement simple type StopMotion : "
             f"{label} | clients={clients_journal} | "
-            f"socket={opts_simple['socket_timeout']}s retries={opts_simple['retries']}/{opts_simple['fragment_retries']}"
+            f"socket={opts_simple['socket_timeout']}s retries={opts_simple['retries']}/{opts_simple['fragment_retries']} "
+            f"source_address={opts_simple.get('source_address') or 'auto'}"
         )
-        with YoutubeDL(opts_simple) as ydl:
-            info_simple = ydl.extract_info(url.strip(), download=True) or {}
+        try:
+            with YoutubeDL(opts_simple) as ydl:
+                info_simple = ydl.extract_info(url.strip(), download=True) or {}
+        finally:
+            try:
+                statut_simple.empty()
+            except Exception:
+                pass
         candidats_simple = chemins_depuis_info_ytdlp(info_simple)
         candidats_simple.extend(fichiers_media_sortie(depuis_timestamp=debut_telechargement))
         candidats_simple = fichiers_valides(candidats_simple)
