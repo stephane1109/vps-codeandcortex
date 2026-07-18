@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-stopmotion-download-first-2026-07-18-19"
+APP_BUILD = "extraction-multimedia-visible-youtube-timeline-2026-07-18-20"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1900,6 +1900,37 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
             font-weight: 800;
             color: #0f766e;
           }}
+          .yt-visible-timeline {{
+            margin-top: 0.75rem;
+            padding: 0.9rem 0.95rem;
+            border-radius: 14px;
+            background: #ffffff;
+            border: 1px solid rgba(234, 88, 12, 0.22);
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+            color: #111827;
+            font-family: sans-serif;
+          }}
+          .yt-visible-timeline input[type="range"] {{
+            width: 100%;
+            accent-color: #ea580c;
+            cursor: pointer;
+          }}
+          .yt-range-labels {{
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.4rem;
+            color: #475569;
+            font-size: 0.9rem;
+          }}
+          .yt-range-caption {{
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-top: 0.35rem;
+            color: #64748b;
+            font-size: 0.82rem;
+          }}
           .yt-copy-button {{
             border: 1px solid rgba(234, 88, 12, 0.35);
             border-radius: 999px;
@@ -1939,8 +1970,27 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
             Copier la seconde
           </button>
         </div>
+        <div class="yt-visible-timeline">
+          <div class="yt-range-labels">
+            <span>Timeline visible</span>
+            <span>Durée : <strong id="yt-duration-{video_id}">--:--</strong></span>
+          </div>
+          <input
+            id="yt-range-{video_id}"
+            type="range"
+            min="0"
+            max="0"
+            value="0"
+            step="1"
+            aria-label="Timeline vidéo YouTube visible">
+          <div class="yt-range-caption">
+            <span>Début</span>
+            <span>Déplacez le curseur pour repérer une seconde précise</span>
+            <span>Fin</span>
+          </div>
+        </div>
         <p class="yt-help-text">
-          Utilisez la timeline du lecteur YouTube pour repérer le début et la fin,
+          Utilisez cette timeline visible pour repérer le début et la fin,
           puis recopiez les secondes dans l'intervalle personnalisé de l'application.
         </p>
         <script>
@@ -1948,9 +1998,13 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
             const frameId = "yt-frame-{video_id}";
             const secondsEl = document.getElementById("yt-time-seconds-{video_id}");
             const formattedEl = document.getElementById("yt-time-formatted-{video_id}");
+            const durationEl = document.getElementById("yt-duration-{video_id}");
+            const rangeEl = document.getElementById("yt-range-{video_id}");
             const copyButton = document.getElementById("yt-copy-seconds-{video_id}");
             let player = null;
             let lastSeconds = 0;
+            let durationSeconds = 0;
+            let userIsScrubbing = false;
 
             function formatSeconds(totalSeconds) {{
               const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -1968,9 +2022,20 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
             function updateTime() {{
               try {{
                 if (!player || typeof player.getCurrentTime !== "function") return;
+                if (typeof player.getDuration === "function") {{
+                  const duration = Math.floor(player.getDuration() || 0);
+                  if (duration > 0 && duration !== durationSeconds) {{
+                    durationSeconds = duration;
+                    rangeEl.max = String(durationSeconds);
+                    durationEl.textContent = formatSeconds(durationSeconds);
+                  }}
+                }}
                 lastSeconds = Math.floor(player.getCurrentTime() || 0);
                 secondsEl.textContent = String(lastSeconds);
                 formattedEl.textContent = formatSeconds(lastSeconds);
+                if (!userIsScrubbing) {{
+                  rangeEl.value = String(lastSeconds);
+                }}
               }} catch (error) {{
                 // Le lecteur YouTube garde sa timeline native même si l'API JS est indisponible.
               }}
@@ -2004,6 +2069,27 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
               }}, 1600);
             }});
 
+            rangeEl.addEventListener("input", function() {{
+              userIsScrubbing = true;
+              lastSeconds = Math.floor(Number(rangeEl.value) || 0);
+              secondsEl.textContent = String(lastSeconds);
+              formattedEl.textContent = formatSeconds(lastSeconds);
+            }});
+
+            rangeEl.addEventListener("change", function() {{
+              try {{
+                if (player && typeof player.seekTo === "function") {{
+                  player.seekTo(lastSeconds, true);
+                }}
+              }} catch (error) {{
+                // Si YouTube refuse le seek API, la timeline reste au moins un repère visuel.
+              }}
+              window.setTimeout(function() {{
+                userIsScrubbing = false;
+                updateTime();
+              }}, 250);
+            }});
+
             const previousReady = window.onYouTubeIframeAPIReady;
             window.onYouTubeIframeAPIReady = function() {{
               if (typeof previousReady === "function") previousReady();
@@ -2019,7 +2105,7 @@ def afficher_apercu_youtube_depuis_url(url_video: str) -> None:
           }})();
         </script>
         """,
-        height=545,
+        height=640,
     )
 
 
