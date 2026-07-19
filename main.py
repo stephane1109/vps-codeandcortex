@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-rotate-youtube-cdn-2026-07-19-30"
+APP_BUILD = "extraction-multimedia-cdn-route-diagnostic-2026-07-19-31"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1666,7 +1666,7 @@ def telecharger_preparer_video(
                     )
                     erreurs_fallback.append(f"{label_acces}/{label_client}/{label_reseau}/simple -> {message}")
                     if _erreur_reseau_cdn(message) and label_reseau == "réseau-env":
-                        journal_debug("Erreur CDN/IP détectée : essai immédiat en réseau-auto sans forçage IP.")
+                        journal_debug("Erreur CDN/IP détectée : passage immédiat au profil YouTube suivant.")
                         continue
                     if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
                         if not cookies_path:
@@ -1681,6 +1681,21 @@ def telecharger_preparer_video(
                 break
         if info is not None:
             break
+
+    erreurs_cdn = [erreur for erreur in erreurs_fallback if _erreur_reseau_cdn(erreur)]
+    if info is None and erreurs_cdn:
+        journal_debug(
+            "Tous les profils YouTube compatibles ont été essayés. "
+            "Le CDN GoogleVideo fourni par YouTube reste inaccessible depuis le VPS."
+        )
+        return None, None, None, (
+            "YouTube a bien fourni des formats vidéo, mais le VPS ne peut pas ouvrir "
+            "la connexion HTTPS vers le CDN GoogleVideo indiqué par YouTube. Tous les "
+            "profils compatibles ont été essayés. Ce blocage relève du routage réseau "
+            "entre le VPS et le CDN, et non du format de la vidéo, de ffmpeg ou du "
+            "cookies.txt. Il faut faire corriger cette route par l'hébergeur ou utiliser "
+            "une autre sortie réseau."
+        )
 
     if info is not None:
         # Le téléchargement façon StopMotion a produit une source exploitable :
