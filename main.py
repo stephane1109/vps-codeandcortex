@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-no-force-ip-default-2026-07-19-27"
+APP_BUILD = "extraction-multimedia-cdn-fast-failover-2026-07-19-28"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1490,11 +1490,16 @@ def telecharger_preparer_video(
                 return
             lignes_sortie.append(ligne)
             ligne_min = ligne.lower()
-            if (
+            erreur_dns = (
                 "address family for hostname not supported" in ligne_min
                 or "failed to resolve" in ligne_min
                 or "temporary failure in name resolution" in ligne_min
-            ):
+            )
+            erreur_timeout_cdn = (
+                "googlevideo.com" in ligne_min
+                and ("timed out" in ligne_min or "connect timeout" in ligne_min)
+            )
+            if erreur_dns or erreur_timeout_cdn:
                 erreur_reseau_bloquante["message"] = ligne[:500]
                 try:
                     processus.kill()
