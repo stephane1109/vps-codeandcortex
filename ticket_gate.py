@@ -71,6 +71,11 @@ Variables d'environnement a modifier si besoin :
   Delai optionnel avant liberation automatique si l'onglet devient cache.
   Mettre 0 pour desactiver ce garde-fou.
 
+- APP_TICKET_ACTIVE_STALE_SECONDS
+  Delai maximal sans heartbeat pour un ticket actif.
+  Utile quand un navigateur est ferme sans que le beacon de liberation arrive.
+  Exemple : 900 pour 15 minutes.
+
 - APP_TICKET_WAIT_STALE_SECONDS
   Delai maximal sans heartbeat pour un ticket en attente.
   Permet de nettoyer plus vite une file d'attente abandonnee.
@@ -172,6 +177,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
     ttl_seconds = max(60, _env_int("APP_TICKET_TTL_SECONDS", 1800))
+    active_stale_default = min(ttl_seconds, 900)
     wait_stale_default = min(ttl_seconds, 120)
     return {
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
@@ -186,6 +192,7 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "heartbeat_ms": max(30000, _env_int("APP_TICKET_HEARTBEAT_MS", 300000)),
         "release_url": os.getenv("APP_TICKET_RELEASE_URL", "").strip(),
         "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0)),
+        "active_stale_seconds": max(60, _env_int("APP_TICKET_ACTIVE_STALE_SECONDS", active_stale_default)),
         "wait_stale_seconds": max(30, _env_int("APP_TICKET_WAIT_STALE_SECONDS", wait_stale_default)),
     }
 
@@ -230,6 +237,8 @@ def _list_members(client, key: str) -> list[str]:
 def _ticket_timeout_seconds(cfg: dict[str, Any], status: str) -> int:
     if status == "attente":
         return cfg["wait_stale_seconds"]
+    if status == "actif":
+        return min(cfg["ttl_seconds"], cfg["active_stale_seconds"])
     return cfg["ttl_seconds"]
 
 
@@ -313,9 +322,9 @@ def _promote_waiting(client, cfg: dict[str, Any]) -> None:
         ticket_data = client.hgetall(_ticket_key(ticket_id)) or {}
         session_id = str(ticket_data.get("session_id", "")).strip()
         client.hset(_ticket_key(ticket_id), mapping={"status": "actif", "updated_at": int(time.time())})
-        client.expire(_ticket_key(ticket_id), cfg["ttl_seconds"])
+        client.expire(_ticket_key(ticket_id), _ticket_timeout_seconds(cfg, "actif"))
         if session_id:
-            client.expire(_session_key(cfg["app_id"], session_id), cfg["ttl_seconds"])
+            client.expire(_session_key(cfg["app_id"], session_id), _ticket_timeout_seconds(cfg, "actif"))
         client.zrem(waiting_key, ticket_id)
         client.zadd(active_key, {ticket_id: time.time()})
         client.zadd(_global_active_key(), {ticket_id: time.time()})
