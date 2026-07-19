@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-simple-cli-timeout-2026-07-19-24"
+APP_BUILD = "extraction-multimedia-progressive-mp4-first-2026-07-19-25"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1361,6 +1361,15 @@ def telecharger_preparer_video(
         geo_proxy_url = opts.get("geo_verification_proxy") or os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
         source_address = opts.get("source_address") or _source_address_ytdlp()
         format_env = os.environ.get("YTDLP_FORMAT", "").strip()
+        if format_env:
+            selecteur_simple = format_env
+            source_selecteur = "YTDLP_FORMAT"
+        else:
+            # Chemin prioritaire type StopMotion : un MP4 progressif avec audio intégré.
+            # Cela évite le choix automatique DASH 399+251 qui peut pointer vers un
+            # CDN googlevideo non résolu par le VPS.
+            selecteur_simple = "18/best[height<=360][ext=mp4]/best[height<=360]/best[ext=mp4]/best"
+            source_selecteur = "progressif MP4 par défaut"
         clients_journal = (
             opts.get("extractor_args", {})
             .get("youtube", {})
@@ -1399,8 +1408,7 @@ def telecharger_preparer_video(
             "-o",
             "video_originale.%(ext)s",
         ]
-        if format_env:
-            commande += ["-f", format_env]
+        commande += ["-f", selecteur_simple]
         if _env_bool("YTDLP_FORCE_IPV4", False):
             commande.append("--force-ipv4")
         if _env_bool("YTDLP_FORCE_IPV6", False):
@@ -1430,10 +1438,11 @@ def telecharger_preparer_video(
             f"timeout={timeout_seconds}s socket={socket_timeout_seconds}s "
             f"retries={retries}/{fragment_retries} extractor_retries={extractor_retries} "
             f"source_address={source_address or 'auto'} "
-            f"format={'auto' if not format_env else format_env}"
+            f"format={selecteur_simple} ({source_selecteur})"
         )
         statut_simple = st.empty()
         lignes_sortie: List[str] = []
+        erreur_reseau_bloquante = {"message": ""}
         debut_process = time.time()
         dernier_keepalive = 0.0
         dernier_scan_partiel = 0.0
@@ -1452,6 +1461,16 @@ def telecharger_preparer_video(
                 return
             lignes_sortie.append(ligne)
             ligne_min = ligne.lower()
+            if (
+                "address family for hostname not supported" in ligne_min
+                or "failed to resolve" in ligne_min
+                or "temporary failure in name resolution" in ligne_min
+            ):
+                erreur_reseau_bloquante["message"] = ligne[:500]
+                try:
+                    processus.kill()
+                except Exception:
+                    pass
             utile = (
                 "[youtube]" in ligne_min
                 or "[download]" in ligne_min
@@ -1520,6 +1539,9 @@ def telecharger_preparer_video(
                 statut_simple.empty()
             except Exception:
                 pass
+
+        if erreur_reseau_bloquante["message"]:
+            raise RuntimeError(erreur_reseau_bloquante["message"])
 
         if processus.returncode != 0:
             detail = lignes_sortie[-1] if lignes_sortie else f"code retour {processus.returncode}"
