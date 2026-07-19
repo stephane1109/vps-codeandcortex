@@ -15,7 +15,7 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import cv2
 import streamlit as st
@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-googlevideo-redirector-2026-07-19-32"
+APP_BUILD = "extraction-multimedia-hls-redirector-2026-07-19-33"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1349,7 +1349,121 @@ def telecharger_preparer_video(
             return ydl.extract_info(url, download=False) or {}
 
     def _telecharger_via_redirecteur_google(opts: Dict[str, Any]) -> Dict[str, Any]:
-        """Télécharge un format progressif via le redirecteur officiel GoogleVideo."""
+        """Télécharge un format audio/vidéo via le redirecteur officiel GoogleVideo."""
+        def _url_via_redirecteur(url_source: str) -> str:
+            url_decomposee = urlparse(url_source)
+            if not (url_decomposee.hostname or "").endswith(".googlevideo.com"):
+                return url_source
+            query = url_decomposee.query
+            if "cms_redirect=" not in query:
+                query = f"{query}&cms_redirect=yes" if query else "cms_redirect=yes"
+            return url_decomposee._replace(
+                netloc="redirector.googlevideo.com",
+                query=query,
+            ).geturl()
+
+        def _media_valide(chemin: Path) -> bool:
+            ffprobe = shutil.which("ffprobe")
+            if not ffprobe or not chemin.is_file() or chemin.stat().st_size <= 0:
+                return False
+            resultat = subprocess.run(
+                [
+                    ffprobe,
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_type",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    str(chemin),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            types_flux = {ligne.strip() for ligne in resultat.stdout.splitlines()}
+            return resultat.returncode == 0 and bool(types_flux.intersection({"audio", "video"}))
+
+        def _convertir_manifeste_hls(
+            manifeste_brut: Path,
+            url_manifeste: str,
+            format_id: str,
+            headers: Dict[str, Any],
+        ) -> Path:
+            contenu = manifeste_brut.read_text(encoding="utf-8", errors="replace")
+            lignes_recrites: List[str] = []
+            urls_recrites = 0
+            for ligne in contenu.splitlines():
+                ligne_epuree = ligne.strip()
+                if ligne_epuree and not ligne_epuree.startswith("#"):
+                    url_absolue = urljoin(url_manifeste, ligne_epuree)
+                    ligne_recrite = _url_via_redirecteur(url_absolue)
+                    urls_recrites += int(ligne_recrite != ligne_epuree)
+                    lignes_recrites.append(ligne_recrite)
+                    continue
+
+                def _remplacer_url(match: re.Match[str]) -> str:
+                    nonlocal urls_recrites
+                    url_initiale = match.group(0)
+                    url_recrite = _url_via_redirecteur(url_initiale)
+                    urls_recrites += int(url_recrite != url_initiale)
+                    return url_recrite
+
+                lignes_recrites.append(
+                    re.sub(
+                        r"https://[A-Za-z0-9.-]+\.googlevideo\.com[^\"'\s,]*",
+                        _remplacer_url,
+                        ligne,
+                    )
+                )
+
+            manifeste_local = REPERTOIRE_SORTIE / f"video_originale_redirector_{format_id}.m3u8"
+            manifeste_local.write_text("\n".join(lignes_recrites) + "\n", encoding="utf-8")
+            sortie_mp4 = REPERTOIRE_SORTIE / f"video_originale_redirector_{format_id}.mp4"
+            sortie_mp4.unlink(missing_ok=True)
+            journal_debug(
+                f"Manifeste HLS détecté : {urls_recrites} URL(s) réécrite(s) vers le redirecteur Google."
+            )
+            arguments_ffmpeg = [
+                tl.chemin_ffmpeg(),
+                "-y",
+                "-protocol_whitelist",
+                "file,http,https,tcp,tls,crypto",
+                "-rw_timeout",
+                "15000000",
+                "-reconnect",
+                "1",
+                "-reconnect_streamed",
+                "1",
+                "-reconnect_delay_max",
+                "2",
+            ]
+            headers_ffmpeg = "".join(
+                f"{nom}: {headers[nom]}\r\n"
+                for nom in ("User-Agent", "Referer", "Accept-Language")
+                if headers.get(nom)
+            )
+            if headers_ffmpeg:
+                arguments_ffmpeg += ["-headers", headers_ffmpeg]
+            arguments_ffmpeg += [
+                "-i",
+                str(manifeste_local),
+                "-c",
+                "copy",
+                "-movflags",
+                "+faststart",
+                str(sortie_mp4),
+            ]
+            try:
+                executer_ffmpeg(arguments_ffmpeg, "Téléchargement HLS via redirector.googlevideo.com")
+            finally:
+                if manifeste_brut != sortie_mp4:
+                    manifeste_brut.unlink(missing_ok=True)
+                manifeste_local.unlink(missing_ok=True)
+            return sortie_mp4
+
         info_probe = _analyser_info(opts)
         formats_progressifs = [
             fmt
@@ -1371,16 +1485,9 @@ def telecharger_preparer_video(
         erreurs_redirecteur: List[str] = []
         for fmt in formats_progressifs[:6]:
             url_media = str(fmt.get("url") or "")
-            url_decomposee = urlparse(url_media)
-            if not (url_decomposee.hostname or "").endswith(".googlevideo.com"):
+            if not (urlparse(url_media).hostname or "").endswith(".googlevideo.com"):
                 continue
-            query = url_decomposee.query
-            if "cms_redirect=" not in query:
-                query = f"{query}&cms_redirect=yes" if query else "cms_redirect=yes"
-            url_redirecteur = url_decomposee._replace(
-                netloc="redirector.googlevideo.com",
-                query=query,
-            ).geturl()
+            url_redirecteur = _url_via_redirecteur(url_media)
 
             format_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(fmt.get("format_id") or "media"))
             extension = re.sub(r"[^A-Za-z0-9]+", "", str(fmt.get("ext") or "mp4")) or "mp4"
@@ -1447,6 +1554,34 @@ def telecharger_preparer_video(
                 statut_redirecteur.empty()
 
             if processus.returncode == 0 and cible_redirecteur.exists() and cible_redirecteur.stat().st_size > 0:
+                entete_fichier = cible_redirecteur.read_bytes()[:1024]
+                protocole_format = str(fmt.get("protocol") or "").lower()
+                est_manifeste_hls = b"#EXTM3U" in entete_fichier or "m3u8" in protocole_format
+                if est_manifeste_hls:
+                    journal_debug(
+                        f"Le format {format_id} est un manifeste HLS, téléchargement des segments via ffmpeg."
+                    )
+                    try:
+                        cible_redirecteur = _convertir_manifeste_hls(
+                            cible_redirecteur,
+                            url_redirecteur,
+                            format_id,
+                            headers,
+                        )
+                    except Exception as exc_hls:
+                        detail_hls = str(exc_hls) or repr(exc_hls)
+                        erreurs_redirecteur.append(f"{format_id}/HLS: {detail_hls}")
+                        journal_debug(f"Fallback HLS échoué : {detail_hls[:500]}")
+                        cible_redirecteur.unlink(missing_ok=True)
+                        continue
+
+                if not _media_valide(cible_redirecteur):
+                    detail_invalide = "la sortie ne contient aucun flux audio/vidéo reconnu par ffprobe"
+                    erreurs_redirecteur.append(f"{format_id}: {detail_invalide}")
+                    journal_debug(f"Fallback redirecteur Google rejeté : {detail_invalide}.")
+                    cible_redirecteur.unlink(missing_ok=True)
+                    continue
+
                 journal_debug(
                     "Fallback redirecteur Google réussi : "
                     f"{cible_redirecteur.name} ({cible_redirecteur.stat().st_size} octets)"
