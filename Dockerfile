@@ -53,7 +53,7 @@ RUN curl -fsSL -o /tmp/deno.zip \
 
 COPY requirements.txt /app/requirements.txt
 
-ARG YTDLP_REFRESH=2026-07-14
+ARG YTDLP_REFRESH=2026-07-19-stopmotion-alternate-googlevideo-cdn-01
 RUN pip install --upgrade pip setuptools wheel \
     && pip install -r /app/requirements.txt \
     && echo "yt-dlp refresh ${YTDLP_REFRESH}" \

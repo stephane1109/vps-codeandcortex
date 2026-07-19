@@ -3,11 +3,14 @@
 import streamlit as st
 import cv2
 import os
+import re
+import shutil
 import tempfile
 import subprocess
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from ticket_gate import enforce_streamlit_access
 from yt_dlp import YoutubeDL
@@ -24,6 +27,14 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 COOKIES_ROOT = APP_DATA_DIR / "youtube-cookies"
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
+APP_BUILD = "stopmotion-alternate-googlevideo-cdn-2026-07-19-01"
+
+
+def env_int(nom, valeur_defaut):
+    try:
+        return int(os.environ.get(nom, str(valeur_defaut)).strip())
+    except (TypeError, ValueError):
+        return valeur_defaut
 
 
 def load_help_markdown() -> str:
@@ -118,15 +129,15 @@ def construire_options_ytdlp(dossier_temporaire, cookies_path=None, user_agent=N
         "noplaylist": True,
         "quiet": True,
         "no_warnings": False,
-        "retries": 10,
-        "fragment_retries": 10,
+        "retries": max(0, env_int("YTDLP_CDN_RETRIES", 0)),
+        "fragment_retries": max(0, env_int("YTDLP_CDN_FRAGMENT_RETRIES", 1)),
         "extractor_retries": 3,
         "continuedl": True,
         "concurrent_fragment_downloads": 1,
         "sleep_interval_requests": 1,
         "sleep_interval": 2,
         "max_sleep_interval": 5,
-        "socket_timeout": 30,
+        "socket_timeout": max(5, env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10)),
         "geo_bypass": True,
         "nocheckcertificate": True,
         "restrictfilenames": True,
@@ -142,6 +153,8 @@ def construire_options_ytdlp(dossier_temporaire, cookies_path=None, user_agent=N
     format_env = os.environ.get("YTDLP_FORMAT", "").strip()
     if format_env:
         options["format"] = format_env
+    else:
+        options["format"] = "18/best[height<=360][ext=mp4]/best[height<=360]/best[ext=mp4]/best"
 
     youtube_args = {}
     clients_env = [
@@ -182,7 +195,185 @@ def construire_options_ytdlp(dossier_temporaire, cookies_path=None, user_agent=N
     return options
 
 
-def telecharger_video_yt_dlp(url, dossier_temporaire, cookies_path=None, user_agent=None):
+def erreur_reseau_googlevideo(message):
+    message = (message or "").lower()
+    incidents = (
+        "failed to resolve",
+        "address family for hostname not supported",
+        "temporary failure in name resolution",
+        "network is unreachable",
+        "name or service not known",
+        "connect timeout",
+        "timed out",
+    )
+    return "googlevideo.com" in message and any(incident in message for incident in incidents)
+
+
+def url_cdn_googlevideo_alternatif(url_source):
+    url_decomposee = urlparse(url_source)
+    hostname = url_decomposee.hostname or ""
+    correspondance_hote = re.match(
+        r"^(?P<prefixe>.*?)(?P<cache>sn-[^.]+)\.googlevideo\.com$",
+        hostname,
+    )
+    if not correspondance_hote:
+        return None, None
+
+    caches = []
+    for valeur in parse_qs(url_decomposee.query).get("mn", []):
+        caches.extend(partie.strip() for partie in valeur.split(",") if partie.strip())
+    correspondance_mn = re.search(r"/mn/([^/]+)", unquote(url_decomposee.path))
+    if correspondance_mn:
+        caches.extend(
+            partie.strip()
+            for partie in correspondance_mn.group(1).split(",")
+            if partie.strip()
+        )
+
+    prefixe = correspondance_hote.group("prefixe")
+    cache_courant = correspondance_hote.group("cache")
+    for cache in caches:
+        if cache.startswith("sn-") and cache != cache_courant:
+            hote_alternatif = f"{prefixe}{cache}.googlevideo.com"
+            return url_decomposee._replace(netloc=hote_alternatif).geturl(), hote_alternatif
+    return None, None
+
+
+def media_video_valide(chemin):
+    chemin = Path(chemin)
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not chemin.is_file() or chemin.stat().st_size <= 0:
+        return False
+    resultat = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(chemin),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    return resultat.returncode == 0 and "video" in resultat.stdout.splitlines()
+
+
+def telecharger_via_cdn_googlevideo_alternatif(
+    url,
+    dossier_temporaire,
+    cookies_path=None,
+    user_agent=None,
+):
+    options = construire_options_ytdlp(
+        dossier_temporaire,
+        cookies_path=cookies_path,
+        user_agent=user_agent,
+        clients_youtube=None,
+    )
+    options_probe = dict(options)
+    options_probe.pop("format", None)
+    options_probe.update(
+        {
+            "simulate": True,
+            "skip_download": True,
+            "ignore_no_formats_error": True,
+        }
+    )
+    with YoutubeDL(options_probe) as ydl:
+        info = ydl.extract_info(url.strip(), download=False) or {}
+
+    formats_directs = [
+        fmt
+        for fmt in (info.get("formats") or [])
+        if isinstance(fmt, dict)
+        and str(fmt.get("url") or "").startswith(("http://", "https://"))
+        and str(fmt.get("vcodec") or "none") != "none"
+        and str(fmt.get("acodec") or "none") != "none"
+        and "m3u8" not in str(fmt.get("protocol") or "").lower()
+    ]
+    formats_directs.sort(
+        key=lambda fmt: (
+            str(fmt.get("format_id") or "") == "18",
+            int(fmt.get("height") or 0) <= 720,
+            int(fmt.get("height") or 0),
+            float(fmt.get("tbr") or 0),
+        ),
+        reverse=True,
+    )
+    if not formats_directs:
+        raise RuntimeError("aucun format vidéo progressif n'est disponible pour le CDN alternatif")
+
+    format_video = formats_directs[0]
+    url_alternative, hote_alternatif = url_cdn_googlevideo_alternatif(
+        str(format_video.get("url") or "")
+    )
+    if not url_alternative or not hote_alternatif:
+        raise RuntimeError("l'URL signée ne contient aucun CDN GoogleVideo alternatif")
+
+    extension = re.sub(r"[^A-Za-z0-9]+", "", str(format_video.get("ext") or "mp4")) or "mp4"
+    destination = Path(dossier_temporaire) / f"video_originale_cdn_alternatif.{extension}"
+    destination.unlink(missing_ok=True)
+    headers = options.get("http_headers") or {}
+    timeout_total = max(120, env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+    commande = [
+        "curl",
+        "--location",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        str(max(5, env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10))),
+        "--max-time",
+        str(timeout_total),
+        "--speed-time",
+        "30",
+        "--speed-limit",
+        "1024",
+        "--output",
+        str(destination),
+    ]
+    if cookies_path:
+        commande += ["--cookie", str(cookies_path)]
+    for nom_entete in ("User-Agent", "Referer", "Accept-Language"):
+        if headers.get(nom_entete):
+            commande += ["--header", f"{nom_entete}: {headers[nom_entete]}"]
+    commande.append(url_alternative)
+
+    resultat = subprocess.run(
+        commande,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout_total + 10,
+        check=False,
+    )
+    if resultat.returncode != 0:
+        destination.unlink(missing_ok=True)
+        detail = (resultat.stderr or resultat.stdout or f"code {resultat.returncode}").strip()
+        raise RuntimeError(f"{hote_alternatif} : {detail}")
+    if not media_video_valide(destination):
+        destination.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"{hote_alternatif} a répondu, mais aucun flux vidéo valide n'a été téléchargé"
+        )
+    return str(destination), hote_alternatif
+
+
+def telecharger_video_yt_dlp(
+    url,
+    dossier_temporaire,
+    cookies_path=None,
+    user_agent=None,
+    progress_callback=None,
+):
     """
     Télécharge une vidéo YouTube avec yt-dlp.
     """
@@ -216,6 +407,30 @@ def telecharger_video_yt_dlp(url, dossier_temporaire, cookies_path=None, user_ag
         except DownloadError as erreur:
             message = str(erreur) or repr(erreur)
             erreurs.append(f"{libelle} : {message}")
+            if erreur_reseau_googlevideo(message):
+                if progress_callback:
+                    progress_callback(
+                        18,
+                        "CDN GoogleVideo principal inaccessible. Tentative du CDN alternatif signé.",
+                    )
+                try:
+                    chemin_alternatif, hote_alternatif = telecharger_via_cdn_googlevideo_alternatif(
+                        url,
+                        dossier_temporaire,
+                        cookies_path=cookies_path,
+                        user_agent=user_agent,
+                    )
+                    if progress_callback:
+                        progress_callback(
+                            22,
+                            f"Téléchargement repris via {hote_alternatif}.",
+                        )
+                    return chemin_alternatif
+                except Exception as erreur_alternative:
+                    raise RuntimeError(
+                        "Le CDN GoogleVideo principal et son CDN alternatif sont "
+                        f"inaccessibles depuis le VPS : {erreur_alternative}"
+                    ) from erreur_alternative
             if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
                 if not cookies_path:
                     raise RuntimeError(
@@ -227,7 +442,12 @@ def telecharger_video_yt_dlp(url, dossier_temporaire, cookies_path=None, user_ag
                     "depuis le même navigateur et remplace aussi le User-Agent par celui de ce navigateur."
                 ) from erreur
         except Exception as erreur:
-            erreurs.append(f"{libelle} : {str(erreur) or repr(erreur)}")
+            message = str(erreur) or repr(erreur)
+            erreurs.append(f"{libelle} : {message}")
+            if erreur_reseau_googlevideo(message):
+                raise RuntimeError(
+                    "Le CDN GoogleVideo principal est inaccessible depuis le VPS."
+                ) from erreur
 
     detail = " | ".join(erreurs[-4:]) if erreurs else "aucun détail yt-dlp disponible"
     raise RuntimeError(
@@ -477,6 +697,7 @@ if st.button("Créer la vidéo Stop Motion"):
                     tmpdir,
                     cookies_path=cookies_path,
                     user_agent=user_agent_youtube.strip() or None,
+                    progress_callback=actualiser_progression,
                 )
                 taille_video = os.path.getsize(chemin_video) / (1024 * 1024)
                 actualiser_progression(25, f"Téléchargement terminé : {Path(chemin_video).name} ({taille_video:.1f} Mo).")
