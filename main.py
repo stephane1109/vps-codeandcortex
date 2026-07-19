@@ -74,6 +74,7 @@ def main() -> None:
 
     st.title("Analyse du débit de parole d'une vidéo YouTube")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
+    st.caption("version 0.2 beta - modifiée 19-07-2026")
     with st.expander("Aide", expanded=False):
         st.markdown(
             """
