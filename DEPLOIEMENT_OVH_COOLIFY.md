@@ -37,12 +37,30 @@ APP_TICKET_HEARTBEAT_MS=300000
 APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
 APP_TICKET_HIDDEN_RELEASE_SECONDS=300
 PORT=8501
+YTDLP_FORCE_IPV4=0
+YTDLP_FORCE_IPV6=0
+YTDLP_DOWNLOAD_TIMEOUT_SECONDS=900
+YTDLP_SOCKET_TIMEOUT_SECONDS=30
+YTDLP_RETRIES=10
+YTDLP_FRAGMENT_RETRIES=10
 STREAMLIT_SERVER_BASE_URL_PATH=
-APP_DATA_DIR=/tmp/appdata
+APP_DATA_DIR=/data/app
 APP_SESSION_TTL_HOURS=24
 ```
 
 `STREAMLIT_SERVER_BASE_URL_PATH` peut rester vide si l'application est exposee directement sur son sous-domaine.
+
+Ne definis pas `YTDLP_SOURCE_ADDRESS` par defaut. Dans yt-dlp, `--force-ipv4` revient a utiliser `source_address=0.0.0.0`; ce forçage peut casser selon le CDN `googlevideo.com` renvoye par YouTube. Si la route reseau OVH vers GoogleVideo reste instable, la solution documentee par yt-dlp est d'utiliser un proxy de sortie uniquement pour yt-dlp :
+
+```env
+YTDLP_PROXY_URL=http://user:password@host:port
+```
+
+ou :
+
+```env
+YTDLP_PROXY_URL=socks5://user:password@host:port
+```
 
 ## 3. Healthcheck recommande
 
