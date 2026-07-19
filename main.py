@@ -683,7 +683,6 @@ def analyser_video(
     start_time: int,
     end_time: int,
     jobs_dir: Path,
-    job_label: str,
     cookies_upload: object | None = None,
     status_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
@@ -693,7 +692,7 @@ def analyser_video(
             status_callback(message)
 
     video_id = extraire_video_id(video_url)
-    job_dir = create_job_directory(jobs_dir, job_label or video_id)
+    job_dir = create_job_directory(jobs_dir, video_id)
     exports_dir = ensure_directory(job_dir / "exports")
     images_dir = ensure_directory(job_dir / "images_25fps")
     cookies_path = save_cookies_upload(cookies_upload, job_dir)
@@ -1150,10 +1149,6 @@ video_url = st.text_input(
     "URL de la vidéo YouTube",
     placeholder="https://www.youtube.com/watch?v=...",
 )
-job_label = st.text_input(
-    "Nom du répertoire de travail (optionnel)",
-    placeholder="analyse_video_1",
-)
 cookies_upload = st.file_uploader(
     "Fichier cookies.txt YouTube (optionnel)",
     type=["txt"],
@@ -1195,7 +1190,6 @@ if st.button("Lancer l'analyse", type="primary", use_container_width=True):
                 start_time=int(start_time),
                 end_time=int(end_time),
                 jobs_dir=jobs_dir,
-                job_label=job_label.strip(),
                 cookies_upload=cookies_upload,
                 status_callback=lambda message: status_box.info(message),
             )
