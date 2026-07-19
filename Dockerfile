@@ -13,8 +13,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     YTDLP_SOCKET_TIMEOUT_SECONDS=30 \
     YTDLP_RETRIES=10 \
     YTDLP_FRAGMENT_RETRIES=10 \
-    YTDLP_CDN_RETRIES=1 \
-    YTDLP_CDN_FRAGMENT_RETRIES=2 \
+    YTDLP_CDN_SOCKET_TIMEOUT_SECONDS=10 \
+    YTDLP_CDN_RETRIES=0 \
+    YTDLP_CDN_FRAGMENT_RETRIES=1 \
     YTDLP_FORCE_IPV4=0 \
     YTDLP_FORCE_IPV6=0 \
     APP_TICKET_ID=extraction-multimedia \
@@ -81,7 +82,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
 # séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
-ARG YTDLP_REFRESH=2026-07-19-ytdlp-check-formats-cdn-19
+ARG YTDLP_REFRESH=2026-07-19-ytdlp-rotate-youtube-cdn-20
 RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
     && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
     && python -m yt_dlp --version

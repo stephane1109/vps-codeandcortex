@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-check-formats-cdn-2026-07-19-29"
+APP_BUILD = "extraction-multimedia-rotate-youtube-cdn-2026-07-19-30"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1121,9 +1121,9 @@ def telecharger_preparer_video(
         headers = opts.get("http_headers") or {}
         ignorer_forcage_ip = bool(opts.get(INTERNAL_IGNORE_FORCE_IP_KEY))
         timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
-        socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        retries = max(1, _env_int("YTDLP_CDN_RETRIES", 1))
-        fragment_retries = max(1, _env_int("YTDLP_CDN_FRAGMENT_RETRIES", 2))
+        socket_timeout_seconds = max(5, _env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10))
+        retries = max(0, _env_int("YTDLP_CDN_RETRIES", 0))
+        fragment_retries = max(0, _env_int("YTDLP_CDN_FRAGMENT_RETRIES", 1))
         proxy_url = (
             os.environ.get("YTDLP_PROXY_URL", "").strip()
             or os.environ.get("HTTPS_PROXY", "").strip()
@@ -1381,9 +1381,9 @@ def telecharger_preparer_video(
         headers = opts.get("http_headers") or {}
         ignorer_forcage_ip = bool(opts.get(INTERNAL_IGNORE_FORCE_IP_KEY))
         timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
-        socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        retries = max(1, _env_int("YTDLP_CDN_RETRIES", 1))
-        fragment_retries = max(1, _env_int("YTDLP_CDN_FRAGMENT_RETRIES", 2))
+        socket_timeout_seconds = max(5, _env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10))
+        retries = max(0, _env_int("YTDLP_CDN_RETRIES", 0))
+        fragment_retries = max(0, _env_int("YTDLP_CDN_FRAGMENT_RETRIES", 1))
         extractor_retries = max(3, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
         proxy_url = opts.get("proxy") or _proxy_ytdlp()
         geo_proxy_url = opts.get("geo_verification_proxy") or os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
@@ -1502,9 +1502,14 @@ def telecharger_preparer_video(
                 and ("timed out" in ligne_min or "connect timeout" in ligne_min)
             )
             if erreur_dns or erreur_timeout_cdn:
-                # `--check-formats` doit pouvoir écarter ce format et tester le
-                # suivant. On mémorise l'incident sans interrompre yt-dlp.
+                # Tous les formats d'un même profil pointent généralement vers
+                # le même cache GoogleVideo. On abandonne ce cache immédiatement
+                # afin que la boucle tente un autre profil client YouTube.
                 dernier_incident_reseau["message"] = ligne[:500]
+                try:
+                    processus.kill()
+                except Exception:
+                    pass
             utile = (
                 "[youtube]" in ligne_min
                 or "[download]" in ligne_min
@@ -1614,7 +1619,17 @@ def telecharger_preparer_video(
         info_simple["_filename"] = str(fichier_principal)
         return info_simple
 
-    profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None), ("android", ["android"])]
+    profils_clients: List[tuple[str, Optional[List[str]]]] = [
+        ("auto", None),
+        ("tv", ["tv"]),
+        ("web_safari", ["web_safari"]),
+        ("android", ["android"]),
+        ("android_vr", ["android_vr"]),
+        ("ios", ["ios"]),
+        ("mweb", ["mweb"]),
+        ("web", ["web"]),
+        ("web_embedded", ["web_embedded"]),
+    ]
     clients_forces = (
         ydl_opts.get("extractor_args", {})
         .get("youtube", {})
@@ -1622,14 +1637,6 @@ def telecharger_preparer_video(
     )
     if isinstance(clients_forces, list) and clients_forces:
         profils_clients.append(("coolify", [str(client) for client in clients_forces]))
-    profils_clients.extend(
-        [
-            ("source", ["android", "ios", "mweb", "web"]),
-            ("web", ["web"]),
-            ("mweb", ["mweb"]),
-            ("ios", ["ios"]),
-        ]
-    )
 
     erreurs_fallback: List[str] = []
     info = None
