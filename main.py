@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-beta-version-label-2026-07-18-23"
+APP_BUILD = "extraction-multimedia-simple-cli-timeout-2026-07-19-24"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -1343,86 +1343,219 @@ def telecharger_preparer_video(
         return opts_sans_cookies
 
     def _telecharger_api_simple_stopmotion(opts: Dict[str, Any], label: str) -> Optional[Dict[str, Any]]:
-        """Téléchargement prioritaire calé sur StopMotion.
+        """Téléchargement prioritaire calé sur StopMotion, mais piloté par la CLI.
 
-        StopMotion fonctionne mieux sur le VPS parce qu'il laisse yt-dlp choisir
-        directement le flux et écrire une vidéo source simple. On reprend cette
-        stratégie avant l'analyse fine des formats.
+        La précédente version utilisait directement l'API Python de yt-dlp. Sur
+        certaines vidéos, elle pouvait rester longtemps sans produire de retour
+        visible dans Streamlit. Ici, on garde le principe simple : laisser
+        yt-dlp choisir le format, mais via la CLI avec timeout, progression et
+        diagnostic des fichiers partiels.
         """
-        opts_simple = dict(opts)
-        opts_simple["outtmpl"] = {"default": "video_originale.%(ext)s"}
-        opts_simple["merge_output_format"] = "mp4"
-        opts_simple["socket_timeout"] = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        opts_simple["retries"] = max(10, _env_int("YTDLP_RETRIES", 10))
-        opts_simple["fragment_retries"] = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
-        opts_simple["extractor_retries"] = max(3, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
-        opts_simple["quiet"] = not verbose
-        opts_simple["no_warnings"] = False
-        opts_simple["updatetime"] = False
-        statut_simple = st.empty()
-        dernier_hook = {"time": 0.0}
-
-        def _progress_hook(d: Dict[str, Any]) -> None:
-            statut = str(d.get("status") or "")
-            maintenant = time.time()
-            if statut == "downloading" and maintenant - dernier_hook["time"] < 2:
-                return
-            dernier_hook["time"] = maintenant
-            filename = Path(str(d.get("filename") or "video_originale")).name
-            downloaded = d.get("downloaded_bytes") or 0
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-            speed = d.get("speed") or 0
-            if statut == "downloading":
-                if total:
-                    pct = min(100.0, (float(downloaded) / float(total)) * 100.0)
-                    message = f"Téléchargement yt-dlp : {filename} · {pct:.1f}%"
-                else:
-                    message = f"Téléchargement yt-dlp : {filename} · {downloaded / (1024 * 1024):.1f} Mo"
-                if speed:
-                    message += f" · {float(speed) / (1024 * 1024):.2f} Mo/s"
-                statut_simple.caption(message)
-                journal_debug(message)
-            elif statut == "finished":
-                message = f"Téléchargement yt-dlp terminé : {filename}"
-                statut_simple.caption(message)
-                journal_debug(message)
-            elif statut:
-                message = f"yt-dlp statut : {statut} · {filename}"
-                statut_simple.caption(message)
-                journal_debug(message)
-
-        opts_simple["progress_hooks"] = [_progress_hook]
-        if not os.environ.get("YTDLP_FORMAT", "").strip():
-            opts_simple.pop("format", None)
-
+        headers = opts.get("http_headers") or {}
+        timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+        socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
+        retries = max(10, _env_int("YTDLP_RETRIES", 10))
+        fragment_retries = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        extractor_retries = max(3, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
+        proxy_url = opts.get("proxy") or _proxy_ytdlp()
+        geo_proxy_url = opts.get("geo_verification_proxy") or os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
+        source_address = opts.get("source_address") or _source_address_ytdlp()
+        format_env = os.environ.get("YTDLP_FORMAT", "").strip()
         clients_journal = (
-            opts_simple.get("extractor_args", {})
+            opts.get("extractor_args", {})
             .get("youtube", {})
             .get("player_client")
             or "auto"
         )
+
+        commande = [
+            sys.executable,
+            "-m",
+            "yt_dlp",
+            "--no-playlist",
+            "--no-simulate",
+            "--force-overwrites",
+            "--progress",
+            "--progress-delta",
+            "2",
+            "--newline",
+            "--no-mtime",
+            "--write-info-json",
+            "--retries",
+            str(retries),
+            "--fragment-retries",
+            str(fragment_retries),
+            "--extractor-retries",
+            str(extractor_retries),
+            "--socket-timeout",
+            str(socket_timeout_seconds),
+            "--restrict-filenames",
+            "--trim-filenames",
+            "80",
+            "--merge-output-format",
+            "mp4",
+            "-P",
+            str(REPERTOIRE_SORTIE),
+            "-o",
+            "video_originale.%(ext)s",
+        ]
+        if format_env:
+            commande += ["-f", format_env]
+        if _env_bool("YTDLP_FORCE_IPV4", False):
+            commande.append("--force-ipv4")
+        if _env_bool("YTDLP_FORCE_IPV6", False):
+            commande.append("--force-ipv6")
+        if proxy_url:
+            commande += ["--proxy", str(proxy_url)]
+        if geo_proxy_url:
+            commande += ["--geo-verification-proxy", str(geo_proxy_url)]
+        if source_address:
+            commande += ["--source-address", str(source_address)]
+        if utiliser_intervalle:
+            commande += ["--download-sections", f"*{debut}-{fin}", "--force-keyframes-at-cuts"]
+        if opts.get("cookiefile"):
+            commande += ["--cookies", str(opts["cookiefile"])]
+        if headers.get("User-Agent"):
+            commande += ["--user-agent", str(headers["User-Agent"])]
+        if headers.get("Referer"):
+            commande += ["--referer", str(headers["Referer"])]
+        if headers.get("Accept-Language"):
+            commande += ["--add-header", f"Accept-Language:{headers['Accept-Language']}"]
+        commande += _extractor_args_cli(opts)
+        commande.append(url.strip())
+
         journal_debug(
-            "yt-dlp téléchargement simple type StopMotion : "
+            "yt-dlp téléchargement simple type StopMotion CLI : "
             f"{label} | clients={clients_journal} | "
-            f"socket={opts_simple['socket_timeout']}s retries={opts_simple['retries']}/{opts_simple['fragment_retries']} "
-            f"source_address={opts_simple.get('source_address') or 'auto'}"
+            f"timeout={timeout_seconds}s socket={socket_timeout_seconds}s "
+            f"retries={retries}/{fragment_retries} extractor_retries={extractor_retries} "
+            f"source_address={source_address or 'auto'} "
+            f"format={'auto' if not format_env else format_env}"
         )
+        statut_simple = st.empty()
+        lignes_sortie: List[str] = []
+        debut_process = time.time()
+        dernier_keepalive = 0.0
+        dernier_scan_partiel = 0.0
+
+        processus = subprocess.Popen(
+            commande,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        def _journaliser_ligne_simple(ligne: str) -> None:
+            ligne = ligne.strip()
+            if not ligne:
+                return
+            lignes_sortie.append(ligne)
+            ligne_min = ligne.lower()
+            utile = (
+                "[youtube]" in ligne_min
+                or "[download]" in ligne_min
+                or "[info]" in ligne_min
+                or "destination" in ligne_min
+                or "merging" in ligne_min
+                or "deleting original" in ligne_min
+                or "already been downloaded" in ligne_min
+                or "error" in ligne_min
+                or "warning" in ligne_min
+                or "ffmpeg" in ligne_min
+            )
+            if utile:
+                message = ligne[:500]
+                journal_debug(f"yt-dlp simple CLI : {message}")
+                statut_simple.caption(message)
+
         try:
-            with YoutubeDL(opts_simple) as ydl:
-                info_simple = ydl.extract_info(url.strip(), download=True) or {}
+            while True:
+                if processus.stdout is not None:
+                    prets, _, _ = select.select([processus.stdout], [], [], 0.5)
+                    if prets:
+                        ligne = processus.stdout.readline()
+                        if ligne:
+                            _journaliser_ligne_simple(ligne)
+
+                code_retour = processus.poll()
+                if code_retour is not None:
+                    if processus.stdout is not None:
+                        reste = processus.stdout.read()
+                        if reste:
+                            for ligne_reste in reste.splitlines():
+                                _journaliser_ligne_simple(ligne_reste)
+                    break
+
+                maintenant = time.time()
+                if maintenant - dernier_keepalive >= 15:
+                    keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+                    dernier_keepalive = maintenant
+
+                if maintenant - dernier_scan_partiel >= 20:
+                    partiels = sorted(
+                        list(REPERTOIRE_SORTIE.rglob("*.part")) + list(REPERTOIRE_SORTIE.rglob("*.ytdl")),
+                        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                        reverse=True,
+                    )
+                    if partiels:
+                        for partiel in partiels[:3]:
+                            try:
+                                journal_debug(f"yt-dlp simple partiel : {partiel.name} ({partiel.stat().st_size} octets)")
+                            except Exception:
+                                pass
+                    else:
+                        journal_debug(f"yt-dlp simple actif depuis {int(maintenant - debut_process)}s : aucun fichier partiel visible.")
+                    dernier_scan_partiel = maintenant
+
+                if maintenant - debut_process > timeout_seconds:
+                    processus.kill()
+                    try:
+                        processus.communicate(timeout=5)
+                    except Exception:
+                        pass
+                    raise RuntimeError(f"yt-dlp simple CLI timeout après {timeout_seconds}s")
         finally:
             try:
                 statut_simple.empty()
             except Exception:
                 pass
-        candidats_simple = chemins_depuis_info_ytdlp(info_simple)
-        candidats_simple.extend(fichiers_media_sortie(depuis_timestamp=debut_telechargement))
+
+        if processus.returncode != 0:
+            detail = lignes_sortie[-1] if lignes_sortie else f"code retour {processus.returncode}"
+            raise RuntimeError(detail)
+
+        candidats_simple = fichiers_media_sortie(depuis_timestamp=debut_telechargement)
+        if not candidats_simple:
+            candidats_simple = fichiers_media_sortie()
         candidats_simple = fichiers_valides(candidats_simple)
         journal_debug(f"Téléchargement simple terminé : {len(candidats_simple)} fichier(s) média détecté(s)")
         for fichier in candidats_simple[:8]:
             journal_debug(f" - simple : {fichier.name} ({fichier.stat().st_size} octets)")
         if not candidats_simple:
-            raise RuntimeError("yt-dlp simple terminé sans fichier média détecté.")
+            journal_debug("Diagnostic dossier après yt-dlp simple CLI :")
+            for ligne in diagnostic_contenu_sortie(25).splitlines():
+                journal_debug(ligne[:500])
+            raise RuntimeError("yt-dlp simple CLI terminé sans fichier média détecté.")
+
+        info_simple: Dict[str, Any] = {}
+        info_jsons = sorted(
+            REPERTOIRE_SORTIE.glob("video_originale.info.json"),
+            key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            reverse=True,
+        )
+        if info_jsons:
+            try:
+                import json
+
+                info_simple = json.loads(info_jsons[0].read_text(encoding="utf-8"))
+                journal_debug(f"Info JSON yt-dlp chargée : {info_jsons[0].name}")
+            except Exception as exc:
+                journal_debug(f"Info JSON yt-dlp illisible : {exc}")
+        fichier_principal = candidats_simple[0]
+        info_simple.setdefault("id", extraire_id_youtube(url) or fichier_principal.stem)
+        info_simple.setdefault("title", info_simple.get("fulltitle") or fichier_principal.stem)
+        info_simple["_filename"] = str(fichier_principal)
         return info_simple
 
     profils_clients: List[tuple[str, Optional[List[str]]]] = [("auto", None), ("android", ["android"])]
