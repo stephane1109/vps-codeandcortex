@@ -53,7 +53,8 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-progressive-mp4-first-2026-07-19-25"
+APP_BUILD = "extraction-multimedia-network-auto-fallback-2026-07-19-26"
+INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
 SESSION_DIR = SESSIONS_DIR / SESSION_ID
@@ -184,6 +185,13 @@ def _source_address_ytdlp() -> str:
     if _env_bool("YTDLP_FORCE_IPV6", False):
         return "::"
     return ""
+
+
+def _nettoyer_options_internes(opts: Dict[str, Any]) -> Dict[str, Any]:
+    """Retire les marqueurs internes avant de passer les options à yt-dlp."""
+    opts_propres = dict(opts)
+    opts_propres.pop(INTERNAL_IGNORE_FORCE_IP_KEY, None)
+    return opts_propres
 
 
 FFMPEG_TIMEOUT_SECONDS = max(60, _env_int("APP_FFMPEG_TIMEOUT_SECONDS", 3600))
@@ -1111,6 +1119,7 @@ def telecharger_preparer_video(
 
     def _telecharger_cli(opts: Dict[str, Any], selecteur_format: str, info_probe: Dict[str, Any]) -> Dict[str, Any]:
         headers = opts.get("http_headers") or {}
+        ignorer_forcage_ip = bool(opts.get(INTERNAL_IGNORE_FORCE_IP_KEY))
         timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
         socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
         retries = max(10, _env_int("YTDLP_RETRIES", 10))
@@ -1121,7 +1130,7 @@ def telecharger_preparer_video(
             or os.environ.get("HTTP_PROXY", "").strip()
         )
         geo_proxy_url = os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
-        source_address = os.environ.get("YTDLP_SOURCE_ADDRESS", "").strip()
+        source_address = "" if ignorer_forcage_ip else (opts.get("source_address") or os.environ.get("YTDLP_SOURCE_ADDRESS", "").strip())
         selecteur_effectif = selecteur_format
         commande = [
             sys.executable,
@@ -1151,9 +1160,9 @@ def telecharger_preparer_video(
             "-f",
             selecteur_effectif,
         ]
-        if _env_bool("YTDLP_FORCE_IPV4", False):
+        if not ignorer_forcage_ip and _env_bool("YTDLP_FORCE_IPV4", False):
             commande.append("--force-ipv4")
-        if _env_bool("YTDLP_FORCE_IPV6", False):
+        if not ignorer_forcage_ip and _env_bool("YTDLP_FORCE_IPV6", False):
             commande.append("--force-ipv6")
         if proxy_url:
             commande += ["--proxy", proxy_url]
@@ -1182,8 +1191,9 @@ def telecharger_preparer_video(
             "yt-dlp CLI démarrage : "
             f"format={selecteur_effectif} timeout={timeout_seconds}s "
             f"socket={socket_timeout_seconds}s retries={retries}/{fragment_retries} "
-            f"ipv4={'oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non'} "
-            f"ipv6={'oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non'} "
+            f"ipv4={'ignoré' if ignorer_forcage_ip else ('oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non')} "
+            f"ipv6={'ignoré' if ignorer_forcage_ip else ('oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non')} "
+            f"source_address={source_address or 'auto'} "
             f"proxy={'oui ' + _masquer_url_sensible(proxy_url) if proxy_url else 'non'}"
         )
         statut_ytdlp = st.empty()
@@ -1296,7 +1306,7 @@ def telecharger_preparer_video(
         met longtemps à joindre le CDN YouTube, ce fallback reprend la logique
         plus tolérante utilisée par StopMotion.
         """
-        opts_api = dict(opts)
+        opts_api = _nettoyer_options_internes(opts)
         opts_api["format"] = selecteur_format or "18/22/bestvideo*+bestaudio/best[acodec!=none][vcodec!=none]/best"
         opts_api["merge_output_format"] = "mp4"
         opts_api["socket_timeout"] = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
@@ -1328,7 +1338,7 @@ def telecharger_preparer_video(
         return any(marqueur in message_min for marqueur in marqueurs)
 
     def _analyser_info(opts: Dict[str, Any]) -> Dict[str, Any]:
-        opts_probe = dict(opts)
+        opts_probe = _nettoyer_options_internes(opts)
         for cle in ("format", "download_sections", "force_keyframes_at_cuts", "merge_output_format"):
             opts_probe.pop(cle, None)
         opts_probe["simulate"] = True
@@ -1342,6 +1352,22 @@ def telecharger_preparer_video(
         opts_sans_cookies.pop("cookiefile", None)
         return opts_sans_cookies
 
+    def _variantes_reseau(opts: Dict[str, Any]) -> List[tuple[str, Dict[str, Any]]]:
+        """Tente d'abord le réseau configuré, puis un mode auto sans forçage IP.
+
+        YouTube change régulièrement de CDN `googlevideo`. Certains hôtes
+        renvoyés par yt-dlp ne sont accessibles qu'avec une famille IP donnée.
+        Ce fallback évite qu'un `YTDLP_FORCE_IPV4=1` ou `source_address=0.0.0.0`
+        bloque toute l'extraction quand le CDN du jour n'est pas compatible.
+        """
+        variantes: List[tuple[str, Dict[str, Any]]] = [("réseau-env", opts)]
+        if opts.get("source_address") or _env_bool("YTDLP_FORCE_IPV4", False) or _env_bool("YTDLP_FORCE_IPV6", False):
+            opts_auto = dict(opts)
+            opts_auto.pop("source_address", None)
+            opts_auto[INTERNAL_IGNORE_FORCE_IP_KEY] = True
+            variantes.append(("réseau-auto", opts_auto))
+        return variantes
+
     def _telecharger_api_simple_stopmotion(opts: Dict[str, Any], label: str) -> Optional[Dict[str, Any]]:
         """Téléchargement prioritaire calé sur StopMotion, mais piloté par la CLI.
 
@@ -1352,6 +1378,7 @@ def telecharger_preparer_video(
         diagnostic des fichiers partiels.
         """
         headers = opts.get("http_headers") or {}
+        ignorer_forcage_ip = bool(opts.get(INTERNAL_IGNORE_FORCE_IP_KEY))
         timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
         socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
         retries = max(10, _env_int("YTDLP_RETRIES", 10))
@@ -1359,7 +1386,7 @@ def telecharger_preparer_video(
         extractor_retries = max(3, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
         proxy_url = opts.get("proxy") or _proxy_ytdlp()
         geo_proxy_url = opts.get("geo_verification_proxy") or os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
-        source_address = opts.get("source_address") or _source_address_ytdlp()
+        source_address = "" if ignorer_forcage_ip else (opts.get("source_address") or _source_address_ytdlp())
         format_env = os.environ.get("YTDLP_FORMAT", "").strip()
         if format_env:
             selecteur_simple = format_env
@@ -1409,9 +1436,9 @@ def telecharger_preparer_video(
             "video_originale.%(ext)s",
         ]
         commande += ["-f", selecteur_simple]
-        if _env_bool("YTDLP_FORCE_IPV4", False):
+        if not ignorer_forcage_ip and _env_bool("YTDLP_FORCE_IPV4", False):
             commande.append("--force-ipv4")
-        if _env_bool("YTDLP_FORCE_IPV6", False):
+        if not ignorer_forcage_ip and _env_bool("YTDLP_FORCE_IPV6", False):
             commande.append("--force-ipv6")
         if proxy_url:
             commande += ["--proxy", str(proxy_url)]
@@ -1437,6 +1464,8 @@ def telecharger_preparer_video(
             f"{label} | clients={clients_journal} | "
             f"timeout={timeout_seconds}s socket={socket_timeout_seconds}s "
             f"retries={retries}/{fragment_retries} extractor_retries={extractor_retries} "
+            f"ipv4={'ignoré' if ignorer_forcage_ip else ('oui' if _env_bool('YTDLP_FORCE_IPV4', False) else 'non')} "
+            f"ipv6={'ignoré' if ignorer_forcage_ip else ('oui' if _env_bool('YTDLP_FORCE_IPV6', False) else 'non')} "
             f"source_address={source_address or 'auto'} "
             f"format={selecteur_simple} ({source_selecteur})"
         )
@@ -1611,22 +1640,33 @@ def telecharger_preparer_video(
     for label_acces, opts_base_acces in bases_ytdlp:
         for label_client, clients in profils_clients:
             opts_client = _appliquer_clients_youtube(opts_base_acces, clients)
-            try:
-                info = _telecharger_api_simple_stopmotion(opts_client, f"{label_acces}/{label_client}")
+            for label_reseau, opts_reseau in _variantes_reseau(opts_client):
+                try:
+                    info = _telecharger_api_simple_stopmotion(opts_reseau, f"{label_acces}/{label_client}/{label_reseau}")
+                    if info is not None:
+                        journal_debug(f"Téléchargement simple OK : {label_acces}/{label_client}/{label_reseau}")
+                        break
+                except Exception as exc:
+                    message = str(exc) or repr(exc)
+                    journal_debug(
+                        f"Téléchargement simple échoué : "
+                        f"{label_acces}/{label_client}/{label_reseau} | {message[:500]}"
+                    )
+                    erreurs_fallback.append(f"{label_acces}/{label_client}/{label_reseau}/simple -> {message}")
+                    if _erreur_reseau_cdn(message) and label_reseau == "réseau-env":
+                        journal_debug("Erreur CDN/IP détectée : essai immédiat en réseau-auto sans forçage IP.")
+                        continue
+                    if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
+                        if not cookies_path:
+                            return None, None, None, (
+                                "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
+                                "récent exporté depuis le même navigateur, puis relance."
+                            )
+                        break
                 if info is not None:
-                    journal_debug(f"Téléchargement simple OK : {label_acces}/{label_client}")
                     break
-            except Exception as exc:
-                message = str(exc) or repr(exc)
-                journal_debug(f"Téléchargement simple échoué : {label_acces}/{label_client} | {message[:500]}")
-                erreurs_fallback.append(f"{label_acces}/{label_client}/simple -> {message}")
-                if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
-                    if not cookies_path:
-                        return None, None, None, (
-                            "YouTube bloque la requête comme anti-bot. Ajoute un cookies.txt "
-                            "récent exporté depuis le même navigateur, puis relance."
-                        )
-                    break
+            if info is not None:
+                break
         if info is not None:
             break
 
