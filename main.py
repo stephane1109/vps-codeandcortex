@@ -15,7 +15,7 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import cv2
 import streamlit as st
@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-hls-uri-fix-2026-07-19-34"
+APP_BUILD = "extraction-multimedia-alternate-cdn-stop-loop-2026-07-19-35"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1138,7 +1138,6 @@ def telecharger_preparer_video(
             "yt_dlp",
             "--no-playlist",
             "--no-simulate",
-            "--check-formats",
             "--force-overwrites",
             "--progress",
             "--progress-delta",
@@ -1352,8 +1351,35 @@ def telecharger_preparer_video(
         """Télécharge un format audio/vidéo via le redirecteur officiel GoogleVideo."""
         def _url_via_redirecteur(url_source: str) -> str:
             url_decomposee = urlparse(url_source)
-            if not (url_decomposee.hostname or "").endswith(".googlevideo.com"):
+            hostname = url_decomposee.hostname or ""
+            if not hostname.endswith(".googlevideo.com"):
                 return url_source
+
+            correspondance_hote = re.match(
+                r"^(?P<prefixe>.*?)(?P<cache>sn-[^.]+)\.googlevideo\.com$",
+                hostname,
+            )
+            caches: List[str] = []
+            for valeur in parse_qs(url_decomposee.query).get("mn", []):
+                caches.extend(partie.strip() for partie in valeur.split(",") if partie.strip())
+            chemin_decode = unquote(url_decomposee.path)
+            correspondance_mn = re.search(r"/mn/([^/]+)", chemin_decode)
+            if correspondance_mn:
+                caches.extend(
+                    partie.strip()
+                    for partie in correspondance_mn.group(1).split(",")
+                    if partie.strip()
+                )
+
+            if correspondance_hote:
+                prefixe = correspondance_hote.group("prefixe")
+                cache_courant = correspondance_hote.group("cache")
+                for cache in caches:
+                    if cache.startswith("sn-") and cache != cache_courant:
+                        return url_decomposee._replace(
+                            netloc=f"{prefixe}{cache}.googlevideo.com",
+                        ).geturl()
+
             query = url_decomposee.query
             if "cms_redirect=" not in query:
                 query = f"{query}&cms_redirect=yes" if query else "cms_redirect=yes"
@@ -1495,22 +1521,13 @@ def telecharger_preparer_video(
             ),
             None,
         )
-        candidat_hls = next(
-            (
-                fmt
-                for fmt in formats_progressifs
-                if "m3u8" in str(fmt.get("protocol") or "").lower()
-            ),
-            None,
-        )
-        for candidat in (candidat_direct, candidat_hls):
+        for candidat in (candidat_direct,):
             if candidat is not None and candidat not in candidats_redirecteur:
                 candidats_redirecteur.append(candidat)
 
         journal_debug(
-            "Fallback redirecteur : "
-            f"{len(candidats_redirecteur)} candidat(s) distinct(s) "
-            "(un flux direct et un flux HLS au maximum)."
+            "Fallback réseau GoogleVideo : "
+            f"{len(candidats_redirecteur)} flux direct(s) à tester sur le CDN alternatif."
         )
         erreurs_redirecteur: List[str] = []
         for fmt in candidats_redirecteur:
@@ -1547,9 +1564,10 @@ def telecharger_preparer_video(
                     commande += ["--header", f"{nom_entete}: {headers[nom_entete]}"]
             commande.append(url_redirecteur)
 
+            hote_fallback = urlparse(url_redirecteur).hostname or "inconnu"
             journal_debug(
-                "Fallback redirector.googlevideo.com : "
-                f"format={format_id} {extension} "
+                "Redirection vers un CDN GoogleVideo alternatif : "
+                f"hôte={hote_fallback} | format={format_id} {extension} "
                 f"{fmt.get('height') or '?'}p"
             )
             statut_redirecteur = st.empty()
@@ -1692,7 +1710,6 @@ def telecharger_preparer_video(
             "yt_dlp",
             "--no-playlist",
             "--no-simulate",
-            "--check-formats",
             "--force-overwrites",
             "--progress",
             "--progress-delta",
@@ -1955,7 +1972,7 @@ def telecharger_preparer_video(
                             redirecteur_google_tente = True
                             try:
                                 info = _telecharger_via_redirecteur_google(opts_reseau)
-                                journal_debug("Téléchargement récupéré via redirector.googlevideo.com.")
+                                journal_debug("Téléchargement récupéré via le CDN GoogleVideo alternatif.")
                                 break
                             except Exception as exc_redirecteur:
                                 message_redirecteur = str(exc_redirecteur) or repr(exc_redirecteur)
@@ -1963,11 +1980,18 @@ def telecharger_preparer_video(
                                     f"{label_acces}/{label_client}/redirecteur -> {message_redirecteur}"
                                 )
                                 journal_debug(
-                                    "Redirecteur Google indisponible pour ce média : "
+                                    "CDN GoogleVideo alternatif indisponible pour ce média : "
                                     f"{message_redirecteur[:500]}"
                                 )
-                        journal_debug("Erreur CDN/IP détectée : passage immédiat au profil YouTube suivant.")
-                        continue
+                        journal_debug(
+                            "Arrêt immédiat : le CDN principal et son alternative "
+                            "sont inaccessibles depuis le VPS."
+                        )
+                        return None, None, None, (
+                            "YouTube a fourni la vidéo, mais les connexions HTTPS vers le CDN "
+                            "GoogleVideo principal et son CDN alternatif expirent depuis le VPS. "
+                            "Le traitement est arrêté sans essayer inutilement les autres profils."
+                        )
                     if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
                         if not cookies_path:
                             return None, None, None, (
