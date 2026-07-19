@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 
 APP_NAME = "Analyse de l'amplitude sonore dans un discours"
+SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".mp3"}
 
 
 def convertir_en_min_sec(seconds: float) -> str:
@@ -29,6 +31,69 @@ def resolve_app_data_dir() -> Path:
     temp_root = root / "tmp"
     temp_root.mkdir(parents=True, exist_ok=True)
     return temp_root
+
+
+def audio_file_suffix(uploaded_file) -> str:
+    """Conserver l'extension réelle pour les outils de décodage audio."""
+    suffix = Path(getattr(uploaded_file, "name", "")).suffix.lower()
+    return suffix if suffix in SUPPORTED_AUDIO_EXTENSIONS else ".wav"
+
+
+def lire_audio(uploaded_file) -> tuple[np.ndarray, int]:
+    """Lire un WAV ou convertir temporairement un MP3 en WAV avec FFmpeg."""
+    temp_root = resolve_app_data_dir()
+    suffix = audio_file_suffix(uploaded_file)
+    source_path: Path | None = None
+    wav_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=suffix,
+            dir=temp_root,
+        ) as source_file:
+            source_file.write(uploaded_file.getvalue())
+            source_path = Path(source_file.name)
+
+        lecture_path = source_path
+        if suffix == ".mp3":
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".wav",
+                dir=temp_root,
+            ) as wav_file:
+                wav_path = Path(wav_file.name)
+
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    os.fspath(source_path),
+                    "-vn",
+                    "-c:a",
+                    "pcm_s16le",
+                    os.fspath(wav_path),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or "erreur FFmpeg").strip()
+                raise RuntimeError(f"conversion MP3 impossible : {detail}")
+            lecture_path = wav_path
+
+        return sf.read(lecture_path)
+    finally:
+        for path in (source_path, wav_path):
+            if path is not None:
+                path.unlink(missing_ok=True)
 
 
 def transcrire_audio_whisper(uploaded_file) -> list[dict]:
@@ -48,7 +113,11 @@ def transcrire_audio_whisper(uploaded_file) -> list[dict]:
     download_root = os.getenv("WHISPER_CACHE_DIR", "").strip() or None
     temp_root = resolve_app_data_dir()
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav", dir=temp_root) as temp_file:
+    with tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=audio_file_suffix(uploaded_file),
+        dir=temp_root,
+    ) as temp_file:
         temp_file.write(uploaded_file.getvalue())
         temp_audio_path = temp_file.name
 
@@ -150,11 +219,12 @@ def main() -> None:
 
     st.title(APP_NAME)
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
+    st.caption("version 0.2 beta - modifiée 19-07-2026")
 
     st.markdown(
         """
 ### Introduction
-Ce script analyse un fichier audio `.wav` en regroupant le signal en intervalles fixes de 1 seconde.
+Ce script analyse un fichier audio `.wav` ou `.mp3` en regroupant le signal en intervalles fixes de 1 seconde.
 Chaque intervalle contient un ensemble d'observations. Pour chaque intervalle, on calcule :
 
 - le **point central de l'intervalle** pour positionner la seconde sur l'axe temporel,
@@ -169,7 +239,10 @@ Si la transcription est activée, le script associe à chaque observation atypiq
 """
     )
 
-    uploaded_file = st.file_uploader("Importer un fichier audio (.wav)", type=["wav"])
+    uploaded_file = st.file_uploader(
+        "Importer un fichier audio (.wav ou .mp3)",
+        type=["wav", "mp3"],
+    )
     afficher_transcription = st.checkbox(
         "Afficher la transcription avec Whisper (pour le concordancier)",
         value=False,
@@ -183,17 +256,17 @@ Si la transcription est activée, le script associe à chaque observation atypiq
     )
 
     if not st.button("Lancer l'analyse"):
-        st.info("Veuillez importer un fichier audio (.wav).")
+        st.info("Veuillez importer un fichier audio (.wav ou .mp3).")
         return
 
     keep_ticket_alive("rendreaudible", APP_NAME)
 
     if uploaded_file is None:
-        st.info("Veuillez importer un fichier audio (WAV).")
+        st.info("Veuillez importer un fichier audio (WAV ou MP3).")
         return
 
     try:
-        data, samplerate = sf.read(uploaded_file)
+        data, samplerate = lire_audio(uploaded_file)
         st.write(f"Taux d'échantillonnage : {samplerate} Hz")
     except Exception as exc:
         st.error(f"Erreur lors de la lecture du fichier audio : {exc}")
