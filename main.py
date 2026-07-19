@@ -639,25 +639,37 @@ def optimiser_clusters(X_pca: np.ndarray) -> tuple[int | None, pd.DataFrame]:
     if X_pca.shape[0] < 3:
         return None, pd.DataFrame(columns=["Nombre de clusters", "Score de silhouette"])
 
-    max_clusters = min(10, X_pca.shape[0] - 1)
+    distinct_points = np.unique(np.round(X_pca, decimals=12), axis=0).shape[0]
+    max_clusters = min(10, X_pca.shape[0] - 1, distinct_points)
     if max_clusters < 2:
         return None, pd.DataFrame(columns=["Nombre de clusters", "Score de silhouette"])
 
+    tested_clusters: list[int] = []
     scores: list[float] = []
     range_n_clusters = list(range(2, max_clusters + 1))
 
     for n_clusters in range_n_clusters:
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(X_pca)
-        scores.append(float(silhouette_score(X_pca, labels)))
+        try:
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(X_pca)
+            labels_count = np.unique(labels).size
+            if labels_count < 2 or labels_count >= X_pca.shape[0]:
+                continue
+            tested_clusters.append(n_clusters)
+            scores.append(float(silhouette_score(X_pca, labels)))
+        except ValueError:
+            continue
+
+    if not scores:
+        return None, pd.DataFrame(columns=["Nombre de clusters", "Score de silhouette"])
 
     df_silhouette = pd.DataFrame(
         {
-            "Nombre de clusters": range_n_clusters,
+            "Nombre de clusters": tested_clusters,
             "Score de silhouette": scores,
         }
     )
-    best_n = range_n_clusters[scores.index(max(scores))]
+    best_n = tested_clusters[scores.index(max(scores))]
     return best_n, df_silhouette
 
 
@@ -1193,17 +1205,32 @@ if st.button("Lancer l'analyse", type="primary", use_container_width=True):
                 cookies_upload=cookies_upload,
                 status_callback=lambda message: status_box.info(message),
             )
-            save_visual_exports(result)
-            result["bundle_zip"] = str(
-                create_bundle_zip(
-                    Path(str(result["job_dir"])),
-                    Path(str(result["exports_dir"])),
-                    Path(str(result["images_dir"])),
-                    Path(str(result["job_dir"])) / "vecteur_emotionnel_exports.zip",
-                )
-            )
             st.session_state.analysis_result = result
-            status_box.success("Analyse terminée. Les résultats sont prêts à être consultés et téléchargés.")
+            export_warnings: list[str] = []
+            try:
+                save_visual_exports(result)
+            except Exception as export_exc:
+                export_warnings.append(f"exports graphiques : {export_exc}")
+            try:
+                result["bundle_zip"] = str(
+                    create_bundle_zip(
+                        Path(str(result["job_dir"])),
+                        Path(str(result["exports_dir"])),
+                        Path(str(result["images_dir"])),
+                        Path(str(result["job_dir"])) / "vecteur_emotionnel_exports.zip",
+                    )
+                )
+            except Exception as bundle_exc:
+                export_warnings.append(f"archive globale : {bundle_exc}")
+            if export_warnings:
+                status_box.warning(
+                    "Analyse terminée. Les résultats sont affichés, mais certains exports "
+                    f"optionnels ont échoué : {' | '.join(export_warnings)}"
+                )
+            else:
+                status_box.success(
+                    "Analyse terminée. Les résultats sont prêts à être consultés et téléchargés."
+                )
         except Exception as exc:
             status_box.empty()
             st.error(f"Erreur lors de l'analyse : {exc}")
