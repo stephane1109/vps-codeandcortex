@@ -11,7 +11,7 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Callable
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import altair as alt
 import cv2
@@ -40,6 +40,7 @@ SESSIONS_DIR = APP_DATA_DIR / "sessions"
 YOUTUBE_COOKIES_DIR = APP_DATA_DIR / "youtube-cookies"
 APP_NAME = "Vecteur émotionnel"
 APP_TICKET_DEFAULT_ID = "vecteur-emotionnel"
+APP_BUILD = "vecteur-emotionnel-alternate-googlevideo-cdn-2026-07-19-01"
 DEFAULT_YOUTUBE_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -227,6 +228,179 @@ def pick_downloaded_video(job_dir: Path) -> Path:
     return candidates[0]
 
 
+def erreur_reseau_googlevideo(message: str) -> bool:
+    message_min = (message or "").lower()
+    incidents = (
+        "failed to resolve",
+        "address family for hostname not supported",
+        "temporary failure in name resolution",
+        "network is unreachable",
+        "name or service not known",
+        "connect timeout",
+        "timed out",
+    )
+    return "googlevideo.com" in message_min and any(
+        incident in message_min for incident in incidents
+    )
+
+
+def url_cdn_googlevideo_alternatif(url_source: str) -> tuple[str | None, str | None]:
+    url_decomposee = urlparse(url_source)
+    hostname = url_decomposee.hostname or ""
+    correspondance_hote = re.match(
+        r"^(?P<prefixe>.*?)(?P<cache>sn-[^.]+)\.googlevideo\.com$",
+        hostname,
+    )
+    if not correspondance_hote:
+        return None, None
+
+    caches: list[str] = []
+    for valeur in parse_qs(url_decomposee.query).get("mn", []):
+        caches.extend(partie.strip() for partie in valeur.split(",") if partie.strip())
+    correspondance_mn = re.search(r"/mn/([^/]+)", unquote(url_decomposee.path))
+    if correspondance_mn:
+        caches.extend(
+            partie.strip()
+            for partie in correspondance_mn.group(1).split(",")
+            if partie.strip()
+        )
+
+    prefixe = correspondance_hote.group("prefixe")
+    cache_courant = correspondance_hote.group("cache")
+    for cache in caches:
+        if cache.startswith("sn-") and cache != cache_courant:
+            hote_alternatif = f"{prefixe}{cache}.googlevideo.com"
+            return url_decomposee._replace(netloc=hote_alternatif).geturl(), hote_alternatif
+    return None, None
+
+
+def media_video_valide(path: Path) -> bool:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not path.is_file() or path.stat().st_size <= 0:
+        return False
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            os.fspath(path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    return result.returncode == 0 and "video" in result.stdout.splitlines()
+
+
+def telecharger_via_cdn_googlevideo_alternatif(
+    video_url: str,
+    job_dir: Path,
+    options: dict,
+) -> tuple[Path, str]:
+    options_probe = dict(options)
+    options_probe.pop("format", None)
+    options_probe.update(
+        {
+            "simulate": True,
+            "skip_download": True,
+            "ignore_no_formats_error": True,
+        }
+    )
+    with YoutubeDL(options_probe) as ydl:
+        info = ydl.extract_info(video_url, download=False) or {}
+
+    formats_directs = [
+        fmt
+        for fmt in (info.get("formats") or [])
+        if isinstance(fmt, dict)
+        and str(fmt.get("url") or "").startswith(("http://", "https://"))
+        and str(fmt.get("vcodec") or "none") != "none"
+        and str(fmt.get("acodec") or "none") != "none"
+        and "m3u8" not in str(fmt.get("protocol") or "").lower()
+    ]
+    formats_directs.sort(
+        key=lambda fmt: (
+            str(fmt.get("format_id") or "") == "18",
+            int(fmt.get("height") or 0) <= 720,
+            int(fmt.get("height") or 0),
+            float(fmt.get("tbr") or 0),
+        ),
+        reverse=True,
+    )
+    if not formats_directs:
+        raise RuntimeError("aucun format vidéo progressif n'est disponible")
+
+    format_video = formats_directs[0]
+    url_alternative, hote_alternatif = url_cdn_googlevideo_alternatif(
+        str(format_video.get("url") or "")
+    )
+    if not url_alternative or not hote_alternatif:
+        raise RuntimeError("l'URL signée ne contient aucun CDN GoogleVideo alternatif")
+
+    extension = re.sub(
+        r"[^A-Za-z0-9]+",
+        "",
+        str(format_video.get("ext") or "mp4"),
+    ) or "mp4"
+    destination = job_dir / f"video_cdn_alternatif.{extension}"
+    destination.unlink(missing_ok=True)
+    headers = options.get("http_headers") or {}
+    timeout_total = max(120, env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+    command = [
+        "curl",
+        "--location",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        str(max(5, env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10))),
+        "--max-time",
+        str(timeout_total),
+        "--speed-time",
+        "30",
+        "--speed-limit",
+        "1024",
+        "--output",
+        os.fspath(destination),
+    ]
+    cookiefile = options.get("cookiefile")
+    if cookiefile:
+        command += ["--cookie", os.fspath(cookiefile)]
+    for header_name in ("User-Agent", "Referer", "Accept-Language"):
+        if headers.get(header_name):
+            command += ["--header", f"{header_name}: {headers[header_name]}"]
+    command.append(url_alternative)
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout_total + 10,
+        check=False,
+    )
+    if result.returncode != 0:
+        destination.unlink(missing_ok=True)
+        detail = (result.stderr or result.stdout or f"code {result.returncode}").strip()
+        raise RuntimeError(f"{hote_alternatif} : {detail}")
+    if not media_video_valide(destination):
+        destination.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"{hote_alternatif} a répondu, mais aucun flux vidéo valide n'a été téléchargé"
+        )
+
+    title = str(info.get("title") or extraire_video_id(video_url))
+    return destination, title
+
+
 def telecharger_video(video_url: str, job_dir: Path, cookies_path: Path | None = None) -> tuple[Path, str]:
     video_id = extraire_video_id(video_url)
     options = {
@@ -234,8 +408,10 @@ def telecharger_video(video_url: str, job_dir: Path, cookies_path: Path | None =
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "retries": 5,
-        "fragment_retries": 5,
+        "retries": max(0, env_int("YTDLP_CDN_RETRIES", 0)),
+        "fragment_retries": max(0, env_int("YTDLP_CDN_FRAGMENT_RETRIES", 1)),
+        "extractor_retries": max(1, env_int("YTDLP_EXTRACTOR_RETRIES", 3)),
+        "socket_timeout": max(5, env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10)),
         "restrictfilenames": True,
         "merge_output_format": "mp4",
         "format": "18/22/bestvideo*+bestaudio/best[acodec!=none][vcodec!=none]/best",
@@ -245,16 +421,41 @@ def telecharger_video(video_url: str, job_dir: Path, cookies_path: Path | None =
             "Accept-Language": "en-US,en;q=0.5",
             "Referer": "https://www.youtube.com/",
         },
-        "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
     }
+    player_clients = [
+        client.strip()
+        for client in os.getenv("YTDLP_PLAYER_CLIENTS", "").split(",")
+        if client.strip()
+    ]
+    if player_clients:
+        options["extractor_args"] = {"youtube": {"player_client": player_clients}}
     if cookies_path and cookies_path.exists():
         options["cookiefile"] = str(cookies_path)
 
-    with YoutubeDL(options) as ydl:
-        info = ydl.extract_info(video_url, download=True)
+    try:
+        with YoutubeDL(options) as ydl:
+            info = ydl.extract_info(video_url, download=True)
 
-    title = str(info.get("title") or video_id)
-    return pick_downloaded_video(job_dir), title
+        video_path = pick_downloaded_video(job_dir)
+        if not media_video_valide(video_path):
+            raise RuntimeError("yt-dlp n'a pas produit un fichier vidéo valide")
+        title = str(info.get("title") or video_id)
+        return video_path, title
+    except Exception as exc:
+        message = str(exc) or repr(exc)
+        if not erreur_reseau_googlevideo(message):
+            raise
+        try:
+            return telecharger_via_cdn_googlevideo_alternatif(
+                video_url,
+                job_dir,
+                options,
+            )
+        except Exception as alternative_exc:
+            raise RuntimeError(
+                "Le CDN GoogleVideo principal et son CDN alternatif sont "
+                f"inaccessibles depuis le VPS : {alternative_exc}"
+            ) from alternative_exc
 
 
 def normalize_emotions(emotions: dict[str, float] | None) -> dict[str, float]:
@@ -927,6 +1128,8 @@ if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
 
 st.title("Vecteur émotionnel")
+st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
+st.caption("version 0.2 beta - modifiée 19-07-2026")
 st.caption(
     "Analyse émotionnelle d'une vidéo YouTube avec FER, concordancier, streamgraphs, PCA et KMeans."
 )

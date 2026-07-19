@@ -27,16 +27,33 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# `ffmpeg` reste disponible dans le conteneur via le package Python
-# `imageio-ffmpeg`, ce qui evite l'etape `apt-get` qui cassait le build.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        ffmpeg \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
+# Deno permet à yt-dlp de résoudre les challenges JavaScript YouTube récents.
+RUN curl -fsSL -o /tmp/deno.zip \
+        https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/deno \
+    && rm -f /tmp/deno.zip \
+    && deno --version
+
 COPY requirements.txt /app/requirements.txt
 
+ARG YTDLP_REFRESH=2026-07-19-vecteur-emotionnel-alternate-googlevideo-cdn-01
 RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel \
     && pip install --no-cache-dir -r /app/requirements.txt \
     && pip install --no-cache-dir --no-deps fer==22.4.0 \
+    && echo "yt-dlp refresh ${YTDLP_REFRESH}" \
+    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
+    && python -m yt_dlp --version \
     && python -c "import pkg_resources; from fer import FER" \
     && rm -rf /root/.cache/pip /tmp/*
 
