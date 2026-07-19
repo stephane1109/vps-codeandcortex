@@ -1,6 +1,8 @@
 import io
 import json
 import math
+import shutil
+import subprocess
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -17,7 +19,7 @@ from PIL import Image
 
 APP_NAME = "DetectIA vidéo"
 APP_VERSION = "0.1.0 - 14/07/2026"
-APP_BUILD = "detectia-rerun-stable-tempfile-2026-07-18-01"
+APP_BUILD = "detectia-opencv-ffmpeg-fallback-2026-07-19-01"
 HELP_PATH = Path(__file__).resolve().parent / "aide.md"
 
 
@@ -203,10 +205,112 @@ def render_analysis_log(expanded: bool = False) -> None:
         st.code("\n".join(lines))
 
 
-def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
+def run_command(command: list[str], timeout: int = 120) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+    )
+
+
+def ffprobe_summary(video_path: Path) -> dict[str, Any]:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return {"available": False, "message": "ffprobe indisponible"}
+
+    command = [
+        ffprobe,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=codec_name,width,height,avg_frame_rate,r_frame_rate,nb_frames,duration",
+        "-show_entries",
+        "format=format_name,duration,size",
+        "-of",
+        "json",
+        str(video_path),
+    ]
+    result = run_command(command, timeout=30)
+    if result.returncode != 0:
+        return {"available": True, "error": result.stderr.strip() or result.stdout.strip()}
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"available": True, "error": "Sortie ffprobe illisible", "raw": result.stdout[:1000]}
+
+
+def log_video_probe(video_path: Path, label: str) -> None:
+    probe = ffprobe_summary(video_path)
+    if not probe.get("available", True):
+        log_analysis(f"Diagnostic vidéo {label} : ffprobe indisponible.")
+        return
+    if probe.get("error"):
+        log_analysis(f"Diagnostic vidéo {label} : ffprobe erreur : {probe['error']}")
+        return
+
+    stream = (probe.get("streams") or [{}])[0]
+    fmt = probe.get("format") or {}
+    log_analysis(
+        "Diagnostic vidéo "
+        f"{label} : codec={stream.get('codec_name', '?')} | "
+        f"taille={stream.get('width', '?')}x{stream.get('height', '?')} | "
+        f"fps={stream.get('avg_frame_rate', '?')} | "
+        f"frames={stream.get('nb_frames', '?')} | "
+        f"durée_stream={stream.get('duration', '?')}s | "
+        f"durée_format={fmt.get('duration', '?')}s | "
+        f"format={fmt.get('format_name', '?')}"
+    )
+
+
+def transcode_for_opencv(source_path: Path, output_path: Path) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg est indisponible dans le conteneur : impossible de convertir la vidéo.")
+
+    # Conversion de secours : H.264 + yuv420p + FPS constant pour maximiser la compatibilité OpenCV.
+    command = [
+        ffmpeg,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(source_path),
+        "-map",
+        "0:v:0",
+        "-an",
+        "-vf",
+        "fps=25,scale=960:-2:force_original_aspect_ratio=decrease",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+    log_analysis("Conversion ffmpeg de secours : normalisation MP4 H.264 pour OpenCV.")
+    result = run_command(command, timeout=300)
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip() or "erreur ffmpeg inconnue"
+        raise RuntimeError(f"Conversion ffmpeg impossible : {details}")
+    if not output_path.exists() or output_path.stat().st_size <= 0:
+        raise RuntimeError("Conversion ffmpeg terminée sans fichier vidéo exploitable.")
+    log_analysis(f"Conversion ffmpeg réussie : {output_path.stat().st_size} octets.")
+
+
+def analyze_video_cv2(video_path: Path, config: AnalysisConfig, source_label: str) -> dict[str, Any]:
+    log_video_probe(video_path, source_label)
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
-        raise RuntimeError("Impossible d'ouvrir la vidéo avec OpenCV.")
+        raise RuntimeError(f"Impossible d'ouvrir la vidéo avec OpenCV ({source_label}).")
 
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
     fps = fps if fps > 0 else 25.0
@@ -223,15 +327,21 @@ def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
     residual_heat: np.ndarray | None = None
 
     frame_index = -1
+    read_frames = 0
     sampled_pairs = 0
     progress = st.progress(0, text="Analyse en cours...")
     status_box = st.empty()
+    log_analysis(
+        f"Lecture OpenCV ({source_label}) : fps={fps:.2f} | frames annoncées={total_frames} | "
+        f"durée estimée={duration_seconds:.2f}s | taille={original_width}x{original_height}"
+    )
 
     while True:
         success, frame_bgr = capture.read()
         if not success:
             break
         frame_index += 1
+        read_frames += 1
 
         if frame_index % config.sample_every_n_frames != 0:
             continue
@@ -327,9 +437,9 @@ def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
     if metrics_df.empty or sampled_pairs <= 0:
         raise RuntimeError(
             "Aucune paire de frames exploitable n'a été analysée. "
-            f"Frames détectées : {total_frames}. FPS : {fps:.2f}. "
+            f"Frames annoncées : {total_frames}. Frames lues réellement : {read_frames}. FPS : {fps:.2f}. "
             "Réduisez 'Analyser une frame sur', augmentez le nombre maximum de paires, "
-            "ou essayez un extrait vidéo plus long/non corrompu."
+            "ou essayez une vidéo encodée en MP4/H.264."
         )
 
     score = compute_global_score(metrics_df)
@@ -343,6 +453,7 @@ def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
         "metadata": {
             "fps": round(fps, 3),
             "total_frames": total_frames,
+            "read_frames": read_frames,
             "duration_seconds": round(duration_seconds, 3),
             "original_width": original_width,
             "original_height": original_height,
@@ -357,6 +468,36 @@ def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
         "heatmaps": heatmaps,
         "candidates": candidates,
     }
+
+
+def should_retry_with_ffmpeg(error: Exception) -> bool:
+    message = str(error)
+    retry_markers = [
+        "Aucune paire de frames exploitable",
+        "Impossible d'ouvrir la vidéo avec OpenCV",
+        "pas assez de frames",
+    ]
+    return any(marker in message for marker in retry_markers)
+
+
+def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
+    try:
+        return analyze_video_cv2(video_path, config, "fichier original")
+    except Exception as original_error:
+        if not should_retry_with_ffmpeg(original_error):
+            raise
+
+        log_analysis(f"Analyse OpenCV originale insuffisante : {original_error}")
+        with tempfile.TemporaryDirectory(prefix="detectia_transcode_") as transcode_dir:
+            normalized_path = Path(transcode_dir) / "video_normalisee_opencv.mp4"
+            transcode_for_opencv(video_path, normalized_path)
+            try:
+                return analyze_video_cv2(normalized_path, config, "vidéo normalisée ffmpeg")
+            except Exception as fallback_error:
+                raise RuntimeError(
+                    "La vidéo reste inexploitable après conversion ffmpeg. "
+                    f"Erreur initiale : {original_error}. Erreur après conversion : {fallback_error}"
+                ) from fallback_error
 
 
 def build_report_zip(result: dict[str, Any]) -> bytes:
@@ -585,11 +726,12 @@ with tab_summary:
         st.metric("Indice de suspicion", f"{score['score']} / 100", score["niveau"])
         st.write(score["interpretation"])
     with col_meta:
-        meta_cols = st.columns(4)
+        meta_cols = st.columns(5)
         meta_cols[0].metric("FPS", metadata["fps"])
         meta_cols[1].metric("Durée", f"{metadata['duration_seconds']:.1f}s")
-        meta_cols[2].metric("Frames", metadata["total_frames"])
-        meta_cols[3].metric("Paires analysées", metadata["sampled_pairs"])
+        meta_cols[2].metric("Frames annoncées", metadata["total_frames"])
+        meta_cols[3].metric("Frames lues", metadata.get("read_frames", metadata["total_frames"]))
+        meta_cols[4].metric("Paires analysées", metadata["sampled_pairs"])
 
     st.markdown("#### Lecture rapide")
     st.write(
