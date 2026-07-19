@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import time
 import unicodedata
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 import altair as alt
 import pandas as pd
@@ -28,6 +30,14 @@ DEFAULT_YOUTUBE_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/137.0.0.0 Safari/537.36"
 )
+APP_BUILD = "analyse-debit-parole-alternate-googlevideo-cdn-2026-07-19-01"
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def ensure_directory(path: Path) -> Path:
@@ -176,6 +186,173 @@ def extract_subclip_custom(input_path: str | Path, t1: float, t2: float, output_
 # =============================================================================
 # Téléchargement de la vidéo YouTube et renommage
 # =============================================================================
+def erreur_reseau_googlevideo(message: str) -> bool:
+    message_min = (message or "").lower()
+    incidents = (
+        "failed to resolve",
+        "address family for hostname not supported",
+        "temporary failure in name resolution",
+        "network is unreachable",
+        "name or service not known",
+        "connect timeout",
+        "timed out",
+    )
+    return "googlevideo.com" in message_min and any(
+        incident in message_min for incident in incidents
+    )
+
+
+def url_cdn_googlevideo_alternatif(url_source: str) -> tuple[str | None, str | None]:
+    url_decomposee = urlparse(url_source)
+    hostname = url_decomposee.hostname or ""
+    correspondance_hote = re.match(
+        r"^(?P<prefixe>.*?)(?P<cache>sn-[^.]+)\.googlevideo\.com$",
+        hostname,
+    )
+    if not correspondance_hote:
+        return None, None
+
+    caches: list[str] = []
+    for valeur in parse_qs(url_decomposee.query).get("mn", []):
+        caches.extend(partie.strip() for partie in valeur.split(",") if partie.strip())
+    correspondance_mn = re.search(r"/mn/([^/]+)", unquote(url_decomposee.path))
+    if correspondance_mn:
+        caches.extend(
+            partie.strip()
+            for partie in correspondance_mn.group(1).split(",")
+            if partie.strip()
+        )
+
+    prefixe = correspondance_hote.group("prefixe")
+    cache_courant = correspondance_hote.group("cache")
+    for cache in caches:
+        if cache.startswith("sn-") and cache != cache_courant:
+            hote_alternatif = f"{prefixe}{cache}.googlevideo.com"
+            return url_decomposee._replace(netloc=hote_alternatif).geturl(), hote_alternatif
+    return None, None
+
+
+def media_audio_video_valide(path: Path) -> bool:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not path.is_file() or path.stat().st_size <= 0:
+        return False
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            os.fspath(path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    stream_types = {line.strip() for line in result.stdout.splitlines()}
+    return result.returncode == 0 and {"audio", "video"}.issubset(stream_types)
+
+
+def telecharger_via_cdn_googlevideo_alternatif(
+    video_url: str,
+    output_dir: Path,
+    options: dict,
+) -> Path:
+    options_probe = dict(options)
+    options_probe.pop("format", None)
+    options_probe.update(
+        {
+            "simulate": True,
+            "skip_download": True,
+            "ignore_no_formats_error": True,
+        }
+    )
+    with YoutubeDL(options_probe) as ydl:
+        info = ydl.extract_info(video_url, download=False) or {}
+
+    formats_directs = [
+        fmt
+        for fmt in (info.get("formats") or [])
+        if isinstance(fmt, dict)
+        and str(fmt.get("url") or "").startswith(("http://", "https://"))
+        and str(fmt.get("vcodec") or "none") != "none"
+        and str(fmt.get("acodec") or "none") != "none"
+        and "m3u8" not in str(fmt.get("protocol") or "").lower()
+    ]
+    formats_directs.sort(
+        key=lambda fmt: (
+            str(fmt.get("format_id") or "") == "18",
+            int(fmt.get("height") or 0) <= 720,
+            int(fmt.get("height") or 0),
+            float(fmt.get("tbr") or 0),
+        ),
+        reverse=True,
+    )
+    if not formats_directs:
+        raise RuntimeError("aucun format progressif audio/vidéo disponible")
+
+    format_media = formats_directs[0]
+    url_alternative, hote_alternatif = url_cdn_googlevideo_alternatif(
+        str(format_media.get("url") or "")
+    )
+    if not url_alternative or not hote_alternatif:
+        raise RuntimeError("l'URL signée ne contient aucun CDN GoogleVideo alternatif")
+
+    title = sanitize_filename(str(info.get("title") or "video"))
+    extension = re.sub(r"[^A-Za-z0-9]+", "", str(format_media.get("ext") or "mp4")) or "mp4"
+    destination = output_dir / f"{title}_cdn_alternatif.{extension}"
+    destination.unlink(missing_ok=True)
+    headers = options.get("http_headers") or {}
+    timeout_total = max(120, env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+    command = [
+        "curl",
+        "--location",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        str(max(5, env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10))),
+        "--max-time",
+        str(timeout_total),
+        "--speed-time",
+        "30",
+        "--speed-limit",
+        "1024",
+        "--output",
+        os.fspath(destination),
+    ]
+    cookiefile = options.get("cookiefile")
+    if cookiefile:
+        command += ["--cookie", os.fspath(cookiefile)]
+    for header_name in ("User-Agent", "Referer", "Accept-Language"):
+        if headers.get(header_name):
+            command += ["--header", f"{header_name}: {headers[header_name]}"]
+    command.append(url_alternative)
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout_total + 10,
+        check=False,
+    )
+    if result.returncode != 0:
+        destination.unlink(missing_ok=True)
+        detail = (result.stderr or result.stdout or f"code {result.returncode}").strip()
+        raise RuntimeError(f"{hote_alternatif} : {detail}")
+    if not media_audio_video_valide(destination):
+        destination.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"{hote_alternatif} a répondu, mais le média audio/vidéo est invalide"
+        )
+    return destination
+
+
 def telecharger_video(video_url: str, repertoire: str | Path, cookies_path: str | Path | None = None) -> Path:
     """
     Télécharge la vidéo YouTube via yt-dlp et la sauvegarde dans le répertoire spécifié
@@ -188,27 +365,53 @@ def telecharger_video(video_url: str, repertoire: str | Path, cookies_path: str 
         "quiet": True,
         "noplaylist": True,
         "merge_output_format": "mp4",
-        "retries": 5,
-        "fragment_retries": 5,
+        "retries": max(0, env_int("YTDLP_CDN_RETRIES", 0)),
+        "fragment_retries": max(0, env_int("YTDLP_CDN_FRAGMENT_RETRIES", 1)),
+        "extractor_retries": max(1, env_int("YTDLP_EXTRACTOR_RETRIES", 3)),
+        "socket_timeout": max(5, env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10)),
         "http_headers": {
             "User-Agent": DEFAULT_YOUTUBE_USER_AGENT,
             "Accept": "*/*",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
             "Referer": "https://www.youtube.com/",
         },
-        "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}},
     }
+    player_clients = [
+        client.strip()
+        for client in os.getenv("YTDLP_PLAYER_CLIENTS", "").split(",")
+        if client.strip()
+    ]
+    if player_clients:
+        options["extractor_args"] = {"youtube": {"player_client": player_clients}}
     if cookies_path is not None and Path(cookies_path).exists():
         options["cookiefile"] = os.fspath(cookies_path)
-    with YoutubeDL(options) as ydl:
-        info = ydl.extract_info(video_url, download=True)
-        original_filename = Path(ydl.prepare_filename(info))
-        sanitized_title = sanitize_filename(info.get("title", "video"))
-        extension = original_filename.suffix or ".mp4"
-        sanitized_filename = output_dir / f"{sanitized_title}{extension}"
-        if original_filename != sanitized_filename and original_filename.exists():
-            original_filename.rename(sanitized_filename)
-        return sanitized_filename
+    try:
+        with YoutubeDL(options) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            original_filename = Path(ydl.prepare_filename(info))
+            sanitized_title = sanitize_filename(info.get("title", "video"))
+            extension = original_filename.suffix or ".mp4"
+            sanitized_filename = output_dir / f"{sanitized_title}{extension}"
+            if original_filename != sanitized_filename and original_filename.exists():
+                original_filename.rename(sanitized_filename)
+            if not media_audio_video_valide(sanitized_filename):
+                raise RuntimeError("yt-dlp n'a pas produit un média audio/vidéo valide")
+            return sanitized_filename
+    except Exception as exc:
+        message = str(exc) or repr(exc)
+        if not erreur_reseau_googlevideo(message):
+            raise
+        try:
+            return telecharger_via_cdn_googlevideo_alternatif(
+                video_url,
+                output_dir,
+                options,
+            )
+        except Exception as alternative_exc:
+            raise RuntimeError(
+                "Le CDN GoogleVideo principal et son CDN alternatif sont "
+                f"inaccessibles depuis le VPS : {alternative_exc}"
+            ) from alternative_exc
 
 
 @lru_cache(maxsize=2)
