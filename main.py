@@ -4,6 +4,7 @@ import math
 import shutil
 import subprocess
 import tempfile
+import wave
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,7 +20,7 @@ from PIL import Image
 
 APP_NAME = "DetectIA vidéo"
 APP_VERSION = "0.1.0 - 14/07/2026"
-APP_BUILD = "detectia-opencv-ffmpeg-fallback-2026-07-19-01"
+APP_BUILD = "detectia-forensic-comparison-audio-flow-2026-07-19-02"
 HELP_PATH = Path(__file__).resolve().parent / "aide.md"
 
 
@@ -30,6 +31,8 @@ class AnalysisConfig:
     resize_width: int
     algorithm: str
     candidate_count: int
+    keep_flow_gallery: bool
+    flow_gallery_limit: int
 
 
 def resize_frame(frame_bgr: np.ndarray, target_width: int) -> np.ndarray:
@@ -306,6 +309,99 @@ def transcode_for_opencv(source_path: Path, output_path: Path) -> None:
     log_analysis(f"Conversion ffmpeg réussie : {output_path.stat().st_size} octets.")
 
 
+def extract_audio_metrics(video_path: Path) -> dict[str, Any]:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return {"available": False, "message": "ffmpeg indisponible pour l'analyse sonore"}
+
+    with tempfile.TemporaryDirectory(prefix="detectia_audio_") as audio_dir:
+        wav_path = Path(audio_dir) / "audio_mono_16k.wav"
+        command = [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(video_path),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-acodec",
+            "pcm_s16le",
+            str(wav_path),
+        ]
+        result = run_command(command, timeout=180)
+        if result.returncode != 0 or not wav_path.exists() or wav_path.stat().st_size <= 44:
+            details = result.stderr.strip() or result.stdout.strip() or "aucune piste audio exploitable"
+            return {"available": False, "message": details}
+
+        with wave.open(str(wav_path), "rb") as wav_file:
+            sample_rate = int(wav_file.getframerate())
+            channels = int(wav_file.getnchannels())
+            frame_count = int(wav_file.getnframes())
+            raw_audio = wav_file.readframes(frame_count)
+
+    samples = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
+    if samples.size == 0:
+        return {"available": False, "message": "piste audio vide"}
+
+    frame_size = 1024
+    hop = 512
+    rms_values: list[float] = []
+    zcr_values: list[float] = []
+    centroid_values: list[float] = []
+    frequencies = np.fft.rfftfreq(frame_size, d=1.0 / sample_rate)
+
+    for start in range(0, max(1, samples.size - frame_size + 1), hop):
+        frame = samples[start : start + frame_size]
+        if frame.size < frame_size:
+            frame = np.pad(frame, (0, frame_size - frame.size))
+        rms = float(np.sqrt(np.mean(np.square(frame))))
+        rms_values.append(rms)
+        zcr_values.append(float(np.mean(np.abs(np.diff(np.signbit(frame))))))
+        spectrum = np.abs(np.fft.rfft(frame * np.hanning(frame_size)))
+        spectrum_sum = float(np.sum(spectrum))
+        centroid = 0.0 if spectrum_sum <= 1e-12 else float(np.sum(frequencies * spectrum) / spectrum_sum)
+        centroid_values.append(centroid)
+
+    rms_array = np.array(rms_values, dtype=np.float64)
+    db_array = 20.0 * np.log10(np.maximum(rms_array, 1e-8))
+    voiced = rms_array > 0.015
+
+    return {
+        "available": True,
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "duration_seconds": round(float(samples.size / sample_rate), 3),
+        "rms_mean": round(float(np.mean(rms_array)), 5),
+        "rms_std": round(float(np.std(rms_array)), 5),
+        "energy_cv": round(float(np.std(rms_array) / (np.mean(rms_array) + 1e-8)), 4),
+        "silence_ratio": round(float(1.0 - np.mean(voiced)), 4),
+        "dynamic_range_db": round(float(np.percentile(db_array, 95) - np.percentile(db_array, 5)), 3),
+        "zcr_mean": round(float(np.mean(zcr_values)), 5),
+        "spectral_centroid_mean": round(float(np.mean(centroid_values)), 2),
+    }
+
+
+def attach_audio_metrics(result: dict[str, Any], video_path: Path, label: str) -> dict[str, Any]:
+    log_analysis(f"Analyse sonore ({label}) : extraction ffmpeg et indicateurs audio.")
+    try:
+        result["audio"] = extract_audio_metrics(video_path)
+    except Exception as exc:
+        result["audio"] = {"available": False, "message": str(exc) or repr(exc)}
+    if result["audio"].get("available"):
+        log_analysis(
+            f"Audio ({label}) : durée={result['audio']['duration_seconds']}s | "
+            f"silence={result['audio']['silence_ratio']} | énergie_cv={result['audio']['energy_cv']}"
+        )
+    else:
+        log_analysis(f"Audio ({label}) indisponible : {result['audio'].get('message', 'erreur inconnue')}")
+    return result
+
+
 def analyze_video_cv2(video_path: Path, config: AnalysisConfig, source_label: str) -> dict[str, Any]:
     log_video_probe(video_path, source_label)
     capture = cv2.VideoCapture(str(video_path))
@@ -321,6 +417,7 @@ def analyze_video_cv2(video_path: Path, config: AnalysisConfig, source_label: st
 
     metrics: list[dict[str, float | int]] = []
     candidates: list[dict[str, Any]] = []
+    flow_gallery: list[dict[str, Any]] = []
     previous_gray: np.ndarray | None = None
     previous_mean_mag: float | None = None
     flow_heat: np.ndarray | None = None
@@ -402,6 +499,22 @@ def analyze_video_cv2(video_path: Path, config: AnalysisConfig, source_label: st
         flow_heat += magnitude.astype(np.float32)
         residual_heat += residual_map.astype(np.float32)
 
+        flow_rgb = flow_to_rgb(flow)
+        flow_arrows_rgb = draw_flow_arrows(frame_rgb, flow)
+        residual_rgb = heatmap_rgb(residual_map)
+        if config.keep_flow_gallery and len(flow_gallery) < config.flow_gallery_limit:
+            flow_gallery.append(
+                {
+                    "sequence_index": sampled_pairs + 1,
+                    "frame_index": frame_index,
+                    "time_seconds": round(frame_index / fps, 3),
+                    "pair_score": round(pair_score, 1),
+                    "flow_rgb": flow_rgb,
+                    "flow_arrows_rgb": flow_arrows_rgb,
+                    "residual_rgb": residual_rgb,
+                }
+            )
+
         update_top_candidates(
             candidates,
             {
@@ -409,9 +522,9 @@ def analyze_video_cv2(video_path: Path, config: AnalysisConfig, source_label: st
                 "time_seconds": round(frame_index / fps, 3),
                 "pair_score": round(pair_score, 1),
                 "frame_rgb": frame_rgb,
-                "flow_rgb": flow_to_rgb(flow),
-                "flow_arrows_rgb": draw_flow_arrows(frame_rgb, flow),
-                "residual_rgb": heatmap_rgb(residual_map),
+                "flow_rgb": flow_rgb,
+                "flow_arrows_rgb": flow_arrows_rgb,
+                "residual_rgb": residual_rgb,
             },
             config.candidate_count,
         )
@@ -467,6 +580,7 @@ def analyze_video_cv2(video_path: Path, config: AnalysisConfig, source_label: st
         "metrics": metrics_df,
         "heatmaps": heatmaps,
         "candidates": candidates,
+        "flow_gallery": flow_gallery,
     }
 
 
@@ -482,7 +596,8 @@ def should_retry_with_ffmpeg(error: Exception) -> bool:
 
 def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
     try:
-        return analyze_video_cv2(video_path, config, "fichier original")
+        result = analyze_video_cv2(video_path, config, "fichier original")
+        return attach_audio_metrics(result, video_path, "fichier original")
     except Exception as original_error:
         if not should_retry_with_ffmpeg(original_error):
             raise
@@ -492,7 +607,8 @@ def analyze_video(video_path: Path, config: AnalysisConfig) -> dict[str, Any]:
             normalized_path = Path(transcode_dir) / "video_normalisee_opencv.mp4"
             transcode_for_opencv(video_path, normalized_path)
             try:
-                return analyze_video_cv2(normalized_path, config, "vidéo normalisée ffmpeg")
+                result = analyze_video_cv2(normalized_path, config, "vidéo normalisée ffmpeg")
+                return attach_audio_metrics(result, video_path, "fichier original")
             except Exception as fallback_error:
                 raise RuntimeError(
                     "La vidéo reste inexploitable après conversion ffmpeg. "
@@ -511,6 +627,7 @@ def build_report_zip(result: dict[str, Any]) -> bytes:
         "version": APP_VERSION,
         "metadata": metadata,
         "score": score,
+        "audio": result.get("audio", {"available": False}),
         "note": "Indice heuristique d'incohérence temporelle. Ne constitue pas une preuve automatique de génération par IA.",
     }
 
@@ -521,6 +638,12 @@ def build_report_zip(result: dict[str, Any]) -> bytes:
         for name, image_rgb in result["heatmaps"].items():
             archive.writestr(f"heatmaps/{name}.png", image_to_png_bytes(image_rgb))
 
+        for item in result.get("flow_gallery", []):
+            prefix = f"optical_flow_sequence/{item['sequence_index']:04d}_t{item['time_seconds']:.2f}s"
+            archive.writestr(f"{prefix}_flow.png", image_to_png_bytes(item["flow_rgb"]))
+            archive.writestr(f"{prefix}_flow_fleches.png", image_to_png_bytes(item["flow_arrows_rgb"]))
+            archive.writestr(f"{prefix}_residu.png", image_to_png_bytes(item["residual_rgb"]))
+
         for index, candidate in enumerate(result["candidates"], start=1):
             prefix = f"frames_suspectes/{index:02d}_t{candidate['time_seconds']:.2f}s"
             archive.writestr(f"{prefix}_frame.png", image_to_png_bytes(candidate["frame_rgb"]))
@@ -528,6 +651,125 @@ def build_report_zip(result: dict[str, Any]) -> bytes:
             archive.writestr(f"{prefix}_flow_fleches.png", image_to_png_bytes(candidate["flow_arrows_rgb"]))
             archive.writestr(f"{prefix}_residu.png", image_to_png_bytes(candidate["residual_rgb"]))
 
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def summarize_result(result: dict[str, Any], label: str) -> dict[str, Any]:
+    metrics_df: pd.DataFrame = result["metrics"]
+    score = result["score"]
+    audio = result.get("audio", {})
+    return {
+        "Source": label,
+        "Score global": score.get("score"),
+        "Niveau": score.get("niveau"),
+        "Résidu médian": score.get("residual_median"),
+        "Flicker médian": score.get("flicker_median"),
+        "Instabilité flow": score.get("flow_cv_median"),
+        "Jerk médian": score.get("jerk_median"),
+        "Mouvement moyen": round(float(metrics_df["mean_magnitude"].median()), 4),
+        "Paires analysées": result["metadata"].get("sampled_pairs"),
+        "Durée vidéo": result["metadata"].get("duration_seconds"),
+        "Audio disponible": "oui" if audio.get("available") else "non",
+        "Silence audio": audio.get("silence_ratio"),
+        "Variation énergie audio": audio.get("energy_cv"),
+        "Centroïde spectral moyen": audio.get("spectral_centroid_mean"),
+    }
+
+
+def build_comparison_dataframe(suspect: dict[str, Any], reference: dict[str, Any]) -> pd.DataFrame:
+    rows = [
+        summarize_result(suspect, "Vidéo suspecte"),
+        summarize_result(reference, "Vidéo de référence"),
+    ]
+    return pd.DataFrame(rows)
+
+
+def normalized_metric_frame(result: dict[str, Any], label: str, metric_name: str) -> pd.DataFrame:
+    metrics_df: pd.DataFrame = result["metrics"]
+    if metrics_df.empty or metric_name not in metrics_df:
+        return pd.DataFrame(columns=["progression", label])
+    values = metrics_df[metric_name].astype(float).reset_index(drop=True)
+    progression = np.linspace(0.0, 100.0, num=len(values))
+    return pd.DataFrame({"progression": progression, label: values})
+
+
+def render_normalized_comparison(
+    suspect: dict[str, Any],
+    reference: dict[str, Any],
+    metric_name: str,
+    title: str,
+) -> None:
+    suspect_df = normalized_metric_frame(suspect, "Vidéo suspecte", metric_name)
+    reference_df = normalized_metric_frame(reference, "Vidéo de référence", metric_name)
+    if suspect_df.empty or reference_df.empty:
+        st.info(f"{title} : comparaison indisponible.")
+        return
+
+    merged = pd.merge_asof(
+        suspect_df.sort_values("progression"),
+        reference_df.sort_values("progression"),
+        on="progression",
+        direction="nearest",
+    ).set_index("progression")
+    st.markdown(f"#### {title}")
+    st.line_chart(merged, use_container_width=True)
+
+
+def render_audio_table(result: dict[str, Any], label: str) -> None:
+    audio = result.get("audio", {})
+    if not audio.get("available"):
+        st.warning(f"{label} : audio indisponible - {audio.get('message', 'aucune piste exploitable')}")
+        return
+    rows = [
+        {"Indicateur": "Durée audio", "Valeur": audio.get("duration_seconds"), "Lecture": "Durée sonore réellement extraite."},
+        {"Indicateur": "Énergie moyenne", "Valeur": audio.get("rms_mean"), "Lecture": "Niveau moyen du signal audio."},
+        {"Indicateur": "Variation énergie", "Valeur": audio.get("energy_cv"), "Lecture": "Instabilité relative du volume."},
+        {"Indicateur": "Ratio de silence", "Valeur": audio.get("silence_ratio"), "Lecture": "Part approximative de frames audio silencieuses."},
+        {"Indicateur": "Dynamique dB", "Valeur": audio.get("dynamic_range_db"), "Lecture": "Écart entre passages faibles et forts."},
+        {"Indicateur": "ZCR moyen", "Valeur": audio.get("zcr_mean"), "Lecture": "Indice simple de rugosité/bruit dans le signal."},
+        {"Indicateur": "Centroïde spectral", "Valeur": audio.get("spectral_centroid_mean"), "Lecture": "Centre de gravité fréquentiel moyen."},
+    ]
+    st.markdown(f"#### {label}")
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def render_flow_gallery(result: dict[str, Any], title: str, key_prefix: str, page_size: int = 4) -> None:
+    gallery = result.get("flow_gallery", [])
+    if not gallery:
+        st.warning(f"{title} : aucune image optical flow conservée.")
+        return
+
+    total_pages = max(1, math.ceil(len(gallery) / page_size))
+    page = st.number_input(
+        f"{title} - page",
+        min_value=1,
+        max_value=total_pages,
+        value=1,
+        step=1,
+        key=f"{key_prefix}_flow_page",
+    )
+    start = (int(page) - 1) * page_size
+    end = min(start + page_size, len(gallery))
+    st.caption(f"{title} : images {start + 1} à {end} sur {len(gallery)} optical flows conservés.")
+
+    for item in gallery[start:end]:
+        st.markdown(
+            f"##### #{item['sequence_index']} - t={item['time_seconds']:.2f}s - score local={item['pair_score']} / 100"
+        )
+        cols = st.columns(3)
+        cols[0].image(item["flow_arrows_rgb"], caption="Vecteurs sur frame", use_container_width=True)
+        cols[1].image(item["flow_rgb"], caption="Optical flow", use_container_width=True)
+        cols[2].image(item["residual_rgb"], caption="Résidu temporel", use_container_width=True)
+
+
+def build_comparison_zip(suspect: dict[str, Any], reference: dict[str, Any]) -> bytes:
+    buffer = io.BytesIO()
+    comparison_df = build_comparison_dataframe(suspect, reference)
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("comparaison_indicateurs.csv", comparison_df.to_csv(index=False))
+        archive.writestr("video_suspecte/rapport_detectia.zip", build_report_zip(suspect))
+        archive.writestr("video_reference/rapport_detectia.zip", build_report_zip(reference))
     buffer.seek(0)
     return buffer.getvalue()
 
@@ -578,11 +820,19 @@ st.markdown(
 with st.sidebar:
     st.header("Paramètres")
     uploaded_file = st.file_uploader(
-        "Importer une vidéo",
+        "Importer la vidéo suspecte",
         type=["mp4", "mov", "mkv", "avi", "webm", "m4v"],
         help=(
-            "Charge une vidéo locale à analyser. Formats acceptés : MP4, MOV, MKV, AVI, WEBM, M4V. "
+            "Charge la vidéo à examiner. Formats acceptés : MP4, MOV, MKV, AVI, WEBM, M4V. "
             "Pour un premier test, privilégie un extrait court : l'analyse optical flow peut être coûteuse."
+        ),
+    )
+    reference_file = st.file_uploader(
+        "Vidéo réelle de référence (facultatif)",
+        type=["mp4", "mov", "mkv", "avi", "webm", "m4v"],
+        help=(
+            "Ajoute une vidéo réelle de la même personne, si possible dans un contexte proche. "
+            "Elle servira de base comparative pour l'optical flow et l'audio."
         ),
     )
 
@@ -638,6 +888,23 @@ with st.sidebar:
             "Ces frames sont sélectionnées selon les signaux de résidu, flicker et rupture de mouvement."
         ),
     )
+    keep_flow_gallery = st.checkbox(
+        "Afficher/exporter les optical flows analysés",
+        value=True,
+        help=(
+            "Conserve les images optical flow des paires analysées afin de les afficher et de les exporter. "
+            "Un plafond est appliqué pour protéger la mémoire du VPS."
+        ),
+    )
+    flow_gallery_limit = st.slider(
+        "Nombre maximum d'optical flows conservés",
+        20,
+        300,
+        120,
+        step=20,
+        help="Nombre maximal d'images optical flow conservées pour l'affichage et l'export ZIP.",
+        disabled=not keep_flow_gallery,
+    )
 
     st.divider()
     with st.expander("Aide", expanded=False):
@@ -655,15 +922,29 @@ st.markdown(
 )
 
 st.session_state.setdefault("analysis_result", None)
+st.session_state.setdefault("reference_result", None)
 st.session_state.setdefault("analysis_error", "")
+st.session_state.setdefault("reference_error", "")
 st.session_state.setdefault("analysis_log", [])
 
 if uploaded_file is None:
-    st.info("Importe une vidéo dans la colonne de gauche pour lancer l'analyse.")
+    st.info("Importe une vidéo suspecte dans la colonne de gauche pour lancer l'analyse.")
     st.stop()
 
 video_bytes = uploaded_file.getvalue()
-st.video(video_bytes)
+reference_bytes = reference_file.getvalue() if reference_file is not None else None
+
+if reference_bytes is None:
+    st.markdown("### Vidéo suspecte")
+    st.video(video_bytes)
+else:
+    preview_cols = st.columns(2)
+    with preview_cols[0]:
+        st.markdown("### Vidéo suspecte")
+        st.video(video_bytes)
+    with preview_cols[1]:
+        st.markdown("### Vidéo réelle de référence")
+        st.video(reference_bytes)
 
 config = AnalysisConfig(
     sample_every_n_frames=int(sample_every_n_frames),
@@ -671,37 +952,64 @@ config = AnalysisConfig(
     resize_width=int(resize_width),
     algorithm=algorithm,
     candidate_count=int(candidate_count),
+    keep_flow_gallery=bool(keep_flow_gallery),
+    flow_gallery_limit=int(flow_gallery_limit),
 )
 
 if st.button("Lancer l'analyse DetectIA", type="primary", use_container_width=True):
     suffix = Path(uploaded_file.name).suffix or ".mp4"
     st.session_state.analysis_result = None
+    st.session_state.reference_result = None
     st.session_state.analysis_error = ""
+    st.session_state.reference_error = ""
     st.session_state.analysis_log = []
     log_analysis(f"Build application : {APP_BUILD}")
     log_analysis(
-        f"Fichier reçu : {uploaded_file.name} | taille={len(video_bytes) / (1024 * 1024):.1f} Mo | "
+        f"Vidéo suspecte reçue : {uploaded_file.name} | taille={len(video_bytes) / (1024 * 1024):.1f} Mo | "
         f"sample_every={config.sample_every_n_frames} | max_pairs={config.max_pairs} | "
-        f"resize_width={config.resize_width} | algorithm={config.algorithm}"
+        f"resize_width={config.resize_width} | algorithm={config.algorithm} | "
+        f"flow_gallery={config.keep_flow_gallery} | flow_gallery_limit={config.flow_gallery_limit}"
     )
     with tempfile.TemporaryDirectory(prefix="detectia_") as tmpdir:
         temp_path = Path(tmpdir) / f"video_source{suffix}"
         temp_path.write_bytes(video_bytes)
-        log_analysis(f"Vidéo temporaire écrite : {temp_path.name} ({temp_path.stat().st_size} octets)")
+        log_analysis(f"Vidéo suspecte temporaire écrite : {temp_path.name} ({temp_path.stat().st_size} octets)")
         try:
-            with st.spinner("Analyse DetectIA en cours..."):
+            with st.spinner("Analyse DetectIA de la vidéo suspecte en cours..."):
                 st.session_state.analysis_result = analyze_video(temp_path, config)
             metadata_done = st.session_state.analysis_result["metadata"]
             log_analysis(
-                f"Analyse terminée : {metadata_done['sampled_pairs']} paire(s), "
+                f"Analyse suspecte terminée : {metadata_done['sampled_pairs']} paire(s), "
                 f"durée={metadata_done['duration_seconds']}s, fps={metadata_done['fps']}"
             )
         except Exception as exc:
             st.session_state.analysis_result = None
             st.session_state.analysis_error = str(exc) or repr(exc)
-            log_analysis(f"Erreur pendant l'analyse : {st.session_state.analysis_error}")
-            st.error(f"Erreur pendant l'analyse : {st.session_state.analysis_error}")
+            log_analysis(f"Erreur pendant l'analyse suspecte : {st.session_state.analysis_error}")
+            st.error(f"Erreur pendant l'analyse suspecte : {st.session_state.analysis_error}")
             render_analysis_log(expanded=True)
+
+        if reference_bytes is not None and st.session_state.analysis_result is not None:
+            reference_suffix = Path(reference_file.name).suffix or ".mp4"
+            reference_path = Path(tmpdir) / f"video_reference{reference_suffix}"
+            reference_path.write_bytes(reference_bytes)
+            log_analysis(
+                f"Vidéo de référence reçue : {reference_file.name} | "
+                f"taille={len(reference_bytes) / (1024 * 1024):.1f} Mo"
+            )
+            try:
+                with st.spinner("Analyse DetectIA de la vidéo de référence en cours..."):
+                    st.session_state.reference_result = analyze_video(reference_path, config)
+                reference_metadata = st.session_state.reference_result["metadata"]
+                log_analysis(
+                    f"Analyse référence terminée : {reference_metadata['sampled_pairs']} paire(s), "
+                    f"durée={reference_metadata['duration_seconds']}s, fps={reference_metadata['fps']}"
+                )
+            except Exception as exc:
+                st.session_state.reference_result = None
+                st.session_state.reference_error = str(exc) or repr(exc)
+                log_analysis(f"Erreur pendant l'analyse référence : {st.session_state.reference_error}")
+                st.warning(f"Analyse de référence indisponible : {st.session_state.reference_error}")
 
 result = st.session_state.analysis_result
 if result is None:
@@ -712,12 +1020,22 @@ if result is None:
 
 render_analysis_log(expanded=False)
 
+reference_result = st.session_state.reference_result
 metadata = result["metadata"]
 score = result["score"]
 metrics_df: pd.DataFrame = result["metrics"]
 
-tab_summary, tab_temporal, tab_flow, tab_candidates, tab_export = st.tabs(
-    ["Synthèse", "Temporalité", "Optical flow", "Frames suspectes", "Rapport"]
+tab_summary, tab_comparison, tab_temporal, tab_flow, tab_gallery, tab_audio, tab_candidates, tab_export = st.tabs(
+    [
+        "Synthèse",
+        "Comparaison",
+        "Temporalité",
+        "Optical flow",
+        "Galerie optical flow",
+        "Audio",
+        "Frames suspectes",
+        "Rapport",
+    ]
 )
 
 with tab_summary:
@@ -753,6 +1071,29 @@ with tab_summary:
         hide_index=True,
     )
 
+with tab_comparison:
+    if reference_result is None:
+        st.info(
+            "Ajoute une vidéo réelle de référence dans la colonne de gauche pour comparer la vidéo suspecte "
+            "avec un comportement visuel et sonore de la même personne."
+        )
+        if st.session_state.get("reference_error"):
+            st.warning(f"Dernière erreur référence : {st.session_state.reference_error}")
+    else:
+        st.markdown("### Comparaison suspect / référence")
+        comparison_df = build_comparison_dataframe(result, reference_result)
+        st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+        render_normalized_comparison(result, reference_result, "pair_score", "Score local normalisé")
+        render_normalized_comparison(result, reference_result, "residual_mean", "Résidu temporel moyen")
+        render_normalized_comparison(result, reference_result, "mean_magnitude", "Intensité du mouvement")
+        render_normalized_comparison(result, reference_result, "flicker_mean", "Flicker moyen")
+
+        st.caption(
+            "Les courbes sont ramenées sur une progression 0-100 % pour comparer deux vidéos de durée différente. "
+            "L'objectif n'est pas une preuve automatique, mais une lecture comparative des ruptures de mouvement."
+        )
+
 with tab_temporal:
     if metrics_df.empty:
         st.warning("Pas assez de frames pour afficher les courbes.")
@@ -783,6 +1124,31 @@ with tab_flow:
             "La heatmap de résidu montre les zones qui restent incohérentes même après estimation du mouvement."
         )
 
+with tab_gallery:
+    if reference_result is None:
+        render_flow_gallery(result, "Vidéo suspecte", "suspect")
+    else:
+        st.markdown("### Optical flow comparatif")
+        gallery_cols = st.columns(2)
+        with gallery_cols[0]:
+            render_flow_gallery(result, "Vidéo suspecte", "suspect")
+        with gallery_cols[1]:
+            render_flow_gallery(reference_result, "Vidéo de référence", "reference")
+
+with tab_audio:
+    if reference_result is None:
+        render_audio_table(result, "Vidéo suspecte")
+    else:
+        audio_cols = st.columns(2)
+        with audio_cols[0]:
+            render_audio_table(result, "Vidéo suspecte")
+        with audio_cols[1]:
+            render_audio_table(reference_result, "Vidéo de référence")
+        st.caption(
+            "Les indicateurs audio restent exploratoires : ils servent à repérer des écarts de dynamique, "
+            "de silence, de rugosité ou de centre fréquentiel entre deux sources."
+        )
+
 with tab_candidates:
     candidates = result["candidates"]
     if not candidates:
@@ -799,18 +1165,43 @@ with tab_candidates:
 
 with tab_export:
     st.markdown("### Exporter l'analyse")
+    if reference_result is not None:
+        st.download_button(
+            "Télécharger la comparaison complète ZIP",
+            data=build_comparison_zip(result, reference_result),
+            file_name=f"detectia_comparaison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+            use_container_width=True,
+        )
     st.download_button(
-        "Télécharger le rapport complet ZIP",
+        "Télécharger le rapport vidéo suspecte ZIP",
         data=build_report_zip(result),
         file_name=f"detectia_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
         mime="application/zip",
         use_container_width=True,
     )
+    if reference_result is not None:
+        st.download_button(
+            "Télécharger le rapport vidéo de référence ZIP",
+            data=build_report_zip(reference_result),
+            file_name=f"detectia_reference_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+            use_container_width=True,
+        )
     st.download_button(
-        "Télécharger les mesures CSV",
+        "Télécharger les mesures suspectes CSV",
         data=metrics_df.to_csv(index=False).encode("utf-8"),
         file_name="detectia_mesures_temporelles.csv",
         mime="text/csv",
         use_container_width=True,
     )
+    if reference_result is not None:
+        reference_metrics: pd.DataFrame = reference_result["metrics"]
+        st.download_button(
+            "Télécharger les mesures référence CSV",
+            data=reference_metrics.to_csv(index=False).encode("utf-8"),
+            file_name="detectia_mesures_reference.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
     st.json({"metadata": metadata, "score": score})
