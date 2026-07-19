@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-cdn-fast-failover-2026-07-19-28"
+APP_BUILD = "extraction-multimedia-check-formats-cdn-2026-07-19-29"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1122,8 +1122,8 @@ def telecharger_preparer_video(
         ignorer_forcage_ip = bool(opts.get(INTERNAL_IGNORE_FORCE_IP_KEY))
         timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
         socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        retries = max(10, _env_int("YTDLP_RETRIES", 10))
-        fragment_retries = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        retries = max(1, _env_int("YTDLP_CDN_RETRIES", 1))
+        fragment_retries = max(1, _env_int("YTDLP_CDN_FRAGMENT_RETRIES", 2))
         proxy_url = (
             os.environ.get("YTDLP_PROXY_URL", "").strip()
             or os.environ.get("HTTPS_PROXY", "").strip()
@@ -1138,6 +1138,7 @@ def telecharger_preparer_video(
             "yt_dlp",
             "--no-playlist",
             "--no-simulate",
+            "--check-formats",
             "--force-overwrites",
             "--progress",
             "--progress-delta",
@@ -1381,8 +1382,8 @@ def telecharger_preparer_video(
         ignorer_forcage_ip = bool(opts.get(INTERNAL_IGNORE_FORCE_IP_KEY))
         timeout_seconds = max(900, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
         socket_timeout_seconds = max(30, _env_int("YTDLP_SOCKET_TIMEOUT_SECONDS", 30))
-        retries = max(10, _env_int("YTDLP_RETRIES", 10))
-        fragment_retries = max(10, _env_int("YTDLP_FRAGMENT_RETRIES", 10))
+        retries = max(1, _env_int("YTDLP_CDN_RETRIES", 1))
+        fragment_retries = max(1, _env_int("YTDLP_CDN_FRAGMENT_RETRIES", 2))
         extractor_retries = max(3, _env_int("YTDLP_EXTRACTOR_RETRIES", 3))
         proxy_url = opts.get("proxy") or _proxy_ytdlp()
         geo_proxy_url = opts.get("geo_verification_proxy") or os.environ.get("YTDLP_GEO_VERIFICATION_PROXY_URL", "").strip()
@@ -1410,6 +1411,7 @@ def telecharger_preparer_video(
             "yt_dlp",
             "--no-playlist",
             "--no-simulate",
+            "--check-formats",
             "--force-overwrites",
             "--progress",
             "--progress-delta",
@@ -1471,7 +1473,7 @@ def telecharger_preparer_video(
         )
         statut_simple = st.empty()
         lignes_sortie: List[str] = []
-        erreur_reseau_bloquante = {"message": ""}
+        dernier_incident_reseau = {"message": ""}
         debut_process = time.time()
         dernier_keepalive = 0.0
         dernier_scan_partiel = 0.0
@@ -1500,11 +1502,9 @@ def telecharger_preparer_video(
                 and ("timed out" in ligne_min or "connect timeout" in ligne_min)
             )
             if erreur_dns or erreur_timeout_cdn:
-                erreur_reseau_bloquante["message"] = ligne[:500]
-                try:
-                    processus.kill()
-                except Exception:
-                    pass
+                # `--check-formats` doit pouvoir écarter ce format et tester le
+                # suivant. On mémorise l'incident sans interrompre yt-dlp.
+                dernier_incident_reseau["message"] = ligne[:500]
             utile = (
                 "[youtube]" in ligne_min
                 or "[download]" in ligne_min
@@ -1574,11 +1574,11 @@ def telecharger_preparer_video(
             except Exception:
                 pass
 
-        if erreur_reseau_bloquante["message"]:
-            raise RuntimeError(erreur_reseau_bloquante["message"])
-
         if processus.returncode != 0:
-            detail = lignes_sortie[-1] if lignes_sortie else f"code retour {processus.returncode}"
+            detail = (
+                dernier_incident_reseau["message"]
+                or (lignes_sortie[-1] if lignes_sortie else f"code retour {processus.returncode}")
+            )
             raise RuntimeError(detail)
 
         candidats_simple = fichiers_media_sortie(depuis_timestamp=debut_telechargement)
