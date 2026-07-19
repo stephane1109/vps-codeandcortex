@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-cdn-route-diagnostic-2026-07-19-31"
+APP_BUILD = "extraction-multimedia-googlevideo-redirector-2026-07-19-32"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1348,6 +1348,122 @@ def telecharger_preparer_video(
         with YoutubeDL(opts_probe) as ydl:
             return ydl.extract_info(url, download=False) or {}
 
+    def _telecharger_via_redirecteur_google(opts: Dict[str, Any]) -> Dict[str, Any]:
+        """Télécharge un format progressif via le redirecteur officiel GoogleVideo."""
+        info_probe = _analyser_info(opts)
+        formats_progressifs = [
+            fmt
+            for fmt in (info_probe.get("formats") or [])
+            if isinstance(fmt, dict)
+            and str(fmt.get("url") or "").startswith(("http://", "https://"))
+            and str(fmt.get("vcodec") or "none") != "none"
+            and str(fmt.get("acodec") or "none") != "none"
+        ]
+        formats_progressifs.sort(
+            key=lambda fmt: _score_video_youtube(fmt, qualite),
+            reverse=True,
+        )
+        if not formats_progressifs:
+            raise RuntimeError("aucun format progressif audio/vidéo disponible pour le redirecteur")
+
+        headers = opts.get("http_headers") or {}
+        timeout_seconds = max(120, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+        erreurs_redirecteur: List[str] = []
+        for fmt in formats_progressifs[:6]:
+            url_media = str(fmt.get("url") or "")
+            url_decomposee = urlparse(url_media)
+            if not (url_decomposee.hostname or "").endswith(".googlevideo.com"):
+                continue
+            query = url_decomposee.query
+            if "cms_redirect=" not in query:
+                query = f"{query}&cms_redirect=yes" if query else "cms_redirect=yes"
+            url_redirecteur = url_decomposee._replace(
+                netloc="redirector.googlevideo.com",
+                query=query,
+            ).geturl()
+
+            format_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(fmt.get("format_id") or "media"))
+            extension = re.sub(r"[^A-Za-z0-9]+", "", str(fmt.get("ext") or "mp4")) or "mp4"
+            cible_redirecteur = REPERTOIRE_SORTIE / f"video_originale_redirector_{format_id}.{extension}"
+            cible_redirecteur.unlink(missing_ok=True)
+            commande = [
+                "curl",
+                "--location",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--connect-timeout",
+                str(max(5, _env_int("YTDLP_CDN_SOCKET_TIMEOUT_SECONDS", 10))),
+                "--max-time",
+                str(timeout_seconds),
+                "--speed-time",
+                "30",
+                "--speed-limit",
+                "1024",
+                "--output",
+                str(cible_redirecteur),
+            ]
+            if opts.get("cookiefile"):
+                commande += ["--cookie", str(opts["cookiefile"])]
+            for nom_entete in ("User-Agent", "Referer", "Accept-Language"):
+                if headers.get(nom_entete):
+                    commande += ["--header", f"{nom_entete}: {headers[nom_entete]}"]
+            commande.append(url_redirecteur)
+
+            journal_debug(
+                "Fallback redirector.googlevideo.com : "
+                f"format={format_id} {extension} "
+                f"{fmt.get('height') or '?'}p"
+            )
+            statut_redirecteur = st.empty()
+            processus = subprocess.Popen(
+                commande,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            debut_redirecteur = time.time()
+            dernier_keepalive = 0.0
+            expiration_redirecteur = ""
+            erreur_curl = ""
+            try:
+                while processus.poll() is None:
+                    maintenant = time.time()
+                    if maintenant - dernier_keepalive >= 15:
+                        keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
+                        dernier_keepalive = maintenant
+                    taille = cible_redirecteur.stat().st_size if cible_redirecteur.exists() else 0
+                    statut_redirecteur.caption(
+                        f"Téléchargement via le redirecteur Google : {taille / (1024 * 1024):.1f} Mo"
+                    )
+                    if maintenant - debut_redirecteur > timeout_seconds:
+                        processus.kill()
+                        expiration_redirecteur = f"timeout après {timeout_seconds}s"
+                        break
+                    time.sleep(1)
+                _, sortie_erreur_curl = processus.communicate(timeout=5)
+                erreur_curl = expiration_redirecteur or sortie_erreur_curl
+            finally:
+                statut_redirecteur.empty()
+
+            if processus.returncode == 0 and cible_redirecteur.exists() and cible_redirecteur.stat().st_size > 0:
+                journal_debug(
+                    "Fallback redirecteur Google réussi : "
+                    f"{cible_redirecteur.name} ({cible_redirecteur.stat().st_size} octets)"
+                )
+                info_redirecteur = dict(info_probe)
+                info_redirecteur["_filename"] = str(cible_redirecteur)
+                info_redirecteur["requested_downloads"] = [{"filepath": str(cible_redirecteur)}]
+                return info_redirecteur
+
+            detail = (erreur_curl or f"code retour {processus.returncode}").strip()
+            erreurs_redirecteur.append(f"{format_id}: {detail}")
+            journal_debug(f"Fallback redirecteur Google échoué : {detail[:500]}")
+            cible_redirecteur.unlink(missing_ok=True)
+
+        detail_final = " | ".join(erreurs_redirecteur[-3:]) or "aucune URL GoogleVideo réinscriptible"
+        raise RuntimeError(detail_final)
+
     def _sans_cookiefile(opts: Dict[str, Any]) -> Dict[str, Any]:
         opts_sans_cookies = dict(opts)
         opts_sans_cookies.pop("cookiefile", None)
@@ -1640,6 +1756,7 @@ def telecharger_preparer_video(
 
     erreurs_fallback: List[str] = []
     info = None
+    redirecteur_google_tente = False
     if cookies_path:
         bases_ytdlp: List[tuple[str, Dict[str, Any]]] = [
             ("avec-cookies", ydl_opts),
@@ -1666,6 +1783,24 @@ def telecharger_preparer_video(
                     )
                     erreurs_fallback.append(f"{label_acces}/{label_client}/{label_reseau}/simple -> {message}")
                     if _erreur_reseau_cdn(message) and label_reseau == "réseau-env":
+                        if (
+                            not redirecteur_google_tente
+                            and _env_bool("YTDLP_REDIRECTOR_FALLBACK", True)
+                        ):
+                            redirecteur_google_tente = True
+                            try:
+                                info = _telecharger_via_redirecteur_google(opts_reseau)
+                                journal_debug("Téléchargement récupéré via redirector.googlevideo.com.")
+                                break
+                            except Exception as exc_redirecteur:
+                                message_redirecteur = str(exc_redirecteur) or repr(exc_redirecteur)
+                                erreurs_fallback.append(
+                                    f"{label_acces}/{label_client}/redirecteur -> {message_redirecteur}"
+                                )
+                                journal_debug(
+                                    "Redirecteur Google indisponible pour ce média : "
+                                    f"{message_redirecteur[:500]}"
+                                )
                         journal_debug("Erreur CDN/IP détectée : passage immédiat au profil YouTube suivant.")
                         continue
                     if "Sign in to confirm you’re not a bot" in message or "Sign in to confirm you're not a bot" in message:
