@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-hls-redirector-2026-07-19-33"
+APP_BUILD = "extraction-multimedia-hls-uri-fix-2026-07-19-34"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -1404,17 +1404,19 @@ def telecharger_preparer_video(
                     lignes_recrites.append(ligne_recrite)
                     continue
 
-                def _remplacer_url(match: re.Match[str]) -> str:
+                def _remplacer_uri_hls(match: re.Match[str]) -> str:
                     nonlocal urls_recrites
-                    url_initiale = match.group(0)
-                    url_recrite = _url_via_redirecteur(url_initiale)
+                    guillemet = match.group("quote")
+                    url_initiale = match.group("url")
+                    url_absolue = urljoin(url_manifeste, url_initiale)
+                    url_recrite = _url_via_redirecteur(url_absolue)
                     urls_recrites += int(url_recrite != url_initiale)
-                    return url_recrite
+                    return f"URI={guillemet}{url_recrite}{guillemet}"
 
                 lignes_recrites.append(
                     re.sub(
-                        r"https://[A-Za-z0-9.-]+\.googlevideo\.com[^\"'\s,]*",
-                        _remplacer_url,
+                        r"URI=(?P<quote>[\"'])(?P<url>.*?)(?P=quote)",
+                        _remplacer_uri_hls,
                         ligne,
                     )
                 )
@@ -1439,6 +1441,8 @@ def telecharger_preparer_video(
                 "1",
                 "-reconnect_delay_max",
                 "2",
+                "-allowed_extensions",
+                "ALL",
             ]
             headers_ffmpeg = "".join(
                 f"{nom}: {headers[nom]}\r\n"
@@ -1482,8 +1486,34 @@ def telecharger_preparer_video(
 
         headers = opts.get("http_headers") or {}
         timeout_seconds = max(120, _env_int("YTDLP_DOWNLOAD_TIMEOUT_SECONDS", 900))
+        candidats_redirecteur: List[Dict[str, Any]] = []
+        candidat_direct = next(
+            (
+                fmt
+                for fmt in formats_progressifs
+                if "m3u8" not in str(fmt.get("protocol") or "").lower()
+            ),
+            None,
+        )
+        candidat_hls = next(
+            (
+                fmt
+                for fmt in formats_progressifs
+                if "m3u8" in str(fmt.get("protocol") or "").lower()
+            ),
+            None,
+        )
+        for candidat in (candidat_direct, candidat_hls):
+            if candidat is not None and candidat not in candidats_redirecteur:
+                candidats_redirecteur.append(candidat)
+
+        journal_debug(
+            "Fallback redirecteur : "
+            f"{len(candidats_redirecteur)} candidat(s) distinct(s) "
+            "(un flux direct et un flux HLS au maximum)."
+        )
         erreurs_redirecteur: List[str] = []
-        for fmt in formats_progressifs[:6]:
+        for fmt in candidats_redirecteur:
             url_media = str(fmt.get("url") or "")
             if not (urlparse(url_media).hostname or "").endswith(".googlevideo.com"):
                 continue
