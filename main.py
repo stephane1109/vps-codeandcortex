@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-session-results-only-2026-07-20-01"
+APP_BUILD = "extraction-multimedia-remove-duplicate-preview-2026-07-20-02"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -2635,34 +2635,6 @@ if etendue == "Intervalle personnalisé":
 else:
     utiliser_intervalle = False
 
-afficher_apercu = st.checkbox("Afficher l'aperçu vidéo", value=True, disabled=opt_timelapse)
-preview_slot = st.empty()
-with preview_slot.container(border=True):
-    st.subheader("Aperçu vidéo")
-if afficher_apercu and not opt_timelapse:
-    if st.session_state.get("video_base") and Path(st.session_state["video_base"]).exists():
-        with preview_slot.container(border=True):
-            st.subheader("Aperçu vidéo")
-            afficher_video_bytes(Path(st.session_state["video_base"]))
-    elif fichier_local is not None:
-        tmp = sauvegarder_upload_local(fichier_local)
-        if tmp is not None:
-            with preview_slot.container(border=True):
-                st.subheader("Aperçu vidéo")
-                afficher_video_bytes(tmp)
-    else:
-        with preview_slot.container(border=True):
-            st.subheader("Aperçu vidéo")
-            st.info("L'aperçu s'affichera ici après préparation de la vidéo.")
-elif opt_timelapse:
-    with preview_slot.container(border=True):
-        st.subheader("Aperçu vidéo")
-        st.info("Aperçu désactivé pendant le mode timelapse.")
-else:
-    with preview_slot.container(border=True):
-        st.subheader("Aperçu vidéo")
-        st.info("Aperçu vidéo désactivé.")
-
 if st.button("Lancer le traitement"):
     with st.spinner("Traitement en cours..."):
         keep_ticket_alive(APP_TICKET_DEFAULT_ID, APP_NAME)
@@ -2706,10 +2678,6 @@ if st.button("Lancer le traitement"):
                     st.session_state["base_court"] = base_court
                     journal_debug(f"Vidéo préparée : {video_base}")
                     st.success(f"Vidéo prête : {Path(video_base).name}")
-                    if afficher_apercu and not opt_timelapse:
-                        with preview_slot.container(border=True):
-                            st.subheader("Aperçu vidéo")
-                            afficher_video_bytes(Path(video_base))
             elif fichier_local is not None or st.session_state.get("local_temp_path"):
                 journal_debug("Source choisie : fichier local")
                 base_court = st.session_state.get("local_name_base") or generer_nom_base("local", "video")
@@ -2732,10 +2700,6 @@ if st.button("Lancer le traitement"):
                     st.session_state["base_court"] = base_court
                     journal_debug(f"Vidéo locale préparée : {cible}")
                     st.success(f"Vidéo prête : {Path(cible).name}")
-                    if afficher_apercu and not opt_timelapse:
-                        with preview_slot.container(border=True):
-                            st.subheader("Aperçu vidéo")
-                            afficher_video_bytes(Path(cible))
                 except Exception as e:
                     st.error(f"Echec du traitement local : {e}")
                     enregistrer_erreur_resultats(f"Echec du traitement local : {e}")
