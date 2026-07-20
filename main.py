@@ -27,7 +27,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/tmp/appdata"))
 COOKIES_ROOT = APP_DATA_DIR / "youtube-cookies"
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
-APP_BUILD = "stopmotion-alternate-googlevideo-cdn-2026-07-19-01"
+APP_BUILD = "stopmotion-hide-valid-cookies-caption-2026-07-20-01"
 
 
 def env_int(nom, valeur_defaut):
@@ -107,8 +107,8 @@ def diagnostiquer_cookies(chemin_cookies):
             return "Fichier cookies chargé, mais ses expirations utiles semblent dépassées."
         if restant < 3600:
             return f"Fichier cookies chargé ; attention, expiration utile dans environ {max(1, int(restant / 60))} min."
-        return f"Fichier cookies chargé ; expiration utile dans environ {int(restant / 3600)} h."
-    return "Fichier cookies chargé ; entrées YouTube détectées sans expiration exploitable."
+        return ""
+    return ""
 
 
 def trouver_video_telechargee(dossier_temporaire):
@@ -649,7 +649,9 @@ if mode == "YouTube (yt-dlp)":
     )
     cookies_session_path = chemin_cookies_session()
     if cookies_session_path.exists() and cookies_session_path.stat().st_size > 0:
-        st.caption(diagnostiquer_cookies(str(cookies_session_path)))
+        diagnostic_cookies_session = diagnostiquer_cookies(str(cookies_session_path))
+        if diagnostic_cookies_session:
+            st.caption(diagnostic_cookies_session)
     else:
         st.caption("Aucun cookies.txt mémorisé pour cette session.")
     user_agent_youtube = st.text_input(
@@ -687,10 +689,7 @@ if st.button("Créer la vidéo Stop Motion"):
                 cookies_path = enregistrer_cookies_upload(cookies_file, tmpdir)
                 diagnostic_cookies = diagnostiquer_cookies(cookies_path)
                 if diagnostic_cookies:
-                    if diagnostic_cookies.startswith("Fichier cookies chargé") and "attention" not in diagnostic_cookies.lower() and "dépassées" not in diagnostic_cookies.lower():
-                        st.success(diagnostic_cookies)
-                    else:
-                        st.warning(diagnostic_cookies)
+                    st.warning(diagnostic_cookies)
                 actualiser_progression(15, "Téléchargement de la vidéo YouTube en cours avec yt-dlp.")
                 chemin_video = telecharger_video_yt_dlp(
                     url,
