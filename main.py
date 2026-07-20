@@ -53,7 +53,7 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
-APP_BUILD = "extraction-multimedia-alternate-cdn-stop-loop-2026-07-19-35"
+APP_BUILD = "extraction-multimedia-session-results-only-2026-07-20-01"
 INTERNAL_IGNORE_FORCE_IP_KEY = "_ignore_force_ip"
 SESSIONS_DIR = APP_DATA_DIR / "sessions"
 SESSION_ID = st.session_state.setdefault("session_id", uuid.uuid4().hex)
@@ -237,7 +237,7 @@ def render_help_tab() -> None:
 
 
 def initialiser_repertoires_session() -> None:
-    for repertoire in (SESSIONS_DIR, SESSION_DIR, REPERTOIRE_SORTIE, REPERTOIRE_TEMP, LATEST_RESULTS_DIR):
+    for repertoire in (SESSIONS_DIR, SESSION_DIR, REPERTOIRE_SORTIE, REPERTOIRE_TEMP):
         repertoire.mkdir(parents=True, exist_ok=True)
         os.utime(repertoire, None)
 
@@ -269,16 +269,12 @@ def nettoyer_derniere_archive_stable() -> None:
 
 
 def memoriser_archive_stable(zip_path: Path) -> Optional[Path]:
-    try:
-        LATEST_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(zip_path, LATEST_ZIP_PATH)
-        return LATEST_ZIP_PATH if LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0 else None
-    except Exception:
-        return None
+    return None
 
 
 initialiser_repertoires_session()
 nettoyer_sessions_expirees()
+nettoyer_derniere_archive_stable()
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 
@@ -550,6 +546,9 @@ def fichiers_exportables_session() -> List[Path]:
 
 
 def dernier_zip_disponible() -> Optional[Path]:
+    if not st.session_state.get("analyse_lancee_session"):
+        return None
+
     zip_path_brut = st.session_state.get("dernier_zip_path")
     if zip_path_brut:
         zip_path = Path(zip_path_brut)
@@ -567,8 +566,6 @@ def dernier_zip_disponible() -> Optional[Path]:
     for zip_path in zips:
         if zip_path.is_file() and zip_path.stat().st_size > 0:
             return zip_path
-    if LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0:
-        return LATEST_ZIP_PATH
     return None
 
 
@@ -590,6 +587,9 @@ def preparer_archive_session() -> tuple[Optional[Path], List[Path], str]:
 
 
 def obtenir_zip_telechargeable() -> tuple[Optional[Path], str]:
+    if not st.session_state.get("analyse_lancee_session"):
+        return None, "Aucun résultat téléchargeable pour le moment."
+
     zip_path = dernier_zip_disponible()
     if zip_path is not None:
         return zip_path, st.session_state.get("dernier_message_resultats") or f"Archive disponible : {zip_path.name}"
@@ -651,10 +651,9 @@ def diagnostic_contenu_sortie(max_items: int = 80) -> str:
 
 
 def enregistrer_resultats_generes(zip_path: Path, fichiers: List[Path], message: str) -> None:
-    zip_stable = memoriser_archive_stable(zip_path)
+    st.session_state["analyse_lancee_session"] = True
     st.session_state["dernier_zip_path"] = str(zip_path)
-    if zip_stable is not None:
-        st.session_state["dernier_zip_stable_path"] = str(zip_stable)
+    st.session_state["dernier_zip_stable_path"] = None
     st.session_state["derniers_fichiers"] = [str(path) for path in fichiers_valides(fichiers)]
     st.session_state["dernier_message_resultats"] = message
     st.session_state["derniere_erreur_resultats"] = ""
@@ -662,10 +661,14 @@ def enregistrer_resultats_generes(zip_path: Path, fichiers: List[Path], message:
 
 
 def enregistrer_erreur_resultats(message: str) -> None:
+    st.session_state["analyse_lancee_session"] = True
     st.session_state["derniere_erreur_resultats"] = message
 
 
 def afficher_resultats_generes() -> None:
+    if not st.session_state.get("analyse_lancee_session"):
+        return
+
     zip_path_brut = st.session_state.get("dernier_zip_path")
     fichiers = fichiers_valides([Path(path) for path in st.session_state.get("derniers_fichiers", [])])
     if not fichiers:
@@ -674,7 +677,6 @@ def afficher_resultats_generes() -> None:
         not zip_path_brut
         and not fichiers
         and not st.session_state.get("derniere_erreur_resultats")
-        and not (LATEST_ZIP_PATH.is_file() and LATEST_ZIP_PATH.stat().st_size > 0)
     ):
         return
 
@@ -694,7 +696,6 @@ def afficher_resultats_generes() -> None:
         with st.expander("Diagnostic du dossier de sortie", expanded=True):
             st.write(f"Dossier de session : `{SESSION_DIR}`")
             st.write(f"Dossier des fichiers : `{REPERTOIRE_SORTIE}`")
-            st.write(f"Dernière archive stable : `{LATEST_ZIP_PATH}`")
             st.code(diagnostic_contenu_sortie())
 
 
@@ -2559,6 +2560,7 @@ st.session_state.setdefault("derniers_fichiers", [])
 st.session_state.setdefault("dernier_message_resultats", "")
 st.session_state.setdefault("derniere_erreur_resultats", "")
 st.session_state.setdefault("resultats_revision", 0)
+st.session_state.setdefault("analyse_lancee_session", False)
 
 st.subheader("Source")
 url = st.text_input("URL YouTube")
