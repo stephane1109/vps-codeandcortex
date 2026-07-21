@@ -340,7 +340,7 @@ st.set_page_config(page_title="LDA", layout="wide", initial_sidebar_state="expan
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 st.title("Analyse discriminante linéaire (LDA)")
-st.caption("version VPS - www.codeandcortex.fr")
+st.caption("version 0.2 - modifiée 21-07-2026")
 with st.expander("Aide", expanded=False):
     st.markdown(
         'Article de blog sur LDA : '
@@ -354,37 +354,165 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("Paramètres LDA")
-    spacy_model = st.text_input("Modèle spaCy", value=DEFAULT_SPACY_MODEL)
-    pos_selection = st.multiselect("POS à conserver", options=ALL_POS, default=DEFAULT_POS)
-    retirer_stopwords = st.checkbox("Retirer les stopwords spaCy", value=True)
-    lemmatiser = st.checkbox("Lemmatisation", value=True)
-    min_token_length = st.number_input("Longueur minimale des mots", min_value=1, max_value=10, value=2, step=1)
+    spacy_model = st.text_input(
+        "Modèle spaCy",
+        value=DEFAULT_SPACY_MODEL,
+        help=(
+            "Nom du modèle linguistique spaCy utilisé pour découper et annoter le texte. "
+            "Par défaut, le modèle français moyen fonctionne bien pour la plupart des corpus."
+        ),
+    )
+    pos_selection = st.multiselect(
+        "POS à conserver",
+        options=ALL_POS,
+        default=DEFAULT_POS,
+        help=(
+            "Sélectionne les catégories grammaticales à garder dans l'analyse. "
+            "Conserver surtout les noms, adjectifs et noms propres aide souvent à obtenir des topics plus interprétables."
+        ),
+    )
+    retirer_stopwords = st.checkbox(
+        "Retirer les stopwords spaCy",
+        value=True,
+        help=(
+            "Supprime les mots-outils fréquents comme les articles, pronoms ou prépositions. "
+            "Coche cette option pour concentrer les topics sur les mots les plus informatifs."
+        ),
+    )
+    lemmatiser = st.checkbox(
+        "Lemmatisation",
+        value=True,
+        help=(
+            "Ramène les formes fléchies à leur forme de base, par exemple 'mangeait' vers 'manger'. "
+            "Cela regroupe les variantes d'un même mot dans le dictionnaire."
+        ),
+    )
+    min_token_length = st.number_input(
+        "Longueur minimale des mots",
+        min_value=1,
+        max_value=10,
+        value=2,
+        step=1,
+        help=(
+            "Ignore les mots trop courts après prétraitement. "
+            "Augmenter cette valeur élimine davantage de petits mots, mais peut aussi retirer des sigles utiles."
+        ),
+    )
 
     st.subheader("Bigrammes")
-    bigram_min_count = st.number_input("min_count", min_value=1, max_value=50, value=5, step=1)
-    bigram_threshold = st.number_input("threshold", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+    bigram_min_count = st.number_input(
+        "min_count",
+        min_value=1,
+        max_value=50,
+        value=5,
+        step=1,
+        help=(
+            "Nombre minimal d'apparitions pour qu'une association de deux mots puisse devenir un bigramme. "
+            "Plus la valeur est basse, plus l'application détecte de bigrammes rares ; plus elle est haute, "
+            "plus seuls les bigrammes fréquents sont conservés."
+        ),
+    )
+    bigram_threshold = st.number_input(
+        "threshold",
+        min_value=1.0,
+        max_value=100.0,
+        value=10.0,
+        step=1.0,
+        help=(
+            "Seuil de solidité statistique des bigrammes dans Gensim. "
+            "Une valeur basse crée davantage de bigrammes ; une valeur élevée garde uniquement les associations fortes."
+        ),
+    )
 
     st.subheader("Filtrage dictionnaire")
-    no_below = st.number_input("no_below", min_value=0, max_value=100, value=1, step=1)
-    no_above = st.slider("no_above", min_value=0.05, max_value=1.0, value=0.6, step=0.05)
+    no_below = st.number_input(
+        "no_below",
+        min_value=0,
+        max_value=100,
+        value=1,
+        step=1,
+        help=(
+            "Fréquence documentaire minimale d'un terme. "
+            "Par exemple, no_below=3 supprime les mots présents dans moins de 3 documents. "
+            "Augmenter cette valeur nettoie le dictionnaire, mais peut supprimer des termes rares importants."
+        ),
+    )
+    no_above = st.slider(
+        "no_above",
+        min_value=0.05,
+        max_value=1.0,
+        value=0.6,
+        step=0.05,
+        help=(
+            "Proportion maximale de documents dans lesquels un terme peut apparaître avant d'être supprimé. "
+            "Par exemple, 0.60 retire les mots présents dans plus de 60 % des documents, souvent trop généraux pour distinguer les thèmes."
+        ),
+    )
 
     st.subheader("Modèle")
-    num_topics = st.number_input("Nombre de topics", min_value=2, max_value=50, value=12, step=1)
-    passes = st.number_input("Passes", min_value=1, max_value=100, value=15, step=1)
-    random_state = st.number_input("Random state", min_value=0, max_value=999999, value=42, step=1)
-    words_per_topic = st.number_input("Mots affichés par topic", min_value=5, max_value=60, value=20, step=5)
+    num_topics = st.number_input(
+        "Nombre de topics",
+        min_value=2,
+        max_value=50,
+        value=12,
+        step=1,
+        help=(
+            "Nombre de thèmes que le modèle LDA doit extraire du corpus. "
+            "Un nombre trop faible regroupe des thèmes différents ; un nombre trop élevé fragmente les résultats."
+        ),
+    )
+    passes = st.number_input(
+        "Passes",
+        min_value=1,
+        max_value=100,
+        value=15,
+        step=1,
+        help=(
+            "Nombre de passages d'apprentissage sur le corpus. "
+            "Plus la valeur est élevée, plus le modèle peut se stabiliser, mais le calcul devient plus long."
+        ),
+    )
+    random_state = st.number_input(
+        "Random state",
+        min_value=0,
+        max_value=999999,
+        value=42,
+        step=1,
+        help=(
+            "Graine aléatoire utilisée pour rendre les résultats reproductibles. "
+            "Garde la même valeur pour comparer plusieurs essais avec les mêmes paramètres."
+        ),
+    )
+    words_per_topic = st.number_input(
+        "Mots affichés par topic",
+        min_value=5,
+        max_value=60,
+        value=20,
+        step=5,
+        help=(
+            "Nombre de mots affichés pour décrire chaque topic dans les tableaux et nuages de mots. "
+            "Cela ne change pas le modèle, seulement la quantité de mots montrés dans les résultats."
+        ),
+    )
 
 uploaded_files = st.file_uploader(
     "Importer un ou plusieurs corpus texte",
     type=["txt"],
     accept_multiple_files=True,
-    help="Les lignes commençant par **** sont reconnues comme séparateurs de documents IRaMuTeQ.",
+    help=(
+        "Importe un ou plusieurs fichiers texte au format .txt. "
+        "Les lignes commençant par **** sont reconnues comme séparateurs de documents IRaMuTeQ."
+    ),
 )
 
 if "lda_result" not in st.session_state:
     st.session_state.lda_result = None
 
-if st.button("Lancer le test LDA", type="primary"):
+if st.button(
+    "Lancer le test LDA",
+    type="primary",
+    help="Démarre le prétraitement du corpus, la détection des bigrammes, puis l'entraînement du modèle LDA avec les paramètres choisis.",
+):
     documents, noms_sources = lire_fichiers_uploades(uploaded_files)
     if not documents:
         st.error("Importe au moins un fichier texte avant de lancer l'analyse.")
