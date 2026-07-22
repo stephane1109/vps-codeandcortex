@@ -1,0 +1,15 @@
+streamlit>=1.36,<2
+streamlit-autorefresh>=1,<2
+pandas>=2.2,<3
+numpy>=1.26,<2
+scikit-learn>=1.4,<2
+matplotlib>=3.8,<4
+seaborn>=0.13,<1
+wordcloud>=1.9,<2
+requests>=2.32,<3
+nltk>=3.8,<4
+umap-learn>=0.5,<1
+plotly>=5.22,<6
+kaleido==0.2.1
+sentence-transformers>=3,<4
+redis>=5,<6

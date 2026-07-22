@@ -74,6 +74,11 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 2,
         "cout": 3,
     },
+    "kmeans": {
+        "label": "KMeans",
+        "max_active": 1,
+        "cout": 4,
+    },
     "symbolic_connectors": {
         "label": "Symbolic Connectors",
         "max_active": 1,
