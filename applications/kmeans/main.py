@@ -366,19 +366,6 @@ def render_analysis() -> None:
     _ = vectorizer_model
 
     st.subheader("Détermination du Nombre Optimal de Clusters")
-    inertia = []
-    valid_k_values = range(2, min(20, len(df)) + 1)
-    for k in valid_k_values:
-        kmeans = KMeans(n_clusters=k, random_state=42)
-        kmeans.fit(embeddings)
-        inertia.append(kmeans.inertia_)
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(list(valid_k_values), inertia, "bx-")
-    ax.set_xlabel("Nombre de Clusters (k)")
-    ax.set_ylabel("Inertie")
-    ax.set_title("Méthode du Coude Pour Déterminer le Nombre Optimal de Clusters")
-    st.pyplot(fig)
 
     n_clusters = st.sidebar.slider("Choisissez le nombre de clusters", 2, 20, 5, 1)
 
@@ -388,11 +375,26 @@ def render_analysis() -> None:
                 "Le nombre de clusters choisi est supérieur au nombre d'articles disponibles. "
                 "Réduisez le nombre de clusters ou ajoutez des articles."
             )
-            plt.close(fig)
             return
 
         clear_output_directory(save_directory)
+
+        with st.spinner("Calcul de la méthode du coude..."):
+            inertia = []
+            valid_k_values = range(2, min(20, len(df)) + 1)
+            for k in valid_k_values:
+                kmeans = KMeans(n_clusters=k, random_state=42)
+                kmeans.fit(embeddings)
+                inertia.append(kmeans.inertia_)
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(list(valid_k_values), inertia, "bx-")
+        ax.set_xlabel("Nombre de Clusters (k)")
+        ax.set_ylabel("Inertie")
+        ax.set_title("Méthode du Coude Pour Déterminer le Nombre Optimal de Clusters")
+        st.pyplot(fig)
         save_matplotlib_figure(fig, "elbow_method.png", save_directory)
+        plt.close(fig)
 
         cluster_model = KMeans(n_clusters=n_clusters, random_state=42)
         kmeans_labels = cluster_model.fit_predict(embeddings)
@@ -425,8 +427,6 @@ def render_analysis() -> None:
                 file_name="kmeans_resultats.zip",
                 mime="application/zip",
             )
-
-    plt.close(fig)
 
 
 def render_faq() -> None:
