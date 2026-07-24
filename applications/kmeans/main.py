@@ -245,6 +245,83 @@ def display_wordclouds(
         plt.close(fig)
 
 
+def extract_top_words_by_cluster(
+    df: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    selected_stopwords: list[str],
+    words_per_cluster: int,
+) -> pd.DataFrame:
+    records = []
+    for cluster in sorted(set(cluster_labels)):
+        cluster_texts = df.loc[cluster_labels == cluster, "content"].dropna().tolist()
+        cluster_texts = [text for text in cluster_texts if text.strip()]
+        if not cluster_texts:
+            continue
+
+        vectorizer = CountVectorizer(stop_words=selected_stopwords or None, ngram_range=(1, 1))
+        try:
+            term_matrix = vectorizer.fit_transform(cluster_texts)
+        except ValueError:
+            continue
+
+        frequencies = np.asarray(term_matrix.sum(axis=0)).ravel()
+        terms = vectorizer.get_feature_names_out()
+        top_indices = np.argsort(frequencies)[::-1][:words_per_cluster]
+        for rank, index in enumerate(top_indices, start=1):
+            records.append(
+                {
+                    "Mot": terms[index],
+                    "Cluster": f"Cluster {int(cluster) + 1}",
+                    "Rang": rank,
+                    "Fréquence": int(frequencies[index]),
+                }
+            )
+
+    return pd.DataFrame(records)
+
+
+def display_cluster_word_projection(
+    df: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    selected_stopwords: list[str],
+    words_per_cluster: int,
+    directory: str | Path,
+) -> None:
+    words_df = extract_top_words_by_cluster(df, cluster_labels, selected_stopwords, words_per_cluster)
+    if words_df.empty:
+        st.info("Aucun mot à projeter avec les paramètres actuels.")
+        return
+
+    with st.spinner("Projection des mots des clusters..."):
+        word_embeddings = encode_documents(tuple(words_df["Mot"].tolist()))
+        reduced_words = reduce_to_2d(word_embeddings)
+
+    words_df = words_df.copy()
+    words_df["x"] = reduced_words[:, 0]
+    words_df["y"] = reduced_words[:, 1]
+    save_csv(words_df, "kmeans_projection_mots_clusters", directory)
+
+    fig = px.scatter(
+        words_df,
+        x="x",
+        y="y",
+        color="Cluster",
+        size="Fréquence",
+        text="Mot",
+        hover_data=["Mot", "Cluster", "Rang", "Fréquence"],
+        title=f"Projection des {words_per_cluster} mots les plus fréquents par cluster",
+        labels={"x": "Dimension 1", "y": "Dimension 2", "Fréquence": "Fréquence"},
+    )
+    fig.update_traces(textposition="top center", marker={"opacity": 0.72})
+    fig.update_layout(height=700, legend_title_text="Clusters")
+    st.caption(
+        "Chaque point est un mot extrait d'un cluster. Les axes sont une projection 2D des embeddings "
+        "des mots, et la taille du point indique la fréquence du mot dans son cluster."
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    save_plotly_figure(fig, "kmeans_projection_mots_clusters.html", directory)
+
+
 def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, directory: str | Path) -> None:
     reduced_embeddings = reduce_to_2d(embeddings)
     viz_df = pd.DataFrame(
@@ -381,6 +458,16 @@ def render_stopword_settings() -> None:
         help="Définit le nombre maximal de mots affichés dans chaque nuage de mots.",
     )
 
+    st.subheader("Projection des mots")
+    st.slider(
+        "Nombre de mots à projeter par cluster",
+        1,
+        50,
+        step=1,
+        key="projected_words_per_cluster",
+        help="Définit combien de mots de chaque cluster seront affichés sur le graphique de projection.",
+    )
+
 
 def render_preparation() -> None:
     st.sidebar.markdown("### Préparation des Données")
@@ -425,8 +512,10 @@ def render_analysis() -> None:
     selected_stopwords = build_stopwords(stopword_mode, custom_stopwords)
     apply_stopwords_to_clustering = st.session_state.get("apply_stopwords_to_clustering", False)
     wordcloud_max_words = st.session_state.get("wordcloud_max_words", 100)
+    projected_words_per_cluster = st.session_state.get("projected_words_per_cluster", 10)
     st.sidebar.caption(f"Stopwords : {stopword_mode} ({len(selected_stopwords)} actifs)")
     st.sidebar.caption(f"Nuages de mots : {wordcloud_max_words} mots maximum")
+    st.sidebar.caption(f"Projection : {projected_words_per_cluster} mots par cluster")
     if apply_stopwords_to_clustering:
         st.sidebar.caption("Stopwords appliqués au clustering.")
 
@@ -515,6 +604,15 @@ def render_analysis() -> None:
 
             st.subheader("Taille des Clusters sous Forme de Bulles")
             display_grouped_bubble_chart(embeddings, kmeans_labels, save_directory)
+
+            st.subheader("Projection des Mots des Clusters en 2D")
+            display_cluster_word_projection(
+                df,
+                kmeans_labels,
+                selected_stopwords,
+                projected_words_per_cluster,
+                save_directory,
+            )
 
             st.subheader("Visualisation des Clusters en 2D")
             display_cluster_visualization(embeddings, kmeans_labels, save_directory)
@@ -667,6 +765,8 @@ def main() -> None:
         st.session_state.apply_stopwords_to_clustering = False
     if "wordcloud_max_words" not in st.session_state:
         st.session_state.wordcloud_max_words = 100
+    if "projected_words_per_cluster" not in st.session_state:
+        st.session_state.projected_words_per_cluster = 10
 
     if menu_principal == "Préparation des Données":
         render_preparation()
