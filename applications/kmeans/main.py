@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import os
 import re
+import shutil
+import uuid
 import zipfile
 from io import StringIO
 from pathlib import Path
@@ -85,17 +87,32 @@ def ensure_directory(directory: str | Path) -> Path:
     return path
 
 
+def get_output_directory() -> Path:
+    if "output_directory" not in st.session_state:
+        st.session_state.output_directory = str(ensure_directory(Path(DEFAULT_SAVE_DIRECTORY) / uuid.uuid4().hex))
+    return ensure_directory(st.session_state.output_directory)
+
+
+def clear_output_directory(directory: str | Path) -> None:
+    path = ensure_directory(directory)
+    for item in path.iterdir():
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+
+
 def save_csv(dataframe: pd.DataFrame, filename: str, directory: str | Path) -> Path:
     path = ensure_directory(directory) / f"{filename}.csv"
     dataframe.to_csv(path, index=False, encoding="utf-8")
-    st.success(f"Enregistré : {path}")
+    st.success(f"{filename}.csv ajouté aux résultats téléchargeables.")
     return path
 
 
 def save_matplotlib_figure(fig, filename: str, directory: str | Path) -> Path:
     path = ensure_directory(directory) / filename
     fig.savefig(path, bbox_inches="tight")
-    st.success(f"Graphique enregistré : {path}")
+    st.success(f"{filename} ajouté aux résultats téléchargeables.")
     return path
 
 
@@ -108,10 +125,10 @@ def save_plotly_figure(fig, filename: str, directory: str | Path) -> Path | None
         fig.write_html(html_path)
         st.warning(
             "Export PNG Plotly indisponible. "
-            f"Version interactive HTML enregistrée : {html_path}. Détail : {exc}"
+            f"Version interactive HTML ajoutée aux résultats téléchargeables. Détail : {exc}"
         )
         return html_path
-    st.success(f"Graphique enregistré : {path}")
+    st.success(f"{filename} ajouté aux résultats téléchargeables.")
     return path
 
 
@@ -312,13 +329,7 @@ def render_preparation() -> None:
     if st.session_state.df is not None:
         total_articles = len(st.session_state.df)
         st.markdown(f"**Nombre d'articles trouvés : {total_articles}**")
-
-        st.subheader("Définir le Répertoire de Sauvegarde")
-        save_directory = st.text_input("Entrez le chemin du répertoire de sauvegarde", value=DEFAULT_SAVE_DIRECTORY)
-        if st.button("Définir le Répertoire"):
-            path = ensure_directory(save_directory)
-            st.session_state.save_directory = str(path)
-            st.success(f"Répertoire de sauvegarde défini : {path}")
+        st.session_state.save_directory = str(get_output_directory())
 
 
 def render_analysis() -> None:
@@ -329,8 +340,7 @@ def render_analysis() -> None:
         return
 
     if st.session_state.save_directory is None:
-        st.error("Veuillez d'abord définir un répertoire de sauvegarde dans la section de préparation des données.")
-        return
+        st.session_state.save_directory = str(get_output_directory())
 
     if st.session_state.file_name:
         st.sidebar.text(f"Fichier chargé : {st.session_state.file_name}")
@@ -369,8 +379,6 @@ def render_analysis() -> None:
     ax.set_ylabel("Inertie")
     ax.set_title("Méthode du Coude Pour Déterminer le Nombre Optimal de Clusters")
     st.pyplot(fig)
-    save_matplotlib_figure(fig, "elbow_method.png", save_directory)
-    plt.close(fig)
 
     n_clusters = st.sidebar.slider("Choisissez le nombre de clusters", 2, 20, 5, 1)
 
@@ -380,7 +388,11 @@ def render_analysis() -> None:
                 "Le nombre de clusters choisi est supérieur au nombre d'articles disponibles. "
                 "Réduisez le nombre de clusters ou ajoutez des articles."
             )
+            plt.close(fig)
             return
+
+        clear_output_directory(save_directory)
+        save_matplotlib_figure(fig, "elbow_method.png", save_directory)
 
         cluster_model = KMeans(n_clusters=n_clusters, random_state=42)
         kmeans_labels = cluster_model.fit_predict(embeddings)
@@ -413,6 +425,8 @@ def render_analysis() -> None:
                 file_name="kmeans_resultats.zip",
                 mime="application/zip",
             )
+
+    plt.close(fig)
 
 
 def render_faq() -> None:
@@ -535,7 +549,7 @@ def main() -> None:
     if "file_name" not in st.session_state:
         st.session_state.file_name = None
     if "save_directory" not in st.session_state:
-        st.session_state.save_directory = None
+        st.session_state.save_directory = str(get_output_directory())
 
     if menu_principal == "Préparation des Données":
         render_preparation()
