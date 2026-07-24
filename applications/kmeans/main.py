@@ -251,7 +251,7 @@ def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, di
         {
             "x": reduced_embeddings[:, 0],
             "y": reduced_embeddings[:, 1],
-            "Cluster": labels,
+            "Cluster": [f"Cluster {int(label) + 1}" for label in labels],
         }
     )
 
