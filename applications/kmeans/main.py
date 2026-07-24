@@ -519,17 +519,6 @@ def render_analysis() -> None:
     if apply_stopwords_to_clustering:
         st.sidebar.caption("Stopwords appliqués au clustering.")
 
-    embedding_contents = df["content"].tolist()
-    if apply_stopwords_to_clustering and selected_stopwords:
-        cleaned_contents = [remove_stopwords_from_text(content, selected_stopwords) for content in embedding_contents]
-        embedding_contents = [
-            cleaned_content if cleaned_content.strip() else original_content
-            for cleaned_content, original_content in zip(cleaned_contents, embedding_contents)
-        ]
-
-    with st.spinner("Création des embeddings avec SentenceTransformer..."):
-        embeddings = encode_documents(tuple(embedding_contents))
-
     st.sidebar.subheader("Paramètres du Vectorizer")
     min_df = st.sidebar.slider(
         "Min DF (fraction minimale de documents)",
@@ -566,6 +555,8 @@ def render_analysis() -> None:
         help="Nombre de groupes que KMeans doit former dans le corpus.",
     )
 
+    st.info("Aucune analyse n'est lancée automatiquement. Réglez les paramètres, puis cliquez sur le bouton.")
+
     if st.button("Lancer l'Analyse KMeans"):
         if n_clusters > len(df):
             st.error(
@@ -575,6 +566,17 @@ def render_analysis() -> None:
             return
 
         clear_output_directory(save_directory)
+
+        embedding_contents = df["content"].tolist()
+        if apply_stopwords_to_clustering and selected_stopwords:
+            cleaned_contents = [remove_stopwords_from_text(content, selected_stopwords) for content in embedding_contents]
+            embedding_contents = [
+                cleaned_content if cleaned_content.strip() else original_content
+                for cleaned_content, original_content in zip(cleaned_contents, embedding_contents)
+            ]
+
+        with st.spinner("Création des embeddings avec SentenceTransformer..."):
+            embeddings = encode_documents(tuple(embedding_contents))
 
         with st.spinner("Calcul de la méthode du coude..."):
             inertia = []
