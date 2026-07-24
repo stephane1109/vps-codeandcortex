@@ -5,8 +5,6 @@ Application Streamlit pour analyser un corpus texte avec K-Means++.
 ## Fonctionnalites
 
 - import d'un fichier texte Europresse/IRaMuTeQ separe par `****`
-- import depuis une URL
-- choix du repertoire de sauvegarde
 - parametrage `Min DF`, `Max DF` et nombre de clusters
 - methode du coude
 - visualisation des centroides

@@ -18,7 +18,6 @@ import nltk
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import requests
 import seaborn as sns
 import streamlit as st
 from nltk.corpus import stopwords
@@ -212,18 +211,6 @@ def display_wordclouds(df: pd.DataFrame, cluster_labels: np.ndarray, directory: 
         plt.close(fig)
 
 
-def get_text_from_url(url: str) -> str:
-    try:
-        response = requests.get(url, timeout=30)
-        if response.status_code == 200:
-            return response.text
-        st.error("Impossible de récupérer le texte depuis l'URL.")
-        return ""
-    except Exception as exc:
-        st.error(f"Erreur lors de la récupération du texte depuis l'URL : {exc}")
-        return ""
-
-
 def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, directory: str | Path) -> None:
     reduced_embeddings = reduce_to_2d(embeddings)
     viz_df = pd.DataFrame(
@@ -313,26 +300,14 @@ def dataframe_from_text(file_text: str) -> pd.DataFrame:
 
 def render_preparation() -> None:
     st.sidebar.markdown("### Préparation des Données")
-    preparation_option = st.sidebar.radio("Options de Préparation", ["Uploader un Fichier", "URL"])
-
-    if preparation_option == "Uploader un Fichier":
-        st.subheader("Uploader un Fichier")
-        uploaded_file = st.file_uploader("Téléchargez un fichier texte contenant des articles de presse", type="txt")
-        if uploaded_file is not None:
-            st.session_state.file_name = uploaded_file.name
-            stringio = StringIO(uploaded_file.getvalue().decode("utf-8", errors="replace"))
-            st.session_state.df = dataframe_from_text(stringio.read())
-            st.write(st.session_state.df)
-            st.sidebar.text(f"Fichier chargé : {st.session_state.file_name}")
-
-    elif preparation_option == "URL":
-        st.subheader("URL")
-        url = st.text_input("Entrez l'URL du texte")
-        if url:
-            file_text = get_text_from_url(url)
-            st.session_state.df = dataframe_from_text(file_text)
-            st.write(st.session_state.df)
-            st.sidebar.text("Fichier chargé depuis l'URL")
+    st.subheader("Uploader un Fichier")
+    uploaded_file = st.file_uploader("Téléchargez un fichier texte contenant des articles de presse", type="txt")
+    if uploaded_file is not None:
+        st.session_state.file_name = uploaded_file.name
+        stringio = StringIO(uploaded_file.getvalue().decode("utf-8", errors="replace"))
+        st.session_state.df = dataframe_from_text(stringio.read())
+        st.write(st.session_state.df)
+        st.sidebar.text(f"Fichier chargé : {st.session_state.file_name}")
 
     if st.session_state.df is not None:
         total_articles = len(st.session_state.df)
@@ -451,7 +426,6 @@ chaque article distinctement.
 
 - **Format d'entrée :**
 - **Fichiers Texte :** Les fichiers doivent être en format texte, avec des articles séparés par `****`.
-- **URL :** Vous pouvez également fournir une URL d'où le texte sera extrait.
 
 ### 2. Algorithme K-Means++
 
