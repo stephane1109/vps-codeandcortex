@@ -330,6 +330,35 @@ def dataframe_from_text(file_text: str) -> pd.DataFrame:
     return df
 
 
+def render_stopword_settings() -> None:
+    st.subheader("Stopwords")
+    st.selectbox(
+        "Système de stopwords",
+        STOPWORD_MODES,
+        key="stopword_mode",
+        help=(
+            "Choisit les mots à ignorer dans les nuages de mots. "
+            "Ils peuvent aussi être appliqués au clustering avec l'option suivante."
+        ),
+    )
+    if st.session_state.stopword_mode in {STOPWORD_MODE_CUSTOM, STOPWORD_MODE_FRENCH_CUSTOM}:
+        st.text_area(
+            "Stopwords personnalisés",
+            key="custom_stopwords",
+            help="Ajoutez des mots séparés par des virgules, des points-virgules ou des retours à la ligne.",
+        )
+    st.checkbox(
+        "Appliquer les stopwords au clustering",
+        key="apply_stopwords_to_clustering",
+        help=(
+            "Si activé, les stopwords sont retirés des textes avant la création des embeddings. "
+            "Par défaut, le clustering conserve le comportement historique."
+        ),
+    )
+    selected_stopwords = build_stopwords(st.session_state.stopword_mode, st.session_state.custom_stopwords)
+    st.caption(f"{len(selected_stopwords)} stopwords actifs.")
+
+
 def render_preparation() -> None:
     st.sidebar.markdown("### Préparation des Données")
     st.subheader("Uploader un Fichier")
@@ -345,6 +374,8 @@ def render_preparation() -> None:
         total_articles = len(st.session_state.df)
         st.markdown(f"**Nombre d'articles trouvés : {total_articles}**")
         st.session_state.save_directory = str(get_output_directory())
+
+    render_stopword_settings()
 
 
 def render_analysis() -> None:
@@ -366,31 +397,13 @@ def render_analysis() -> None:
         st.error("Le corpus doit contenir au moins 2 articles pour lancer KMeans.")
         return
 
-    st.sidebar.subheader("Stopwords")
-    stopword_mode = st.sidebar.selectbox(
-        "Système de stopwords",
-        STOPWORD_MODES,
-        help=(
-            "Choisit les mots à ignorer dans les nuages de mots. "
-            "Ils peuvent aussi être appliqués au clustering avec l'option suivante."
-        ),
-    )
-    custom_stopwords = ""
-    if stopword_mode in {STOPWORD_MODE_CUSTOM, STOPWORD_MODE_FRENCH_CUSTOM}:
-        custom_stopwords = st.sidebar.text_area(
-            "Stopwords personnalisés",
-            help="Ajoutez des mots séparés par des virgules, des points-virgules ou des retours à la ligne.",
-        )
+    stopword_mode = st.session_state.get("stopword_mode", STOPWORD_MODE_FRENCH)
+    custom_stopwords = st.session_state.get("custom_stopwords", "")
     selected_stopwords = build_stopwords(stopword_mode, custom_stopwords)
-    apply_stopwords_to_clustering = st.sidebar.checkbox(
-        "Appliquer les stopwords au clustering",
-        value=False,
-        help=(
-            "Si activé, les stopwords sont retirés des textes avant la création des embeddings. "
-            "Par défaut, le clustering conserve le comportement historique."
-        ),
-    )
-    st.sidebar.caption(f"{len(selected_stopwords)} stopwords actifs.")
+    apply_stopwords_to_clustering = st.session_state.get("apply_stopwords_to_clustering", False)
+    st.sidebar.caption(f"Stopwords : {stopword_mode} ({len(selected_stopwords)} actifs)")
+    if apply_stopwords_to_clustering:
+        st.sidebar.caption("Stopwords appliqués au clustering.")
 
     embedding_contents = df["content"].tolist()
     if apply_stopwords_to_clustering and selected_stopwords:
@@ -624,6 +637,12 @@ def main() -> None:
         st.session_state.file_name = None
     if "save_directory" not in st.session_state:
         st.session_state.save_directory = str(get_output_directory())
+    if "stopword_mode" not in st.session_state:
+        st.session_state.stopword_mode = STOPWORD_MODE_FRENCH
+    if "custom_stopwords" not in st.session_state:
+        st.session_state.custom_stopwords = ""
+    if "apply_stopwords_to_clustering" not in st.session_state:
+        st.session_state.apply_stopwords_to_clustering = False
 
     if menu_principal == "Préparation des Données":
         render_preparation()
