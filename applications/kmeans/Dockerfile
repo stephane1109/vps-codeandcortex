@@ -2,6 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_PREFER_BINARY=1 \
     MPLBACKEND=Agg \
@@ -42,7 +43,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         fonts-dejavu-core \
         libgomp1 \
-        build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && addgroup --system app \
     && adduser --system --ingroup app --home /home/app app \

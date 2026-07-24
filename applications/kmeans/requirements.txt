@@ -11,5 +11,7 @@ nltk>=3.8,<4
 umap-learn>=0.5,<1
 plotly>=5.22,<6
 kaleido==0.2.1
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
 sentence-transformers>=3,<4
 redis>=5,<6
