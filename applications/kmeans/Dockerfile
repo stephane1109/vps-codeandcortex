@@ -52,8 +52,7 @@ COPY requirements.txt /app/requirements.txt
 
 RUN pip install --upgrade pip setuptools wheel \
     && pip install -r /app/requirements.txt \
-    && python -m nltk.downloader -d /home/app/nltk_data stopwords \
-    && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+    && python -m nltk.downloader -d /home/app/nltk_data stopwords
 
 COPY . /app
 
