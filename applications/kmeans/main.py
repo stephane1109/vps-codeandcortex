@@ -607,9 +607,6 @@ de son fonctionnement et de sa mise en œuvre dans votre script.
 #### Point Négatif : Détermination du Nombre de Clusters
 
 - **Limitation :** Contrairement à des approches comme LDA ou BERTopic, K-Means++ nécessite que l'utilisateur spécifie *a priori* le nombre de clusters.
-- **Comparaison avec LDA et BERTopic :**
-- **LDA :** Identifie automatiquement les sujets dans un corpus textuel, utile pour des explorations sans connaissance préalable.
-- **BERTopic :** Utilise des méthodes avancées pour découvrir des topics de manière plus flexible.
 
 ### 5. Exemples d'Utilisation en Sciences Humaines
 
