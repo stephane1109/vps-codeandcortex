@@ -535,7 +535,7 @@ def main() -> None:
 
     st.title("Analyse textuelle avec K-means")
     st.markdown(
-        "**Version du script : 1.0 - Date : 09-08-2024 - Stéphane Meurisse - "
+        "**Version 0.1 beta - modifiée : 24-07-2026 - Stéphane Meurisse - "
         "[www.codeandcortex.fr](http://www.codeandcortex.fr)**"
     )
 
