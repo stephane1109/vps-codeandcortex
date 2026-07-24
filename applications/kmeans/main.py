@@ -217,6 +217,7 @@ def display_wordclouds(
     cluster_labels: np.ndarray,
     directory: str | Path,
     selected_stopwords: list[str],
+    max_words: int,
 ) -> None:
     wordcloud_stopwords = set(selected_stopwords)
     for cluster in sorted(set(cluster_labels)):
@@ -232,6 +233,7 @@ def display_wordclouds(
             height=400,
             background_color="white",
             stopwords=wordcloud_stopwords,
+            max_words=max_words,
         ).generate(wordcloud_text)
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.imshow(wordcloud, interpolation="bilinear")
@@ -292,29 +294,40 @@ def display_centroid_visualization(embeddings: np.ndarray, cluster_labels: np.nd
 
 
 def display_grouped_bubble_chart(embeddings: np.ndarray, cluster_labels: np.ndarray, directory: str | Path) -> None:
-    reduced_embeddings = reduce_to_2d(embeddings)
+    cluster_ids = sorted(set(cluster_labels))
+    cluster_centers = np.array([embeddings[cluster_labels == cluster].mean(axis=0) for cluster in cluster_ids])
+    reduced_centers = reduce_to_2d(cluster_centers)
+    cluster_sizes = pd.Series(cluster_labels).value_counts().sort_index()
+    total_documents = int(cluster_sizes.sum())
     df = pd.DataFrame(
         {
-            "x": reduced_embeddings[:, 0],
-            "y": reduced_embeddings[:, 1],
-            "Cluster": cluster_labels,
+            "x": reduced_centers[:, 0],
+            "y": reduced_centers[:, 1],
+            "Cluster": [f"Cluster {cluster + 1}" for cluster in cluster_ids],
+            "Nombre d'articles": [int(cluster_sizes[cluster]) for cluster in cluster_ids],
+            "Part du corpus": [
+                f"{(int(cluster_sizes[cluster]) / total_documents) * 100:.1f} %" for cluster in cluster_ids
+            ],
         }
     )
-    cluster_sizes = df["Cluster"].value_counts().sort_index()
-    df["Size"] = df["Cluster"].map(cluster_sizes)
 
     fig = px.scatter(
         df,
         x="x",
         y="y",
-        size="Size",
+        size="Nombre d'articles",
         color="Cluster",
-        hover_data=["Cluster"],
+        hover_data=["Cluster", "Nombre d'articles", "Part du corpus"],
         opacity=0.6,
         size_max=50,
-        title="Visualisation des Clusters Regroupés en Forme de Bulles",
+        title="Taille des Clusters sous Forme de Bulles",
+        labels={"x": "Dimension 1", "y": "Dimension 2"},
     )
     fig.update_layout(showlegend=True)
+    st.caption(
+        "Ce graphique sert à contrôler l'équilibre des clusters : chaque bulle représente un cluster, "
+        "et sa taille correspond au nombre d'articles regroupés dans ce cluster."
+    )
     st.plotly_chart(fig, use_container_width=True)
     save_plotly_figure(fig, "kmeans_grouped_bubble_chart.png", directory)
 
@@ -357,6 +370,16 @@ def render_stopword_settings() -> None:
     )
     selected_stopwords = build_stopwords(st.session_state.stopword_mode, st.session_state.custom_stopwords)
     st.caption(f"{len(selected_stopwords)} stopwords actifs.")
+
+    st.subheader("Nuages de mots")
+    st.slider(
+        "Nombre de mots par nuage",
+        20,
+        500,
+        step=10,
+        key="wordcloud_max_words",
+        help="Définit le nombre maximal de mots affichés dans chaque nuage de mots.",
+    )
 
 
 def render_preparation() -> None:
@@ -401,7 +424,9 @@ def render_analysis() -> None:
     custom_stopwords = st.session_state.get("custom_stopwords", "")
     selected_stopwords = build_stopwords(stopword_mode, custom_stopwords)
     apply_stopwords_to_clustering = st.session_state.get("apply_stopwords_to_clustering", False)
+    wordcloud_max_words = st.session_state.get("wordcloud_max_words", 100)
     st.sidebar.caption(f"Stopwords : {stopword_mode} ({len(selected_stopwords)} actifs)")
+    st.sidebar.caption(f"Nuages de mots : {wordcloud_max_words} mots maximum")
     if apply_stopwords_to_clustering:
         st.sidebar.caption("Stopwords appliqués au clustering.")
 
@@ -488,7 +513,7 @@ def render_analysis() -> None:
             st.subheader("Visualisation des Centroides des Clusters K-Means")
             display_centroid_visualization(embeddings, kmeans_labels, save_directory)
 
-            st.subheader("Visualisation des Clusters Regroupés en Forme de Bulles")
+            st.subheader("Taille des Clusters sous Forme de Bulles")
             display_grouped_bubble_chart(embeddings, kmeans_labels, save_directory)
 
             st.subheader("Visualisation des Clusters en 2D")
@@ -502,7 +527,7 @@ def render_analysis() -> None:
             st.dataframe(concordance_kmeans, use_container_width=True)
             save_csv(concordance_kmeans, "concordance_kmeans", save_directory)
 
-            display_wordclouds(df, kmeans_labels, save_directory, selected_stopwords)
+            display_wordclouds(df, kmeans_labels, save_directory, selected_stopwords, wordcloud_max_words)
 
             st.download_button(
                 "Télécharger les résultats",
@@ -643,6 +668,8 @@ def main() -> None:
         st.session_state.custom_stopwords = ""
     if "apply_stopwords_to_clustering" not in st.session_state:
         st.session_state.apply_stopwords_to_clustering = False
+    if "wordcloud_max_words" not in st.session_state:
+        st.session_state.wordcloud_max_words = 100
 
     if menu_principal == "Préparation des Données":
         render_preparation()
