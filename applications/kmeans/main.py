@@ -35,6 +35,16 @@ APP_NAME = "KMeans"
 APP_TICKET_DEFAULT_ID = "kmeans"
 SENTENCE_MODEL_NAME = os.getenv("KMEANS_SENTENCE_MODEL", "all-MiniLM-L6-v2").strip() or "all-MiniLM-L6-v2"
 DEFAULT_SAVE_DIRECTORY = os.getenv("KMEANS_OUTPUT_DIR", "/tmp/kmeans")
+STOPWORD_MODE_FRENCH = "Français NLTK"
+STOPWORD_MODE_NONE = "Aucun stopword"
+STOPWORD_MODE_CUSTOM = "Stopwords personnalisés"
+STOPWORD_MODE_FRENCH_CUSTOM = "Français NLTK + personnalisés"
+STOPWORD_MODES = (
+    STOPWORD_MODE_FRENCH,
+    STOPWORD_MODE_NONE,
+    STOPWORD_MODE_CUSTOM,
+    STOPWORD_MODE_FRENCH_CUSTOM,
+)
 PAGE_STYLE = """
 <style>
   .main .block-container,
@@ -57,6 +67,32 @@ def load_french_stopwords() -> list[str]:
     except LookupError:
         nltk.download("stopwords", quiet=True)
         return stopwords.words("french")
+
+
+def parse_custom_stopwords(raw_stopwords: str) -> list[str]:
+    parsed_stopwords = set()
+    for raw_word in re.split(r"[,;\n]+", raw_stopwords):
+        cleaned_word = preprocess_text(raw_word).strip()
+        if cleaned_word:
+            parsed_stopwords.add(cleaned_word)
+    return sorted(parsed_stopwords)
+
+
+def build_stopwords(stopword_mode: str, custom_stopwords: str) -> list[str]:
+    selected_stopwords: set[str] = set()
+    if stopword_mode in {STOPWORD_MODE_FRENCH, STOPWORD_MODE_FRENCH_CUSTOM}:
+        selected_stopwords.update(load_french_stopwords())
+    if stopword_mode in {STOPWORD_MODE_CUSTOM, STOPWORD_MODE_FRENCH_CUSTOM}:
+        selected_stopwords.update(parse_custom_stopwords(custom_stopwords))
+    return sorted(selected_stopwords)
+
+
+def remove_stopwords_from_text(text: str, selected_stopwords: list[str]) -> str:
+    if not selected_stopwords:
+        return text
+    stopword_set = set(selected_stopwords)
+    tokens = re.findall(r"\b\w+\b", text, flags=re.UNICODE)
+    return " ".join(token for token in tokens if token not in stopword_set)
 
 
 @st.cache_data(show_spinner=False)
@@ -124,19 +160,10 @@ def save_matplotlib_figure(fig, filename: str, directory: str | Path) -> Path:
 
 
 def save_plotly_figure(fig, filename: str, directory: str | Path) -> Path | None:
-    path = ensure_directory(directory) / filename
-    try:
-        fig.write_image(path)
-    except Exception as exc:
-        html_path = path.with_suffix(".html")
-        fig.write_html(html_path)
-        st.warning(
-            "Export PNG Plotly indisponible. "
-            f"Version interactive HTML ajoutée aux résultats téléchargeables. Détail : {exc}"
-        )
-        return html_path
-    st.success(f"{filename} ajouté aux résultats téléchargeables.")
-    return path
+    html_path = (ensure_directory(directory) / filename).with_suffix(".html")
+    fig.write_html(html_path)
+    st.success(f"{html_path.name} ajouté aux résultats téléchargeables.")
+    return html_path
 
 
 def zip_directory(directory: str | Path) -> bytes:
@@ -185,8 +212,13 @@ def display_similarity_matrix(embeddings: np.ndarray, cluster_labels: np.ndarray
     plt.close(fig)
 
 
-def display_wordclouds(df: pd.DataFrame, cluster_labels: np.ndarray, directory: str | Path) -> None:
-    french_stopwords = load_french_stopwords()
+def display_wordclouds(
+    df: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    directory: str | Path,
+    selected_stopwords: list[str],
+) -> None:
+    wordcloud_stopwords = set(selected_stopwords)
     for cluster in sorted(set(cluster_labels)):
         st.subheader(f"Nuage de Mots pour le Topic {cluster + 1}")
         cluster_data = df["content"][cluster_labels == cluster]
@@ -199,7 +231,7 @@ def display_wordclouds(df: pd.DataFrame, cluster_labels: np.ndarray, directory: 
             width=800,
             height=400,
             background_color="white",
-            stopwords=set(french_stopwords),
+            stopwords=wordcloud_stopwords,
         ).generate(wordcloud_text)
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.imshow(wordcloud, interpolation="bilinear")
@@ -334,20 +366,78 @@ def render_analysis() -> None:
         st.error("Le corpus doit contenir au moins 2 articles pour lancer KMeans.")
         return
 
-    with st.spinner("Création des embeddings avec SentenceTransformer..."):
-        embeddings = encode_documents(tuple(df["content"].tolist()))
+    st.sidebar.subheader("Stopwords")
+    stopword_mode = st.sidebar.selectbox(
+        "Système de stopwords",
+        STOPWORD_MODES,
+        help=(
+            "Choisit les mots à ignorer dans les nuages de mots. "
+            "Ils peuvent aussi être appliqués au clustering avec l'option suivante."
+        ),
+    )
+    custom_stopwords = ""
+    if stopword_mode in {STOPWORD_MODE_CUSTOM, STOPWORD_MODE_FRENCH_CUSTOM}:
+        custom_stopwords = st.sidebar.text_area(
+            "Stopwords personnalisés",
+            help="Ajoutez des mots séparés par des virgules, des points-virgules ou des retours à la ligne.",
+        )
+    selected_stopwords = build_stopwords(stopword_mode, custom_stopwords)
+    apply_stopwords_to_clustering = st.sidebar.checkbox(
+        "Appliquer les stopwords au clustering",
+        value=False,
+        help=(
+            "Si activé, les stopwords sont retirés des textes avant la création des embeddings. "
+            "Par défaut, le clustering conserve le comportement historique."
+        ),
+    )
+    st.sidebar.caption(f"{len(selected_stopwords)} stopwords actifs.")
 
-    french_stopwords = load_french_stopwords()
+    embedding_contents = df["content"].tolist()
+    if apply_stopwords_to_clustering and selected_stopwords:
+        cleaned_contents = [remove_stopwords_from_text(content, selected_stopwords) for content in embedding_contents]
+        embedding_contents = [
+            cleaned_content if cleaned_content.strip() else original_content
+            for cleaned_content, original_content in zip(cleaned_contents, embedding_contents)
+        ]
+
+    with st.spinner("Création des embeddings avec SentenceTransformer..."):
+        embeddings = encode_documents(tuple(embedding_contents))
 
     st.sidebar.subheader("Paramètres du Vectorizer")
-    min_df = st.sidebar.slider("Min DF (fraction minimale de documents)", 0.0, 1.0, 0.01, 0.01)
-    max_df = st.sidebar.slider("Max DF (fraction maximale de documents)", min_df, 1.0, max(0.95, min_df), 0.01)
-    vectorizer_model = CountVectorizer(stop_words=french_stopwords, min_df=min_df, max_df=max_df, ngram_range=(1, 3))
+    min_df = st.sidebar.slider(
+        "Min DF (fraction minimale de documents)",
+        0.0,
+        1.0,
+        0.01,
+        0.01,
+        help="Ignore les termes présents dans une fraction de documents inférieure à cette valeur.",
+    )
+    max_df = st.sidebar.slider(
+        "Max DF (fraction maximale de documents)",
+        min_df,
+        1.0,
+        max(0.95, min_df),
+        0.01,
+        help="Ignore les termes présents dans une fraction de documents supérieure à cette valeur.",
+    )
+    vectorizer_model = CountVectorizer(
+        stop_words=selected_stopwords or None,
+        min_df=min_df,
+        max_df=max_df,
+        ngram_range=(1, 3),
+    )
     _ = vectorizer_model
 
     st.subheader("Détermination du Nombre Optimal de Clusters")
 
-    n_clusters = st.sidebar.slider("Choisissez le nombre de clusters", 2, 20, 5, 1)
+    n_clusters = st.sidebar.slider(
+        "Choisissez le nombre de clusters",
+        2,
+        20,
+        5,
+        1,
+        help="Nombre de groupes que KMeans doit former dans le corpus.",
+    )
 
     if st.button("Lancer l'Analyse KMeans"):
         if n_clusters > len(df):
@@ -399,7 +489,7 @@ def render_analysis() -> None:
             st.dataframe(concordance_kmeans, use_container_width=True)
             save_csv(concordance_kmeans, "concordance_kmeans", save_directory)
 
-            display_wordclouds(df, kmeans_labels, save_directory)
+            display_wordclouds(df, kmeans_labels, save_directory, selected_stopwords)
 
             st.download_button(
                 "Télécharger les résultats",
@@ -522,7 +612,11 @@ def main() -> None:
         "[www.codeandcortex.fr](http://www.codeandcortex.fr)**"
     )
 
-    menu_principal = st.sidebar.radio("Menu Principal", ["Préparation des Données", "Analyse des Données", "FAQ"])
+    menu_principal = st.radio(
+        "Menu Principal",
+        ["Préparation des Données", "Analyse des Données", "FAQ"],
+        horizontal=True,
+    )
 
     if "df" not in st.session_state:
         st.session_state.df = None
