@@ -36,6 +36,14 @@ APP_NAME = "KMeans"
 APP_TICKET_DEFAULT_ID = "kmeans"
 SENTENCE_MODEL_NAME = os.getenv("KMEANS_SENTENCE_MODEL", "all-MiniLM-L6-v2").strip() or "all-MiniLM-L6-v2"
 DEFAULT_SAVE_DIRECTORY = os.getenv("KMEANS_OUTPUT_DIR", "/tmp/kmeans")
+PAGE_STYLE = """
+<style>
+  .main .block-container,
+  div[data-testid="stMainBlockContainer"] {
+    padding-top: 0rem !important;
+  }
+</style>
+"""
 
 
 @st.cache_resource(show_spinner=False)
@@ -531,6 +539,7 @@ base solide pour des analyses plus approfondies.
 
 def main() -> None:
     st.set_page_config(page_title="Analyse textuelle avec K-means", layout="wide", initial_sidebar_state="expanded")
+    st.markdown(PAGE_STYLE, unsafe_allow_html=True)
     enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
     st.title("Analyse textuelle avec K-means")
