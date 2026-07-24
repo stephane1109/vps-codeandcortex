@@ -23,6 +23,7 @@ import streamlit as st
 from nltk.corpus import stopwords
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from umap import UMAP
@@ -177,14 +178,37 @@ def zip_directory(directory: str | Path) -> bytes:
     return buffer.getvalue()
 
 
-def reduce_to_2d(values: np.ndarray) -> np.ndarray:
+def reduce_with_pca(values: np.ndarray) -> np.ndarray:
+    values = np.asarray(values)
+    if values.ndim == 1:
+        values = values.reshape(1, -1)
+    if len(values) == 0:
+        return np.empty((0, 2))
     if len(values) == 1:
         return np.array([[0.0, 0.0]])
     if len(values) == 2:
         return np.array([[0.0, 0.0], [1.0, 0.0]])
+
+    n_components = min(2, values.shape[0], values.shape[1])
+    reduced_values = PCA(n_components=n_components).fit_transform(values)
+    if reduced_values.shape[1] == 1:
+        reduced_values = np.column_stack([reduced_values[:, 0], np.zeros(len(reduced_values))])
+    return reduced_values[:, :2]
+
+
+def reduce_to_2d(values: np.ndarray) -> np.ndarray:
+    values = np.asarray(values)
+    if values.ndim == 1:
+        values = values.reshape(1, -1)
+    if len(values) <= 3:
+        return reduce_with_pca(values)
+
     n_neighbors = min(15, max(2, len(values) - 1))
     umap_model = UMAP(n_components=2, random_state=42, n_neighbors=n_neighbors)
-    return umap_model.fit_transform(values)
+    try:
+        return umap_model.fit_transform(values)
+    except (TypeError, ValueError):
+        return reduce_with_pca(values)
 
 
 def display_similarity_matrix(embeddings: np.ndarray, cluster_labels: np.ndarray, directory: str | Path) -> None:
