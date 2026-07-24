@@ -351,9 +351,6 @@ def render_analysis() -> None:
         st.error("Le corpus doit contenir au moins 2 articles pour lancer KMeans.")
         return
 
-    st.subheader("KMeans")
-    st.write("**KMeans**: Algorithme de clustering qui partitionne les données en un nombre fixe de clusters.")
-
     with st.spinner("Création des embeddings avec SentenceTransformer..."):
         embeddings = encode_documents(tuple(df["content"].tolist()))
 
