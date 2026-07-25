@@ -355,6 +355,108 @@ def display_cluster_word_projection(
     save_plotly_figure(fig, "kmeans_projection_mots_clusters.html", directory)
 
 
+def get_word_candidates_by_cluster(
+    df: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    selected_stopwords: list[str],
+    words_per_cluster: int,
+) -> pd.DataFrame:
+    candidate_limit = max(words_per_cluster * 6, 30)
+    return extract_top_words_by_cluster(df, cluster_labels, selected_stopwords, candidate_limit)
+
+
+def compute_discriminant_words(
+    df: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    cluster_centers: np.ndarray,
+    selected_stopwords: list[str],
+    words_per_cluster: int,
+) -> pd.DataFrame:
+    candidates_df = get_word_candidates_by_cluster(df, cluster_labels, selected_stopwords, words_per_cluster)
+    if candidates_df.empty:
+        return candidates_df
+
+    words = candidates_df["Mot"].tolist()
+    word_embeddings = encode_documents(tuple(words))
+    distances = np.linalg.norm(word_embeddings[:, np.newaxis, :] - cluster_centers[np.newaxis, :, :], axis=2)
+    source_clusters = candidates_df["Cluster"].str.extract(r"(\d+)").astype(int)[0].to_numpy() - 1
+
+    records = []
+    for row_index, source_cluster in enumerate(source_clusters):
+        source_distance = float(distances[row_index, source_cluster])
+        other_distances = np.delete(distances[row_index], source_cluster)
+        nearest_other_distance = float(other_distances.min()) if len(other_distances) else source_distance
+        margin = nearest_other_distance - source_distance
+        records.append(
+            {
+                **candidates_df.iloc[row_index].to_dict(),
+                "Distance au centroïde": source_distance,
+                "Distance au centroïde concurrent": nearest_other_distance,
+                "Marge de décision": margin,
+            }
+        )
+
+    discriminant_df = pd.DataFrame(records)
+    discriminant_df = discriminant_df[discriminant_df["Marge de décision"] > 0].copy()
+    if discriminant_df.empty:
+        discriminant_df = pd.DataFrame(records)
+
+    discriminant_df = discriminant_df.sort_values(
+        ["Cluster", "Marge de décision", "Fréquence"],
+        ascending=[True, False, False],
+    )
+    return discriminant_df.groupby("Cluster", group_keys=False).head(words_per_cluster).reset_index(drop=True)
+
+
+def display_discriminant_words(
+    df: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    cluster_centers: np.ndarray,
+    selected_stopwords: list[str],
+    words_per_cluster: int,
+    directory: str | Path,
+) -> None:
+    discriminant_df = compute_discriminant_words(
+        df,
+        cluster_labels,
+        cluster_centers,
+        selected_stopwords,
+        words_per_cluster,
+    )
+    if discriminant_df.empty:
+        st.info("Aucun mot discriminant à afficher avec les paramètres actuels.")
+        return
+
+    save_csv(discriminant_df, "kmeans_mots_discriminants", directory)
+    st.caption(
+        "La marge de décision mesure l'écart entre la distance au centroïde du cluster et la distance "
+        "au centroïde concurrent le plus proche. Plus elle est grande, plus le mot est discriminant."
+    )
+    st.dataframe(discriminant_df, use_container_width=True)
+
+    fig = px.scatter(
+        discriminant_df,
+        x="Marge de décision",
+        y="Cluster",
+        color="Cluster",
+        size="Fréquence",
+        text="Mot",
+        hover_data=[
+            "Mot",
+            "Cluster",
+            "Fréquence",
+            "Distance au centroïde",
+            "Distance au centroïde concurrent",
+            "Marge de décision",
+        ],
+        title=f"Mots les plus loin des frontières de décision ({words_per_cluster} par cluster)",
+    )
+    fig.update_traces(textposition="top center", marker={"opacity": 0.74})
+    fig.update_layout(height=650, legend_title_text="Clusters")
+    st.plotly_chart(fig, use_container_width=True)
+    save_plotly_figure(fig, "kmeans_mots_discriminants.html", directory)
+
+
 def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, directory: str | Path) -> None:
     reduced_embeddings = reduce_to_2d(embeddings)
     viz_df = pd.DataFrame(
@@ -372,6 +474,78 @@ def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, di
     ax.set_ylabel("Dimension 2")
     ax.legend(title="Clusters", bbox_to_anchor=(1.05, 1), loc="upper left")
     save_matplotlib_figure(fig, "kmeans_cluster_2D.png", directory)
+    st.pyplot(fig)
+    plt.close(fig)
+
+
+def display_decision_boundaries(
+    embeddings: np.ndarray,
+    cluster_labels: np.ndarray,
+    cluster_centers: np.ndarray,
+    directory: str | Path,
+) -> None:
+    if len(cluster_centers) < 2:
+        st.info("Il faut au moins deux clusters pour afficher des frontières de décision.")
+        return
+
+    projection_model = PCA(n_components=2)
+    stacked_values = np.vstack([embeddings, cluster_centers])
+    projected_values = projection_model.fit_transform(stacked_values)
+    projected_documents = projected_values[: len(embeddings)]
+    projected_centers = projected_values[len(embeddings) :]
+
+    x_min, x_max = projected_documents[:, 0].min(), projected_documents[:, 0].max()
+    y_min, y_max = projected_documents[:, 1].min(), projected_documents[:, 1].max()
+    x_padding = max((x_max - x_min) * 0.15, 1e-3)
+    y_padding = max((y_max - y_min) * 0.15, 1e-3)
+    xx, yy = np.meshgrid(
+        np.linspace(x_min - x_padding, x_max + x_padding, 260),
+        np.linspace(y_min - y_padding, y_max + y_padding, 260),
+    )
+    grid_points = np.c_[xx.ravel(), yy.ravel()]
+    grid_distances = np.linalg.norm(grid_points[:, np.newaxis, :] - projected_centers[np.newaxis, :, :], axis=2)
+    grid_labels = grid_distances.argmin(axis=1).reshape(xx.shape)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    color_map = plt.get_cmap("tab20", len(cluster_centers))
+    contour_levels = np.arange(len(cluster_centers) + 1) - 0.5
+    contour = ax.contourf(xx, yy, grid_labels, levels=contour_levels, alpha=0.16, cmap=color_map)
+    _ = contour
+    for cluster_index in range(len(cluster_centers)):
+        mask = cluster_labels == cluster_index
+        if not np.any(mask):
+            continue
+        ax.scatter(
+            projected_documents[mask, 0],
+            projected_documents[mask, 1],
+            color=color_map(cluster_index),
+            s=42,
+            alpha=0.78,
+            edgecolors="white",
+            linewidths=0.4,
+            label=f"Cluster {cluster_index + 1}",
+        )
+    ax.scatter(
+        projected_centers[:, 0],
+        projected_centers[:, 1],
+        c=range(len(projected_centers)),
+        cmap=color_map,
+        marker="X",
+        s=180,
+        edgecolors="black",
+        linewidths=1.0,
+    )
+    for cluster_index, center in enumerate(projected_centers):
+        ax.annotate(f"Cluster {cluster_index + 1}", (center[0], center[1]), xytext=(6, 6), textcoords="offset points")
+    ax.set_title("Frontières de Décision Approximatives en 2D")
+    ax.set_xlabel("Axe PCA 1")
+    ax.set_ylabel("Axe PCA 2")
+    ax.legend(title="Clusters", bbox_to_anchor=(1.05, 1), loc="upper left")
+    st.caption(
+        "Ces frontières sont une approximation visuelle en 2D obtenue après projection PCA. "
+        "Les vraies frontières KMeans existent dans l'espace complet des embeddings."
+    )
+    save_matplotlib_figure(fig, "kmeans_frontieres_decision_2d.png", directory)
     st.pyplot(fig)
     plt.close(fig)
 
@@ -501,6 +675,35 @@ def render_stopword_settings() -> None:
         help="Définit combien de mots de chaque cluster seront affichés sur le graphique de projection.",
     )
 
+    st.subheader("Mots discriminants")
+    st.checkbox(
+        "Afficher les termes les plus loin de la frontière de décision",
+        key="show_discriminant_words",
+        help=(
+            "Affiche les mots dont l'embedding est proche du centroïde de leur cluster "
+            "et loin du centroïde concurrent le plus proche."
+        ),
+    )
+    if st.session_state.show_discriminant_words:
+        st.slider(
+            "Nombre de mots discriminants par cluster",
+            1,
+            50,
+            step=1,
+            key="discriminant_words_per_cluster",
+            help="Définit combien de mots discriminants sont affichés pour chaque cluster.",
+        )
+
+    st.subheader("Frontières de décision")
+    st.checkbox(
+        "Afficher les frontières de décision approximatives",
+        key="show_decision_boundaries",
+        help=(
+            "Affiche une approximation 2D des frontières KMeans. "
+            "La vraie frontière existe dans l'espace complet des embeddings."
+        ),
+    )
+
 
 def render_preparation() -> None:
     st.sidebar.markdown("### Préparation des Données")
@@ -546,9 +749,16 @@ def render_analysis() -> None:
     apply_stopwords_to_clustering = st.session_state.get("apply_stopwords_to_clustering", False)
     wordcloud_max_words = st.session_state.get("wordcloud_max_words", 100)
     projected_words_per_cluster = st.session_state.get("projected_words_per_cluster", 10)
+    show_discriminant_words = st.session_state.get("show_discriminant_words", False)
+    discriminant_words_per_cluster = st.session_state.get("discriminant_words_per_cluster", 10)
+    show_decision_boundaries = st.session_state.get("show_decision_boundaries", False)
     st.sidebar.caption(f"Stopwords : {stopword_mode} ({len(selected_stopwords)} actifs)")
     st.sidebar.caption(f"Nuages de mots : {wordcloud_max_words} mots maximum")
     st.sidebar.caption(f"Projection : {projected_words_per_cluster} mots par cluster")
+    if show_discriminant_words:
+        st.sidebar.caption(f"Mots discriminants : {discriminant_words_per_cluster} par cluster")
+    if show_decision_boundaries:
+        st.sidebar.caption("Frontières de décision : affichées")
     if apply_stopwords_to_clustering:
         st.sidebar.caption("Stopwords appliqués au clustering.")
 
@@ -648,6 +858,21 @@ def render_analysis() -> None:
                 projected_words_per_cluster,
                 save_directory,
             )
+
+            if show_discriminant_words:
+                st.subheader("Mots les Plus Loin des Frontières de Décision")
+                display_discriminant_words(
+                    df,
+                    kmeans_labels,
+                    cluster_model.cluster_centers_,
+                    selected_stopwords,
+                    discriminant_words_per_cluster,
+                    save_directory,
+                )
+
+            if show_decision_boundaries:
+                st.subheader("Frontières de Décision Approximatives en 2D")
+                display_decision_boundaries(embeddings, kmeans_labels, cluster_model.cluster_centers_, save_directory)
 
             st.subheader("Visualisation des Clusters en 2D")
             display_cluster_visualization(embeddings, kmeans_labels, save_directory)
@@ -802,6 +1027,12 @@ def main() -> None:
         st.session_state.wordcloud_max_words = 100
     if "projected_words_per_cluster" not in st.session_state:
         st.session_state.projected_words_per_cluster = 10
+    if "show_discriminant_words" not in st.session_state:
+        st.session_state.show_discriminant_words = False
+    if "discriminant_words_per_cluster" not in st.session_state:
+        st.session_state.discriminant_words_per_cluster = 10
+    if "show_decision_boundaries" not in st.session_state:
+        st.session_state.show_decision_boundaries = False
 
     if menu_principal == "Préparation des Données":
         render_preparation()
