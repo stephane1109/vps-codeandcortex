@@ -88,11 +88,18 @@ def build_stopwords(stopword_mode: str, custom_stopwords: str) -> list[str]:
     return sorted(selected_stopwords)
 
 
+def normalize_stopwords(selected_stopwords: list[str]) -> set[str]:
+    normalized_stopwords = set()
+    for stopword in selected_stopwords:
+        normalized_stopwords.update(re.findall(r"\b\w+\b", preprocess_text(stopword), flags=re.UNICODE))
+    return normalized_stopwords
+
+
 def remove_stopwords_from_text(text: str, selected_stopwords: list[str]) -> str:
     if not selected_stopwords:
         return text
-    stopword_set = set(selected_stopwords)
-    tokens = re.findall(r"\b\w+\b", text, flags=re.UNICODE)
+    stopword_set = normalize_stopwords(selected_stopwords)
+    tokens = re.findall(r"\b\w+\b", preprocess_text(text), flags=re.UNICODE)
     return " ".join(token for token in tokens if token not in stopword_set)
 
 
@@ -247,7 +254,7 @@ def display_wordclouds(
     for cluster in sorted(set(cluster_labels)):
         st.subheader(f"Nuage de Mots pour le Topic {cluster + 1}")
         cluster_data = df["content"][cluster_labels == cluster]
-        wordcloud_text = " ".join(cluster_data).strip()
+        wordcloud_text = remove_stopwords_from_text(" ".join(cluster_data), selected_stopwords).strip()
         if not wordcloud_text:
             st.info(f"Aucun texte disponible pour le topic {cluster + 1}.")
             continue
@@ -258,6 +265,7 @@ def display_wordclouds(
             background_color="white",
             stopwords=wordcloud_stopwords,
             max_words=max_words,
+            collocations=False,
         ).generate(wordcloud_text)
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.imshow(wordcloud, interpolation="bilinear")
@@ -278,11 +286,12 @@ def extract_top_words_by_cluster(
     records = []
     for cluster in sorted(set(cluster_labels)):
         cluster_texts = df.loc[cluster_labels == cluster, "content"].dropna().tolist()
+        cluster_texts = [remove_stopwords_from_text(text, selected_stopwords) for text in cluster_texts]
         cluster_texts = [text for text in cluster_texts if text.strip()]
         if not cluster_texts:
             continue
 
-        vectorizer = CountVectorizer(stop_words=selected_stopwords or None, ngram_range=(1, 1))
+        vectorizer = CountVectorizer(ngram_range=(1, 1))
         try:
             term_matrix = vectorizer.fit_transform(cluster_texts)
         except ValueError:
