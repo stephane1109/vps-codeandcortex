@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import os
 import re
 import shutil
@@ -144,6 +145,12 @@ def get_output_directory() -> Path:
     return ensure_directory(st.session_state.output_directory)
 
 
+def reset_output_directory() -> Path:
+    st.session_state.output_directory = str(ensure_directory(Path(DEFAULT_SAVE_DIRECTORY) / uuid.uuid4().hex))
+    st.session_state.save_directory = st.session_state.output_directory
+    return ensure_directory(st.session_state.output_directory)
+
+
 def clear_output_directory(directory: str | Path) -> None:
     path = ensure_directory(directory)
     for item in path.iterdir():
@@ -185,6 +192,18 @@ def zip_directory(directory: str | Path) -> bytes:
     return buffer.getvalue()
 
 
+def display_results_download(directory: str | Path) -> None:
+    if not any(ensure_directory(directory).rglob("*")):
+        return
+    st.download_button(
+        "Télécharger les résultats",
+        data=zip_directory(directory),
+        file_name="kmeans_resultats.zip",
+        mime="application/zip",
+        key="download_kmeans_results",
+    )
+
+
 def reduce_with_pca(values: np.ndarray) -> np.ndarray:
     values = np.asarray(values)
     if values.ndim == 1:
@@ -216,6 +235,12 @@ def reduce_to_2d(values: np.ndarray) -> np.ndarray:
         return umap_model.fit_transform(values)
     except (TypeError, ValueError):
         return reduce_with_pca(values)
+
+
+def project_documents_and_centers(embeddings: np.ndarray, cluster_centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    stacked_values = np.vstack([embeddings, cluster_centers])
+    projected_values = reduce_with_pca(stacked_values)
+    return projected_values[: len(embeddings)], projected_values[len(embeddings) :]
 
 
 def display_similarity_matrix(embeddings: np.ndarray, cluster_labels: np.ndarray, directory: str | Path) -> None:
@@ -346,7 +371,7 @@ def display_cluster_word_projection(
         labels={"x": "Dimension 1", "y": "Dimension 2", "Fréquence": "Fréquence"},
     )
     fig.update_traces(textposition="top center", marker={"opacity": 0.72})
-    fig.update_layout(height=700, legend_title_text="Clusters")
+    fig.update_layout(height=560, legend_title_text="Clusters", margin={"l": 20, "r": 20, "t": 55, "b": 25})
     st.caption(
         "Chaque point est un mot extrait d'un cluster. Les axes sont une projection 2D des embeddings "
         "des mots, et la taille du point indique la fréquence du mot dans son cluster."
@@ -457,8 +482,13 @@ def display_discriminant_words(
     save_plotly_figure(fig, "kmeans_mots_discriminants.html", directory)
 
 
-def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, directory: str | Path) -> None:
-    reduced_embeddings = reduce_to_2d(embeddings)
+def display_cluster_visualization(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    cluster_centers: np.ndarray,
+    directory: str | Path,
+) -> None:
+    reduced_embeddings, _ = project_documents_and_centers(embeddings, cluster_centers)
     viz_df = pd.DataFrame(
         {
             "x": reduced_embeddings[:, 0],
@@ -467,11 +497,11 @@ def display_cluster_visualization(embeddings: np.ndarray, labels: np.ndarray, di
         }
     )
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(10, 6))
     sns.scatterplot(data=viz_df, x="x", y="y", hue="Cluster", palette="viridis", s=50, alpha=0.7, ax=ax)
-    ax.set_title("Visualisation des Clusters K-Means")
-    ax.set_xlabel("Dimension 1")
-    ax.set_ylabel("Dimension 2")
+    ax.set_title("Visualisation des Clusters K-Means en 2D")
+    ax.set_xlabel("Axe PCA 1")
+    ax.set_ylabel("Axe PCA 2")
     ax.legend(title="Clusters", bbox_to_anchor=(1.05, 1), loc="upper left")
     save_matplotlib_figure(fig, "kmeans_cluster_2D.png", directory)
     st.pyplot(fig)
@@ -488,11 +518,7 @@ def display_decision_boundaries(
         st.info("Il faut au moins deux clusters pour afficher des frontières de décision.")
         return
 
-    projection_model = PCA(n_components=2)
-    stacked_values = np.vstack([embeddings, cluster_centers])
-    projected_values = projection_model.fit_transform(stacked_values)
-    projected_documents = projected_values[: len(embeddings)]
-    projected_centers = projected_values[len(embeddings) :]
+    projected_documents, projected_centers = project_documents_and_centers(embeddings, cluster_centers)
 
     x_min, x_max = projected_documents[:, 0].min(), projected_documents[:, 0].max()
     y_min, y_max = projected_documents[:, 1].min(), projected_documents[:, 1].max()
@@ -506,11 +532,20 @@ def display_decision_boundaries(
     grid_distances = np.linalg.norm(grid_points[:, np.newaxis, :] - projected_centers[np.newaxis, :, :], axis=2)
     grid_labels = grid_distances.argmin(axis=1).reshape(xx.shape)
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(10, 6))
     color_map = plt.get_cmap("tab20", len(cluster_centers))
     contour_levels = np.arange(len(cluster_centers) + 1) - 0.5
-    contour = ax.contourf(xx, yy, grid_labels, levels=contour_levels, alpha=0.16, cmap=color_map)
-    _ = contour
+    ax.contourf(xx, yy, grid_labels, levels=contour_levels, alpha=0.24, cmap=color_map)
+    if len(cluster_centers) > 1:
+        ax.contour(
+            xx,
+            yy,
+            grid_labels,
+            levels=np.arange(len(cluster_centers) - 1) + 0.5,
+            colors="black",
+            linewidths=0.8,
+            alpha=0.48,
+        )
     for cluster_index in range(len(cluster_centers)):
         mask = cluster_labels == cluster_index
         if not np.any(mask):
@@ -540,6 +575,8 @@ def display_decision_boundaries(
     ax.set_title("Frontières de Décision Approximatives en 2D")
     ax.set_xlabel("Axe PCA 1")
     ax.set_ylabel("Axe PCA 2")
+    ax.set_xlim(x_min - x_padding, x_max + x_padding)
+    ax.set_ylim(y_min - y_padding, y_max + y_padding)
     ax.legend(title="Clusters", bbox_to_anchor=(1.05, 1), loc="upper left")
     st.caption(
         "Ces frontières sont une approximation visuelle en 2D obtenue après projection PCA. "
@@ -550,15 +587,20 @@ def display_decision_boundaries(
     plt.close(fig)
 
 
-def display_centroid_visualization(embeddings: np.ndarray, cluster_labels: np.ndarray, directory: str | Path) -> None:
-    cluster_centers = np.array([embeddings[cluster_labels == i].mean(axis=0) for i in range(max(cluster_labels) + 1)])
-    reduced_centroids = reduce_to_2d(cluster_centers)
+def display_centroid_visualization(
+    embeddings: np.ndarray,
+    cluster_labels: np.ndarray,
+    cluster_centers: np.ndarray,
+    directory: str | Path,
+) -> None:
+    _, reduced_centroids = project_documents_and_centers(embeddings, cluster_centers)
+    cluster_sizes = pd.Series(cluster_labels).value_counts().reindex(range(len(cluster_centers)), fill_value=0)
     df_centroids = pd.DataFrame(
         {
             "x": reduced_centroids[:, 0],
             "y": reduced_centroids[:, 1],
-            "Cluster": range(1, len(cluster_centers) + 1),
-            "Size": [10] * len(cluster_centers),
+            "Cluster": [f"Cluster {cluster + 1}" for cluster in range(len(cluster_centers))],
+            "Nombre d'articles": [int(cluster_sizes[cluster]) for cluster in range(len(cluster_centers))],
         }
     )
 
@@ -566,27 +608,33 @@ def display_centroid_visualization(embeddings: np.ndarray, cluster_labels: np.nd
         df_centroids,
         x="x",
         y="y",
-        size="Size",
+        size="Nombre d'articles",
         color="Cluster",
         title="Visualisation des Centroides des Clusters",
-        labels={"x": "Dimension 1", "y": "Dimension 2", "Cluster": "Clusters"},
-        hover_data={"Size": False},
+        labels={"x": "Axe PCA 1", "y": "Axe PCA 2", "Cluster": "Clusters"},
+        hover_data=["Nombre d'articles"],
+        size_max=34,
     )
     fig.update_traces(marker={"opacity": 0.6})
+    fig.update_layout(height=430, margin={"l": 20, "r": 20, "t": 55, "b": 25})
     st.plotly_chart(fig, use_container_width=True)
     save_plotly_figure(fig, "kmeans_centroid_visualization.png", directory)
 
 
-def display_grouped_bubble_chart(embeddings: np.ndarray, cluster_labels: np.ndarray, directory: str | Path) -> None:
+def display_grouped_bubble_chart(
+    embeddings: np.ndarray,
+    cluster_labels: np.ndarray,
+    cluster_centers: np.ndarray,
+    directory: str | Path,
+) -> None:
     cluster_ids = sorted(set(cluster_labels))
-    cluster_centers = np.array([embeddings[cluster_labels == cluster].mean(axis=0) for cluster in cluster_ids])
-    reduced_centers = reduce_to_2d(cluster_centers)
+    _, reduced_centers = project_documents_and_centers(embeddings, cluster_centers)
     cluster_sizes = pd.Series(cluster_labels).value_counts().sort_index()
     total_documents = int(cluster_sizes.sum())
     df = pd.DataFrame(
         {
-            "x": reduced_centers[:, 0],
-            "y": reduced_centers[:, 1],
+            "x": [reduced_centers[cluster, 0] for cluster in cluster_ids],
+            "y": [reduced_centers[cluster, 1] for cluster in cluster_ids],
             "Cluster": [f"Cluster {cluster + 1}" for cluster in cluster_ids],
             "Nombre d'articles": [int(cluster_sizes[cluster]) for cluster in cluster_ids],
             "Part du corpus": [
@@ -605,9 +653,9 @@ def display_grouped_bubble_chart(embeddings: np.ndarray, cluster_labels: np.ndar
         opacity=0.6,
         size_max=50,
         title="Taille des Clusters sous Forme de Bulles",
-        labels={"x": "Dimension 1", "y": "Dimension 2"},
+        labels={"x": "Axe PCA 1", "y": "Axe PCA 2"},
     )
-    fig.update_layout(showlegend=True)
+    fig.update_layout(showlegend=True, height=430, margin={"l": 20, "r": 20, "t": 55, "b": 25})
     st.caption(
         "Ce graphique sert à contrôler l'équilibre des clusters : chaque bulle représente un cluster, "
         "et sa taille correspond au nombre d'articles regroupés dans ce cluster."
@@ -710,9 +758,15 @@ def render_preparation() -> None:
     st.subheader("Uploader un Fichier")
     uploaded_file = st.file_uploader("Téléchargez un fichier texte contenant des articles de presse", type="txt")
     if uploaded_file is not None:
-        st.session_state.file_name = uploaded_file.name
-        stringio = StringIO(uploaded_file.getvalue().decode("utf-8", errors="replace"))
-        st.session_state.df = dataframe_from_text(stringio.read())
+        uploaded_bytes = uploaded_file.getvalue()
+        file_signature = hashlib.sha256(uploaded_bytes).hexdigest()
+        if st.session_state.file_signature != file_signature:
+            st.session_state.file_name = uploaded_file.name
+            stringio = StringIO(uploaded_bytes.decode("utf-8", errors="replace"))
+            st.session_state.df = dataframe_from_text(stringio.read())
+            st.session_state.file_signature = file_signature
+            st.session_state.kmeans_last_result = None
+            reset_output_directory()
         st.write(st.session_state.df)
         st.sidebar.text(f"Fichier chargé : {st.session_state.file_name}")
 
@@ -722,6 +776,85 @@ def render_preparation() -> None:
         st.session_state.save_directory = str(get_output_directory())
 
     render_stopword_settings()
+
+
+def render_elbow_method(valid_k_values: list[int], inertia: list[float], directory: str | Path) -> None:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    ax.plot(valid_k_values, inertia, "bx-")
+    ax.set_xlabel("Nombre de Clusters (k)")
+    ax.set_ylabel("Inertie")
+    ax.set_title("Méthode du Coude Pour Déterminer le Nombre Optimal de Clusters")
+    st.pyplot(fig)
+    save_matplotlib_figure(fig, "elbow_method.png", directory)
+    plt.close(fig)
+
+
+def render_kmeans_results(
+    result: dict,
+    selected_stopwords: list[str],
+    wordcloud_max_words: int,
+    projected_words_per_cluster: int,
+    show_discriminant_words: bool,
+    discriminant_words_per_cluster: int,
+    show_decision_boundaries: bool,
+) -> None:
+    df = result["df"]
+    embeddings = result["embeddings"]
+    kmeans_labels = result["cluster_labels"]
+    cluster_centers = result["cluster_centers"]
+    save_directory = result["save_directory"]
+    unique_clusters = len(set(kmeans_labels))
+
+    st.subheader("Résultats de la Dernière Analyse")
+    st.write(f"Clusters KMeans trouvés : {unique_clusters} (regroupés)")
+    render_elbow_method(result["valid_k_values"], result["inertia"], save_directory)
+
+    if unique_clusters <= 0:
+        return
+
+    st.subheader("Visualisation des Clusters en 2D")
+    display_cluster_visualization(embeddings, kmeans_labels, cluster_centers, save_directory)
+
+    if show_decision_boundaries:
+        st.subheader("Frontières de Décision Approximatives en 2D")
+        display_decision_boundaries(embeddings, kmeans_labels, cluster_centers, save_directory)
+
+    st.subheader("Visualisation des Centroides des Clusters K-Means")
+    display_centroid_visualization(embeddings, kmeans_labels, cluster_centers, save_directory)
+
+    st.subheader("Taille des Clusters sous Forme de Bulles")
+    display_grouped_bubble_chart(embeddings, kmeans_labels, cluster_centers, save_directory)
+
+    st.subheader("Projection des Mots des Clusters en 2D")
+    display_cluster_word_projection(
+        df,
+        kmeans_labels,
+        selected_stopwords,
+        projected_words_per_cluster,
+        save_directory,
+    )
+
+    if show_discriminant_words:
+        st.subheader("Mots les Plus Loin des Frontières de Décision")
+        display_discriminant_words(
+            df,
+            kmeans_labels,
+            cluster_centers,
+            selected_stopwords,
+            discriminant_words_per_cluster,
+            save_directory,
+        )
+
+    st.subheader("Carte Thermique de Similarité des Clusters")
+    display_similarity_matrix(embeddings, kmeans_labels, save_directory)
+
+    concordance_kmeans = create_concordance(df, kmeans_labels)
+    st.subheader("Concordancier KMeans")
+    st.dataframe(concordance_kmeans, use_container_width=True)
+    save_csv(concordance_kmeans, "concordance_kmeans", save_directory)
+
+    display_wordclouds(df, kmeans_labels, save_directory, selected_stopwords, wordcloud_max_words)
+    display_results_download(save_directory)
 
 
 def render_analysis() -> None:
@@ -823,76 +956,36 @@ def render_analysis() -> None:
 
         with st.spinner("Calcul de la méthode du coude..."):
             inertia = []
-            valid_k_values = range(2, min(20, len(df)) + 1)
+            valid_k_values = list(range(2, min(20, len(df)) + 1))
             for k in valid_k_values:
                 kmeans = KMeans(n_clusters=k, random_state=42)
                 kmeans.fit(embeddings)
                 inertia.append(kmeans.inertia_)
 
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(list(valid_k_values), inertia, "bx-")
-        ax.set_xlabel("Nombre de Clusters (k)")
-        ax.set_ylabel("Inertie")
-        ax.set_title("Méthode du Coude Pour Déterminer le Nombre Optimal de Clusters")
-        st.pyplot(fig)
-        save_matplotlib_figure(fig, "elbow_method.png", save_directory)
-        plt.close(fig)
-
         cluster_model = KMeans(n_clusters=n_clusters, random_state=42)
         kmeans_labels = cluster_model.fit_predict(embeddings)
-        unique_clusters = len(set(kmeans_labels))
-        st.write(f"Clusters KMeans trouvés : {unique_clusters} (regroupés)")
+        st.session_state.kmeans_last_result = {
+            "df": df.copy(),
+            "embeddings": embeddings,
+            "cluster_labels": kmeans_labels,
+            "cluster_centers": cluster_model.cluster_centers_,
+            "valid_k_values": valid_k_values,
+            "inertia": inertia,
+            "save_directory": save_directory,
+            "n_clusters": n_clusters,
+        }
+        st.success("Analyse KMeans terminée.")
 
-        if unique_clusters > 0:
-            st.subheader("Visualisation des Centroides des Clusters K-Means")
-            display_centroid_visualization(embeddings, kmeans_labels, save_directory)
-
-            st.subheader("Taille des Clusters sous Forme de Bulles")
-            display_grouped_bubble_chart(embeddings, kmeans_labels, save_directory)
-
-            st.subheader("Projection des Mots des Clusters en 2D")
-            display_cluster_word_projection(
-                df,
-                kmeans_labels,
-                selected_stopwords,
-                projected_words_per_cluster,
-                save_directory,
-            )
-
-            if show_discriminant_words:
-                st.subheader("Mots les Plus Loin des Frontières de Décision")
-                display_discriminant_words(
-                    df,
-                    kmeans_labels,
-                    cluster_model.cluster_centers_,
-                    selected_stopwords,
-                    discriminant_words_per_cluster,
-                    save_directory,
-                )
-
-            if show_decision_boundaries:
-                st.subheader("Frontières de Décision Approximatives en 2D")
-                display_decision_boundaries(embeddings, kmeans_labels, cluster_model.cluster_centers_, save_directory)
-
-            st.subheader("Visualisation des Clusters en 2D")
-            display_cluster_visualization(embeddings, kmeans_labels, save_directory)
-
-            st.subheader("Carte Thermique de Similarité des Clusters")
-            display_similarity_matrix(embeddings, kmeans_labels, save_directory)
-
-            concordance_kmeans = create_concordance(df, kmeans_labels)
-            st.subheader("Concordancier KMeans")
-            st.dataframe(concordance_kmeans, use_container_width=True)
-            save_csv(concordance_kmeans, "concordance_kmeans", save_directory)
-
-            display_wordclouds(df, kmeans_labels, save_directory, selected_stopwords, wordcloud_max_words)
-
-            st.download_button(
-                "Télécharger les résultats",
-                data=zip_directory(save_directory),
-                file_name="kmeans_resultats.zip",
-                mime="application/zip",
-            )
+    if st.session_state.kmeans_last_result is not None:
+        render_kmeans_results(
+            st.session_state.kmeans_last_result,
+            selected_stopwords,
+            wordcloud_max_words,
+            projected_words_per_cluster,
+            show_discriminant_words,
+            discriminant_words_per_cluster,
+            show_decision_boundaries,
+        )
 
 
 def render_faq() -> None:
@@ -1015,8 +1108,12 @@ def main() -> None:
         st.session_state.df = None
     if "file_name" not in st.session_state:
         st.session_state.file_name = None
+    if "file_signature" not in st.session_state:
+        st.session_state.file_signature = None
     if "save_directory" not in st.session_state:
         st.session_state.save_directory = str(get_output_directory())
+    if "kmeans_last_result" not in st.session_state:
+        st.session_state.kmeans_last_result = None
     if "stopword_mode" not in st.session_state:
         st.session_state.stopword_mode = STOPWORD_MODE_FRENCH
     if "custom_stopwords" not in st.session_state:
