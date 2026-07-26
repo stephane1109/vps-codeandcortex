@@ -1098,12 +1098,6 @@ def main() -> None:
         "[www.codeandcortex.fr](http://www.codeandcortex.fr)**"
     )
 
-    menu_principal = st.radio(
-        "Menu Principal",
-        ["Préparation des Données", "Analyse des Données", "FAQ"],
-        horizontal=True,
-    )
-
     if "df" not in st.session_state:
         st.session_state.df = None
     if "file_name" not in st.session_state:
@@ -1131,11 +1125,13 @@ def main() -> None:
     if "show_decision_boundaries" not in st.session_state:
         st.session_state.show_decision_boundaries = False
 
-    if menu_principal == "Préparation des Données":
+    preparation_tab, analysis_tab, faq_tab = st.tabs(["Préparation des Données", "Analyse des Données", "FAQ"])
+
+    with preparation_tab:
         render_preparation()
-    elif menu_principal == "Analyse des Données":
+    with analysis_tab:
         render_analysis()
-    elif menu_principal == "FAQ":
+    with faq_tab:
         render_faq()
 
 
