@@ -73,7 +73,12 @@ const els = {
   supprimerChiffres: document.getElementById("supprimerChiffres"),
   supprimerApostrophes: document.getElementById("supprimerApostrophes"),
   forcerMinusculesAvant: document.getElementById("forcerMinusculesAvant"),
-  retirerStopwords: document.getElementById("retirerStopwords"),
+  modeNettoyageLexical: document.getElementById("modeNettoyageLexical"),
+  lexiqueSection: document.getElementById("lexiqueSection"),
+  lexiqueUtiliserLemmes: document.getElementById("lexiqueUtiliserLemmes"),
+  posLexiqueSelection: document.getElementById("posLexiqueSelection"),
+  morphoConserverHorsLexique: document.getElementById("morphoConserverHorsLexique"),
+  morphoExclureEtreVerbe: document.getElementById("morphoExclureEtreVerbe"),
   filtrageMorpho: document.getElementById("filtrageMorpho"),
   posSection: document.getElementById("posSection"),
   uposSelection: document.getElementById("uposSelection"),
@@ -463,6 +468,8 @@ function toggleAdvancedUi(root = document) {
   const segmentSize = resolveScopedField(root, "segmentSize");
   const typeClassification = resolveScopedField(root, "typeClassification");
   const doubleClassificationOptions = resolveScopedField(root, "doubleClassificationOptions");
+  const modeNettoyageLexical = resolveScopedField(root, "modeNettoyageLexical");
+  const lexiqueSection = resolveScopedField(root, "lexiqueSection");
   const filtrageMorpho = resolveScopedField(root, "filtrageMorpho");
   const posSection = resolveScopedField(root, "posSection");
   const uposSelection = resolveScopedField(root, "uposSelection");
@@ -475,6 +482,10 @@ function toggleAdvancedUi(root = document) {
   if (typeClassification && doubleClassificationOptions) {
     const isDouble = typeClassification.value === "double";
     doubleClassificationOptions.hidden = !isDouble;
+  }
+
+  if (modeNettoyageLexical && lexiqueSection) {
+    lexiqueSection.hidden = modeNettoyageLexical.value !== "lexique_iramuteq";
   }
 
   if (filtrageMorpho && posSection && uposSelection) {
@@ -502,9 +513,16 @@ function configPayload() {
     supprimer_chiffres: Boolean(els.supprimerChiffres.checked),
     supprimer_apostrophes: Boolean(els.supprimerApostrophes.checked),
     forcer_minuscules_avant: Boolean(els.forcerMinusculesAvant.checked),
-    retirer_stopwords: Boolean(els.retirerStopwords.checked),
+    mode_nettoyage_lexical: els.modeNettoyageLexical.value,
+    retirer_stopwords: els.modeNettoyageLexical.value === "stopwords_quanteda",
+    lexique_utiliser_lemmes: Boolean(els.lexiqueUtiliserLemmes.checked),
+    pos_lexique_a_conserver: selectedValues(els.posLexiqueSelection),
+    morpho_conserver_hors_lexique: Boolean(els.morphoConserverHorsLexique.checked),
+    morpho_exclure_etre_verbe: Boolean(els.morphoExclureEtreVerbe.checked),
     filtrage_morpho: Boolean(els.filtrageMorpho.checked),
     pos_spacy_a_conserver: selectedValues(els.uposSelection),
+    lemmatisation: Boolean(els.spacyUtiliserLemmes.checked),
+    upos_a_conserver: selectedValues(els.uposSelection),
     spacy_utiliser_lemmes: Boolean(els.spacyUtiliserLemmes.checked),
     activer_ner: Boolean(els.activerNer.checked),
     afc_reduire_chevauchement: Boolean(els.afcReduireChevauchement.checked),
@@ -1125,8 +1143,9 @@ function bindEvents() {
   [
     els.modeDecoupage,
     els.typeClassification,
+    els.modeNettoyageLexical,
     els.filtrageMorpho,
-  ].forEach((element) => element.addEventListener("change", () => toggleAdvancedUi(document)));
+  ].forEach((element) => element?.addEventListener("change", () => toggleAdvancedUi(document)));
 
   els.explorerK.addEventListener("input", syncExplorerUi);
   els.explorerMeasure.addEventListener("change", syncExplorerUi);

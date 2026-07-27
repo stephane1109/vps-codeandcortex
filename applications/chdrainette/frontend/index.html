@@ -94,8 +94,8 @@
               <article class="card section-card" data-chd-config-source>
                 <div class="section-head">
                   <div>
-                    <p class="card-kicker">spaCy</p>
-                    <h3>Dictionnaire spaCy</h3>
+                    <p class="card-kicker">Langue</p>
+                    <h3>Langue du corpus</h3>
                   </div>
                 </div>
                 <div class="form-grid form-grid--single">
@@ -108,7 +108,7 @@
                     </select>
                   </label>
                   <p class="muted sidebar-note">
-                    Ce choix pilote spaCy, les stopwords et le NER.
+                    Ce choix pilote les traitements linguistiques et le NER. Le nettoyage lexical se règle dans le bloc Texte.
                   </p>
                 </div>
               </article>
@@ -169,13 +169,65 @@
                     <input id="forcerMinusculesAvant" type="checkbox" />
                     <span>Forcer les minuscules avant traitement</span>
                   </label>
-                  <label class="checkbox-row">
-                    <input id="retirerStopwords" type="checkbox" />
-                    <span>Retirer les stopwords (spaCy)</span>
+                  <label>
+                    Nettoyage lexical
+                    <select id="modeNettoyageLexical">
+                      <option value="stopwords_quanteda" selected>Stopwords quanteda</option>
+                      <option value="lexique_iramuteq">Dictionnaire IRaMuTeQ-lite (lexique_fr)</option>
+                      <option value="aucun">Aucun nettoyage lexical</option>
+                    </select>
                   </label>
+                  <p class="muted sidebar-note">
+                    Le mode Quanteda conserve le nettoyage actuel. Le mode dictionnaire applique lexique_fr
+                    avec c_mot, c_lemme et c_morpho.
+                  </p>
+                  <div id="lexiqueSection" class="stacked-fields" hidden>
+                    <label class="checkbox-row">
+                      <input id="lexiqueUtiliserLemmes" type="checkbox" checked />
+                      <span>Lemmatisation lexique_fr (forme vers c_lemme)</span>
+                    </label>
+                    <label>
+                      Catégories c_morpho à conserver
+                      <select id="posLexiqueSelection" multiple size="8">
+                        <option value="ADJ" selected>ADJ</option>
+                        <option value="ADJ_DEM">ADJ_DEM</option>
+                        <option value="ADJ_IND">ADJ_IND</option>
+                        <option value="ADJ_INT">ADJ_INT</option>
+                        <option value="ADJ_NUM">ADJ_NUM</option>
+                        <option value="ADJ_POS">ADJ_POS</option>
+                        <option value="ADJ_SUP">ADJ_SUP</option>
+                        <option value="ADV">ADV</option>
+                        <option value="ADV_SUP">ADV_SUP</option>
+                        <option value="ART_DEF">ART_DEF</option>
+                        <option value="ART_IND">ART_IND</option>
+                        <option value="AUX">AUX</option>
+                        <option value="CON">CON</option>
+                        <option value="NOM" selected>NOM</option>
+                        <option value="NOM_SUP">NOM_SUP</option>
+                        <option value="ONO">ONO</option>
+                        <option value="PRE">PRE</option>
+                        <option value="PRO_DEM">PRO_DEM</option>
+                        <option value="PRO_IND">PRO_IND</option>
+                        <option value="PRO_PER">PRO_PER</option>
+                        <option value="PRO_POS">PRO_POS</option>
+                        <option value="PRO_REL">PRO_REL</option>
+                        <option value="VER" selected>VER</option>
+                        <option value="VER_SUP">VER_SUP</option>
+                        <option value="AUTRE_FORME">AUTRE_FORME</option>
+                      </select>
+                    </label>
+                    <label class="checkbox-row">
+                      <input id="morphoConserverHorsLexique" type="checkbox" checked />
+                      <span>Conserver les formes hors lexique (AUTRE_FORME)</span>
+                    </label>
+                    <label class="checkbox-row">
+                      <input id="morphoExclureEtreVerbe" type="checkbox" />
+                      <span>Exclure être/etre si VER est sélectionné</span>
+                    </label>
+                  </div>
                   <label class="checkbox-row">
                     <input id="filtrageMorpho" type="checkbox" />
-                    <span>Filtrage morphosyntaxique (spaCy)</span>
+                    <span>Filtrage morphosyntaxique UDPipe</span>
                   </label>
                   <div id="posSection" class="stacked-fields" hidden>
                     <label>
@@ -622,7 +674,7 @@
                   interface web locale au conteneur pour éviter la dépendance à Shiny côté utilisateur.
                 </p>
                 <p>
-                  Les paramètres CHD, les choix spaCy, la classification simple ou double, le nettoyage, le NER,
+                  Les paramètres CHD, les traitements linguistiques, la classification simple ou double, le nettoyage, le NER,
                   l’AFC et les cooccurrences sont maintenant regroupés dans une fenêtre de paramétrage dédiée.
                 </p>
                 <p>
