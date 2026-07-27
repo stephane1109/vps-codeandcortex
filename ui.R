@@ -181,6 +181,30 @@ build_main_ui <- function() {
           background: #24211f !important;
           color: #fffefa !important;
         }
+        .shiny-input-container .input-group {
+          display: flex !important;
+          align-items: stretch !important;
+          width: 100%;
+        }
+        .shiny-input-container label.input-group-btn,
+        .shiny-input-container .input-group-btn {
+          display: flex !important;
+          align-items: stretch !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          width: auto !important;
+        }
+        .shiny-input-container .input-group .form-control {
+          height: auto !important;
+          min-height: 2.75rem !important;
+        }
+        .shiny-input-container .btn-file {
+          display: inline-flex !important;
+          align-items: center !important;
+          min-height: 2.75rem !important;
+          margin: 0 !important;
+          white-space: nowrap;
+        }
         .action-row {
           display: grid;
           gap: 0.45rem;
