@@ -283,6 +283,59 @@ exporter_segments_par_classe <- function(segments_by_class, path) {
   path
 }
 
+extraire_frequences_dfm <- function(dfm_obj, rv = NULL, label = NULL) {
+  empty <- data.frame(
+    feature = character(0),
+    frequency = numeric(0),
+    rank = integer(0),
+    docfreq = integer(0),
+    group = character(0),
+    stringsAsFactors = FALSE
+  )
+
+  if (is.null(dfm_obj) || quanteda::ndoc(dfm_obj) == 0 || quanteda::nfeat(dfm_obj) == 0) {
+    return(empty)
+  }
+
+  total <- tryCatch(sum(dfm_obj), error = function(e) 0)
+  if (!is.finite(total) || total <= 0) {
+    return(empty)
+  }
+
+  tryCatch(
+    as.data.frame(quanteda.textstats::textstat_frequency(dfm_obj), stringsAsFactors = FALSE),
+    error = function(e) {
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Fréquences ignorées", if (!is.null(label) && nzchar(label)) paste0(" (", label, ")") else "", " : ", conditionMessage(e)))
+      }
+      empty
+    }
+  )
+}
+
+preparer_termes_wordcloud <- function(words, freq, top_n) {
+  words <- trimws(as.character(words))
+  freq <- suppressWarnings(as.numeric(freq))
+  keep <- !is.na(words) & nzchar(words) & is.finite(freq) & !is.na(freq) & freq > 0
+  words <- words[keep]
+  freq <- freq[keep]
+
+  if (!length(words)) {
+    return(data.frame(words = character(0), freq = numeric(0), stringsAsFactors = FALSE))
+  }
+
+  ord <- order(freq, decreasing = TRUE)
+  words <- words[ord]
+  freq <- freq[ord]
+  n <- min(as.integer(top_n), length(words))
+
+  data.frame(
+    words = words[seq_len(n)],
+    freq = freq[seq_len(n)],
+    stringsAsFactors = FALSE
+  )
+}
+
 exporter_wordclouds <- function(res_stats_df, dfm_obj, groupes, clusters, top_n, output_dir, rv = NULL) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   out <- list()
@@ -293,14 +346,15 @@ exporter_wordclouds <- function(res_stats_df, dfm_obj, groupes, clusters, top_n,
       dplyr::arrange(dplyr::desc(chi2)) %>%
       dplyr::slice_head(n = top_n)
 
-    if (nrow(subset_stats) > 0) {
+    termes_chi2 <- preparer_termes_wordcloud(subset_stats$Terme, subset_stats$chi2, top_n)
+    if (nrow(termes_chi2) > 0) {
       file_chi2 <- file.path(output_dir, paste0("cluster_", cl, "_wordcloud_chi2.png"))
       safe_png_export(
         file_chi2,
         {
           suppressWarnings(wordcloud(
-            words = subset_stats$Terme,
-            freq = subset_stats$chi2,
+            words = termes_chi2$words,
+            freq = termes_chi2$freq,
             scale = c(10, 0.5),
             max.words = top_n,
             colors = brewer.pal(8, "Dark2")
@@ -320,16 +374,17 @@ exporter_wordclouds <- function(res_stats_df, dfm_obj, groupes, clusters, top_n,
     segments_idx <- which(groupes == cl)
     if (length(segments_idx) > 0) {
       dfm_cl <- dfm_obj[segments_idx, ]
-      freq_terms <- quanteda.textstats::textstat_frequency(dfm_cl)
+      freq_terms <- extraire_frequences_dfm(dfm_cl, rv = rv, label = paste0("wordcloud fréquence classe ", cl))
       freq_terms <- freq_terms[seq_len(min(top_n, nrow(freq_terms))), , drop = FALSE]
-      if (nrow(freq_terms) > 0) {
+      termes_freq <- preparer_termes_wordcloud(freq_terms$feature, freq_terms$frequency, top_n)
+      if (nrow(termes_freq) > 0) {
         file_freq <- file.path(output_dir, paste0("cluster_", cl, "_wordcloud_frequence.png"))
         safe_png_export(
           file_freq,
           {
             suppressWarnings(wordcloud(
-              words = freq_terms$feature,
-              freq = freq_terms$frequency,
+              words = termes_freq$words,
+              freq = termes_freq$freq,
               scale = c(10, 0.5),
               max.words = top_n,
               colors = brewer.pal(8, "Set2")
@@ -368,6 +423,9 @@ exporter_mots_et_segments <- function(segments_by_class_all, res_stats_df, dfm_o
     if (!length(mots_cl)) next
 
     noms_segments <- names(segs)
+    if (is.null(noms_segments) || length(noms_segments) != length(segs)) {
+      noms_segments <- paste0("segment_", seq_along(segs))
+    }
 
     for (mot in mots_cl) {
       motif <- paste0("\\b", echapper_regex(mot), "\\b")
@@ -411,13 +469,20 @@ exporter_mots_et_segments <- function(segments_by_class_all, res_stats_df, dfm_o
 
   frequences_par_classe <- lapply(clusters, function(cl) {
     dfm_cl <- dfm_obj[groupes == cl, ]
-    freq <- quanteda.textstats::textstat_frequency(dfm_cl)
-    freq$Classe <- as.integer(cl)
+    freq <- extraire_frequences_dfm(dfm_cl, label = paste0("classe ", cl))
+    if (nrow(freq)) {
+      freq$Classe <- as.integer(cl)
+    }
     freq
   })
-  frequences_df <- dplyr::bind_rows(frequences_par_classe) %>%
-    dplyr::rename(Mot = feature, Frequence = frequency) %>%
-    dplyr::select(Mot, Classe, Frequence)
+  frequences_df <- dplyr::bind_rows(frequences_par_classe)
+  if (nrow(frequences_df)) {
+    frequences_df <- frequences_df %>%
+      dplyr::rename(Mot = feature, Frequence = frequency) %>%
+      dplyr::select(Mot, Classe, Frequence)
+  } else {
+    frequences_df <- data.frame(Mot = character(0), Classe = integer(0), Frequence = numeric(0), stringsAsFactors = FALSE)
+  }
 
   if (nrow(donnees_finales)) {
     donnees_finales <- merge(donnees_finales, frequences_df, by = c("Mot", "Classe"), all.x = TRUE)
@@ -651,23 +716,39 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     ajouter_etape(rv, "Exports texte et concordancier générés.")
   }
 
-  wordclouds <- exporter_wordclouds(
-    res_stats_df = res_stats_df,
-    dfm_obj = dfm_ok,
-    groupes = groupes,
-    clusters = clusters,
-    top_n = params$top_n,
-    output_dir = file.path(export_dir, "wordclouds"),
-    rv = rv
+  wordclouds <- tryCatch(
+    exporter_wordclouds(
+      res_stats_df = res_stats_df,
+      dfm_obj = dfm_ok,
+      groupes = groupes,
+      clusters = clusters,
+      top_n = params$top_n,
+      output_dir = file.path(export_dir, "wordclouds"),
+      rv = rv
+    ),
+    error = function(e) {
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Exports nuages de mots ignorés : ", conditionMessage(e)))
+      }
+      data.frame(classe = character(0), type = character(0), src = character(0), stringsAsFactors = FALSE)
+    }
   )
 
-  exporter_mots_et_segments(
-    segments_by_class_all = segments_info$all,
-    res_stats_df = res_stats_df,
-    dfm_obj = dfm_ok,
-    groupes = groupes,
-    top_n = params$top_n,
-    export_dir = export_dir
+  tryCatch(
+    exporter_mots_et_segments(
+      segments_by_class_all = segments_info$all,
+      res_stats_df = res_stats_df,
+      dfm_obj = dfm_ok,
+      groupes = groupes,
+      top_n = params$top_n,
+      export_dir = export_dir
+    ),
+    error = function(e) {
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Exports mots/segments ignorés : ", conditionMessage(e)))
+      }
+      NULL
+    }
   )
 
   bundle_info <- exporter_bundle_rainette(
