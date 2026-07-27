@@ -726,7 +726,7 @@ server <- function(input, output, session) {
 
   output$ui_afc_status <- renderUI({
     if (!is.null(rv$afc_obj)) {
-      return(tags$div(class = "alert alert-success", "AFC calculée à partir des classes de la CHD."))
+      return(tags$p(class = "afc-status-note is-ok", "AFC calculée à partir des classes de la CHD."))
     }
     if (!is.null(rv$afc_error) && nzchar(rv$afc_error)) {
       return(tags$div(class = "alert alert-warning", rv$afc_error))
