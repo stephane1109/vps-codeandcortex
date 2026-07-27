@@ -613,7 +613,6 @@ build_main_ui <- function() {
             ),
             selected = "stopwords_quanteda"
           ),
-          helpText("Le dictionnaire IRaMuTeQ-lite demandé est intégré dans dictionnaires/lexique_fr.csv. Quanteda reste disponible au choix."),
           uiOutput("ui_stopwords_info"),
           checkboxInput("lexique_utiliser_lemmes", "Lemmatisation lexique_fr (forme vers c_lemme)", value = TRUE),
           selectizeInput(
