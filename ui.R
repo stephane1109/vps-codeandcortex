@@ -261,6 +261,37 @@ build_main_ui <- function() {
           letter-spacing: 0.06em;
           text-transform: uppercase;
         }
+        .help-pane,
+        .help-pane p,
+        .help-pane li {
+          color: #24211f;
+          font-size: 1.32rem !important;
+          line-height: 1.45 !important;
+        }
+        .help-pane h1,
+        .help-pane h2,
+        .help-pane h3 {
+          margin: 0.95rem 0 0.45rem;
+          color: #24211f;
+          font-size: 1.45rem !important;
+          font-weight: 700;
+          line-height: 1.25 !important;
+        }
+        .help-pane h1:first-child,
+        .help-pane h2:first-child,
+        .help-pane h3:first-child {
+          margin-top: 0;
+        }
+        .help-pane ul,
+        .help-pane ol {
+          margin: 0.35rem 0 0.9rem 1.35rem;
+          padding-left: 0;
+        }
+        .help-pane a,
+        .help-pane strong,
+        .help-pane code {
+          font-size: inherit !important;
+        }
         .wide-stack {
           display: grid;
           gap: 0.85rem;
