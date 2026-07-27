@@ -149,6 +149,10 @@ build_main_ui <- function() {
           margin-bottom: 0.35rem;
           font-size: 1.32rem !important;
         }
+        #langue_corpus,
+        #mode_nettoyage_lexical {
+          margin-top: 0.7rem !important;
+        }
         .checkbox label,
         .radio label {
           min-height: 0;
