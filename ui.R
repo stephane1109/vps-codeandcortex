@@ -428,6 +428,16 @@ build_main_ui <- function() {
           font-weight: 400 !important;
           line-height: 1.35 !important;
         }
+        .archive-placeholder {
+          margin: 0.15rem 0 0 !important;
+          color: #6b625b !important;
+          font-size: 1.02rem !important;
+          font-weight: 400 !important;
+          line-height: 1.35 !important;
+        }
+        .archive-download-action {
+          margin-top: 0.85rem;
+        }
         .ticket-status-shell {
           display: grid;
           gap: 0.4rem;
@@ -608,8 +618,7 @@ build_main_ui <- function() {
         ),
         div(
           class = "action-row",
-          actionButton("lancer", "Lancer l'analyse", class = "btn-primary"),
-          downloadButton("dl_zip", "Télécharger l'archive globale (zip)")
+          actionButton("lancer", "Lancer l'analyse", class = "btn-primary")
         )
       ),
       column(

@@ -839,13 +839,17 @@ server <- function(input, output, session) {
 
   output$ui_exports_links <- renderUI({
     if (is.null(rv$zip_file) || !file.exists(rv$zip_file)) {
-      return(tags$p("L'archive globale sera disponible ici après la fin d'une analyse."))
+      return(tags$p(class = "archive-placeholder", "L'archive globale sera disponible ici après la fin d'une analyse."))
     }
     tagList(
       tags$p(tags$strong("Archive prête : "), basename(rv$zip_file)),
       tags$p(
         class = "text-muted small",
         "Cette archive ZIP regroupe l'ensemble des sorties produites par l'analyse : tableaux, concordancier HTML, images et fichiers Rainette."
+      ),
+      tags$div(
+        class = "archive-download-action",
+        downloadButton("dl_zip", "Télécharger l'archive")
       )
     )
   })
