@@ -553,13 +553,168 @@ chdrainette_normaliser_appel_rainette <- function(res, min_segment_size = 0L) {
   res
 }
 
-creer_archive_exports <- function(base_dir, zip_name = "exports_rainette.zip") {
+normaliser_nom_export_corpus <- function(original_name, input_path = NULL) {
+  source_name <- NULL
+
+  if (!is.null(original_name) && length(original_name) && nzchar(as.character(original_name[[1]]))) {
+    source_name <- as.character(original_name[[1]])
+  } else if (!is.null(input_path) && length(input_path) && nzchar(as.character(input_path[[1]]))) {
+    source_name <- basename(as.character(input_path[[1]]))
+  }
+
+  if (is.null(source_name) || !nzchar(source_name)) {
+    source_name <- "chdrainette"
+  }
+
+  file_stem <- tools::file_path_sans_ext(basename(source_name))
+  file_stem <- trimws(file_stem)
+  file_stem <- gsub("[/\\\\:]+", "_", file_stem)
+  file_stem <- gsub("[[:cntrl:]]+", "_", file_stem)
+  file_stem <- gsub("^\\.+$", "", file_stem)
+  if (!nzchar(file_stem)) {
+    return("chdrainette")
+  }
+
+  file_stem
+}
+
+html_table_simple <- function(df, max_rows = 80L) {
+  if (is.null(df) || !is.data.frame(df) || !nrow(df)) {
+    return("<p>Aucun tableau de synthèse CHD disponible.</p>")
+  }
+
+  df <- utils::head(df, max_rows)
+  headers <- paste0("<th>", htmltools::htmlEscape(names(df)), "</th>", collapse = "")
+  rows <- apply(df, 1, function(row) {
+    cells <- paste0("<td>", htmltools::htmlEscape(as.character(row)), "</td>", collapse = "")
+    paste0("<tr>", cells, "</tr>")
+  })
+
+  paste0(
+    "<table><thead><tr>", headers, "</tr></thead><tbody>",
+    paste(rows, collapse = "\n"),
+    "</tbody></table>"
+  )
+}
+
+exporter_chd_statique <- function(res, dfm_obj, groupes, classes_df, export_dir, file_stem, rv = NULL) {
+  chd_dir <- file.path(export_dir, "chd")
+  dir.create(chd_dir, recursive = TRUE, showWarnings = FALSE)
+
+  chd_png <- file.path(chd_dir, "chd_rainette.png")
+  groupes_valides <- suppressWarnings(as.integer(groupes[!is.na(groupes)]))
+  k_plot <- suppressWarnings(max(groupes_valides, na.rm = TRUE))
+  if (!is.finite(k_plot) || is.na(k_plot) || k_plot < 2L) {
+    k_plot <- 2L
+  }
+
+  safe_png_export(
+    chd_png,
+    {
+      if (is.null(res) || is.null(dfm_obj)) {
+        plot.new()
+        text(0.5, 0.5, "CHD Rainette indisponible", cex = 1.15)
+      } else {
+        plot_chd <- rainette::rainette_plot(
+          res,
+          dfm_obj,
+          k = k_plot,
+          n_terms = 20L,
+          free_scales = TRUE,
+          measure = "chi2",
+          show_negative = FALSE,
+          text_size = 11
+        )
+        if (!is.null(plot_chd)) {
+          if (inherits(plot_chd, c("gtable", "gTree", "grob"))) {
+            grid::grid.newpage()
+            grid::grid.draw(plot_chd)
+          } else {
+            print(plot_chd)
+          }
+        }
+      }
+    },
+    rv = rv,
+    label = "CHD Rainette",
+    width = 2200,
+    height = 1600,
+    res = 170
+  )
+
+  resume_chd_file <- file.path(chd_dir, "resume_chd.csv")
+  if (!is.null(classes_df) && is.data.frame(classes_df)) {
+    safe_write_csv_utf8(classes_df, resume_chd_file, row.names = FALSE)
+  }
+
+  chd_html <- file.path(chd_dir, "chd_rainette.html")
+  corpus_label <- htmltools::htmlEscape(file_stem %||% "chdrainette")
+  nb_classes <- length(unique(groupes_valides))
+  if (!is.finite(nb_classes) || is.na(nb_classes)) {
+    nb_classes <- 0L
+  }
+
+  writeLines(
+    c(
+      "<!doctype html>",
+      "<html lang=\"fr\">",
+      "<head>",
+      "  <meta charset=\"utf-8\">",
+      "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      paste0("  <title>CHD Rainette - ", corpus_label, "</title>"),
+      "  <style>",
+      "    body{margin:0;padding:32px;font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;font-size:15px;line-height:1.45;}",
+      "    main{max-width:1440px;margin:0 auto;}",
+      "    h1{font-size:28px;margin:0 0 10px;font-weight:700;}",
+      "    h2{font-size:20px;margin:28px 0 10px;font-weight:700;}",
+      "    .meta{margin:0 0 24px;color:#555;}",
+      "    figure{margin:0;}",
+      "    img{display:block;width:100%;height:auto;border:1px solid #ddd;}",
+      "    table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px;}",
+      "    th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;vertical-align:top;}",
+      "    th{background:#f5f5f5;font-weight:700;}",
+      "  </style>",
+      "</head>",
+      "<body>",
+      "  <main>",
+      "    <h1>CHD Rainette</h1>",
+      paste0("    <p class=\"meta\">Corpus : <strong>", corpus_label, "</strong> · Classes : ", nb_classes, "</p>"),
+      "    <h2>Classification hiérarchique descendante</h2>",
+      "    <figure>",
+      "      <img src=\"chd_rainette.png\" alt=\"Graphique CHD Rainette\">",
+      "    </figure>",
+      "    <h2>Résumé des classes</h2>",
+      html_table_simple(classes_df),
+      "  </main>",
+      "</body>",
+      "</html>"
+    ),
+    con = chd_html,
+    useBytes = TRUE
+  )
+
+  ajouter_log(rv, paste0("Export CHD généré : ", chd_html))
+
+  list(
+    directory = chd_dir,
+    chd_png = chd_png,
+    chd_html = chd_html,
+    resume_chd = if (file.exists(resume_chd_file)) resume_chd_file else NULL
+  )
+}
+
+creer_archive_exports <- function(base_dir, archive_root = "exports", zip_name = paste0(archive_root, ".zip")) {
+  archive_dir <- file.path(base_dir, archive_root)
+  if (!dir.exists(archive_dir)) {
+    stop("Le dossier à archiver est introuvable : ", archive_dir)
+  }
+
   zip_file <- file.path(base_dir, zip_name)
   if (file.exists(zip_file)) unlink(zip_file)
   old_wd <- getwd()
   on.exit(setwd(old_wd), add = TRUE)
   setwd(base_dir)
-  utils::zip(zipfile = zip_file, files = "exports")
+  utils::zip(zipfile = zip_file, files = archive_root)
   zip_file
 }
 
@@ -569,11 +724,10 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
   }
 
   params <- normaliser_parametres_chdrainette(params)
-  file_stem <- tools::file_path_sans_ext(basename(original_name %||% basename(input_path)))
-  if (!nzchar(file_stem)) file_stem <- "chdrainette"
+  file_stem <- normaliser_nom_export_corpus(original_name, input_path)
 
   base_dir <- chdrainette_new_job_dir(session_token = session_token)
-  export_dir <- file.path(base_dir, "exports")
+  export_dir <- file.path(base_dir, file_stem)
   dir.create(export_dir, recursive = TRUE, showWarnings = FALSE)
 
   if (!is.null(rv)) {
@@ -761,13 +915,35 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     export_dir = export_dir
   )
 
+  chd_files <- tryCatch(
+    exporter_chd_statique(
+      res = res,
+      dfm_obj = dfm_ok,
+      groupes = groupes,
+      classes_df = classes_df,
+      export_dir = export_dir,
+      file_stem = file_stem,
+      rv = rv
+    ),
+    error = function(e) {
+      if (!is.null(rv)) {
+        ajouter_log(rv, paste0("Export CHD statique ignoré : ", conditionMessage(e)))
+      }
+      NULL
+    }
+  )
+
   if (!is.null(rv)) {
     rv$progression <- 92
     rv$statut <- "Création de l'archive ZIP."
     ajouter_etape(rv, "Nuages de mots et exports détaillés terminés.")
   }
 
-  zip_file <- creer_archive_exports(base_dir = base_dir)
+  zip_file <- creer_archive_exports(
+    base_dir = base_dir,
+    archive_root = file_stem,
+    zip_name = paste0(file_stem, ".zip")
+  )
   ajouter_log_debug(rv, paste0("Archive ZIP finale : ", zip_file))
 
   if (!is.null(rv)) {
@@ -795,6 +971,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     bundle_file = bundle_info$bundle_file,
     bundle_script_file = bundle_info$script_file,
     wordclouds = wordclouds,
+    chd_files = chd_files,
     afc_obj = afc_obj,
     afc_error = afc_error,
     afc_files = afc_files,

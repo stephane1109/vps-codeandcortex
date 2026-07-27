@@ -261,6 +261,7 @@ server <- function(input, output, session) {
     bundle_file = NULL,
     bundle_script_file = NULL,
     wordclouds = NULL,
+    chd_files = NULL,
     afc_obj = NULL,
     afc_error = NULL,
     afc_files = NULL,
@@ -498,6 +499,7 @@ server <- function(input, output, session) {
       rv$bundle_file <- result$bundle_file
       rv$bundle_script_file <- result$bundle_script_file
       rv$wordclouds <- result$wordclouds
+      rv$chd_files <- result$chd_files
       rv$afc_obj <- result$afc_obj
       rv$afc_error <- result$afc_error
       rv$afc_files <- result$afc_files
@@ -888,7 +890,7 @@ server <- function(input, output, session) {
   })
 
   output$dl_zip <- downloadHandler(
-    filename = function() paste0(rv$file_stem %||% "chdrainette", "_exports.zip"),
+    filename = function() paste0(rv$file_stem %||% "chdrainette", ".zip"),
     content = function(file) file.copy(rv$zip_file, file, overwrite = TRUE)
   )
 }
