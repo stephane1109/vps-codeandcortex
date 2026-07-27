@@ -266,6 +266,7 @@ def main() -> None:
     # - APP_TICKET_TTL_SECONDS
     enforce_streamlit_access("divergence-jensen-shannon", "Divergence Jensen-Shannon")
     st.title("Divergence de Jensen-Shannon")
+    st.markdown("version beta_0.2 - modifiée 27-07-2026")
     onglet_aide, = st.tabs(["Aide"])
     with onglet_aide:
         st.markdown(
