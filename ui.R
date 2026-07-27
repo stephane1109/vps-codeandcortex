@@ -217,19 +217,18 @@ page_sidebar(
       }
       .afc-plot-host {
         width: 100%;
-        display: flex;
-        justify-content: center;
-        overflow: visible;
-        padding: 0.4rem 0 1rem;
+        min-height: calc(100vh - 14rem);
+        display: block;
+        overflow: hidden;
+        padding: 0;
       }
       .afc-plot-canvas {
-        flex: 0 1 1000px;
-        width: min(100%, 1000px);
+        width: 100%;
         min-width: 0;
-        max-width: 1000px;
-        height: auto;
-        aspect-ratio: 1 / 1;
-        margin: 0 auto;
+        max-width: none;
+        height: calc(100vh - 14rem);
+        min-height: 760px;
+        margin: 0;
       }
       .afc-plot-canvas .shiny-plot-output {
         width: 100% !important;
@@ -601,6 +600,109 @@ page_sidebar(
         .nav-tabs { gap: 0.3rem; }
         .nav-tabs .nav-link { padding: 0.55rem 0.75rem; }
       }
+      body {
+        background: #f7f6f2 !important;
+      }
+      .navbar,
+      .sidebar-group,
+      .ticket-status-card,
+      .ticket-status-message,
+      .form-control,
+      .form-select,
+      .selectize-input,
+      .accordion-item,
+      .accordion-button,
+      .btn:not(.btn-close),
+      .bslib-navs-card,
+      .card,
+      .card-header,
+      .nav-tabs .nav-link,
+      .metric-card,
+      .debug-terminal,
+      .preview-box,
+      .code-box,
+      .input-help-box,
+      .progress-shell,
+      .progress-bar-custom,
+      iframe,
+      img {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+      .navbar,
+      .sidebar-group,
+      .bslib-navs-card,
+      .card,
+      .metric-card,
+      .accordion-body,
+      .card-header,
+      .nav-tabs {
+        background: #fffdf8 !important;
+      }
+      .card,
+      .sidebar-group,
+      .metric-card,
+      .ticket-status-card,
+      .accordion-item {
+        border: 1px solid #d8d1c5 !important;
+      }
+      .card-header {
+        border-bottom: 1px solid #d8d1c5 !important;
+        font-size: 0.92rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .nav-tabs {
+        border-bottom: 1px solid #d8d1c5 !important;
+      }
+      .nav-tabs .nav-link.active,
+      .nav-tabs > li.active > a,
+      .nav-tabs > li.active > a:hover,
+      .nav-tabs > li.active > a:focus {
+        background: #24211f !important;
+        border-color: #24211f !important;
+        color: #fffdf8 !important;
+      }
+      .metric-card::before {
+        display: none;
+      }
+      .graph-full-page-card {
+        min-height: calc(100vh - 8rem);
+      }
+      .graph-full-page-card > .card-body,
+      .graph-full-page-card .card-body {
+        min-height: calc(100vh - 11rem);
+      }
+      .graph-full-page-card .card-body {
+        padding: 0.75rem !important;
+      }
+      .graph-full-page-card .card-header {
+        flex: 0 0 auto;
+      }
+      .rainette-host-shell,
+      .full-page-iframe {
+        width: 100% !important;
+        min-height: calc(100vh - 11rem) !important;
+        height: calc(100vh - 11rem) !important;
+      }
+      .wordcloud-full-page img,
+      .full-page-image {
+        width: 100% !important;
+        max-height: calc(100vh - 11rem);
+        object-fit: contain;
+      }
+      @media (max-width: 640px) {
+        .afc-plot-host,
+        .afc-plot-canvas,
+        .graph-full-page-card,
+        .graph-full-page-card > .card-body,
+        .graph-full-page-card .card-body {
+          min-height: 560px;
+        }
+        .afc-plot-canvas {
+          height: 560px;
+        }
+      }
     "))
   ),
   uiOutput("ui_ticket_release_hook"),
@@ -751,6 +853,7 @@ page_sidebar(
     nav_panel(
       "CHD",
       card(
+        class = "graph-full-page-card",
         full_screen = TRUE,
         card_header("Rainette explor"),
         card_body(
@@ -772,6 +875,7 @@ page_sidebar(
         )
       ),
       card(
+        class = "graph-full-page-card",
         full_screen = TRUE,
         card_header("Projection des classes"),
         card_body(
@@ -785,6 +889,7 @@ page_sidebar(
         )
       ),
       card(
+        class = "graph-full-page-card",
         full_screen = TRUE,
         card_header("Projection des classes et des termes"),
         card_body(
@@ -817,6 +922,7 @@ page_sidebar(
         tableOutput("table_stats_classe")
       ),
       card(
+        class = "graph-full-page-card",
         full_screen = TRUE,
         card_header("Nuages de mots"),
         uiOutput("ui_wordclouds")

@@ -524,9 +524,10 @@ server <- function(input, output, session) {
       row <- sous_df[index, , drop = FALSE]
       src <- build_resource_url(rv, row$src[[1]])
       card(
+        class = "graph-full-page-card wordcloud-full-page",
         full_screen = TRUE,
         card_header(if (identical(row$type[[1]], "chi2")) "Nuage de mots chi2" else "Nuage de mots fréquence"),
-        tags$img(src = src, style = "width:100%; height:auto; display:block; border-radius:12px;")
+        tags$img(src = src, class = "full-page-image", style = "width:100%; height:auto; display:block; border-radius:0;")
       )
     })
 
@@ -545,7 +546,8 @@ server <- function(input, output, session) {
       ),
       tags$iframe(
         src = src,
-        style = "width:100%; min-height:720px; border:1px solid rgba(47, 36, 28, 0.08); border-radius:16px; background:#fffdf9;"
+        class = "full-page-iframe",
+        style = "width:100%; min-height:calc(100vh - 11rem); border:1px solid #d8d1c5; border-radius:0; background:#fffdf9;"
       )
     )
   })
@@ -584,11 +586,12 @@ server <- function(input, output, session) {
       ),
       tags$iframe(
         src = src,
+        class = "full-page-iframe",
         style = paste(
           "width:100%;",
-          "min-height:82vh;",
-          "border:1px solid rgba(31, 35, 40, 0.08);",
-          "border-radius:16px;",
+          "min-height:calc(100vh - 11rem);",
+          "border:1px solid #d8d1c5;",
+          "border-radius:0;",
           "background:#ffffff;"
         )
       )

@@ -186,6 +186,9 @@ chdrainette_plot_afc_classes <- function(afc) {
   coords <- afc$class_coords
   limit <- chdrainette_afc_limits(coords[, 1L], coords[, 2L])
   colors <- chdrainette_afc_palette(rownames(coords))
+  old_par <- graphics::par(no.readonly = TRUE)
+  on.exit(graphics::par(old_par), add = TRUE)
+  graphics::par(mar = c(4.2, 4.2, 0.8, 0.8), bg = "white")
 
   graphics::plot(
     coords[, 1L], coords[, 2L],
@@ -195,7 +198,7 @@ chdrainette_plot_afc_classes <- function(afc) {
     ylim = limit,
     xlab = chdrainette_afc_axis_label(afc, 1L),
     ylab = chdrainette_afc_axis_label(afc, 2L),
-    main = "AFC des classes issues de la CHD"
+    main = ""
   )
   graphics::abline(h = 0, v = 0, col = "#c7c2bb", lty = 2)
   graphics::points(coords[, 1L], coords[, 2L], pch = 19, cex = 1.5, col = colors[rownames(coords)])
@@ -227,6 +230,9 @@ chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2", a
   } else {
     sizes <- 0.65 + 0.8 * (weights - min(weights)) / (max(weights) - min(weights))
   }
+  old_par <- graphics::par(no.readonly = TRUE)
+  on.exit(graphics::par(old_par), add = TRUE)
+  graphics::par(mar = c(4.2, 4.2, 0.8, 0.8), bg = "white")
 
   graphics::plot(
     0, 0,
@@ -236,7 +242,7 @@ chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2", a
     ylim = limit,
     xlab = chdrainette_afc_axis_label(afc, 1L),
     ylab = chdrainette_afc_axis_label(afc, 2L),
-    main = "AFC des classes et des termes"
+    main = ""
   )
   graphics::abline(h = 0, v = 0, col = "#c7c2bb", lty = 2)
   graphics::points(classes[, 1L], classes[, 2L], pch = 19, cex = 1.45, col = colors[rownames(classes)])
