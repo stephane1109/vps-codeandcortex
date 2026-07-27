@@ -731,7 +731,7 @@ server <- function(input, output, session) {
     if (!is.null(rv$afc_error) && nzchar(rv$afc_error)) {
       return(tags$div(class = "alert alert-warning", rv$afc_error))
     }
-    tags$p("Lance une analyse CHD pour calculer l'AFC classes-termes.")
+    tags$p("Lancez une analyse CHD pour calculer l'AFC classes-termes.")
   })
 
   output$plot_afc_classes <- renderImage({
