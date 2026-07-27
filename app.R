@@ -350,6 +350,30 @@ server <- function(input, output, session) {
     refresh_ticket_snapshot(force_resume = TRUE)
   })
 
+  observeEvent(input$help_parametres_chd, {
+    showModal(
+      modalDialog(
+        title = "Aide - Paramètres CHD",
+        easyClose = TRUE,
+        footer = modalButton("Fermer"),
+        tags$div(
+          class = "chd-help-modal",
+          tags$h4("Paramètres principaux"),
+          tags$ul(
+            tags$li(tags$strong("Mode de découpage"), " : segment_size ou ponctuation"),
+            tags$li(tags$strong("segment_size"), " : taille des segments avant analyse"),
+            tags$li(tags$strong("k"), " : nombre de classes demandé"),
+            tags$li(tags$strong("min_segment_size"), " : taille minimale d’un segment pour Rainette"),
+            tags$li(tags$strong("min_split_members"), " : effectif minimal pour continuer à scinder une classe"),
+            tags$li(tags$strong("min_docfreq"), " : fréquence documentaire minimale des termes"),
+            tags$li(tags$strong("max_p"), " : seuil de p-value pour les termes discriminants"),
+            tags$li(tags$strong("top_n"), " : nombre de termes affichés dans les nuages de mots")
+          )
+        )
+      )
+    )
+  }, ignoreInit = TRUE)
+
   session$onSessionEnded(function() {
     try(ticket_release(ticket_cfg, ticket_session_id(session)), silent = TRUE)
   })

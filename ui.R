@@ -10,10 +10,16 @@ build_main_ui <- function() {
     )
   }
 
-  control_section <- function(title, ...) {
+  control_section <- function(title, ..., help_id = NULL) {
     div(
       class = "control-section",
-      tags$h3(class = "control-title", title),
+      div(
+        class = "control-title-row",
+        tags$h3(class = "control-title", title),
+        if (!is.null(help_id) && nzchar(help_id)) {
+          actionButton(help_id, "Aide", class = "control-help-button")
+        }
+      ),
       div(class = "control-section-body", ...)
     )
   }
@@ -92,16 +98,81 @@ build_main_ui <- function() {
           background: transparent !important;
           box-shadow: none !important;
         }
-        .control-title,
+        .control-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.65rem;
+          padding: 0 0 0.25rem;
+          border-bottom: 1px solid #d8d1c5;
+        }
+        .control-title {
+          flex: 1 1 auto;
+          min-width: 0;
+          margin: 0;
+          padding: 0;
+          border-bottom: 0;
+        }
         .ticket-access-title {
           margin: 0;
           padding: 0 0 0.25rem;
           border-bottom: 1px solid #d8d1c5;
+        }
+        .control-title,
+        .ticket-access-title {
           color: #24211f;
           font-size: 1.3rem !important;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
+        }
+        .btn.control-help-button,
+        .btn-default.control-help-button,
+        .control-help-button {
+          flex: 0 0 auto;
+          min-height: 1.45rem !important;
+          padding: 0.12rem 0.42rem !important;
+          border: 1px solid #24211f !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          color: #24211f !important;
+          box-shadow: none !important;
+          font-size: 0.86rem !important;
+          font-weight: 700 !important;
+          line-height: 1.15 !important;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .btn.control-help-button:hover,
+        .btn-default.control-help-button:hover,
+        .control-help-button:hover {
+          background: #24211f !important;
+          color: #fffefa !important;
+        }
+        .modal-content {
+          border-radius: 0 !important;
+          border: 1px solid #24211f !important;
+          box-shadow: none !important;
+        }
+        .modal-header,
+        .modal-footer {
+          border-color: #d8d1c5 !important;
+        }
+        .chd-help-modal {
+          font-size: 1.18rem !important;
+          line-height: 1.45;
+        }
+        .chd-help-modal h4 {
+          margin-top: 0;
+          font-size: 1.28rem !important;
+          font-weight: 700;
+        }
+        .chd-help-modal ul {
+          margin: 0.6rem 0 0;
+          padding-left: 1.25rem;
+        }
+        .chd-help-modal li {
+          margin-bottom: 0.45rem;
         }
         .control-section-body {
           padding-top: 0.95rem;
@@ -594,6 +665,7 @@ build_main_ui <- function() {
         ),
         control_section(
           "Paramètres CHD",
+          help_id = "help_parametres_chd",
           selectInput(
             "mode_decoupage",
             "Mode de découpage",
