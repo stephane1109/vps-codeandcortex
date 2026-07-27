@@ -421,6 +421,13 @@ build_main_ui <- function() {
         .language-detection-note.is-ok {
           color: #2f6f4e !important;
         }
+        .rainette-explor-placeholder {
+          margin: 0.15rem 0 0 !important;
+          color: #6b625b !important;
+          font-size: 1.02rem !important;
+          font-weight: 400 !important;
+          line-height: 1.35 !important;
+        }
         .ticket-status-shell {
           display: grid;
           gap: 0.4rem;

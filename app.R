@@ -852,7 +852,7 @@ server <- function(input, output, session) {
 
   output$ui_rainette_explor_frame <- renderUI({
     if (is.null(rv$bundle_file) || !file.exists(rv$bundle_file)) {
-      return(tags$p("Lance une analyse pour ouvrir ici le vrai rainette_explor."))
+      return(tags$p(class = "rainette-explor-placeholder", "Lancez une analyse pour ouvrir ici le vrai rainette_explor."))
     }
 
     src <- chdrainette_rainette_explor_url(rv$bundle_file)
