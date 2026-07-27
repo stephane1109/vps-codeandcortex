@@ -20,6 +20,20 @@ options(
   left
 }
 
+DISPLAY_MAX_TABLE_ROWS <- 300L
+DISPLAY_MAX_LOG_LINES <- 250L
+
+format_count_fr <- function(value) {
+  format(as.integer(value), big.mark = " ", scientific = FALSE, trim = TRUE)
+}
+
+limit_display_rows <- function(df, max_rows = DISPLAY_MAX_TABLE_ROWS) {
+  if (!is.data.frame(df)) {
+    df <- as.data.frame(df, stringsAsFactors = FALSE)
+  }
+  utils::head(df, max_rows)
+}
+
 source("nettoyage.R", encoding = "UTF-8", local = TRUE)
 source("concordancier.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_general.R", encoding = "UTF-8", local = TRUE)
@@ -335,7 +349,20 @@ server <- function(input, output, session) {
   })
 
   output$statut <- renderText(rv$statut)
-  output$logs <- renderText(rv$logs)
+  output$logs <- renderText({
+    logs <- rv$logs %||% ""
+    lines <- strsplit(logs, "\n", fixed = TRUE)[[1]]
+    if (length(lines) <= DISPLAY_MAX_LOG_LINES) {
+      return(logs)
+    }
+    paste(
+      c(
+        paste0("[affichage limité aux ", DISPLAY_MAX_LOG_LINES, " dernières lignes pour garder l'interface réactive]"),
+        utils::tail(lines, DISPLAY_MAX_LOG_LINES)
+      ),
+      collapse = "\n"
+    )
+  })
 
   output$barre_progression <- renderUI({
     valeur <- max(0, min(100, as.integer(rv$progression %||% 0L)))
@@ -466,16 +493,60 @@ server <- function(input, output, session) {
     rv$classes_df
   }, rownames = FALSE)
 
-  output$table_stats_classe <- renderTable({
+  stats_classe_display <- reactive({
     req(rv$res_stats_df, input$classe_resultat)
     classe <- suppressWarnings(as.integer(input$classe_resultat))
-    sous_df <- rv$res_stats_df %>%
-      filter(Classe == classe) %>%
-      arrange(desc(chi2))
+    stats_df <- rv$res_stats_df
+    sous_df <- stats_df[stats_df$Classe == classe, , drop = FALSE]
     if (!nrow(sous_df)) {
       return(data.frame())
     }
-    sous_df[, intersect(c("Terme", "chi2", "p", "frequency", "docprop", "lr"), names(sous_df)), drop = FALSE]
+    if ("chi2" %in% names(sous_df)) {
+      sous_df <- sous_df[order(-suppressWarnings(as.numeric(sous_df$chi2))), , drop = FALSE]
+    }
+    columns <- intersect(c("Terme", "chi2", "p", "frequency", "docprop", "lr"), names(sous_df))
+    sous_df[, columns, drop = FALSE]
+  })
+
+  output$ui_resultats_perf_note <- renderUI({
+    req(rv$res_stats_df)
+    total <- nrow(rv$res_stats_df)
+    tags$p(
+      class = "result-note",
+      paste0(
+        "Affichage rapide : les tableaux longs sont limités à ",
+        format_count_fr(DISPLAY_MAX_TABLE_ROWS),
+        " lignes à l'écran. Les exports CSV/ZIP restent complets",
+        if (!is.null(rv$stats_file) && nzchar(rv$stats_file)) paste0(" (", basename(rv$stats_file), ").") else "."
+      ),
+      tags$br(),
+      paste0("Statistiques complètes calculées : ", format_count_fr(total), " lignes.")
+    )
+  })
+
+  output$ui_table_stats_note <- renderUI({
+    data <- stats_classe_display()
+    total <- nrow(data)
+    if (!total) {
+      return(tags$p(class = "result-note", "Aucune statistique disponible pour cette classe."))
+    }
+    displayed <- min(total, DISPLAY_MAX_TABLE_ROWS)
+    tags$p(
+      class = "result-note",
+      paste0(
+        "Classe ",
+        input$classe_resultat,
+        " : ",
+        format_count_fr(displayed),
+        " lignes affichées sur ",
+        format_count_fr(total),
+        "."
+      )
+    )
+  })
+
+  output$table_stats_classe <- renderTable({
+    limit_display_rows(stats_classe_display())
   }, rownames = FALSE)
 
   output$ui_afc_status <- renderUI({

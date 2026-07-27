@@ -37,8 +37,8 @@ build_main_ui <- function() {
           color: #24211f;
           background: #f7f6f2;
           font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
-          font-size: 14px;
-          line-height: 1.45;
+          font-size: 16px;
+          line-height: 1.5;
         }
         a {
           color: #9a4d16;
@@ -60,7 +60,7 @@ build_main_ui <- function() {
         }
         .app-header h1 {
           margin: 0;
-          font-size: 1.35rem;
+          font-size: 1.65rem;
           line-height: 1.1;
           font-weight: 650;
           letter-spacing: -0.02em;
@@ -68,7 +68,7 @@ build_main_ui <- function() {
         .app-subtitle {
           margin: 0.25rem 0 0;
           color: #6b625b;
-          font-size: 0.82rem;
+          font-size: 0.98rem;
         }
         .layout-row {
           margin-left: -0.7rem;
@@ -98,7 +98,7 @@ build_main_ui <- function() {
           padding: 0 0 0.25rem;
           border-bottom: 1px solid #d8d1c5;
           color: #24211f;
-          font-size: 0.78rem;
+          font-size: 0.9rem;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -107,17 +107,17 @@ build_main_ui <- function() {
         .text-muted,
         .small {
           color: #6b625b !important;
-          font-size: 0.78rem;
+          font-size: 0.9rem;
         }
         .shiny-input-container {
           width: 100%;
-          margin-bottom: 0.65rem;
+          margin-bottom: 0.78rem;
         }
         .shiny-input-container label,
         .control-label {
           margin-bottom: 0.2rem;
           color: #3b3632;
-          font-size: 0.78rem;
+          font-size: 0.92rem;
           font-weight: 600;
         }
         .form-control,
@@ -129,7 +129,7 @@ build_main_ui <- function() {
           background: #fffefa !important;
           box-shadow: none !important;
           color: #24211f;
-          font-size: 0.82rem;
+          font-size: 0.95rem;
         }
         .form-control:focus,
         .form-select:focus,
@@ -141,7 +141,7 @@ build_main_ui <- function() {
         .radio {
           margin-top: 0.2rem;
           margin-bottom: 0.35rem;
-          font-size: 0.82rem;
+          font-size: 0.95rem;
         }
         .checkbox label,
         .radio label {
@@ -163,7 +163,7 @@ build_main_ui <- function() {
           background: #fffefa !important;
           box-shadow: none !important;
           color: #24211f !important;
-          font-size: 0.8rem;
+          font-size: 0.95rem;
           font-weight: 600;
           line-height: 1.2;
         }
@@ -189,13 +189,13 @@ build_main_ui <- function() {
         }
         .nav-tabs > li > a {
           margin-right: 0;
-          padding: 0.42rem 0.62rem;
+          padding: 0.68rem 0.95rem;
           border: 0 !important;
           border-radius: 0 !important;
           background: transparent !important;
           color: #6b625b !important;
-          font-size: 0.8rem;
-          font-weight: 600;
+          font-size: 1.02rem;
+          font-weight: 650;
         }
         .nav-tabs > li.active > a,
         .nav-tabs > li.active > a:hover,
@@ -222,7 +222,7 @@ build_main_ui <- function() {
           padding: 0 0 0.35rem;
           border-bottom: 1px solid #d8d1c5;
           color: #24211f;
-          font-size: 0.9rem;
+          font-size: 1.08rem;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -245,13 +245,13 @@ build_main_ui <- function() {
           display: block;
           margin-bottom: 0.15rem;
           color: #6b625b;
-          font-size: 0.76rem;
+          font-size: 0.9rem;
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
         .metric-value {
           color: #24211f;
-          font-size: 1.25rem;
+          font-size: 1.45rem;
           font-weight: 650;
         }
         .progress-wrapper {
@@ -260,7 +260,7 @@ build_main_ui <- function() {
         }
         .progress-label {
           color: #6b625b;
-          font-size: 0.78rem;
+          font-size: 0.92rem;
         }
         .progress-shell {
           width: 100%;
@@ -379,7 +379,7 @@ build_main_ui <- function() {
         .ticket-status-note,
         .ticket-status-message {
           color: #4a433e;
-          font-size: 0.78rem;
+          font-size: 0.9rem;
         }
         .ticket-actions {
           display: grid;
@@ -387,7 +387,12 @@ build_main_ui <- function() {
         }
         table {
           width: 100%;
-          font-size: 0.82rem;
+          font-size: 0.95rem;
+        }
+        .result-note {
+          margin: 0.2rem 0 0.75rem;
+          color: #5c544e;
+          font-size: 0.95rem;
         }
         .table > thead > tr > th,
         .table > tbody > tr > td,
@@ -612,10 +617,12 @@ build_main_ui <- function() {
           ),
           tabPanel(
             "Résultats",
+            section("Affichage des résultats", uiOutput("ui_resultats_perf_note")),
             section("Résumé des classes", tableOutput("table_classes")),
             section(
               "Statistiques par classe",
               selectInput("classe_resultat", "Classe", choices = NULL),
+              uiOutput("ui_table_stats_note"),
               tableOutput("table_stats_classe")
             ),
             section("Nuages de mots", uiOutput("ui_wordclouds"), class = "graph-full-page-section")
