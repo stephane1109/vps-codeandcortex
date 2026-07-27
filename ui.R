@@ -530,7 +530,7 @@ build_main_ui <- function() {
           "Nettoyage",
           radioButtons(
             "mode_nettoyage_lexical",
-            "Nettoyage lexical - choisir la méthode",
+            NULL,
             choices = c(
               "Stopwords quanteda" = "stopwords_quanteda",
               "Dictionnaire IRaMuTeQ-lite (lexique_fr)" = "lexique_iramuteq",
