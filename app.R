@@ -1,4 +1,3 @@
-library(bslib)
 library(dplyr)
 library(htmltools)
 library(quanteda)
@@ -520,17 +519,20 @@ server <- function(input, output, session) {
       return(tags$p("Aucun nuage de mots disponible pour cette classe."))
     }
 
-    cards <- lapply(seq_len(nrow(sous_df)), function(index) {
+    sections <- lapply(seq_len(nrow(sous_df)), function(index) {
       row <- sous_df[index, , drop = FALSE]
       src <- build_resource_url(rv, row$src[[1]])
-      card(
-        class = "graph-full-page-card wordcloud-full-page",
-        card_header(if (identical(row$type[[1]], "chi2")) "Nuage de mots chi2" else "Nuage de mots fréquence"),
+      tags$section(
+        class = "plain-section graph-full-page-section wordcloud-full-page",
+        tags$h2(
+          class = "section-title",
+          if (identical(row$type[[1]], "chi2")) "Nuage de mots chi2" else "Nuage de mots fréquence"
+        ),
         tags$img(src = src, class = "full-page-image", style = "width:100%; height:auto; display:block; border-radius:0;")
       )
     })
 
-    do.call(tagList, cards)
+    do.call(tagList, sections)
   })
 
   output$ui_concordancier <- renderUI({
@@ -546,7 +548,7 @@ server <- function(input, output, session) {
       tags$iframe(
         src = src,
         class = "full-page-iframe",
-        style = "width:100%; min-height:calc(100vh - 11rem); border:1px solid #d8d1c5; border-radius:0; background:#fffdf9;"
+        style = "width:100%; min-height:calc(100vh - 11rem); border:0; border-radius:0; background:#ffffff;"
       )
     )
   })
@@ -589,7 +591,7 @@ server <- function(input, output, session) {
         style = paste(
           "width:100%;",
           "min-height:calc(100vh - 11rem);",
-          "border:1px solid #d8d1c5;",
+          "border:0;",
           "border-radius:0;",
           "background:#ffffff;"
         )

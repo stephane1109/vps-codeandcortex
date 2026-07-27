@@ -1,13 +1,429 @@
-library(bslib)
 library(shiny)
 library(htmltools)
 
 build_main_ui <- function() {
-page_sidebar(
-  title = div(
-    class = "app-title-block",
-    tags$div(
-      class = "app-title-copy",
+  section <- function(title, ..., class = NULL) {
+    div(
+      class = paste(c("plain-section", class), collapse = " "),
+      if (!is.null(title) && nzchar(title)) tags$h2(class = "section-title", title),
+      ...
+    )
+  }
+
+  control_section <- function(title, ...) {
+    div(
+      class = "control-section",
+      tags$h3(class = "control-title", title),
+      ...
+    )
+  }
+
+  metric_item <- function(label, output_id) {
+    div(
+      class = "metric-item",
+      span(class = "metric-label", label),
+      span(class = "metric-value", textOutput(output_id, inline = TRUE))
+    )
+  }
+
+  fluidPage(
+    tags$head(
+      tags$style(HTML("
+        html, body {
+          min-height: 100%;
+        }
+        body {
+          margin: 0;
+          color: #24211f;
+          background: #f7f6f2;
+          font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+          font-size: 14px;
+          line-height: 1.45;
+        }
+        a {
+          color: #9a4d16;
+          text-decoration: none;
+        }
+        a:hover {
+          color: #24211f;
+          text-decoration: underline;
+        }
+        .container-fluid {
+          width: 100%;
+          max-width: none;
+          padding: 0 1.4rem 2rem;
+        }
+        .app-header {
+          margin: 0 0 1.1rem;
+          padding: 1rem 0 0.8rem;
+          border-bottom: 1px solid #d8d1c5;
+        }
+        .app-header h1 {
+          margin: 0;
+          font-size: 1.35rem;
+          line-height: 1.1;
+          font-weight: 650;
+          letter-spacing: -0.02em;
+        }
+        .app-subtitle {
+          margin: 0.25rem 0 0;
+          color: #6b625b;
+          font-size: 0.82rem;
+        }
+        .layout-row {
+          margin-left: -0.7rem;
+          margin-right: -0.7rem;
+        }
+        .control-column,
+        .main-column {
+          padding-left: 0.7rem;
+          padding-right: 0.7rem;
+        }
+        .control-column {
+          border-right: 1px solid #d8d1c5;
+        }
+        .control-section,
+        .sidebar-group,
+        .ticket-access-group {
+          margin: 0 0 1.15rem;
+          padding: 0;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .control-title,
+        .ticket-access-title {
+          margin: 0 0 0.55rem;
+          padding: 0 0 0.25rem;
+          border-bottom: 1px solid #d8d1c5;
+          color: #24211f;
+          font-size: 0.78rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .help-block,
+        .text-muted,
+        .small {
+          color: #6b625b !important;
+          font-size: 0.78rem;
+        }
+        .shiny-input-container {
+          width: 100%;
+          margin-bottom: 0.65rem;
+        }
+        .shiny-input-container label,
+        .control-label {
+          margin-bottom: 0.2rem;
+          color: #3b3632;
+          font-size: 0.78rem;
+          font-weight: 600;
+        }
+        .form-control,
+        .form-select,
+        .selectize-input {
+          min-height: 2rem;
+          border: 1px solid #cfc8bd !important;
+          border-radius: 0 !important;
+          background: #fffefa !important;
+          box-shadow: none !important;
+          color: #24211f;
+          font-size: 0.82rem;
+        }
+        .form-control:focus,
+        .form-select:focus,
+        .selectize-input.focus {
+          border-color: #24211f !important;
+          box-shadow: none !important;
+        }
+        .checkbox,
+        .radio {
+          margin-top: 0.2rem;
+          margin-bottom: 0.35rem;
+          font-size: 0.82rem;
+        }
+        .checkbox label,
+        .radio label {
+          min-height: 0;
+          font-weight: 400;
+        }
+        input[type='checkbox'],
+        input[type='radio'] {
+          margin-top: 0.2rem;
+          accent-color: #24211f;
+        }
+        .btn,
+        .btn-default,
+        .btn-primary {
+          min-height: 2rem;
+          padding: 0.35rem 0.55rem;
+          border: 1px solid #24211f !important;
+          border-radius: 0 !important;
+          background: #fffefa !important;
+          box-shadow: none !important;
+          color: #24211f !important;
+          font-size: 0.8rem;
+          font-weight: 600;
+          line-height: 1.2;
+        }
+        .btn-primary,
+        .btn:hover,
+        .btn-default:hover,
+        .btn-primary:hover {
+          background: #24211f !important;
+          color: #fffefa !important;
+        }
+        .action-row {
+          display: grid;
+          gap: 0.45rem;
+          margin-top: 0.85rem;
+        }
+        .action-row .btn {
+          width: 100%;
+        }
+        .nav-tabs {
+          margin: 0;
+          padding: 0;
+          border-bottom: 1px solid #24211f;
+        }
+        .nav-tabs > li > a {
+          margin-right: 0;
+          padding: 0.42rem 0.62rem;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          color: #6b625b !important;
+          font-size: 0.8rem;
+          font-weight: 600;
+        }
+        .nav-tabs > li.active > a,
+        .nav-tabs > li.active > a:hover,
+        .nav-tabs > li.active > a:focus {
+          border: 0 !important;
+          background: #24211f !important;
+          color: #fffefa !important;
+        }
+        .tab-content {
+          padding-top: 1rem;
+          overflow: visible !important;
+        }
+        .plain-section {
+          margin: 0 0 1.8rem;
+          padding: 0;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          overflow: visible !important;
+        }
+        .section-title {
+          margin: 0 0 0.7rem;
+          padding: 0 0 0.35rem;
+          border-bottom: 1px solid #d8d1c5;
+          color: #24211f;
+          font-size: 0.9rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .wide-stack {
+          display: grid;
+          gap: 0.85rem;
+        }
+        .metrics-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 1rem;
+        }
+        .metric-item {
+          padding: 0;
+          border: 0;
+          background: transparent;
+        }
+        .metric-label {
+          display: block;
+          margin-bottom: 0.15rem;
+          color: #6b625b;
+          font-size: 0.76rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .metric-value {
+          color: #24211f;
+          font-size: 1.25rem;
+          font-weight: 650;
+        }
+        .progress-wrapper {
+          display: grid;
+          gap: 0.35rem;
+        }
+        .progress-label {
+          color: #6b625b;
+          font-size: 0.78rem;
+        }
+        .progress-shell {
+          width: 100%;
+          height: 8px;
+          border-radius: 0 !important;
+          background: #ded8ce;
+          overflow: visible !important;
+        }
+        .progress-bar-custom {
+          height: 100%;
+          border-radius: 0 !important;
+          background: #24211f;
+          box-shadow: none !important;
+        }
+        .debug-terminal,
+        .preview-box,
+        .code-box {
+          min-height: auto !important;
+          max-height: none !important;
+          padding: 0;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          color: #24211f;
+          overflow: visible !important;
+          white-space: pre-wrap;
+        }
+        .debug-terminal pre,
+        .preview-box pre,
+        .code-box pre {
+          margin: 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: #24211f;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .afc-plot-host,
+        .afc-plot-canvas {
+          width: 100%;
+          min-width: 0;
+          max-width: none;
+          margin: 0;
+          padding: 0;
+          border: 0 !important;
+          background: transparent !important;
+          overflow: visible !important;
+        }
+        .afc-plot-canvas {
+          height: calc(100vh - 11rem);
+          min-height: 760px;
+        }
+        .afc-plot-canvas .shiny-plot-output {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        .full-page-iframe,
+        iframe {
+          width: 100% !important;
+          min-height: calc(100vh - 11rem) !important;
+          height: calc(100vh - 11rem) !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: #ffffff;
+          box-shadow: none !important;
+        }
+        .full-page-image,
+        .wordcloud-full-page img {
+          width: 100% !important;
+          max-height: calc(100vh - 11rem);
+          object-fit: contain;
+          border: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+        }
+        .input-help-box,
+        .ticket-status-card,
+        .ticket-status-message,
+        .alert {
+          padding: 0;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .ticket-status-shell {
+          display: grid;
+          gap: 0.4rem;
+        }
+        .ticket-status-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.45rem;
+        }
+        .ticket-status-dot {
+          width: 0.55rem;
+          height: 0.55rem;
+          flex: 0 0 0.55rem;
+          margin-top: 0.35rem;
+          border-radius: 0 !important;
+          background: #6b625b;
+          box-shadow: none !important;
+        }
+        .ticket-status-dot.is-active {
+          background: #2f855a;
+        }
+        .ticket-status-dot.is-waiting {
+          background: #b7791f;
+        }
+        .ticket-status-dot.is-error {
+          background: #c53030;
+        }
+        .ticket-status-meta,
+        .ticket-status-note,
+        .ticket-status-message {
+          color: #4a433e;
+          font-size: 0.78rem;
+        }
+        .ticket-actions {
+          display: grid;
+          gap: 0.45rem;
+        }
+        table {
+          width: 100%;
+          font-size: 0.82rem;
+        }
+        .table > thead > tr > th,
+        .table > tbody > tr > td,
+        table > thead > tr > th,
+        table > tbody > tr > td {
+          padding: 0.35rem 0.45rem;
+          border-top: 1px solid #ded8ce;
+        }
+        @media (max-width: 992px) {
+          .control-column {
+            margin-bottom: 1.2rem;
+            border-right: 0;
+            border-bottom: 1px solid #d8d1c5;
+            padding-bottom: 1rem;
+          }
+          .metrics-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 640px) {
+          .container-fluid {
+            padding: 0 0.85rem 1.4rem;
+          }
+          .metrics-grid {
+            grid-template-columns: 1fr;
+          }
+          .afc-plot-canvas {
+            height: 620px;
+            min-height: 620px;
+          }
+        }
+      "))
+    ),
+    uiOutput("ui_ticket_release_hook"),
+    tags$header(
+      class = "app-header",
       tags$h1("CHD Rainette"),
       tags$p(
         class = "app-subtitle",
@@ -17,972 +433,203 @@ page_sidebar(
           rel = "noopener noreferrer",
           "www.codeandcortex.fr"
         ),
-        HTML(" &middot; version 0_4beta - modifiée 27-07-2026")
-      )
-    )
-  ),
-  theme = bs_theme(
-    version = 5,
-    primary = "#ef6c21",
-    secondary = "#f4dfcf",
-    success = "#2f855a",
-    info = "#2b6cb0",
-    warning = "#b7791f",
-    danger = "#c53030",
-    bg = "#f6f1ea",
-    fg = "#24211f",
-    base_font = font_google("Source Sans 3"),
-    heading_font = font_google("Space Grotesk")
-  ),
-  fillable = TRUE,
-  tags$head(
-    tags$style(HTML("
-      body {
-        background:
-          linear-gradient(180deg, rgba(255,255,255,0.70) 0%, rgba(255,255,255,0.70) 100%),
-          repeating-linear-gradient(
-            0deg,
-            rgba(20, 24, 28, 0.028) 0,
-            rgba(20, 24, 28, 0.028) 1px,
-            transparent 1px,
-            transparent 40px
-          ),
-          linear-gradient(180deg, #f4f2ee 0%, #ece8e2 100%);
-      }
-      .app-title-block h1 {
-        margin: 0;
-        font-size: 2rem;
-        line-height: 1.08;
-        letter-spacing: -0.02em;
-      }
-      .app-subtitle {
-        margin: 0.55rem 0 0;
-        color: #5f6670;
-        max-width: 70ch;
-      }
-      .app-subtitle a {
-        color: #9e5b22;
-        font-weight: 700;
-        text-decoration: none;
-      }
-      .app-subtitle a:hover { text-decoration: underline; }
-      .bslib-sidebar-layout > .sidebar {
-        background: rgba(247, 245, 241, 0.97);
-        border-right: 1px solid rgba(31, 35, 40, 0.08);
-        box-shadow: inset -1px 0 0 rgba(255,255,255,0.8);
-      }
-      .sidebar-group {
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(31, 35, 40, 0.08);
-        border-radius: 12px;
-        padding: 1rem 1rem 0.65rem;
-        box-shadow: 0 6px 18px rgba(24, 28, 33, 0.05);
-      }
-      .sidebar-group + .sidebar-group { margin-top: 1rem; }
-      .shiny-input-container { margin-bottom: 0.85rem; }
-      .btn-primary {
-        font-weight: 700;
-        border: none;
-        background: #d96b2b;
-        box-shadow: 0 6px 14px rgba(217, 107, 43, 0.14);
-      }
-      .btn-primary:hover { background: #c85d1b; }
-      .btn-secondary, .btn-default {
-        border: 1px solid rgba(31, 35, 40, 0.10);
-        background: #ffffff;
-        color: #1f2328;
-      }
-      .accordion-item, .accordion-button {
-        border-radius: 10px !important;
-      }
-      .accordion-button {
-        font-weight: 700;
-        color: #1f2328;
-        background: #fbfaf8;
-      }
-      .accordion-body {
-        background: #ffffff;
-      }
-      .logs-box pre, .logs-box code { white-space: pre-wrap; }
-      .bslib-navs-card, .card {
-        border: 1px solid rgba(31, 35, 40, 0.08);
-        border-radius: 14px;
-        box-shadow: 0 8px 24px rgba(24, 28, 33, 0.05);
-        background: rgba(255, 255, 255, 0.95);
-      }
-      .card-header {
-        font-weight: 800;
-        color: #1f2328;
-        background: #fbfaf8;
-        border-bottom: 1px solid rgba(31, 35, 40, 0.06);
-      }
-      .nav-tabs {
-        border-bottom: 1px solid rgba(31, 35, 40, 0.08);
-        gap: 0.25rem;
-        padding: 0.45rem 0.45rem 0;
-      }
-      .nav-tabs .nav-link,
-      .nav-tabs > li > a {
-        border: 1px solid transparent;
-        border-radius: 10px 10px 0 0;
-        background: transparent;
-        color: #5f6670;
-        font-weight: 700;
-      }
-      .nav-tabs .nav-link.active {
-        background: #ffffff;
-        color: #1f2328;
-        border-color: rgba(31, 35, 40, 0.08) rgba(31, 35, 40, 0.08) #ffffff;
-        box-shadow: inset 0 3px 0 #d96b2b;
-      }
-      .metrics-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 1rem;
-      }
-      .metric-card {
-        background: #fbfaf8;
-        border: 1px solid rgba(31, 35, 40, 0.08);
-        border-radius: 12px;
-        padding: 1rem 1.1rem;
-        box-shadow: none;
-      }
-      .metric-card .label {
-        font-size: 0.85rem;
-        color: #66707a;
-        display: block;
-        margin-bottom: 0.35rem;
-      }
-      .metric-card .value {
-        font-size: 1.45rem;
-        font-weight: 700;
-        color: #1f2328;
-      }
-      .analysis-intro {
-        border-left: 4px solid #d96b2b;
-        background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(249,247,243,0.96) 100%);
-      }
-      .analysis-intro h2 {
-        margin: 0 0 0.55rem;
-        font-size: 1.35rem;
-        color: #1f2328;
-      }
-      .analysis-intro p {
-        margin: 0;
-        color: #4d5863;
-        max-width: 74ch;
-      }
-      .debug-strip {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.6rem;
-      }
-      .debug-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        background: #fbfaf8;
-        border: 1px solid rgba(31, 35, 40, 0.08);
-        color: #2d333b;
-        border-radius: 999px;
-        padding: 0.4rem 0.8rem;
-        font-size: 0.88rem;
-        font-weight: 700;
-      }
-      .debug-terminal {
-        min-height: 22rem;
-        max-height: none;
-        overflow: visible;
-        background: #14181c;
-        color: #eef2f6;
-        border-radius: 12px;
-        padding: 1rem 1.05rem;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-      }
-      .debug-terminal pre {
-        white-space: pre-wrap;
-        margin: 0;
-        color: #eef2f6;
-      }
-      .preview-box, .code-box {
-        min-height: 22rem;
-        max-height: none;
-        overflow: visible;
-        background: #ffffff;
-        border: 1px solid rgba(31, 35, 40, 0.08);
-        border-radius: 12px;
-        padding: 1rem;
-        white-space: pre-wrap;
-      }
-      .afc-plot-host {
-        width: 100%;
-        min-height: calc(100vh - 14rem);
-        display: block;
-        overflow: visible;
-        padding: 0;
-      }
-      .afc-plot-canvas {
-        width: 100%;
-        min-width: 0;
-        max-width: none;
-        height: calc(100vh - 14rem);
-        min-height: 760px;
-        margin: 0;
-      }
-      .afc-plot-canvas .shiny-plot-output {
-        width: 100% !important;
-        height: 100% !important;
-      }
-      .input-help-box {
-        margin-top: 0.45rem;
-        display: grid;
-        gap: 0.15rem;
-        background: #fbfaf8;
-        border: 1px dashed rgba(217, 107, 43, 0.4);
-        border-radius: 10px;
-        padding: 0.65rem 0.8rem;
-      }
-      .input-help-label {
-        font-size: 0.75rem;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #9e5b22;
-      }
-      .input-help-value {
-        font-size: 0.9rem;
-        color: #4d5863;
-      }
-      .help-pane { max-width: 1000px; }
-      .progress-wrapper { display: grid; gap: 0.5rem; }
-      .progress-label { font-size: 0.95rem; color: #4d5863; }
-      .progress-shell {
-        width: 100%;
-        height: 14px;
-        border-radius: 999px;
-        background: rgba(31, 35, 40, 0.08);
-        overflow: visible;
-      }
-      .progress-bar-custom {
-        height: 100%;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #d96b2b 0%, #e68f40 100%);
-      }
-      .wide-stack {
-        display: grid;
-        gap: 1rem;
-      }
-      .control-note {
-        display: flex;
-        align-items: end;
-        min-height: 100%;
-      }
-      .lab-note {
-        font-size: 0.9rem;
-        color: #5f6670;
-        margin: 0;
-      }
-      .rainette-host-shell {
-        min-height: 78vh;
-        height: 78vh;
-      }
-      @media (max-width: 980px) {
-        .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      }
-      @media (max-width: 640px) {
-        .metrics-grid { grid-template-columns: 1fr; }
-      }
-
-      :root {
-        --rainette-orange: #ef6c21;
-        --rainette-orange-dark: #c94f0b;
-        --rainette-orange-soft: #fff0e5;
-        --rainette-ink: #24211f;
-        --rainette-muted: #6f665f;
-        --rainette-paper: #fffdf9;
-        --rainette-line: rgba(87, 63, 47, 0.13);
-      }
-      body {
-        color: var(--rainette-ink);
-        background:
-          radial-gradient(circle at 88% 8%, rgba(239, 108, 33, 0.12), transparent 28rem),
-          radial-gradient(circle at 8% 92%, rgba(218, 155, 93, 0.10), transparent 32rem),
-          linear-gradient(135deg, #f8f3ec 0%, #f1e9df 100%);
-      }
-      .navbar {
-        background: rgba(255, 253, 249, 0.94) !important;
-        border-bottom: 1px solid var(--rainette-line);
-        box-shadow: 0 10px 30px rgba(76, 49, 31, 0.07);
-        backdrop-filter: blur(16px);
-      }
-      .app-title-block {
-        display: flex;
-        align-items: center;
-        gap: 0.95rem;
-        padding: 0.2rem 0;
-      }
-      .app-title-copy { min-width: 0; }
-      .app-title-block h1 {
-        color: var(--rainette-ink);
-        font-size: clamp(1.55rem, 2.2vw, 2.15rem);
-        font-weight: 760;
-        letter-spacing: -0.045em;
-      }
-      .app-subtitle { margin-top: 0.28rem; }
-      .app-subtitle a { color: var(--rainette-orange-dark); }
-      .bslib-sidebar-layout > .sidebar {
-        background: rgba(247, 240, 232, 0.96);
-        border-right: 1px solid var(--rainette-line);
-        box-shadow: 12px 0 34px rgba(76, 49, 31, 0.06);
-      }
-      .sidebar-group {
-        border: 1px solid var(--rainette-line);
-        border-radius: 18px;
-        background: rgba(255, 253, 249, 0.94);
-        box-shadow: 0 12px 28px rgba(76, 49, 31, 0.07);
-      }
-      .ticket-access-group { padding-bottom: 1rem; }
-      .ticket-access-title {
-        margin: 0 0 0.85rem;
-        color: var(--rainette-ink);
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.02rem;
-        font-weight: 760;
-      }
-      .ticket-status-shell {
-        display: grid;
-        gap: 0.75rem;
-      }
-      .ticket-status-card {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.78rem;
-        padding: 0.92rem 1rem;
-        border-radius: 14px;
-        border: 1px solid var(--rainette-line);
-        background: #fffdf9;
-      }
-      .ticket-status-dot {
-        width: 0.78rem;
-        height: 0.78rem;
-        flex: 0 0 0.78rem;
-        margin-top: 0.22rem;
-        border-radius: 999px;
-        box-shadow: 0 0 0 3px rgba(255,255,255,0.78);
-      }
-      .ticket-status-meta {
-        color: #27303a;
-        line-height: 1.45;
-      }
-      .ticket-status-meta strong {
-        display: inline-block;
-        margin-bottom: 0.2rem;
-      }
-      .ticket-status-note,
-      .ticket-status-message {
-        margin: 0;
-        line-height: 1.45;
-      }
-      .ticket-status-note {
-        color: #4d5863;
-        font-size: 0.92rem;
-      }
-      .ticket-status-message {
-        color: #a53d2d;
-        font-size: 0.9rem;
-        background: rgba(255, 255, 255, 0.72);
-        border: 1px dashed rgba(165, 61, 45, 0.22);
-        border-radius: 10px;
-        padding: 0.7rem 0.8rem;
-      }
-      .ticket-status-message strong {
-        display: block;
-        margin-bottom: 0.35rem;
-        color: #7f1d1d;
-      }
-      .ticket-status-message pre {
-        margin: 0;
-        color: #7f1d1d;
-        background: transparent;
-        border: 0;
-        padding: 0;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-      .ticket-actions {
-        display: grid;
-        gap: 0.55rem;
-      }
-      .ticket-actions .btn { width: 100%; }
-      .ticket-status-card.is-active {
-        background: #eef9f1;
-        border-color: rgba(47, 133, 90, 0.22);
-      }
-      .ticket-status-card.is-active .ticket-status-meta,
-      .ticket-status-card.is-active .ticket-status-meta strong,
-      .ticket-status-card.is-active + .ticket-status-note {
-        color: #23683f;
-      }
-      .ticket-status-dot.is-active { background: #2f855a; }
-      .ticket-status-card.is-waiting {
-        background: #fff4e8;
-        border-color: rgba(217, 107, 43, 0.25);
-      }
-      .ticket-status-card.is-waiting .ticket-status-meta,
-      .ticket-status-card.is-waiting .ticket-status-meta strong,
-      .ticket-status-card.is-waiting + .ticket-status-note {
-        color: #9e5b22;
-      }
-      .ticket-status-dot.is-waiting { background: #d96b2b; }
-      .ticket-status-card.is-error {
-        background: #fff0ef;
-        border-color: rgba(197, 48, 48, 0.22);
-      }
-      .ticket-status-card.is-error .ticket-status-meta,
-      .ticket-status-card.is-error .ticket-status-meta strong,
-      .ticket-status-card.is-error + .ticket-status-note {
-        color: #a53d2d;
-      }
-      .ticket-status-dot.is-error { background: #c53030; }
-      .ticket-status-card.is-released,
-      .ticket-status-card.is-disabled {
-        background: #f4f6f8;
-        border-color: rgba(95, 102, 112, 0.18);
-      }
-      .ticket-status-card.is-released .ticket-status-meta,
-      .ticket-status-card.is-released .ticket-status-meta strong,
-      .ticket-status-card.is-released + .ticket-status-note,
-      .ticket-status-card.is-disabled .ticket-status-meta,
-      .ticket-status-card.is-disabled .ticket-status-meta strong,
-      .ticket-status-card.is-disabled + .ticket-status-note {
-        color: #4d5863;
-      }
-      .ticket-status-dot.is-released,
-      .ticket-status-dot.is-disabled { background: #6b7280; }
-      .form-control, .form-select, .selectize-input {
-        min-height: 2.75rem;
-        border: 1px solid rgba(87, 63, 47, 0.18) !important;
-        border-radius: 11px !important;
-        background: #fffefa !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
-      }
-      .form-control:focus, .form-select:focus, .selectize-input.focus {
-        border-color: var(--rainette-orange) !important;
-        box-shadow: 0 0 0 0.22rem rgba(239, 108, 33, 0.15) !important;
-      }
-      .form-check-input { accent-color: var(--rainette-orange); }
-      .form-check-input:checked {
-        background-color: var(--rainette-orange);
-        border-color: var(--rainette-orange);
-      }
-      .accordion-item {
-        margin-bottom: 0.55rem;
-        overflow: visible;
-        border: 1px solid var(--rainette-line) !important;
-        border-radius: 8px !important;
-        background: var(--rainette-paper);
-      }
-      .accordion-button {
-        padding: 0.9rem 1rem;
-        color: var(--rainette-ink);
-        background: #fffaf5;
-        box-shadow: none !important;
-      }
-      .accordion-button:not(.collapsed) {
-        color: var(--rainette-orange-dark);
-        background: var(--rainette-orange-soft);
-      }
-      .accordion-button:not(.collapsed)::after { filter: sepia(1) saturate(5) hue-rotate(340deg); }
-      .btn:not(.btn-close) {
-        min-height: 2.65rem;
-        border: 1px solid #cf5816 !important;
-        border-radius: 6px !important;
-        color: #ffffff !important;
-        background: #e7651d !important;
-        box-shadow: none !important;
-        font-weight: 700 !important;
-        transition: background-color 140ms ease, border-color 140ms ease;
-      }
-      .btn:not(.btn-close):hover {
-        transform: none;
-        filter: none;
-        border-color: #ad4308 !important;
-        background: #c95312 !important;
-        box-shadow: none !important;
-      }
-      .btn:not(.btn-close):active { background: #ad4308 !important; }
-      .sidebar-group.d-grid .btn { width: 100%; }
-      .bslib-navs-card, .card {
-        overflow: visible;
-        border: 1px solid var(--rainette-line);
-        border-radius: 20px;
-        background: rgba(255, 253, 249, 0.97);
-        box-shadow: 0 16px 38px rgba(76, 49, 31, 0.08);
-      }
-      .tab-content > .tab-pane > .card {
-        animation: rainette-card-in 360ms ease both;
-      }
-      .card-header {
-        padding: 1rem 1.2rem;
-        color: var(--rainette-ink);
-        background: linear-gradient(90deg, var(--rainette-orange-soft), #fffaf5 38%, #fffdf9 100%);
-        border-bottom: 1px solid var(--rainette-line);
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.02rem;
-        letter-spacing: -0.01em;
-      }
-      .nav-tabs {
-        gap: 0.5rem;
-        padding: 0.7rem;
-        border: 0;
-        background: rgba(249, 241, 232, 0.88);
-      }
-      .nav-tabs .nav-link,
-      .nav-tabs > li > a {
-        border: 1px solid transparent;
-        border-radius: 6px;
-        color: #625951 !important;
-        background: rgba(255,255,255,0.72) !important;
-        padding: 0.65rem 1rem;
-      }
-      .nav-tabs .nav-link:hover,
-      .nav-tabs > li > a:hover {
-        color: var(--rainette-orange-dark) !important;
-        border-color: rgba(239, 108, 33, 0.22) !important;
-        background: #fff7f0 !important;
-      }
-      .nav-tabs .nav-link.active,
-      .nav-tabs .nav-item.show .nav-link,
-      .nav-tabs > li.active > a,
-      .nav-tabs > li.active > a:hover,
-      .nav-tabs > li.active > a:focus {
-        color: #ffffff !important;
-        border-color: var(--rainette-orange) !important;
-        background: #e7651d !important;
-        box-shadow: none !important;
-      }
-      .metric-card {
-        position: relative;
-        overflow: visible;
-        border: 1px solid rgba(239, 108, 33, 0.17);
-        border-radius: 16px;
-        background: linear-gradient(145deg, #fffdf9 0%, #fff5ed 100%);
-        box-shadow: 0 10px 22px rgba(76, 49, 31, 0.06);
-      }
-      .metric-card::before {
-        content: '';
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 4px;
-        background: linear-gradient(180deg, #ff9c5b, var(--rainette-orange));
-      }
-      .metric-card .value { color: var(--rainette-orange-dark); }
-      .progress-shell { height: 16px; background: #eadfd5; }
-      .progress-bar-custom {
-        background: linear-gradient(90deg, #ff9b59 0%, var(--rainette-orange) 60%, #cc4b08 100%);
-        box-shadow: 0 0 14px rgba(239, 108, 33, 0.30);
-      }
-      .debug-terminal {
-        border: 1px solid rgba(239, 108, 33, 0.25);
-        background: #211c19;
-        box-shadow: inset 4px 0 0 var(--rainette-orange), 0 12px 24px rgba(36, 24, 17, 0.10);
-      }
-      @keyframes rainette-card-in {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .tab-content > .tab-pane > .card { animation: none; }
-        .btn:not(.btn-close) { transition: none; }
-      }
-      @media (max-width: 640px) {
-        .nav-tabs { gap: 0.3rem; }
-        .nav-tabs .nav-link { padding: 0.55rem 0.75rem; }
-      }
-      body {
-        background: #f7f6f2 !important;
-      }
-      .navbar,
-      .sidebar-group,
-      .ticket-status-card,
-      .ticket-status-message,
-      .form-control,
-      .form-select,
-      .selectize-input,
-      .accordion-item,
-      .accordion-button,
-      .btn:not(.btn-close),
-      .bslib-navs-card,
-      .card,
-      .card-header,
-      .nav-tabs .nav-link,
-      .metric-card,
-      .debug-terminal,
-      .preview-box,
-      .code-box,
-      .input-help-box,
-      .progress-shell,
-      .progress-bar-custom,
-      iframe,
-      img {
-        border-radius: 0 !important;
-        box-shadow: none !important;
-      }
-      .navbar,
-      .sidebar-group,
-      .bslib-navs-card,
-      .card,
-      .metric-card,
-      .accordion-body,
-      .card-header,
-      .nav-tabs {
-        background: #fffdf8 !important;
-      }
-      .card,
-      .sidebar-group,
-      .metric-card,
-      .ticket-status-card,
-      .accordion-item {
-        border: 1px solid #d8d1c5 !important;
-      }
-      .card-header {
-        border-bottom: 1px solid #d8d1c5 !important;
-        font-size: 0.92rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-      .nav-tabs {
-        border-bottom: 1px solid #d8d1c5 !important;
-      }
-      .nav-tabs .nav-link.active,
-      .nav-tabs > li.active > a,
-      .nav-tabs > li.active > a:hover,
-      .nav-tabs > li.active > a:focus {
-        background: #24211f !important;
-        border-color: #24211f !important;
-        color: #fffdf8 !important;
-      }
-      .metric-card::before {
-        display: none;
-      }
-      .graph-full-page-card {
-        min-height: calc(100vh - 8rem);
-      }
-      .graph-full-page-card > .card-body,
-      .graph-full-page-card .card-body {
-        min-height: calc(100vh - 11rem);
-      }
-      .graph-full-page-card .card-body {
-        padding: 0.75rem !important;
-      }
-      .graph-full-page-card .card-header {
-        flex: 0 0 auto;
-      }
-      .rainette-host-shell,
-      .full-page-iframe {
-        width: 100% !important;
-        min-height: calc(100vh - 11rem) !important;
-        height: calc(100vh - 11rem) !important;
-      }
-      .wordcloud-full-page img,
-      .full-page-image {
-        width: 100% !important;
-        max-height: calc(100vh - 11rem);
-        object-fit: contain;
-      }
-      .bslib-navs-card,
-      .bslib-card,
-      .bslib-card .card-body,
-      .card,
-      .card-body,
-      .tab-content,
-      .tab-pane,
-      .accordion-body,
-      .debug-terminal,
-      .preview-box,
-      .code-box,
-      .afc-plot-host,
-      .afc-plot-canvas {
-        overflow: visible !important;
-        max-height: none !important;
-      }
-      .debug-terminal,
-      .preview-box,
-      .code-box {
-        min-height: auto !important;
-      }
-      .bslib-full-screen-enter,
-      .bslib-full-screen-exit {
-        display: none !important;
-      }
-      .btn:not(.btn-close) {
-        min-height: 2rem !important;
-        padding: 0.35rem 0.55rem !important;
-        font-size: 0.84rem !important;
-        font-weight: 600 !important;
-      }
-      .nav-tabs {
-        gap: 0.32rem !important;
-        padding: 0.42rem !important;
-      }
-      .nav-tabs .nav-link,
-      .nav-tabs > li > a {
-        padding: 0.4rem 0.62rem !important;
-        font-size: 0.82rem !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.02em !important;
-      }
-      .card-header {
-        padding: 0.55rem 0.75rem !important;
-        font-size: 0.78rem !important;
-      }
-      .accordion-button {
-        padding: 0.55rem 0.7rem !important;
-        font-size: 0.84rem !important;
-      }
-      .form-control,
-      .form-select,
-      .selectize-input,
-      .sidebar {
-        font-size: 0.86rem !important;
-      }
-      @media (max-width: 640px) {
-        .afc-plot-host,
-        .afc-plot-canvas,
-        .graph-full-page-card,
-        .graph-full-page-card > .card-body,
-        .graph-full-page-card .card-body {
-          min-height: 560px;
-        }
-        .afc-plot-canvas {
-          height: 560px;
-        }
-      }
-    "))
-  ),
-  uiOutput("ui_ticket_release_hook"),
-  sidebar = sidebar(
-    width = 420,
-    open = "desktop",
-    uiOutput("ui_ticket_sidebar"),
-    div(
-      class = "sidebar-group",
-      fileInput("fichier_corpus", "Importer un corpus IRaMuTeQ (.txt)", accept = c(".txt")),
-      p(
-        class = "text-muted small",
-        "Les lignes commençant par ",
-        tags$code("****"),
-        " sont reconnues comme dans le format IRaMuTeQ."
+        HTML(" · version 0_4beta - modifiée 27-07-2026")
       )
     ),
-    accordion(
-      id = "sidebar_accordion",
-      open = c("param_chd", "param_langue", "param_nettoyage", "param_afc", "param_debug"),
-      accordion_panel(
-        title = "Paramètres CHD",
-        value = "param_chd",
-        selectInput(
-          "mode_decoupage",
-          "Mode de découpage",
-          choices = c("segment_size" = "segment_size", "ponctuation" = "ponctuation"),
-          selected = "segment_size"
+    fluidRow(
+      class = "layout-row",
+      column(
+        width = 3,
+        class = "control-column",
+        uiOutput("ui_ticket_sidebar"),
+        control_section(
+          "Corpus",
+          fileInput("fichier_corpus", "Importer un corpus IRaMuTeQ (.txt)", accept = c(".txt")),
+          p(
+            class = "text-muted small",
+            "Les lignes commençant par ",
+            tags$code("****"),
+            " sont reconnues comme dans le format IRaMuTeQ."
+          )
         ),
-        numericInput("segment_size", "segment_size", value = 40, min = 5, step = 1),
-        numericInput("k", "k (nombre de classes)", value = 6, min = 2, step = 1),
-        numericInput("min_segment_size", "Nombre minimal de termes par segment", value = 0, min = 0, step = 1),
-        numericInput("min_split_members", "Effectif minimal pour scinder une classe", value = 12, min = 3, step = 1),
-        numericInput("min_docfreq", "Fréquence minimale des termes", value = 1, min = 1, step = 1),
-        numericInput("max_p", "max_p (p-value)", value = 0.05, min = 0, max = 1, step = 0.01)
-      ),
-      accordion_panel(
-        title = "Langue du corpus",
-        value = "param_langue",
-        radioButtons(
-          "langue_corpus",
+        control_section(
+          "Paramètres CHD",
+          selectInput(
+            "mode_decoupage",
+            "Mode de découpage",
+            choices = c("segment_size" = "segment_size", "ponctuation" = "ponctuation"),
+            selected = "segment_size"
+          ),
+          numericInput("segment_size", "segment_size", value = 40, min = 5, step = 1),
+          numericInput("k", "k (nombre de classes)", value = 6, min = 2, step = 1),
+          numericInput("min_segment_size", "Nombre minimal de termes par segment", value = 0, min = 0, step = 1),
+          numericInput("min_split_members", "Effectif minimal pour scinder une classe", value = 12, min = 3, step = 1),
+          numericInput("min_docfreq", "Fréquence minimale des termes", value = 1, min = 1, step = 1),
+          numericInput("max_p", "max_p (p-value)", value = 0.05, min = 0, max = 1, step = 0.01)
+        ),
+        control_section(
           "Langue du corpus",
-          choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
-          selected = "fr"
-        ),
-        uiOutput("ui_langue_detection")
-      ),
-      accordion_panel(
-        title = "Nettoyage",
-        value = "param_nettoyage",
-        radioButtons(
-          "mode_nettoyage_lexical",
-          "Nettoyage lexical - choisir la méthode",
-          choices = c(
-            "Stopwords quanteda" = "stopwords_quanteda",
-            "Dictionnaire IRaMuTeQ-lite (lexique_fr)" = "lexique_iramuteq",
-            "Aucun nettoyage lexical" = "aucun"
+          radioButtons(
+            "langue_corpus",
+            "Langue du corpus",
+            choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
+            selected = "fr"
           ),
-          selected = "stopwords_quanteda"
+          uiOutput("ui_langue_detection")
         ),
-        helpText("Le dictionnaire IRaMuTeQ-lite demandé est intégré dans dictionnaires/lexique_fr.csv. Quanteda reste disponible au choix."),
-        uiOutput("ui_stopwords_info"),
-        checkboxInput("lexique_utiliser_lemmes", "Lemmatisation lexique_fr (forme vers c_lemme)", value = TRUE),
-        selectizeInput(
-          "pos_lexique_a_conserver",
-          "Catégories c_morpho à conserver",
-          choices = categories_morpho_iramuteq(),
-          selected = c("NOM", "VER", "ADJ"),
-          multiple = TRUE
+        control_section(
+          "Nettoyage",
+          radioButtons(
+            "mode_nettoyage_lexical",
+            "Nettoyage lexical - choisir la méthode",
+            choices = c(
+              "Stopwords quanteda" = "stopwords_quanteda",
+              "Dictionnaire IRaMuTeQ-lite (lexique_fr)" = "lexique_iramuteq",
+              "Aucun nettoyage lexical" = "aucun"
+            ),
+            selected = "stopwords_quanteda"
+          ),
+          helpText("Le dictionnaire IRaMuTeQ-lite demandé est intégré dans dictionnaires/lexique_fr.csv. Quanteda reste disponible au choix."),
+          uiOutput("ui_stopwords_info"),
+          checkboxInput("lexique_utiliser_lemmes", "Lemmatisation lexique_fr (forme vers c_lemme)", value = TRUE),
+          selectizeInput(
+            "pos_lexique_a_conserver",
+            "Catégories c_morpho à conserver",
+            choices = categories_morpho_iramuteq(),
+            selected = c("NOM", "VER", "ADJ"),
+            multiple = TRUE
+          ),
+          checkboxInput("morpho_conserver_hors_lexique", "Conserver les formes hors lexique (AUTRE_FORME)", value = TRUE),
+          checkboxInput("morpho_exclure_etre_verbe", "Exclure le terme être/etre si VER est sélectionné", value = FALSE),
+          checkboxInput("nettoyage_caracteres", "Nettoyage caractères (regex)", value = FALSE),
+          checkboxInput("supprimer_ponctuation", "Supprimer la ponctuation", value = TRUE),
+          checkboxInput("supprimer_chiffres", "Supprimer les chiffres", value = TRUE),
+          checkboxInput("supprimer_apostrophes", "Traiter les élisions françaises", value = FALSE),
+          checkboxInput("forcer_minuscules_avant", "Forcer les minuscules avant traitement", value = FALSE)
         ),
-        checkboxInput("morpho_conserver_hors_lexique", "Conserver les formes hors lexique (AUTRE_FORME)", value = TRUE),
-        checkboxInput("morpho_exclure_etre_verbe", "Exclure le terme être/etre si VER est sélectionné", value = FALSE),
-        checkboxInput("nettoyage_caracteres", "Nettoyage caractères (regex)", value = FALSE),
-        checkboxInput("supprimer_ponctuation", "Supprimer la ponctuation", value = TRUE),
-        checkboxInput("supprimer_chiffres", "Supprimer les chiffres", value = TRUE),
-        checkboxInput("supprimer_apostrophes", "Traiter les élisions françaises", value = FALSE),
-        checkboxInput("forcer_minuscules_avant", "Forcer les minuscules avant traitement", value = FALSE)
-      ),
-      accordion_panel(
-        title = "AFC",
-        value = "param_afc",
-        checkboxInput("afc_avoid_overlap", "Éviter les chevauchements AFC", value = TRUE)
-      ),
-      accordion_panel(
-        title = "Nuages de mots",
-        value = "param_wordcloud",
-        numericInput("top_n", "top_n (wordcloud)", value = 20, min = 5, step = 1)
-      ),
-      accordion_panel(
-        title = "Debug",
-        value = "param_debug",
-        checkboxInput("debug_mode", "Activer le mode debug détaillé", value = TRUE),
-        p(
-          class = "text-muted small",
-          "Quand il est activé, toutes les grandes étapes du pipeline sont journalisées de façon détaillée sur l’onglet Analyse."
-        )
-      )
-    ),
-    div(
-      class = "sidebar-group d-grid gap-2",
-      actionButton("lancer", "Lancer l'analyse", class = "btn-primary"),
-      downloadButton("dl_zip", "Télécharger l'archive globale (zip)")
-    )
-  ),
-  navset_card_tab(
-    id = "onglets_principaux",
-    nav_panel(
-      "Analyse",
-      card(
-        card_header("Statut et indicateurs"),
-        div(class = "wide-stack",
-          p(textOutput("statut")),
-          uiOutput("barre_progression"),
-          div(
-            class = "metrics-grid",
-            div(class = "metric-card", span(class = "label", "Documents"), span(class = "value", textOutput("metric_docs", inline = TRUE))),
-            div(class = "metric-card", span(class = "label", "Segments"), span(class = "value", textOutput("metric_segments", inline = TRUE))),
-            div(class = "metric-card", span(class = "label", "Segments analysés"), span(class = "value", textOutput("metric_analyzed", inline = TRUE))),
-            div(class = "metric-card", span(class = "label", "Classes"), span(class = "value", textOutput("metric_classes", inline = TRUE)))
+        control_section(
+          "AFC",
+          checkboxInput("afc_avoid_overlap", "Éviter les chevauchements AFC", value = TRUE)
+        ),
+        control_section(
+          "Nuages de mots",
+          numericInput("top_n", "top_n (wordcloud)", value = 20, min = 5, step = 1)
+        ),
+        control_section(
+          "Debug",
+          checkboxInput("debug_mode", "Activer le mode debug détaillé", value = TRUE),
+          p(
+            class = "text-muted small",
+            "Quand il est activé, toutes les grandes étapes du pipeline sont journalisées dans l’onglet Analyse."
           )
+        ),
+        div(
+          class = "action-row",
+          actionButton("lancer", "Lancer l'analyse", class = "btn-primary"),
+          downloadButton("dl_zip", "Télécharger l'archive globale (zip)")
         )
       ),
-      card(
-        class = "logs-box",
-        card_header("Mode debug et étapes de l’analyse"),
-        div(class = "debug-terminal", verbatimTextOutput("logs", placeholder = TRUE))
-      )
-    ),
-    nav_panel(
-      "Corpus",
-      card(
-        card_header("Informations"),
-        uiOutput("corpus_meta")
-      ),
-      card(
-        card_header("Aperçu du corpus importé"),
-        div(class = "preview-box", verbatimTextOutput("corpus_preview", placeholder = TRUE))
-      ),
-      card(
-        card_header("Concordancier HTML"),
-        uiOutput("ui_concordancier")
-      )
-    ),
-    nav_panel(
-      "CHD",
-      card(
-        class = "graph-full-page-card",
-        card_header("Rainette explor"),
-        card_body(
-          fill = TRUE,
-          uiOutput("ui_rainette_explor_frame")
-        )
-      )
-    ),
-    nav_panel(
-      "AFC",
-      card(
-        card_header("Analyse factorielle des correspondances"),
-        uiOutput("ui_afc_status"),
-        layout_columns(
-          col_widths = c(6, 6),
-          numericInput("afc_top_terms", "Nombre de termes affichés", value = 80, min = 10, max = 200, step = 10),
-          selectInput("afc_size_by", "Taille des termes", choices = c("Chi2" = "Chi2", "Fréquence" = "Frequence"), selected = "Chi2")
-        )
-      ),
-      card(
-        class = "graph-full-page-card",
-        card_header("Projection des classes"),
-        card_body(
-          div(
-            class = "afc-plot-host",
-            div(
-              class = "afc-plot-canvas",
-              plotOutput("plot_afc_classes", width = "100%", height = "100%")
+      column(
+        width = 9,
+        class = "main-column",
+        tabsetPanel(
+          id = "onglets_principaux",
+          type = "tabs",
+          tabPanel(
+            "Analyse",
+            section(
+              "Statut et indicateurs",
+              div(
+                class = "wide-stack",
+                p(textOutput("statut")),
+                uiOutput("barre_progression"),
+                div(
+                  class = "metrics-grid",
+                  metric_item("Documents", "metric_docs"),
+                  metric_item("Segments", "metric_segments"),
+                  metric_item("Segments analysés", "metric_analyzed"),
+                  metric_item("Classes", "metric_classes")
+                )
+              )
+            ),
+            section(
+              "Mode debug et étapes de l’analyse",
+              div(class = "debug-terminal", verbatimTextOutput("logs", placeholder = TRUE))
             )
+          ),
+          tabPanel(
+            "Corpus",
+            section("Informations", uiOutput("corpus_meta")),
+            section(
+              "Aperçu du corpus importé",
+              div(class = "preview-box", verbatimTextOutput("corpus_preview", placeholder = TRUE))
+            ),
+            section("Concordancier HTML", uiOutput("ui_concordancier"))
+          ),
+          tabPanel(
+            "CHD",
+            section("Rainette explor", uiOutput("ui_rainette_explor_frame"), class = "graph-full-page-section")
+          ),
+          tabPanel(
+            "AFC",
+            section(
+              "Analyse factorielle des correspondances",
+              uiOutput("ui_afc_status"),
+              fluidRow(
+                column(
+                  width = 6,
+                  numericInput("afc_top_terms", "Nombre de termes affichés", value = 80, min = 10, max = 200, step = 10)
+                ),
+                column(
+                  width = 6,
+                  selectInput("afc_size_by", "Taille des termes", choices = c("Chi2" = "Chi2", "Fréquence" = "Frequence"), selected = "Chi2")
+                )
+              )
+            ),
+            section(
+              "Projection des classes",
+              div(
+                class = "afc-plot-host",
+                div(
+                  class = "afc-plot-canvas",
+                  plotOutput("plot_afc_classes", width = "100%", height = "100%")
+                )
+              ),
+              class = "graph-full-page-section"
+            ),
+            section(
+              "Projection des classes et des termes",
+              div(
+                class = "afc-plot-host",
+                div(
+                  class = "afc-plot-canvas",
+                  plotOutput("plot_afc_terms", width = "100%", height = "100%")
+                )
+              ),
+              class = "graph-full-page-section"
+            ),
+            section("Valeurs propres et inertie", tableOutput("table_afc_eigenvalues"))
+          ),
+          tabPanel(
+            "Résultats",
+            section("Résumé des classes", tableOutput("table_classes")),
+            section(
+              "Statistiques par classe",
+              selectInput("classe_resultat", "Classe", choices = NULL),
+              tableOutput("table_stats_classe")
+            ),
+            section("Nuages de mots", uiOutput("ui_wordclouds"), class = "graph-full-page-section")
+          ),
+          tabPanel(
+            "Exports",
+            section("Archive globale", uiOutput("ui_exports_links"))
+          ),
+          tabPanel(
+            "Aide",
+            section(NULL, uiOutput("help_main"), class = "help-pane")
           )
         )
-      ),
-      card(
-        class = "graph-full-page-card",
-        card_header("Projection des classes et des termes"),
-        card_body(
-          div(
-            class = "afc-plot-host",
-            div(
-              class = "afc-plot-canvas",
-              plotOutput("plot_afc_terms", width = "100%", height = "100%")
-            )
-          )
-        )
-      ),
-      card(
-        card_header("Valeurs propres et inertie"),
-        tableOutput("table_afc_eigenvalues")
       )
-    ),
-    nav_panel(
-      "Résultats",
-      card(
-        card_header("Résumé des classes"),
-        tableOutput("table_classes")
-      ),
-      card(
-        card_header("Statistiques par classe"),
-        selectInput("classe_resultat", "Classe", choices = NULL),
-        tableOutput("table_stats_classe")
-      ),
-      card(
-        class = "graph-full-page-card",
-        card_header("Nuages de mots"),
-        uiOutput("ui_wordclouds")
-      )
-    ),
-    nav_panel(
-      "Exports",
-      card(
-        card_header("Archive globale"),
-        uiOutput("ui_exports_links")
-      )
-    ),
-    nav_panel(
-      "Aide",
-      div(class = "help-pane", uiOutput("help_main"))
     )
   )
-)
 }
