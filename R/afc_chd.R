@@ -135,6 +135,12 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 2
   result_x <- x
   result_y <- y
   result_rectangles <- vector("list", length(labels))
+  max_iterations <- suppressWarnings(as.integer(max_iterations))
+  if (!is.finite(max_iterations) || max_iterations < 0L) {
+    max_iterations <- 600L
+  }
+  adaptive_iterations <- max(160L, round(3600 / sqrt(length(labels))))
+  max_iterations <- min(max_iterations, adaptive_iterations)
 
   overlaps <- function(first, second) {
     !(first$xmax < second$xmin || second$xmax < first$xmin ||
@@ -150,11 +156,11 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 2
     width * height
   }
 
-  overlap_score <- function(rectangle) {
+  overlap_areas <- function(rectangle) {
     if (!length(placed)) {
-      return(0)
+      return(numeric(0))
     }
-    sum(vapply(
+    vapply(
       placed,
       function(previous) {
         if (is.null(previous)) {
@@ -163,7 +169,7 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 2
         overlap_area(rectangle, previous)
       },
       numeric(1)
-    ))
+    )
   }
 
   make_rectangle <- function(center_x, center_y, width, height) {
@@ -207,11 +213,8 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 2
       candidate_y <- clamp_axis(candidate_y, user[3L] + height / 2, user[4L] - height / 2)
       rectangle <- make_rectangle(candidate_x, candidate_y, width, height)
 
-      collision <- any(vapply(
-        placed,
-        function(previous) !is.null(previous) && overlaps(rectangle, previous),
-        logical(1)
-      ))
+      areas <- overlap_areas(rectangle)
+      collision <- any(areas > 0)
       if (!collision) {
         selected <- rectangle
         result_x[index] <- candidate_x
@@ -219,7 +222,7 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 2
         break
       }
 
-      score <- overlap_score(rectangle) / (range_x * range_y) +
+      score <- sum(areas) / (range_x * range_y) +
         ((candidate_x - x[index]) / range_x)^2 * 0.002 +
         ((candidate_y - y[index]) / range_y)^2 * 0.002
       if (score < best_score) {

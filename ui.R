@@ -319,6 +319,15 @@ build_main_ui <- function() {
           width: 100% !important;
           height: 100% !important;
         }
+        .afc-plot-canvas .shiny-image-output,
+        .afc-plot-canvas img {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        .afc-plot-canvas img {
+          object-fit: contain;
+          display: block;
+        }
         .full-page-iframe,
         iframe {
           width: 100% !important;
@@ -597,7 +606,7 @@ build_main_ui <- function() {
                 class = "afc-plot-host",
                 div(
                   class = "afc-plot-canvas",
-                  plotOutput("plot_afc_classes", width = "100%", height = "100%")
+                  imageOutput("plot_afc_classes", width = "100%", height = "100%")
                 )
               ),
               class = "graph-full-page-section"
@@ -608,7 +617,7 @@ build_main_ui <- function() {
                 class = "afc-plot-host",
                 div(
                   class = "afc-plot-canvas",
-                  plotOutput("plot_afc_terms", width = "100%", height = "100%")
+                  imageOutput("plot_afc_terms", width = "100%", height = "100%")
                 )
               ),
               class = "graph-full-page-section"

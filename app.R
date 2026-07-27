@@ -34,6 +34,45 @@ limit_display_rows <- function(df, max_rows = DISPLAY_MAX_TABLE_ROWS) {
   utils::head(df, max_rows)
 }
 
+sanitize_cache_token <- function(value) {
+  value <- paste(as.character(value), collapse = "_")
+  value <- gsub("[^A-Za-z0-9_-]+", "_", value)
+  value <- gsub("_+", "_", value)
+  value <- gsub("^_|_$", "", value)
+  if (!nzchar(value)) {
+    return("value")
+  }
+  value
+}
+
+afc_screen_cache_dir <- function(rv) {
+  base_dir <- rv$export_dir
+  if (is.null(base_dir) || !nzchar(base_dir)) {
+    base_dir <- tempdir()
+  }
+  cache_dir <- file.path(base_dir, "afc", "screen_cache")
+  dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+  cache_dir
+}
+
+render_afc_png_once <- function(path, plot_expr, width = 1800L, height = 1300L, res = 120L) {
+  if (!file.exists(path)) {
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    grDevices::png(path, width = width, height = height, res = res)
+    tryCatch(force(plot_expr), finally = grDevices::dev.off())
+  }
+  path
+}
+
+image_response <- function(path, alt) {
+  list(
+    src = path,
+    contentType = "image/png",
+    width = "100%",
+    alt = alt
+  )
+}
+
 source("nettoyage.R", encoding = "UTF-8", local = TRUE)
 source("concordancier.R", encoding = "UTF-8", local = TRUE)
 source("R/utils_general.R", encoding = "UTF-8", local = TRUE)
@@ -559,20 +598,58 @@ server <- function(input, output, session) {
     tags$p("Lance une analyse CHD pour calculer l'AFC classes-termes.")
   })
 
-  output$plot_afc_classes <- renderPlot({
+  output$plot_afc_classes <- renderImage({
     req(rv$afc_obj)
-    chdrainette_plot_afc_classes(rv$afc_obj)
-  }, res = 160, execOnResize = TRUE)
+    path <- NULL
+    if (!is.null(rv$afc_files$classes_png) && file.exists(rv$afc_files$classes_png)) {
+      path <- rv$afc_files$classes_png
+    } else {
+      path <- file.path(afc_screen_cache_dir(rv), "afc_classes_screen.png")
+      render_afc_png_once(path, chdrainette_plot_afc_classes(rv$afc_obj), width = 1600L, height = 1200L)
+    }
+    image_response(path, "Projection des classes AFC")
+  }, deleteFile = FALSE)
 
-  output$plot_afc_terms <- renderPlot({
+  output$plot_afc_terms <- renderImage({
     req(rv$afc_obj)
-    chdrainette_plot_afc_terms(
-      rv$afc_obj,
-      top_terms = input$afc_top_terms %||% 80L,
-      size_by = input$afc_size_by %||% "Chi2",
-      avoid_overlap = isTRUE(input$afc_avoid_overlap)
+    top_terms <- max(5L, suppressWarnings(as.integer(input$afc_top_terms %||% 80L)))
+    size_by <- as.character(input$afc_size_by %||% "Chi2")
+    avoid_overlap <- isTRUE(input$afc_avoid_overlap)
+
+    if (
+      identical(top_terms, 80L) &&
+        identical(size_by, "Chi2") &&
+        isTRUE(avoid_overlap) &&
+        !is.null(rv$afc_files$terms_png) &&
+        file.exists(rv$afc_files$terms_png)
+    ) {
+      return(image_response(rv$afc_files$terms_png, "Projection des classes et des termes AFC"))
+    }
+
+    path <- file.path(
+      afc_screen_cache_dir(rv),
+      paste0(
+        "afc_terms_",
+        sanitize_cache_token(c(top_terms, size_by, avoid_overlap)),
+        ".png"
+      )
     )
-  }, res = 160, execOnResize = TRUE)
+    render_afc_png_once(
+      path,
+      chdrainette_plot_afc_terms(
+        rv$afc_obj,
+        top_terms = top_terms,
+        size_by = size_by,
+        avoid_overlap = avoid_overlap
+      ),
+      width = 1900L,
+      height = 1350L
+    )
+    image_response(path, "Projection des classes et des termes AFC")
+  }, deleteFile = FALSE)
+
+  outputOptions(output, "plot_afc_classes", suspendWhenHidden = TRUE)
+  outputOptions(output, "plot_afc_terms", suspendWhenHidden = TRUE)
 
   output$table_afc_eigenvalues <- renderTable({
     req(rv$afc_obj)
