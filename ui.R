@@ -37,7 +37,7 @@ build_main_ui <- function() {
           color: #24211f;
           background: #f7f6f2;
           font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
-          font-size: 20px;
+          font-size: 21px;
           line-height: 1.5;
         }
         a {
@@ -98,7 +98,7 @@ build_main_ui <- function() {
           padding: 0 0 0.25rem;
           border-bottom: 1px solid #d8d1c5;
           color: #24211f;
-          font-size: 1.22rem !important;
+          font-size: 1.3rem !important;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -107,7 +107,7 @@ build_main_ui <- function() {
         .text-muted,
         .small {
           color: #6b625b !important;
-          font-size: 1.16rem !important;
+          font-size: 1.2rem !important;
         }
         .shiny-input-container {
           width: 100%;
@@ -117,7 +117,7 @@ build_main_ui <- function() {
         .control-label {
           margin-bottom: 0.2rem;
           color: #3b3632;
-          font-size: 1.2rem !important;
+          font-size: 1.32rem !important;
           font-weight: 600;
         }
         .form-control,
@@ -129,7 +129,13 @@ build_main_ui <- function() {
           background: #fffefa !important;
           box-shadow: none !important;
           color: #24211f;
-          font-size: 1.2rem !important;
+          font-size: 1.32rem !important;
+        }
+        .selectize-input input,
+        .selectize-dropdown,
+        .selectize-dropdown-content,
+        .selectize-dropdown .option {
+          font-size: 1.32rem !important;
         }
         .form-control:focus,
         .form-select:focus,
@@ -141,11 +147,12 @@ build_main_ui <- function() {
         .radio {
           margin-top: 0.2rem;
           margin-bottom: 0.35rem;
-          font-size: 1.2rem !important;
+          font-size: 1.32rem !important;
         }
         .checkbox label,
         .radio label {
           min-height: 0;
+          font-size: 1.32rem !important;
           font-weight: 400;
         }
         input[type='checkbox'],
@@ -163,7 +170,7 @@ build_main_ui <- function() {
           background: #fffefa !important;
           box-shadow: none !important;
           color: #24211f !important;
-          font-size: 1.2rem !important;
+          font-size: 1.28rem !important;
           font-weight: 600;
           line-height: 1.2;
         }
@@ -364,6 +371,28 @@ build_main_ui <- function() {
           border-radius: 0 !important;
           background: transparent !important;
           box-shadow: none !important;
+        }
+        .input-help-label,
+        .input-help-value {
+          font-size: 1.2rem !important;
+          line-height: 1.35;
+        }
+        .input-help-label {
+          font-weight: 700;
+        }
+        .language-detection-note {
+          margin: 0.15rem 0 0 !important;
+          color: #6b625b !important;
+          font-size: 1.02rem !important;
+          font-weight: 400 !important;
+          line-height: 1.35 !important;
+          letter-spacing: 0 !important;
+        }
+        .language-detection-note.is-warning {
+          color: #8a5a13 !important;
+        }
+        .language-detection-note.is-ok {
+          color: #2f6f4e !important;
         }
         .ticket-status-shell {
           display: grid;

@@ -639,12 +639,12 @@ server <- function(input, output, session) {
       textes <- strsplit(rv$corpus_preview_text, "\n", fixed = TRUE)[[1]]
     }
     if (is.null(textes) || !length(textes)) {
-      return(tags$p("Détection langue : importe et lance une analyse pour afficher une estimation."))
+      return(tags$p(class = "language-detection-note", "Détection de la langue : importe puis lance une analyse pour afficher une estimation."))
     }
 
     est <- estimer_langue_corpus(textes, rv = rv)
     if (is.na(est$code)) {
-      return(tags$p("Détection langue : estimation indisponible."))
+      return(tags$p(class = "language-detection-note", "Détection de la langue : estimation indisponible."))
     }
 
     cfg_est <- configurer_langue_corpus(est$code)
@@ -657,10 +657,10 @@ server <- function(input, output, session) {
     )
 
     if (!identical(cfg_est$code, cfg_sel$code)) {
-      return(tags$div(class = "alert alert-warning", tags$p(style = "margin:0;", paste0(message, " Langue sélectionnée : ", cfg_sel$libelle, "."))))
+      return(tags$p(class = "language-detection-note is-warning", paste0(message, " Langue sélectionnée : ", cfg_sel$libelle, ".")))
     }
 
-    tags$div(class = "alert alert-success", tags$p(style = "margin:0;", paste0(message, " Langue sélectionnée : ", cfg_sel$libelle, ".")))
+    tags$p(class = "language-detection-note is-ok", paste0(message, " Langue sélectionnée : ", cfg_sel$libelle, "."))
   })
 
   output$table_classes <- renderTable({
