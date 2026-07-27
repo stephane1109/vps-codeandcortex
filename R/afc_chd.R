@@ -111,28 +111,85 @@ chdrainette_afc_palette <- function(classes) {
   stats::setNames(colors[seq_along(classes)], classes)
 }
 
-chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 600L) {
+chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 2200L, fixed_rectangles = list()) {
   x <- as.numeric(x)
   y <- as.numeric(y)
   labels <- as.character(labels)
-  sizes <- rep_len(as.numeric(sizes), length(labels))
+  labels[is.na(labels)] <- ""
+  if (!length(labels)) {
+    return(list(x = x, y = y, rectangles = list()))
+  }
+
+  if (!length(sizes)) {
+    sizes <- rep(0.9, length(labels))
+  } else {
+    sizes <- rep_len(as.numeric(sizes), length(labels))
+  }
+  sizes[!is.finite(sizes) | sizes <= 0] <- 0.9
   user <- graphics::par("usr")
-  range_x <- user[2L] - user[1L]
-  range_y <- user[4L] - user[3L]
-  placed <- vector("list", length(labels))
+  range_x <- max(.Machine$double.eps, user[2L] - user[1L])
+  range_y <- max(.Machine$double.eps, user[4L] - user[3L])
+  padding_x <- range_x * 0.012
+  padding_y <- range_y * 0.018
+  placed <- fixed_rectangles
   result_x <- x
   result_y <- y
+  result_rectangles <- vector("list", length(labels))
 
   overlaps <- function(first, second) {
     !(first$xmax < second$xmin || second$xmax < first$xmin ||
       first$ymax < second$ymin || second$ymax < first$ymin)
   }
 
-  for (index in seq_along(labels)) {
-    width <- graphics::strwidth(labels[index], units = "user", cex = sizes[index])
-    height <- graphics::strheight(labels[index], units = "user", cex = sizes[index])
-    width <- max(width, range_x * 0.008)
-    height <- max(height, range_y * 0.012)
+  overlap_area <- function(first, second) {
+    width <- min(first$xmax, second$xmax) - max(first$xmin, second$xmin)
+    height <- min(first$ymax, second$ymax) - max(first$ymin, second$ymin)
+    if (!is.finite(width) || !is.finite(height) || width <= 0 || height <= 0) {
+      return(0)
+    }
+    width * height
+  }
+
+  overlap_score <- function(rectangle) {
+    if (!length(placed)) {
+      return(0)
+    }
+    sum(vapply(
+      placed,
+      function(previous) {
+        if (is.null(previous)) {
+          return(0)
+        }
+        overlap_area(rectangle, previous)
+      },
+      numeric(1)
+    ))
+  }
+
+  make_rectangle <- function(center_x, center_y, width, height) {
+    list(
+      xmin = center_x - width / 2,
+      xmax = center_x + width / 2,
+      ymin = center_y - height / 2,
+      ymax = center_y + height / 2
+    )
+  }
+
+  clamp_axis <- function(value, lower, upper) {
+    if (lower > upper) {
+      return((lower + upper) / 2)
+    }
+    min(max(value, lower), upper)
+  }
+
+  label_order <- order(-sizes, -nchar(labels))
+  for (index in label_order) {
+    width <- graphics::strwidth(labels[index], units = "user", cex = sizes[index]) + padding_x
+    height <- graphics::strheight(labels[index], units = "user", cex = sizes[index]) + padding_y
+    width <- max(width, range_x * 0.018)
+    height <- max(height, range_y * 0.026)
+    best <- NULL
+    best_score <- Inf
     selected <- NULL
 
     for (iteration in 0:max_iterations) {
@@ -142,21 +199,16 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 6
       } else {
         angle <- iteration * 2.399963
         radius <- sqrt(iteration)
-        candidate_x <- x[index] + cos(angle) * radius * range_x * 0.0045
-        candidate_y <- y[index] + sin(angle) * radius * range_y * 0.006
+        candidate_x <- x[index] + cos(angle) * radius * range_x * 0.006
+        candidate_y <- y[index] + sin(angle) * radius * range_y * 0.008
       }
 
-      candidate_x <- min(max(candidate_x, user[1L] + width / 2), user[2L] - width / 2)
-      candidate_y <- min(max(candidate_y, user[3L] + height / 2), user[4L] - height / 2)
-      rectangle <- list(
-        xmin = candidate_x - width / 2,
-        xmax = candidate_x + width / 2,
-        ymin = candidate_y - height / 2,
-        ymax = candidate_y + height / 2
-      )
+      candidate_x <- clamp_axis(candidate_x, user[1L] + width / 2, user[2L] - width / 2)
+      candidate_y <- clamp_axis(candidate_y, user[3L] + height / 2, user[4L] - height / 2)
+      rectangle <- make_rectangle(candidate_x, candidate_y, width, height)
 
       collision <- any(vapply(
-        placed[seq_len(index - 1L)],
+        placed,
         function(previous) !is.null(previous) && overlaps(rectangle, previous),
         logical(1)
       ))
@@ -166,20 +218,26 @@ chdrainette_afc_place_labels <- function(x, y, labels, sizes, max_iterations = 6
         result_y[index] <- candidate_y
         break
       }
+
+      score <- overlap_score(rectangle) / (range_x * range_y) +
+        ((candidate_x - x[index]) / range_x)^2 * 0.002 +
+        ((candidate_y - y[index]) / range_y)^2 * 0.002
+      if (score < best_score) {
+        best_score <- score
+        best <- list(rectangle = rectangle, x = candidate_x, y = candidate_y)
+      }
     }
 
     if (is.null(selected)) {
-      selected <- list(
-        xmin = x[index] - width / 2,
-        xmax = x[index] + width / 2,
-        ymin = y[index] - height / 2,
-        ymax = y[index] + height / 2
-      )
+      selected <- best$rectangle
+      result_x[index] <- best$x
+      result_y[index] <- best$y
     }
-    placed[[index]] <- selected
+    placed[[length(placed) + 1L]] <- selected
+    result_rectangles[[index]] <- selected
   }
 
-  list(x = result_x, y = result_y)
+  list(x = result_x, y = result_y, rectangles = result_rectangles)
 }
 
 chdrainette_plot_afc_classes <- function(afc) {
@@ -201,8 +259,20 @@ chdrainette_plot_afc_classes <- function(afc) {
     main = ""
   )
   graphics::abline(h = 0, v = 0, col = "#c7c2bb", lty = 2)
-  graphics::points(coords[, 1L], coords[, 2L], pch = 19, cex = 1.5, col = colors[rownames(coords)])
-  graphics::text(coords[, 1L], coords[, 2L], labels = rownames(coords), pos = 3, cex = 1.05, col = colors[rownames(coords)])
+  graphics::points(coords[, 1L], coords[, 2L], pch = 19, cex = 1.35, col = colors[rownames(coords)])
+  label_sizes <- rep(0.95, nrow(coords))
+  placed <- chdrainette_afc_place_labels(coords[, 1L], coords[, 2L], rownames(coords), label_sizes, max_iterations = 1600L)
+  moved <- abs(placed$x - coords[, 1L]) + abs(placed$y - coords[, 2L]) > .Machine$double.eps
+  if (any(moved)) {
+    graphics::segments(
+      coords[moved, 1L],
+      coords[moved, 2L],
+      placed$x[moved],
+      placed$y[moved],
+      col = grDevices::adjustcolor(colors[rownames(coords)][moved], alpha.f = 0.35)
+    )
+  }
+  graphics::text(placed$x, placed$y, labels = rownames(coords), cex = label_sizes, col = colors[rownames(coords)])
 }
 
 chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2", avoid_overlap = TRUE) {
@@ -246,11 +316,37 @@ chdrainette_plot_afc_terms <- function(afc, top_terms = 80L, size_by = "Chi2", a
   )
   graphics::abline(h = 0, v = 0, col = "#c7c2bb", lty = 2)
   graphics::points(classes[, 1L], classes[, 2L], pch = 19, cex = 1.45, col = colors[rownames(classes)])
-  graphics::text(classes[, 1L], classes[, 2L], labels = rownames(classes), pos = 3, cex = 1, font = 2, col = colors[rownames(classes)])
+  class_label_x <- classes[, 1L]
+  class_label_y <- classes[, 2L]
+  class_rectangles <- list()
+  if (isTRUE(avoid_overlap)) {
+    class_sizes <- rep(0.92, nrow(classes))
+    placed_classes <- chdrainette_afc_place_labels(
+      class_label_x,
+      class_label_y,
+      rownames(classes),
+      class_sizes,
+      max_iterations = 1600L
+    )
+    moved_classes <- abs(placed_classes$x - class_label_x) + abs(placed_classes$y - class_label_y) > .Machine$double.eps
+    if (any(moved_classes)) {
+      graphics::segments(
+        class_label_x[moved_classes],
+        class_label_y[moved_classes],
+        placed_classes$x[moved_classes],
+        placed_classes$y[moved_classes],
+        col = grDevices::adjustcolor(colors[rownames(classes)][moved_classes], alpha.f = 0.35)
+      )
+    }
+    class_label_x <- placed_classes$x
+    class_label_y <- placed_classes$y
+    class_rectangles <- placed_classes$rectangles
+  }
+  graphics::text(class_label_x, class_label_y, labels = rownames(classes), cex = 0.92, font = 2, col = colors[rownames(classes)])
   label_x <- terms[, 1L]
   label_y <- terms[, 2L]
   if (isTRUE(avoid_overlap)) {
-    placed <- chdrainette_afc_place_labels(label_x, label_y, stats$Terme, sizes)
+    placed <- chdrainette_afc_place_labels(label_x, label_y, stats$Terme, sizes, fixed_rectangles = class_rectangles)
     moved <- abs(placed$x - label_x) + abs(placed$y - label_y) > .Machine$double.eps
     if (any(moved)) {
       graphics::segments(label_x[moved], label_y[moved], placed$x[moved], placed$y[moved], col = grDevices::adjustcolor(term_colors[moved], alpha.f = 0.35))

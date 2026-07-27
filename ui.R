@@ -191,8 +191,8 @@ page_sidebar(
       }
       .debug-terminal {
         min-height: 22rem;
-        max-height: 42rem;
-        overflow: auto;
+        max-height: none;
+        overflow: visible;
         background: #14181c;
         color: #eef2f6;
         border-radius: 12px;
@@ -207,8 +207,8 @@ page_sidebar(
       }
       .preview-box, .code-box {
         min-height: 22rem;
-        max-height: 42rem;
-        overflow: auto;
+        max-height: none;
+        overflow: visible;
         background: #ffffff;
         border: 1px solid rgba(31, 35, 40, 0.08);
         border-radius: 12px;
@@ -219,7 +219,7 @@ page_sidebar(
         width: 100%;
         min-height: calc(100vh - 14rem);
         display: block;
-        overflow: hidden;
+        overflow: visible;
         padding: 0;
       }
       .afc-plot-canvas {
@@ -262,7 +262,7 @@ page_sidebar(
         height: 14px;
         border-radius: 999px;
         background: rgba(31, 35, 40, 0.08);
-        overflow: hidden;
+        overflow: visible;
       }
       .progress-bar-custom {
         height: 100%;
@@ -478,7 +478,7 @@ page_sidebar(
       }
       .accordion-item {
         margin-bottom: 0.55rem;
-        overflow: hidden;
+        overflow: visible;
         border: 1px solid var(--rainette-line) !important;
         border-radius: 8px !important;
         background: var(--rainette-paper);
@@ -514,7 +514,7 @@ page_sidebar(
       .btn:not(.btn-close):active { background: #ad4308 !important; }
       .sidebar-group.d-grid .btn { width: 100%; }
       .bslib-navs-card, .card {
-        overflow: hidden;
+        overflow: visible;
         border: 1px solid var(--rainette-line);
         border-radius: 20px;
         background: rgba(255, 253, 249, 0.97);
@@ -564,7 +564,7 @@ page_sidebar(
       }
       .metric-card {
         position: relative;
-        overflow: hidden;
+        overflow: visible;
         border: 1px solid rgba(239, 108, 33, 0.17);
         border-radius: 16px;
         background: linear-gradient(145deg, #fffdf9 0%, #fff5ed 100%);
@@ -691,6 +691,62 @@ page_sidebar(
         max-height: calc(100vh - 11rem);
         object-fit: contain;
       }
+      .bslib-navs-card,
+      .bslib-card,
+      .bslib-card .card-body,
+      .card,
+      .card-body,
+      .tab-content,
+      .tab-pane,
+      .accordion-body,
+      .debug-terminal,
+      .preview-box,
+      .code-box,
+      .afc-plot-host,
+      .afc-plot-canvas {
+        overflow: visible !important;
+        max-height: none !important;
+      }
+      .debug-terminal,
+      .preview-box,
+      .code-box {
+        min-height: auto !important;
+      }
+      .bslib-full-screen-enter,
+      .bslib-full-screen-exit {
+        display: none !important;
+      }
+      .btn:not(.btn-close) {
+        min-height: 2rem !important;
+        padding: 0.35rem 0.55rem !important;
+        font-size: 0.84rem !important;
+        font-weight: 600 !important;
+      }
+      .nav-tabs {
+        gap: 0.32rem !important;
+        padding: 0.42rem !important;
+      }
+      .nav-tabs .nav-link,
+      .nav-tabs > li > a {
+        padding: 0.4rem 0.62rem !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.02em !important;
+      }
+      .card-header {
+        padding: 0.55rem 0.75rem !important;
+        font-size: 0.78rem !important;
+      }
+      .accordion-button {
+        padding: 0.55rem 0.7rem !important;
+        font-size: 0.84rem !important;
+      }
+      .form-control,
+      .form-select,
+      .selectize-input,
+      .sidebar {
+        font-size: 0.86rem !important;
+      }
       @media (max-width: 640px) {
         .afc-plot-host,
         .afc-plot-canvas,
@@ -784,7 +840,7 @@ page_sidebar(
       accordion_panel(
         title = "AFC",
         value = "param_afc",
-        checkboxInput("afc_avoid_overlap", "Éviter les chevauchements des mots", value = TRUE)
+        checkboxInput("afc_avoid_overlap", "Éviter les chevauchements AFC", value = TRUE)
       ),
       accordion_panel(
         title = "Nuages de mots",
@@ -809,11 +865,9 @@ page_sidebar(
   ),
   navset_card_tab(
     id = "onglets_principaux",
-    full_screen = TRUE,
     nav_panel(
       "Analyse",
       card(
-        full_screen = TRUE,
         card_header("Statut et indicateurs"),
         div(class = "wide-stack",
           p(textOutput("statut")),
@@ -829,7 +883,6 @@ page_sidebar(
       ),
       card(
         class = "logs-box",
-        full_screen = TRUE,
         card_header("Mode debug et étapes de l’analyse"),
         div(class = "debug-terminal", verbatimTextOutput("logs", placeholder = TRUE))
       )
@@ -845,7 +898,6 @@ page_sidebar(
         div(class = "preview-box", verbatimTextOutput("corpus_preview", placeholder = TRUE))
       ),
       card(
-        full_screen = TRUE,
         card_header("Concordancier HTML"),
         uiOutput("ui_concordancier")
       )
@@ -854,7 +906,6 @@ page_sidebar(
       "CHD",
       card(
         class = "graph-full-page-card",
-        full_screen = TRUE,
         card_header("Rainette explor"),
         card_body(
           fill = TRUE,
@@ -865,7 +916,6 @@ page_sidebar(
     nav_panel(
       "AFC",
       card(
-        full_screen = TRUE,
         card_header("Analyse factorielle des correspondances"),
         uiOutput("ui_afc_status"),
         layout_columns(
@@ -876,7 +926,6 @@ page_sidebar(
       ),
       card(
         class = "graph-full-page-card",
-        full_screen = TRUE,
         card_header("Projection des classes"),
         card_body(
           div(
@@ -890,7 +939,6 @@ page_sidebar(
       ),
       card(
         class = "graph-full-page-card",
-        full_screen = TRUE,
         card_header("Projection des classes et des termes"),
         card_body(
           div(
@@ -903,7 +951,6 @@ page_sidebar(
         )
       ),
       card(
-        full_screen = TRUE,
         card_header("Valeurs propres et inertie"),
         tableOutput("table_afc_eigenvalues")
       )
@@ -911,19 +958,16 @@ page_sidebar(
     nav_panel(
       "Résultats",
       card(
-        full_screen = TRUE,
         card_header("Résumé des classes"),
         tableOutput("table_classes")
       ),
       card(
-        full_screen = TRUE,
         card_header("Statistiques par classe"),
         selectInput("classe_resultat", "Classe", choices = NULL),
         tableOutput("table_stats_classe")
       ),
       card(
         class = "graph-full-page-card",
-        full_screen = TRUE,
         card_header("Nuages de mots"),
         uiOutput("ui_wordclouds")
       )
@@ -931,7 +975,6 @@ page_sidebar(
     nav_panel(
       "Exports",
       card(
-        full_screen = TRUE,
         card_header("Archive globale"),
         uiOutput("ui_exports_links")
       )

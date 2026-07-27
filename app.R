@@ -525,7 +525,6 @@ server <- function(input, output, session) {
       src <- build_resource_url(rv, row$src[[1]])
       card(
         class = "graph-full-page-card wordcloud-full-page",
-        full_screen = TRUE,
         card_header(if (identical(row$type[[1]], "chi2")) "Nuage de mots chi2" else "Nuage de mots fréquence"),
         tags$img(src = src, class = "full-page-image", style = "width:100%; height:auto; display:block; border-radius:0;")
       )
