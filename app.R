@@ -22,6 +22,7 @@ options(
 
 DISPLAY_MAX_TABLE_ROWS <- 300L
 DISPLAY_MAX_LOG_LINES <- 250L
+DISPLAY_MAX_PREVIEW_LINES <- 30L
 
 format_count_fr <- function(value) {
   format(as.integer(value), big.mark = " ", scientific = FALSE, trim = TRUE)
@@ -264,7 +265,7 @@ server <- function(input, output, session) {
       readLines(input$fichier_corpus$datapath, warn = FALSE, encoding = "UTF-8"),
       error = function(e) character(0)
     )
-    rv$corpus_preview_text <- paste(utils::head(lines, 400), collapse = "\n")
+    rv$corpus_preview_text <- paste(utils::head(lines, DISPLAY_MAX_PREVIEW_LINES), collapse = "\n")
     rv$statut <- "Fichier chargé. Prêt pour l'analyse."
     rv$logs <- "[info] Prêt."
     ajouter_log(rv, paste0("Fichier reçu : ", input$fichier_corpus$name %||% basename(input$fichier_corpus$datapath)))

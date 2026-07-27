@@ -300,6 +300,14 @@ build_main_ui <- function() {
           white-space: pre-wrap;
           word-break: break-word;
         }
+        .preview-box {
+          min-height: 12rem !important;
+          max-height: 22rem !important;
+          padding: 0.75rem !important;
+          border: 1px solid #d8d1c5 !important;
+          background: #fffefa !important;
+          overflow: auto !important;
+        }
         .afc-plot-host,
         .afc-plot-canvas {
           width: 100%;
