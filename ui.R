@@ -37,7 +37,7 @@ build_main_ui <- function() {
           color: #24211f;
           background: #f7f6f2;
           font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
-          font-size: 18px;
+          font-size: 20px;
           line-height: 1.5;
         }
         a {
@@ -60,7 +60,7 @@ build_main_ui <- function() {
         }
         .app-header h1 {
           margin: 0;
-          font-size: 2.05rem;
+          font-size: 3rem !important;
           line-height: 1.1;
           font-weight: 650;
           letter-spacing: -0.02em;
@@ -68,7 +68,7 @@ build_main_ui <- function() {
         .app-subtitle {
           margin: 0.25rem 0 0;
           color: #6b625b;
-          font-size: 1.12rem;
+          font-size: 1.3rem !important;
         }
         .layout-row {
           margin-left: -0.7rem;
@@ -98,7 +98,7 @@ build_main_ui <- function() {
           padding: 0 0 0.25rem;
           border-bottom: 1px solid #d8d1c5;
           color: #24211f;
-          font-size: 1.08rem;
+          font-size: 1.22rem !important;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -107,7 +107,7 @@ build_main_ui <- function() {
         .text-muted,
         .small {
           color: #6b625b !important;
-          font-size: 1.02rem !important;
+          font-size: 1.16rem !important;
         }
         .shiny-input-container {
           width: 100%;
@@ -117,7 +117,7 @@ build_main_ui <- function() {
         .control-label {
           margin-bottom: 0.2rem;
           color: #3b3632;
-          font-size: 1.08rem !important;
+          font-size: 1.2rem !important;
           font-weight: 600;
         }
         .form-control,
@@ -129,7 +129,7 @@ build_main_ui <- function() {
           background: #fffefa !important;
           box-shadow: none !important;
           color: #24211f;
-          font-size: 1.08rem !important;
+          font-size: 1.2rem !important;
         }
         .form-control:focus,
         .form-select:focus,
@@ -141,7 +141,7 @@ build_main_ui <- function() {
         .radio {
           margin-top: 0.2rem;
           margin-bottom: 0.35rem;
-          font-size: 1.08rem !important;
+          font-size: 1.2rem !important;
         }
         .checkbox label,
         .radio label {
@@ -163,7 +163,7 @@ build_main_ui <- function() {
           background: #fffefa !important;
           box-shadow: none !important;
           color: #24211f !important;
-          font-size: 1.08rem !important;
+          font-size: 1.2rem !important;
           font-weight: 600;
           line-height: 1.2;
         }
@@ -194,7 +194,7 @@ build_main_ui <- function() {
           border-radius: 0 !important;
           background: transparent !important;
           color: #6b625b !important;
-          font-size: 1.35rem !important;
+          font-size: 1.55rem !important;
           font-weight: 700 !important;
         }
         .nav-tabs > li.active > a,
@@ -222,7 +222,7 @@ build_main_ui <- function() {
           padding: 0 0 0.35rem;
           border-bottom: 1px solid #d8d1c5;
           color: #24211f;
-          font-size: 1.28rem;
+          font-size: 1.45rem !important;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -245,13 +245,13 @@ build_main_ui <- function() {
           display: block;
           margin-bottom: 0.15rem;
           color: #6b625b;
-          font-size: 1.02rem;
+          font-size: 1.16rem !important;
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
         .metric-value {
           color: #24211f;
-          font-size: 1.65rem;
+          font-size: 1.95rem !important;
           font-weight: 650;
         }
         .progress-wrapper {
@@ -260,7 +260,7 @@ build_main_ui <- function() {
         }
         .progress-label {
           color: #6b625b;
-          font-size: 1.02rem;
+          font-size: 1.16rem !important;
         }
         .progress-shell {
           width: 100%;
@@ -396,7 +396,7 @@ build_main_ui <- function() {
         .ticket-status-note,
         .ticket-status-message {
           color: #4a433e;
-          font-size: 1.02rem;
+          font-size: 1.16rem !important;
         }
         .ticket-actions {
           display: grid;
@@ -404,12 +404,12 @@ build_main_ui <- function() {
         }
         table {
           width: 100%;
-          font-size: 1.06rem !important;
+          font-size: 1.18rem !important;
         }
         .result-note {
           margin: 0.2rem 0 0.75rem;
           color: #5c544e;
-          font-size: 1.06rem;
+          font-size: 1.18rem !important;
         }
         .table > thead > tr > th,
         .table > tbody > tr > td,
