@@ -868,6 +868,7 @@ server <- function(input, output, session) {
 
     tagList(
       tags$p(
+        class = "rainette-explor-link",
         tags$a(
           href = src,
           target = "_blank",

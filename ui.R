@@ -459,6 +459,12 @@ build_main_ui <- function() {
           font-weight: 400 !important;
           line-height: 1.35 !important;
         }
+        .rainette-explor-link,
+        .rainette-explor-link a {
+          font-size: 1.02rem !important;
+          line-height: 1.35 !important;
+          font-weight: 400 !important;
+        }
         .archive-placeholder {
           margin: 0.15rem 0 0 !important;
           color: #6b625b !important;
