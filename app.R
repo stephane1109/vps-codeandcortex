@@ -120,6 +120,104 @@ build_resource_url <- function(rv, relative_path) {
   paste0(rv$exports_prefix, "/", relative_path)
 }
 
+nom_fichier_corpus <- function(fichier_corpus) {
+  if (is.null(fichier_corpus)) {
+    return(NULL)
+  }
+  nom <- fichier_corpus$name %||% basename(fichier_corpus$datapath %||% "")
+  nom <- as.character(nom)
+  if (!length(nom) || !nzchar(nom[[1]])) {
+    return(NULL)
+  }
+  nom[[1]]
+}
+
+decrire_nettoyage_lexical <- function(mode_nettoyage_lexical,
+                                      langue_corpus,
+                                      lexique_utiliser_lemmes,
+                                      pos_lexique_a_conserver,
+                                      morpho_conserver_hors_lexique,
+                                      morpho_exclure_etre_verbe) {
+  mode_nettoyage_lexical <- as.character(mode_nettoyage_lexical %||% "stopwords_quanteda")
+  if (!mode_nettoyage_lexical %in% c("stopwords_quanteda", "lexique_iramuteq", "aucun")) {
+    mode_nettoyage_lexical <- "stopwords_quanteda"
+  }
+
+  cfg <- configurer_langue_corpus(langue_corpus %||% "fr")
+  if (identical(mode_nettoyage_lexical, "stopwords_quanteda")) {
+    sw <- obtenir_stopwords_quanteda(cfg$code, rv = NULL)
+    return(paste0(
+      "Nettoyage sélectionné : stopwords quanteda (",
+      cfg$libelle,
+      ", ",
+      length(sw),
+      " termes)."
+    ))
+  }
+
+  if (identical(mode_nettoyage_lexical, "lexique_iramuteq")) {
+    lex_info <- tryCatch(
+      {
+        lexique <- charger_lexique_fr_iramuteq(rv = NULL)
+        paste0(format_count_fr(nrow(lexique)), " entrées lexique_fr")
+      },
+      error = function(e) paste0("lexique indisponible : ", conditionMessage(e))
+    )
+    categories <- normaliser_selection_morpho_iramuteq(pos_lexique_a_conserver)
+    lemmes <- if (isTRUE(lexique_utiliser_lemmes)) "lemmatisation active" else "lemmatisation désactivée"
+    hors_lexique <- if (isTRUE(morpho_conserver_hors_lexique)) {
+      "formes hors lexique conservées"
+    } else {
+      "formes hors lexique exclues"
+    }
+    exclusion_etre <- if (isTRUE(morpho_exclure_etre_verbe)) {
+      "; formes du verbe être exclues"
+    } else {
+      ""
+    }
+    note_langue <- if (!identical(cfg$code, "fr")) {
+      " Attention : lexique_fr est un dictionnaire français."
+    } else {
+      ""
+    }
+
+    return(paste0(
+      "Nettoyage sélectionné : dictionnaire IRaMuTeQ-lite (",
+      lex_info,
+      "; ",
+      lemmes,
+      "; catégories ",
+      paste(categories, collapse = ", "),
+      "; ",
+      hors_lexique,
+      exclusion_etre,
+      ").",
+      note_langue
+    ))
+  }
+
+  "Nettoyage sélectionné : aucun nettoyage lexical supplémentaire."
+}
+
+rafraichir_logs_configuration <- function(rv, input) {
+  rv$logs <- "[info] Prêt."
+  nom_fichier <- nom_fichier_corpus(input$fichier_corpus)
+  if (!is.null(nom_fichier)) {
+    ajouter_log(rv, paste0("Fichier reçu : ", nom_fichier))
+  }
+  ajouter_log(
+    rv,
+    decrire_nettoyage_lexical(
+      mode_nettoyage_lexical = input$mode_nettoyage_lexical,
+      langue_corpus = input$langue_corpus,
+      lexique_utiliser_lemmes = input$lexique_utiliser_lemmes,
+      pos_lexique_a_conserver = input$pos_lexique_a_conserver,
+      morpho_conserver_hors_lexique = input$morpho_conserver_hors_lexique,
+      morpho_exclure_etre_verbe = input$morpho_exclure_etre_verbe
+    )
+  )
+}
+
 server <- function(input, output, session) {
   run_rainette_explor_page_server(input, output, session)
 
@@ -146,6 +244,7 @@ server <- function(input, output, session) {
     corpus_segmente = NULL,
     filtered_corpus = NULL,
     corpus_preview_text = "",
+    analyse_en_cours = FALSE,
     dfm = NULL,
     res = NULL,
     res_stats_df = NULL,
@@ -267,9 +366,28 @@ server <- function(input, output, session) {
     )
     rv$corpus_preview_text <- paste(utils::head(lines, DISPLAY_MAX_PREVIEW_LINES), collapse = "\n")
     rv$statut <- "Fichier chargé. Prêt pour l'analyse."
-    rv$logs <- "[info] Prêt."
-    ajouter_log(rv, paste0("Fichier reçu : ", input$fichier_corpus$name %||% basename(input$fichier_corpus$datapath)))
+    rafraichir_logs_configuration(rv, input)
   }, ignoreNULL = TRUE)
+
+  observeEvent({
+    list(
+      input$mode_nettoyage_lexical,
+      input$langue_corpus,
+      input$lexique_utiliser_lemmes,
+      input$pos_lexique_a_conserver,
+      input$morpho_conserver_hors_lexique,
+      input$morpho_exclure_etre_verbe
+    )
+  }, {
+    if (isTRUE(rv$analyse_en_cours)) {
+      return(invisible(NULL))
+    }
+    if (is.null(input$fichier_corpus) || is.null(input$fichier_corpus$datapath)) {
+      return(invisible(NULL))
+    }
+    rv$statut <- "Paramètres mis à jour. Prêt pour l'analyse."
+    rafraichir_logs_configuration(rv, input)
+  }, ignoreInit = TRUE)
 
   observeEvent(input$lancer, {
     current_ticket <- isolate(ticket_snapshot_state())
@@ -283,6 +401,7 @@ server <- function(input, output, session) {
     rv$statut <- "Préparation de l'analyse."
     rv$progression <- 0
     rv$debug_mode <- isTRUE(input$debug_mode)
+    rv$analyse_en_cours <- FALSE
     rv$corpus_importe <- NULL
     rv$corpus_segmente <- NULL
     rv$filtered_corpus <- NULL
@@ -338,6 +457,20 @@ server <- function(input, output, session) {
       top_n = as.integer(input$top_n %||% 20L)
     )
 
+    ajouter_log(rv, paste0("Fichier analysé : ", nom_fichier_corpus(input$fichier_corpus) %||% basename(input$fichier_corpus$datapath)))
+    ajouter_log(
+      rv,
+      decrire_nettoyage_lexical(
+        mode_nettoyage_lexical = params$mode_nettoyage_lexical,
+        langue_corpus = params$langue_corpus,
+        lexique_utiliser_lemmes = params$lexique_utiliser_lemmes,
+        pos_lexique_a_conserver = params$pos_lexique_a_conserver,
+        morpho_conserver_hors_lexique = params$morpho_conserver_hors_lexique,
+        morpho_exclure_etre_verbe = params$morpho_exclure_etre_verbe
+      )
+    )
+
+    rv$analyse_en_cours <- TRUE
     tryCatch({
       result <- run_chdrainette_analysis(
         input_path = input$fichier_corpus$datapath,
@@ -378,10 +511,12 @@ server <- function(input, output, session) {
 
       rv$progression <- 100
       rv$statut <- "Analyse terminée."
+      rv$analyse_en_cours <- FALSE
       ajouter_log(rv, "Analyse CHD terminée.")
       showNotification("Analyse CHD Rainette terminée.", type = "message", duration = 5)
     }, error = function(e) {
       rv$statut <- paste0("Erreur : ", conditionMessage(e))
+      rv$analyse_en_cours <- FALSE
       ajouter_log(rv, paste0("ERREUR : ", conditionMessage(e)))
       rv$progression <- 0
       showNotification(conditionMessage(e), type = "error", duration = 8)

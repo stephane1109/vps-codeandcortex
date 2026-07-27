@@ -273,9 +273,9 @@ estimer_langue_corpus <- function(textes, rv = NULL, max_segments = 200) {
   if (length(all_tokens) == 0) return(list(code = NA_character_, scores = c(fr = 0, en = 0, es = 0)))
 
   scores <- c(
-    fr = mean(all_tokens %in% obtenir_stopwords_quanteda("fr", rv = rv)),
-    en = mean(all_tokens %in% obtenir_stopwords_quanteda("en", rv = rv)),
-    es = mean(all_tokens %in% obtenir_stopwords_quanteda("es", rv = rv))
+    fr = mean(all_tokens %in% obtenir_stopwords_quanteda("fr", rv = NULL)),
+    en = mean(all_tokens %in% obtenir_stopwords_quanteda("en", rv = NULL)),
+    es = mean(all_tokens %in% obtenir_stopwords_quanteda("es", rv = NULL))
   )
 
   langue <- names(scores)[which.max(scores)]
