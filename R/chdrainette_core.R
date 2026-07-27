@@ -34,7 +34,18 @@ normaliser_parametres_chdrainette <- function(params) {
 
   params$segment_size <- max(5L, as.integer(params$segment_size %||% 40L))
   params$langue_corpus <- configurer_langue_corpus(params$langue_corpus %||% "fr")$code
-  params$retirer_stopwords <- isTRUE(params$retirer_stopwords)
+  mode_nettoyage_lexical <- as.character(params$mode_nettoyage_lexical %||% "")
+  if (!mode_nettoyage_lexical %in% c("stopwords_quanteda", "lexique_iramuteq", "aucun")) {
+    mode_nettoyage_lexical <- if (isTRUE(params$retirer_stopwords)) "stopwords_quanteda" else "aucun"
+  }
+  params$mode_nettoyage_lexical <- mode_nettoyage_lexical
+  params$retirer_stopwords <- identical(mode_nettoyage_lexical, "stopwords_quanteda")
+  params$lexique_utiliser_lemmes <- isTRUE(params$lexique_utiliser_lemmes %||% TRUE)
+  params$pos_lexique_a_conserver <- normaliser_selection_morpho_iramuteq(
+    params$pos_lexique_a_conserver %||% c("NOM", "VER", "ADJ")
+  )
+  params$morpho_conserver_hors_lexique <- isTRUE(params$morpho_conserver_hors_lexique %||% TRUE)
+  params$morpho_exclure_etre_verbe <- isTRUE(params$morpho_exclure_etre_verbe)
   params$nettoyage_caracteres <- isTRUE(params$nettoyage_caracteres)
   params$supprimer_ponctuation <- isTRUE(params$supprimer_ponctuation)
   params$supprimer_chiffres <- isTRUE(params$supprimer_chiffres)
@@ -97,12 +108,17 @@ construire_dfm_rainette <- function(corpus_segmente, params, rv = NULL) {
     remove_numbers = params$supprimer_chiffres
   )
   ajouter_log_debug(rv, paste0("Tokenisation : ", length(tok), " documents tokenisés."))
-  if (params$retirer_stopwords) {
+  if (identical(params$mode_nettoyage_lexical, "stopwords_quanteda")) {
     sw <- obtenir_stopwords_quanteda(params$langue_corpus, rv = rv)
     ajouter_log_debug(rv, paste0("Stopwords quanteda activés : ", length(sw), " termes chargés pour la langue ", params$langue_corpus, "."))
     tok <- quanteda::tokens_remove(tok, sw)
+  } else if (identical(params$mode_nettoyage_lexical, "lexique_iramuteq")) {
+    if (!identical(params$langue_corpus, "fr")) {
+      stop("Le dictionnaire IRaMuTeQ-lite intégré est lexique_fr : sélectionne la langue Français ou utilise les stopwords quanteda.")
+    }
+    ajouter_log_debug(rv, "Stopwords quanteda désactivés : nettoyage lexical par dictionnaire IRaMuTeQ-lite.")
   } else {
-    ajouter_log_debug(rv, "Stopwords quanteda désactivés pour cette analyse.")
+    ajouter_log_debug(rv, "Nettoyage lexical désactivé pour cette analyse.")
   }
   tok <- quanteda::tokens_split(tok, "'")
   tok <- quanteda::tokens_remove(tok, pattern = c("\\b[a-zA-Z]\\b", "^[^[:alpha:]]+$"), valuetype = "regex")
@@ -110,6 +126,24 @@ construire_dfm_rainette <- function(corpus_segmente, params, rv = NULL) {
 
   dfm_obj <- quanteda::dfm(tok)
   ajouter_log_debug(rv, paste0("DFM brute : ", quanteda::ndoc(dfm_obj), " segments x ", quanteda::nfeat(dfm_obj), " termes."))
+  if (identical(params$mode_nettoyage_lexical, "lexique_iramuteq")) {
+    lexique_fr_df <- charger_lexique_fr_iramuteq(rv = rv)
+    if (isTRUE(params$lexique_utiliser_lemmes)) {
+      tok <- lemmatiser_tokens_lexique_iramuteq(tok, lexique_fr_df, rv = rv)
+      dfm_obj <- quanteda::dfm(tok)
+      ajouter_log_debug(rv, paste0("DFM après lemmatisation lexique_fr : ", quanteda::ndoc(dfm_obj), " segments x ", quanteda::nfeat(dfm_obj), " termes."))
+    } else {
+      ajouter_log_debug(rv, "Lemmatisation lexique_fr désactivée.")
+    }
+    dfm_obj <- filtrer_dfm_lexique_iramuteq(
+      dfm_obj = dfm_obj,
+      lexique_fr_df = lexique_fr_df,
+      categories = params$pos_lexique_a_conserver,
+      conserver_hors_lexique = params$morpho_conserver_hors_lexique,
+      exclure_etre_verbe = params$morpho_exclure_etre_verbe,
+      rv = rv
+    )
+  }
   if (ncol(quanteda::docvars(corpus_segmente)) > 0) {
     quanteda::docvars(dfm_obj) <- quanteda::docvars(corpus_segmente)
   }
@@ -493,7 +527,11 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
         " | min_docfreq=", params$min_docfreq,
         " | max_p=", params$max_p,
         " | top_n=", params$top_n,
+        " | nettoyage_lexical=", params$mode_nettoyage_lexical,
         " | stopwords_quanteda=", as.integer(isTRUE(params$retirer_stopwords)),
+        " | lexique_lemmes=", as.integer(isTRUE(params$lexique_utiliser_lemmes)),
+        " | lexique_categories=", paste(params$pos_lexique_a_conserver, collapse = ","),
+        " | lexique_hors_lexique=", as.integer(isTRUE(params$morpho_conserver_hors_lexique)),
         " | debug=", as.integer(isTRUE(params$debug_mode))
       )
     )

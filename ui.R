@@ -17,7 +17,7 @@ page_sidebar(
           rel = "noopener noreferrer",
           "www.codeandcortex.fr"
         ),
-        HTML(" &middot; version 0_3beta")
+        HTML(" &middot; version 0_4beta - modifiée 27-07-2026")
       )
     )
   ),
@@ -651,8 +651,28 @@ page_sidebar(
       accordion_panel(
         title = "Nettoyage",
         value = "param_nettoyage",
-        checkboxInput("retirer_stopwords", "Stopwords quanteda", value = TRUE),
+        radioButtons(
+          "mode_nettoyage_lexical",
+          "Nettoyage lexical - choisir la méthode",
+          choices = c(
+            "Stopwords quanteda" = "stopwords_quanteda",
+            "Dictionnaire IRaMuTeQ-lite (lexique_fr)" = "lexique_iramuteq",
+            "Aucun nettoyage lexical" = "aucun"
+          ),
+          selected = "stopwords_quanteda"
+        ),
+        helpText("Le dictionnaire IRaMuTeQ-lite demandé est intégré dans dictionnaires/lexique_fr.csv. Quanteda reste disponible au choix."),
         uiOutput("ui_stopwords_info"),
+        checkboxInput("lexique_utiliser_lemmes", "Lemmatisation lexique_fr (forme vers c_lemme)", value = TRUE),
+        selectizeInput(
+          "pos_lexique_a_conserver",
+          "Catégories c_morpho à conserver",
+          choices = categories_morpho_iramuteq(),
+          selected = c("NOM", "VER", "ADJ"),
+          multiple = TRUE
+        ),
+        checkboxInput("morpho_conserver_hors_lexique", "Conserver les formes hors lexique (AUTRE_FORME)", value = TRUE),
+        checkboxInput("morpho_exclure_etre_verbe", "Exclure le terme être/etre si VER est sélectionné", value = FALSE),
         checkboxInput("nettoyage_caracteres", "Nettoyage caractères (regex)", value = FALSE),
         checkboxInput("supprimer_ponctuation", "Supprimer la ponctuation", value = TRUE),
         checkboxInput("supprimer_chiffres", "Supprimer les chiffres", value = TRUE),

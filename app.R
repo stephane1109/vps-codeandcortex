@@ -256,11 +256,21 @@ server <- function(input, output, session) {
       return(invisible(NULL))
     }
 
+    mode_nettoyage_lexical <- as.character(input$mode_nettoyage_lexical %||% "stopwords_quanteda")
+    if (!mode_nettoyage_lexical %in% c("stopwords_quanteda", "lexique_iramuteq", "aucun")) {
+      mode_nettoyage_lexical <- "stopwords_quanteda"
+    }
+
     params <- list(
       mode_decoupage = as.character(input$mode_decoupage %||% "segment_size"),
       segment_size = as.integer(input$segment_size %||% 40L),
       langue_corpus = as.character(input$langue_corpus %||% "fr"),
-      retirer_stopwords = isTRUE(input$retirer_stopwords),
+      mode_nettoyage_lexical = mode_nettoyage_lexical,
+      retirer_stopwords = identical(mode_nettoyage_lexical, "stopwords_quanteda"),
+      lexique_utiliser_lemmes = isTRUE(input$lexique_utiliser_lemmes),
+      pos_lexique_a_conserver = input$pos_lexique_a_conserver %||% c("NOM", "VER", "ADJ"),
+      morpho_conserver_hors_lexique = isTRUE(input$morpho_conserver_hors_lexique),
+      morpho_exclure_etre_verbe = isTRUE(input$morpho_exclure_etre_verbe),
       debug_mode = isTRUE(input$debug_mode),
       nettoyage_caracteres = isTRUE(input$nettoyage_caracteres),
       supprimer_ponctuation = isTRUE(input$supprimer_ponctuation),
@@ -363,16 +373,41 @@ server <- function(input, output, session) {
 
   output$ui_stopwords_info <- renderUI({
     cfg <- configurer_langue_corpus(input$langue_corpus %||% "fr")
-    if (!isTRUE(input$retirer_stopwords)) {
-      return(tags$p(class = "text-muted small", "Stopwords quanteda désactivés pour cette analyse."))
+    mode_nettoyage <- as.character(input$mode_nettoyage_lexical %||% "stopwords_quanteda")
+    if (identical(mode_nettoyage, "stopwords_quanteda")) {
+      sw <- obtenir_stopwords_quanteda(cfg$code, rv = NULL)
+      return(
+        tags$div(
+          class = "input-help-box",
+          tags$span(class = "input-help-label", "Stopwords quanteda"),
+          tags$span(class = "input-help-value", paste0(length(sw), " termes chargés en ", cfg$libelle, "."))
+        )
+      )
     }
 
-    sw <- obtenir_stopwords_quanteda(cfg$code, rv = NULL)
-    tags$div(
-      class = "input-help-box",
-      tags$span(class = "input-help-label", "Stopwords quanteda"),
-      tags$span(class = "input-help-value", paste0(length(sw), " termes chargés en ", cfg$libelle, "."))
-    )
+    if (identical(mode_nettoyage, "lexique_iramuteq")) {
+      lex_info <- tryCatch(
+        {
+          lexique <- charger_lexique_fr_iramuteq(rv = NULL)
+          paste0(nrow(lexique), " entrées lexique_fr chargées.")
+        },
+        error = function(e) paste0("Lexique indisponible : ", conditionMessage(e))
+      )
+      note_langue <- if (!identical(cfg$code, "fr")) {
+        " Attention : lexique_fr est un dictionnaire français."
+      } else {
+        ""
+      }
+      return(
+        tags$div(
+          class = "input-help-box",
+          tags$span(class = "input-help-label", "Dictionnaire IRaMuTeQ-lite"),
+          tags$span(class = "input-help-value", paste0(lex_info, note_langue))
+        )
+      )
+    }
+
+    tags$p(class = "text-muted small", "Aucun nettoyage lexical supplémentaire pour cette analyse.")
   })
 
   output$metric_docs <- renderText({
