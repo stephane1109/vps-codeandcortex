@@ -14,7 +14,7 @@ build_main_ui <- function() {
     div(
       class = "control-section",
       tags$h3(class = "control-title", title),
-      ...
+      div(class = "control-section-body", ...)
     )
   }
 
@@ -94,7 +94,7 @@ build_main_ui <- function() {
         }
         .control-title,
         .ticket-access-title {
-          margin: 0 0 0.55rem;
+          margin: 0;
           padding: 0 0 0.25rem;
           border-bottom: 1px solid #d8d1c5;
           color: #24211f;
@@ -102,6 +102,9 @@ build_main_ui <- function() {
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
+        }
+        .control-section-body {
+          padding-top: 0.95rem;
         }
         .help-block,
         .text-muted,
@@ -148,10 +151,6 @@ build_main_ui <- function() {
           margin-top: 0.2rem;
           margin-bottom: 0.35rem;
           font-size: 1.32rem !important;
-        }
-        #langue_corpus,
-        #mode_nettoyage_lexical {
-          margin-top: 0.7rem !important;
         }
         .checkbox label,
         .radio label {
