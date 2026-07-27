@@ -265,7 +265,7 @@ function bindChdDialogInteractions() {
   if (!chdConfigDialogContent) {
     return;
   }
-  ["modeDecoupage", "typeClassification", "filtrageMorpho"].forEach((sourceId) => {
+  ["modeDecoupage", "typeClassification", "modeNettoyageLexical", "filtrageMorpho"].forEach((sourceId) => {
     const element = resolveScopedField(chdConfigDialogContent, sourceId);
     if (element) {
       element.addEventListener("change", () => toggleAdvancedUi(chdConfigDialogContent));

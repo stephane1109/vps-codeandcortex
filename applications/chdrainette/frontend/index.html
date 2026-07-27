@@ -171,16 +171,16 @@
                     <span>Forcer les minuscules avant traitement</span>
                   </label>
                   <label>
-                    Nettoyage lexical
-                    <select id="modeNettoyageLexical">
+                    Nettoyage lexical - choisir la méthode
+                    <select id="modeNettoyageLexical" size="3">
                       <option value="stopwords_quanteda" selected>Stopwords quanteda</option>
                       <option value="lexique_iramuteq">Dictionnaire IRaMuTeQ-lite (lexique_fr)</option>
                       <option value="aucun">Aucun nettoyage lexical</option>
                     </select>
                   </label>
                   <p class="muted sidebar-note">
-                    Le mode Quanteda conserve le nettoyage actuel. Le mode dictionnaire applique lexique_fr
-                    avec c_mot, c_lemme et c_morpho.
+                    Le dictionnaire IRaMuTeQ-lite demandé est intégré dans l'application :
+                    <code>dictionnaires/lexique_fr.csv</code>. Quanteda reste disponible au choix.
                   </p>
                   <div id="lexiqueSection" class="stacked-fields" hidden>
                     <label class="checkbox-row">
