@@ -461,9 +461,7 @@ build_main_ui <- function() {
           fileInput("fichier_corpus", "Importer un corpus IRaMuTeQ (.txt)", accept = c(".txt")),
           p(
             class = "text-muted small",
-            "Les lignes commençant par ",
-            tags$code("****"),
-            " sont reconnues comme dans le format IRaMuTeQ."
+            "Le corpus doit être dans le format IRaMuTeQ."
           )
         ),
         control_section(
