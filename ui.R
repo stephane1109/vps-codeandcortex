@@ -520,7 +520,7 @@ build_main_ui <- function() {
           "Langue du corpus",
           radioButtons(
             "langue_corpus",
-            "Langue du corpus",
+            NULL,
             choices = c("Français" = "fr", "Anglais" = "en", "Espagnol" = "es"),
             selected = "fr"
           ),
