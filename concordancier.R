@@ -106,7 +106,33 @@ detecter_segments_contenant_termes_unicode <- function(textes_index, termes) {
   present
 }
 
-extraire_termes_significatifs_quanteda <- function(dfm_obj, classes_docs, classe_cible, max_p = 0.05, top_n = 200, rv = NULL) {
+decrire_nettoyage_concordancier <- function(mode_nettoyage_lexical = NULL) {
+  mode <- as.character(mode_nettoyage_lexical)
+  if (!length(mode) || !nzchar(mode[[1]])) {
+    return("sur la matrice lexicale analysée")
+  }
+  mode <- mode[[1]]
+
+  if (identical(mode, "stopwords_quanteda")) {
+    return("après nettoyage par stopwords quanteda")
+  }
+  if (identical(mode, "lexique_iramuteq")) {
+    return("après nettoyage par dictionnaire IRaMuTeQ-lite (lexique_fr)")
+  }
+  if (identical(mode, "aucun")) {
+    return("sans nettoyage lexical supplémentaire")
+  }
+
+  "avec le nettoyage lexical sélectionné"
+}
+
+extraire_termes_significatifs_quanteda <- function(dfm_obj,
+                                                   classes_docs,
+                                                   classe_cible,
+                                                   max_p = 0.05,
+                                                   top_n = 200,
+                                                   rv = NULL,
+                                                   contexte_nettoyage = NULL) {
   if (is.null(dfm_obj) || ndoc(dfm_obj) == 0) return(character(0))
   if (is.null(classes_docs) || !length(classes_docs)) return(character(0))
 
@@ -122,7 +148,7 @@ extraire_termes_significatifs_quanteda <- function(dfm_obj, classes_docs, classe
     as.data.frame(quanteda.textstats::textstat_keyness(dfm_obj, target = cible, measure = "chi2")),
     error = function(e) {
       if (!is.null(rv)) {
-        ajouter_log(rv, paste0("Concordancier : échec quanteda.textstats pour la classe ", classe_cible, " : ", conditionMessage(e)))
+        ajouter_log(rv, paste0("Concordancier : échec du calcul des termes significatifs pour la classe ", classe_cible, " : ", conditionMessage(e)))
       }
       NULL
     }
@@ -153,7 +179,10 @@ extraire_termes_significatifs_quanteda <- function(dfm_obj, classes_docs, classe
   termes <- termes[!is.na(termes) & nzchar(trimws(termes))]
 
   if (!is.null(rv)) {
-    ajouter_log(rv, paste0("Concordancier : ", length(termes), " termes significatifs extraits via quanteda.textstats pour la classe ", classe_cible, "."))
+    if (is.null(contexte_nettoyage) || !nzchar(as.character(contexte_nettoyage))) {
+      contexte_nettoyage <- "sur la matrice lexicale analysée"
+    }
+    ajouter_log(rv, paste0("Concordancier : ", length(termes), " termes significatifs extraits ", contexte_nettoyage, " pour la classe ", classe_cible, "."))
   }
 
   termes
@@ -169,11 +198,15 @@ generer_concordancier_html <- function(
   classes_docs = NULL,
   top_termes_keyness = 200,
   explor_assets = NULL,
+  mode_nettoyage_lexical = NULL,
   avancer = NULL,
   rv = NULL,
   ...
 ) {
-  if (!is.null(rv)) ajouter_log(rv, "Concordancier : génération HTML (filtré + surlignage Unicode via quanteda.textstats).")
+  contexte_nettoyage <- decrire_nettoyage_concordancier(mode_nettoyage_lexical)
+  if (!is.null(rv)) {
+    ajouter_log(rv, paste0("Concordancier : génération HTML (segments filtrés et surlignés ; ", contexte_nettoyage, ")."))
+  }
 
   con <- file(chemin_sortie, open = "wt", encoding = "UTF-8")
   on.exit(try(close(con), silent = TRUE), add = TRUE)
@@ -185,7 +218,7 @@ generer_concordancier_html <- function(
   writeLines("<h1>Concordancier Rainette</h1>", con)
 
   writeLines("<h2>Segments par classe</h2>", con)
-  writeLines("<h3>Segments par classe (filtrés et surlignés à partir des termes significatifs calculés avec quanteda.textstats)</h3>", con)
+  writeLines(paste0("<h3>Segments par classe (filtrés et surlignés à partir des termes significatifs ; ", htmltools::htmlEscape(contexte_nettoyage), ")</h3>"), con)
 
   noms_classes <- names(segments_by_class)
   n_classes <- length(noms_classes)
@@ -203,7 +236,8 @@ generer_concordancier_html <- function(
       classe_cible = cl,
       max_p = max_p,
       top_n = top_termes_keyness,
-      rv = rv
+      rv = rv,
+      contexte_nettoyage = contexte_nettoyage
     )
 
     if (!length(termes_cl)) {

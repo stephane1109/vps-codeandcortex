@@ -641,6 +641,7 @@ run_chdrainette_analysis <- function(input_path, original_name, params, rv = NUL
     dfm_obj = dfm_ok,
     classes_docs = groupes,
     top_termes_keyness = max(100L, params$top_n * 10L),
+    mode_nettoyage_lexical = params$mode_nettoyage_lexical,
     rv = rv
   )
 
