@@ -921,17 +921,14 @@ with st.sidebar:
         options=ALL_POS,
         default=DEFAULT_POS,
         help=(
-            "Sélectionne les catégories grammaticales à garder dans l'analyse. "
+            "Permet de sélectionner les catégories grammaticales à garder dans l'analyse. "
             "Conserver surtout les noms, adjectifs et noms propres aide souvent à obtenir des topics plus interprétables."
         ),
     )
     retirer_stopwords = st.checkbox(
         "Retirer les stopwords spaCy",
         value=True,
-        help=(
-            "Supprime les mots-outils fréquents comme les articles, pronoms ou prépositions. "
-            "Coche cette option pour concentrer les topics sur les mots les plus informatifs."
-        ),
+        help="Supprime les mots-outils fréquents comme les articles, pronoms ou prépositions.",
     )
     lemmatiser = st.checkbox(
         "Lemmatisation",
@@ -1054,7 +1051,7 @@ uploaded_files = st.file_uploader(
     type=["txt"],
     accept_multiple_files=True,
     help=(
-        "Importe un ou plusieurs fichiers texte au format .txt. "
+        "Permet d'importer un ou plusieurs fichiers texte au format .txt. "
         "Les lignes commençant par **** sont reconnues comme séparateurs de documents IRaMuTeQ."
     ),
 )
@@ -1065,11 +1062,11 @@ if "lda_result" not in st.session_state:
 if st.button(
     "Lancer le test LDA",
     type="primary",
-    help="Démarre le prétraitement du corpus, la détection des bigrammes, puis l'entraînement du modèle LDA avec les paramètres choisis.",
+    help="Permet de démarrer le prétraitement du corpus, la détection des bigrammes, puis l'entraînement du modèle LDA avec les paramètres choisis.",
 ):
     documents, noms_sources = lire_fichiers_uploades(uploaded_files)
     if not documents:
-        st.error("Importe au moins un fichier texte avant de lancer l'analyse.")
+        st.error("Veuillez importer au moins un fichier texte avant de lancer l'analyse.")
     else:
         try:
             st.session_state.lda_result = run_lda_analysis(
