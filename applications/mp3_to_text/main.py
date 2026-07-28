@@ -275,7 +275,7 @@ def main() -> None:
     enforce_streamlit_access("mp3_to_text", APP_NAME)
     st.title("Speech to text avec Whisper - OpenAI")
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
-    st.caption("version modifié le 13-07-2026")
+    st.caption("version 0_2beta - modifiée le 28-07-2026")
     st.markdown("<hr style='margin:0.35rem 0 1.2rem; border:0; border-top:1px solid rgba(15,23,42,0.12);'>", unsafe_allow_html=True)
     build_sidebar_notes()
 
