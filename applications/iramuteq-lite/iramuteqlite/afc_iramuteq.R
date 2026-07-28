@@ -762,6 +762,98 @@ executer_afc_variables_etoilees <- function(corpus_aligne, groupes, max_modalite
   st
 }
 
+.tracer_modalites_etoilees_repli <- function(
+  st,
+  top_modalites = 120,
+  titre = "Variables étoilées : modalités disponibles",
+  message = "Projection AFC 2D indisponible ou instable : affichage de secours par fréquence."
+) {
+  if (is.null(st) || !is.data.frame(st) || nrow(st) == 0 || !"Modalite" %in% names(st)) {
+    plot.new()
+    text(0.5, 0.5, "Aucune modalité étoilée à afficher.", cex = 1.05)
+    return(invisible(NULL))
+  }
+
+  st <- st[!is.na(st$Modalite) & nzchar(st$Modalite), , drop = FALSE]
+  if (nrow(st) == 0) {
+    plot.new()
+    text(0.5, 0.5, "Aucune modalité étoilée à afficher.", cex = 1.05)
+    return(invisible(NULL))
+  }
+
+  st$frequency_num <- suppressWarnings(as.numeric(st$frequency))
+  st$chi2_num <- suppressWarnings(as.numeric(st$chi2))
+  st$p_num <- suppressWarnings(as.numeric(st$p_value))
+  st <- st[order(-st$frequency_num, -st$chi2_num, na.last = TRUE), , drop = FALSE]
+  if (is.finite(top_modalites) && nrow(st) > top_modalites) {
+    st <- st[seq_len(top_modalites), , drop = FALSE]
+  }
+  st <- st[rev(seq_len(nrow(st))), , drop = FALSE]
+
+  valeurs <- st$frequency_num
+  if (!any(is.finite(valeurs))) valeurs <- st$chi2_num
+  valeurs[!is.finite(valeurs)] <- 0
+  if (all(valeurs <= 0)) valeurs <- seq_len(nrow(st))
+
+  labels <- as.character(st$Modalite)
+  classes <- sort(unique(as.character(st$Classe_max[!is.na(st$Classe_max) & nzchar(st$Classe_max)])))
+  if (length(classes) == 0) classes <- "Classe non déterminée"
+  pal <- if (requireNamespace("RColorBrewer", quietly = TRUE) && length(classes) <= 8) {
+    RColorBrewer::brewer.pal(max(3, length(classes)), "Set2")[seq_along(classes)]
+  } else {
+    grDevices::rainbow(length(classes))
+  }
+  col_map <- setNames(pal, classes)
+  col_bars <- col_map[as.character(st$Classe_max)]
+  col_bars[is.na(col_bars)] <- "gray55"
+
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par), add = TRUE)
+  marge_gauche <- min(18, max(8, max(nchar(labels), na.rm = TRUE) * 0.18 + 4))
+  par(mar = c(5, marge_gauche, 4.2, 2))
+
+  bp <- barplot(
+    valeurs,
+    names.arg = labels,
+    horiz = TRUE,
+    las = 1,
+    col = col_bars,
+    border = NA,
+    xlab = "Fréquence",
+    main = titre,
+    cex.names = 0.9
+  )
+  grid(nx = NA, ny = NULL, col = "gray88", lty = "dotted")
+  box()
+
+  details <- character(nrow(st))
+  for (i in seq_len(nrow(st))) {
+    chi_txt <- if (is.finite(st$chi2_num[i])) paste0("χ²=", round(st$chi2_num[i], 2)) else ""
+    p_txt <- if (is.finite(st$p_num[i])) paste0("p=", format.pval(st$p_num[i], digits = 2, eps = 0.001)) else ""
+    parts <- c(chi_txt, p_txt)
+    details[i] <- paste(parts[nzchar(parts)], collapse = " · ")
+  }
+  details[nzchar(details)] <- paste0("  ", details[nzchar(details)])
+  if (any(nzchar(details))) {
+    text(
+      x = valeurs + max(valeurs, na.rm = TRUE) * 0.025,
+      y = bp,
+      labels = details,
+      adj = 0,
+      cex = 0.78,
+      col = "gray35"
+    )
+  }
+
+  if (nzchar(message)) {
+    mtext(message, side = 3, line = 0.35, cex = 0.76, col = "gray35")
+  }
+  if (length(classes) > 0 && nrow(st) > 1) {
+    legend("bottomright", legend = classes, fill = col_map[classes], bty = "n", cex = 0.75)
+  }
+  invisible(NULL)
+}
+
 # Tracé AFC classes + variables étoilées
 tracer_afc_variables_etoilees <- function(
   obj,
@@ -791,14 +883,26 @@ tracer_afc_variables_etoilees <- function(
 
   st <- st[st$Modalite %in% rownames(cc), , drop = FALSE]
   if (nrow(st) < 2) {
-    plot.new()
-    text(0.5, 0.5, "AFC variables étoilées : pas assez de modalités à tracer.", cex = 1.1)
+    .tracer_modalites_etoilees_repli(
+      st,
+      top_modalites = top_modalites,
+      message = "Moins de deux modalités sont projetables : affichage de secours par fréquence."
+    )
     return(invisible(NULL))
   }
 
   mods <- st$Modalite
   x_m <- coords_modalites$x[match(mods, rownames(cc))]
   y_m <- coords_modalites$y[match(mods, rownames(cc))]
+
+  if (!isTRUE(axis_info$has_second) || !any(is.finite(x_m)) || !any(is.finite(y_m))) {
+    .tracer_modalites_etoilees_repli(
+      st,
+      top_modalites = top_modalites,
+      message = "AFC limitée à un seul axe ou coordonnées instables : affichage de secours par fréquence."
+    )
+    return(invisible(NULL))
+  }
 
   x_c <- coords_classes$x
   y_c <- coords_classes$y

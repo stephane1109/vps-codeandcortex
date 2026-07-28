@@ -1651,33 +1651,54 @@ run_batch <- function() {
       error = function(e) NULL
     )
     if (!is.null(afc_vars_obj) && !is.null(afc_vars_obj$ca)) {
-      afc_vars_png <- NULL
-      if (coords_have_at_least_one_axis(afc_vars_obj$rowcoord) && coords_have_at_least_one_axis(afc_vars_obj$colcoord)) {
-        activer_repel2 <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
-        top_mod <- 120L
-        afc_vars_png <- file.path(afc_dir, "afc_variables_etoilees.png")
-        grDevices::png(afc_vars_png, width = 2000, height = 1600, res = 180)
-        tryCatch(
-          tracer_afc_variables_etoilees(
-            afc_vars_obj,
-            axes = c(1, 2),
-            top_modalites = top_mod,
-            activer_repel = activer_repel2
-          ),
-          error = function(e) {
-            plot.new()
-            text(0.5, 0.5, paste0("AFC variables etoilees indisponible : ", e$message), cex = 1.0)
-            log_info(paste0("AFC variables etoilees : rendu de secours utilise (", e$message, ")."))
+      activer_repel2 <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
+      top_mod <- 120L
+      afc_vars_png <- file.path(afc_dir, "afc_variables_etoilees.png")
+      grDevices::png(afc_vars_png, width = 2000, height = 1600, res = 180)
+      tryCatch(
+        {
+          if (!coords_have_at_least_one_axis(afc_vars_obj$rowcoord) || !coords_have_at_least_one_axis(afc_vars_obj$colcoord)) {
+            .tracer_modalites_etoilees_repli(
+              afc_vars_obj$modalites_stats,
+              top_modalites = top_mod,
+              message = "Coordonnées AFC insuffisantes : affichage de secours par fréquence."
+            )
+          } else {
+            if (!coords_have_two_axes(afc_vars_obj$rowcoord) || !coords_have_two_axes(afc_vars_obj$colcoord)) {
+              log_info("AFC variables étoilées : un seul axe disponible, graphique de secours par fréquence.")
+            }
+            tracer_afc_variables_etoilees(
+              afc_vars_obj,
+              axes = c(1, 2),
+              top_modalites = top_mod,
+              activer_repel = activer_repel2
+            )
           }
-        )
-        grDevices::dev.off()
-        if (!coords_have_two_axes(afc_vars_obj$rowcoord) || !coords_have_two_axes(afc_vars_obj$colcoord)) {
-          log_info("AFC variables étoilées : un seul axe disponible, export PNG en projection 1D.")
+        },
+        error = function(e) {
+          plot.new()
+          text(0.5, 0.5, paste0("AFC variables etoilees indisponible : ", e$message), cex = 1.0)
+          log_info(paste0("AFC variables etoilees : rendu de secours utilise (", e$message, ")."))
+          try(
+            .tracer_modalites_etoilees_repli(
+              afc_vars_obj$modalites_stats,
+              top_modalites = top_mod,
+              message = "Projection AFC indisponible : affichage de secours par fréquence."
+            ),
+            silent = TRUE
+          )
+        }
+      )
+      grDevices::dev.off()
+      if (coords_have_at_least_one_axis(afc_vars_obj$rowcoord) && coords_have_at_least_one_axis(afc_vars_obj$colcoord)) {
+        if (coords_have_two_axes(afc_vars_obj$rowcoord) && coords_have_two_axes(afc_vars_obj$colcoord)) {
+          log_info("AFC variables étoilées : calcul terminé.", progress = 80)
+        } else {
+          log_info("AFC variables étoilées : un seul axe disponible, export PNG de secours généré.", progress = 80)
         }
       } else {
-        log_info("AFC variables étoilées : aucun axe exploitable, graphique PNG ignoré.")
+        log_info("AFC variables étoilées : coordonnées insuffisantes, export PNG de secours généré.", progress = 80)
       }
-      log_info("AFC variables étoilées : calcul terminé.", progress = 80)
       ecrire_csv_6_decimales(afc_vars_obj$modalites_stats, file.path(afc_dir, "stats_modalites.csv"), row.names = FALSE)
       if (!is.null(afc_vars_obj$ca$eig)) {
         ecrire_csv_6_decimales(as.data.frame(afc_vars_obj$ca$eig), file.path(afc_dir, "valeurs_propres_vars.csv"), row.names = TRUE)
