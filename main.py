@@ -1040,10 +1040,7 @@ with st.sidebar:
         max_value=60,
         value=20,
         step=5,
-        help=(
-            "Nombre de mots affichés pour décrire chaque topic dans les tableaux et nuages de mots. "
-            "Cela ne change pas le modèle, seulement la quantité de mots montrés dans les résultats."
-        ),
+        help="Nombre de mots affichés pour décrire chaque topic dans les tableaux et nuages de mots.",
     )
 
 uploaded_files = st.file_uploader(
