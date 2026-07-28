@@ -126,11 +126,11 @@ tracer_graphe_similitudes_igraph <- function(g,
   }
 
   freq <- simi_extraire_freq_vertices(g, vertex_freq = vertex_freq)
-  vertex_size <- simi_tailles_sommets_igraph(freq, min_out = 5, max_out = 58, power = 0.9)
+  vertex_size <- simi_tailles_sommets_igraph(freq, min_out = 10, max_out = 72, power = 0.72)
 
   vertex_label_cex <- 1.0
   if (isTRUE(vertex_text_by_freq) || !isTRUE(vertex_bubbles)) {
-    vertex_label_cex <- simi_tailles_labels_igraph(freq, min_out = 0.8, max_out = 2.6, power = 0.9)
+    vertex_label_cex <- simi_tailles_labels_igraph(freq, min_out = 0.78, max_out = 2.35, power = 0.8)
   }
   if (length(vertex_label_cex) == 1L) {
     vertex_label_cex <- rep(vertex_label_cex, igraph::vcount(g))
@@ -142,7 +142,7 @@ tracer_graphe_similitudes_igraph <- function(g,
   vertex_labels[is.na(vertex_labels)] <- ""
 
   if (isTRUE(edge_width_by_index)) {
-    edge_width <- simi_largeurs_aretes_igraph(igraph::E(g)$weight, min_out = 0.5, max_out = 8.5, cap_out = 10)
+    edge_width <- simi_largeurs_aretes_igraph(igraph::E(g)$weight, min_out = 0.8, max_out = 12, cap_out = 13.5)
   } else {
     edge_width <- rep(1, igraph::ecount(g))
   }
@@ -174,16 +174,31 @@ tracer_graphe_similitudes_igraph <- function(g,
       vcol <- pal[idx]
 
       if (isTRUE(halo)) {
-        mark_groups <- igraph::groups(communities)
-        mark_col <- grDevices::adjustcolor(pal[seq_along(mark_groups)], alpha.f = 0.22)
-        mark_border <- grDevices::adjustcolor(pal[seq_along(mark_groups)], alpha.f = 0.85)
+        raw_mark_groups <- igraph::groups(communities)
+        mark_groups <- lapply(raw_mark_groups, function(group_vertices) {
+          group_idx <- match(as.character(group_vertices), vertex_labels)
+          if (all(is.na(group_idx))) {
+            group_idx <- suppressWarnings(as.integer(group_vertices))
+          }
+          group_idx <- group_idx[is.finite(group_idx) & !is.na(group_idx)]
+          group_idx[group_idx >= 1 & group_idx <= length(vertex_labels)]
+        })
+        keep_groups <- lengths(mark_groups) > 1
+        if (any(keep_groups)) {
+          mark_groups <- mark_groups[keep_groups]
+          mark_palette <- pal[seq_along(raw_mark_groups)][keep_groups]
+          mark_col <- grDevices::adjustcolor(mark_palette, alpha.f = 0.34)
+          mark_border <- grDevices::adjustcolor(mark_palette, alpha.f = 0.95)
+        } else {
+          mark_groups <- NULL
+        }
       }
     }
   }
 
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit(graphics::par(old_par), add = TRUE)
-  graphics::par(mar = c(1.2, 1.2, 3.2, 1.2), bg = "#E6E6E6")
+  graphics::par(mar = c(1.2, 1.2, 3.2, 1.2), bg = "#FFFFFF")
 
   lo_mat <- as.matrix(lo)
   if (ncol(lo_mat) < 2) {
@@ -212,9 +227,7 @@ tracer_graphe_similitudes_igraph <- function(g,
   xlim_use <- c(-layout_spacing / zoom, layout_spacing / zoom)
   ylim_use <- c(-layout_spacing / zoom, layout_spacing / zoom)
 
-  # Rendu statique attendu: pas de bulles de sommets (mots + arêtes + halos uniquement).
-  # On conserve l'argument vertex_bubbles pour compatibilité d'appel.
-  afficher_bulles <- FALSE
+  afficher_bulles <- isTRUE(vertex_bubbles)
   # Sommets "tampon" invisibles pour éviter que les arêtes ne traversent les mots.
   # Les arêtes s'arrêtent au bord du sommet: on calibre donc la taille sur la taille du label.
   vertex_hitbox <- pmax(3, as.numeric(vertex_label_cex) * 4.6)
@@ -226,7 +239,7 @@ tracer_graphe_similitudes_igraph <- function(g,
     vertex.label = vertex_labels,
     vertex.size = if (isTRUE(afficher_bulles)) vertex_size else vertex_hitbox,
     vertex.shape = if (isTRUE(afficher_bulles)) "circle" else "circle",
-    vertex.color = if (isTRUE(afficher_bulles)) vcol else NA,
+    vertex.color = if (isTRUE(afficher_bulles)) grDevices::adjustcolor(vcol, alpha.f = 0.86) else NA,
     vertex.frame.color = if (isTRUE(afficher_bulles)) "white" else NA,
     vertex.label.family = "sans",
     vertex.label.font = 1,
@@ -242,6 +255,7 @@ tracer_graphe_similitudes_igraph <- function(g,
     mark.groups = mark_groups,
     mark.col = mark_col,
     mark.border = mark_border,
+    mark.expand = if (isTRUE(halo)) 18 else 0,
     xlim = xlim_use,
     ylim = ylim_use,
     rescale = FALSE
