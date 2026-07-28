@@ -74,6 +74,7 @@ const applyMultimodalCompareAbDialogBtn = document.getElementById("applyMultimod
 const afcTermsZoomInBtn = document.getElementById("afcTermsZoomInBtn");
 const afcTermsZoomOutBtn = document.getElementById("afcTermsZoomOutBtn");
 const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
+const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcVarsPlot"]);
 const simiZoomInBtn = document.getElementById("simiZoomInBtn");
 const simiZoomOutBtn = document.getElementById("simiZoomOutBtn");
 const simiZoomResetBtn = document.getElementById("simiZoomResetBtn");
@@ -8762,6 +8763,10 @@ async function resetAnnotationEntriesOnStartup() {
   }
 }
 
+function isAfcPlotContainer(container) {
+  return container instanceof HTMLElement && AFC_PLOT_CONTAINER_IDS.has(container.id);
+}
+
 function renderImage(container, file, altText, emptyMessage = "Aucun fichier image disponible.") {
   if (!clearContainer(container)) {
     return;
@@ -8774,6 +8779,9 @@ function renderImage(container, file, altText, emptyMessage = "Aucun fichier ima
 
   const image = document.createElement("img");
   image.className = "result-image";
+  if (isAfcPlotContainer(container)) {
+    image.classList.add("afc-plot-image");
+  }
   image.alt = altText;
   image.src = createObjectUrl(file);
   container.appendChild(image);
@@ -9196,17 +9204,19 @@ function setSimiZoom(nextZoom) {
 }
 
 function applyAfcTermsZoom() {
-  const container = resultContainers.afcTermsPlot;
   const media = resultContainers.afcTermsPlot?.querySelector(".result-image");
-  if (!(media instanceof HTMLElement) || !(container instanceof HTMLElement)) return;
+  if (!(media instanceof HTMLElement)) return;
 
-  const containerWidth = Math.max(0, Math.round(container.getBoundingClientRect().width || 0));
-  const baseWidth = Math.max(320, containerWidth || 980);
-  const targetWidth = Math.round(baseWidth * appState.afcTermsZoom);
+  const zoom = Math.min(3, Math.max(0.4, Number(appState.afcTermsZoom) || 1));
+  media.classList.add("afc-plot-image");
+  media.classList.toggle("is-afc-zoomed", Math.abs(zoom - 1) > 0.01);
+  media.style.removeProperty("width");
+  media.style.removeProperty("max-width");
 
-  media.style.width = `${targetWidth}px`;
-  media.style.maxWidth = "none";
-  media.style.margin = "0 auto";
+  if (Math.abs(zoom - 1) > 0.01) {
+    media.style.width = `${Math.round(zoom * 100)}%`;
+    media.style.maxWidth = "none";
+  }
 }
 
 function setAfcTermsZoom(nextZoom) {

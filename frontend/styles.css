@@ -1280,18 +1280,31 @@ progress {
 #afcClassesPlot,
 #afcTermsPlot,
 #afcVarsPlot {
+  --afc-plot-base-width: 1120px;
   overflow: auto;
-  display: block;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(0.35rem, 1vw, 0.75rem);
+  max-height: min(78vh, 920px);
 }
 
 #afcClassesPlot .result-image,
 #afcTermsPlot .result-image,
 #afcVarsPlot .result-image {
-  width: 100%;
+  width: min(100%, var(--afc-plot-base-width));
   max-width: none;
+  max-height: min(74vh, 860px);
   height: auto;
   object-fit: contain;
-  margin: 0;
+  margin: 0 auto;
+  cursor: zoom-in;
+}
+
+#afcClassesPlot .result-image.is-afc-zoomed,
+#afcTermsPlot .result-image.is-afc-zoomed,
+#afcVarsPlot .result-image.is-afc-zoomed {
+  max-height: none;
 }
 
 #chdDendrogramme .result-image {
@@ -3424,8 +3437,7 @@ code {
   #afcClassesPlot .result-image,
   #afcTermsPlot .result-image,
   #afcVarsPlot .result-image {
-    width: 100%;
-    max-width: none;
+    max-height: none;
   }
 
   #suiviMeta .result-table,
