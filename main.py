@@ -30,6 +30,24 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
 APP_BUILD = "stopmotion-hide-valid-cookies-caption-2026-07-20-01"
 
 
+def apply_page_style():
+    st.markdown(
+        """
+        <style>
+          .main .block-container,
+          div[data-testid="stMainBlockContainer"],
+          .block-container {
+            padding-top: 0rem !important;
+          }
+          h1 {
+            margin-top: 0 !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def env_int(nom, valeur_defaut):
     try:
         return int(os.environ.get(nom, str(valeur_defaut)).strip())
@@ -632,6 +650,7 @@ def reencoder_video_h264(chemin_entrée, chemin_sortie):
 
 # Interface Streamlit
 st.set_page_config(page_title="StopMotion", layout="wide")
+apply_page_style()
 enforce_streamlit_access("stopmotion_opticalflow", "StopMotion")
 st.title("Générateur de Stop Motion avec Optical Flow (optionnel)")
 st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
