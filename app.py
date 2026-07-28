@@ -36,6 +36,21 @@ from doublons import (
 )
 
 st.set_page_config(layout="wide")
+st.markdown(
+    """
+    <style>
+      .main .block-container,
+      div[data-testid="stMainBlockContainer"],
+      .block-container {
+        padding-top: 0rem !important;
+      }
+      h1 {
+        margin-top: 0 !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 enforce_streamlit_access("europresse-to-iramuteq", "Europresse to IRaMuTeQ")
 
 # -----------------------------------------
