@@ -240,8 +240,27 @@ def build_sidebar_notes() -> None:
         )
 
 
+def apply_page_style() -> None:
+    st.markdown(
+        """
+        <style>
+          .main .block-container,
+          div[data-testid="stMainBlockContainer"],
+          .block-container {
+            padding-top: 0rem !important;
+          }
+          h1 {
+            margin-top: 0 !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, layout="centered")
+    apply_page_style()
     st.markdown(
         '<link rel="icon" href="data:,">',
         unsafe_allow_html=True,
