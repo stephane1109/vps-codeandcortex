@@ -1714,8 +1714,8 @@ run_batch <- function() {
     simi_layout_spacing <- scalar_num(config$simi_layout_spacing, 1.7)
     if (!is.finite(simi_layout_spacing) || is.na(simi_layout_spacing)) simi_layout_spacing <- 1.7
     simi_layout_spacing <- min(3, max(0.8, simi_layout_spacing))
-    simi_engine <- scalar_chr(config$simi_engine, "visnetwork")
-    if (!simi_engine %in% c("visnetwork", "igraph")) simi_engine <- "visnetwork"
+    simi_engine <- scalar_chr(config$simi_engine, "igraph")
+    if (!simi_engine %in% c("visnetwork", "igraph")) simi_engine <- "igraph"
     simi <- construire_graphe_similitudes(
       dfm_obj = dfm_obj,
       method = scalar_chr(config$simi_method, "cooc"),
@@ -1768,8 +1768,8 @@ run_batch <- function() {
       )
     }
     simi_png <- file.path(output_dir, "simi_graph.png")
-    simi_png_width <- as.integer(min(4200, max(1800, round(1800 * simi_layout_spacing))))
-    simi_png_height <- as.integer(min(3200, max(1400, round(1400 * simi_layout_spacing))))
+    simi_png_width <- as.integer(min(5200, max(2400, round(2200 * simi_layout_spacing))))
+    simi_png_height <- as.integer(min(3900, max(1800, round(1650 * simi_layout_spacing))))
     grDevices::png(simi_png, width = simi_png_width, height = simi_png_height, res = 180)
     tracer_graphe_similitudes_igraph(
       g = simi$graph,

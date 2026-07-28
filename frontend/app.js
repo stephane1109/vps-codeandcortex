@@ -2102,7 +2102,7 @@ function buildJobConfig(analysisKind = "chd") {
     simi_max_tree: document.getElementById("simiMaxTree").checked,
     simi_layout: document.getElementById("simiLayout").value,
     simi_layout_spacing: simiSpacing,
-    simi_engine: String(document.getElementById("simiEngine")?.value || "visnetwork").trim() || "visnetwork",
+    simi_engine: String(document.getElementById("simiEngine")?.value || "igraph").trim() || "igraph",
     simi_edge_labels: document.getElementById("simiEdgeLabels").checked,
     simi_edge_width_by_index: document.getElementById("simiEdgeWidth").checked,
     simi_vertex_text_by_freq: document.getElementById("simiVertexText").checked,
@@ -9193,8 +9193,15 @@ function applySimiZoom() {
   const media = resultContainers.simiGraph?.querySelector(".embedded-frame, .result-image");
   if (!(media instanceof HTMLElement)) return;
 
-  media.style.width = `${Math.round(appState.simiZoom * 100)}%`;
-  media.style.maxWidth = "none";
+  const zoom = Math.min(3, Math.max(0.4, Number(appState.simiZoom) || 1));
+  media.classList.toggle("is-simi-zoomed", Math.abs(zoom - 1) > 0.01);
+  media.style.removeProperty("width");
+  media.style.removeProperty("max-width");
+
+  if (Math.abs(zoom - 1) > 0.01) {
+    media.style.width = `${Math.round(zoom * 100)}%`;
+    media.style.maxWidth = "none";
+  }
 }
 
 function setSimiZoom(nextZoom) {
@@ -12214,14 +12221,18 @@ async function renderExports(entries, index) {
   });
 
   await safeRenderExportSection("Similitudes", async () => {
-    const similitudeHtmlFile = findFile(index, [
-      (path) => path.endsWith(".html") && path.includes("simi"),
-      (path) => path.endsWith(".html") && path.includes("simil"),
+    const similitudePngFile = findFile(index, [
       (path) => path.endsWith(".png") && path.includes("simi"),
       (path) => path.endsWith(".png") && path.includes("simil")
     ]);
+    const similitudeHtmlFile = findFile(index, [
+      (path) => path.endsWith(".html") && path.includes("simi"),
+      (path) => path.endsWith(".html") && path.includes("simil")
+    ]);
 
-    if (similitudeHtmlFile?.name.endsWith(".html")) {
+    if (similitudePngFile) {
+      renderImage(resultContainers.simiGraph, similitudePngFile, "Graphe de similitudes");
+    } else if (similitudeHtmlFile) {
       try {
         renderHtmlFrame(
           resultContainers.simiGraph,
@@ -12232,8 +12243,6 @@ async function renderExports(entries, index) {
         renderHtmlFrame(resultContainers.simiGraph, "", "Impossible de lire le graphe HTML.");
         log(`[error] Lecture HTML impossible (${similitudeHtmlFile.name}): ${error.message}`);
       }
-    } else if (similitudeHtmlFile) {
-      renderImage(resultContainers.simiGraph, similitudeHtmlFile, "Graphe de similitudes");
     } else {
       clearContainer(resultContainers.simiGraph);
       resultContainers.simiGraph.appendChild(createEmptyState("Aucun graphe de similitudes exporté."));
