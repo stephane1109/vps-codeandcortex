@@ -37,10 +37,3 @@ APP_TICKET_HIDDEN_RELEASE_SECONDS=300
 PORT=8501
 LDA_SPACY_MODEL=fr_core_news_md
 ```
-
-## Lancement local
-
-```bash
-docker build -t lda .
-docker run --rm -p 8501:8501 lda
-```
