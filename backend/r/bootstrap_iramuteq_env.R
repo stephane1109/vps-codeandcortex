@@ -26,7 +26,8 @@ scalar_chr <- function(x, default = "") {
 
 required_packages <- c(
   "jsonlite", "Matrix", "quanteda", "dplyr", "wordcloud", "RColorBrewer",
-  "FactoMineR", "igraph", "proxy", "htmltools", "irlba", "factoextra"
+  "FactoMineR", "igraph", "proxy", "htmltools", "htmlwidgets", "irlba", "factoextra",
+  "visNetwork"
 )
 
 required_min_versions <- c(

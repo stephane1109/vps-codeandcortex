@@ -842,20 +842,25 @@
           </div>
 
           <div class="field">
+            <label for="simiSpacing">Espacement des bulles</label>
+            <input id="simiSpacing" type="number" min="0.8" max="3" step="0.1" value="1.7" />
+            <p class="field-help">Augmente la surface du graphe et l'écartement visuel des nœuds sans modifier les calculs.</p>
+          </div>
+
+          <div class="field">
             <label for="simiEngine">Moteur de rendu du graphe</label>
             <select id="simiEngine">
+              <option value="visnetwork" selected>Interactif (déplaçable)</option>
               <option value="igraph">igraph (statique)</option>
-              <option value="visnetwork">visNetwork (interactif)</option>
             </select>
             <p class="field-help">
-              En mode visNetwork, ouvrez le panneau config pour adapter le rendu du graphe
-              (nœuds, arêtes, physique, layout, interactions, etc.).
+              Le mode interactif permet de déplacer les bulles, zoomer et explorer les liens.
             </p>
           </div>
 
           <div class="field">
             <label class="check-option" for="simiEdgeLabels">
-              <input id="simiEdgeLabels" type="checkbox" checked />
+              <input id="simiEdgeLabels" type="checkbox" />
               <span>Afficher le score de l'indice (arêtes / info-bulles)</span>
             </label>
           </div>

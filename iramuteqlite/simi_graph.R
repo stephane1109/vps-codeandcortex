@@ -39,6 +39,12 @@ normaliser_vecteur_simi <- function(x, min_out = 0, max_out = 1) {
   min_out + ((x - xmin) / (xmax - xmin)) * (max_out - min_out)
 }
 
+normaliser_espacement_simi <- function(x, default = 1.7) {
+  value <- suppressWarnings(as.numeric(x))
+  if (!length(value) || !is.finite(value[[1]]) || is.na(value[[1]])) value <- default
+  min(3, max(0.8, as.numeric(value[[1]])))
+}
+
 calculer_tailles_sommets_simi <- function(freq, min_out = 6, max_out = 42) {
   f <- suppressWarnings(as.numeric(freq))
   if (!length(f) || all(!is.finite(f))) return(rep((min_out + max_out) / 2, length(f)))
@@ -79,6 +85,7 @@ construire_graphe_similitudes <- function(dfm_obj,
                                          top_terms = 100L,
                                          selected_terms = NULL,
                                          layout_type = "frutch",
+                                         layout_spacing = 1.7,
                                          communities = FALSE,
                                          community_method = "edge_betweenness") {
   if (is.null(dfm_obj) || quanteda::ndoc(dfm_obj) < 2 || quanteda::nfeat(dfm_obj) < 2) {
@@ -190,14 +197,28 @@ construire_graphe_similitudes <- function(dfm_obj,
     vfreq <- numeric(0)
   }
 
+  layout_spacing <- normaliser_espacement_simi(layout_spacing)
+
   lo <- switch(
     layout_type,
-    frutch = igraph::layout_with_fr(g),
+    frutch = igraph::layout_with_fr(
+      g,
+      niter = as.integer(600 * layout_spacing),
+      start.temp = sqrt(max(1, igraph::vcount(g))) * layout_spacing
+    ),
     kawa = igraph::layout_with_kk(g),
     circle = igraph::layout_in_circle(g),
     random = igraph::layout_on_grid(g),
-    spirale = igraph::layout_with_fr(g),
-    igraph::layout_with_fr(g)
+    spirale = igraph::layout_with_fr(
+      g,
+      niter = as.integer(600 * layout_spacing),
+      start.temp = sqrt(max(1, igraph::vcount(g))) * layout_spacing
+    ),
+    igraph::layout_with_fr(
+      g,
+      niter = as.integer(600 * layout_spacing),
+      start.temp = sqrt(max(1, igraph::vcount(g))) * layout_spacing
+    )
   )
 
   com <- NULL
@@ -212,6 +233,7 @@ construire_graphe_similitudes <- function(dfm_obj,
     method = method,
     seuil = seuil_val,
     communities = com,
+    layout_spacing = layout_spacing,
     n_terms_used = ncol(mat_bin),
     n_terms_total = ncol(mat_dfm),
     top_terms_requested = n_top
@@ -234,6 +256,7 @@ tracer_graphe_similitudes <- function(g,
                                      communities = NULL,
                                      halo = FALSE,
                                      zoom = 1,
+                                     layout_spacing = 1.7,
                                      info_text = NULL) {
   if (is.null(g) || !inherits(g, "igraph") || igraph::vcount(g) == 0) {
     plot.new()
@@ -272,6 +295,7 @@ tracer_graphe_similitudes <- function(g,
 
   zoom <- suppressWarnings(as.numeric(zoom))
   if (!is.finite(zoom) || is.na(zoom) || zoom <= 0) zoom <- 1
+  layout_spacing <- normaliser_espacement_simi(layout_spacing)
 
   edge_lab <- if (isTRUE(edge_labels)) round(igraph::E(g)$weight, 3) else NA
 
@@ -305,9 +329,15 @@ tracer_graphe_similitudes <- function(g,
     lo_mat <- cbind(lo_mat, rep(0, nrow(lo_mat)))
   }
   lo_plot <- lo_mat[, 1:2, drop = FALSE]
-  lo_plot <- igraph::norm_coords(lo_plot, xmin = -1, xmax = 1, ymin = -1, ymax = 1)
-  xlim_use <- c(-1 / zoom, 1 / zoom)
-  ylim_use <- c(-1 / zoom, 1 / zoom)
+  lo_plot <- igraph::norm_coords(
+    lo_plot,
+    xmin = -layout_spacing,
+    xmax = layout_spacing,
+    ymin = -layout_spacing,
+    ymax = layout_spacing
+  )
+  xlim_use <- c(-layout_spacing / zoom, layout_spacing / zoom)
+  ylim_use <- c(-layout_spacing / zoom, layout_spacing / zoom)
 
   plot(
     g,
@@ -327,7 +357,8 @@ tracer_graphe_similitudes <- function(g,
     mark.border = mark_border,
     main = main,
     xlim = xlim_use,
-    ylim = ylim_use
+    ylim = ylim_use,
+    rescale = FALSE
   )
 
   if (!is.null(info_text) && nzchar(as.character(info_text))) {
@@ -443,6 +474,7 @@ tracer_graphe_similitudes_visnetwork <- function(g,
                                                 vertex_freq = NULL,
                                                 communities = NULL,
                                                 halo = FALSE,
+                                                layout_spacing = 1.7,
                                                 info_text = NULL) {
   if (!requireNamespace("visNetwork", quietly = TRUE)) {
     return(NULL)
@@ -457,6 +489,14 @@ tracer_graphe_similitudes_visnetwork <- function(g,
   }
   lo <- as.matrix(lo)
   if (ncol(lo) < 2) lo <- cbind(lo, rep(0, nrow(lo)))
+  layout_spacing <- normaliser_espacement_simi(layout_spacing)
+  lo <- igraph::norm_coords(
+    lo[, 1:2, drop = FALSE],
+    xmin = -450 * layout_spacing,
+    xmax = 450 * layout_spacing,
+    ymin = -360 * layout_spacing,
+    ymax = 360 * layout_spacing
+  )
 
   vnames <- igraph::V(g)$name
   vsize <- suppressWarnings(as.numeric(igraph::V(g)$size))
@@ -465,6 +505,10 @@ tracer_graphe_similitudes_visnetwork <- function(g,
   }
   # VisNetwork taille mieux avec un range plus serré.
   vsize <- as.numeric(normaliser_vecteur_simi(vsize, 14, 42))
+  if (!length(vsize) || length(vsize) != igraph::vcount(g) || all(!is.finite(vsize))) {
+    vsize <- rep(24, igraph::vcount(g))
+  }
+  vsize[!is.finite(vsize)] <- 24
 
   vcol <- rep("#2C7FB8", igraph::vcount(g))
   groups <- rep("g1", igraph::vcount(g))
@@ -512,14 +556,25 @@ tracer_graphe_similitudes_visnetwork <- function(g,
     edges$color <- character(0)
   }
 
-  p <- visNetwork::visNetwork(nodes, edges, width = "100%", height = "980px", main = info_text) |>
+  graph_height <- paste0(as.integer(min(1800, max(980, round(980 * layout_spacing)))), "px")
+  spring_length <- as.integer(round(170 * layout_spacing))
+  gravity <- -30 * layout_spacing
+  central_gravity <- 0.005 / layout_spacing
+
+  p <- visNetwork::visNetwork(nodes, edges, width = "100%", height = graph_height, main = info_text) |>
     visNetwork::visEdges(smooth = FALSE, color = list(color = "#4A4A4A", opacity = 0.8)) |>
     visNetwork::visNodes(shape = "dot", borderWidth = 1.2, font = list(size = 22)) |>
     visNetwork::visPhysics(
       solver = "forceAtlas2Based",
-      forceAtlas2Based = list(gravitationalConstant = -30, centralGravity = 0.005, springLength = 170, springConstant = 0.06),
+      forceAtlas2Based = list(
+        gravitationalConstant = gravity,
+        centralGravity = central_gravity,
+        springLength = spring_length,
+        springConstant = 0.045
+      ),
       stabilization = list(iterations = 250)
     ) |>
+    visNetwork::visLayout(randomSeed = 42, improvedLayout = TRUE) |>
     visNetwork::visInteraction(navigationButtons = TRUE, dragNodes = TRUE, dragView = TRUE, zoomView = TRUE, hover = TRUE) |>
     visNetwork::visOptions(highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE))
 

@@ -114,6 +114,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       r-cran-fs \
       r-cran-ggplot2 \
       r-cran-htmltools \
+      r-cran-htmlwidgets \
       r-cran-igraph \
       r-cran-irlba \
       r-cran-jsonlite \
@@ -123,6 +124,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       r-cran-rgexf \
       r-cran-rgl \
       r-cran-sna \
+      r-cran-visnetwork \
       r-cran-wordcloud \
     " \
     && available_r_packages="" \
