@@ -62,7 +62,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # au pipeline actif :
 # - CHD
 # - AFC
-# - LDA
 # - similitudes statiques
 # Les anciens paquets de l'interface Shiny / desktop ne sont plus precharges
 # au build et, si besoin ponctuel, seront reinstalles par le bootstrap runtime.
@@ -124,7 +123,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       r-cran-rgexf \
       r-cran-rgl \
       r-cran-sna \
-      r-cran-topicmodels \
       r-cran-wordcloud \
     " \
     && available_r_packages="" \
@@ -177,7 +175,7 @@ COPY --chown=app:app . /app
 # Definir `IRAMUTEQ_BUILD_BOOTSTRAP=1` si vous souhaitez a nouveau:
 # - preinstaller les packages R au build
 # - executer le smoke-test CHD pendant le build
-RUN python3 -c "import numpy, sklearn, matplotlib, pyLDAvis, wordcloud, altair, vl_convert" \
+RUN python3 -c "import fastapi, uvicorn, redis" \
     && if [ "${IRAMUTEQ_BUILD_BOOTSTRAP}" = "1" ]; then \
          Rscript /app/backend/r/bootstrap_iramuteq_env.R --mode install \
          && sh /app/docker/smoke-test-chd.sh; \

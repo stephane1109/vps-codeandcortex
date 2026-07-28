@@ -48,7 +48,6 @@ cran_packages <- c(
   "shiny",
   "shinyFiles",
   "sna",
-  "topicmodels",
   "visNetwork",
   "wordcloud",
   "ggplot2"

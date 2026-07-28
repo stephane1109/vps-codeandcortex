@@ -63,10 +63,6 @@ const simiConfigDialog = document.getElementById("simiConfigDialog");
 const simiConfigDialogContent = document.getElementById("simiConfigDialogContent");
 const closeSimiDialogBtn = document.getElementById("closeSimiDialogBtn");
 const launchSimiDialogBtn = document.getElementById("launchSimiDialogBtn");
-const ldaConfigDialog = document.getElementById("ldaConfigDialog");
-const ldaConfigDialogContent = document.getElementById("ldaConfigDialogContent");
-const closeLdaDialogBtn = document.getElementById("closeLdaDialogBtn");
-const launchLdaDialogBtn = document.getElementById("launchLdaDialogBtn");
 const suiviConfigDialog = document.getElementById("suiviConfigDialog");
 const suiviConfigDialogContent = document.getElementById("suiviConfigDialogContent");
 const closeSuiviDialogBtn = document.getElementById("closeSuiviDialogBtn");
@@ -97,7 +93,6 @@ const annotationDictTable = document.getElementById("annotationDictTable");
 const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
-const helpLdaMarkdownContent = document.getElementById("helpLdaMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
 const helpMultimodaleMarkdownContent = document.getElementById("helpMultimodaleMarkdownContent");
@@ -264,8 +259,6 @@ const topNavLinks = Array.from(document.querySelectorAll("[data-tab-target]"));
 const panels = Array.from(document.querySelectorAll("[data-panel]"));
 const chdSubNavLinks = Array.from(document.querySelectorAll("[data-subtab-target]"));
 const chdSubPanels = Array.from(document.querySelectorAll("[data-subpanel]"));
-const ldaSubNavLinks = Array.from(document.querySelectorAll("[data-lda-subtab-target]"));
-const ldaSubPanels = Array.from(document.querySelectorAll("[data-lda-subpanel]"));
 const suiviSubNavLinks = Array.from(document.querySelectorAll("[data-suivi-subtab-target]"));
 const suiviSubPanels = Array.from(document.querySelectorAll("[data-suivi-subpanel]"));
 const multimodalSubNavLinks = Array.from(document.querySelectorAll("[data-multimodal-subtab-target]"));
@@ -276,7 +269,6 @@ const helpSubNavLinks = Array.from(document.querySelectorAll("[data-help-subtab-
 const helpSubPanels = Array.from(document.querySelectorAll("[data-help-subpanel]"));
 const chdConfigSourceCards = Array.from(document.querySelectorAll("[data-chd-config-source]"));
 const simiConfigSourceCards = Array.from(document.querySelectorAll("[data-simi-config-source]"));
-const ldaConfigSourceCards = Array.from(document.querySelectorAll("[data-lda-config-source]"));
 const suiviConfigSourceCards = Array.from(document.querySelectorAll("[data-suivi-config-source]"));
 
 const resultContainers = {
@@ -312,14 +304,6 @@ const resultContainers = {
   suiviMatrixPlot: document.getElementById("suiviMatrixPlot"),
   suiviMatrixTable: document.getElementById("suiviMatrixTable"),
   suiviWordclouds: document.getElementById("suiviWordclouds"),
-  ldaBubblePlot: document.getElementById("ldaBubblePlot"),
-  ldaHeatmap: document.getElementById("ldaHeatmap"),
-  ldaNetwork: document.getElementById("ldaNetwork"),
-  ldaWordclouds: document.getElementById("ldaWordclouds"),
-  ldaTopTerms: document.getElementById("ldaTopTerms"),
-  ldaSegments: document.getElementById("ldaSegments"),
-  ldaDocTopics: document.getElementById("ldaDocTopics"),
-  ldaTopicWords: document.getElementById("ldaTopicWords"),
   simiGraph: document.getElementById("simiGraph")
 };
 
@@ -524,11 +508,13 @@ function setSidebarTicketStatus(message, state = "idle") {
 function setSidebarRuntimeStatus(message = "", state = "info") {
   if (!sidebarRuntimeStatus) return;
   sidebarRuntimeStatus.textContent = String(message || "");
-  sidebarRuntimeStatus.classList.remove("is-error", "is-success");
+  sidebarRuntimeStatus.classList.remove("is-error", "is-success", "is-warning");
   if (state === "error") {
     sidebarRuntimeStatus.classList.add("is-error");
   } else if (state === "success") {
     sidebarRuntimeStatus.classList.add("is-success");
+  } else if (state === "warning") {
+    sidebarRuntimeStatus.classList.add("is-warning");
   }
 }
 
@@ -564,6 +550,7 @@ function rememberUserInteraction() {
 
 function rememberTicketSnapshot(snapshot) {
   latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
+  window.__APP_TICKET_CURRENT_ID__ = String(latestTicketSnapshot.ticket_id || "").trim();
   if (["actif", "attente"].includes(latestTicketSnapshot.statut)) {
     ticketReleasedLocally = false;
   }
@@ -627,16 +614,23 @@ function releaseTicketOnPageHide() {
   void fetch("/api/tickets/release", {
     method: "POST",
     credentials: "same-origin",
-    keepalive: true
+    keepalive: true,
+    headers: latestTicketSnapshot?.ticket_id
+      ? { "X-App-Ticket-Id": String(latestTicketSnapshot.ticket_id) }
+      : undefined
   }).catch(() => {});
 }
 
 async function callTicketApi(path, { method = "GET", body = null } = {}) {
+  const headers = body ? { "Content-Type": "application/json" } : {};
+  if (latestTicketSnapshot?.ticket_id) {
+    headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+  }
   const response = await fetch(path, {
     method,
     credentials: "same-origin",
     cache: "no-store",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined
   });
 
@@ -985,7 +979,6 @@ function updateDownloadResultsState() {
 
 function getAnalysisKindLabel(analysisKind) {
   if (analysisKind === "suivi") return "Trajectoire lexicale";
-  if (analysisKind === "lda") return "LDA";
   if (analysisKind === "simi") return "Similitudes";
   if (analysisKind === "multimodal_audio") return "Multimodal · Audio";
   if (analysisKind === "multimodal_mouvements") return "Multimodal · Mouvements";
@@ -1965,64 +1958,6 @@ function renderMorphoPickers(scope = document) {
   scope.querySelectorAll("[data-chd-morpho-card]").forEach((card) => renderMorphoPicker(card));
 }
 
-function renderLdaMorphoPicker(card) {
-  if (!card) return;
-  const hiddenInput = card.querySelector("[data-lda-morpho-selected-input]");
-  const select = card.querySelector("[data-lda-morpho-available-select]");
-  const list = card.querySelector("[data-lda-morpho-selected-list]");
-  if (!hiddenInput || !select || !list) return;
-
-  const selected = splitCsvValues(hiddenInput.value).map((value) => value.toUpperCase());
-  const uniqueSelected = [...new Set(selected)].filter((value) => MORPHO_CATEGORIES.includes(value));
-  hiddenInput.value = uniqueSelected.join(", ");
-
-  select.innerHTML = "";
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Choisir une catégorie";
-  select.appendChild(placeholder);
-
-  MORPHO_CATEGORIES.filter((category) => !uniqueSelected.includes(category)).forEach((category) => {
-    const option = document.createElement("option");
-    option.value = category;
-    option.textContent = category;
-    select.appendChild(option);
-  });
-
-  list.innerHTML = "";
-  if (!uniqueSelected.length) {
-    list.appendChild(createEmptyState("Aucune catégorie sélectionnée."));
-    return;
-  }
-
-  uniqueSelected.forEach((category) => {
-    const chip = document.createElement("div");
-    chip.className = "chip-item";
-
-    const label = document.createElement("span");
-    label.className = "chip-item-label";
-    label.textContent = category;
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "chip-item-remove";
-    removeButton.setAttribute("aria-label", `Retirer ${category}`);
-    removeButton.textContent = "×";
-    removeButton.addEventListener("click", () => {
-      hiddenInput.value = uniqueSelected.filter((item) => item !== category).join(", ");
-      renderLdaMorphoPicker(card);
-    });
-
-    chip.appendChild(label);
-    chip.appendChild(removeButton);
-    list.appendChild(chip);
-  });
-}
-
-function renderLdaMorphoPickers(scope = document) {
-  scope.querySelectorAll("[data-lda-morpho-card]").forEach((card) => renderLdaMorphoPicker(card));
-}
-
 function renderClassificationModeCard(card) {
   if (!card) return;
   const hiddenInput = card.querySelector("#classificationMode, [data-source-id='classificationMode']");
@@ -2050,23 +1985,13 @@ function buildAnalysesConfig(analysisKind = "chd") {
         chd: false,
         afc: false,
         simi: false,
-        lda: false,
         suivi: true
-      };
-    case "lda":
-      return {
-        chd: false,
-        afc: false,
-        simi: false,
-        lda: true,
-        suivi: false
       };
     case "simi":
       return {
         chd: false,
         afc: false,
         simi: true,
-        lda: false,
         suivi: false
       };
     case "chd":
@@ -2075,7 +2000,6 @@ function buildAnalysesConfig(analysisKind = "chd") {
         chd: true,
         afc: true,
         simi: false,
-        lda: false,
         suivi: false
       };
   }
@@ -2171,19 +2095,7 @@ function buildJobConfig(analysisKind = "chd") {
     simi_community_method: document.getElementById("simiCommunityMethod").value,
     simi_halo: document.getElementById("simiHalo").checked,
     chd_dendrogram_width_px: dendrogramSizing.exportWidth,
-    chd_dendrogram_height_px: dendrogramSizing.exportHeight,
-    lda_mode_unite: document.getElementById("language").value,
-    lda_k: Math.max(2, Number(document.getElementById("ldaK").value) || 6),
-    lda_n_terms: Math.max(3, Number(document.getElementById("ldaTerms").value) || 8),
-    lda_min_df: Math.max(1, Number(document.getElementById("ldaMinDf").value) || 1),
-    lda_max_df: Math.min(1, Math.max(0.01, Number(document.getElementById("ldaMaxDf").value) || 0.95)),
-    lda_max_iter: Math.max(1, Number(document.getElementById("ldaMaxIter").value) || 100),
-    lda_ngram_range: splitCsvValues(document.getElementById("ldaNgramRange").value),
-    lda_segment_size: Number(document.getElementById("ldaSegmentSize").value) || 40,
-    lda_segmenter_sur_ponctuation_forte: document.getElementById("ldaStrongPunctuation").checked,
-    lda_retirer_stopwords: document.getElementById("ldaStopwords").checked,
-    lda_filtrage_morpho: document.getElementById("ldaMorpho").checked,
-    lda_pos_keep: splitCsvValues(document.getElementById("ldaPosKeep").value)
+    chd_dendrogram_height_px: dendrogramSizing.exportHeight
   };
 }
 
@@ -2316,18 +2228,6 @@ function activateChdSubTab(target) {
 
   chdSubPanels.forEach((panel) => {
     const isActive = panel.dataset.subpanel === target;
-    panel.classList.toggle("is-active", isActive);
-    panel.hidden = !isActive;
-  });
-}
-
-function activateLdaSubTab(target) {
-  ldaSubNavLinks.forEach((link) => {
-    link.classList.toggle("is-active", link.dataset.ldaSubtabTarget === target);
-  });
-
-  ldaSubPanels.forEach((panel) => {
-    const isActive = panel.dataset.ldaSubpanel === target;
     panel.classList.toggle("is-active", isActive);
     panel.hidden = !isActive;
   });
@@ -6911,7 +6811,7 @@ function renderMultimodalNodeDetail(container, payload, nodeId) {
     container.appendChild(list);
   } else {
     const text = document.createElement("p");
-    text.className = "lda-segment-text";
+    text.className = "multimodal-node-text";
     text.textContent = String(node?.text || node?.text_excerpt || "").trim() || "Aucun texte.";
     container.appendChild(text);
   }
@@ -8541,8 +8441,7 @@ function createDiagnosticState(message) {
   return wrapper;
 }
 
-function getNavigationTargetForAnalysisKind({ isLdaMode = false, isSimiMode = false, isSuiviMode = false } = {}) {
-  if (isLdaMode) return "lda";
+function getNavigationTargetForAnalysisKind({ isSimiMode = false, isSuiviMode = false } = {}) {
   if (isSimiMode) return "similitudes";
   if (isSuiviMode) return "suivi_longitudinal";
   return "resultats_chd";
@@ -8552,9 +8451,7 @@ function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
   const diagnosticText = String(message || "").trim() || "Aucun export exploitable n'a ete genere par l'analyse.";
   let containers = [];
 
-  if (navigationTarget === "lda") {
-    containers = [resultContainers.ldaBubblePlot, resultContainers.ldaHeatmap, resultContainers.ldaSegments];
-  } else if (navigationTarget === "similitudes") {
+  if (navigationTarget === "similitudes") {
     containers = [resultContainers.simiGraph];
   } else if (navigationTarget === "suivi_longitudinal") {
     containers = [resultContainers.suiviMeta, resultContainers.suiviIndicatorsTable, resultContainers.suiviEntropyPlot];
@@ -8579,8 +8476,6 @@ function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
     activateChdSubTab("dendrogramme");
   } else if (navigationTarget === "suivi_longitudinal") {
     activateSuiviSubTab("suivi_indicateurs");
-  } else if (navigationTarget === "lda") {
-    activateLdaSubTab("lda_bubble");
   }
 }
 
@@ -10381,84 +10276,6 @@ function formatJsdDisplayedTerm(term, lexical = false) {
   return lexical ? raw.replaceAll("_", " ") : raw;
 }
 
-function buildLdaTopicTermLookup(parsed, maxTermsPerTopic = 20) {
-  const topicGroups = parseLdaTopicGroups(parsed);
-  if (!topicGroups?.topics?.length) return new Map();
-
-  const lookup = new Map();
-  topicGroups.topics.forEach((topic) => {
-    const canonicalTopic = canonicalizeTopicLabel(topic);
-    let entries = (topicGroups.topicMap.get(topic) || [])
-      .filter((entry) => entry && entry.term && Number.isFinite(entry.prob) && entry.prob > 0);
-    if (Number.isFinite(maxTermsPerTopic) && maxTermsPerTopic > 0) {
-      entries = entries.slice(0, maxTermsPerTopic);
-    }
-    const terms = entries
-      .map((entry) => String(entry.term).trim())
-      .filter(Boolean);
-    lookup.set(canonicalTopic, terms);
-  });
-
-  return lookup;
-}
-
-function highlightLdaSegmentTerms(segment, terms) {
-  const source = String(segment || "");
-  const termList = [...new Set((terms || []).map((term) => String(term || "").trim()).filter(Boolean))]
-    .sort((left, right) => right.length - left.length);
-
-  if (!source || !termList.length) {
-    return escapeHtml(source);
-  }
-
-  const matches = [];
-  const overlaps = (start, end) => matches.some((item) => start < item.end && end > item.start);
-  const collectTermMatches = (term) => {
-    const regex = buildLooseTermRegex(term, "giu");
-    let found = false;
-    let match;
-    while ((match = regex.exec(source)) !== null) {
-      const prefix = match[1] || "";
-      const core = match[2] || "";
-      if (!core) continue;
-      const start = match.index + prefix.length;
-      const end = start + core.length;
-      if (overlaps(start, end)) continue;
-      matches.push({ start, end });
-      found = true;
-    }
-    return found;
-  };
-
-  termList.forEach((term) => {
-    const foundExact = collectTermMatches(term);
-    if (!foundExact && term.includes(" ")) {
-      const parts = term
-        .split(/\s+/)
-        .map((part) => part.trim())
-        .filter((part) => part.length >= 3);
-      parts.forEach((part) => {
-        collectTermMatches(part);
-      });
-    }
-  });
-
-  if (!matches.length) {
-    return escapeHtml(source);
-  }
-
-  matches.sort((left, right) => left.start - right.start);
-  let cursor = 0;
-  let html = "";
-  matches.forEach((match) => {
-    html += escapeHtml(source.slice(cursor, match.start));
-    html += `<mark class="lda-segment-mark">${escapeHtml(source.slice(match.start, match.end))}</mark>`;
-    cursor = match.end;
-  });
-  html += escapeHtml(source.slice(cursor));
-  return html;
-}
-
 function renderTable(container, parsed, options = {}) {
   if (!clearContainer(container)) {
     return;
@@ -10944,1235 +10761,6 @@ async function renderJsdContributionsTable(container, file, options = {}) {
   }
 }
 
-function sortTopicLabels(labels) {
-  return [...labels].sort((left, right) => {
-    const leftNum = Number.parseInt(String(left).replace(/[^\d-]/g, ""), 10);
-    const rightNum = Number.parseInt(String(right).replace(/[^\d-]/g, ""), 10);
-    if (Number.isFinite(leftNum) && Number.isFinite(rightNum)) return leftNum - rightNum;
-    return String(left).localeCompare(String(right), undefined, { numeric: true });
-  });
-}
-
-function getLdaTopicColor(index) {
-  const palette = [
-    "#9f2f2a",
-    "#2c7a7b",
-    "#b7791f",
-    "#6b46c1",
-    "#2f855a",
-    "#c05621",
-    "#285e61",
-    "#97266d"
-  ];
-  return palette[index % palette.length];
-}
-
-async function renderLdaTopTermsByTopic(container, file, options = {}) {
-  clearContainer(container);
-
-  if (!file) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV de top termes LDA n'a été trouvé."));
-    return;
-  }
-
-  try {
-    const parsed = parseCsv(await file.text());
-    if (!parsed.headers.length) {
-      container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV de top termes LDA n'a été trouvé."));
-      return;
-    }
-
-    const wideMatrix = parseLdaWideTopicMatrix(parsed);
-    if (wideMatrix) {
-      const title = document.createElement("h3");
-      title.className = "result-table-section-title";
-      title.textContent = options.heading || "Mots les plus probables par topic";
-      container.appendChild(title);
-
-      const caption = document.createElement("p");
-      caption.className = "result-table-caption";
-      caption.textContent = `${wideMatrix.topics.length} topic(s) détecté(s) dans ${file.name}.`;
-      container.appendChild(caption);
-
-      const stack = document.createElement("div");
-      stack.className = "lda-topic-sections";
-
-      wideMatrix.topics.forEach((topic) => {
-        const rows = wideMatrix.topicMap.get(topic) || [];
-        const topicMaxProb = rows.length ? rows[0].prob : 0;
-        const topicSumProb = rows.reduce((sum, entry) => sum + (Number.isFinite(entry.prob) ? entry.prob : 0), 0);
-        const rowsWithRelative = rows.map((entry) => ({
-          ...entry,
-          relativeProb: topicSumProb > 0 ? entry.prob / topicSumProb : Number.NaN
-        }));
-        const topicMaxRelative = rowsWithRelative.length
-          ? Math.max(...rowsWithRelative.map((entry) => entry.relativeProb).filter((value) => Number.isFinite(value)))
-          : 0;
-
-        const section = document.createElement("section");
-        section.className = "lda-topic-section";
-
-        const heading = document.createElement("h4");
-        heading.className = "lda-topic-section-title";
-        heading.textContent = topic.replaceAll("_", " ");
-        section.appendChild(heading);
-
-        const tableHost = document.createElement("div");
-        tableHost.className = "lda-topic-section-table";
-        section.appendChild(tableHost);
-
-        const parsedTable = {
-          headers: ["Rang", "Mot", "Probabilité LDA réelle", "Score relatif (mots retenus)"],
-          rows: rowsWithRelative.map((entry, index) => [
-            String(index + 1),
-            entry.term,
-            formatTableNumber(entry.prob, 6),
-            formatTableNumber(entry.relativeProb, 6)
-          ])
-        };
-
-        renderTable(tableHost, parsedTable, {
-          maxRows: parsedTable.rows.length,
-          rowClassName: ({ rowIndex }) => {
-            if (rowIndex === 0) return "is-lda-term-strong";
-            if (rowIndex === 1) return "is-lda-term-medium";
-            if (rowIndex === 2) return "is-lda-term-soft";
-            return "";
-          },
-          cellClassName: ({ columnIndex }) => {
-            if (columnIndex === 1) return "lda-term-cell";
-            if (columnIndex === 2) return "lda-probability-cell";
-            if (columnIndex === 3) return "lda-relative-score-cell";
-            return "";
-          },
-          cellRenderer: ({ cell, columnIndex }) => {
-            if (columnIndex !== 2 && columnIndex !== 3) return null;
-            const probText = String(cell || "");
-            const value = parseTableNumber(probText);
-            const scaleMax = columnIndex === 2 ? topicMaxProb : topicMaxRelative;
-            const relativeWidth = Number.isFinite(value) && Number.isFinite(scaleMax) && scaleMax > 0
-              ? Math.max(8, Math.min(100, (value / scaleMax) * 100))
-              : 8;
-            const meterClass = columnIndex === 2 ? "lda-probability-meter" : "lda-relative-meter";
-            const barClass = columnIndex === 2 ? "lda-probability-bar" : "lda-relative-bar";
-            return {
-              html: `<div class="${meterClass}"><span class="${barClass}" style="width:${relativeWidth}%"></span><strong class="lda-probability-value">${escapeHtml(probText)}</strong></div>`
-            };
-          }
-        });
-
-        stack.appendChild(section);
-      });
-
-      container.appendChild(stack);
-      return;
-    }
-
-    const topicIndex = headerIndex(parsed.headers, ["topic"]);
-    const termIndex = headerIndex(parsed.headers, ["term", "terme"]);
-    const probIndex = headerIndex(parsed.headers, ["prob", "probability", "poids"]);
-
-    if (topicIndex === -1 || termIndex === -1 || probIndex === -1) {
-      renderTable(container, parsed, {
-        title: options.title || "Top termes par topic",
-        emptyMessage: options.emptyMessage
-      });
-      return;
-    }
-
-    const groups = new Map();
-    parsed.rows.forEach((row) => {
-      const topic = String(row[topicIndex] || "").trim();
-      const term = String(row[termIndex] || "").trim();
-      const prob = parseTableNumber(row[probIndex]);
-      if (!topic || !term || !Number.isFinite(prob)) return;
-      if (!groups.has(topic)) groups.set(topic, []);
-      groups.get(topic).push({ term, prob });
-    });
-
-    if (!groups.size) {
-      container.appendChild(createEmptyState(options.emptyMessage || "Aucun top terme LDA exploitable n'a été trouvé."));
-      return;
-    }
-
-    const title = document.createElement("h3");
-    title.className = "result-table-section-title";
-    title.textContent = options.heading || "Mots les plus probables par topic";
-    container.appendChild(title);
-
-    const caption = document.createElement("p");
-    caption.className = "result-table-caption";
-    caption.textContent = `${groups.size} topic(s) détecté(s) dans ${file.name}.`;
-    container.appendChild(caption);
-
-    const stack = document.createElement("div");
-    stack.className = "lda-topic-sections";
-
-    sortTopicLabels([...groups.keys()]).forEach((topic) => {
-      const rows = [...groups.get(topic)].sort((left, right) => right.prob - left.prob);
-      const topicMaxProb = rows.length ? rows[0].prob : 0;
-      const topicSumProb = rows.reduce((sum, entry) => sum + (Number.isFinite(entry.prob) ? entry.prob : 0), 0);
-      const rowsWithRelative = rows.map((entry) => ({
-        ...entry,
-        relativeProb: topicSumProb > 0 ? entry.prob / topicSumProb : Number.NaN
-      }));
-      const topicMaxRelative = rowsWithRelative.length
-        ? Math.max(...rowsWithRelative.map((entry) => entry.relativeProb).filter((value) => Number.isFinite(value)))
-        : 0;
-
-      const section = document.createElement("section");
-      section.className = "lda-topic-section";
-
-      const heading = document.createElement("h4");
-      heading.className = "lda-topic-section-title";
-      heading.textContent = topic.replaceAll("_", " ");
-      section.appendChild(heading);
-
-      const tableHost = document.createElement("div");
-      tableHost.className = "lda-topic-section-table";
-      section.appendChild(tableHost);
-
-      const parsedTable = {
-        headers: ["Rang", "Mot", "Probabilité LDA réelle", "Score relatif (mots retenus)"],
-        rows: rowsWithRelative.map((entry, index) => [
-          String(index + 1),
-          entry.term,
-          formatTableNumber(entry.prob, 6),
-          formatTableNumber(entry.relativeProb, 6)
-        ])
-      };
-
-      renderTable(tableHost, parsedTable, {
-        maxRows: 200,
-        rowClassName: ({ rowIndex }) => {
-          if (rowIndex === 0) return "is-lda-term-strong";
-          if (rowIndex === 1) return "is-lda-term-medium";
-          if (rowIndex === 2) return "is-lda-term-soft";
-          return "";
-        },
-        cellClassName: ({ columnIndex }) => {
-          if (columnIndex === 1) return "lda-term-cell";
-          if (columnIndex === 2) return "lda-probability-cell";
-          if (columnIndex === 3) return "lda-relative-score-cell";
-          return "";
-        },
-        cellRenderer: ({ cell, columnIndex }) => {
-          if (columnIndex !== 2 && columnIndex !== 3) return null;
-          const probText = String(cell || "");
-          const value = parseTableNumber(probText);
-          const scaleMax = columnIndex === 2 ? topicMaxProb : topicMaxRelative;
-          const relativeWidth = Number.isFinite(value) && Number.isFinite(scaleMax) && scaleMax > 0
-            ? Math.max(8, Math.min(100, (value / scaleMax) * 100))
-            : 8;
-          const meterClass = columnIndex === 2 ? "lda-probability-meter" : "lda-relative-meter";
-          const barClass = columnIndex === 2 ? "lda-probability-bar" : "lda-relative-bar";
-          return {
-            html: `<div class="${meterClass}"><span class="${barClass}" style="width:${relativeWidth}%"></span><strong class="lda-probability-value">${escapeHtml(probText)}</strong></div>`
-          };
-        }
-      });
-
-      stack.appendChild(section);
-    });
-
-    container.appendChild(stack);
-  } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire les top termes LDA."));
-    log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
-  }
-}
-
-async function renderLdaTopicSegments(container, file, options = {}) {
-  clearContainer(container);
-
-  if (!file) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV de segments LDA n'a été trouvé."));
-    return;
-  }
-
-  try {
-    const fileText = await file.text();
-    const groups = new Map();
-    const skippedSegments = [];
-    const normalizedFileName = String(file.name || file.path || "").toLowerCase();
-    let topicTermLookup = new Map();
-
-    if (options.topTermsFile) {
-      try {
-        const topTermsParsed = parseCsv(await options.topTermsFile.text());
-        topicTermLookup = buildLdaTopicTermLookup(topTermsParsed, Number.isFinite(options.highlightTermsPerTopic) ? options.highlightTermsPerTopic : 20);
-      } catch (error) {
-        log(`[warn] Lecture des mots saillants LDA impossible (${options.topTermsFile.name}): ${error.message}`);
-      }
-    }
-
-    const pushEntry = ({ docId, texte, topicLabel, dominantProb, segmentExploitable = true, retainedTermsCount = 0, distribution = [] }) => {
-      const cleanedText = String(texte || "").replace(/\s+/g, " ").trim();
-      const cleanedDocId = String(docId || "").trim();
-      const cleanedTopic = String(topicLabel || "").trim();
-      if (!cleanedText || !cleanedDocId) return;
-      const numericDistribution = Array.isArray(distribution)
-        ? distribution.map((value) => Number(value)).filter((value) => Number.isFinite(value))
-        : [];
-      const inferredUniform = numericDistribution.length > 1 && (Math.max(...numericDistribution) - Math.min(...numericDistribution) < 1e-9);
-      if (!segmentExploitable || inferredUniform || !cleanedTopic) {
-        skippedSegments.push({
-          docId: cleanedDocId,
-          texte: cleanedText,
-          retainedTermsCount: Number.isFinite(retainedTermsCount) ? retainedTermsCount : 0
-        });
-        return;
-      }
-      if (!groups.has(cleanedTopic)) groups.set(cleanedTopic, []);
-      groups.get(cleanedTopic).push({
-        docId: cleanedDocId,
-        texte: cleanedText,
-        dominantProb
-      });
-    };
-
-    if (normalizedFileName.endsWith(".json")) {
-      const payload = JSON.parse(fileText);
-      const units = Array.isArray(payload?.unites) ? payload.unites : [];
-      units.forEach((unit) => {
-        const scores = Array.isArray(unit?.distribution_topics) ? unit.distribution_topics.map((value) => Number(value)) : [];
-        let dominantTopic = Number.parseInt(String(unit?.topic_dominant ?? "").replace(/[^\d-]/g, ""), 10);
-        let dominantProb = Number.NaN;
-        const retainedTermsCount = Number.parseInt(String(unit?.nb_termes_retenus ?? "0"), 10);
-        const segmentExploitable = Boolean(unit?.segment_exploitable ?? true);
-        if (!Number.isFinite(dominantTopic) && scores.length) {
-          let bestIndex = -1;
-          let bestScore = -Infinity;
-          scores.forEach((score, index) => {
-            if (Number.isFinite(score) && score > bestScore) {
-              bestScore = score;
-              bestIndex = index;
-            }
-          });
-          dominantTopic = bestIndex >= 0 ? bestIndex + 1 : Number.NaN;
-          dominantProb = Number.isFinite(bestScore) ? bestScore : Number.NaN;
-        } else if (Number.isFinite(dominantTopic) && scores.length >= dominantTopic) {
-          dominantProb = Number(scores[dominantTopic - 1]);
-        }
-
-        pushEntry({
-          docId: unit?.identifiant,
-          texte: unit?.texte,
-          topicLabel: Number.isFinite(dominantTopic) ? `Topic_${dominantTopic}` : "Topic_inconnu",
-          dominantProb,
-          segmentExploitable,
-          retainedTermsCount,
-          distribution: scores
-        });
-      });
-    } else {
-      const parsed = parseCsv(fileText);
-      if (!parsed.headers.length) {
-        container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV de segments LDA n'a été trouvé."));
-        return;
-      }
-
-      const textIndex = headerIndex(parsed.headers, ["texte", "text", "segment", "segment_texte"]);
-      const docIdIndex = headerIndex(parsed.headers, ["doc_id", "document", "doc"]);
-      const dominantTopicIndex = headerIndex(parsed.headers, ["topic_dominant", "topic dominant"]);
-      const dominantProbIndex = headerIndex(parsed.headers, ["prob_topic_dominant", "prob topic dominant", "prob_dominante"]);
-      const retainedTermsIndex = headerIndex(parsed.headers, ["nb_termes_retenus", "nb termes retenus"]);
-      const exploitableIndex = headerIndex(parsed.headers, ["segment_exploitable", "segment exploitable"]);
-      const topicColumns = parsed.headers
-        .map((header, index) => ({ header: String(header || "").trim(), index }))
-        .filter(({ header }) => /^topic[_\s-]*\d+/i.test(header));
-
-      if (textIndex === -1 || docIdIndex === -1) {
-        container.appendChild(
-          createEmptyState("Les segments de texte LDA ne sont pas disponibles dans ce run. Relancez LDA avec la version actuelle.")
-        );
-        return;
-      }
-
-      parsed.rows.forEach((row) => {
-        const texte = row[textIndex];
-        const docId = row[docIdIndex];
-        const retainedTermsCount = retainedTermsIndex !== -1 ? Number.parseInt(String(row[retainedTermsIndex] || "0"), 10) : 0;
-        const exploitableRaw = exploitableIndex !== -1 ? String(row[exploitableIndex] || "").trim().toLowerCase() : "";
-        const segmentExploitable = exploitableIndex !== -1
-          ? ["1", "true", "vrai", "yes", "oui"].includes(exploitableRaw)
-          : true;
-
-        let topicLabel = "";
-        if (dominantTopicIndex !== -1) {
-          const rawTopic = String(row[dominantTopicIndex] || "").trim();
-          const rawNumeric = Number.parseInt(rawTopic.replace(/[^\d-]/g, ""), 10);
-          if (Number.isFinite(rawNumeric)) {
-            topicLabel = `Topic_${rawNumeric}`;
-          } else if (rawTopic) {
-            topicLabel = canonicalizeTopicLabel(rawTopic).replace(/^topic_/, "Topic_");
-          }
-        }
-
-        let dominantProb = dominantProbIndex !== -1 ? parseTableNumber(row[dominantProbIndex]) : Number.NaN;
-        if (!topicLabel && topicColumns.length) {
-          let bestTopic = "";
-          let bestProb = -Infinity;
-          topicColumns.forEach(({ header, index }) => {
-            const prob = parseTableNumber(row[index]);
-            if (!Number.isFinite(prob)) return;
-            if (prob > bestProb) {
-              bestProb = prob;
-              bestTopic = header;
-            }
-          });
-          topicLabel = bestTopic || "";
-          dominantProb = Number.isFinite(bestProb) ? bestProb : dominantProb;
-        }
-
-        pushEntry({
-          docId,
-          texte,
-          topicLabel: topicLabel || "Topic_inconnu",
-          dominantProb,
-          segmentExploitable,
-          retainedTermsCount,
-          distribution: topicColumns.map(({ index }) => parseTableNumber(row[index]))
-        });
-      });
-    }
-
-    const topics = sortTopicLabels([...groups.keys()]);
-    if (!topics.length) {
-      container.appendChild(createEmptyState("Aucun segment LDA exploitable n'a été trouvé."));
-      return;
-    }
-
-    const heading = document.createElement("h3");
-    heading.className = "result-table-section-title";
-    heading.textContent = options.heading || "Segments de texte par topic";
-    container.appendChild(heading);
-
-    const caption = document.createElement("p");
-    caption.className = "result-table-caption";
-    caption.textContent = `${topics.length} topic(s) détecté(s) dans ${file.name}.`;
-    container.appendChild(caption);
-
-    const explanation = document.createElement("p");
-    explanation.className = "field-help";
-    explanation.textContent = "La probabilité dominante correspond à la probabilité que le segment appartienne à ce topic, et non au score d'un mot isolé.";
-    container.appendChild(explanation);
-
-    if (skippedSegments.length) {
-      const warning = document.createElement("p");
-      warning.className = "field-help field-help--alert";
-      warning.textContent = `${skippedSegments.length} segment(s) ne contiennent aucun terme ou n-gramme retenu par le modèle et ne sont donc pas affichés dans les topics.`;
-      container.appendChild(warning);
-    }
-
-    const tabs = document.createElement("div");
-    tabs.className = "local-tabs";
-    tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "Topics LDA");
-    container.appendChild(tabs);
-
-    const panels = document.createElement("div");
-    panels.className = "lda-segment-panels";
-    container.appendChild(panels);
-
-    const activateTopic = (activeTopic) => {
-      tabs.querySelectorAll(".local-tab-button").forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.ldaTopicTab === activeTopic);
-      });
-      panels.querySelectorAll(".lda-segment-panel").forEach((panel) => {
-        panel.hidden = panel.dataset.ldaTopicPanel !== activeTopic;
-      });
-    };
-
-    topics.forEach((topic, topicIndex) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `local-tab-button${topicIndex === 0 ? " is-active" : ""}`;
-      button.dataset.ldaTopicTab = topic;
-      button.textContent = topic.replaceAll("_", " ");
-      button.addEventListener("click", () => activateTopic(topic));
-      tabs.appendChild(button);
-
-      const panel = document.createElement("section");
-      panel.className = "lda-segment-panel";
-      panel.dataset.ldaTopicPanel = topic;
-      panel.hidden = topicIndex !== 0;
-
-      const entries = [...(groups.get(topic) || [])].sort((left, right) => {
-        const leftProb = Number.isFinite(left.dominantProb) ? left.dominantProb : -Infinity;
-        const rightProb = Number.isFinite(right.dominantProb) ? right.dominantProb : -Infinity;
-        if (rightProb !== leftProb) return rightProb - leftProb;
-        return left.docId.localeCompare(right.docId, undefined, { numeric: true });
-      });
-
-      const info = document.createElement("p");
-      info.className = "result-table-caption lda-segment-caption";
-      info.textContent = `${entries.length} segment(s) dominés par ${topic.replaceAll("_", " ")}.`;
-      panel.appendChild(info);
-
-      const tableHost = document.createElement("div");
-      panel.appendChild(tableHost);
-
-      const highlightTerms = topicTermLookup.get(canonicalizeTopicLabel(topic)) || [];
-      renderTable(tableHost, {
-        headers: ["Segment de texte", "Probabilité du topic dans le segment", "doc_id"],
-        rows: entries.map((entry) => [
-          entry.texte,
-          Number.isFinite(entry.dominantProb) ? formatTableNumber(entry.dominantProb, 6) : "",
-          entry.docId
-        ])
-      }, {
-        title: "Segments affichés",
-        maxRows: Number.isFinite(options.maxRows) ? options.maxRows : 120,
-        cellClassName: ({ columnIndex }) => {
-          if (columnIndex === 0) return "lda-segment-text-cell";
-          if (columnIndex === 1) return "lda-segment-prob-cell";
-          if (columnIndex === 2) return "lda-segment-id-cell";
-          return "";
-        },
-        cellRenderer: ({ cell, columnIndex }) => {
-          if (columnIndex === 0) {
-            return {
-              html: `<div class="lda-segment-text">${highlightLdaSegmentTerms(String(cell || ""), highlightTerms)}</div>`
-            };
-          }
-          return null;
-        }
-      });
-
-      panels.appendChild(panel);
-    });
-  } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire les segments LDA."));
-    log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
-  }
-}
-
-async function renderLdaTopTermsMatrix(container, file, options = {}) {
-  clearContainer(container);
-
-  if (!file) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV de top termes LDA n'a été trouvé."));
-    return;
-  }
-
-  try {
-    const parsed = parseCsv(await file.text());
-    const isFallbackTopTermsFile = /(^|\/)top_terms\.csv$/i.test(String(file?.name || "")) || /(^|\/)top_terms\.csv$/i.test(String(file?.path || ""));
-    if (!parsed.headers.length) {
-      container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV de top termes LDA n'a été trouvé."));
-      return;
-    }
-
-    const wideMatrix = parseLdaWideTopicMatrix(parsed);
-    if (wideMatrix) {
-      const matrixParsed = {
-        headers: ["Terme", ...wideMatrix.topics.map((topic) => topic.replaceAll("_", " "))],
-        rows: parsed.rows
-          .map((row) => {
-            const term = String(row[wideMatrix.termIndex] || "").trim();
-            if (!term) return null;
-            return [
-              term,
-              ...wideMatrix.topicColumns.map(({ index }) => {
-                  const prob = parseTableNumber(row[index]);
-                  return Number.isFinite(prob) ? formatTableNumber(prob, 6) : "";
-                })
-            ];
-          })
-          .filter(Boolean)
-      };
-
-      const title = document.createElement("h3");
-      title.className = "result-table-section-title";
-      title.textContent = "Tableau général des probabilités par mot";
-      container.appendChild(title);
-
-      if (isFallbackTopTermsFile) {
-        const warning = document.createElement("p");
-        warning.className = "field-help field-help--alert";
-        warning.textContent = "Affichage partiel : ce tableau provient de top_terms.csv. Certaines probabilités peuvent manquer tant que topic_term_matrix.csv n'est pas exporté.";
-        container.appendChild(warning);
-      }
-
-      renderTable(container, matrixParsed, {
-        title: options.title || "Probabilités mot × topic",
-        maxRows: matrixParsed.rows.length,
-        cellClassName: ({ row, columnIndex }) => {
-          if (columnIndex === 0) return "lda-matrix-term-cell";
-          const numericValues = row
-            .slice(1)
-            .map((value) => parseTableNumber(String(value || "")))
-            .filter((value) => Number.isFinite(value));
-          if (!numericValues.length) return "";
-          const current = parseTableNumber(String(row[columnIndex] || ""));
-          const maxValue = Math.max(...numericValues);
-          if (Number.isFinite(current) && Math.abs(current - maxValue) < 1e-12) {
-            return "lda-matrix-max-cell";
-          }
-          return "";
-        }
-      });
-      return;
-    }
-
-    const topicIndex = headerIndex(parsed.headers, ["topic"]);
-    const termIndex = headerIndex(parsed.headers, ["term", "terme"]);
-    const probIndex = headerIndex(parsed.headers, ["prob", "probability", "poids"]);
-
-    if (topicIndex === -1 || termIndex === -1 || probIndex === -1) {
-      renderTable(container, parsed, {
-        title: options.title || "Top termes par topic",
-        emptyMessage: options.emptyMessage
-      });
-      return;
-    }
-
-    const topicMap = new Map();
-    parsed.rows.forEach((row) => {
-      const topic = String(row[topicIndex] || "").trim();
-      const term = String(row[termIndex] || "").trim();
-      const prob = parseTableNumber(row[probIndex]);
-      if (!topic || !term || !Number.isFinite(prob)) return;
-      if (!topicMap.has(term)) topicMap.set(term, new Map());
-      topicMap.get(term).set(topic, prob);
-    });
-
-    const topics = sortTopicLabels(
-      [...new Set(parsed.rows.map((row) => String(row[topicIndex] || "").trim()).filter(Boolean))]
-    );
-
-    const entries = [...topicMap.entries()].map(([term, probs]) => {
-      const values = topics.map((topic) => probs.get(topic));
-      const maxProb = Math.max(...values.filter((value) => Number.isFinite(value)));
-      return { term, probs, maxProb };
-    });
-
-    entries.sort((left, right) => {
-      if (right.maxProb !== left.maxProb) return right.maxProb - left.maxProb;
-      return left.term.localeCompare(right.term, undefined, { sensitivity: "base" });
-    });
-
-    const matrixParsed = {
-      headers: ["Terme", ...topics.map((topic) => topic.replaceAll("_", " "))],
-      rows: entries.map(({ term, probs }) => [
-        term,
-        ...topics.map((topic) => {
-          const prob = probs.get(topic);
-          return Number.isFinite(prob) ? formatTableNumber(prob, 6) : "";
-        })
-      ])
-    };
-
-    const title = document.createElement("h3");
-    title.className = "result-table-section-title";
-    title.textContent = "Tableau général des probabilités par mot";
-    container.appendChild(title);
-
-    if (isFallbackTopTermsFile) {
-      const warning = document.createElement("p");
-      warning.className = "field-help field-help--alert";
-      warning.textContent = "Affichage partiel : ce tableau provient de top_terms.csv. Certaines probabilités peuvent manquer tant que topic_term_matrix.csv n'est pas exporté.";
-      container.appendChild(warning);
-    }
-
-    renderTable(container, matrixParsed, {
-      title: options.title || "Probabilités mot × topic",
-      maxRows: matrixParsed.rows.length,
-      cellClassName: ({ row, columnIndex }) => {
-        if (columnIndex === 0) return "lda-matrix-term-cell";
-        const numericValues = row
-          .slice(1)
-          .map((value) => parseTableNumber(String(value || "")))
-          .filter((value) => Number.isFinite(value));
-        if (!numericValues.length) return "";
-        const current = parseTableNumber(String(row[columnIndex] || ""));
-        const maxValue = Math.max(...numericValues);
-        if (Number.isFinite(current) && Math.abs(current - maxValue) < 1e-9) {
-          return "lda-matrix-max-cell";
-        }
-        return "";
-      }
-    });
-  } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire le tableau général LDA."));
-    log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
-  }
-}
-
-function parseLdaTopTermsLookup(parsed) {
-  const topicIndex = headerIndex(parsed.headers, ["topic"]);
-  const termIndex = headerIndex(parsed.headers, ["term", "terme"]);
-  const probIndex = headerIndex(parsed.headers, ["prob", "probability", "poids"]);
-  if (topicIndex === -1 || termIndex === -1 || probIndex === -1) {
-    return null;
-  }
-
-  const topics = new Map();
-  parsed.rows.forEach((row) => {
-    const topic = String(row[topicIndex] || "").trim();
-    const term = String(row[termIndex] || "").trim();
-    const prob = parseTableNumber(row[probIndex]);
-    if (!topic || !term || !Number.isFinite(prob)) return;
-    const canonicalTopic = canonicalizeTopicLabel(topic);
-    if (!topics.has(canonicalTopic)) topics.set(canonicalTopic, []);
-    topics.get(canonicalTopic).push({ term, prob });
-  });
-
-  topics.forEach((entries) => entries.sort((left, right) => right.prob - left.prob));
-  return topics;
-}
-
-function parseLdaWideTopicMatrix(parsed) {
-  const termIndex = headerIndex(parsed.headers, ["term", "terme"]);
-  if (termIndex === -1) return null;
-
-  const topicColumns = parsed.headers
-    .map((header, index) => ({ header: String(header || "").trim(), index }))
-    .filter(({ header, index }) => index !== termIndex && /^topic[_\s-]*\d+/i.test(header));
-
-  if (!topicColumns.length) return null;
-
-  const topics = sortTopicLabels(topicColumns.map(({ header }) => header));
-  const orderedTopicColumns = topics.map((topic) => topicColumns.find((column) => column.header === topic)).filter(Boolean);
-  const topicMap = new Map(
-    topics.map((topic) => [topic, []])
-  );
-
-  parsed.rows.forEach((row) => {
-    const term = String(row[termIndex] || "").trim();
-    if (!term) return;
-    topicColumns.forEach(({ header, index }) => {
-      const prob = parseTableNumber(row[index]);
-      if (!Number.isFinite(prob)) return;
-      topicMap.get(header).push({ term, prob });
-    });
-  });
-
-  topicMap.forEach((entries) => entries.sort((left, right) => right.prob - left.prob));
-
-  return {
-    termIndex,
-    topics,
-    topicColumns: orderedTopicColumns,
-    topicMap
-  };
-}
-
-function parseLdaTopicGroups(parsed) {
-  const wideMatrix = parseLdaWideTopicMatrix(parsed);
-  if (wideMatrix) {
-    return {
-      topics: wideMatrix.topics,
-      topicMap: wideMatrix.topicMap,
-      sourceType: "matrix"
-    };
-  }
-
-  const topicIndex = headerIndex(parsed.headers, ["topic"]);
-  const termIndex = headerIndex(parsed.headers, ["term", "terme"]);
-  const probIndex = headerIndex(parsed.headers, ["prob", "probability", "poids"]);
-  if (topicIndex === -1 || termIndex === -1 || probIndex === -1) {
-    return null;
-  }
-
-  const topicMap = new Map();
-  parsed.rows.forEach((row) => {
-    const topic = String(row[topicIndex] || "").trim();
-    const term = String(row[termIndex] || "").trim();
-    const prob = parseTableNumber(row[probIndex]);
-    if (!topic || !term || !Number.isFinite(prob)) return;
-    if (!topicMap.has(topic)) topicMap.set(topic, []);
-    topicMap.get(topic).push({ term, prob });
-  });
-
-  const topics = sortTopicLabels([...topicMap.keys()]);
-  topicMap.forEach((entries) => entries.sort((left, right) => right.prob - left.prob));
-
-  return {
-    topics,
-    topicMap,
-    sourceType: "top_terms"
-  };
-}
-
-function distributePositions(count, min, max) {
-  if (!count) return [];
-  if (count === 1) return [(min + max) / 2];
-  const step = (max - min) / (count - 1);
-  return Array.from({ length: count }, (_value, index) => min + (step * index));
-}
-
-function truncateLdaNodeLabel(value, maxLength = 28) {
-  const text = String(value || "").trim();
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
-}
-
-function buildLdaBipartiteGraph(topicGroups, options = {}) {
-  const topN = Math.max(4, Number.parseInt(String(options.topN || 12), 10) || 12);
-  const scoreMode = options.scoreMode === "relative" ? "relative" : "real";
-
-  const topics = topicGroups.topics
-    .map((topic, topicIndex) => {
-      const entries = (topicGroups.topicMap.get(topic) || [])
-        .filter((entry) => entry && entry.term && Number.isFinite(entry.prob) && entry.prob > 0)
-        .slice(0, topN);
-      if (!entries.length) return null;
-      const retainedSum = entries.reduce((sum, entry) => sum + entry.prob, 0);
-      const enrichedEntries = entries.map((entry, rank) => ({
-        ...entry,
-        rank,
-        relativeProb: retainedSum > 0 ? entry.prob / retainedSum : 0
-      }));
-      return {
-        key: topic,
-        label: topic.replaceAll("_", " "),
-        topicIndex,
-        color: getLdaTopicColor(topicIndex),
-        entries: enrichedEntries
-      };
-    })
-    .filter(Boolean);
-
-  const wordMap = new Map();
-  const edges = [];
-
-  topics.forEach((topic) => {
-    topic.entries.forEach((entry) => {
-      const score = scoreMode === "relative" ? entry.relativeProb : entry.prob;
-      if (!Number.isFinite(score) || score <= 0) return;
-
-      edges.push({
-        topicKey: topic.key,
-        topicLabel: topic.label,
-        topicIndex: topic.topicIndex,
-        topicColor: topic.color,
-        term: entry.term,
-        realProb: entry.prob,
-        relativeProb: entry.relativeProb,
-        score,
-        rank: entry.rank
-      });
-
-      const existing = wordMap.get(entry.term) || {
-        term: entry.term,
-        strongestScore: -Infinity,
-        strongestTopicIndex: topic.topicIndex,
-        strongestTopicLabel: topic.label,
-        strongestTopicColor: topic.color,
-        maxRealProb: entry.prob,
-        maxRelativeProb: entry.relativeProb,
-        links: 0
-      };
-
-      existing.links += 1;
-      existing.maxRealProb = Math.max(existing.maxRealProb, entry.prob);
-      existing.maxRelativeProb = Math.max(existing.maxRelativeProb, entry.relativeProb);
-
-      if (score > existing.strongestScore) {
-        existing.strongestScore = score;
-        existing.strongestTopicIndex = topic.topicIndex;
-        existing.strongestTopicLabel = topic.label;
-        existing.strongestTopicColor = topic.color;
-      }
-
-      wordMap.set(entry.term, existing);
-    });
-  });
-
-  const words = [...wordMap.values()].sort((left, right) => {
-    if (left.strongestTopicIndex !== right.strongestTopicIndex) {
-      return left.strongestTopicIndex - right.strongestTopicIndex;
-    }
-    if (right.strongestScore !== left.strongestScore) {
-      return right.strongestScore - left.strongestScore;
-    }
-    return left.term.localeCompare(right.term, undefined, { sensitivity: "base" });
-  });
-
-  const maxScore = edges.length
-    ? Math.max(...edges.map((edge) => edge.score).filter((value) => Number.isFinite(value)))
-    : 0;
-
-  return {
-    topics,
-    words,
-    edges,
-    maxScore,
-    topN,
-    scoreMode,
-    isPartial: topicGroups.sourceType !== "matrix"
-  };
-}
-
-function buildLdaBipartiteGraphSvg(graph) {
-  if (!graph.edges.length || !graph.topics.length || !graph.words.length) {
-    return "";
-  }
-
-  const width = 1080;
-  const wordBandHeight = Math.max(24, graph.words.length > 40 ? 22 : 26);
-  const topicBandHeight = Math.max(70, graph.topics.length > 8 ? 62 : 76);
-  const innerHeight = Math.max(
-    320,
-    Math.max(
-      (graph.words.length - 1) * wordBandHeight,
-      (graph.topics.length - 1) * topicBandHeight
-    )
-  );
-  const height = innerHeight + 120;
-  const topPadding = 58;
-  const bottomPadding = 58;
-  const topicX = 180;
-  const wordX = width - 250;
-  const topicNodeRadius = 12;
-  const wordNodeRadius = 7;
-  const controlSpan = 170;
-  const topicYs = distributePositions(graph.topics.length, topPadding, height - bottomPadding);
-  const wordYs = distributePositions(graph.words.length, topPadding, height - bottomPadding);
-  const topicYMap = new Map(graph.topics.map((topic, index) => [topic.key, topicYs[index]]));
-  const wordYMap = new Map(graph.words.map((word, index) => [word.term, wordYs[index]]));
-
-  const gridLines = distributePositions(5, topPadding, height - bottomPadding)
-    .map((y) => `<line x1="${topicX + 24}" y1="${y}" x2="${wordX - 24}" y2="${y}" class="lda-network-grid" />`)
-    .join("");
-
-  const edgesMarkup = graph.edges
-    .map((edge) => {
-      const startY = topicYMap.get(edge.topicKey);
-      const endY = wordYMap.get(edge.term);
-      const weightRatio = graph.maxScore > 0 ? edge.score / graph.maxScore : 0;
-      const strokeWidth = 1.2 + (weightRatio * 6.2);
-      const strokeOpacity = 0.16 + (weightRatio * 0.76);
-      const controlOffset = Math.max(82, controlSpan - (edge.rank * 4));
-      const path = [
-        `M ${topicX + topicNodeRadius} ${startY}`,
-        `C ${topicX + controlOffset} ${startY}, ${wordX - controlOffset} ${endY}, ${wordX - wordNodeRadius} ${endY}`
-      ].join(" ");
-      const title = [
-        `${edge.topicLabel} → ${edge.term}`,
-        `Score du modèle : ${formatTableNumber(edge.realProb, 6)}`
-      ].join(" | ");
-      return `<path d="${path}" fill="none" stroke="${edge.topicColor}" stroke-width="${strokeWidth.toFixed(2)}" stroke-opacity="${strokeOpacity.toFixed(3)}"><title>${escapeHtml(title)}</title></path>`;
-    })
-    .join("");
-
-  const topicNodesMarkup = graph.topics
-    .map((topic) => {
-      const y = topicYMap.get(topic.key);
-      return `
-        <g class="lda-network-topic-node">
-          <text x="${topicX - 26}" y="${y + 5}" text-anchor="end" class="lda-network-topic-label">${escapeHtml(topic.label)}</text>
-          <circle cx="${topicX}" cy="${y}" r="${topicNodeRadius}" fill="${topic.color}" stroke="rgba(17,17,17,0.22)" stroke-width="1.2"></circle>
-        </g>
-      `;
-    })
-    .join("");
-
-  const wordNodesMarkup = graph.words
-    .map((word) => {
-      const y = wordYMap.get(word.term);
-      const label = truncateLdaNodeLabel(word.term, 34);
-      const title = [
-        word.term,
-        `Topic dominant : ${word.strongestTopicLabel}`,
-        `Score du modèle max : ${formatTableNumber(word.maxRealProb, 6)}`
-      ].join(" | ");
-      return `
-        <g class="lda-network-word-node">
-          <circle cx="${wordX}" cy="${y}" r="${wordNodeRadius}" fill="#fffdf8" stroke="${word.strongestTopicColor}" stroke-width="${word.links > 1 ? 2.2 : 1.4}"></circle>
-          <text x="${wordX + 18}" y="${y + 4}" class="lda-network-word-label">${escapeHtml(label)}</text>
-          <title>${escapeHtml(title)}</title>
-        </g>
-      `;
-    })
-    .join("");
-
-  return `
-    <svg class="lda-network-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Réseau topics × mots">
-      <rect x="0" y="0" width="${width}" height="${height}" rx="18" ry="18" class="lda-network-background"></rect>
-      ${gridLines}
-      ${edgesMarkup}
-      ${topicNodesMarkup}
-      ${wordNodesMarkup}
-    </svg>
-  `;
-}
-
-async function renderLdaBipartiteNetwork(container, file, options = {}) {
-  clearContainer(container);
-
-  if (!file) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV LDA exploitable n'a été trouvé."));
-    return;
-  }
-
-  try {
-    const parsed = parseCsv(await file.text());
-    const topicGroups = parseLdaTopicGroups(parsed);
-    if (!topicGroups?.topics?.length) {
-      container.appendChild(createEmptyState(options.emptyMessage || "Aucun export CSV LDA exploitable n'a été trouvé."));
-      return;
-    }
-
-    const title = document.createElement("h3");
-    title.className = "result-table-section-title";
-    title.textContent = options.heading || "Réseau topics × mots";
-    container.appendChild(title);
-
-    const intro = document.createElement("p");
-    intro.className = "result-table-caption";
-    intro.textContent = "Chaque lien relie un topic à un mot. Plus le lien est visible, plus le mot est important dans ce topic.";
-    container.appendChild(intro);
-
-    const scoreHelp = document.createElement("p");
-    scoreHelp.className = "field-help";
-    scoreHelp.textContent = "Score du modèle : probabilité P(mot | topic) calculée par le LDA.";
-    container.appendChild(scoreHelp);
-
-    if (topicGroups.sourceType !== "matrix") {
-      const warning = document.createElement("p");
-      warning.className = "field-help field-help--alert";
-      warning.textContent = "Affichage partiel : le réseau est construit à partir de top_terms.csv. Pour un réseau complet, relancez LDA avec topic_term_matrix.csv.";
-      container.appendChild(warning);
-    }
-
-    const controls = document.createElement("div");
-    controls.className = "lda-network-controls";
-    controls.innerHTML = `
-      <label class="lda-network-control">
-        <span>Mots retenus par topic</span>
-        <select data-lda-network-topn>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-          <option value="30">30</option>
-        </select>
-      </label>
-    `;
-    container.appendChild(controls);
-
-    const metrics = document.createElement("p");
-    metrics.className = "lda-network-metrics";
-    container.appendChild(metrics);
-
-    const canvas = document.createElement("div");
-    canvas.className = "lda-network-canvas";
-    container.appendChild(canvas);
-
-    const topNSelect = controls.querySelector("[data-lda-network-topn]");
-    if (topNSelect instanceof HTMLSelectElement && Number.isFinite(options.defaultTopN)) {
-      topNSelect.value = String(options.defaultTopN);
-    }
-
-    const draw = () => {
-      const graph = buildLdaBipartiteGraph(topicGroups, {
-        scoreMode: "real",
-        topN: topNSelect instanceof HTMLSelectElement ? topNSelect.value : 10
-      });
-
-      metrics.textContent = `${graph.topics.length} topic(s) · ${graph.words.length} mot(s) visibles · ${graph.edges.length} lien(s)`;
-
-      if (!graph.edges.length) {
-        canvas.innerHTML = "";
-        canvas.appendChild(createEmptyState("Aucun lien exploitable n'a été trouvé pour ce réseau LDA."));
-        return;
-      }
-
-      canvas.innerHTML = buildLdaBipartiteGraphSvg(graph);
-    };
-
-    topNSelect?.addEventListener("change", draw);
-    draw();
-  } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire le réseau LDA."));
-    log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
-  }
-}
-
-async function renderLdaDocTopicsWithWords(container, topTermsFile, options = {}) {
-  clearContainer(container);
-
-  if (!topTermsFile) {
-    container.appendChild(
-      createEmptyState(options.emptyMessage || "Aucun export CSV de top termes LDA n'a été trouvé.")
-    );
-    return;
-  }
-
-  try {
-    const parsed = parseCsv(await topTermsFile.text());
-    if (!parsed.headers.length) {
-      container.appendChild(
-        createEmptyState(options.emptyMessage || "Aucun export CSV de top termes LDA n'a été trouvé.")
-      );
-      return;
-    }
-
-    const topicIndex = headerIndex(parsed.headers, ["topic"]);
-    const termIndex = headerIndex(parsed.headers, ["term", "terme"]);
-    const probIndex = headerIndex(parsed.headers, ["prob", "probability", "poids"]);
-
-    if (topicIndex === -1 || termIndex === -1 || probIndex === -1) {
-      renderTable(container, parsed, {
-        title: options.title || "Mots classés par topic",
-        emptyMessage: options.emptyMessage
-      });
-      return;
-    }
-
-    const groups = new Map();
-    parsed.rows.forEach((row) => {
-      const topic = String(row[topicIndex] || "").trim();
-      const term = String(row[termIndex] || "").trim();
-      const prob = parseTableNumber(row[probIndex]);
-      if (!topic || !term || !Number.isFinite(prob)) return;
-      if (!groups.has(topic)) groups.set(topic, []);
-      groups.get(topic).push({ term, prob });
-    });
-
-    const topics = sortTopicLabels([...groups.keys()]);
-    const orderedGroups = topics.map((topic) =>
-      [...groups.get(topic)].sort((left, right) => right.prob - left.prob)
-    );
-    const maxRank = orderedGroups.reduce((acc, rows) => Math.max(acc, rows.length), 0);
-
-    const parsedTable = {
-      headers: ["Rang", ...topics.map((topic) => topic.replaceAll("_", " "))],
-      rows: Array.from({ length: maxRank }, (_, rankIndex) => [
-        String(rankIndex + 1),
-        ...orderedGroups.map((rows) => {
-          const entry = rows[rankIndex];
-          if (!entry) return "—";
-          return `${entry.term}|||${formatTableNumber(entry.prob, 6)}`;
-        })
-      ])
-    };
-
-    const title = document.createElement("h3");
-    title.className = "result-table-section-title";
-    title.textContent = "Tableau des mots par topic";
-    container.appendChild(title);
-
-    renderTable(container, parsedTable, {
-      title: options.title || "Tableau des mots par topic",
-      maxRows: 250,
-      cellRenderer: ({ cell, columnIndex }) => {
-        if (columnIndex === 0) return null;
-        const raw = String(cell || "");
-        if (!raw.includes("|||")) return null;
-        const [term, prob] = raw.split("|||");
-        return {
-          html: `<strong>${escapeHtml(term)}</strong><br><span class="lda-topic-inline-prob">${escapeHtml(prob)}</span>`
-        };
-      },
-      cellClassName: ({ row, columnIndex }) => {
-        if (columnIndex > 0) return "lda-matrix-term-cell";
-        return "";
-      }
-    });
-  } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire le tableau des mots par topic LDA."));
-    log(`[error] Lecture CSV impossible (${topTermsFile.name}): ${error.message}`);
-  }
-}
-
-async function renderLdaDocTopicsSummary(container, file, options = {}) {
-  clearContainer(container);
-
-  if (!file) {
-    container.appendChild(
-      createEmptyState(options.emptyMessage || "Aucun export CSV de distribution topics/documents n'a été trouvé.")
-    );
-    return;
-  }
-
-  try {
-    const parsed = parseCsv(await file.text());
-    if (!parsed.headers.length) {
-      container.appendChild(
-        createEmptyState(options.emptyMessage || "Aucun export CSV de distribution topics/documents n'a été trouvé.")
-      );
-      return;
-    }
-
-    const docIdIndex = headerIndex(parsed.headers, ["doc_id", "document", "doc"]);
-    const topicColumns = parsed.headers
-      .map((header, index) => ({ header: String(header || "").trim(), index }))
-      .filter(({ header, index }) => index !== docIdIndex && /^topic[_\s-]*\d+/i.test(header));
-
-    if (!topicColumns.length) {
-      renderTable(container, parsed, {
-        title: options.title || "Distribution topics / documents",
-        emptyMessage: options.emptyMessage
-      });
-      return;
-    }
-
-    const summaryByTopic = new Map(
-      topicColumns.map(({ header }) => [
-        header,
-        { docs: 0, sumProb: 0, maxProb: 0 }
-      ])
-    );
-
-    parsed.rows.forEach((row) => {
-      let bestTopic = null;
-      let bestProb = -Infinity;
-      topicColumns.forEach(({ header, index }) => {
-        const prob = parseTableNumber(row[index]);
-        if (!Number.isFinite(prob)) return;
-        if (prob > bestProb) {
-          bestProb = prob;
-          bestTopic = header;
-        }
-      });
-
-      if (!bestTopic || !Number.isFinite(bestProb)) return;
-      const bucket = summaryByTopic.get(bestTopic);
-      bucket.docs += 1;
-      bucket.sumProb += bestProb;
-      bucket.maxProb = Math.max(bucket.maxProb, bestProb);
-    });
-
-    const summaryParsed = {
-      headers: ["Topic", "Segments dominés", "Part des segments", "Probabilité moyenne", "Probabilité max"],
-      rows: sortTopicLabels([...summaryByTopic.keys()]).map((topic) => {
-        const item = summaryByTopic.get(topic);
-        const share = parsed.rows.length > 0 ? item.docs / parsed.rows.length : 0;
-        const avgProb = item.docs > 0 ? item.sumProb / item.docs : 0;
-        return [
-          topic.replaceAll("_", " "),
-          String(item.docs),
-          `${formatTableNumber(share * 100, 1)} %`,
-          `${formatTableNumber(avgProb * 100, 1)} %`,
-          `${formatTableNumber(item.maxProb * 100, 1)} %`
-        ];
-      })
-    };
-
-    const title = document.createElement("h3");
-    title.className = "result-table-section-title";
-    title.textContent = "Répartition dominante des segments par topic";
-    container.appendChild(title);
-
-    renderTable(container, summaryParsed, {
-      title: options.title || "Synthèse topics / documents",
-      maxRows: topicColumns.length,
-      rowClassName: ({ rowIndex }) => `lda-summary-row lda-summary-row--${rowIndex % 4}`
-    });
-  } catch (error) {
-    clearContainer(container);
-    container.appendChild(createEmptyState("Impossible de lire la distribution topics/documents."));
-    log(`[error] Lecture CSV impossible (${file.name}): ${error.message}`);
-  }
-}
-
 function headerIndex(headers, candidates) {
   const normalized = headers.map((header) => String(header || "").replace(/^\ufeff/, "").trim().toLowerCase());
   for (const candidate of candidates) {
@@ -12180,21 +10768,6 @@ function headerIndex(headers, candidates) {
     if (index !== -1) return index;
   }
   return -1;
-}
-
-function canonicalizeTopicLabel(value) {
-  const raw = String(value || "").replace(/^\ufeff/, "").trim();
-  if (!raw) return "";
-
-  const numericMatch = raw.match(/(\d+)/);
-  if (numericMatch) {
-    return `topic_${Number.parseInt(numericMatch[1], 10)}`;
-  }
-
-  return raw
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_")
-    .replace(/_+/g, "_");
 }
 
 function sortClassLabels(labels) {
@@ -13078,7 +11651,6 @@ function applyDialogValuesToSource() {
     }
   });
   renderClassificationModeCards(document);
-  renderLdaMorphoPickers(document);
 }
 
 function applyDialogValues(dialogContent) {
@@ -13115,7 +11687,6 @@ function applyDialogValues(dialogContent) {
     }
   });
   renderClassificationModeCards(document);
-  renderLdaMorphoPickers(document);
 }
 
 function populateChdConfigDialog() {
@@ -13217,20 +11788,6 @@ async function openSimiConfigDialog() {
 function closeSimiConfigDialog() {
   if (simiConfigDialog.open) {
     simiConfigDialog.close();
-  }
-}
-
-function openLdaConfigDialog() {
-  populateConfigDialog(ldaConfigDialogContent, ldaConfigSourceCards, "__lda_dialog");
-  renderLdaMorphoPickers(ldaConfigDialogContent);
-  if (typeof ldaConfigDialog.showModal === "function") {
-    ldaConfigDialog.showModal();
-  }
-}
-
-function closeLdaConfigDialog() {
-  if (ldaConfigDialog.open) {
-    ldaConfigDialog.close();
   }
 }
 
@@ -13490,7 +12047,15 @@ async function renderExports(entries, index) {
     ["iramuteq", findFile(index, [(path) => path.endsWith("dendrogramme_chd.png")])],
     ["factoextra", findFile(index, [(path) => path.endsWith("dendrogramme_chd_factoextra.png")])]
   ]);
-  renderSelectableChdDendrogram();
+  try {
+    renderSelectableChdDendrogram();
+  } catch (error) {
+    log(`[error] Rendu du dendrogramme impossible : ${error?.message || String(error)}`);
+    setContainerEmptyState(
+      resultContainers.chdDendrogramme,
+      "Le dendrogramme principal n'a pas pu etre affiche, mais les autres exports restent disponibles."
+    );
+  }
 
   await safeRenderExportSection("CHD", async () => {
     const chdSegmentsFile = findFile(index, [(path) => path.endsWith("segments_par_classe.txt")]);
@@ -13624,129 +12189,6 @@ async function renderExports(entries, index) {
     await renderLongitudinalExports(index);
   });
 
-  await safeRenderExportSection("LDA", async () => {
-    const ldaWordcloudFiles = findFiles(
-      index,
-      (path) => path.endsWith(".png") && (path.includes("wordcloud_lda") || path.includes("lda/wordcloud"))
-    )
-      .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }))
-      .map(({ path, file }) => ({
-        file,
-        title: path.split("/").pop().replace(".png", "")
-      }));
-
-    renderImageGallery(
-      resultContainers.ldaWordclouds,
-      ldaWordcloudFiles,
-      "Aucun nuage LDA détecté dans le dossier chargé.",
-      { previewKicker: "LDA" }
-    );
-
-    const ldaVisHtmlFile = findFile(index, [
-      (path) => path.endsWith("lda/pyldavis.html"),
-      (path) => path.endsWith("pyldavis.html")
-    ]);
-    if (ldaVisHtmlFile) {
-      try {
-        renderHtmlFrame(
-          resultContainers.ldaBubblePlot,
-          await ldaVisHtmlFile.text(),
-          "Impossible de lire la visualisation pyLDAvis."
-        );
-      } catch (error) {
-        clearContainer(resultContainers.ldaBubblePlot);
-        resultContainers.ldaBubblePlot.appendChild(createEmptyState("Impossible de lire la visualisation pyLDAvis."));
-        log(`[error] Lecture HTML impossible (${ldaVisHtmlFile.name}): ${error.message}`);
-      }
-    } else {
-      clearContainer(resultContainers.ldaBubblePlot);
-      resultContainers.ldaBubblePlot.appendChild(
-        createEmptyState("Visualisation pyLDAvis indisponible. Vérifiez que le package Python pyLDAvis est installé.")
-      );
-    }
-
-    const ldaHeatmapFile = findFile(index, [
-      (path) => path.endsWith("lda/heatmap_lda.png"),
-      (path) => path.endsWith("/heatmap_lda.png"),
-      (path) => path.endsWith("heatmap_lda.png")
-    ]);
-    if (ldaHeatmapFile) {
-      renderImage(resultContainers.ldaHeatmap, ldaHeatmapFile, "Heatmap LDA mots × topics");
-      const heatmapImage = resultContainers.ldaHeatmap?.querySelector(".result-image");
-      if (heatmapImage instanceof HTMLImageElement) {
-        heatmapImage.classList.add("is-clickable");
-        heatmapImage.addEventListener("click", () =>
-          openImagePreview("Heatmap mots × topics", heatmapImage.src, "LDA")
-        );
-      }
-    } else {
-      clearContainer(resultContainers.ldaHeatmap);
-      resultContainers.ldaHeatmap.appendChild(
-        createEmptyState("Aucune heatmap LDA détectée dans le dossier chargé.")
-      );
-    }
-
-    const ldaTopTermsFile = findFile(index, [
-      (path) => path.endsWith("lda/topic_term_matrix.csv"),
-      (path) => path.endsWith("/topic_term_matrix.csv"),
-      (path) => path.endsWith("topic_term_matrix.csv"),
-      (path) => path.endsWith("lda/top_terms.csv"),
-      (path) => path.endsWith("/top_terms.csv"),
-      (path) => path.endsWith("top_terms.csv"),
-      (path) => path.endsWith("lda/topics.csv"),
-      (path) => path.endsWith("/topics.csv") && !path.endsWith("doc_topics.csv") && !path.endsWith("documents_topics.csv")
-    ]);
-    log(`[info] Fichier LDA retenu pour les mots : ${ldaTopTermsFile?.name || "aucun"}.`);
-    await renderLdaBipartiteNetwork(
-      resultContainers.ldaNetwork,
-      ldaTopTermsFile,
-      {
-        heading: "Réseau topics × mots",
-        emptyMessage: "Aucun export CSV LDA exploitable n'a été trouvé."
-      }
-    );
-
-    await renderLdaTopTermsMatrix(
-      resultContainers.ldaTopTerms,
-      ldaTopTermsFile,
-      {
-        title: "Probabilités mot × topic",
-        emptyMessage: "Aucun export CSV de top termes LDA n'a été trouvé."
-      }
-    );
-
-    await renderLdaTopTermsByTopic(
-      resultContainers.ldaDocTopics,
-      ldaTopTermsFile,
-      {
-        heading: "Tableaux par topic",
-        title: "Tableaux par topic",
-        emptyMessage: "Aucun export CSV de top termes LDA n'a été trouvé."
-      }
-    );
-
-    const ldaSegmentsFile = findFile(index, [
-      (path) => path.endsWith("lda/lda_python_output.json"),
-      (path) => path.endsWith("/lda_python_output.json"),
-      (path) => path.endsWith("lda_python_output.json"),
-      (path) => path.endsWith("lda/segments_topics.csv"),
-      (path) => path.endsWith("/segments_topics.csv"),
-      (path) => path.endsWith("segments_topics.csv")
-    ]);
-    await renderLdaTopicSegments(
-      resultContainers.ldaSegments,
-      ldaSegmentsFile,
-      {
-        heading: "Segments de texte par topic",
-        topTermsFile: ldaTopTermsFile,
-        highlightTermsPerTopic: 20,
-        emptyMessage: "Aucun export CSV de segments LDA n'a été trouvé."
-      }
-    );
-
-    clearContainer(resultContainers.ldaTopicWords);
-  });
-
   await safeRenderExportSection("Similitudes", async () => {
     const similitudeHtmlFile = findFile(index, [
       (path) => path.endsWith(".html") && path.includes("simi"),
@@ -13774,15 +12216,19 @@ async function renderExports(entries, index) {
     }
   });
 
-  appState.exportEntries = entries;
-  renderResults(entries.map((entry) => entry.relativePath));
+  try {
+    appState.exportEntries = entries;
+    renderResults(entries.map((entry) => entry.relativePath));
+  } catch (error) {
+    log(`[error] Finalisation du rendu des exports impossible : ${error?.message || String(error)}`);
+  }
 }
 
 async function handleExportsFolderSelection(fileList, navigationTarget = "resultats_chd") {
   const files = Array.from(fileList || []);
 
   if (!files.length) {
-    return;
+    return { rendered: false, entries: [] };
   }
 
   const firstPath = files[0].virtualRelativePath || files[0].webkitRelativePath || "";
@@ -13792,7 +12238,21 @@ async function handleExportsFolderSelection(fileList, navigationTarget = "result
   appState.exportsFolderName = folderName;
   setSidebarRuntimeStatus("Exports charges dans l'application", "success");
 
-  await renderExports(entries, index);
+  let rendered = true;
+  try {
+    await renderExports(entries, index);
+  } catch (error) {
+    rendered = false;
+    log(`[error] Rendu global des exports interrompu : ${error?.message || String(error)}`);
+    renderAnalysisDiagnostic(
+      [
+        "Une erreur est survenue pendant l'affichage des exports.",
+        `Dossier charge : ${folderName}`,
+        `Details : ${error?.message || String(error)}`
+      ].join("\n"),
+      navigationTarget
+    );
+  }
   activateTopTab(navigationTarget);
   if (navigationTarget === "resultats_chd") {
     activateChdSubTab("dendrogramme");
@@ -13800,6 +12260,7 @@ async function handleExportsFolderSelection(fileList, navigationTarget = "result
     activateSuiviSubTab("suivi_indicateurs");
   }
   log(`[info] Dossier d'exports chargé : ${folderName} (${entries.length} fichiers).`);
+  return { rendered, entries };
 }
 
 function resetResultPanes() {
@@ -13855,14 +12316,6 @@ function resetResultPanes() {
     suiviMatrixPlot: "Chargez un dossier d'exports pour afficher la matrice de divergence de Jensen-Shannon.",
     suiviMatrixTable: "Chargez un dossier d'exports pour afficher le tableau de la matrice de divergence de Jensen-Shannon.",
     suiviWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots de la trajectoire lexicale.",
-    ldaBubblePlot: "Chargez un dossier d'exports LDA pour afficher la visualisation pyLDAvis.",
-    ldaHeatmap: "Chargez un dossier d'exports LDA pour afficher la heatmap mots × topics.",
-    ldaNetwork: "Chargez un dossier d'exports LDA pour afficher le réseau topics × mots.",
-    ldaWordclouds: "Chargez un dossier d'exports LDA pour afficher les nuages par topic.",
-    ldaTopTerms: "Chargez un dossier d'exports LDA pour afficher le tableau général des probabilités.",
-    ldaSegments: "Chargez un dossier d'exports LDA pour afficher les segments de texte par topic.",
-    ldaDocTopics: "Chargez un dossier d'exports LDA pour afficher le tableau des mots par topic.",
-    ldaTopicWords: "Chargez un dossier d'exports LDA pour afficher le détail des topics.",
     simiGraph: "Vous devez réaliser une CHD avant l'analyse de similitudes."
   };
 
@@ -14193,12 +12646,6 @@ document.querySelectorAll("[data-open-simi-dialog]").forEach((button) => {
   });
 });
 
-document.querySelectorAll("[data-open-lda-dialog]").forEach((button) => {
-  button.addEventListener("click", () => {
-    openLdaConfigDialog();
-  });
-});
-
 document.querySelectorAll("[data-open-suivi-dialog]").forEach((button) => {
   button.addEventListener("click", () => {
     openSuiviConfigDialog();
@@ -14228,10 +12675,6 @@ launchSimiDialogBtn.addEventListener("click", () => {
   activateTopTab("analyse");
   log("[info] Lancement de l'analyse de similitudes depuis la boite de dialogue.");
   void startAnalysis("simi");
-});
-
-closeLdaDialogBtn.addEventListener("click", () => {
-  closeLdaConfigDialog();
 });
 
 closeSuiviDialogBtn?.addEventListener("click", () => {
@@ -14401,14 +12844,6 @@ afcTermsZoomResetBtn?.addEventListener("click", () => {
   setAfcTermsZoom(1);
 });
 
-launchLdaDialogBtn.addEventListener("click", () => {
-  applyDialogValues(ldaConfigDialogContent);
-  closeLdaConfigDialog();
-  activateTopTab("analyse");
-  log("[info] Lancement de l'analyse LDA depuis la boite de dialogue.");
-  void startAnalysis("lda");
-});
-
 launchSuiviDialogBtn?.addEventListener("click", () => {
   applyDialogValues(suiviConfigDialogContent);
   renderMorphoPickers(document);
@@ -14537,26 +12972,6 @@ document.addEventListener("click", (event) => {
   renderMorphoPicker(card);
 });
 
-document.addEventListener("click", (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  const addButton = target.closest("[data-lda-morpho-add-btn]");
-  if (!addButton) return;
-
-  const card = addButton.closest("[data-lda-morpho-card]");
-  if (!card) return;
-
-  const hiddenInput = card.querySelector("[data-lda-morpho-selected-input]");
-  const select = card.querySelector("[data-lda-morpho-available-select]");
-  if (!hiddenInput || !select || !select.value) return;
-
-  const selected = splitCsvValues(hiddenInput.value).map((value) => value.toUpperCase());
-  if (!selected.includes(select.value)) {
-    hiddenInput.value = [...selected, select.value].join(", ");
-  }
-  renderLdaMorphoPicker(card);
-});
-
 document.addEventListener("change", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
@@ -14592,17 +13007,6 @@ document.addEventListener("click", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-  if (!target.matches("[data-lda-morpho-available-select]")) return;
-
-  const card = target.closest("[data-lda-morpho-card]");
-  if (card) {
-    renderLdaMorphoPicker(card);
-  }
-});
-
-document.addEventListener("change", (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
   if (!target.matches("[data-classification-radio]")) return;
   if (target instanceof HTMLInputElement && !target.checked) return;
 
@@ -14619,12 +13023,6 @@ document.addEventListener("change", (event) => {
 chdSubNavLinks.forEach((link) => {
   link.addEventListener("click", () => {
     activateChdSubTab(link.dataset.subtabTarget);
-  });
-});
-
-ldaSubNavLinks.forEach((link) => {
-  link.addEventListener("click", () => {
-    activateLdaSubTab(link.dataset.ldaSubtabTarget);
   });
 });
 
@@ -15391,7 +13789,13 @@ async function startAnalysis(analysisKind = "chd") {
       setTimeout(resolve, ms);
     });
 
-  closeParameterDialogs([chdConfigDialog, simiConfigDialog, ldaConfigDialog, suiviConfigDialog, multimodalCompareAbConfigDialog]);
+  closeParameterDialogs([chdConfigDialog, simiConfigDialog, suiviConfigDialog, multimodalCompareAbConfigDialog]);
+
+  if (!["chd", "simi", "suivi"].includes(analysisKind)) {
+    activateTopTab("analyse");
+    log("[error] Ce module a été retiré de cette version d'IRaMuTeQ Lite.");
+    return;
+  }
 
   const selectedFile = corpusFileInput.files?.[0] || null;
   const corpusName = String(appState.corpusFileName || selectedFile?.name || "").trim();
@@ -15406,9 +13810,7 @@ async function startAnalysis(analysisKind = "chd") {
   const minFreq = Number(document.getElementById("minFreq").value);
   const statsMode = document.getElementById("statsMode").value;
   const kIramuteq = Number(document.getElementById("kIramuteq").value);
-  const ldaK = Math.max(2, Number(document.getElementById("ldaK").value) || 6);
   const tauriInvoke = getTauriInvoke();
-  const isLdaMode = analysisKind === "lda";
   const isSimiMode = analysisKind === "simi";
   const isSuiviMode = analysisKind === "suivi";
 
@@ -15417,7 +13819,7 @@ async function startAnalysis(analysisKind = "chd") {
     return;
   }
 
-  const navigationTarget = getNavigationTargetForAnalysisKind({ isLdaMode, isSimiMode, isSuiviMode });
+  const navigationTarget = getNavigationTargetForAnalysisKind({ isSimiMode, isSuiviMode });
   const suiviSelectedUnits = isSuiviMode ? getSelectedMultiSelectValues(suiviInterviewsSelect) : [];
   const suiviAvailableUnits = isSuiviMode ? getSuiviAvailableUnits(document) : [];
   const suiviVariableName = isSuiviMode ? resolveSuiviVariableName(document) : "";
@@ -15457,28 +13859,22 @@ async function startAnalysis(analysisKind = "chd") {
     return;
   }
 
-  const progressTitle = isLdaMode
-    ? "Analyse LDA"
-    : isSimiMode
-      ? "Analyse de similitudes"
-      : isSuiviMode
-        ? "Trajectoire lexicale"
-        : "Analyse CHD";
-  const progressStartMessage = isLdaMode
-    ? "Préparation du modèle LDA..."
-    : isSimiMode
-      ? "Préparation du graphe de similitudes..."
-      : isSuiviMode
-        ? "Préparation de la trajectoire lexicale..."
-        : "Préparation de la CHD...";
+  const progressTitle = isSimiMode
+    ? "Analyse de similitudes"
+    : isSuiviMode
+      ? "Trajectoire lexicale"
+      : "Analyse CHD";
+  const progressStartMessage = isSimiMode
+    ? "Préparation du graphe de similitudes..."
+    : isSuiviMode
+      ? "Préparation de la trajectoire lexicale..."
+      : "Préparation de la CHD...";
 
   setSidebarRuntimeStatus("Vérification de l'accès serveur...");
   activateTopTab("analyse");
   progression.open(progressTitle, progressStartMessage);
   await waitForNextPaint();
-  if (isLdaMode) {
-    log(`[info] Démarrage analyse LDA : topics=${ldaK}, unité=${document.getElementById("language").value}`);
-  } else if (isSimiMode) {
+  if (isSimiMode) {
     log(`[info] Démarrage analyse de similitudes : méthode=${document.getElementById("simiMethod").value}`);
   } else if (isSuiviMode) {
     const coucheLabel = suiviAnalysisLayer === "emotionnelle"
@@ -15495,20 +13891,13 @@ async function startAnalysis(analysisKind = "chd") {
   progression.set(4, progressStartMessage);
 
   if (!tauriInvoke) {
-    const checkpoints = isLdaMode
+    const checkpoints = isSimiMode
       ? [
           [18, "Préparation du corpus"],
-          [42, "Segmentation et préparation LDA"],
-          [76, "Modélisation des topics"],
-          [100, "Exports LDA prêts à afficher"]
+          [46, "Construction de la matrice de similitudes"],
+          [82, "Génération du graphe"],
+          [100, "Exports similitudes prêts à afficher"]
         ]
-      : isSimiMode
-        ? [
-            [18, "Préparation du corpus"],
-            [46, "Construction de la matrice de similitudes"],
-            [82, "Génération du graphe"],
-            [100, "Exports similitudes prêts à afficher"]
-          ]
       : isSuiviMode
         ? [
             [18, "Préparation des entretiens"],
@@ -15540,6 +13929,7 @@ async function startAnalysis(analysisKind = "chd") {
   }
 
   let analysisTicket = null;
+  let resultsRendered = false;
   try {
     const bootstrap = await ensureDependenciesReady();
     if (!bootstrap?.success) {
@@ -15558,6 +13948,7 @@ async function startAnalysis(analysisKind = "chd") {
     let lastTicketHeartbeatAt = 0;
 
     analysisTicket = await waitForAnalysisTicket(progression, log);
+    lastTicketHeartbeatAt = Date.now();
     analysisExecutionInProgress = true;
     updateReleaseAccessButton();
     setSidebarRuntimeStatus("Analyse en cours. L'acces reste reserve pour cette session.");
@@ -15645,20 +14036,34 @@ async function startAnalysis(analysisKind = "chd") {
     );
 
     if (virtualFiles.length) {
-      await handleExportsFolderSelection(virtualFiles, navigationTarget);
-      rememberAnalysisHistoryEntry({
-        id: payload.jobId || `${analysisKind}-${Date.now()}`,
-        jobId: payload.jobId || null,
-        analysisKind,
-        createdAt: new Date().toISOString(),
-        corpusName,
-        folderName: payload.jobId || "exports",
-        outputDir: payload.outputDir || null,
-        navigationTarget,
-        summary: payload.summary || null,
-        logs: Array.isArray(payload.logs) ? payload.logs : [],
-        artifacts: artifactFiles
-      });
+      const previewPaths = virtualFiles
+        .slice(0, 8)
+        .map((file) => getRelativePath(file))
+        .filter(Boolean);
+      if (previewPaths.length) {
+        log(`[info] Aperçu des exports : ${previewPaths.join(", ")}`);
+      }
+
+      const renderState = await handleExportsFolderSelection(virtualFiles, navigationTarget);
+      resultsRendered = Boolean(renderState?.rendered);
+
+      try {
+        rememberAnalysisHistoryEntry({
+          id: payload.jobId || `${analysisKind}-${Date.now()}`,
+          jobId: payload.jobId || null,
+          analysisKind,
+          createdAt: new Date().toISOString(),
+          corpusName,
+          folderName: payload.jobId || "exports",
+          outputDir: payload.outputDir || null,
+          navigationTarget,
+          summary: payload.summary || null,
+          logs: Array.isArray(payload.logs) ? payload.logs : [],
+          artifacts: artifactFiles
+        });
+      } catch (historyError) {
+        log(`[error] Historique d'analyse impossible a memoriser : ${historyError?.message || String(historyError)}`);
+      }
     } else {
       log("[error] Aucun export exploitable n'a été récupéré après l'analyse.");
       renderAnalysisDiagnostic(
@@ -15678,9 +14083,7 @@ async function startAnalysis(analysisKind = "chd") {
     setSidebarRuntimeStatus("Analyse terminée. Vous pouvez libérer l'accès ou lancer une nouvelle analyse.", "success");
     const summary = payload.summary || {};
     log(
-      isLdaMode
-        ? `[info] Analyse LDA terminée : topics=${ldaK}, fichiers=${virtualFiles.length}.`
-        : isSimiMode
+      isSimiMode
         ? `[info] Analyse de similitudes terminée : fichiers=${virtualFiles.length}.`
         : isSuiviMode
           ? `[info] Trajectoire lexicale terminée : entretiens=${suiviSelectedUnits.length}, fichiers=${virtualFiles.length}.`
@@ -15689,8 +14092,11 @@ async function startAnalysis(analysisKind = "chd") {
     log(`[info] Exports backend: ${payload.outputDir}`);
     progression.close();
   } catch (error) {
-    setSidebarRuntimeStatus("Echec de l'analyse", "error");
-    progression.set(0, "Échec de l'analyse.");
+    setSidebarRuntimeStatus(
+      resultsRendered ? "Analyse terminee avec avertissements" : "Echec de l'analyse",
+      resultsRendered ? "warning" : "error"
+    );
+    progression.set(resultsRendered ? 100 : 0, resultsRendered ? "Analyse terminée avec avertissements." : "Échec de l'analyse.");
     const message = error?.message || String(error);
     const lines = String(message)
       .split(/\r?\n/)
@@ -15703,7 +14109,11 @@ async function startAnalysis(analysisKind = "chd") {
         log(index === 0 ? `[error] ${line}` : line);
       });
     }
-    renderAnalysisDiagnostic(lines.join("\n"), navigationTarget);
+    if (resultsRendered) {
+      log("[error] Une erreur est survenue apres le rendu des exports. Les resultats deja affiches sont conserves.");
+    } else {
+      renderAnalysisDiagnostic(lines.join("\n"), navigationTarget);
+    }
     progression.close();
   } finally {
     analysisExecutionInProgress = false;
@@ -15721,7 +14131,6 @@ renderResults([]);
 syncDendrogramSizing();
 renderMorphoPickers(document);
 renderAfcStarredVariablesPickers(document, { resetSelection: true });
-renderLdaMorphoPickers(document);
 renderClassificationModeCards(document);
 renderSimiTermsPickers(document);
 populateAnnotationMorphoOptions();
@@ -15730,7 +14139,6 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
-void loadHelpMarkdown(helpLdaMarkdownContent, "lda.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();

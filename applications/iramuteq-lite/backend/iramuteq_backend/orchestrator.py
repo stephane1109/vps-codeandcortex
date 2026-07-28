@@ -348,26 +348,10 @@ def check_environment(rscript_path: str | None = None) -> dict[str, Any]:
 
 
 def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = True) -> dict[str, Any]:
-    python_required = {
-        "numpy": "numpy",
-        "sklearn": "scikit-learn",
-        "matplotlib": "matplotlib",
-        "pyLDAvis": "pyLDAvis",
-        "wordcloud": "wordcloud",
-        "altair": "altair",
-        "vl_convert": "vl-convert-python",
-    }
+    python_required = {}
     python_optional = {}
     python_all = {**python_required, **python_optional}
-    python_install_targets = {
-        "numpy": "numpy<2",
-        "sklearn": "scikit-learn",
-        "matplotlib": "matplotlib",
-        "pyLDAvis": "pyLDAvis",
-        "wordcloud": "wordcloud",
-        "altair": "altair",
-        "vl_convert": "vl-convert-python",
-    }
+    python_install_targets = {}
     python_min_versions = {}
 
     def python_site_dir() -> Path:
@@ -421,13 +405,6 @@ def bootstrap_environment(rscript_path: str | None = None, auto_install: bool = 
                 continue
             if parse_version_token(installed) < parse_version_token(minimum):
                 outdated.append(import_name)
-        if importlib.util.find_spec("numpy") is not None:
-            try:
-                installed_numpy = importlib_metadata.version(python_all["numpy"])
-            except Exception:
-                installed_numpy = ""
-            if parse_version_token(installed_numpy) >= (2,):
-                outdated.append("numpy")
         return outdated
 
     def detect_missing_python_packages(package_map: dict[str, str] | None = None) -> list[str]:
