@@ -711,7 +711,7 @@ def run_lda_analysis(
     if len(dictionary) == 0 or not corpus:
         raise RuntimeError("Le dictionnaire est vide après filtrage. Diminue no_below ou augmente no_above.")
 
-    progress.progress(58, text="Calcul du modèle LDA")
+    progress.progress(58, text="Estimation LDA")
     lda = LdaModel(
         corpus=corpus,
         num_topics=num_topics,
@@ -1000,7 +1000,7 @@ with st.sidebar:
         ),
     )
 
-    st.subheader("Modèle")
+    st.subheader("Estimation du modèle LDA")
     num_topics = st.number_input(
         "Nombre de topics",
         min_value=2,
@@ -1013,26 +1013,23 @@ with st.sidebar:
         ),
     )
     passes = st.number_input(
-        "Passes",
+        "Nombre de passes d’estimation",
         min_value=1,
         max_value=100,
         value=15,
         step=1,
         help=(
-            "Nombre de passages d'apprentissage sur le corpus. "
-            "Plus la valeur est élevée, plus le modèle peut se stabiliser, mais le calcul devient plus long."
+            "Nombre de parcours du corpus pour stabiliser l’estimation des topics. "
+            "Une valeur plus élevée peut améliorer la stabilité, mais augmente le temps de calcul."
         ),
     )
     random_state = st.number_input(
-        "Random state",
+        "Graine aléatoire",
         min_value=0,
         max_value=999999,
         value=42,
         step=1,
-        help=(
-            "Graine aléatoire utilisée pour rendre les résultats reproductibles. "
-            "Garde la même valeur pour comparer plusieurs essais avec les mêmes paramètres."
-        ),
+        help="Valeur utilisée pour rendre les résultats reproductibles entre plusieurs analyses avec les mêmes paramètres.",
     )
     words_per_topic = st.number_input(
         "Mots affichés par topic",
@@ -1057,9 +1054,9 @@ if "lda_result" not in st.session_state:
     st.session_state.lda_result = None
 
 if st.button(
-    "Lancer le test LDA",
+    "Lancer l’analyse LDA",
     type="primary",
-    help="Permet de démarrer le prétraitement du corpus, la détection des bigrammes, puis l'entraînement du modèle LDA avec les paramètres choisis.",
+    help="Permet de démarrer le prétraitement du corpus, la détection des bigrammes, puis l’estimation du modèle LDA avec les paramètres choisis.",
 ):
     documents, noms_sources = lire_fichiers_uploades(uploaded_files)
     if not documents:
