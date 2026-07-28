@@ -9195,7 +9195,7 @@ function applyAfcTermsZoom() {
   if (!(media instanceof HTMLElement) || !(container instanceof HTMLElement)) return;
 
   const containerWidth = Math.max(0, Math.round(container.getBoundingClientRect().width || 0));
-  const baseWidth = Math.max(320, Math.min(containerWidth || 800, 800));
+  const baseWidth = Math.max(320, containerWidth || 980);
   const targetWidth = Math.round(baseWidth * appState.afcTermsZoom);
 
   media.style.width = `${targetWidth}px`;
