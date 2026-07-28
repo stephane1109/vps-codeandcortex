@@ -1711,6 +1711,11 @@ run_batch <- function() {
 
   if (run_simi) {
     log_info("Calcul similitudes.", progress = 84)
+    simi_layout_spacing <- scalar_num(config$simi_layout_spacing, 1.7)
+    if (!is.finite(simi_layout_spacing) || is.na(simi_layout_spacing)) simi_layout_spacing <- 1.7
+    simi_layout_spacing <- min(3, max(0.8, simi_layout_spacing))
+    simi_engine <- scalar_chr(config$simi_engine, "visnetwork")
+    if (!simi_engine %in% c("visnetwork", "igraph")) simi_engine <- "visnetwork"
     simi <- construire_graphe_similitudes(
       dfm_obj = dfm_obj,
       method = scalar_chr(config$simi_method, "cooc"),
@@ -1719,23 +1724,60 @@ run_batch <- function() {
       top_terms = scalar_int(config$simi_top_terms, 100L, 5L),
       selected_terms = as_char_vec(config$simi_terms_selected, character(0)),
       layout_type = scalar_chr(config$simi_layout, "frutch"),
+      layout_spacing = simi_layout_spacing,
       communities = scalar_bool(config$simi_communities, TRUE),
       community_method = scalar_chr(config$simi_community_method, "edge_betweenness")
     )
+    simi_html <- NULL
+    if (identical(simi_engine, "visnetwork")) {
+      simi_html <- tryCatch(
+        {
+          if (!requireNamespace("visNetwork", quietly = TRUE) || !requireNamespace("htmlwidgets", quietly = TRUE)) {
+            stop("packages visNetwork/htmlwidgets indisponibles")
+          }
+          widget <- tracer_graphe_similitudes_visnetwork(
+            g = simi$graph,
+            layout = simi$layout,
+            edge_width_by_index = scalar_bool(config$simi_edge_width_by_index, TRUE),
+            edge_labels = scalar_bool(config$simi_edge_labels, FALSE),
+            vertex_freq = simi$vertex_freq,
+            communities = simi$communities,
+            halo = scalar_bool(config$simi_halo, TRUE),
+            layout_spacing = simi_layout_spacing,
+            info_text = paste0("Graphe de similitudes interactif - espacement ", simi_layout_spacing)
+          )
+          html_path <- file.path(output_dir, "simi_graph.html")
+          htmlwidgets::saveWidget(widget, html_path, selfcontained = TRUE, title = "Graphe de similitudes")
+          log_info("Graphe de similitudes interactif généré.", progress = 85)
+          html_path
+        },
+        error = function(e) {
+          log_info(paste0("Graphe de similitudes interactif indisponible : ", e$message, ". Repli sur PNG statique."))
+          NULL
+        }
+      )
+    }
     simi_png <- file.path(output_dir, "simi_graph.png")
-    grDevices::png(simi_png, width = 1800, height = 1400, res = 180)
+    simi_png_width <- as.integer(min(4200, max(1800, round(1800 * simi_layout_spacing))))
+    simi_png_height <- as.integer(min(3200, max(1400, round(1400 * simi_layout_spacing))))
+    grDevices::png(simi_png, width = simi_png_width, height = simi_png_height, res = 180)
     tracer_graphe_similitudes_igraph(
       g = simi$graph,
       layout = simi$layout,
-      edge_labels = scalar_bool(config$simi_edge_labels, TRUE),
+      edge_labels = scalar_bool(config$simi_edge_labels, FALSE),
       edge_width_by_index = scalar_bool(config$simi_edge_width_by_index, TRUE),
       vertex_text_by_freq = scalar_bool(config$simi_vertex_text_by_freq, TRUE),
       vertex_freq = simi$vertex_freq,
       communities = simi$communities,
-      halo = scalar_bool(config$simi_halo, TRUE)
+      halo = scalar_bool(config$simi_halo, TRUE),
+      layout_spacing = simi_layout_spacing,
+      info_text = paste0("Graphe de similitudes statique - espacement ", simi_layout_spacing)
     )
     grDevices::dev.off()
-    artifacts$simi <- list(graph_png = relative_to_output(simi_png))
+    artifacts$simi <- list(
+      graph_html = relative_to_output(simi_html),
+      graph_png = relative_to_output(simi_png)
+    )
     log_info("Graphe de similitudes généré.", progress = 86)
   }
 

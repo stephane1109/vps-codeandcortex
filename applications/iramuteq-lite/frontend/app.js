@@ -2036,6 +2036,10 @@ function syncDendrogramSizing() {
 
 function buildJobConfig(analysisKind = "chd") {
   const simiThresholdValue = Number(document.getElementById("simiThreshold").value);
+  const simiSpacingValue = Number(document.getElementById("simiSpacing")?.value);
+  const simiSpacing = Number.isFinite(simiSpacingValue)
+    ? Math.min(3, Math.max(0.8, simiSpacingValue))
+    : 1.7;
   const dendrogramSizing = computeDendrogramSizing();
   const globalUseLemmas = document.getElementById("useLemmas").checked;
   const effectiveUseLemmas = globalUseLemmas;
@@ -2096,6 +2100,8 @@ function buildJobConfig(analysisKind = "chd") {
     simi_terms_selected: splitCsvValues(document.getElementById("simiTermsSelected").value),
     simi_max_tree: document.getElementById("simiMaxTree").checked,
     simi_layout: document.getElementById("simiLayout").value,
+    simi_layout_spacing: simiSpacing,
+    simi_engine: String(document.getElementById("simiEngine")?.value || "visnetwork").trim() || "visnetwork",
     simi_edge_labels: document.getElementById("simiEdgeLabels").checked,
     simi_edge_width_by_index: document.getElementById("simiEdgeWidth").checked,
     simi_vertex_text_by_freq: document.getElementById("simiVertexText").checked,

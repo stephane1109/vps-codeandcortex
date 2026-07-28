@@ -112,6 +112,7 @@ tracer_graphe_similitudes_igraph <- function(g,
                                             communities = NULL,
                                             halo = FALSE,
                                             zoom = 1,
+                                            layout_spacing = 1.7,
                                             info_text = NULL) {
   if (is.null(g) || !inherits(g, "igraph") || igraph::vcount(g) == 0) {
     plot.new()
@@ -148,6 +149,13 @@ tracer_graphe_similitudes_igraph <- function(g,
 
   zoom <- suppressWarnings(as.numeric(zoom))
   if (!is.finite(zoom) || is.na(zoom) || zoom <= 0) zoom <- 1
+  if (exists("normaliser_espacement_simi", mode = "function", inherits = TRUE)) {
+    layout_spacing <- normaliser_espacement_simi(layout_spacing)
+  } else {
+    layout_spacing <- suppressWarnings(as.numeric(layout_spacing))
+    if (!length(layout_spacing) || !is.finite(layout_spacing[[1]]) || is.na(layout_spacing[[1]])) layout_spacing <- 1.7
+    layout_spacing <- min(3, max(0.8, as.numeric(layout_spacing[[1]])))
+  }
   edge_lab <- if (isTRUE(edge_labels)) round(igraph::E(g)$weight, 3) else NA
   edge_curved_use <- if (isTRUE(edge_curved)) 0.16 else 0
 
@@ -194,9 +202,15 @@ tracer_graphe_similitudes_igraph <- function(g,
     )
   }
   lo_plot <- lo_mat[, 1:2, drop = FALSE]
-  lo_plot <- igraph::norm_coords(lo_plot, xmin = -1, xmax = 1, ymin = -1, ymax = 1)
-  xlim_use <- c(-1 / zoom, 1 / zoom)
-  ylim_use <- c(-1 / zoom, 1 / zoom)
+  lo_plot <- igraph::norm_coords(
+    lo_plot,
+    xmin = -layout_spacing,
+    xmax = layout_spacing,
+    ymin = -layout_spacing,
+    ymax = layout_spacing
+  )
+  xlim_use <- c(-layout_spacing / zoom, layout_spacing / zoom)
+  ylim_use <- c(-layout_spacing / zoom, layout_spacing / zoom)
 
   # Rendu statique attendu: pas de bulles de sommets (mots + arêtes + halos uniquement).
   # On conserve l'argument vertex_bubbles pour compatibilité d'appel.
@@ -229,7 +243,8 @@ tracer_graphe_similitudes_igraph <- function(g,
     mark.col = mark_col,
     mark.border = mark_border,
     xlim = xlim_use,
-    ylim = ylim_use
+    ylim = ylim_use,
+    rescale = FALSE
   )
   if (!is.null(info_text) && nzchar(info_text)) {
     mtext(info_text, side = 3, line = 0.3, cex = 0.82, col = "#455A64")

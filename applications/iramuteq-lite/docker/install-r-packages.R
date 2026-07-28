@@ -31,6 +31,7 @@ cran_packages <- c(
   "factoextra",
   "FactoMineR",
   "htmltools",
+  "htmlwidgets",
   "igraph",
   "intergraph",
   "irlba",
