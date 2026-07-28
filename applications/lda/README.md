@@ -21,7 +21,7 @@ Application Streamlit pour tester une analyse LDA a partir d'un corpus texte.
 ## Variables d'environnement
 
 ```env
-REDIS_URL=redis://:motdepasse@nom-exact-du-service-redis:6379/0
+REDIS_URL=
 APP_TICKET_ID=lda
 APP_TICKET_ENFORCED=1
 APP_TICKET_MAX_ACTIVE=1
@@ -32,7 +32,7 @@ APP_TICKET_ACTIVE_STALE_SECONDS=900
 APP_TICKET_MAX_WAITING=20
 APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=300000
-APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
+APP_TICKET_RELEASE_URL=
 APP_TICKET_HIDDEN_RELEASE_SECONDS=300
 PORT=8501
 LDA_SPACY_MODEL=fr_core_news_md
