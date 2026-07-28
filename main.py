@@ -838,6 +838,19 @@ def run_lda_analysis(
 
 
 st.set_page_config(page_title="LDA", layout="wide", initial_sidebar_state="expanded")
+st.markdown(
+    """
+    <style>
+      .block-container {
+        padding-top: 0.35rem !important;
+      }
+      h1 {
+        margin-top: 0 !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 st.title("Latent Dirichlet Allocation (LDA)")
