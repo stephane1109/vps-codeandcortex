@@ -26,6 +26,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown(
+    """
+    <style>
+      .main .block-container,
+      div[data-testid="stMainBlockContainer"],
+      .block-container {
+        padding-top: 0rem !important;
+      }
+      h1 {
+        margin-top: 0 !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
