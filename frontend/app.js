@@ -519,8 +519,11 @@ function setSidebarRuntimeStatus(message = "", state = "info") {
 }
 
 function normalizeTicketSnapshot(snapshot) {
+  const ticketId = String(snapshot?.ticket_id || snapshot?.ticketId || "").trim();
   return {
     enabled: Boolean(snapshot?.enabled),
+    ticket_id: ticketId,
+    ticketId,
     statut: String(snapshot?.statut || "inconnu"),
     position: snapshot?.position ?? null,
     active: Number(snapshot?.active || 0),
@@ -549,7 +552,12 @@ function rememberUserInteraction() {
 }
 
 function rememberTicketSnapshot(snapshot) {
+  const previousTicketId = String(latestTicketSnapshot?.ticket_id || "").trim();
   latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
+  if (!latestTicketSnapshot.ticket_id && analysisExecutionInProgress && previousTicketId) {
+    latestTicketSnapshot.ticket_id = previousTicketId;
+    latestTicketSnapshot.ticketId = previousTicketId;
+  }
   window.__APP_TICKET_CURRENT_ID__ = String(latestTicketSnapshot.ticket_id || "").trim();
   if (["actif", "attente"].includes(latestTicketSnapshot.statut)) {
     ticketReleasedLocally = false;
@@ -13946,6 +13954,7 @@ async function startAnalysis(analysisKind = "chd") {
     const config = buildJobConfig(analysisKind);
     let streamedLogCount = 0;
     let lastTicketHeartbeatAt = 0;
+    let ticketHeartbeatWarningLogged = false;
 
     analysisTicket = await waitForAnalysisTicket(progression, log);
     lastTicketHeartbeatAt = Date.now();
@@ -13993,10 +14002,22 @@ async function startAnalysis(analysisKind = "chd") {
       if (analysisTicket?.enabled) {
         const now = Date.now();
         if (!lastTicketHeartbeatAt || now - lastTicketHeartbeatAt >= analysisTicket.heartbeatMs) {
-          analysisTicket = await heartbeatAnalysisTicket();
           lastTicketHeartbeatAt = now;
-          if (analysisTicket?.enabled && analysisTicket.statut !== "actif") {
-            throw new Error(analysisTicket.message || "Le ticket actif a ete perdu pendant l'analyse.");
+          try {
+            analysisTicket = await heartbeatAnalysisTicket();
+            if (analysisTicket?.enabled && analysisTicket.statut !== "actif") {
+              const ticketMessage = analysisTicket.message || "Le ticket actif n'est plus confirme pendant l'analyse.";
+              if (!ticketHeartbeatWarningLogged) {
+                log(`[info] Ticket non confirmé pendant l'analyse : ${ticketMessage} Le job continue et les exports seront récupérés.`);
+                ticketHeartbeatWarningLogged = true;
+              }
+              setSidebarTicketStatus("Analyse en cours : resynchronisation du ticket", "active");
+            }
+          } catch (heartbeatError) {
+            if (!ticketHeartbeatWarningLogged) {
+              log(`[info] Heartbeat ticket indisponible pendant l'analyse : ${heartbeatError?.message || String(heartbeatError)}. Le job continue et les exports seront récupérés.`);
+              ticketHeartbeatWarningLogged = true;
+            }
           }
         }
       }
