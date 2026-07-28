@@ -771,12 +771,14 @@ def run_lda_analysis(
     wordclouds = creer_wordclouds(lda, num_topics, min(max(words_per_topic, 20), 60))
     heatmap_png = b""
     heatmap_error = ""
+    heatmap_default_top_n = min(max(5, int(words_per_topic)), 10)
+    heatmap_default_max_terms = max(20, min(60, heatmap_default_top_n * int(num_topics)))
     try:
         heatmap_png = creer_heatmap_lda(
             topic_term_matrix,
             terms,
-            top_n_par_topic=max(8, int(words_per_topic)),
-            max_total_termes=max(30, min(160, int(words_per_topic) * int(num_topics))),
+            top_n_par_topic=heatmap_default_top_n,
+            max_total_termes=heatmap_default_max_terms,
         )
     except Exception as exc:
         heatmap_error = str(exc)
@@ -816,6 +818,8 @@ def run_lda_analysis(
         "topics_df": topics_df,
         "top_terms_df": top_terms_df,
         "topic_term_matrix_df": topic_term_matrix_df,
+        "topic_term_matrix": topic_term_matrix,
+        "topic_terms": terms,
         "doc_topics_df": doc_topics_df,
         "segments_topics_df": segments_topics_df,
         "iramuteq_payload": iramuteq_payload,
@@ -826,6 +830,8 @@ def run_lda_analysis(
         "lda_html": lda_html,
         "heatmap_png": heatmap_png,
         "heatmap_error": heatmap_error,
+        "heatmap_default_top_n": heatmap_default_top_n,
+        "heatmap_default_max_terms": heatmap_default_max_terms,
         "reseau_png": reseau_png,
         "reseau_error": reseau_error,
         "wordclouds": wordclouds,
@@ -1180,7 +1186,71 @@ if result:
         components.html(result["lda_html"], height=820, scrolling=True)
 
     with onglet_heatmap:
-        if result["heatmap_png"]:
+        st.caption(
+            "La heatmap est filtrée pour rester lisible : choisissez combien de mots afficher, "
+            "sans relancer l'analyse LDA."
+        )
+        topic_term_matrix_heatmap = result.get("topic_term_matrix")
+        topic_terms_heatmap = result.get("topic_terms") or []
+
+        if topic_term_matrix_heatmap is not None and topic_terms_heatmap:
+            nb_termes_disponibles = len(topic_terms_heatmap)
+            max_top_slider = max(1, min(30, nb_termes_disponibles))
+            min_top_slider = 1 if max_top_slider < 3 else 3
+            default_top_n = max(
+                min_top_slider,
+                min(int(result.get("heatmap_default_top_n", 8)), max_top_slider),
+            )
+
+            max_total_slider = max(1, min(160, nb_termes_disponibles))
+            min_total_slider = 1 if max_total_slider < 10 else 10
+            step_total = 1 if max_total_slider < 20 else 5
+            default_max_terms = max(
+                min_total_slider,
+                min(int(result.get("heatmap_default_max_terms", 40)), max_total_slider),
+            )
+
+            col_heatmap_top, col_heatmap_total = st.columns(2)
+            with col_heatmap_top:
+                heatmap_top_n = st.slider(
+                    "Mots retenus par topic",
+                    min_value=min_top_slider,
+                    max_value=max_top_slider,
+                    value=default_top_n,
+                    step=1,
+                    help="Nombre de mots candidats retenus dans chaque topic avant dédoublonnage.",
+                )
+            with col_heatmap_total:
+                heatmap_max_terms = st.slider(
+                    "Nombre maximum de mots affichés",
+                    min_value=min_total_slider,
+                    max_value=max_total_slider,
+                    value=default_max_terms,
+                    step=step_total,
+                    help="Limite finale du nombre de lignes visibles dans la heatmap.",
+                )
+
+            try:
+                heatmap_visible_png = creer_heatmap_lda(
+                    np.asarray(topic_term_matrix_heatmap, dtype=float),
+                    list(topic_terms_heatmap),
+                    top_n_par_topic=int(heatmap_top_n),
+                    max_total_termes=int(heatmap_max_terms),
+                )
+                st.image(
+                    heatmap_visible_png,
+                    caption=f"Heatmap LDA mots x topics - {heatmap_max_terms} mot(s) max",
+                    use_container_width=True,
+                )
+                st.download_button(
+                    "Télécharger heatmap_lda_filtrée.png",
+                    data=heatmap_visible_png,
+                    file_name="heatmap_lda_filtree.png",
+                    mime="image/png",
+                )
+            except Exception as exc:
+                st.warning(f"Heatmap LDA filtrée indisponible : {exc}")
+        elif result["heatmap_png"]:
             st.image(result["heatmap_png"], caption="Heatmap LDA mots x topics", use_container_width=True)
             st.download_button(
                 "Télécharger heatmap_lda.png",
