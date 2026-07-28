@@ -53,6 +53,23 @@ ALL_POS = [
 ]
 
 
+def get_discrete_colormap(name: str, n_colors: int):
+    n_colors = max(1, int(n_colors))
+    try:
+        cmap = matplotlib.colormaps.get_cmap(name)
+        return cmap.resampled(n_colors) if hasattr(cmap, "resampled") else cmap
+    except Exception:
+        cmap_getter = getattr(plt, "get_cmap", None)
+        if cmap_getter is None:
+            cmap_getter = getattr(getattr(matplotlib, "cm", None), "get_cmap", None)
+        if cmap_getter is None:
+            raise RuntimeError("Aucune API Matplotlib disponible pour charger les palettes de couleurs.")
+        try:
+            return cmap_getter(name, n_colors)
+        except TypeError:
+            return cmap_getter(name)
+
+
 @dataclass
 class UniteAnalyse:
     identifiant: str
@@ -558,7 +575,7 @@ def creer_reseau_topics_mots(top_terms_df: pd.DataFrame, max_terms_per_topic: in
 
     topic_y = {topic: value for topic, value in zip(topics, np.linspace(0.92, 0.08, len(topics)))}
     term_y = {term: value for term, value in zip(terms, np.linspace(0.96, 0.04, len(terms)))}
-    colors = plt.cm.get_cmap("tab20", max(1, len(topics)))
+    colors = get_discrete_colormap("tab20", len(topics))
     topic_color = {topic: colors(index) for index, topic in enumerate(topics)}
     max_prob = max(float(data["prob"].max()), 1e-9)
     hauteur = min(18, max(5.5, len(terms) * 0.24 + 1.8))
