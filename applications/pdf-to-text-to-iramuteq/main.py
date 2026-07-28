@@ -21,6 +21,24 @@ except Exception:
 APP_NAME = "Extraction PDF to TEXT to IRAMUTEQ"
 
 
+def appliquer_style_page() -> None:
+    st.markdown(
+        """
+        <style>
+          .main .block-container,
+          div[data-testid="stMainBlockContainer"],
+          .block-container {
+            padding-top: 0rem !important;
+          }
+          h1 {
+            margin-top: 0 !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def lire_metadonnees_pdf(pdf_bytes: bytes) -> dict:
     """Lire les métadonnées du PDF avec PyMuPDF et retourner un dict plat."""
     meta = {
@@ -423,6 +441,7 @@ def formater_sortie_texte(
 
 def main() -> None:
     st.set_page_config(page_title="Extraction PDF → Texte", layout="wide")
+    appliquer_style_page()
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
