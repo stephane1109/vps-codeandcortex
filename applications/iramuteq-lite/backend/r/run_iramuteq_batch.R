@@ -1714,8 +1714,6 @@ run_batch <- function() {
     simi_layout_spacing <- scalar_num(config$simi_layout_spacing, 1.7)
     if (!is.finite(simi_layout_spacing) || is.na(simi_layout_spacing)) simi_layout_spacing <- 1.7
     simi_layout_spacing <- min(3, max(0.8, simi_layout_spacing))
-    simi_engine <- scalar_chr(config$simi_engine, "igraph")
-    if (!simi_engine %in% c("visnetwork", "igraph")) simi_engine <- "igraph"
     simi <- construire_graphe_similitudes(
       dfm_obj = dfm_obj,
       method = scalar_chr(config$simi_method, "cooc"),
@@ -1729,44 +1727,42 @@ run_batch <- function() {
       community_method = scalar_chr(config$simi_community_method, "edge_betweenness")
     )
     simi_html <- NULL
-    if (identical(simi_engine, "visnetwork")) {
-      simi_html <- tryCatch(
-        {
-          if (!requireNamespace("visNetwork", quietly = TRUE) || !requireNamespace("htmlwidgets", quietly = TRUE)) {
-            stop("packages visNetwork/htmlwidgets indisponibles")
-          }
-          widget <- tracer_graphe_similitudes_visnetwork(
-            g = simi$graph,
-            layout = simi$layout,
-            edge_width_by_index = scalar_bool(config$simi_edge_width_by_index, TRUE),
-            edge_labels = scalar_bool(config$simi_edge_labels, FALSE),
-            vertex_freq = simi$vertex_freq,
-            communities = simi$communities,
-            halo = scalar_bool(config$simi_halo, TRUE),
-            layout_spacing = simi_layout_spacing,
-            info_text = paste0("Graphe de similitudes interactif - espacement ", simi_layout_spacing)
-          )
-          html_path <- file.path(output_dir, "simi_graph.html")
-          tryCatch(
-            htmlwidgets::saveWidget(widget, html_path, selfcontained = TRUE, title = "Graphe de similitudes"),
-            error = function(save_error) {
-              log_info(paste0(
-                "Export HTML autonome indisponible pour le graphe de similitudes : ",
-                save_error$message,
-                ". Export HTML avec fichiers associés."
-              ))
-              htmlwidgets::saveWidget(widget, html_path, selfcontained = FALSE, title = "Graphe de similitudes")
-            }
-          )
-          log_info("Graphe de similitudes interactif généré.", progress = 85)
-          html_path
-        },
-        error = function(e) {
-          log_info(paste0("Graphe de similitudes interactif indisponible : ", e$message, ". Repli sur PNG statique."))
-          NULL
+    simi_html <- tryCatch(
+      {
+        if (!requireNamespace("visNetwork", quietly = TRUE) || !requireNamespace("htmlwidgets", quietly = TRUE)) {
+          stop("packages visNetwork/htmlwidgets indisponibles")
         }
-      )
-    }
+        widget <- tracer_graphe_similitudes_visnetwork(
+          g = simi$graph,
+          layout = simi$layout,
+          edge_width_by_index = scalar_bool(config$simi_edge_width_by_index, TRUE),
+          edge_labels = scalar_bool(config$simi_edge_labels, FALSE),
+          vertex_freq = simi$vertex_freq,
+          communities = simi$communities,
+          halo = scalar_bool(config$simi_halo, TRUE),
+          layout_spacing = simi_layout_spacing,
+          info_text = paste0("Graphe de similitudes interactif - espacement ", simi_layout_spacing)
+        )
+        html_path <- file.path(output_dir, "simi_graph.html")
+        tryCatch(
+          htmlwidgets::saveWidget(widget, html_path, selfcontained = TRUE, title = "Graphe de similitudes"),
+          error = function(save_error) {
+            log_info(paste0(
+              "Export HTML autonome indisponible pour le graphe de similitudes : ",
+              save_error$message,
+              ". Export HTML avec fichiers associés."
+            ))
+            htmlwidgets::saveWidget(widget, html_path, selfcontained = FALSE, title = "Graphe de similitudes")
+          }
+        )
+        log_info("Graphe de similitudes interactif généré.", progress = 85)
+        html_path
+      },
+      error = function(e) {
+        log_info(paste0("Graphe de similitudes interactif indisponible : ", e$message, ". Le PNG statique reste disponible."))
+        NULL
+      }
+    )
     simi_png <- file.path(output_dir, "simi_graph.png")
     simi_png_width <- as.integer(min(5200, max(2400, round(2200 * simi_layout_spacing))))
     simi_png_height <- as.integer(min(3900, max(1800, round(1650 * simi_layout_spacing))))

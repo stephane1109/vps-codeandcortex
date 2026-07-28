@@ -2765,10 +2765,31 @@ body.comparison-ab-fullscreen-open {
 }
 
 #simiGraph {
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   text-align: center;
   padding: clamp(0.35rem, 1vw, 0.75rem);
-  max-height: min(84vh, 1040px);
+  max-height: none;
+}
+
+.simi-graph-stack {
+  display: grid;
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.simi-graph-block {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.simi-graph-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: left;
 }
 
 #simiGraph .result-image {
@@ -2784,6 +2805,7 @@ body.comparison-ab-fullscreen-open {
   width: min(100%, 1360px);
   max-width: none;
   min-height: min(80vh, 980px);
+  margin: 0 auto;
 }
 
 #simiGraph .result-image.is-simi-zoomed,

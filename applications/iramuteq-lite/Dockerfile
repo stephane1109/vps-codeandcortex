@@ -105,6 +105,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libudunits2-dev \
     libsm6 \
     libxext6 \
+    pandoc \
     && binary_r_packages="\
       r-cran-ape \
       r-cran-colorspace \
