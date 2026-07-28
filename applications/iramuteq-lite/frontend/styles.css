@@ -1281,20 +1281,17 @@ progress {
 #afcTermsPlot,
 #afcVarsPlot {
   overflow: auto;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  display: block;
 }
 
 #afcClassesPlot .result-image,
 #afcTermsPlot .result-image,
 #afcVarsPlot .result-image {
-  width: min(100%, 980px);
-  max-width: 980px;
+  width: 100%;
+  max-width: none;
   height: auto;
   object-fit: contain;
-  margin: 0 auto;
-  flex: 0 0 auto;
+  margin: 0;
 }
 
 #chdDendrogramme .result-image {
