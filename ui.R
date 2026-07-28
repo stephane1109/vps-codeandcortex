@@ -610,6 +610,140 @@ build_main_ui <- function() {
           padding: 0.35rem 0.45rem;
           border-top: 1px solid #ded8ce;
         }
+        :root {
+          --cc-text: #263A63;
+          --cc-muted: #68728A;
+          --cc-accent: #C9792B;
+          --cc-background: #F5F7FB;
+          --cc-surface: #FFFDF8;
+          --cc-border: #D8DDEC;
+          --cc-border-strong: #B8C3DB;
+        }
+        body {
+          color: var(--cc-text) !important;
+          background: var(--cc-background) !important;
+        }
+        a,
+        .help-pane a {
+          color: var(--cc-accent) !important;
+        }
+        a:hover,
+        .help-pane a:hover {
+          color: var(--cc-text) !important;
+        }
+        .app-header,
+        .control-column,
+        .control-title-row,
+        .ticket-access-title,
+        .section-title,
+        .nav-tabs,
+        .modal-header,
+        .modal-footer {
+          border-color: var(--cc-border) !important;
+        }
+        .control-title,
+        .ticket-access-title,
+        .section-title,
+        .help-pane,
+        .help-pane p,
+        .help-pane li,
+        .help-pane h1,
+        .help-pane h2,
+        .help-pane h3,
+        .metric-value,
+        .debug-terminal,
+        .preview-box,
+        .code-box,
+        .debug-terminal pre,
+        .preview-box pre,
+        .code-box pre,
+        .input-help-label,
+        .input-help-value {
+          color: var(--cc-text) !important;
+        }
+        .app-subtitle,
+        .help-block,
+        .text-muted,
+        .small,
+        .nav-tabs > li > a,
+        .metric-label,
+        .progress-label,
+        .language-detection-note,
+        .rainette-explor-placeholder,
+        .afc-placeholder,
+        .archive-placeholder,
+        .afc-status-note,
+        .ticket-status-meta,
+        .ticket-status-note,
+        .ticket-status-message,
+        .result-note {
+          color: var(--cc-muted) !important;
+        }
+        .form-control,
+        .form-select,
+        .selectize-input,
+        .preview-box,
+        .modal-content {
+          border-color: var(--cc-border-strong) !important;
+          background: var(--cc-surface) !important;
+          color: var(--cc-text) !important;
+        }
+        .form-control:focus,
+        .form-select:focus,
+        .selectize-input.focus {
+          border-color: var(--cc-text) !important;
+        }
+        input[type='checkbox'],
+        input[type='radio'] {
+          accent-color: var(--cc-text);
+        }
+        .btn,
+        .btn-default,
+        .btn-primary,
+        .btn.control-help-button,
+        .btn-default.control-help-button,
+        .control-help-button {
+          border-color: var(--cc-text) !important;
+          background: var(--cc-surface) !important;
+          color: var(--cc-text) !important;
+        }
+        .btn-primary,
+        .btn:hover,
+        .btn-default:hover,
+        .btn-primary:hover,
+        .btn.control-help-button:hover,
+        .btn-default.control-help-button:hover,
+        .control-help-button:hover,
+        .nav-tabs > li.active > a,
+        .nav-tabs > li.active > a:hover,
+        .nav-tabs > li.active > a:focus {
+          background: var(--cc-text) !important;
+          color: var(--cc-surface) !important;
+        }
+        .progress-shell {
+          background: var(--cc-border) !important;
+        }
+        .progress-bar-custom {
+          background: var(--cc-text) !important;
+        }
+        .ticket-status-dot {
+          background: var(--cc-muted) !important;
+        }
+        .ticket-status-dot.is-active {
+          background: #2f855a !important;
+        }
+        .ticket-status-dot.is-waiting {
+          background: #b7791f !important;
+        }
+        .ticket-status-dot.is-error {
+          background: #c53030 !important;
+        }
+        .table > thead > tr > th,
+        .table > tbody > tr > td,
+        table > thead > tr > th,
+        table > tbody > tr > td {
+          border-color: var(--cc-border) !important;
+        }
         @media (max-width: 992px) {
           .control-column {
             margin-bottom: 1.2rem;
