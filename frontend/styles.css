@@ -250,67 +250,6 @@ textarea {
   border-color: #9f1d20;
 }
 
-.nav-menu {
-  position: relative;
-}
-
-.nav-menu > summary {
-  list-style: none;
-}
-
-.nav-menu > summary::-webkit-details-marker {
-  display: none;
-}
-
-.nav-link--menu {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.nav-link--menu::after {
-  content: "▾";
-  font-size: 0.8rem;
-  color: var(--ink-faint);
-}
-
-.nav-menu[open] .nav-link--menu {
-  color: var(--ink);
-  border-color: #9f1d20;
-}
-
-.nav-menu-panel {
-  position: absolute;
-  top: calc(100% + 0.45rem);
-  right: 0;
-  min-width: 15rem;
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.45rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: var(--shadow);
-  z-index: 20;
-}
-
-.nav-menu-item {
-  display: block;
-  padding: 0.68rem 0.85rem;
-  border-radius: 10px;
-  color: var(--ink);
-  text-decoration: none;
-  font-size: 0.95rem;
-  line-height: 1.2;
-}
-
-.nav-menu-item:hover,
-.nav-menu-item:focus-visible {
-  background: var(--accent-soft);
-  color: #8d1b1d;
-  outline: none;
-}
-
 .workspace {
   display: grid;
   grid-template-columns: 19rem minmax(0, 1fr);
