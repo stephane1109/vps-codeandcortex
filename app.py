@@ -39,13 +39,24 @@ st.set_page_config(layout="wide")
 st.markdown(
     """
     <style>
+      div[data-testid="stHeader"],
+      div[data-testid="stToolbar"],
+      div[data-testid="stDecoration"] {
+        display: none !important;
+        height: 0rem !important;
+      }
+      section.main > div,
+      div[data-testid="stAppViewContainer"] > .main,
       .main .block-container,
       div[data-testid="stMainBlockContainer"],
       .block-container {
         padding-top: 0rem !important;
+        margin-top: 0rem !important;
       }
-      h1 {
-        margin-top: 0 !important;
+      .block-container > div:first-child,
+      h1:first-of-type {
+        margin-top: 0rem !important;
+        padding-top: 0rem !important;
       }
     </style>
     """,
@@ -457,7 +468,7 @@ def extraire_texte_html(
 def afficher_interface_europresse():
     # Grand titre
     st.markdown(
-        "<h1 style='text-align: center; font-size: 44px; margin-bottom: 0px; color: #ff1f00;'>Europresse to IRaMuTeQ</h1>",
+        "<h1 style='text-align: center; font-size: 44px; margin-top: 0px; margin-bottom: 0px; color: #ff1f00;'>Europresse to IRaMuTeQ</h1>",
         unsafe_allow_html=True
     )
 
