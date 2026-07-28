@@ -19,6 +19,24 @@ APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
 
 
+def apply_page_style():
+    st.markdown(
+        """
+        <style>
+          .main .block-container,
+          div[data-testid="stMainBlockContainer"],
+          .block-container {
+            padding-top: 0rem !important;
+          }
+          h1 {
+            margin-top: 0 !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def load_help_markdown() -> str:
     if not HELP_PATH.exists():
         return "Le fichier `aide.md` est introuvable pour cette application."
@@ -199,6 +217,7 @@ def reencoder_video_h264(chemin_entrée, chemin_sortie):
 
 # Interface Streamlit
 st.set_page_config(page_title="StopMotion", layout="wide")
+apply_page_style()
 enforce_streamlit_access("stopmotion_opticalflow", "StopMotion")
 st.title("Générateur de Stop Motion avec Optical Flow (optionnel)")
 with st.expander("Aide"):
