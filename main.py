@@ -36,8 +36,16 @@ st.markdown(
     <style>
       .main .block-container {
         max-width: 100% !important;
+        padding-top: 0rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
+      }
+      div[data-testid="stMainBlockContainer"],
+      .block-container {
+        padding-top: 0rem !important;
+      }
+      h1 {
+        margin-top: 0 !important;
       }
       section[data-testid="stSidebar"] {
         flex-shrink: 0;
