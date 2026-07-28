@@ -505,6 +505,10 @@ tracer_graphe_similitudes_visnetwork <- function(g,
   }
   # VisNetwork taille mieux avec un range plus serré.
   vsize <- as.numeric(normaliser_vecteur_simi(vsize, 14, 42))
+  if (!length(vsize) || length(vsize) != igraph::vcount(g) || all(!is.finite(vsize))) {
+    vsize <- rep(24, igraph::vcount(g))
+  }
+  vsize[!is.finite(vsize)] <- 24
 
   vcol <- rep("#2C7FB8", igraph::vcount(g))
   groups <- rep("g1", igraph::vcount(g))

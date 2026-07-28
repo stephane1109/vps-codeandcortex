@@ -1747,7 +1747,17 @@ run_batch <- function() {
             info_text = paste0("Graphe de similitudes interactif - espacement ", simi_layout_spacing)
           )
           html_path <- file.path(output_dir, "simi_graph.html")
-          htmlwidgets::saveWidget(widget, html_path, selfcontained = TRUE, title = "Graphe de similitudes")
+          tryCatch(
+            htmlwidgets::saveWidget(widget, html_path, selfcontained = TRUE, title = "Graphe de similitudes"),
+            error = function(save_error) {
+              log_info(paste0(
+                "Export HTML autonome indisponible pour le graphe de similitudes : ",
+                save_error$message,
+                ". Export HTML avec fichiers associés."
+              ))
+              htmlwidgets::saveWidget(widget, html_path, selfcontained = FALSE, title = "Graphe de similitudes")
+            }
+          )
           log_info("Graphe de similitudes interactif généré.", progress = 85)
           html_path
         },
