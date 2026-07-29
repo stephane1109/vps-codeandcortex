@@ -1726,10 +1726,9 @@ run_batch <- function() {
       communities = scalar_bool(config$simi_communities, TRUE),
       community_method = scalar_chr(config$simi_community_method, "edge_betweenness")
     )
-    simi_json <- NULL
+    json_path <- file.path(output_dir, "simi_graph.json")
     simi_json <- tryCatch(
       {
-        json_path <- file.path(output_dir, "simi_graph.json")
         exporter_graphe_similitudes_cytoscape(
           simi = simi,
           chemin_sortie = json_path,
@@ -1742,8 +1741,54 @@ run_batch <- function() {
         json_path
       },
       error = function(e) {
-        log_info(paste0("Export JSON Cytoscape indisponible : ", e$message, ". Le PNG statique reste disponible."))
-        NULL
+        primary_message <- conditionMessage(e)
+        log_info(paste0("Export JSON Cytoscape avec halos indisponible : ", primary_message, ". Nouvelle tentative sans halos."))
+        fallback_json <- tryCatch(
+          {
+            exporter_graphe_similitudes_cytoscape(
+              simi = simi,
+              chemin_sortie = json_path,
+              edge_width_by_index = scalar_bool(config$simi_edge_width_by_index, TRUE),
+              edge_labels = scalar_bool(config$simi_edge_labels, FALSE),
+              halo = FALSE,
+              info_text = paste0("Analyse de similitudes de Vergès - espacement ", simi_layout_spacing, " - sans halos")
+            )
+            log_info("Graphe de similitudes JSON Cytoscape exporté sans halos.", progress = 85)
+            json_path
+          },
+          error = function(fallback_error) {
+            diagnostic_message <- paste0(primary_message, " | repli sans halos : ", conditionMessage(fallback_error))
+            log_info(paste0("Export JSON Cytoscape indisponible : ", diagnostic_message, ". Le PNG statique reste disponible."))
+            if (requireNamespace("jsonlite", quietly = TRUE)) {
+              diagnostic_payload <- list(
+                schema = "iramuteq-lite.similitudes.cytoscape.v1",
+                success = FALSE,
+                error = diagnostic_message,
+                nodes = list(),
+                edges = list(),
+                halos = list(),
+                meta = list(
+                  title = "Export JSON Cytoscape indisponible",
+                  renderer = "cytoscape.js + cytoscape-fcose + cytoscape-bubblesets",
+                  layout_spacing = simi_layout_spacing
+                )
+              )
+              diagnostic_path <- tryCatch(
+                {
+                  jsonlite::write_json(diagnostic_payload, json_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+                  json_path
+                },
+                error = function(write_error) NULL
+              )
+              if (!is.null(diagnostic_path)) {
+                log_info("Diagnostic JSON Cytoscape exporté.")
+                return(diagnostic_path)
+              }
+            }
+            NULL
+          }
+        )
+        fallback_json
       }
     )
     simi_png <- file.path(output_dir, "simi_graph.png")
