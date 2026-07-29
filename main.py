@@ -140,12 +140,22 @@ st.set_page_config(page_title="Scraping Reddit", layout="wide")
 st.markdown(
     """
     <style>
+      section.main > div.block-container,
       .main .block-container,
-      .block-container {
-        padding-top: 0rem !important;
+      .block-container,
+      div[data-testid="stMainBlockContainer"],
+      div[data-testid="stAppViewBlockContainer"] {
+        padding-top: 0 !important;
         margin-top: 0 !important;
       }
-      .block-container > div:first-child {
+      .block-container > div:first-child,
+      div[data-testid="stMainBlockContainer"] > div:first-child,
+      div[data-testid="stAppViewBlockContainer"] > div:first-child {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+      }
+      h1,
+      div[data-testid="stHeading"] h1 {
         margin-top: 0 !important;
         padding-top: 0 !important;
       }
