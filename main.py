@@ -166,7 +166,7 @@ st.markdown(
 enforce_streamlit_access("scraping_reddit", "Scraper Reddit")
 initialiser_etat()
 
-st.title("Scraper Reddit : posts et commentaires en français")
+st.title("Scraper Reddit")
 st.markdown("www.codeandcortex.fr")
 with st.expander("Aide"):
     st.markdown(load_help_markdown())
