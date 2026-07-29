@@ -10430,11 +10430,7 @@ async function renderSimilitudeGraphs(container, pngFile, graphJsonFile, htmlFil
 
     const cyTitle = document.createElement("h4");
     cyTitle.className = "simi-graph-title";
-    cyTitle.textContent = "Cytoscape.js - graphe JSON déplaçable";
-
-    const cyFlow = document.createElement("p");
-    cyFlow.className = "field-help simi-cytoscape-flow";
-    cyFlow.textContent = "R calcule l'analyse de similitude de Vergès, exporte les nœuds et arêtes en JSON, puis Cytoscape.js, fCoSE et BubbleSets affichent le graphe et les halos.";
+    cyTitle.textContent = "Graph intéractif (cytoscape.js)";
 
     const cyStage = document.createElement("div");
     cyStage.className = "simi-cytoscape-stage";
@@ -10443,7 +10439,7 @@ async function renderSimilitudeGraphs(container, pngFile, graphJsonFile, htmlFil
     cyStatus.className = "field-help simi-cytoscape-status";
     cyStatus.textContent = "Chargement du graphe Cytoscape...";
 
-    cyBlock.append(cyTitle, cyFlow, cyStage, cyStatus);
+    cyBlock.append(cyTitle, cyStage, cyStatus);
     stack.appendChild(cyBlock);
     cytoscapeTask = renderCytoscapeSimilitudeGraph(cyStage, cyStatus, graphJsonFile).catch((error) => {
       cyStage.innerHTML = "";
