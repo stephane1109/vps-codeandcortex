@@ -35,6 +35,9 @@ from doublons import (
     extraire_apercu,
 )
 
+APP_DIR = os.path.dirname(__file__)
+HELP_PATH = os.path.join(APP_DIR, "aide.md")
+
 st.set_page_config(layout="wide")
 st.markdown(
     """
@@ -460,6 +463,30 @@ def extraire_texte_html(
     return texte_final, data_for_csv, articles_pour_doublons
 
 
+def load_help_markdown() -> str:
+    try:
+        with open(HELP_PATH, "r", encoding="utf-8") as help_file:
+            return help_file.read()
+    except Exception:
+        return "Le fichier `aide.md` est introuvable pour cette application."
+
+
+def render_help_tab() -> None:
+    with st.expander("Aide", expanded=False):
+        st.markdown(
+            """
+            <p>
+              <a href="https://www.codeandcortex.fr/europresse-to-iramuteq-v4/"
+                 target="_blank" rel="noopener noreferrer">
+                Lire l'article du blog : Europresse to IRaMuTeQ v4
+              </a>
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(load_help_markdown())
+
+
 # --------------------------------------------------------------------
 #   INTERFACE GRAPHIQUE STREAMLIT
 # --------------------------------------------------------------------
@@ -478,19 +505,7 @@ def afficher_interface_europresse():
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        """
-        <div style="text-align:center; margin:8px 0 14px;">
-            <a href="https://www.codeandcortex.fr/europresse-to-iramuteq-v4/"
-               target="_blank"
-               rel="noopener noreferrer"
-               style="color:#ff1f00; font-weight:700; text-decoration:none;">
-                Aide
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    render_help_tab()
 
     # Ligne de séparation
     st.markdown(
@@ -514,7 +529,7 @@ def afficher_interface_europresse():
         unsafe_allow_html=True
     )
 
-    options_icon_path = os.path.join(os.path.dirname(__file__), "options.png")
+    options_icon_path = os.path.join(APP_DIR, "options.png")
     options_icon_html = ""
     if os.path.exists(options_icon_path):
         with open(options_icon_path, "rb") as icon_file:
@@ -523,7 +538,7 @@ def afficher_interface_europresse():
             f'<img src="data:image/png;base64,{encoded_icon}" alt="Options" />'
         )
 
-    export_icon_path = os.path.join(os.path.dirname(__file__), "export.png")
+    export_icon_path = os.path.join(APP_DIR, "export.png")
     export_icon_html = ""
     if os.path.exists(export_icon_path):
         with open(export_icon_path, "rb") as icon_file:
