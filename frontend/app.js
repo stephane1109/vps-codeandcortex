@@ -10294,6 +10294,16 @@ function renderSimiBubbleSets(cy, payload, statusElement) {
 
 async function renderCytoscapeSimilitudeGraph(stage, statusElement, graphJsonFile) {
   const payload = JSON.parse(await graphJsonFile.text());
+  if (payload?.success === false || payload?.error) {
+    const errorMessage = payload?.error
+      ? `Export JSON Cytoscape indisponible : ${payload.error}`
+      : "Export JSON Cytoscape indisponible.";
+    stage.appendChild(createDiagnosticState(errorMessage));
+    statusElement.textContent = "Le PNG statique reste disponible. Vérifiez les logs de l'analyse.";
+    log(`[error] ${errorMessage}`);
+    return;
+  }
+
   const nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload?.edges) ? payload.edges : [];
   if (!nodes.length) {
@@ -10441,6 +10451,23 @@ async function renderSimilitudeGraphs(container, pngFile, graphJsonFile, htmlFil
       cyStatus.textContent = `Erreur Cytoscape : ${error?.message || String(error)}`;
       log(`[error] Rendu Cytoscape indisponible (${graphJsonFile.name}): ${error?.message || String(error)}`);
     });
+  }
+
+  if (!graphJsonFile && pngFile) {
+    const missingJsonBlock = document.createElement("section");
+    missingJsonBlock.className = "simi-graph-block";
+
+    const missingJsonTitle = document.createElement("h4");
+    missingJsonTitle.className = "simi-graph-title";
+    missingJsonTitle.textContent = "Cytoscape.js - JSON absent";
+
+    const missingJsonMessage = document.createElement("p");
+    missingJsonMessage.className = "field-help";
+    missingJsonMessage.textContent = "Le fichier simi_graph.json n'a pas été trouvé dans les exports. Relancez l'analyse après redéploiement ; le PNG statique reste affiché en attendant.";
+
+    missingJsonBlock.append(missingJsonTitle, missingJsonMessage);
+    stack.appendChild(missingJsonBlock);
+    log("[error] Graphe Cytoscape non affiché : simi_graph.json absent des exports.");
   }
 
   if (pngFile) {

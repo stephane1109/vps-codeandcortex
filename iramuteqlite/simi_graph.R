@@ -299,8 +299,9 @@ exporter_graphe_similitudes_cytoscape <- function(simi,
       groups <- pmax(1L, memb)
     }
   }
+  groups[!is.finite(groups)] <- 1L
 
-  palette <- grDevices::hcl.colors(max(groups, 1L), palette = "Dark 3")
+  palette <- grDevices::hcl.colors(max(groups, 1L, na.rm = TRUE), palette = "Dark 3")
   colors <- palette[pmax(1L, pmin(length(palette), groups))]
 
   nodes <- data.frame(
@@ -352,7 +353,8 @@ exporter_graphe_similitudes_cytoscape <- function(simi,
   if (isTRUE(halo) && length(unique(groups)) > 1L) {
     halos <- lapply(sort(unique(groups)), function(group_id) {
       group_nodes <- nodes$id[groups == group_id]
-      group_color <- palette[[pmax(1L, pmin(length(palette), group_id))]]
+      group_index <- pmax(1L, pmin(length(palette), group_id))
+      group_color <- palette[[group_index]]
       list(
         id = paste0("halo_", group_id),
         label = paste0("Communauté ", group_id),
@@ -366,6 +368,7 @@ exporter_graphe_similitudes_cytoscape <- function(simi,
 
   payload <- list(
     schema = "iramuteq-lite.similitudes.cytoscape.v1",
+    success = TRUE,
     nodes = nodes,
     edges = edges,
     halos = halos,
