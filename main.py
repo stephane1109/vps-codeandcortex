@@ -28,10 +28,24 @@ HELP_PATH = APP_DIR / "aide.md"
 APP_DISPLAY_NAME = "Extraction des commentaires YouTube"
 APP_SHELL_STYLE = """
 <style>
+section.main > div.block-container,
+.main .block-container,
+.block-container,
 div[data-testid="stMainBlockContainer"] {
     max-width: 100% !important;
+    padding-top: 0rem !important;
     padding-left: 2rem !important;
     padding-right: 2rem !important;
+    margin-top: 0 !important;
+}
+.block-container > div:first-child,
+div[data-testid="stMainBlockContainer"] > div:first-child {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+h1 {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
 }
 </style>
 """
