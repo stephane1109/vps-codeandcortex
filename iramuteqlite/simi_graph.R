@@ -1,5 +1,10 @@
 # Rôle du fichier: simi_graph.R centralise la construction et le tracé du graphe de similitudes.
 
+if (!exists("%||%", mode = "function", inherits = TRUE)) {
+  `%||%` <- function(x, y) {
+    if (is.null(x) || length(x) == 0) y else x
+  }
+}
 
 calculer_communautes_simi <- function(g, method = "edge_betweenness") {
   if (is.null(g) || !inherits(g, "igraph") || igraph::vcount(g) < 2 || igraph::ecount(g) < 1) {
@@ -238,6 +243,146 @@ construire_graphe_similitudes <- function(dfm_obj,
     n_terms_total = ncol(mat_dfm),
     top_terms_requested = n_top
   )
+}
+
+exporter_graphe_similitudes_cytoscape <- function(simi,
+                                                  chemin_sortie,
+                                                  edge_width_by_index = TRUE,
+                                                  edge_labels = FALSE,
+                                                  halo = TRUE,
+                                                  info_text = NULL) {
+  g <- simi$graph
+  if (is.null(g) || !inherits(g, "igraph")) {
+    stop("Graphe de similitudes indisponible pour l'export Cytoscape.")
+  }
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("Le package 'jsonlite' est requis pour l'export Cytoscape.")
+  }
+
+  layout <- simi$layout
+  if (is.null(layout) || !is.matrix(layout) || nrow(layout) != igraph::vcount(g)) {
+    layout <- igraph::layout_with_fr(g)
+  }
+  layout <- as.matrix(layout)
+  if (ncol(layout) < 2) layout <- cbind(layout, rep(0, nrow(layout)))
+
+  layout_spacing <- normaliser_espacement_simi(simi$layout_spacing %||% 1.7)
+  layout_xy <- igraph::norm_coords(
+    layout[, 1:2, drop = FALSE],
+    xmin = -550 * layout_spacing,
+    xmax = 550 * layout_spacing,
+    ymin = -420 * layout_spacing,
+    ymax = 420 * layout_spacing
+  )
+
+  vnames <- as.character(igraph::V(g)$name)
+  if (!length(vnames)) vnames <- as.character(seq_len(igraph::vcount(g)))
+
+  vfreq <- suppressWarnings(as.numeric(simi$vertex_freq))
+  if (!length(vfreq) || length(vfreq) != igraph::vcount(g)) {
+    vfreq <- rep(1, igraph::vcount(g))
+  }
+  vfreq[!is.finite(vfreq)] <- 0
+
+  vsize <- suppressWarnings(as.numeric(igraph::V(g)$size))
+  if (!length(vsize) || length(vsize) != igraph::vcount(g) || all(!is.finite(vsize))) {
+    vsize <- calculer_tailles_sommets_simi(vfreq, min_out = 28, max_out = 84)
+  } else {
+    vsize <- normaliser_vecteur_simi(vsize, min_out = 28, max_out = 84)
+  }
+  vsize[!is.finite(vsize)] <- 42
+
+  groups <- rep(1L, igraph::vcount(g))
+  if (!is.null(simi$communities) && inherits(simi$communities, "communities")) {
+    memb <- suppressWarnings(as.integer(igraph::membership(simi$communities)))
+    if (length(memb) == igraph::vcount(g) && any(is.finite(memb))) {
+      groups <- pmax(1L, memb)
+    }
+  }
+
+  palette <- grDevices::hcl.colors(max(groups, 1L), palette = "Dark 3")
+  colors <- palette[pmax(1L, pmin(length(palette), groups))]
+
+  nodes <- data.frame(
+    id = vnames,
+    label = vnames,
+    frequency = vfreq,
+    size = vsize,
+    group = paste0("communaute_", groups),
+    color = colors,
+    x = layout_xy[, 1],
+    y = layout_xy[, 2],
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  edges_raw <- igraph::as_data_frame(g, what = "edges")
+  if (nrow(edges_raw) > 0) {
+    edge_weight <- suppressWarnings(as.numeric(edges_raw$weight))
+    edge_weight[!is.finite(edge_weight)] <- 0
+    edge_width <- if (isTRUE(edge_width_by_index)) {
+      calculer_largeurs_aretes_simi(edge_weight, max_out = 9, min_out = 1.2, cap_out = 10.5)
+    } else {
+      rep(1.6, length(edge_weight))
+    }
+    edges <- data.frame(
+      id = paste0("e", seq_len(nrow(edges_raw))),
+      source = as.character(edges_raw$from),
+      target = as.character(edges_raw$to),
+      weight = edge_weight,
+      width = edge_width,
+      label = if (isTRUE(edge_labels)) as.character(round(edge_weight, 3)) else "",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  } else {
+    edges <- data.frame(
+      id = character(0),
+      source = character(0),
+      target = character(0),
+      weight = numeric(0),
+      width = numeric(0),
+      label = character(0),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  }
+
+  halos <- list()
+  if (isTRUE(halo) && length(unique(groups)) > 1L) {
+    halos <- lapply(sort(unique(groups)), function(group_id) {
+      group_nodes <- nodes$id[groups == group_id]
+      group_color <- palette[[pmax(1L, pmin(length(palette), group_id))]]
+      list(
+        id = paste0("halo_", group_id),
+        label = paste0("Communauté ", group_id),
+        color = group_color,
+        fill = grDevices::adjustcolor(group_color, alpha.f = 0.18),
+        stroke = grDevices::adjustcolor(group_color, alpha.f = 0.72),
+        nodes = unname(as.list(group_nodes))
+      )
+    })
+  }
+
+  payload <- list(
+    schema = "iramuteq-lite.similitudes.cytoscape.v1",
+    nodes = nodes,
+    edges = edges,
+    halos = halos,
+    meta = list(
+      title = if (!is.null(info_text) && nzchar(as.character(info_text))) as.character(info_text) else "Analyse de similitudes de Vergès",
+      renderer = "cytoscape.js + cytoscape-fcose + cytoscape-bubblesets",
+      method = simi$method %||% NA_character_,
+      seuil = simi$seuil %||% NA_real_,
+      layout_spacing = layout_spacing,
+      n_terms_used = simi$n_terms_used %||% igraph::vcount(g),
+      n_terms_total = simi$n_terms_total %||% igraph::vcount(g),
+      top_terms_requested = simi$top_terms_requested %||% NA_integer_
+    )
+  )
+
+  jsonlite::write_json(payload, chemin_sortie, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  invisible(chemin_sortie)
 }
 
 # Alias de compatibilité utilisé explicitement par app.R.

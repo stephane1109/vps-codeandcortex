@@ -1726,40 +1726,23 @@ run_batch <- function() {
       communities = scalar_bool(config$simi_communities, TRUE),
       community_method = scalar_chr(config$simi_community_method, "edge_betweenness")
     )
-    simi_html <- NULL
-    simi_html <- tryCatch(
+    simi_json <- NULL
+    simi_json <- tryCatch(
       {
-        if (!requireNamespace("visNetwork", quietly = TRUE) || !requireNamespace("htmlwidgets", quietly = TRUE)) {
-          stop("packages visNetwork/htmlwidgets indisponibles")
-        }
-        widget <- tracer_graphe_similitudes_visnetwork(
-          g = simi$graph,
-          layout = simi$layout,
+        json_path <- file.path(output_dir, "simi_graph.json")
+        exporter_graphe_similitudes_cytoscape(
+          simi = simi,
+          chemin_sortie = json_path,
           edge_width_by_index = scalar_bool(config$simi_edge_width_by_index, TRUE),
           edge_labels = scalar_bool(config$simi_edge_labels, FALSE),
-          vertex_freq = simi$vertex_freq,
-          communities = simi$communities,
           halo = scalar_bool(config$simi_halo, TRUE),
-          layout_spacing = simi_layout_spacing,
-          info_text = paste0("Graphe de similitudes interactif - espacement ", simi_layout_spacing)
+          info_text = paste0("Analyse de similitudes de Vergès - espacement ", simi_layout_spacing)
         )
-        html_path <- file.path(output_dir, "simi_graph.html")
-        tryCatch(
-          htmlwidgets::saveWidget(widget, html_path, selfcontained = TRUE, title = "Graphe de similitudes"),
-          error = function(save_error) {
-            log_info(paste0(
-              "Export HTML autonome indisponible pour le graphe de similitudes : ",
-              save_error$message,
-              ". Export HTML avec fichiers associés."
-            ))
-            htmlwidgets::saveWidget(widget, html_path, selfcontained = FALSE, title = "Graphe de similitudes")
-          }
-        )
-        log_info("Graphe de similitudes interactif généré.", progress = 85)
-        html_path
+        log_info("Graphe de similitudes JSON Cytoscape exporté.", progress = 85)
+        json_path
       },
       error = function(e) {
-        log_info(paste0("Graphe de similitudes interactif indisponible : ", e$message, ". Le PNG statique reste disponible."))
+        log_info(paste0("Export JSON Cytoscape indisponible : ", e$message, ". Le PNG statique reste disponible."))
         NULL
       }
     )
@@ -1781,7 +1764,7 @@ run_batch <- function() {
     )
     grDevices::dev.off()
     artifacts$simi <- list(
-      graph_html = relative_to_output(simi_html),
+      graph_json = relative_to_output(simi_json),
       graph_png = relative_to_output(simi_png)
     )
     log_info("Graphe de similitudes généré.", progress = 86)
