@@ -652,7 +652,7 @@ def reencoder_video_h264(chemin_entrée, chemin_sortie):
 st.set_page_config(page_title="StopMotion", layout="wide")
 apply_page_style()
 enforce_streamlit_access("stopmotion_opticalflow", "StopMotion")
-st.title("Générateur de Stop Motion avec Optical Flow (optionnel)")
+st.title("Générateur de Stop Motion")
 st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
 st.caption("version 0.2 beta - modifiée 20-07-2026")
 with st.expander("Aide"):
