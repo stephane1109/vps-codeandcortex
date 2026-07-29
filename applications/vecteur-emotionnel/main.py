@@ -816,6 +816,35 @@ def file_bytes(path: str | Path) -> bytes:
 
 
 st.set_page_config(page_title="Vecteur emotionnel", layout="wide")
+st.markdown(
+    """
+    <style>
+      div[data-testid="stHeader"],
+      div[data-testid="stToolbar"],
+      div[data-testid="stDecoration"] {
+        display: none !important;
+        height: 0rem !important;
+      }
+      section.main > div,
+      div[data-testid="stAppViewContainer"] > .main,
+      .main .block-container,
+      div[data-testid="stMainBlockContainer"],
+      .block-container {
+        max-width: 100% !important;
+        padding-top: 0rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        margin-top: 0rem !important;
+      }
+      .block-container > div:first-child,
+      h1:first-of-type {
+        margin-top: 0rem !important;
+        padding-top: 0rem !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 enforce_streamlit_access("vecteur-emotionnel", "Vecteur emotionnel")
 
 session_id = st.session_state.setdefault("session_id", uuid.uuid4().hex)
