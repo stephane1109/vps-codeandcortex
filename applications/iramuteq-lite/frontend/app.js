@@ -1,5 +1,12 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
 
+const CYTOSCAPE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/+esm";
+const CYTOSCAPE_FCOSE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/+esm";
+const CYTOSCAPE_BUBBLESETS_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape-bubblesets@4.1.0/+esm";
+
+let simiCytoscapeRuntimePromise = null;
+let activeSimiCytoscape = null;
+
 const corpusFileInput = document.getElementById("corpusFile");
 const importCorpusBtn = document.getElementById("importCorpusBtn");
 const downloadResultsBtn = document.getElementById("downloadResultsBtn");
@@ -9190,6 +9197,26 @@ function applySimiZoom() {
   }
 
   const zoom = Math.min(3, Math.max(0.4, Number(appState.simiZoom) || 1));
+  const cytoscapeDestroyed = typeof activeSimiCytoscape?.destroyed === "function"
+    ? activeSimiCytoscape.destroyed()
+    : false;
+  if (activeSimiCytoscape && !cytoscapeDestroyed) {
+    const extent = activeSimiCytoscape.extent();
+    const renderedCenter = activeSimiCytoscape.container()?.getBoundingClientRect();
+    if (Math.abs(zoom - 1) <= 0.01) {
+      activeSimiCytoscape.fit(undefined, 56);
+    } else {
+      activeSimiCytoscape.zoom({
+        level: zoom,
+        renderedPosition: {
+          x: Math.max(1, (renderedCenter?.width || extent.w || 1) / 2),
+          y: Math.max(1, (renderedCenter?.height || extent.h || 1) / 2)
+        }
+      });
+    }
+    return;
+  }
+
   const mediaElements = Array.from(resultContainers.simiGraph?.querySelectorAll(".embedded-frame, .result-image") || []);
   if (!mediaElements.length) return;
 
@@ -10139,18 +10166,282 @@ function renderHtmlFrame(container, htmlText, emptyMessage) {
   }
 }
 
-async function renderSimilitudeGraphs(container, pngFile, htmlFile) {
+function destroyActiveSimiCytoscape() {
+  const cytoscapeDestroyed = typeof activeSimiCytoscape?.destroyed === "function"
+    ? activeSimiCytoscape.destroyed()
+    : false;
+  if (activeSimiCytoscape && typeof activeSimiCytoscape.destroy === "function" && !cytoscapeDestroyed) {
+    activeSimiCytoscape.destroy();
+  }
+  activeSimiCytoscape = null;
+}
+
+async function loadSimiCytoscapeRuntime() {
+  if (!simiCytoscapeRuntimePromise) {
+    simiCytoscapeRuntimePromise = (async () => {
+      const [cytoscapeModule, fcoseModule, bubbleSetsModule] = await Promise.all([
+        import(CYTOSCAPE_ESM_URL),
+        import(CYTOSCAPE_FCOSE_ESM_URL),
+        import(CYTOSCAPE_BUBBLESETS_ESM_URL).catch((error) => ({ __loadError: error }))
+      ]);
+
+      const cytoscapeFactory = cytoscapeModule.default || cytoscapeModule.cytoscape || cytoscapeModule;
+      const fcoseExtension = fcoseModule.default || fcoseModule;
+      if (typeof cytoscapeFactory !== "function") {
+        throw new Error("Cytoscape.js n'a pas pu être chargé.");
+      }
+      if (typeof fcoseExtension === "function" && typeof cytoscapeFactory.use === "function") {
+        cytoscapeFactory.use(fcoseExtension);
+      }
+
+      let bubbleSetsAvailable = false;
+      if (!bubbleSetsModule.__loadError) {
+        const bubbleSetsExtension =
+          bubbleSetsModule.default ||
+          bubbleSetsModule.cytoscapeBubblesets ||
+          bubbleSetsModule.cytoscapeBubbleSets ||
+          bubbleSetsModule;
+        if (typeof bubbleSetsExtension === "function" && typeof cytoscapeFactory.use === "function") {
+          try {
+            cytoscapeFactory.use(bubbleSetsExtension);
+            bubbleSetsAvailable = true;
+          } catch (error) {
+            console.warn("Extension cytoscape-bubblesets indisponible", error);
+          }
+        }
+      }
+
+      return { cytoscape: cytoscapeFactory, bubbleSetsAvailable };
+    })();
+  }
+
+  return simiCytoscapeRuntimePromise;
+}
+
+function buildSimiCytoscapeElements(payload) {
+  const nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
+  const edges = Array.isArray(payload?.edges) ? payload.edges : [];
+
+  return [
+    ...nodes.map((node) => ({
+      data: {
+        id: String(node.id || node.label || ""),
+        label: String(node.label || node.id || ""),
+        frequency: Number(node.frequency) || 0,
+        size: Math.max(24, Math.min(92, Number(node.size) || 42)),
+        group: String(node.group || "communaute_1"),
+        color: String(node.color || "#2C7FB8")
+      },
+      position: {
+        x: Number.isFinite(Number(node.x)) ? Number(node.x) : 0,
+        y: Number.isFinite(Number(node.y)) ? Number(node.y) : 0
+      }
+    })),
+    ...edges.map((edge, index) => ({
+      data: {
+        id: String(edge.id || `e${index + 1}`),
+        source: String(edge.source || edge.from || ""),
+        target: String(edge.target || edge.to || ""),
+        weight: Number(edge.weight) || 0,
+        width: Math.max(1, Math.min(12, Number(edge.width) || 1.6)),
+        label: String(edge.label || "")
+      }
+    }))
+  ];
+}
+
+function renderSimiBubbleSets(cy, payload, statusElement) {
+  const halos = Array.isArray(payload?.halos) ? payload.halos : [];
+  if (!halos.length || typeof cy?.bubbleSets !== "function") {
+    return false;
+  }
+
+  const bubbleSets = cy.bubbleSets();
+  let drawn = 0;
+  halos.forEach((halo) => {
+    const haloNodes = Array.isArray(halo.nodes) ? halo.nodes : [];
+    let nodeCollection = cy.collection();
+    haloNodes.forEach((nodeId) => {
+      const match = cy.$id(String(nodeId));
+      if (match.length) {
+        nodeCollection = nodeCollection.union(match);
+      }
+    });
+    if (!nodeCollection.length) return;
+
+    const edgeCollection = nodeCollection.edgesWith(nodeCollection);
+    const avoidNodes = cy.nodes().not(nodeCollection);
+    try {
+      bubbleSets.addPath(nodeCollection, edgeCollection, avoidNodes, {
+        style: {
+          fill: String(halo.fill || "rgba(44,127,184,0.18)"),
+          stroke: String(halo.stroke || halo.color || "rgba(44,127,184,0.72)"),
+          strokeWidth: 1.8,
+          opacity: 0.96
+        }
+      });
+      drawn += 1;
+    } catch (error) {
+      log(`[error] Halo Cytoscape indisponible (${halo.label || halo.id || "communauté"}): ${error?.message || String(error)}`);
+    }
+  });
+
+  if (drawn > 0 && statusElement) {
+    statusElement.textContent = `${statusElement.textContent} Halos communautaires BubbleSets actifs.`;
+  }
+  return drawn > 0;
+}
+
+async function renderCytoscapeSimilitudeGraph(stage, statusElement, graphJsonFile) {
+  const payload = JSON.parse(await graphJsonFile.text());
+  const nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
+  const edges = Array.isArray(payload?.edges) ? payload.edges : [];
+  if (!nodes.length) {
+    stage.appendChild(createEmptyState("Le JSON de similitudes ne contient aucun nœud."));
+    return;
+  }
+
+  const { cytoscape } = await loadSimiCytoscapeRuntime();
+  const layoutSpacing = Math.min(3, Math.max(0.8, Number(payload?.meta?.layout_spacing) || 1.7));
+  const elements = buildSimiCytoscapeElements(payload);
+
+  activeSimiCytoscape = cytoscape({
+    container: stage,
+    elements,
+    wheelSensitivity: 0.16,
+    minZoom: 0.08,
+    maxZoom: 5,
+    style: [
+      {
+        selector: "node",
+        style: {
+          "background-color": "data(color)",
+          "border-color": "#1f4f7a",
+          "border-width": 1.4,
+          "color": "#1f2937",
+          "font-size": "mapData(size, 24, 92, 12, 25)",
+          "font-weight": 700,
+          "height": "data(size)",
+          "label": "data(label)",
+          "overlay-padding": 6,
+          "text-background-color": "#ffffff",
+          "text-background-opacity": 0.76,
+          "text-background-padding": 3,
+          "text-halign": "center",
+          "text-max-width": 130,
+          "text-valign": "center",
+          "text-wrap": "wrap",
+          "width": "data(size)"
+        }
+      },
+      {
+        selector: "edge",
+        style: {
+          "color": "#334155",
+          "curve-style": "straight",
+          "font-size": 11,
+          "label": "data(label)",
+          "line-color": "#46515d",
+          "opacity": 0.82,
+          "text-background-color": "#ffffff",
+          "text-background-opacity": 0.82,
+          "text-background-padding": 2,
+          "width": "data(width)"
+        }
+      },
+      {
+        selector: "node:selected",
+        style: {
+          "border-color": "#a32121",
+          "border-width": 3
+        }
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          "line-color": "#a32121",
+          "opacity": 1
+        }
+      }
+    ],
+    layout: { name: "preset", fit: true, padding: 64 }
+  });
+
+  statusElement.textContent = `${nodes.length} nœud(s), ${edges.length} arête(s). Les nœuds sont déplaçables ; molette ou boutons pour zoomer.`;
+
+  const layout = activeSimiCytoscape.layout({
+    name: "fcose",
+    quality: "default",
+    animate: "end",
+    animationDuration: 650,
+    randomize: false,
+    nodeDimensionsIncludeLabels: true,
+    nodeRepulsion: 9000 * layoutSpacing,
+    idealEdgeLength: 135 * layoutSpacing,
+    edgeElasticity: 0.16,
+    gravity: 0.22,
+    numIter: 2500,
+    fit: true,
+    padding: 72
+  });
+
+  layout.one("layoutstop", () => {
+    activeSimiCytoscape.fit(undefined, 64);
+    window.requestAnimationFrame(() => {
+      const hasHalos = renderSimiBubbleSets(activeSimiCytoscape, payload, statusElement);
+      if (!hasHalos && Array.isArray(payload?.halos) && payload.halos.length) {
+        statusElement.textContent = `${statusElement.textContent} Halos demandés, mais extension BubbleSets indisponible côté navigateur.`;
+      }
+      applySimiZoom();
+    });
+  });
+
+  layout.run();
+}
+
+async function renderSimilitudeGraphs(container, pngFile, graphJsonFile, htmlFile) {
+  destroyActiveSimiCytoscape();
   if (!clearContainer(container)) {
     return;
   }
 
-  if (!pngFile && !htmlFile) {
+  if (!pngFile && !graphJsonFile && !htmlFile) {
     setContainerEmptyState(container, "Aucun graphe de similitudes exporté.");
     return;
   }
 
   const stack = document.createElement("div");
   stack.className = "simi-graph-stack";
+
+  let cytoscapeTask = null;
+  if (graphJsonFile) {
+    const cyBlock = document.createElement("section");
+    cyBlock.className = "simi-graph-block";
+
+    const cyTitle = document.createElement("h4");
+    cyTitle.className = "simi-graph-title";
+    cyTitle.textContent = "Cytoscape.js - graphe JSON déplaçable";
+
+    const cyFlow = document.createElement("p");
+    cyFlow.className = "field-help simi-cytoscape-flow";
+    cyFlow.textContent = "R calcule l'analyse de similitude de Vergès, exporte les nœuds et arêtes en JSON, puis Cytoscape.js, fCoSE et BubbleSets affichent le graphe et les halos.";
+
+    const cyStage = document.createElement("div");
+    cyStage.className = "simi-cytoscape-stage";
+
+    const cyStatus = document.createElement("p");
+    cyStatus.className = "field-help simi-cytoscape-status";
+    cyStatus.textContent = "Chargement du graphe Cytoscape...";
+
+    cyBlock.append(cyTitle, cyFlow, cyStage, cyStatus);
+    stack.appendChild(cyBlock);
+    cytoscapeTask = renderCytoscapeSimilitudeGraph(cyStage, cyStatus, graphJsonFile).catch((error) => {
+      cyStage.innerHTML = "";
+      cyStage.appendChild(createDiagnosticState("Impossible d'afficher le graphe Cytoscape. Le PNG statique reste disponible."));
+      cyStatus.textContent = `Erreur Cytoscape : ${error?.message || String(error)}`;
+      log(`[error] Rendu Cytoscape indisponible (${graphJsonFile.name}): ${error?.message || String(error)}`);
+    });
+  }
 
   if (pngFile) {
     const pngBlock = document.createElement("section");
@@ -10169,13 +10460,13 @@ async function renderSimilitudeGraphs(container, pngFile, htmlFile) {
     stack.appendChild(pngBlock);
   }
 
-  if (htmlFile) {
+  if (!graphJsonFile && htmlFile) {
     const htmlBlock = document.createElement("section");
     htmlBlock.className = "simi-graph-block";
 
     const htmlTitle = document.createElement("h4");
     htmlTitle.className = "simi-graph-title";
-    htmlTitle.textContent = "HTML interactif - graphe déplaçable";
+    htmlTitle.textContent = "Ancien rendu interactif disponible dans cette archive";
     htmlBlock.appendChild(htmlTitle);
 
     try {
@@ -10192,6 +10483,9 @@ async function renderSimilitudeGraphs(container, pngFile, htmlFile) {
   }
 
   container.appendChild(stack);
+  if (cytoscapeTask) {
+    await cytoscapeTask;
+  }
   applySimiZoom();
 }
 
@@ -12287,8 +12581,12 @@ async function renderExports(entries, index) {
       (path) => path.endsWith(".html") && path.includes("simi"),
       (path) => path.endsWith(".html") && path.includes("simil")
     ]);
+    const similitudeJsonFile = findFile(index, [
+      (path) => path.endsWith(".json") && path.includes("simi"),
+      (path) => path.endsWith(".json") && path.includes("simil")
+    ]);
 
-    await renderSimilitudeGraphs(resultContainers.simiGraph, similitudePngFile, similitudeHtmlFile);
+    await renderSimilitudeGraphs(resultContainers.simiGraph, similitudePngFile, similitudeJsonFile, similitudeHtmlFile);
   });
 
   try {

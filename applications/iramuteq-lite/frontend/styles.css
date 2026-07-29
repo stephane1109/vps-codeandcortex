@@ -2731,6 +2731,26 @@ body.comparison-ab-fullscreen-open {
   text-align: left;
 }
 
+.simi-cytoscape-flow,
+.simi-cytoscape-status {
+  margin: 0;
+  text-align: left;
+}
+
+.simi-cytoscape-stage {
+  width: 100%;
+  height: min(86vh, 1080px);
+  min-height: 720px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(163, 33, 33, 0.05), transparent 26%),
+    linear-gradient(180deg, #fffdf9 0%, #f8f5ef 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+  text-align: left;
+}
+
 #simiGraph .result-image {
   width: min(100%, 1360px);
   max-width: none;
