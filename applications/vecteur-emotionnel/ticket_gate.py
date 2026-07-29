@@ -17,6 +17,42 @@ except ModuleNotFoundError:  # pragma: no cover
 
 SESSION_STATE_KEY = "__ticket_gate_session_id__"
 RELEASED_STATE_KEY = "__ticket_gate_released__"
+RELEASED_ACCESS_NOTICE_STYLE = """
+<style>
+.ticket-gate-main-notice {
+  margin: 0.95rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border-left: 4px solid #2563eb;
+  border-radius: 10px;
+  border-top: 1px solid rgba(37, 99, 235, 0.16);
+  border-right: 1px solid rgba(37, 99, 235, 0.16);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.16);
+  background: #eff6ff;
+  color: #0f172a !important;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.ticket-gate-main-notice strong {
+  color: #1d4ed8 !important;
+}
+.ticket-gate-main-notice p {
+  margin: 0.25rem 0 0;
+}
+</style>
+"""
+
+
+def _render_released_access_notice() -> None:
+    st.markdown(RELEASED_ACCESS_NOTICE_STYLE, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="ticket-gate-main-notice" role="status">
+          <strong>Acces libere</strong>
+          <p>Cliquez sur <em>Reprendre l'acces</em> pour revenir dans la file.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -339,7 +375,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
     st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
 
     if st.session_state.get(RELEASED_STATE_KEY):
-        st.info("Acces libere pour cette page.")
+        _render_released_access_notice()
         if st.button("Reprendre l'acces", use_container_width=True):
             st.session_state[RELEASED_STATE_KEY] = False
             st.rerun()
