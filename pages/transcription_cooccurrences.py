@@ -25,7 +25,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-from app_runtime import enforce_access, heartbeat
+from app_runtime import apply_page_style, enforce_access, heartbeat
 from core_media import initialiser_repertoires, info_ffmpeg
 
 # ======================= Structures de données =======================
@@ -250,6 +250,7 @@ def timeline_occurrences_chart(df: pd.DataFrame, titre: str) -> alt.Chart:
 
 BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 st.set_page_config(page_title="Transcription & Cooccurrences", layout="wide")
+apply_page_style()
 enforce_access()
 st.title("Transcription horodatée & cooccurrences")
 st.markdown("www.codeandcortex.fr")

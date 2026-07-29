@@ -19,7 +19,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-from app_runtime import enforce_access, heartbeat
+from app_runtime import apply_page_style, enforce_access, heartbeat
 from core_media import initialiser_repertoires, info_ffmpeg
 
 # ============================= Utilitaires système =============================
@@ -283,6 +283,7 @@ def fabriquer_vignette_datauri(cv2, img_rgb: np.ndarray, largeur: int = 120, cad
 
 BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 st.set_page_config(page_title="Anomalies + Timeline en vignettes", layout="wide")
+apply_page_style()
 enforce_access()
 st.title("Anomalies + Timeline en vignettes (images posées sur le temps)")
 st.markdown("www.codeandcortex.fr")

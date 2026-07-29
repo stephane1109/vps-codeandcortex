@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import streamlit as st
+
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 
@@ -14,6 +16,35 @@ APP_LABEL = "Analyse MM"
 # En local, l'application retombe sur /tmp/appdata.
 # Sur le VPS, regle APP_DATA_DIR=/data/app dans Coolify pour garder un espace dedie.
 APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/tmp/appdata")).resolve()
+
+
+def apply_page_style() -> None:
+    st.markdown(
+        """
+        <style>
+          section.main > div.block-container,
+          .main .block-container,
+          .block-container,
+          div[data-testid="stMainBlockContainer"],
+          div[data-testid="stAppViewBlockContainer"] {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+          }
+          .block-container > div:first-child,
+          div[data-testid="stMainBlockContainer"] > div:first-child,
+          div[data-testid="stAppViewBlockContainer"] > div:first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+          }
+          h1,
+          div[data-testid="stHeading"] h1 {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def ensure_app_data_dir() -> Path:

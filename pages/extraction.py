@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 import streamlit as st
 
-from app_runtime import enforce_access, heartbeat
+from app_runtime import apply_page_style, enforce_access, heartbeat
 from core_media import initialiser_repertoires, info_ffmpeg
 
 # ----------------- utilitaires -----------------
@@ -64,6 +64,7 @@ def zipper_dossier(dossier: Path) -> Path:
 
 BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 st.set_page_config(page_title="Extraction", layout="wide")
+apply_page_style()
 enforce_access()
 st.title("Extraction")
 

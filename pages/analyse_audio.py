@@ -9,9 +9,10 @@ import numpy as np
 import soundfile as sf
 import io
 
-from app_runtime import enforce_access, heartbeat
+from app_runtime import apply_page_style, enforce_access, heartbeat
 
 st.set_page_config(page_title="Analyse audio", layout="wide")
+apply_page_style()
 enforce_access()
 st.title("Analyse audio : pauses, intensité, débit")
 
