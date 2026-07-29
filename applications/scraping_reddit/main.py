@@ -137,6 +137,22 @@ def generer_fichier_txt(resultats):
 
 # Interface utilisateur Streamlit
 st.set_page_config(page_title="Scraping Reddit", layout="wide")
+st.markdown(
+    """
+    <style>
+      .main .block-container,
+      .block-container {
+        padding-top: 0rem !important;
+        margin-top: 0 !important;
+      }
+      .block-container > div:first-child {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 enforce_streamlit_access("scraping_reddit", "Scraper Reddit")
 initialiser_etat()
 
