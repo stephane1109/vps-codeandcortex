@@ -514,16 +514,15 @@ def afficher_interface_europresse():
     )
     st.markdown(
         """
-        <p style="font-size:16px;">
-            Cette application (no code !) vous permet de convertir facilement des fichiers HTML issus du site Europresse en
-            fichiers texte (.txt et .csv), prêts à être analysés avec le logiciel IRaMuTEQ. Le script (version 4) effectue
-            un nettoyage du corpus et formate la première ligne de chaque article selon les exigences du logiciel
-            <code>**** *source_nomdujournal *date_2023-12-22 *am_2023-12 *annee_2023</code>. Une (nouvelle) option permet
-            également de rechercher des articles en double (print vs web d'un même journal par exemple). Autre (nouvelle)
-            option : Un filtrage des articles trops court. Possibilité d'exporter l'article ou de selectionner uniquement
-            le titres et le chapô. Consultez mon site où je partage des contenus autour de l'analyse de texte, de la data
-            science et du NLP. Si vous avez des questions, des retours ou des suggestions, n'hésitez pas à me contacter.
-            <a href="https://www.codeandcortex.fr" target="_blank">codeandxortex.fr</a>
+        <p style="font-size:16px; line-height:1.45; margin:0;">
+            Cette application (no code !) vous permet de convertir facilement des fichiers HTML issus du site Europresse en fichiers texte (.txt et .csv), prêts à être analysés avec le logiciel IRaMuTEQ.<br>
+            Le script (version 4) effectue un nettoyage du corpus et formate la première ligne de chaque article selon les exigences du logiciel <code>**** *source_nomdujournal *date_2023-12-22 *am_2023-12 *annee_2023</code>.<br>
+            Une (nouvelle) option permet également de rechercher des articles en double (print vs web d'un même journal par exemple).<br>
+            Autre (nouvelle) option : un filtrage des articles trop courts.<br>
+            Possibilité d'exporter l'article ou de sélectionner uniquement les titres et le chapô.<br>
+            Consultez mon site où je partage des contenus autour de l'analyse de texte, de la data science et du NLP.<br>
+            Si vous avez des questions, des retours ou des suggestions, n'hésitez pas à me contacter.<br>
+            <a href="https://www.codeandcortex.fr" target="_blank">codeandcortex.fr</a>
         </p>
         """,
         unsafe_allow_html=True
