@@ -98,6 +98,32 @@ def _load_uploaded_content(
 
 def main() -> None:
     st.set_page_config(page_title="Symbolic Connectors", layout="wide")
+    st.markdown(
+        """
+        <style>
+          section.main > div.block-container,
+          .main .block-container,
+          .block-container,
+          div[data-testid="stMainBlockContainer"],
+          div[data-testid="stAppViewBlockContainer"] {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+          }
+          .block-container > div:first-child,
+          div[data-testid="stMainBlockContainer"] > div:first-child,
+          div[data-testid="stAppViewBlockContainer"] > div:first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+          }
+          h1,
+          div[data-testid="stHeading"] h1 {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     # #### VARIABLES D'ENVIRONNEMENT - CONTROLE D'ACCES REDIS POUR LE VPS
     # Variables a ajuster dans Coolify :
     # - REDIS_URL
