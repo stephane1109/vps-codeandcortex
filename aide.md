@@ -1,38 +1,5 @@
 # Aide
 
-## Fonctions (code)
-
-### `parser_date(raw_date_str)`
-- Convertit une date en français/anglais en `datetime` (ex. "31 décembre 2024", "June 13, 2024").
-- Retourne `None` si le parsing échoue.
-
-### `nettoyer_nom_journal(nom_journal)`
-- Normalise le nom du journal et retourne un tag `*source_*`.
-- Remplace espaces/apostrophes par `_` et coupe après la première virgule.
-
-### `extraire_texte_html(...)`
-- Parse le HTML Europresse et reconstruit :
-  - le texte final au format IRaMuTeQ,
-  - une table CSV,
-  - une liste d’articles pour la détection de doublons.
-- Applique les options : source, dates, variable supplémentaire, méthode d’extraction, type de contenu, suppression de balises expérimentale.
-
-### `afficher_interface_europresse()`
-- Construit l’interface Streamlit (upload, options, exports, aperçu, ZIP).
-
-### `compter_mots(texte)`
-- Compte les mots d’un texte via regex.
-
-### `detecter_doublons_articles(articles, longueur_minimale=...)`
-- Détecte les doublons par hash du corps d’article.
-- Signale aussi les articles trop courts (< longueur minimale).
-
-### `reconstruire_texte(articles)`
-- Reconstruit le corpus à partir d’articles filtrés (sans doublons/courts).
-
-### `extraire_apercu(article, longueur=200)`
-- Génère un court aperçu pour affichage dans l’UI (doublons/courts).
-
 ## Options (interface)
 
 ### Upload
