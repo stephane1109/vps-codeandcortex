@@ -112,7 +112,7 @@ APPLICATIONS_PAR_DEFAUT = {
     },
     "chdrainette": {
         "label": "CHD Rainette",
-        "max_active": 1,
+        "max_active": 3,
         "cout": 4,
         "duree_ticket": 300,
     },
