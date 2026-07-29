@@ -147,6 +147,25 @@ TICKET_STATUS_STYLE = """
 .ticket-status-card.is-released .ticket-status-meta strong {
   color: #475569 !important;
 }
+.ticket-gate-main-notice {
+  margin: 0.95rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border-left: 4px solid #2563eb;
+  border-radius: 10px;
+  border-top: 1px solid rgba(37, 99, 235, 0.16);
+  border-right: 1px solid rgba(37, 99, 235, 0.16);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.16);
+  background: #eff6ff;
+  color: #0f172a !important;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.ticket-gate-main-notice strong {
+  color: #1d4ed8 !important;
+}
+.ticket-gate-main-notice p {
+  margin: 0.25rem 0 0;
+}
 @keyframes ticket-pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
   70% { box-shadow: 0 0 0 12px rgba(22, 163, 74, 0); }
@@ -159,6 +178,19 @@ TICKET_STATUS_STYLE = """
 }
 </style>
 """
+
+
+def _render_released_access_notice() -> None:
+    st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="ticket-gate-main-notice" role="status">
+          <strong>Accès libéré</strong>
+          <p>Cliquez sur <em>Reprendre l'accès</em> dans la barre latérale pour revenir dans la file.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -657,7 +689,7 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
         return _released_snapshot(
             client,
             cfg,
-            "Accès libéré pour cette page. Clique sur 'Reprendre l'accès' pour revenir dans la file.",
+            "Accès libéré pour cette page. Cliquez sur 'Reprendre l'accès' pour revenir dans la file.",
         )
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
@@ -761,7 +793,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.stop()
 
     if snapshot["statut"] == "released":
-        st.info("Accès libéré. Clique sur 'Reprendre l'accès' pour revenir dans la file.")
+        _render_released_access_notice()
         st.stop()
 
     if snapshot["statut"] == "refuse":
