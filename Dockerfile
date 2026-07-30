@@ -10,6 +10,8 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY dashboard_api.py gestion_tickets.py index.html style.css aide.md /app/
+COPY dashboard_shared /app/dashboard_shared
+COPY applications /app/applications
 COPY assets /app/assets
 
 # #### VARIABLES D'ENVIRONNEMENT IMPORTANTES

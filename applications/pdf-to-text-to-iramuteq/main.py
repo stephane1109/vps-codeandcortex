@@ -446,7 +446,7 @@ def main() -> None:
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL=redis://:motdepasse@nom-du-service-redis:6379/0
     # - APP_TICKET_ID=pdf-to-text-to-iramuteq
-    # - APP_TICKET_MAX_ACTIVE=1
+    # - APP_TICKET_MAX_ACTIVE=4
     # - APP_TICKET_COST=1
     # - CAPACITE_SERVEUR=6
     # - APP_TICKET_TTL_SECONDS=3600

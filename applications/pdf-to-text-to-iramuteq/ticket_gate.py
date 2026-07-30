@@ -33,9 +33,8 @@ Variables d'environnement a modifier si besoin :
 
 - APP_TICKET_MAX_ACTIVE
   Nombre maximal d'utilisateurs actifs pour l'application.
-  Pour tes applications exclusives, laisse 1.
-  Si un jour tu veux ouvrir a 2 utilisateurs simultanes :
-  APP_TICKET_MAX_ACTIVE=2
+  Cette application PDF peut monter a 4 utilisateurs simultanes :
+  APP_TICKET_MAX_ACTIVE=4
 
 - APP_TICKET_COST
   Cout de charge de l'application dans la capacite globale du serveur.
@@ -72,7 +71,7 @@ Variables d'environnement a modifier si besoin :
   Mettre 0 pour desactiver ce garde-fou.
 
 Conseil pratique pour Coolify :
-- laisse APP_TICKET_MAX_ACTIVE=1 pour une grosse application monopolistique
+- laisse APP_TICKET_MAX_ACTIVE=4 pour ce service PDF leger
 - augmente APP_TICKET_TTL_SECONDS si un traitement peut durer longtemps
 - ajuste APP_TICKET_COST selon la charge CPU/RAM reelle sur ton VPS
 """
@@ -202,7 +201,7 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
         "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
         "app_label": app_label,
-        "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 1)),
+        "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 4)),
         "cost": max(0, _env_int("APP_TICKET_COST", 4)),
         "global_capacity": max(1, _env_int("CAPACITE_SERVEUR", 6)),
         "ttl_seconds": max(60, _env_int("APP_TICKET_TTL_SECONDS", 1800)),
