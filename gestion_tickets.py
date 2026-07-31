@@ -386,8 +386,10 @@ def lire_configuration_tickets(application_id: str | None = None, client_redis=N
     applications: dict[str, dict[str, Any]] = {}
     for slug in sorted(set(ids)):
         brute = dict(configurations_brutes.get(slug) or {})
-        brute.update(_configuration_runtime_depuis_redis(client_redis, slug))
+        configuration_runtime = _configuration_runtime_depuis_redis(client_redis, slug)
+        brute.update(configuration_runtime)
         applications[slug] = _fusionner_configuration_application(slug, brute or {"label": slug}, configuration_globale)
+        applications[slug]["runtime_sync"] = bool(configuration_runtime)
 
     application = applications[identifiant_application]
 
@@ -752,6 +754,21 @@ def lire_statut_application(client_redis, application_id: str) -> dict[str, Any]
 
     active = compter_tickets_actifs_application(client_redis, identifiant_application)
     queued = compter_tickets_attente_application(client_redis, identifiant_application)
+
+    if not configuration.get("runtime_sync"):
+        return {
+            "applicationId": identifiant_application,
+            "label": configuration["label"],
+            "active": active,
+            "maxActive": None,
+            "queued": queued,
+            "cost": configuration["cout"],
+            "state": "unavailable",
+            "stateLabel": "Synchronisation indisponible",
+            "message": "Configuration runtime non publiee par l'application.",
+            "metaText": "Synchronisation indisponible",
+        }
+
     state, state_label = _statut_application_depuis_compteurs(active, configuration["max_active"], queued)
 
     return {
