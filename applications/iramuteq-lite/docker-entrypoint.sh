@@ -33,6 +33,7 @@ candidate_files = [
     app_root / "webapp" / "ticket_gate.py",
     app_root / "main.py",
     app_root / "webapp" / "main.py",
+    app_root / "README.md",
     app_root / "Dockerfile",
 ]
 texts: list[tuple[str, str]] = []
@@ -78,6 +79,13 @@ def extract(patterns, file_names=None):
     return ""
 
 
+def clean_label(value: str, fallback: str) -> str:
+    label = str(value or "").strip()
+    label = re.sub(r'^[#\s\-]+', '', label)
+    label = re.sub(r'^(projet\s*:\s*)', '', label, flags=re.IGNORECASE)
+    return label.strip() or fallback
+
+
 def extract_int(name: str, fallback: int) -> int:
     raw = extract(
         [
@@ -112,7 +120,9 @@ def infer_app_id() -> str:
     )
     if value:
         return value
-    if any(hint in joined_text for hint in ("APP_TICKET_", "ticket_gate", "enforce_streamlit_access(")):
+    if any((app_root / relative).exists() for relative in ("ticket_gate.py", "webapp/ticket_gate.py", "main.py", "webapp/main.py", "README.md")):
+        return app_root.name
+    if any(hint in joined_text for hint in ("APP_TICKET_", "ticket_gate", "enforce_streamlit_access(", "APP_NAME", "APP_DISPLAY_NAME", "st.set_page_config(", "st.title(")):
         return app_root.name
     return ""
 
@@ -120,17 +130,27 @@ def infer_app_id() -> str:
 def infer_label(app_id: str) -> str:
     value = (os.getenv("APP_TICKET_LABEL") or os.getenv("APP_NAME") or "").strip()
     if value:
-        return value
+        return clean_label(value, app_id)
     value = extract(
         [
             r'def _config\([\s\S]*?app_label: str\s*=\s*"(?P<label>[^"]+)"',
             r'enforce_streamlit_access\(\s*"[^"]+"\s*,\s*"(?P<label>[^"]+)"',
             r'\bAPP_TICKET_LABEL\b\s*=\s*"?(?P<label>[^"\n]+)"?',
-            r'\bAPP_NAME\b\s*=\s*"?(?P<label>[^"\n]+)"?',
+            r'\bAPP_DISPLAY_NAME\b\s*=\s*"(?P<label>[^"]+)"',
+            r"\bAPP_DISPLAY_NAME\b\s*=\s*'(?P<label>[^']+)'",
+            r'\bAPP_NAME\b\s*=\s*"(?P<label>[^"]+)"',
+            r"\bAPP_NAME\b\s*=\s*'(?P<label>[^']+)'",
+            r'st\.title\(\s*"(?P<label>[^"]+)"',
+            r"st\.title\(\s*'(?P<label>[^']+)'",
+            r'st\.set_page_config\([\s\S]*?page_title\s*=\s*"(?P<label>[^"]+)"',
+            r"st\.set_page_config\([\s\S]*?page_title\s*=\s*'(?P<label>[^']+)'",
         ],
         file_names=["ticket_gate.py", "webapp/ticket_gate.py", "main.py", "webapp/main.py", "Dockerfile"],
     )
-    return value or app_id
+    if value:
+        return clean_label(value, app_id)
+    value = extract(r'^#{1,6}\s+(?P<label>[^\n]+)$', file_names=["README.md"])
+    return clean_label(value, app_id)
 
 
 app_id = infer_app_id()
@@ -173,6 +193,7 @@ client.hset(f"app:{app_id}:config", mapping=payload)
 client.expire(f"app:{app_id}:config", max(3600, ttl_seconds, max(30, heartbeat_ms // 1000) * 3))
 PYTHON
 }
+
 
 
 
