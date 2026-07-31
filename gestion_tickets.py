@@ -242,33 +242,18 @@ def charger_configurations_applications() -> dict[str, dict[str, Any]]:
     return configurations
 
 
-def lire_configuration_tickets(application_id: str | None = None) -> dict[str, Any]:
-    """Lire la configuration globale et celle d'une application donnée."""
-    configuration_globale = _configuration_globale()
-    applications = charger_configurations_applications()
-    identifiant_application = normaliser_identifiant_application(application_id)
-    application = applications.get(identifiant_application)
-    if application is None:
-        application = _fusionner_configuration_application(
-            identifiant_application,
-            {"label": identifiant_application},
-            configuration_globale,
-        )
-        applications[identifiant_application] = application
-
-    return {
-        "capacite_serveur": configuration_globale["capacite_serveur"],
-        "duree_ticket": configuration_globale["duree_ticket"],
-        "applications": applications,
-        **application,
-    }
-
-
 def cles_redis_application(application_id: str) -> dict[str, str]:
     return {
         "tickets_actifs": f"app:{application_id}:tickets:actifs",
         "tickets_attente": f"app:{application_id}:tickets:attente",
     }
+
+
+def cles_redis_configuration_application(application_id: str) -> tuple[str, ...]:
+    return (
+        f"app:{application_id}:config",
+        f"application:{application_id}:config",
+    )
 
 
 def cle_ticket(identifiant_ticket: str) -> str:
@@ -285,6 +270,133 @@ def _zset_actifs_globale() -> str:
 
 def _application_ids_configures() -> list[str]:
     return sorted(charger_configurations_applications().keys())
+
+
+def _extraire_texte_mapping(donnees: dict[str, Any], *champs: str) -> str | None:
+    for champ in champs:
+        valeur = str(donnees.get(champ, "")).strip()
+        if valeur:
+            return valeur
+    return None
+
+
+def _extraire_entier_mapping(donnees: dict[str, Any], *champs: str, minimum: int | None = None) -> int | None:
+    for champ in champs:
+        valeur = donnees.get(champ)
+        if valeur in (None, ""):
+            continue
+        try:
+            nombre = int(float(valeur))
+        except (TypeError, ValueError):
+            continue
+        return max(minimum, nombre) if minimum is not None else nombre
+    return None
+
+
+def _configuration_runtime_depuis_redis(client_redis, application_id: str) -> dict[str, Any]:
+    if client_redis is None:
+        return {}
+
+    for cle in cles_redis_configuration_application(application_id):
+        donnees = client_redis.hgetall(cle) or {}
+        if not donnees:
+            continue
+
+        configuration: dict[str, Any] = {}
+        label = _extraire_texte_mapping(donnees, "label", "application_label", "app_label", "nom_application")
+        if label:
+            configuration["label"] = label
+
+        cout = _extraire_entier_mapping(donnees, "cost", "cout", "cout_application", minimum=0)
+        if cout is not None:
+            configuration["cout"] = cout
+
+        max_active = _extraire_entier_mapping(donnees, "max_active", "maxActive", minimum=1)
+        if max_active is not None:
+            configuration["max_active"] = max_active
+
+        max_file_attente = _extraire_entier_mapping(
+            donnees,
+            "max_waiting",
+            "max_file_attente",
+            "maxWaiting",
+            minimum=0,
+        )
+        if max_file_attente is not None:
+            configuration["max_file_attente"] = max_file_attente
+
+        duree_ticket = _extraire_entier_mapping(donnees, "ttl_seconds", "duree_ticket", minimum=60)
+        if duree_ticket is not None:
+            configuration["duree_ticket"] = duree_ticket
+
+        duree_attente = _extraire_entier_mapping(donnees, "duree_attente", minimum=30)
+        if duree_attente is not None:
+            configuration["duree_attente"] = duree_attente
+
+        return configuration
+
+    return {}
+
+
+def _extraire_application_id_depuis_cle_redis(cle: str) -> str | None:
+    if cle.startswith("app:") and cle.endswith(":config"):
+        return normaliser_identifiant_application(cle[4:-7])
+    if cle.startswith("application:") and cle.endswith(":config"):
+        return normaliser_identifiant_application(cle[len("application:") : -7])
+    if cle.startswith("app:") and cle.endswith(":tickets:actifs"):
+        return normaliser_identifiant_application(cle[4:-15])
+    if cle.startswith("app:") and cle.endswith(":tickets:attente"):
+        return normaliser_identifiant_application(cle[4:-16])
+    return None
+
+
+def _application_ids_redis(client_redis) -> list[str]:
+    if client_redis is None:
+        return []
+
+    ids: set[str] = set()
+    for motif in (
+        "app:*:config",
+        "application:*:config",
+        "app:*:tickets:actifs",
+        "app:*:tickets:attente",
+    ):
+        for cle in client_redis.scan_iter(match=motif):
+            application_id = _extraire_application_id_depuis_cle_redis(str(cle))
+            if application_id:
+                ids.add(application_id)
+    return sorted(ids)
+
+
+def _application_ids_connues(client_redis=None) -> list[str]:
+    ids = set(_application_ids_configures())
+    ids.update(_application_ids_redis(client_redis))
+    return sorted(ids)
+
+
+def lire_configuration_tickets(application_id: str | None = None, client_redis=None) -> dict[str, Any]:
+    """Lire la configuration globale et celle d'une application donnée."""
+    configuration_globale = _configuration_globale()
+    identifiant_application = normaliser_identifiant_application(application_id)
+    configurations_brutes = charger_configurations_applications()
+
+    ids = _application_ids_connues(client_redis)
+    ids.append(identifiant_application)
+
+    applications: dict[str, dict[str, Any]] = {}
+    for slug in sorted(set(ids)):
+        brute = dict(configurations_brutes.get(slug) or {})
+        brute.update(_configuration_runtime_depuis_redis(client_redis, slug))
+        applications[slug] = _fusionner_configuration_application(slug, brute or {"label": slug}, configuration_globale)
+
+    application = applications[identifiant_application]
+
+    return {
+        "capacite_serveur": configuration_globale["capacite_serveur"],
+        "duree_ticket": configuration_globale["duree_ticket"],
+        "applications": applications,
+        **application,
+    }
 
 
 def _zscore(client_redis, key: str, member: str) -> float:
@@ -348,12 +460,12 @@ def _supprimer_ticket(client_redis, identifiant_ticket: str, application_id: str
 
 def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
     """Supprimer des index les tickets expirés ou abandonnés."""
-    applications = [normaliser_identifiant_application(application_id)] if application_id else _application_ids_configures()
+    applications = [normaliser_identifiant_application(application_id)] if application_id else _application_ids_connues(client_redis)
     tickets_vus: set[tuple[str, str]] = set()
     maintenant = int(time.time())
 
     for identifiant_application in applications:
-        configuration = lire_configuration_tickets(identifiant_application)
+        configuration = lire_configuration_tickets(identifiant_application, client_redis=client_redis)
         cles = cles_redis_application(identifiant_application)
         for key in (cles["tickets_actifs"], cles["tickets_attente"]):
             for identifiant_ticket in _lister_tickets(client_redis, key):
@@ -396,7 +508,7 @@ def calculer_charge_active(client_redis):
         donnees = client_redis.hgetall(cle_ticket(identifiant_ticket))
         if donnees:
             application_id = str(donnees.get("application_id", "")).strip()
-            configuration = lire_configuration_tickets(application_id) if application_id else None
+            configuration = lire_configuration_tickets(application_id, client_redis=client_redis) if application_id else None
             charge += _cout_ticket_depuis_donnees(donnees, configuration)
     return charge
 
@@ -419,7 +531,7 @@ def compter_tickets_actifs_total(client_redis) -> int:
 def compter_tickets_attente_total(client_redis) -> int:
     nettoyer_tickets_expires(client_redis)
     total = 0
-    for application_id in _application_ids_configures():
+    for application_id in _application_ids_connues(client_redis):
         total += compter_tickets_attente_application(client_redis, application_id)
     return total
 
@@ -446,7 +558,7 @@ def _statut_application_depuis_compteurs(active: int, max_active: int, queued: i
 
 
 def _resume_ticket(client_redis, identifiant_ticket: str, application_id: str) -> dict[str, Any]:
-    configuration = lire_configuration_tickets(application_id)
+    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
     donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
     position = calculer_position_attente(client_redis, identifiant_ticket, application_id)
     active = compter_tickets_actifs_application(client_redis, application_id)
@@ -471,7 +583,7 @@ def _resume_ticket(client_redis, identifiant_ticket: str, application_id: str) -
 
 def _candidats_attente(client_redis) -> list[tuple[float, str, str]]:
     candidats: list[tuple[float, str, str]] = []
-    for application_id in _application_ids_configures():
+    for application_id in _application_ids_connues(client_redis):
         key = cles_redis_application(application_id)["tickets_attente"]
         for identifiant_ticket in _lister_tickets(client_redis, key):
             candidats.append((_zscore(client_redis, key, identifiant_ticket), application_id, identifiant_ticket))
@@ -491,7 +603,7 @@ def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = N
             client_redis.zrem(cles_redis_application(application_id)["tickets_attente"], identifiant_ticket)
             continue
 
-        configuration = lire_configuration_tickets(application_id)
+        configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
         cout_application = _cout_ticket_depuis_donnees(donnees, configuration)
         charge_active = calculer_charge_active(client_redis)
         actifs_application = compter_tickets_actifs_application(client_redis, application_id)
@@ -518,7 +630,7 @@ def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = N
 
 def creer_ou_recuperer_ticket(client_redis, identifiant_session: str, application_id: str | None = None):
     """Créer un ticket pour une session ou récupérer le ticket déjà existant."""
-    configuration = lire_configuration_tickets(application_id)
+    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
     identifiant_application = configuration["application_id"]
     cout_application = configuration["cout"]
     capacite_serveur = configuration["capacite_serveur"]
@@ -594,7 +706,7 @@ def creer_ou_recuperer_ticket(client_redis, identifiant_session: str, applicatio
 
 def rafraichir_ticket(client_redis, identifiant_session: str, application_id: str | None = None):
     """Renouveler la durée de vie d'un ticket déjà attribué à une session."""
-    configuration = lire_configuration_tickets(application_id)
+    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
     identifiant_application = configuration["application_id"]
     duree_ticket = configuration["duree_ticket"]
     cle_ticket_session = cle_session(identifiant_application, identifiant_session)
@@ -614,7 +726,7 @@ def rafraichir_ticket(client_redis, identifiant_session: str, application_id: st
 
 def liberer_ticket(client_redis, identifiant_session: str, application_id: str | None = None):
     """Libérer le ticket d’une session après traitement."""
-    configuration = lire_configuration_tickets(application_id)
+    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
     capacite_serveur = configuration["capacite_serveur"]
     identifiant_application = configuration["application_id"]
 
@@ -633,7 +745,7 @@ def liberer_ticket(client_redis, identifiant_session: str, application_id: str |
 
 def lire_statut_application(client_redis, application_id: str) -> dict[str, Any]:
     """Retourner l'état agrégé d'une application pour le tableau de bord."""
-    configuration = lire_configuration_tickets(application_id)
+    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
     identifiant_application = configuration["application_id"]
     nettoyer_tickets_expires(client_redis, identifiant_application)
     promouvoir_tickets_en_attente(client_redis, configuration["capacite_serveur"])
@@ -660,7 +772,7 @@ def construire_tableau_de_bord(client_redis, application_ids: list[str] | None =
     configuration_globale = _configuration_globale()
     promouvoir_tickets_en_attente(client_redis, configuration_globale["capacite_serveur"])
 
-    ids = [normaliser_identifiant_application(item) for item in application_ids] if application_ids else _application_ids_configures()
+    ids = [normaliser_identifiant_application(item) for item in application_ids] if application_ids else _application_ids_connues(client_redis)
     applications = {application_id: lire_statut_application(client_redis, application_id) for application_id in ids}
 
     active_users = sum(item["active"] for item in applications.values())
