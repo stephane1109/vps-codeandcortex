@@ -369,8 +369,10 @@ h1 {
 
 .contenu-carte {
     display: grid;
-    align-content: start;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    align-content: stretch;
     gap: 8px;
+    height: 100%;
 }
 
 .titre-application {
@@ -403,6 +405,18 @@ h1 {
     font-size: 12px;
     line-height: 1.35;
     color: var(--couleur-secondaire);
+    text-align: center;
+}
+
+.version-application {
+    display: block;
+    align-self: end;
+    margin: 4px auto 0 auto;
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    color: #8a8a8a;
     text-align: center;
 }
 
@@ -501,7 +515,8 @@ h1 {
 }
 
 .carte-application.indisponible .meta-application,
-.carte-application.indisponible .description-application {
+.carte-application.indisponible .description-application,
+.carte-application.indisponible .version-application {
     color: #6b7280;
 }
 
