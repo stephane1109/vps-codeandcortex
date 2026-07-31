@@ -166,6 +166,60 @@ TICKET_STATUS_STYLE = """
 """
 
 
+def _render_released_access_notice() -> None:
+    st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="ticket-gate-main-notice" role="status">
+          <strong>Accès libéré</strong>
+          <p>Cliquez sur <em>Reprendre l'accès</em> dans la barre latérale pour revenir dans la file.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    components.html(
+        """
+        <script>
+        (function () {
+          function resolveHostWindow() {
+            try {
+              if (window.parent && window.parent !== window) {
+                return window.parent;
+              }
+            } catch (error) {}
+            return window;
+          }
+
+          const host = resolveHostWindow();
+          const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || {};
+          const appId = String(current.applicationId || "");
+          if (!appId || host.__ticketGateReleasedNoticeSent) {
+            return;
+          }
+
+          host.__ticketGateReleasedNoticeSent = true;
+          try {
+            if (host.opener && typeof host.opener.postMessage === "function") {
+              host.opener.postMessage(
+                {
+                  type: "codeandcortex-ticket:released",
+                  appId: appId,
+                  applicationId: appId,
+                  sessionId: String(current.sessionId || ""),
+                  at: Date.now(),
+                },
+                "*",
+              );
+            }
+          } catch (error) {}
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def _env_int(name: str, default: int) -> int:
     try:
         return max(0, int(os.getenv(name, str(default))))
@@ -197,8 +251,12 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
         "heartbeat_ms": heartbeat_ms,
-        "release_url": os.getenv("APP_TICKET_RELEASE_URL", "").strip(),
-        "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0)),
+        "release_url": (
+            str(os.getenv("APP_TICKET_RELEASE_URL")).strip()
+            if os.getenv("APP_TICKET_RELEASE_URL") is not None
+            else "https://vps.codeandcortex.fr/api/tickets/release"
+        ),
+        "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 300)),
         "wait_stale_seconds": max(30, _env_int("APP_TICKET_WAIT_STALE_SECONDS", wait_stale_default)),
     }
 
@@ -234,6 +292,35 @@ def _session_key(app_id: str, session_id: str) -> str:
 
 def _global_active_key() -> str:
     return "tickets:global:actifs"
+
+
+def _config_key(app_id: str) -> str:
+    return f"app:{app_id}:config"
+
+
+def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
+    now = int(time.time())
+    client.hset(
+        _config_key(cfg["app_id"]),
+        mapping={
+            "application_id": cfg["app_id"],
+            "application_label": cfg["app_label"],
+            "label": cfg["app_label"],
+            "max_active": cfg["max_active"],
+            "cost": cfg["cost"],
+            "cout": cfg["cost"],
+            "global_capacity": cfg["global_capacity"],
+            "capacite_serveur": cfg["global_capacity"],
+            "ttl_seconds": cfg["ttl_seconds"],
+            "max_waiting": cfg["max_waiting"],
+            "wait_refresh_ms": cfg["wait_refresh_ms"],
+            "heartbeat_ms": cfg["heartbeat_ms"],
+            "enabled": int(bool(cfg["enabled"])),
+            "published_at": now,
+            "updated_at": now,
+        },
+    )
+    client.expire(_config_key(cfg["app_id"]), max(3600, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 3))
 
 
 def _list_members(client, key: str) -> list[str]:
@@ -533,7 +620,19 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
         <script>
         (function () {{
           const config = {json.dumps(payload)};
+          function resolveHostWindow() {{
+            try {{
+              if (window.parent && window.parent !== window) {{
+                return window.parent;
+              }}
+            }} catch (error) {{}}
+            return window;
+          }}
+
+          const host = resolveHostWindow();
           window.__ticketGateReleaseConfig = config;
+          host.__ticketGateReleaseConfig = config;
+          host.__ticketGateReleasedNoticeSent = false;
 
           if (window.__ticketGateReleaseHookInstalled) {{
             return;
@@ -542,8 +641,30 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
           window.__ticketGateReleaseHookInstalled = true;
           window.__ticketGateReleaseSent = false;
 
+          function notifyHomeDashboard(eventName) {{
+            const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || config;
+            const appId = String(current.applicationId || "");
+            if (!appId) {{
+              return;
+            }}
+            try {{
+              if (host.opener && typeof host.opener.postMessage === "function") {{
+                host.opener.postMessage(
+                  {{
+                    type: "codeandcortex-ticket:" + eventName,
+                    appId: appId,
+                    applicationId: appId,
+                    sessionId: String(current.sessionId || ""),
+                    at: Date.now(),
+                  }},
+                  "*",
+                );
+              }}
+            }} catch (error) {{}}
+          }}
+
           function buildReleaseUrl() {{
-            const current = window.__ticketGateReleaseConfig || config;
+            const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || config;
             const separator = current.releaseUrl.includes("?") ? "&" : "?";
             return current.releaseUrl + separator
               + "application_id=" + encodeURIComponent(current.applicationId)
@@ -558,6 +679,7 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
 
             window.__ticketGateReleaseSent = true;
             const url = buildReleaseUrl();
+            notifyHomeDashboard("releasing");
 
             try {{
               const sent = navigator.sendBeacon && navigator.sendBeacon(
@@ -679,6 +801,8 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
         return _bypass_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
+    if client is not None:
+        _publish_runtime_config(client, cfg)
     if st.session_state.get(RELEASED_STATE_KEY):
         return _released_snapshot(
             client,
