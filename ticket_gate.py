@@ -17,7 +17,7 @@ except ModuleNotFoundError:  # pragma: no cover - depend de l'image Docker final
 
 
 """
-Contrôle d'accès Redis pour les applications Streamlit.
+Controle d'acces Redis pour les applications Streamlit.
 
 #### VARIABLES D'ENVIRONNEMENT A MODIFIER SI BESOIN
 
@@ -35,7 +35,7 @@ Variables d'environnement a modifier si besoin :
   Nombre maximal d'utilisateurs actifs pour l'application.
   Pour tes applications exclusives, laisse 1.
   Si un jour tu veux ouvrir a 2 utilisateurs simultanes :
-  APP_TICKET_MAX_ACTIVE=2
+  APP_TICKET_MAX_ACTIVE=3
 
 - APP_TICKET_COST
   Cout de charge de l'application dans la capacite globale du serveur.
@@ -96,11 +96,11 @@ TICKET_STATUS_STYLE = """
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(248, 250, 252, 0.96);
-  color: #0f172a !important;
 }
 .ticket-status-card.is-active {
   border-color: rgba(22, 163, 74, 0.22);
   background: rgba(240, 253, 244, 0.96);
+  color: #16a34a !important;
 }
 .ticket-status-dot {
   width: 0.8rem;
@@ -125,26 +125,11 @@ TICKET_STATUS_STYLE = """
 .ticket-status-meta {
   font-size: 0.84rem;
   line-height: 1.35;
-  color: #0f172a !important;
-}
-.ticket-status-meta strong {
-  color: #0f172a !important;
 }
 .ticket-status-card.is-active .ticket-status-meta,
+.ticket-status-card.is-active .ticket-status-meta strong,
 .ticket-status-card.is-active .ticket-status-meta * {
-  color: #15803d !important;
-}
-.ticket-status-card.is-active .ticket-status-meta strong {
   color: #16a34a !important;
-}
-.ticket-status-card.is-waiting .ticket-status-meta strong {
-  color: #b45309 !important;
-}
-.ticket-status-card.is-error .ticket-status-meta strong {
-  color: #b91c1c !important;
-}
-.ticket-status-card.is-released .ticket-status-meta strong {
-  color: #475569 !important;
 }
 @keyframes ticket-pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
@@ -158,6 +143,60 @@ TICKET_STATUS_STYLE = """
 }
 </style>
 """
+
+
+def _render_released_access_notice() -> None:
+    st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="ticket-gate-main-notice" role="status">
+          <strong>Accès libéré</strong>
+          <p>Cliquez sur <em>Reprendre l'accès</em> dans la barre latérale pour revenir dans la file.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    components.html(
+        """
+        <script>
+        (function () {
+          function resolveHostWindow() {
+            try {
+              if (window.parent && window.parent !== window) {
+                return window.parent;
+              }
+            } catch (error) {}
+            return window;
+          }
+
+          const host = resolveHostWindow();
+          const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || {};
+          const appId = String(current.applicationId || "");
+          if (!appId || host.__ticketGateReleasedNoticeSent) {
+            return;
+          }
+
+          host.__ticketGateReleasedNoticeSent = true;
+          try {
+            if (host.opener && typeof host.opener.postMessage === "function") {
+              host.opener.postMessage(
+                {
+                  type: "codeandcortex-ticket:released",
+                  appId: appId,
+                  applicationId: appId,
+                  sessionId: String(current.sessionId || ""),
+                  at: Date.now(),
+                },
+                "*",
+              );
+            }
+          } catch (error) {}
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -188,18 +227,22 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
         "heartbeat_ms": max(30000, _env_int("APP_TICKET_HEARTBEAT_MS", 300000)),
-        "release_url": os.getenv("APP_TICKET_RELEASE_URL", "").strip(),
-        "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0)),
+        "release_url": (
+            str(os.getenv("APP_TICKET_RELEASE_URL")).strip()
+            if os.getenv("APP_TICKET_RELEASE_URL") is not None
+            else "https://vps.codeandcortex.fr/api/tickets/release"
+        ),
+        "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 300)),
         "wait_stale_seconds": max(30, _env_int("APP_TICKET_WAIT_STALE_SECONDS", wait_stale_default)),
     }
 
 
 def _redis_client():
     if redis is None:
-        return None, "Le paquet Python 'redis' n'est pas installé dans l'application."
+        return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
     redis_url_env = os.getenv("REDIS_URL", "").strip()
     if not redis_url_env:
-        return None, "REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify."
+        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url_env, decode_responses=True)
         client.ping()
@@ -225,6 +268,35 @@ def _session_key(app_id: str, session_id: str) -> str:
 
 def _global_active_key() -> str:
     return "tickets:global:actifs"
+
+
+def _config_key(app_id: str) -> str:
+    return f"app:{app_id}:config"
+
+
+def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
+    now = int(time.time())
+    client.hset(
+        _config_key(cfg["app_id"]),
+        mapping={
+            "application_id": cfg["app_id"],
+            "application_label": cfg["app_label"],
+            "label": cfg["app_label"],
+            "max_active": cfg["max_active"],
+            "cost": cfg["cost"],
+            "cout": cfg["cost"],
+            "global_capacity": cfg["global_capacity"],
+            "capacite_serveur": cfg["global_capacity"],
+            "ttl_seconds": cfg["ttl_seconds"],
+            "max_waiting": cfg["max_waiting"],
+            "wait_refresh_ms": cfg["wait_refresh_ms"],
+            "heartbeat_ms": cfg["heartbeat_ms"],
+            "enabled": int(bool(cfg["enabled"])),
+            "published_at": now,
+            "updated_at": now,
+        },
+    )
+    client.expire(_config_key(cfg["app_id"]), max(3600, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 3))
 
 
 def _list_members(client, key: str) -> list[str]:
@@ -343,7 +415,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": bypass_message or "Contrôle d'accès désactivé.",
+            "message": bypass_message or "Controle d'acces desactive.",
         }
 
     active = _active_count(client, cfg)
@@ -359,7 +431,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": "Aucun ticket associé à cette session.",
+            "message": "Aucun ticket associe a cette session.",
         }
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
@@ -415,7 +487,7 @@ def _released_snapshot(client, cfg: dict[str, Any], message: str) -> dict[str, A
 
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _error_snapshot(cfg, "Redis indisponible : impossible de réserver un ticket.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -506,7 +578,19 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
         <script>
         (function () {{
           const config = {json.dumps(payload)};
+          function resolveHostWindow() {{
+            try {{
+              if (window.parent && window.parent !== window) {{
+                return window.parent;
+              }}
+            }} catch (error) {{}}
+            return window;
+          }}
+
+          const host = resolveHostWindow();
           window.__ticketGateReleaseConfig = config;
+          host.__ticketGateReleaseConfig = config;
+          host.__ticketGateReleasedNoticeSent = false;
 
           if (window.__ticketGateReleaseHookInstalled) {{
             return;
@@ -515,8 +599,30 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
           window.__ticketGateReleaseHookInstalled = true;
           window.__ticketGateReleaseSent = false;
 
+          function notifyHomeDashboard(eventName) {{
+            const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || config;
+            const appId = String(current.applicationId || "");
+            if (!appId) {{
+              return;
+            }}
+            try {{
+              if (host.opener && typeof host.opener.postMessage === "function") {{
+                host.opener.postMessage(
+                  {{
+                    type: "codeandcortex-ticket:" + eventName,
+                    appId: appId,
+                    applicationId: appId,
+                    sessionId: String(current.sessionId || ""),
+                    at: Date.now(),
+                  }},
+                  "*",
+                );
+              }}
+            }} catch (error) {{}}
+          }}
+
           function buildReleaseUrl() {{
-            const current = window.__ticketGateReleaseConfig || config;
+            const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || config;
             const separator = current.releaseUrl.includes("?") ? "&" : "?";
             return current.releaseUrl + separator
               + "application_id=" + encodeURIComponent(current.applicationId)
@@ -531,6 +637,7 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
 
             window.__ticketGateReleaseSent = true;
             const url = buildReleaseUrl();
+            notifyHomeDashboard("releasing");
 
             try {{
               const sent = navigator.sendBeacon && navigator.sendBeacon(
@@ -622,14 +729,16 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
 def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     if not cfg["enabled"]:
-        return _bypass_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
+        return _bypass_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
+    if client is not None:
+        _publish_runtime_config(client, cfg)
     if st.session_state.get(RELEASED_STATE_KEY):
         return _released_snapshot(
             client,
             cfg,
-            "Accès libéré pour cette page. Clique sur 'Reprendre l'accès' pour revenir dans la file.",
+            "Acces libere pour cette page. Clique sur 'Reprendre l'acces' pour revenir dans la file.",
         )
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
@@ -647,7 +756,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         _install_release_hooks(cfg, session_id)
 
     with st.sidebar:
-        st.markdown("### Accès utilisateur")
+        st.markdown("### Acces utilisateur")
         st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
 
         if snapshot["statut"] == "actif":
@@ -655,29 +764,29 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.success(f"Accès actif ({snapshot['active']} / {snapshot['max_active']}).")
-            if st.button("Libérer l'accès", use_container_width=True):
+            st.success(f"Acces actif ({snapshot['active']} / {snapshot['max_active']}).")
+            if st.button("Liberer l'acces", use_container_width=True):
                 if release_ticket_for_session(default_app_id, app_label):
                     st.rerun()
                 else:
-                    st.warning("Impossible de libérer le ticket courant pour le moment.")
+                    st.warning("Impossible de liberer le ticket courant pour le moment.")
         elif snapshot["statut"] == "attente":
             position = snapshot["position"] or "?"
             st.markdown(
                 f"""
                 <div class="ticket-status-card">
                   <span class="ticket-status-dot is-waiting"></span>
-                  <div class="ticket-status-meta"><strong>Application occupée</strong><br>Position actuelle dans la file : {position}.</div>
+                  <div class="ticket-status-meta"><strong>Application occupee</strong><br>Position actuelle dans la file : {position}.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.warning(f"Application occupée. Position dans la file : {position}.")
+            st.warning(f"Application occupee. Position dans la file : {position}.")
             if st.button("Quitter la file d'attente", key="leave-waiting-queue", use_container_width=True):
                 if release_ticket_for_session(default_app_id, app_label):
                     st.rerun()
@@ -699,13 +808,13 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 """
                 <div class="ticket-status-card">
                   <span class="ticket-status-dot is-released"></span>
-                  <div class="ticket-status-meta"><strong>Accès libéré</strong><br>Cette page n'occupe plus l'application.</div>
+                  <div class="ticket-status-meta"><strong>Acces libere</strong><br>Cette page n'occupe plus l'application.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.info("Accès libéré pour cette page.")
-            if st.button("Reprendre l'accès", use_container_width=True):
+            st.info("Acces libere pour cette page.")
+            if st.button("Reprendre l'acces", use_container_width=True):
                 _resume_local_ticket_state()
                 st.rerun()
         else:
@@ -713,12 +822,12 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 """
                 <div class="ticket-status-card">
                   <span class="ticket-status-dot is-error"></span>
-                  <div class="ticket-status-meta"><strong>Accès indisponible</strong><br>Le ticket courant n'a pas pu être validé.</div>
+                  <div class="ticket-status-meta"><strong>Acces indisponible</strong><br>Le ticket courant n'a pas pu etre valide.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.error("Contrôle d'accès temporairement indisponible.")
+            st.error("Controle d'acces temporairement indisponible.")
             if snapshot["message"]:
                 st.error(snapshot["message"])
 
@@ -729,19 +838,19 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
     if snapshot["statut"] == "attente":
         st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
         st.warning(
-            f"{app_label} est actuellement utilisée par un autre utilisateur. "
+            f"{app_label} est actuellement utilisee par un autre utilisateur. "
             f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
         )
         st.stop()
 
     if snapshot["statut"] == "released":
-        st.info("Accès libéré. Clique sur 'Reprendre l'accès' pour revenir dans la file.")
+        st.info("Acces libere. Clique sur 'Reprendre l'acces' pour revenir dans la file.")
         st.stop()
 
     if snapshot["statut"] == "refuse":
         st.error("File d'attente pleine pour cette application.")
     else:
-        st.error("Contrôle d'accès temporairement indisponible.")
+        st.error("Controle d'acces temporairement indisponible.")
         if snapshot["message"]:
             st.error(snapshot["message"])
     st.stop()
