@@ -374,24 +374,49 @@ def _application_ids_connues(client_redis=None) -> list[str]:
     return sorted(ids)
 
 
+def _lire_configuration_application(
+    application_id: str,
+    configuration_globale: dict[str, int],
+    configurations_brutes: dict[str, dict[str, Any]],
+    client_redis=None,
+) -> dict[str, Any]:
+    slug = normaliser_identifiant_application(application_id)
+    brute = dict(configurations_brutes.get(slug) or {})
+    configuration_runtime = _configuration_runtime_depuis_redis(client_redis, slug)
+    brute.update(configuration_runtime)
+    configuration = _fusionner_configuration_application(
+        slug,
+        brute or {"label": slug},
+        configuration_globale,
+    )
+    configuration["runtime_sync"] = bool(configuration_runtime)
+    return configuration
+
+
 def lire_configuration_tickets(application_id: str | None = None, client_redis=None) -> dict[str, Any]:
     """Lire la configuration globale et celle d'une application donnée."""
     configuration_globale = _configuration_globale()
     identifiant_application = normaliser_identifiant_application(application_id)
     configurations_brutes = charger_configurations_applications()
 
+    application = _lire_configuration_application(
+        identifiant_application,
+        configuration_globale,
+        configurations_brutes,
+        client_redis=client_redis,
+    )
+
     ids = _application_ids_connues(client_redis)
     ids.append(identifiant_application)
 
     applications: dict[str, dict[str, Any]] = {}
     for slug in sorted(set(ids)):
-        brute = dict(configurations_brutes.get(slug) or {})
-        configuration_runtime = _configuration_runtime_depuis_redis(client_redis, slug)
-        brute.update(configuration_runtime)
-        applications[slug] = _fusionner_configuration_application(slug, brute or {"label": slug}, configuration_globale)
-        applications[slug]["runtime_sync"] = bool(configuration_runtime)
-
-    application = applications[identifiant_application]
+        applications[slug] = _lire_configuration_application(
+            slug,
+            configuration_globale,
+            configurations_brutes,
+            client_redis=client_redis,
+        )
 
     return {
         "capacite_serveur": configuration_globale["capacite_serveur"],
@@ -465,9 +490,16 @@ def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
     applications = [normaliser_identifiant_application(application_id)] if application_id else _application_ids_connues(client_redis)
     tickets_vus: set[tuple[str, str]] = set()
     maintenant = int(time.time())
+    configuration_globale = _configuration_globale()
+    configurations_brutes = charger_configurations_applications()
 
     for identifiant_application in applications:
-        configuration = lire_configuration_tickets(identifiant_application, client_redis=client_redis)
+        configuration = _lire_configuration_application(
+            identifiant_application,
+            configuration_globale,
+            configurations_brutes,
+            client_redis=client_redis,
+        )
         cles = cles_redis_application(identifiant_application)
         for key in (cles["tickets_actifs"], cles["tickets_attente"]):
             for identifiant_ticket in _lister_tickets(client_redis, key):
@@ -502,27 +534,57 @@ def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
             client_redis.zrem(_zset_actifs_globale(), identifiant_ticket)
 
 
-def calculer_charge_active(client_redis):
-    """Calculer la charge totale des tickets actifs sur tout le VPS."""
-    nettoyer_tickets_expires(client_redis)
+def _compter_tickets_actifs_application_brut(client_redis, application_id: str) -> int:
+    return client_redis.zcard(cles_redis_application(application_id)["tickets_actifs"])
+
+
+def _compter_tickets_attente_application_brut(client_redis, application_id: str) -> int:
+    return client_redis.zcard(cles_redis_application(application_id)["tickets_attente"])
+
+
+def _calculer_charge_active_brut(
+    client_redis,
+    configuration_globale: dict[str, int] | None = None,
+    configurations_brutes: dict[str, dict[str, Any]] | None = None,
+) -> int:
+    configuration_globale = configuration_globale or _configuration_globale()
+    configurations_brutes = configurations_brutes or charger_configurations_applications()
     charge = 0
     for identifiant_ticket in _lister_tickets(client_redis, _zset_actifs_globale()):
         donnees = client_redis.hgetall(cle_ticket(identifiant_ticket))
         if donnees:
             application_id = str(donnees.get("application_id", "")).strip()
-            configuration = lire_configuration_tickets(application_id, client_redis=client_redis) if application_id else None
+            configuration = (
+                _lire_configuration_application(
+                    application_id,
+                    configuration_globale,
+                    configurations_brutes,
+                    client_redis=client_redis,
+                )
+                if application_id
+                else None
+            )
             charge += _cout_ticket_depuis_donnees(donnees, configuration)
     return charge
 
 
-def compter_tickets_actifs_application(client_redis, application_id: str) -> int:
-    nettoyer_tickets_expires(client_redis, application_id)
-    return client_redis.zcard(cles_redis_application(application_id)["tickets_actifs"])
+def calculer_charge_active(client_redis, maintain: bool = True):
+    """Calculer la charge totale des tickets actifs sur tout le VPS."""
+    if maintain:
+        nettoyer_tickets_expires(client_redis)
+    return _calculer_charge_active_brut(client_redis)
 
 
-def compter_tickets_attente_application(client_redis, application_id: str) -> int:
-    nettoyer_tickets_expires(client_redis, application_id)
-    return client_redis.zcard(cles_redis_application(application_id)["tickets_attente"])
+def compter_tickets_actifs_application(client_redis, application_id: str, maintain: bool = True) -> int:
+    if maintain:
+        nettoyer_tickets_expires(client_redis, application_id)
+    return _compter_tickets_actifs_application_brut(client_redis, application_id)
+
+
+def compter_tickets_attente_application(client_redis, application_id: str, maintain: bool = True) -> int:
+    if maintain:
+        nettoyer_tickets_expires(client_redis, application_id)
+    return _compter_tickets_attente_application_brut(client_redis, application_id)
 
 
 def compter_tickets_actifs_total(client_redis) -> int:
@@ -534,7 +596,7 @@ def compter_tickets_attente_total(client_redis) -> int:
     nettoyer_tickets_expires(client_redis)
     total = 0
     for application_id in _application_ids_connues(client_redis):
-        total += compter_tickets_attente_application(client_redis, application_id)
+        total += _compter_tickets_attente_application_brut(client_redis, application_id)
     return total
 
 
@@ -560,18 +622,29 @@ def _statut_application_depuis_compteurs(active: int, max_active: int, queued: i
 
 
 def _resume_ticket(client_redis, identifiant_ticket: str, application_id: str) -> dict[str, Any]:
-    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
+    configuration_globale = _configuration_globale()
+    configurations_brutes = charger_configurations_applications()
+    configuration = _lire_configuration_application(
+        application_id,
+        configuration_globale,
+        configurations_brutes,
+        client_redis=client_redis,
+    )
     donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
     position = calculer_position_attente(client_redis, identifiant_ticket, application_id)
-    active = compter_tickets_actifs_application(client_redis, application_id)
-    queued = compter_tickets_attente_application(client_redis, application_id)
+    active = _compter_tickets_actifs_application_brut(client_redis, application_id)
+    queued = _compter_tickets_attente_application_brut(client_redis, application_id)
     state, label = _statut_application_depuis_compteurs(active, configuration["max_active"], queued)
 
     return {
         "identifiant_ticket": identifiant_ticket,
         "statut": _statut_ticket(donnees) if donnees else "inconnu",
         "position": position,
-        "charge_active": calculer_charge_active(client_redis),
+        "charge_active": _calculer_charge_active_brut(
+            client_redis,
+            configuration_globale,
+            configurations_brutes,
+        ),
         "capacite_serveur": configuration["capacite_serveur"],
         "application_id": application_id,
         "application_label": configuration["label"],
@@ -593,11 +666,18 @@ def _candidats_attente(client_redis) -> list[tuple[float, str, str]]:
     return candidats
 
 
-def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = None):
+def promouvoir_tickets_en_attente(
+    client_redis,
+    capacite_serveur: int | None = None,
+    *,
+    perform_cleanup: bool = True,
+):
     """Promouvoir les premiers tickets en attente si les capacités le permettent."""
     configuration_globale = _configuration_globale()
+    configurations_brutes = charger_configurations_applications()
     capacite = capacite_serveur if capacite_serveur is not None else configuration_globale["capacite_serveur"]
-    nettoyer_tickets_expires(client_redis)
+    if perform_cleanup:
+        nettoyer_tickets_expires(client_redis)
 
     for _score, application_id, identifiant_ticket in _candidats_attente(client_redis):
         donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
@@ -605,10 +685,19 @@ def promouvoir_tickets_en_attente(client_redis, capacite_serveur: int | None = N
             client_redis.zrem(cles_redis_application(application_id)["tickets_attente"], identifiant_ticket)
             continue
 
-        configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
+        configuration = _lire_configuration_application(
+            application_id,
+            configuration_globale,
+            configurations_brutes,
+            client_redis=client_redis,
+        )
         cout_application = _cout_ticket_depuis_donnees(donnees, configuration)
-        charge_active = calculer_charge_active(client_redis)
-        actifs_application = compter_tickets_actifs_application(client_redis, application_id)
+        charge_active = _calculer_charge_active_brut(
+            client_redis,
+            configuration_globale,
+            configurations_brutes,
+        )
+        actifs_application = _compter_tickets_actifs_application_brut(client_redis, application_id)
 
         if actifs_application >= configuration["max_active"]:
             continue
@@ -745,15 +834,31 @@ def liberer_ticket(client_redis, identifiant_session: str, application_id: str |
     promouvoir_tickets_en_attente(client_redis, capacite_serveur)
 
 
-def lire_statut_application(client_redis, application_id: str) -> dict[str, Any]:
+def lire_statut_application(
+    client_redis,
+    application_id: str,
+    *,
+    maintain: bool = True,
+) -> dict[str, Any]:
     """Retourner l'état agrégé d'une application pour le tableau de bord."""
-    configuration = lire_configuration_tickets(application_id, client_redis=client_redis)
+    configuration_globale = _configuration_globale()
+    configurations_brutes = charger_configurations_applications()
+    if maintain:
+        nettoyer_tickets_expires(client_redis, application_id)
+        promouvoir_tickets_en_attente(
+            client_redis,
+            configuration_globale["capacite_serveur"],
+            perform_cleanup=False,
+        )
+    configuration = _lire_configuration_application(
+        application_id,
+        configuration_globale,
+        configurations_brutes,
+        client_redis=client_redis,
+    )
     identifiant_application = configuration["application_id"]
-    nettoyer_tickets_expires(client_redis, identifiant_application)
-    promouvoir_tickets_en_attente(client_redis, configuration["capacite_serveur"])
-
-    active = compter_tickets_actifs_application(client_redis, identifiant_application)
-    queued = compter_tickets_attente_application(client_redis, identifiant_application)
+    active = _compter_tickets_actifs_application_brut(client_redis, identifiant_application)
+    queued = _compter_tickets_attente_application_brut(client_redis, identifiant_application)
 
     if not configuration.get("runtime_sync"):
         return {
@@ -787,14 +892,26 @@ def construire_tableau_de_bord(client_redis, application_ids: list[str] | None =
     """Construire un résumé JSON exploitable par une page HTML ou une API FastAPI."""
     nettoyer_tickets_expires(client_redis)
     configuration_globale = _configuration_globale()
-    promouvoir_tickets_en_attente(client_redis, configuration_globale["capacite_serveur"])
+    configurations_brutes = charger_configurations_applications()
+    promouvoir_tickets_en_attente(
+        client_redis,
+        configuration_globale["capacite_serveur"],
+        perform_cleanup=False,
+    )
 
     ids = [normaliser_identifiant_application(item) for item in application_ids] if application_ids else _application_ids_connues(client_redis)
-    applications = {application_id: lire_statut_application(client_redis, application_id) for application_id in ids}
+    applications = {
+        application_id: lire_statut_application(client_redis, application_id, maintain=False)
+        for application_id in ids
+    }
 
     active_users = sum(item["active"] for item in applications.values())
     total_queued = sum(item["queued"] for item in applications.values())
-    active_load = calculer_charge_active(client_redis)
+    active_load = _calculer_charge_active_brut(
+        client_redis,
+        configuration_globale,
+        configurations_brutes,
+    )
 
     if total_queued > 0:
         server_state = "full"

@@ -46,6 +46,7 @@
 
 <body
     data-dashboard-endpoint="/api/tickets/dashboard"
+    data-dashboard-timeout-ms="5000"
     data-local-pending-ms="15000"
     data-local-fallback-ms="300000"
 >
@@ -412,6 +413,7 @@
         (function () {
             const body = document.body;
             const endpoint = body.dataset.dashboardEndpoint || "/api/tickets/dashboard";
+            const dashboardTimeoutMs = Math.max(1000, Number.parseInt(body.dataset.dashboardTimeoutMs || "5000", 10) || 5000);
             const localPendingMs = Math.max(5000, Number.parseInt(body.dataset.localPendingMs || "15000", 10) || 15000);
             const localFallbackMs = Math.max(localPendingMs, Number.parseInt(body.dataset.localFallbackMs || "300000", 10) || 300000);
             const localStorageKey = "codeandcortex-dashboard-local-tickets";
@@ -635,11 +637,14 @@
 
                 const url = new URL(endpoint, window.location.origin);
                 url.searchParams.set("applications", appIds.join(","));
+                const controller = new AbortController();
+                const timeoutId = window.setTimeout(() => controller.abort(), dashboardTimeoutMs);
 
                 try {
                     const response = await fetch(url.toString(), {
                         headers: { "Accept": "application/json" },
                         cache: "no-store",
+                        signal: controller.signal,
                     });
 
                     if (!response.ok) {
@@ -649,7 +654,12 @@
                     const payload = await response.json();
                     applyDashboard(payload);
                 } catch (error) {
-                    markDashboardUnavailable("API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.");
+                    const message = error && error.name === "AbortError"
+                        ? "API dashboard trop lente : verifie Redis et la boucle de synchronisation du dashboard."
+                        : "API dashboard indisponible : verifie le service racine du depot, l'endpoint `/api/tickets/dashboard` et la variable REDIS_URL du dashboard.";
+                    markDashboardUnavailable(message);
+                } finally {
+                    window.clearTimeout(timeoutId);
                 }
             }
 
