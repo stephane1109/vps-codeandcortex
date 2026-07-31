@@ -31,7 +31,7 @@ L'application est adaptee pour :
 REDIS_URL=redis://:motdepasse@nom-exact-du-service-redis:6379/0
 APP_TICKET_ID=cooccurrencesmotpivot
 APP_TICKET_ENFORCED=1
-APP_TICKET_MAX_ACTIVE=2
+APP_TICKET_MAX_ACTIVE=3
 APP_TICKET_COST=2
 CAPACITE_SERVEUR=6
 APP_TICKET_TTL_SECONDS=3600

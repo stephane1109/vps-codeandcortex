@@ -209,8 +209,12 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
         "wait_refresh_ms": max(2000, _env_int("APP_TICKET_WAIT_REFRESH_MS", 10000)),
         "heartbeat_ms": max(30000, _env_int("APP_TICKET_HEARTBEAT_MS", 300000)),
-        "release_url": os.getenv("APP_TICKET_RELEASE_URL", "").strip(),
-        "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 0)),
+        "release_url": (
+            str(os.getenv("APP_TICKET_RELEASE_URL")).strip()
+            if os.getenv("APP_TICKET_RELEASE_URL") is not None
+            else "https://vps.codeandcortex.fr/api/tickets/release"
+        ),
+        "hidden_release_seconds": max(0, _env_int("APP_TICKET_HIDDEN_RELEASE_SECONDS", 300)),
     }
 
 
