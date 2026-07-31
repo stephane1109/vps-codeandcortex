@@ -190,9 +190,28 @@ payload = {
 
 client = redis.from_url(url, decode_responses=True)
 client.hset(f"app:{app_id}:config", mapping=payload)
-client.expire(f"app:{app_id}:config", max(3600, ttl_seconds, max(30, heartbeat_ms // 1000) * 3))
+client.expire(f"app:{app_id}:config", max(86400, ttl_seconds, max(30, heartbeat_ms // 1000) * 6))
 PYTHON
 }
+
+start_ticket_runtime_config_heartbeat() {
+  [ -n "${REDIS_URL:-}" ] || return 0
+  interval="${APP_TICKET_CONFIG_REFRESH_SECONDS:-60}"
+  case "$interval" in
+    ''|*[!0-9]*) interval=60 ;;
+  esac
+  if [ "$interval" -lt 10 ]; then
+    interval=10
+  fi
+
+  (
+    while :; do
+      sleep "$interval" || exit 0
+      publish_ticket_runtime_config
+    done
+  ) &
+}
+
 
 
 
@@ -209,5 +228,6 @@ if [ -n "${BASE_URL_PATH}" ]; then
 fi
 
 publish_ticket_runtime_config
+start_ticket_runtime_config_heartbeat
 
 exec "$@"
