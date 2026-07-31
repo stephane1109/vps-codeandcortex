@@ -526,6 +526,17 @@
                 };
             }
 
+            function buildReleasedPayload() {
+                return {
+                    state: "available",
+                    stateLabel: "Libre",
+                    active: 0,
+                    maxActive: null,
+                    queued: 0,
+                    metaText: "Acces libere",
+                };
+            }
+
             function resolvePayload(card, payload) {
                 const appId = card.dataset.appId;
                 const localTicket = appId ? getLocalTicket(appId) : null;
@@ -534,9 +545,6 @@
                     if (isBusyState(payload.state, payload.active, payload.queued)) {
                         clearLocalTicket(appId);
                         return payload;
-                    }
-                    if (localTicket && Date.now() < Number(localTicket.pendingUntil || 0)) {
-                        return buildLocalPayload();
                     }
                     clearLocalTicket(appId);
                     return payload;
@@ -579,6 +587,11 @@
                     if (!appId || !getLocalTicket(appId)) return;
                     decorateCard(card, buildLocalPayload());
                 });
+            }
+
+            function findCardByAppId(appId) {
+                if (!appId) return null;
+                return cards.find((card) => card.dataset.appId === appId) || null;
             }
 
             function decorateGlobal(payload) {
@@ -683,8 +696,17 @@
                 if (!payload || typeof payload !== "object") return;
                 if (typeof payload.type !== "string" || !payload.type.startsWith("codeandcortex-ticket:")) return;
                 const appId = String(payload.appId || payload.applicationId || "").trim();
-                if (appId) clearLocalTicket(appId);
+                if (appId) {
+                    clearLocalTicket(appId);
+                }
+                if (payload.type === "codeandcortex-ticket:released" && appId) {
+                    const card = findCardByAppId(appId);
+                    if (card) {
+                        decorateCard(card, buildReleasedPayload());
+                    }
+                }
                 refreshDashboard();
+                window.setTimeout(refreshDashboard, 600);
             });
 
             window.addEventListener("focus", () => {
