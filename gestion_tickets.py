@@ -56,7 +56,7 @@ APPLICATIONS_PAR_DEFAUT = {
     },
     "pdf-to-text-to-iramuteq": {
         "label": "PDF to Text",
-        "max_active": 4,
+        "max_active": 5,
         "cout": 1,
     },
     "analyse_cooccurrences": {
