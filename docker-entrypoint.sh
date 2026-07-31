@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+CANONICAL_APP_TICKET_ID="rendreaudible"
+if [ "${APP_TICKET_ID:-$CANONICAL_APP_TICKET_ID}" != "$CANONICAL_APP_TICKET_ID" ]; then
+  echo "APP_TICKET_ID force a ${CANONICAL_APP_TICKET_ID} pour synchroniser la carte home Rendre Audible." >&2
+fi
+export APP_TICKET_ID="$CANONICAL_APP_TICKET_ID"
+
 publish_ticket_runtime_config() {
   [ -n "${REDIS_URL:-}" ] || return 0
 
