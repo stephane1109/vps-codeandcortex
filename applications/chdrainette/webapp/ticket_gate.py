@@ -98,6 +98,35 @@ def _global_active_key() -> str:
     return "tickets:global:actifs"
 
 
+def _config_key(app_id: str) -> str:
+    return f"app:{app_id}:config"
+
+
+def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
+    now = int(time.time())
+    client.hset(
+        _config_key(cfg["app_id"]),
+        mapping={
+            "application_id": cfg["app_id"],
+            "application_label": cfg["app_label"],
+            "label": cfg["app_label"],
+            "max_active": cfg["max_active"],
+            "cost": cfg["cost"],
+            "cout": cfg["cost"],
+            "global_capacity": cfg["global_capacity"],
+            "capacite_serveur": cfg["global_capacity"],
+            "ttl_seconds": cfg["ttl_seconds"],
+            "max_waiting": cfg["max_waiting"],
+            "wait_refresh_ms": cfg["wait_refresh_ms"],
+            "heartbeat_ms": cfg["heartbeat_ms"],
+            "enabled": int(bool(cfg["enabled"])),
+            "published_at": now,
+            "updated_at": now,
+        },
+    )
+    client.expire(_config_key(cfg["app_id"]), max(3600, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 3))
+
+
 def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
 
@@ -220,6 +249,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
 def _public_status(client, cfg: dict[str, Any], bypass_message: str | None = None) -> dict[str, Any]:
     if client is None:
         return _disabled_snapshot(cfg, bypass_message or "Contrôle d'accès désactivé.")
+    _publish_runtime_config(client, cfg)
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
     active = _active_count(client, cfg)
@@ -233,6 +263,7 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
     if client is None:
         return _error_snapshot(cfg, "Redis indisponible : impossible de réserver un ticket.")
 
+    _publish_runtime_config(client, cfg)
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
 
@@ -295,6 +326,7 @@ def _refresh_existing_ticket(client, cfg: dict[str, Any], session_id: str | None
     if not session_id:
         return _public_status(client, cfg)
 
+    _publish_runtime_config(client, cfg)
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
 

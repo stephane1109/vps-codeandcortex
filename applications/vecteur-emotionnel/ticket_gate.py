@@ -119,6 +119,35 @@ def _global_active_key() -> str:
     return "tickets:global:actifs"
 
 
+def _config_key(app_id: str) -> str:
+    return f"app:{app_id}:config"
+
+
+def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
+    now = int(time.time())
+    client.hset(
+        _config_key(cfg["app_id"]),
+        mapping={
+            "application_id": cfg["app_id"],
+            "application_label": cfg["app_label"],
+            "label": cfg["app_label"],
+            "max_active": cfg["max_active"],
+            "cost": cfg["cost"],
+            "cout": cfg["cost"],
+            "global_capacity": cfg["global_capacity"],
+            "capacite_serveur": cfg["global_capacity"],
+            "ttl_seconds": cfg["ttl_seconds"],
+            "max_waiting": cfg["max_waiting"],
+            "wait_refresh_ms": cfg["wait_refresh_ms"],
+            "heartbeat_ms": cfg["heartbeat_ms"],
+            "enabled": int(bool(cfg["enabled"])),
+            "published_at": now,
+            "updated_at": now,
+        },
+    )
+    client.expire(_config_key(cfg["app_id"]), max(3600, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 3))
+
+
 def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
 
@@ -402,6 +431,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.error("Controle d'acces temporairement indisponible.")
         st.error(message or "Redis indisponible.")
         st.stop()
+    _publish_runtime_config(client, cfg)
 
     snapshot = _claim_or_refresh(client, cfg, st.session_state[SESSION_STATE_KEY])
     _render_release_hooks(snapshot)
