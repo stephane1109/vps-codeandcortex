@@ -190,7 +190,7 @@ def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
             "updated_at": now,
         },
     )
-    client.expire(_config_key(cfg["app_id"]), max(3600, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 3))
+    client.expire(_config_key(cfg["app_id"]), max(86400, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 6))
 
 
 def _list_members(client, key: str) -> list[str]:
