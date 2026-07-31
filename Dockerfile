@@ -7,18 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     PORT=8501 \
-    APP_DATA_DIR=/data/app \
-    APP_FFMPEG_TIMEOUT_SECONDS=3600 \
-    YTDLP_DOWNLOAD_TIMEOUT_SECONDS=900 \
-    YTDLP_SOCKET_TIMEOUT_SECONDS=30 \
-    YTDLP_RETRIES=10 \
-    YTDLP_FRAGMENT_RETRIES=10 \
-    YTDLP_CDN_SOCKET_TIMEOUT_SECONDS=10 \
-    YTDLP_CDN_RETRIES=0 \
-    YTDLP_CDN_FRAGMENT_RETRIES=1 \
-    YTDLP_REDIRECTOR_FALLBACK=1 \
-    YTDLP_FORCE_IPV4=0 \
-    YTDLP_FORCE_IPV6=0 \
+    APP_DATA_DIR=/tmp/appdata \
     APP_TICKET_ID=extraction-multimedia \
     APP_TICKET_MAX_ACTIVE=1 \
     APP_TICKET_COST=4 \
@@ -35,44 +24,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - APP_TICKET_MAX_ACTIVE=1 pour reserver cette application a un seul utilisateur a la fois
 # - APP_TICKET_COST=4 et CAPACITE_SERVEUR=6 pour rester coherent avec le reste du VPS
 # - APP_TICKET_TTL_SECONDS si tu veux allonger ou raccourcir la duree d'un ticket
-# - APP_FFMPEG_TIMEOUT_SECONDS=3600 pour fixer le temps maximal d'une commande ffmpeg
-# - APP_DATA_DIR=/data/app pour conserver les cookies et les derniers resultats dans l'image active
-# - APP_COOKIES_DIR=/data/app/cookies/extraction-multimedia si tu veux fixer explicitement le dossier cookies
-# - YTDLP_FORCE_IPV4=0 et YTDLP_FORCE_IPV6=0 : conforme aux options réseau yt-dlp.
-#   Ne force pas une famille IP par defaut, car le CDN googlevideo.com change selon le moment.
-# - YTDLP_DOWNLOAD_TIMEOUT_SECONDS=900, YTDLP_SOCKET_TIMEOUT_SECONDS=30,
-#   YTDLP_RETRIES=10, YTDLP_FRAGMENT_RETRIES=10 ajustent les timeouts réseau yt-dlp
-# - YTDLP_PROXY_URL=http://user:pass@host:port ou socks5://user:pass@host:port fait sortir yt-dlp via un proxy.
-#   C'est la solution documentee si l'IP/la route du VPS est bloquee vers googlevideo.com.
-# - YTDLP_GEO_VERIFICATION_PROXY_URL peut utiliser un proxy uniquement pour la vérification géographique yt-dlp
-# - YTDLP_SOURCE_ADDRESS permet de fixer l'adresse source si plusieurs IP sont configurées sur le VPS.
-#   Ne pas le definir par defaut : source_address=0.0.0.0 revient a forcer IPv4.
-# - YTDLP_IMPERSONATE=chrome est optionnel. Ne pas le mettre par defaut :
-#   certaines versions de l'API Python yt-dlp peuvent echouer avec AssertionError.
-# - YTDLP_YOUTUBE_PO_TOKEN_ARGS=web.gvs+XXX si YouTube impose un PO token manuel
-# - Ne pas definir YTDLP_YOUTUBE_FORMATS=missing_pot pour cette application :
-#   cela peut masquer les formats MP4 classiques et bloquer l'extraction.
 
 WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
         ffmpeg \
         libgl1 \
         libglib2.0-0 \
-        unzip \
     && rm -rf /var/lib/apt/lists/*
-
-# Deno est le runtime JavaScript recommande par yt-dlp pour yt-dlp-ejs.
-# Cela permet a yt-dlp de traiter les challenges JavaScript YouTube récents.
-RUN curl -fsSL -o /tmp/deno.zip \
-        https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
-    && unzip -q /tmp/deno.zip -d /usr/local/bin \
-    && chmod +x /usr/local/bin/deno \
-    && rm -f /tmp/deno.zip \
-    && deno --version
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
@@ -81,18 +41,11 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip setuptools wheel \
     && pip install -r /app/requirements.txt
 
-# YouTube change souvent ses formats/extracteurs. Cette ligne est volontairement
-# séparée pour forcer une couche Docker explicite et faciliter les rebuilds Coolify.
-ARG YTDLP_REFRESH=2026-07-19-ytdlp-alternate-cdn-stop-loop-25
-RUN echo "yt-dlp refresh ${YTDLP_REFRESH}" \
-    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
-    && python -m yt_dlp --version
-
 COPY . /app
 
 RUN chmod +x /app/docker-entrypoint.sh \
-    && mkdir -p /data/app /tmp/appdata /home/app/.streamlit \
-    && chown -R app:app /app /data/app /tmp/appdata /home/app
+    && mkdir -p /tmp/appdata /home/app/.streamlit \
+    && chown -R app:app /app /tmp/appdata /home/app
 
 USER app
 
