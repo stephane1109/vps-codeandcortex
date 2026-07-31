@@ -404,6 +404,7 @@
         </section>
 
         <p class="pied" id="dashboard-note" aria-live="polite" hidden></p>
+        <p class="pied version-home">Version 0_3 - modifiée 31-07-2026</p>
 
     </main>
 
@@ -416,23 +417,11 @@
             const localFallbackMs = Math.max(localPendingMs, Number.parseInt(body.dataset.localFallbackMs || "300000", 10) || 300000);
             const localStorageKey = "codeandcortex-dashboard-local-tickets";
             const cards = Array.from(document.querySelectorAll("[data-app-id]"));
-            const applicationVersionLabel = "Version 0_3 - modifiée 31-07-2026";
             const appIds = cards.map((card) => card.dataset.appId).filter(Boolean);
             const note = document.getElementById("dashboard-note");
             const globalActive = document.getElementById("global-active");
             const globalQueue = document.getElementById("global-queue");
             const globalServer = document.getElementById("global-server");
-
-            document.querySelectorAll(".carte-application").forEach((card) => {
-                const content = card.querySelector(".contenu-carte");
-                if (!content || content.querySelector(".version-application")) {
-                    return;
-                }
-                const version = document.createElement("span");
-                version.className = "version-application";
-                version.textContent = applicationVersionLabel;
-                content.appendChild(version);
-            });
 
             function safeParseJson(value) {
                 try {
