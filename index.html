@@ -403,9 +403,7 @@
 
         </section>
 
-        <p class="pied" id="dashboard-note">
-            Les cartes restent neutres en gris/blanc avec icones orange et texte noir. Seules les pastilles changent selon l'etat.
-        </p>
+        <p class="pied" id="dashboard-note" aria-live="polite" hidden></p>
 
     </main>
 
@@ -606,9 +604,11 @@
 
                 if (note) {
                     if (payload.global && payload.global.serverState === "degraded") {
+                        note.hidden = false;
                         note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et met a jour la pastille d'une application que vous venez d'ouvrir.";
                     } else {
-                        note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
+                        note.hidden = true;
+                        note.textContent = "";
                     }
                 }
             }
@@ -628,6 +628,7 @@
                     }));
                 });
                 if (note) {
+                    note.hidden = false;
                     note.textContent = message || "API dashboard indisponible pour le moment.";
                 }
             }
