@@ -883,6 +883,32 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+st.markdown(
+    """
+    <style>
+      section.main > div.block-container,
+      .main .block-container,
+      .block-container,
+      div[data-testid="stMainBlockContainer"],
+      div[data-testid="stAppViewBlockContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+      }
+      .block-container > div:first-child,
+      div[data-testid="stMainBlockContainer"] > div:first-child,
+      div[data-testid="stAppViewBlockContainer"] > div:first-child {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+      }
+      h1,
+      div[data-testid="stHeading"] h1 {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
 if "df_resultats" not in st.session_state:
