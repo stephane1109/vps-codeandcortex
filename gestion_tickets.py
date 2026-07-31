@@ -808,7 +808,7 @@ def construire_tableau_de_bord_indisponible(
     application_ids: list[str] | None = None,
     message: str | None = None,
 ) -> dict[str, Any]:
-    """Retourner un JSON exploitable meme quand Redis est indisponible."""
+    """Retourner un JSON exploitable quand Redis est indisponible sans inventer de quotas statiques."""
     configuration_globale = _configuration_globale()
     ids = [normaliser_identifiant_application(item) for item in application_ids] if application_ids else _application_ids_configures()
     erreur = message or "Redis indisponible pour le tableau de bord."
@@ -820,12 +820,13 @@ def construire_tableau_de_bord_indisponible(
             "applicationId": configuration["application_id"],
             "label": configuration["label"],
             "active": 0,
-            "maxActive": configuration["max_active"],
+            "maxActive": None,
             "queued": 0,
             "cost": configuration["cout"],
             "state": "unavailable",
             "stateLabel": "Synchronisation indisponible",
             "message": erreur,
+            "metaText": "Synchronisation indisponible",
         }
 
     return {

@@ -522,6 +522,17 @@
                 };
             }
 
+            function buildUnavailablePayload(payload) {
+                return {
+                    state: "unavailable",
+                    stateLabel: payload && payload.stateLabel ? payload.stateLabel : "Synchronisation indisponible",
+                    active: 0,
+                    maxActive: payload && Number.isFinite(payload.maxActive) ? payload.maxActive : null,
+                    queued: 0,
+                    metaText: payload && payload.metaText ? payload.metaText : "Synchronisation indisponible",
+                };
+            }
+
             function resolvePayload(card, payload) {
                 const appId = card.dataset.appId;
                 const localTicket = appId ? getLocalTicket(appId) : null;
@@ -540,6 +551,10 @@
 
                 if (localTicket) {
                     return buildLocalPayload(card);
+                }
+
+                if (payload && isUnavailableState(payload.state)) {
+                    return buildUnavailablePayload(payload);
                 }
 
                 return null;
@@ -600,7 +615,18 @@
 
             function markDashboardUnavailable(message) {
                 globalServer.textContent = "Synchronisation indisponible";
-                applyLocalFallbackStates();
+                cards.forEach((card) => {
+                    const appId = card.dataset.appId;
+                    if (appId && getLocalTicket(appId)) {
+                        decorateCard(card, buildLocalPayload(card));
+                        return;
+                    }
+                    decorateCard(card, buildUnavailablePayload({
+                        state: "unavailable",
+                        stateLabel: "Synchronisation indisponible",
+                        metaText: "Synchronisation indisponible",
+                    }));
+                });
                 if (note) {
                     note.textContent = message || "API dashboard indisponible pour le moment.";
                 }
