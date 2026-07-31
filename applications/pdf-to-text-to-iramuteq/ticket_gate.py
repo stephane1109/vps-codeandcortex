@@ -180,6 +180,47 @@ def _render_released_access_notice() -> None:
         """,
         unsafe_allow_html=True,
     )
+    components.html(
+        """
+        <script>
+        (function () {
+          function resolveHostWindow() {
+            try {
+              if (window.parent && window.parent !== window) {
+                return window.parent;
+              }
+            } catch (error) {}
+            return window;
+          }
+
+          const host = resolveHostWindow();
+          const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || {};
+          const appId = String(current.applicationId || "");
+          if (!appId || host.__ticketGateReleasedNoticeSent) {
+            return;
+          }
+
+          host.__ticketGateReleasedNoticeSent = true;
+          try {
+            if (host.opener && typeof host.opener.postMessage === "function") {
+              host.opener.postMessage(
+                {
+                  type: "codeandcortex-ticket:released",
+                  appId: appId,
+                  applicationId: appId,
+                  sessionId: String(current.sessionId || ""),
+                  at: Date.now(),
+                },
+                "*",
+              );
+            }
+          } catch (error) {}
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -510,7 +551,19 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
         <script>
         (function () {{
           const config = {json.dumps(payload)};
+          function resolveHostWindow() {{
+            try {{
+              if (window.parent && window.parent !== window) {{
+                return window.parent;
+              }}
+            }} catch (error) {{}}
+            return window;
+          }}
+
+          const host = resolveHostWindow();
           window.__ticketGateReleaseConfig = config;
+          host.__ticketGateReleaseConfig = config;
+          host.__ticketGateReleasedNoticeSent = false;
 
           if (window.__ticketGateReleaseHookInstalled) {{
             return;
@@ -519,8 +572,30 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
           window.__ticketGateReleaseHookInstalled = true;
           window.__ticketGateReleaseSent = false;
 
+          function notifyHomeDashboard(eventName) {{
+            const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || config;
+            const appId = String(current.applicationId || "");
+            if (!appId) {{
+              return;
+            }}
+            try {{
+              if (host.opener && typeof host.opener.postMessage === "function") {{
+                host.opener.postMessage(
+                  {{
+                    type: "codeandcortex-ticket:" + eventName,
+                    appId: appId,
+                    applicationId: appId,
+                    sessionId: String(current.sessionId || ""),
+                    at: Date.now(),
+                  }},
+                  "*",
+                );
+              }}
+            }} catch (error) {{}}
+          }}
+
           function buildReleaseUrl() {{
-            const current = window.__ticketGateReleaseConfig || config;
+            const current = host.__ticketGateReleaseConfig || window.__ticketGateReleaseConfig || config;
             const separator = current.releaseUrl.includes("?") ? "&" : "?";
             return current.releaseUrl + separator
               + "application_id=" + encodeURIComponent(current.applicationId)
@@ -535,6 +610,7 @@ def _install_release_hooks(cfg: dict[str, Any], session_id: str | None) -> None:
 
             window.__ticketGateReleaseSent = true;
             const url = buildReleaseUrl();
+            notifyHomeDashboard("releasing");
 
             try {{
               const sent = navigator.sendBeacon && navigator.sendBeacon(

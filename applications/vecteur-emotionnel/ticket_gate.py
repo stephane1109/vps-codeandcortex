@@ -53,6 +53,47 @@ def _render_released_access_notice() -> None:
         """,
         unsafe_allow_html=True,
     )
+    components.html(
+        """
+        <script>
+        (function () {
+          function resolveHostWindow() {
+            try {
+              if (window.parent && window.parent !== window) {
+                return window.parent;
+              }
+            } catch (error) {}
+            return window;
+          }
+
+          const host = resolveHostWindow();
+          const current = host.__ticketGateReleaseConfig || {};
+          const appId = String(current.applicationId || "");
+          if (!appId || host.__ticketGateReleasedNoticeSent) {
+            return;
+          }
+
+          host.__ticketGateReleasedNoticeSent = true;
+          try {
+            if (host.opener && typeof host.opener.postMessage === "function") {
+              host.opener.postMessage(
+                {
+                  type: "codeandcortex-ticket:released",
+                  appId: appId,
+                  applicationId: appId,
+                  sessionId: String(current.sessionId || ""),
+                  at: Date.now(),
+                },
+                "*",
+              );
+            }
+          } catch (error) {}
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -343,8 +384,6 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
     cfg = _config(default_app_id, app_label)
     client, _message = _redis_client()
     session_id = st.session_state.get(SESSION_STATE_KEY)
-    if persist_local_release:
-        st.session_state[RELEASED_STATE_KEY] = True
     if not client or not session_id:
         return False
     session_key = _session_key(cfg["app_id"], session_id)
@@ -356,6 +395,8 @@ def release_ticket_for_session(default_app_id: str, app_label: str, *, persist_l
         client.delete(_ticket_key(ticket_id))
         client.delete(session_key)
     _promote_waiting(client, cfg)
+    if persist_local_release:
+        st.session_state[RELEASED_STATE_KEY] = True
     return True
 
 
@@ -373,18 +414,53 @@ def _render_release_hooks(snapshot: dict[str, Any]) -> None:
         f"""
         <script>
         (function () {{
+          function resolveHostWindow() {{
+            try {{
+              if (window.parent && window.parent !== window) {{
+                return window.parent;
+              }}
+            }} catch (error) {{}}
+            return window;
+          }}
+
           const releaseUrl = {release_url!r};
+          const host = resolveHostWindow();
           const current = {{
             applicationId: {snapshot.get("application_id", "")!r},
             sessionId: {session_id!r},
             hiddenReleaseSeconds: {hidden_release_seconds}
           }};
+          host.__ticketGateReleaseConfig = current;
+          host.__ticketGateReleasedNoticeSent = false;
           let hiddenTimer = null;
+
+          function notifyHomeDashboard(eventName) {{
+            const appId = String(current.applicationId || "");
+            if (!appId) {{
+              return;
+            }}
+            try {{
+              if (host.opener && typeof host.opener.postMessage === "function") {{
+                host.opener.postMessage(
+                  {{
+                    type: "codeandcortex-ticket:" + eventName,
+                    appId: appId,
+                    applicationId: appId,
+                    sessionId: String(current.sessionId || ""),
+                    at: Date.now(),
+                  }},
+                  "*",
+                );
+              }}
+            }} catch (error) {{}}
+          }}
+
           function fireRelease() {{
             const url = releaseUrl
               + (releaseUrl.includes("?") ? "&" : "?")
               + "application_id=" + encodeURIComponent(current.applicationId)
               + "&session_id=" + encodeURIComponent(current.sessionId);
+            notifyHomeDashboard("releasing");
             try {{
               navigator.sendBeacon(url, new Blob([], {{ type: "text/plain" }}));
             }} catch (_error) {{
@@ -399,6 +475,7 @@ def _render_release_hooks(snapshot: dict[str, Any]) -> None:
               hiddenTimer = null;
             }}
           }});
+          window.addEventListener("pagehide", fireRelease);
           window.addEventListener("beforeunload", fireRelease);
         }})();
         </script>
