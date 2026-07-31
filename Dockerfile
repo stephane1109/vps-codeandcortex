@@ -21,7 +21,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - REDIS_URL
 # - APP_TICKET_RELEASE_URL=https://ton-dashboard.codeandcortex.fr/api/tickets/release
 # - APP_TICKET_HIDDEN_RELEASE_SECONDS=0 pour desactiver, sinon liberation auto si onglet cache
-# - APP_TICKET_WAIT_STALE_SECONDS=120 pour nettoyer plus vite une attente abandonnee
 # - APP_TICKET_MAX_ACTIVE pour garder l'exclusivite ou l'ouvrir
 # - APP_TICKET_COST pour la charge globale du VPS
 # - APP_TICKET_TTL_SECONDS si tu observes des expirations trop rapides
