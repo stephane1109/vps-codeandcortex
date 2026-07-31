@@ -26,7 +26,7 @@ APPLICATIONS_TICKETS_JSON = "APPLICATIONS_TICKETS_JSON"
 APPLICATIONS_PAR_DEFAUT = {
     "europresse-to-iramuteq": {
         "label": "Europresse → IRaMuTeQ",
-        "max_active": 4,
+        "max_active": 5,
         "cout": 1,
     },
     "extraction-multimedia": {
