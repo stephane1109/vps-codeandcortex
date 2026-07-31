@@ -36,18 +36,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && addgroup --system app \
     && adduser --system --ingroup app --home /home/app app
 
 COPY requirements.txt /app/requirements.txt
 
-ARG YTDLP_REFRESH=2026-07-19-analyse-debit-alternate-googlevideo-cdn-01
-RUN pip install -r /app/requirements.txt \
-    && echo "yt-dlp refresh ${YTDLP_REFRESH}" \
-    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default,curl-cffi]" \
-    && python -m yt_dlp --version
+RUN pip install -r /app/requirements.txt
 
 COPY . /app
 
