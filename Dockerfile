@@ -1,9 +1,10 @@
 FROM rocker/r2u:jammy
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PORT=8000 \
     APP_DATA_DIR=/data/app \
     CHDRAINETTE_APP_DATA_DIR=/data/app \
@@ -17,6 +18,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APP_TICKET_MAX_WAITING=20 \
     APP_TICKET_WAIT_REFRESH_MS=10000 \
     APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_WAIT_STALE_SECONDS=120 \
+    APP_TICKET_FAIL_OPEN=0 \
     APP_TICKET_ENFORCED=1
 
 # #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
@@ -27,19 +30,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_TICKET_COST=4 pour compter cette application comme application lourde
 # - CAPACITE_SERVEUR=6 pour coller a la capacite globale du VPS
 # - APP_TICKET_TTL_SECONDS=3600 si l'analyse peut durer longtemps
+# - APP_TICKET_FAIL_OPEN=0 pour forcer Redis et synchroniser la home
 # - APP_DATA_DIR=/data/app pour conserver les jobs et les sorties cote serveur
 # - CHDRAINETTE_APP_DATA_DIR=/data/app pour que le backend web et le R utilisent le meme volume
 # - CHDRAINETTE_R_LIBS_USER=/data/app/r-library pour les packages R persistants
 # - CHDRAINETTE_CACHE_DIR=/data/app/cache pour le modele UDPipe
-# - PORT=8000 pour FastAPI / Uvicorn
+# - PORT=8000 pour l'application Shiny
 
 WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 \
-        python3-pip \
-        python3-venv \
+        python3-redis \
+        redis-tools \
         build-essential \
         gfortran \
         pkg-config \
@@ -66,15 +70,24 @@ RUN apt-get update \
         libsm6 \
         libxext6 \
         libxrender1 \
+        zip \
     && binary_r_packages="\
+      r-cran-bslib \
       r-cran-dplyr \
+      r-cran-factominer \
+      r-cran-highr \
       r-cran-htmltools \
+      r-cran-igraph \
       r-cran-jsonlite \
+      r-cran-markdown \
       r-cran-quanteda \
       r-cran-quanteda.textstats \
       r-cran-rcolorbrewer \
       r-cran-remotes \
+      r-cran-shiny \
       r-cran-stopwords \
+      r-cran-stringi \
+      r-cran-stringr \
       r-cran-wordcloud \
       r-cran-xml2 \
     " \
@@ -91,16 +104,13 @@ RUN apt-get update \
        fi \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
-RUN python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /app/requirements.txt
-
 COPY backend/install-r-packages.R /tmp/install-r-packages.R
 RUN Rscript /tmp/install-r-packages.R
 
 COPY . /app
 
 RUN useradd --create-home --shell /bin/bash app \
-    && chmod +x /app/docker-entrypoint.sh \
+    && chmod +x /app/docker-entrypoint.sh /app/backend/ticket_gate_cli.py /app/backend/redis_ticket_cli.py \
     && mkdir -p /data/app /data/app/r-library /data/app/cache \
     && chown -R app:app /app /home/app /data/app
 
@@ -109,6 +119,6 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-  CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health', timeout=3).read()"
+  CMD sh -c 'curl -fsS "http://127.0.0.1:${PORT:-8000}/" >/dev/null'
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

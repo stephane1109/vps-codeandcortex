@@ -222,8 +222,10 @@ start_ticket_runtime_config_heartbeat() {
 
 
 PORT="${PORT:-8000}"
+export PORT
 
+cd /app
 publish_ticket_runtime_config
 start_ticket_runtime_config_heartbeat
 
-exec python3 -m uvicorn webapp.main:app --host 0.0.0.0 --port "${PORT}"
+exec Rscript /app/start.R
