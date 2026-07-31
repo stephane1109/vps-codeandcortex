@@ -9,8 +9,11 @@ from dataclasses import dataclass
 import requests
 import streamlit as st
 
+from ticket_gate import enforce_streamlit_access, keep_ticket_alive
+
 
 DEFAULT_TITLES = "Bordeaux\nParis"
+APP_NAME = "Scraper Wikipedia"
 DEFAULT_LANGUAGE = "fr"
 DEFAULT_KEEP_SECTIONS = [
     "geographie",
@@ -191,10 +194,11 @@ def init_state() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Scraper Wikipedia", layout="wide")
+    st.set_page_config(page_title=APP_NAME, layout="wide")
+    enforce_streamlit_access("scraper_wikipedia", APP_NAME)
     init_state()
 
-    st.title("Scraper Wikipedia")
+    st.title(APP_NAME)
     st.markdown("[www.codeandcortex.fr](https://www.codeandcortex.fr)")
     st.markdown(
         """
@@ -240,6 +244,7 @@ def main() -> None:
         else:
             keep_sections = parse_csv_like(keep_sections_value)
             remove_sections = parse_csv_like(remove_sections_value)
+            keep_ticket_alive("scraper_wikipedia", APP_NAME)
 
             with st.spinner("Recuperation des articles Wikipedia..."):
                 results, errors = process_titles(
