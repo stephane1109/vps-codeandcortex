@@ -66,7 +66,7 @@ APPLICATIONS_PAR_DEFAUT = {
     },
     "cooccurrencesmotpivot": {
         "label": "Cooccurrences mot pivot",
-        "max_active": 2,
+        "max_active": 3,
         "cout": 2,
     },
     "lda": {
