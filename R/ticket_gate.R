@@ -171,7 +171,7 @@ ticket_redis_helper_path <- function() {
 ticket_python3 <- function() {
   python3 <- Sys.which("python3")
   if (!nzchar(python3)) {
-    stop("python3 absent : installe python3 dans l'image Docker CHD Rainette.", call. = FALSE)
+    stop("python3 absent : installé python3 dans l'image Docker CHD Rainette.", call. = FALSE)
   }
   python3
 }
@@ -187,7 +187,7 @@ ticket_shell_args <- function(args) {
 ticket_redis_cli <- function() {
   redis_cli <- Sys.which("redis-cli")
   if (!nzchar(redis_cli)) {
-    stop("redis-cli absent : installe le package redis-tools dans l'image Docker.", call. = FALSE)
+    stop("redis-cli absent : installé le package redis-tools dans l'image Docker.", call. = FALSE)
   }
   redis_cli
 }
@@ -297,7 +297,7 @@ ticket_cli_exec_json <- function(args) {
     stop(sprintf("Helper ticket Python absent : %s", cli_path), call. = FALSE)
   }
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    stop("Package R jsonlite absent : installe r-cran-jsonlite dans l'image Docker.", call. = FALSE)
+    stop("Package R jsonlite absent : installé r-cran-jsonlite dans l'image Docker.", call. = FALSE)
   }
   output <- tryCatch(
     system2(
@@ -896,8 +896,8 @@ ticket_sidebar_ui <- function(snapshot) {
   )
 
   tags$div(
-    class = "sidebar-group ticket-access-group",
-    tags$h3(class = "ticket-access-title", "Accès utilisateur"),
+    class = "sidebar-group ticket-accèss-group",
+    tags$h3(class = "ticket-accèss-title", "Accès utilisateur"),
     tags$div(
       class = "ticket-status-shell",
       tags$div(

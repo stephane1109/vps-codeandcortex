@@ -8,14 +8,14 @@ from typing import Iterable
 try:
     import redis
 except Exception as exc:  # pragma: no cover - depends on container image
-    print(f"Le paquet Python 'redis' n'est pas installe : {exc}", file=sys.stderr)
+    print(f"Le paquet Python 'redis' n'est pas installé : {exc}", file=sys.stderr)
     sys.exit(2)
 
 
 def redis_client():
     redis_url = os.getenv("REDIS_URL", "").strip()
     if not redis_url:
-        print("REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify.", file=sys.stderr)
+        print("REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify.", file=sys.stderr)
         sys.exit(2)
     try:
         client = redis.from_url(redis_url, decode_responses=True)

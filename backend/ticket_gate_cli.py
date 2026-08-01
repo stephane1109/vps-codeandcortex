@@ -52,10 +52,10 @@ def config(default_app_id: str = "chdrainette", app_label: str = "CHD Rainette")
 
 def redis_client():
     if redis is None:
-        raise RuntimeError(f"Le paquet Python 'redis' n'est pas installe : {REDIS_IMPORT_ERROR}")
+        raise RuntimeError(f"Le paquet Python 'redis' n'est pas installé : {REDIS_IMPORT_ERROR}")
     redis_url = os.getenv("REDIS_URL", "").strip()
     if not redis_url:
-        raise RuntimeError("REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify.")
+        raise RuntimeError("REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify.")
     client = redis.from_url(redis_url, decode_responses=True)
     client.ping()
     return client
@@ -231,7 +231,7 @@ def snapshot(client, cfg: dict[str, Any], ticket_id: str | None, message: str = 
             statut="inconnu",
             active=active_count(client, cfg),
             queued=waiting_count(client, cfg),
-            message=message or "Aucun ticket associe a cette session.",
+            message=message or "Aucun ticket associé a cette session.",
         )
 
     data = client.hgetall(ticket_key(ticket_id)) or {}
@@ -340,7 +340,7 @@ def main(argv: list[str]) -> int:
 
     cfg = config(app_label=args.app_label)
     if not cfg["enabled"]:
-        return emit_json(disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."))
+        return emit_json(disabled_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0."))
 
     try:
         client = redis_client()
