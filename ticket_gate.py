@@ -462,7 +462,7 @@ def _render_released_notice(cfg: dict[str, Any]) -> None:
     )
 
 
-def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
@@ -480,7 +480,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
