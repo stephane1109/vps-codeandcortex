@@ -61,7 +61,7 @@ TICKET_STATUS_STYLE = """
   color: #0f172a !important;
 }
 .ticket-gate-main-notice {
-  margin: 0.95rem 0 1rem;
+  margin: clamp(3.5rem, 8vh, 6rem) 0 1rem;
   padding: 0.9rem 1rem;
   border-left: 4px solid #2563eb;
   border-radius: 10px;
@@ -462,7 +462,7 @@ def _render_released_notice(cfg: dict[str, Any]) -> None:
     )
 
 
-def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
