@@ -61,15 +61,15 @@ Variables d'environnement a modifier si besoin :
   Exemple : 300000 pour 5 minutes.
 
 - APP_TICKET_ENFORCED
-  Mettre 0 pour desactiver temporairement le controle d'acces.
+  Mettre 0 pour désactiver temporairement le contrôle d'accès.
 
 - APP_TICKET_RELEASE_URL
   URL absolue du service dashboard qui expose `/api/tickets/release`.
   Exemple : https://ton-dashboard.codeandcortex.fr/api/tickets/release
 
 - APP_TICKET_HIDDEN_RELEASE_SECONDS
-  Delai optionnel avant liberation automatique si l'onglet devient cache.
-  Mettre 0 pour desactiver ce garde-fou.
+  Délai optionnel avant liberation automatique si l'onglet devient cache.
+  Mettre 0 pour désactiver ce garde-fou.
 
 Conseil pratique pour Coolify :
 - laisse APP_TICKET_MAX_ACTIVE=1 pour une grosse application monopolistique
@@ -147,7 +147,7 @@ TICKET_STATUS_STYLE = """
 """
 
 
-def _render_released_access_notice() -> None:
+def _render_released_accèss_notice() -> None:
     st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
@@ -238,10 +238,10 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
 
 def _redis_client():
     if redis is None:
-        return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
+        return None, "Le paquet Python 'redis' n'est pas installé dans l'application."
     redis_url_env = os.getenv("REDIS_URL", "").strip()
     if not redis_url_env:
-        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
+        return None, "REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url_env, decode_responses=True)
         client.ping()
@@ -382,7 +382,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
-            "message": "Aucun ticket associe a cette session.",
+            "message": "Aucun ticket associé a cette session.",
         }
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
@@ -438,7 +438,7 @@ def _released_snapshot(client, cfg: dict[str, Any], message: str) -> dict[str, A
 
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de réserver un ticket.")
 
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
@@ -695,7 +695,7 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
 
 
-def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
@@ -789,7 +789,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.stop()
 
     if snapshot["statut"] == "released":
-        _render_released_access_notice()
+        _render_released_accèss_notice()
         st.stop()
 
     if snapshot["statut"] == "refuse":
