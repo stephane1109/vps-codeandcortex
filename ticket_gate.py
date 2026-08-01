@@ -151,7 +151,7 @@ TICKET_STATUS_STYLE = """
 """
 
 
-def _render_released_access_notice() -> None:
+def _render_released_accèss_notice() -> None:
     st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
@@ -693,13 +693,13 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
         return _released_snapshot(
             client,
             cfg,
-            "Accès libéré pour cette page. Clique sur 'Reprendre l'accès' pour revenir dans la file.",
+            "Accès libéré pour cette page. Cliquez sur 'Reprendre l'accès' pour revenir dans la file.",
         )
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
 
 
-def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
@@ -793,7 +793,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.stop()
 
     if snapshot["statut"] == "released":
-        st.info("Accès libéré. Clique sur 'Reprendre l'accès' pour revenir dans la file.")
+        st.info("Accès libéré. Cliquez sur 'Reprendre l'accès' pour revenir dans la file.")
         st.stop()
 
     if snapshot["statut"] == "refuse":
