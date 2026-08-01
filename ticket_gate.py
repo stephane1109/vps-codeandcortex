@@ -42,13 +42,13 @@ RELEASED_ACCESS_NOTICE_STYLE = """
 """
 
 
-def _render_released_access_notice() -> None:
+def _render_released_accèss_notice() -> None:
     st.markdown(RELEASED_ACCESS_NOTICE_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
         <div class="ticket-gate-main-notice" role="status">
-          <strong>Acces libere</strong>
-          <p>Cliquez sur <em>Reprendre l'acces</em> pour revenir dans la file.</p>
+          <strong>Accès libéré</strong>
+          <p>Cliquez sur <em>Reprendre l'accès</em> pour revenir dans la file.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -133,10 +133,10 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
 
 def _redis_client():
     if redis is None:
-        return None, "Le paquet Python 'redis' n'est pas installe dans l'application."
+        return None, "Le paquet Python 'redis' n'est pas installé dans l'application."
     redis_url_env = os.getenv("REDIS_URL", "").strip()
     if not redis_url_env:
-        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
+        return None, "REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url_env, decode_responses=True)
         client.ping()
@@ -484,13 +484,13 @@ def _render_release_hooks(snapshot: dict[str, Any]) -> None:
     )
 
 
-def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
 
     if st.session_state.get(RELEASED_STATE_KEY):
-        _render_released_access_notice()
-        if st.button("Reprendre l'acces", use_container_width=True):
+        _render_released_accèss_notice()
+        if st.button("Reprendre l'accès", use_container_width=True):
             st.session_state[RELEASED_STATE_KEY] = False
             st.rerun()
         st.stop()
@@ -508,12 +508,12 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
             "application_label": cfg["app_label"],
             "heartbeat_ms": cfg["heartbeat_ms"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
-            "message": "Controle d'acces desactive par APP_TICKET_ENFORCED=0.",
+            "message": "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.",
         }
 
     client, message = _redis_client()
     if client is None:
-        st.error("Controle d'acces temporairement indisponible.")
+        st.error("Contrôle d'accès temporairement indisponible.")
         st.error(message or "Redis indisponible.")
         st.stop()
     _publish_runtime_config(client, cfg)
@@ -532,7 +532,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         elif snapshot["message"]:
             st.info(snapshot["message"])
     with col_action:
-        if snapshot["statut"] in {"actif", "attente"} and st.button("Liberer l'acces", use_container_width=True):
+        if snapshot["statut"] in {"actif", "attente"} and st.button("Libérer l'accès", use_container_width=True):
             if release_ticket_for_session(default_app_id, app_label):
                 st.rerun()
 
