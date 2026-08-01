@@ -361,6 +361,14 @@ def _can_activate(client, cfg: dict[str, Any]) -> bool:
     return _active_count(client, cfg) < cfg["max_active"] and (_active_load(client) + cfg["cost"] <= cfg["global_capacity"])
 
 
+def _activation_block_reason(client, cfg: dict[str, Any]) -> str | None:
+    if _active_count(client, cfg) >= cfg["max_active"]:
+        return "application"
+    if _active_load(client) + cfg["cost"] > cfg["global_capacity"]:
+        return "server_capacity"
+    return None
+
+
 def _promote_waiting(client, cfg: dict[str, Any]) -> None:
     waiting_key = _keys(cfg["app_id"])["waiting"]
     active_key = _keys(cfg["app_id"])["active"]
@@ -393,6 +401,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
         }
 
     active = _active_count(client, cfg)
+    active_load = _active_load(client)
     queued = _waiting_count(client, cfg)
     if not ticket_id:
         return {
@@ -401,24 +410,37 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             "statut": "inconnu",
             "position": None,
             "active": active,
+            "active_load": active_load,
+            "global_capacity": cfg["global_capacity"],
+            "cost": cfg["cost"],
             "queued": queued,
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
+            "blocked_reason": "",
             "message": "Aucun ticket associé à cette session.",
         }
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
+    statut = data.get("status", "inconnu")
+    position = _waiting_position(client, cfg, ticket_id)
+    blocked_reason = data.get("blocked_reason", "")
+    if statut == "attente":
+        blocked_reason = "queue" if position and position > 1 else (_activation_block_reason(client, cfg) or blocked_reason or "queue")
     return {
         "enabled": True,
         "ticket_id": ticket_id,
-        "statut": data.get("status", "inconnu"),
-        "position": _waiting_position(client, cfg, ticket_id),
+        "statut": statut,
+        "position": position,
         "active": active,
+        "active_load": active_load,
+        "global_capacity": cfg["global_capacity"],
+        "cost": cfg["cost"],
         "queued": queued,
         "max_active": cfg["max_active"],
         "wait_refresh_ms": cfg["wait_refresh_ms"],
         "heartbeat_ms": cfg["heartbeat_ms"],
+        "blocked_reason": blocked_reason,
         "message": data.get("message", ""),
     }
 
@@ -434,16 +456,21 @@ def _error_snapshot(cfg: dict[str, Any], message: str) -> dict[str, Any]:
         "statut": "erreur",
         "position": None,
         "active": 0,
+        "active_load": 0,
+        "global_capacity": cfg["global_capacity"],
+        "cost": cfg["cost"],
         "queued": 0,
         "max_active": cfg["max_active"],
         "wait_refresh_ms": cfg["wait_refresh_ms"],
         "heartbeat_ms": cfg["heartbeat_ms"],
+        "blocked_reason": "",
         "message": message,
     }
 
 
 def _released_snapshot(client, cfg: dict[str, Any], message: str) -> dict[str, Any]:
     active = _active_count(client, cfg) if client is not None else 0
+    active_load = _active_load(client) if client is not None else 0
     queued = _waiting_count(client, cfg) if client is not None else 0
     return {
         "enabled": True,
@@ -451,10 +478,14 @@ def _released_snapshot(client, cfg: dict[str, Any], message: str) -> dict[str, A
         "statut": "released",
         "position": None,
         "active": active,
+        "active_load": active_load,
+        "global_capacity": cfg["global_capacity"],
+        "cost": cfg["cost"],
         "queued": queued,
         "max_active": cfg["max_active"],
         "wait_refresh_ms": cfg["wait_refresh_ms"],
         "heartbeat_ms": cfg["heartbeat_ms"],
+        "blocked_reason": "",
         "message": message,
     }
 
@@ -489,14 +520,22 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
             "statut": "refuse",
             "position": None,
             "active": _active_count(client, cfg),
+            "active_load": _active_load(client),
+            "global_capacity": cfg["global_capacity"],
+            "cost": cfg["cost"],
             "queued": _waiting_count(client, cfg),
             "max_active": cfg["max_active"],
             "wait_refresh_ms": cfg["wait_refresh_ms"],
             "heartbeat_ms": cfg["heartbeat_ms"],
+            "blocked_reason": "",
             "message": "File d'attente pleine pour cette application.",
         }
 
-    status = "actif" if _waiting_count(client, cfg) == 0 and _can_activate(client, cfg) else "attente"
+    waiting_count = _waiting_count(client, cfg)
+    blocked_reason = "" if waiting_count == 0 else "queue"
+    if waiting_count == 0:
+        blocked_reason = _activation_block_reason(client, cfg) or ""
+    status = "actif" if waiting_count == 0 and not blocked_reason else "attente"
     client.hset(
         _ticket_key(ticket_id),
         mapping={
@@ -506,6 +545,7 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
             "application_label": cfg["app_label"],
             "cost": cfg["cost"],
             "status": status,
+            "blocked_reason": blocked_reason,
             "created_at": int(time.time()),
             "updated_at": int(time.time()),
         },
@@ -750,16 +790,30 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 st.warning("Impossible de libérer le ticket courant pour le moment.")
         elif snapshot["statut"] == "attente":
             position = snapshot["position"] or "?"
+            is_server_capacity = snapshot.get("blocked_reason") == "server_capacity"
+            titre_attente = "Capacité serveur atteinte" if is_server_capacity else "Application occupée"
+            detail_attente = (
+                f"Charge serveur : {snapshot.get('active_load', 0)} / {snapshot.get('global_capacity', 0)}. "
+                f"Cette application nécessite {snapshot.get('cost', 0)} unités."
+                if is_server_capacity
+                else f"Position actuelle dans la file : {position}."
+            )
             st.markdown(
                 f"""
                 <div class="ticket-status-card is-waiting">
                   <span class="ticket-status-dot is-waiting"></span>
-                  <div class="ticket-status-meta"><strong>Application occupée</strong><br>Position actuelle dans la file : {position}.</div>
+                  <div class="ticket-status-meta"><strong>{titre_attente}</strong><br>{detail_attente}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.warning(f"Application occupée. Position dans la file : {position}.")
+            if is_server_capacity:
+                st.warning(
+                    "Capacité serveur insuffisante pour ouvrir cette application maintenant. "
+                    f"Position dans la file : {position}."
+                )
+            else:
+                st.warning(f"Application occupée. Position dans la file : {position}.")
         elif snapshot["statut"] == "refuse":
             st.markdown(
                 """
@@ -805,10 +859,17 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
 
     if snapshot["statut"] == "attente":
         st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
-        st.warning(
-            f"{app_label} est actuellement utilisee par un autre utilisateur. "
-            f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
-        )
+        if snapshot.get("blocked_reason") == "server_capacity":
+            st.warning(
+                f"{app_label} attend une capacité serveur suffisante. "
+                f"Charge actuelle : {snapshot.get('active_load', 0)} / {snapshot.get('global_capacity', 0)}. "
+                f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
+            )
+        else:
+            st.warning(
+                f"{app_label} est actuellement utilisée par un autre utilisateur. "
+                f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
+            )
         st.stop()
 
     if snapshot["statut"] == "released":
