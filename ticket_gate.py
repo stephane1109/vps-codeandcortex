@@ -138,7 +138,7 @@ TICKET_STATUS_STYLE = """
   color: #475569 !important;
 }
 .ticket-gate-main-notice {
-  margin: 0.95rem 0 1rem;
+  margin: clamp(3.5rem, 8vh, 6rem) 0 1rem;
   padding: 0.9rem 1rem;
   border-left: 4px solid #2563eb;
   border-radius: 10px;
@@ -170,7 +170,7 @@ TICKET_STATUS_STYLE = """
 """
 
 
-def _render_released_accèss_notice() -> None:
+def _render_released_access_notice() -> None:
     st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
@@ -718,7 +718,7 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
 
 
-def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
@@ -812,7 +812,7 @@ def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, 
         st.stop()
 
     if snapshot["statut"] == "released":
-        _render_released_accèss_notice()
+        _render_released_access_notice()
         st.stop()
 
     if snapshot["statut"] == "refuse":
