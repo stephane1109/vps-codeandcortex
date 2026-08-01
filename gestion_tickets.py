@@ -611,10 +611,18 @@ def calculer_position_attente(client_redis, identifiant_ticket: str, application
     return tickets_attente.index(identifiant_ticket) + 1
 
 
-def _statut_application_depuis_compteurs(active: int, max_active: int, queued: int) -> tuple[str, str]:
+def _statut_application_depuis_compteurs(
+    active: int,
+    max_active: int,
+    queued: int,
+    *,
+    capacity_blocked: bool = False,
+) -> tuple[str, str]:
     if queued > 0:
         return "queued", "File d'attente"
     if active <= 0:
+        if capacity_blocked:
+            return "capacity_full", "Serveur occupé"
         return "available", "Libre"
     if active >= max_active:
         return "busy", "Occupée"
@@ -859,6 +867,16 @@ def lire_statut_application(
     identifiant_application = configuration["application_id"]
     active = _compter_tickets_actifs_application_brut(client_redis, identifiant_application)
     queued = _compter_tickets_attente_application_brut(client_redis, identifiant_application)
+    active_load = _calculer_charge_active_brut(
+        client_redis,
+        configuration_globale,
+        configurations_brutes,
+    )
+    capacity_blocked = (
+        queued == 0
+        and active <= 0
+        and active_load + int(configuration["cout"]) > int(configuration["capacite_serveur"])
+    )
 
     if not configuration.get("runtime_sync"):
         return {
@@ -874,7 +892,18 @@ def lire_statut_application(
             "metaText": "Synchronisation indisponible",
         }
 
-    state, state_label = _statut_application_depuis_compteurs(active, configuration["max_active"], queued)
+    state, state_label = _statut_application_depuis_compteurs(
+        active,
+        configuration["max_active"],
+        queued,
+        capacity_blocked=capacity_blocked,
+    )
+    meta_text = None
+    if capacity_blocked:
+        meta_text = (
+            f"Charge serveur {active_load}/{configuration['capacite_serveur']} · "
+            f"coût appli {configuration['cout']}"
+        )
 
     return {
         "applicationId": identifiant_application,
@@ -885,6 +914,7 @@ def lire_statut_application(
         "cost": configuration["cout"],
         "state": state,
         "stateLabel": state_label,
+        "metaText": meta_text,
     }
 
 

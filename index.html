@@ -488,7 +488,7 @@
             function isBusyState(state, active, queued) {
                 if ((queued || 0) > 0) return true;
                 if ((active || 0) > 0) return true;
-                return state === "busy" || state === "active" || state === "queued" || state === "full";
+                return state === "busy" || state === "active" || state === "queued" || state === "full" || state === "capacity_full";
             }
 
             function hasNoServerActivity(payload) {
@@ -497,13 +497,14 @@
 
             function badgeClassFromState(state, queued) {
                 if (isUnavailableState(state)) return "indisponible";
-                if (queued > 0 || state === "queued" || state === "full") return "attente";
+                if (queued > 0 || state === "queued" || state === "full" || state === "capacity_full") return "attente";
                 if (state === "busy" || state === "active") return "attente";
                 return "libre";
             }
 
             function labelFromState(state, queued) {
                 if (isUnavailableState(state)) return "Synchronisation";
+                if (state === "capacity_full") return "Serveur occupé";
                 if (queued > 0 || state === "queued" || state === "full") return "File d'attente";
                 if (state === "busy" || state === "active") return "En cours";
                 return "Libre";
