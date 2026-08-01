@@ -23,6 +23,7 @@ import streamlit.components.v1 as components
 import yt_dlp
 from yt_dlp import YoutubeDL
 
+from app_runtime import resolve_app_data_dir
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
 st.set_page_config(
@@ -58,7 +59,7 @@ st.markdown(
 
 APP_DIR = Path(__file__).resolve().parent
 HELP_PATH = APP_DIR / "aide.md"
-APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
+APP_DATA_DIR = resolve_app_data_dir()
 APP_NAME = "Extraction multimedia"
 APP_TICKET_DEFAULT_ID = "extraction-multimedia"
 APP_BUILD = "extraction-multimedia-remove-duplicate-preview-2026-07-20-02"

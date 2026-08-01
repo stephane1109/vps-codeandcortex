@@ -10,8 +10,9 @@ from typing import List, Optional, Tuple
 
 import cv2
 
+from app_runtime import resolve_app_data_dir
 
-BASE_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
+BASE_DIR = resolve_app_data_dir()
 TIMELAPSE_DIR = BASE_DIR / "timelapse_jobs"
 TIMELAPSE_DIR.mkdir(parents=True, exist_ok=True)
 

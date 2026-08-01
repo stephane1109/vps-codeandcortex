@@ -7,8 +7,9 @@ import time
 
 import streamlit as st
 
+from app_runtime import resolve_app_data_dir
 
-APP_DATA_DIR = Path(os.environ.get("APP_DATA_DIR", "/data/app"))
+APP_DATA_DIR = resolve_app_data_dir()
 APP_TICKET_ID = os.environ.get("APP_TICKET_ID", "extraction-multimedia")
 
 

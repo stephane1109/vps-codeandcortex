@@ -44,8 +44,8 @@ RUN pip install --upgrade pip setuptools wheel \
 COPY . /app
 
 RUN chmod +x /app/docker-entrypoint.sh \
-    && mkdir -p /tmp/appdata /home/app/.streamlit \
-    && chown -R app:app /app /tmp/appdata /home/app
+    && mkdir -p /data/app /tmp/appdata /home/app/.streamlit \
+    && chown -R app:app /app /data/app /tmp/appdata /home/app
 
 USER app
 
