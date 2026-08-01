@@ -61,15 +61,15 @@ Variables d'environnement a modifier si besoin :
   Exemple : 300000 pour 5 minutes.
 
 - APP_TICKET_ENFORCED
-  Mettre 0 pour desactiver temporairement le controle d'acces.
+  Mettre 0 pour désactiver temporairement le contrôle d'accès.
 
 - APP_TICKET_RELEASE_URL
   URL absolue du service dashboard qui expose `/api/tickets/release`.
   Exemple : https://ton-dashboard.codeandcortex.fr/api/tickets/release
 
 - APP_TICKET_HIDDEN_RELEASE_SECONDS
-  Delai optionnel avant liberation automatique si l'onglet devient cache.
-  Mettre 0 pour desactiver ce garde-fou.
+  Délai optionnel avant liberation automatique si l'onglet devient cache.
+  Mettre 0 pour désactiver ce garde-fou.
 
 Conseil pratique pour Coolify :
 - laisse APP_TICKET_MAX_ACTIVE=1 pour une grosse application monopolistique
@@ -170,7 +170,7 @@ TICKET_STATUS_STYLE = """
 """
 
 
-def _render_released_access_notice() -> None:
+def _render_released_accèss_notice() -> None:
     st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
@@ -758,7 +758,7 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
 
 
-def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
@@ -778,7 +778,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -873,7 +873,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         st.stop()
 
     if snapshot["statut"] == "released":
-        _render_released_access_notice()
+        _render_released_accèss_notice()
         st.stop()
 
     if snapshot["statut"] == "refuse":
