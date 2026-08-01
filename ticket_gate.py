@@ -50,7 +50,7 @@ Variables d'environnement a modifier si besoin :
   Exemple : 1800 pour 30 minutes.
 
 - APP_TICKET_ACTIVE_STALE_SECONDS
-  Delai maximal sans heartbeat pour un ticket actif avant nettoyage automatique.
+  Délai maximal sans heartbeat pour un ticket actif avant nettoyage automatique.
   Exemple : 900 pour 15 minutes. Laisse une valeur superieure a APP_TICKET_HEARTBEAT_MS.
 
 - APP_TICKET_MAX_WAITING
@@ -65,18 +65,18 @@ Variables d'environnement a modifier si besoin :
   Exemple : 300000 pour 5 minutes.
 
 - APP_TICKET_ENFORCED
-  Mettre 0 pour desactiver temporairement le controle d'acces.
+  Mettre 0 pour désactiver temporairement le contrôle d'accès.
 
 - APP_TICKET_RELEASE_URL
   URL absolue du service dashboard qui expose `/api/tickets/release`.
   Exemple : https://ton-dashboard.codeandcortex.fr/api/tickets/release
 
 - APP_TICKET_HIDDEN_RELEASE_SECONDS
-  Delai optionnel avant liberation automatique si l'onglet devient cache.
-  Mettre 0 pour desactiver ce garde-fou.
+  Délai optionnel avant liberation automatique si l'onglet devient cache.
+  Mettre 0 pour désactiver ce garde-fou.
 
 - APP_TICKET_WAIT_STALE_SECONDS
-  Delai maximal sans heartbeat pour un ticket en attente.
+  Délai maximal sans heartbeat pour un ticket en attente.
   Permet de nettoyer plus vite une file d'attente abandonnee.
   Exemple : 120 pour 2 minutes.
 
@@ -149,7 +149,7 @@ TICKET_STATUS_STYLE = """
 """
 
 
-def _render_released_access_notice() -> None:
+def _render_released_accèss_notice() -> None:
     st.markdown(TICKET_STATUS_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
@@ -772,13 +772,13 @@ def keep_ticket_alive(default_app_id: str, app_label: str) -> dict[str, Any]:
         return _released_snapshot(
             client,
             cfg,
-            "Accès libéré pour cette page. Clique sur 'Reprendre l'accès' pour revenir dans la file.",
+            "Accès libéré pour cette page. Cliquez sur 'Reprendre l'accès' pour revenir dans la file.",
         )
     session_id = st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
     return _claim_or_refresh(client, cfg, session_id) if client else _error_snapshot(cfg, message or "Redis indisponible.")
 
 
-def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     snapshot = keep_ticket_alive(default_app_id, app_label)
     session_id = st.session_state.get(SESSION_STATE_KEY)
@@ -798,7 +798,7 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 f"""
                 <div class="ticket-status-card is-active">
                   <span class="ticket-status-dot is-active"></span>
-                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorise(s).</div>
+                  <div class="ticket-status-meta"><strong>Application active</strong><br>{snapshot['active']} utilisateur(s) actif(s) sur {snapshot['max_active']} autorisé(s).</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -870,13 +870,13 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
     if snapshot["statut"] == "attente":
         st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
         st.warning(
-            f"{app_label} est actuellement utilisee par un autre utilisateur. "
+            f"{app_label} est actuellement utilisée par un autre utilisateur. "
             f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
         )
         st.stop()
 
     if snapshot["statut"] == "released":
-        st.info("Accès libéré. Clique sur 'Reprendre l'accès' pour revenir dans la file.")
+        st.info("Accès libéré. Cliquez sur 'Reprendre l'accès' pour revenir dans la file.")
         st.stop()
 
     if snapshot["statut"] == "refuse":
