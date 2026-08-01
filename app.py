@@ -36,7 +36,6 @@ from doublons import (
 )
 
 APP_DIR = os.path.dirname(__file__)
-HELP_PATH = os.path.join(APP_DIR, "aide.md")
 
 st.set_page_config(layout="wide")
 st.markdown(
@@ -463,14 +462,6 @@ def extraire_texte_html(
     return texte_final, data_for_csv, articles_pour_doublons
 
 
-def load_help_markdown() -> str:
-    try:
-        with open(HELP_PATH, "r", encoding="utf-8") as help_file:
-            return help_file.read()
-    except Exception:
-        return "Le fichier `aide.md` est introuvable pour cette application."
-
-
 def render_help_tab() -> None:
     with st.expander("Aide", expanded=False):
         st.markdown(
@@ -484,7 +475,6 @@ def render_help_tab() -> None:
             """,
             unsafe_allow_html=True,
         )
-        st.markdown(load_help_markdown())
 
 
 # --------------------------------------------------------------------
