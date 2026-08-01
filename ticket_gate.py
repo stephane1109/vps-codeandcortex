@@ -20,7 +20,7 @@ RELEASED_STATE_KEY = "__ticket_gate_released__"
 RELEASED_ACCESS_NOTICE_STYLE = """
 <style>
 .ticket-gate-main-notice {
-  margin: 0.95rem 0 1rem;
+  margin: clamp(3.5rem, 8vh, 6rem) 0 1rem;
   padding: 0.9rem 1rem;
   border-left: 4px solid #2563eb;
   border-radius: 10px;
@@ -42,7 +42,7 @@ RELEASED_ACCESS_NOTICE_STYLE = """
 """
 
 
-def _render_released_accèss_notice() -> None:
+def _render_released_access_notice() -> None:
     st.markdown(RELEASED_ACCESS_NOTICE_STYLE, unsafe_allow_html=True)
     st.markdown(
         """
@@ -484,12 +484,12 @@ def _render_release_hooks(snapshot: dict[str, Any]) -> None:
     )
 
 
-def enforce_streamlit_accèss(default_app_id: str, app_label: str) -> dict[str, Any]:
+def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, Any]:
     cfg = _config(default_app_id, app_label)
     st.session_state.setdefault(SESSION_STATE_KEY, uuid.uuid4().hex)
 
     if st.session_state.get(RELEASED_STATE_KEY):
-        _render_released_accèss_notice()
+        _render_released_access_notice()
         if st.button("Reprendre l'accès", use_container_width=True):
             st.session_state[RELEASED_STATE_KEY] = False
             st.rerun()
