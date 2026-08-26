@@ -1,0 +1,200 @@
+FROM rocker/r2u:jammy
+
+ARG IRAMUTEQ_BUILD_BOOTSTRAP=0
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    IRAMUTEQ_APP_DATA_DIR=/data/app \
+    IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages \
+    IRAMUTEQ_R_LIBS_USER=/data/app/r-library \
+    IRAMUTEQ_R_SYSTEM_LIBS=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
+    R_LIBS_SITE=/usr/lib/R/site-library:/usr/lib/R/library:/usr/local/lib/R/site-library:/usr/local/lib/R/library \
+    IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1 \
+    USE_BUNDLED_LIBUV=1 \
+    RGL_USE_NULL=TRUE \
+    PORT=8000 \
+    APP_TICKET_ID=iramuteq-lite \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    APP_TICKET_TTL_SECONDS=300 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=30000 \
+    APP_TICKET_ENFORCED=1
+
+# #### VARIABLES D'ENVIRONNEMENT A MODIFIER DANS COOLIFY
+# - REDIS_URL
+# - APP_TICKET_MAX_ACTIVE=1 pour conserver l'exclusivite
+# - APP_TICKET_COST selon la charge reelle du VPS
+# - APP_TICKET_TTL_SECONDS=300 par defaut, soit 5 minutes avant expiration
+#   automatique si le ticket n'est plus rafraichi
+# - IRAMUTEQ_R_LIBS_USER=/data/app/r-library pour conserver
+#   les packages R installes au runtime dans le volume persistant Coolify
+# - IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages pour conserver
+#   les packages Python installes au runtime dans le volume persistant
+# #### MODE VPS / COOLIFY
+# Base `rocker/r2u:jammy` :
+# - expose les paquets CRAN en binaires Ubuntu via `apt`
+# - evite ici la compilation source tres longue de `quanteda`
+# - reduit fortement le risque de timeout Coolify pendant le build
+# Par defaut, on desactive ici le bootstrap R/CHD pendant le build
+# (`IRAMUTEQ_BUILD_BOOTSTRAP=0`) pour fiabiliser Coolify:
+# - moins de temps de build
+# - moins de place temporaire consommee
+# - moins de risque que le smoke-test CHD casse le deploiement
+# L'installation complementaire se fait alors au runtime dans `/data/app`
+# via `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1`.
+# #### MODE BUILD COMPLET
+# Si besoin, vous pouvez reactiver ce bootstrap build-time via
+# `IRAMUTEQ_BUILD_BOOTSTRAP=1` pour revalider l'image au build.
+# #### NOTE BUILD R
+# USE_BUNDLED_LIBUV=1 reste active pour securiser l'installation du package R `fs`
+# si Coolify ou le miroir CRAN ne voit pas correctement `libuv.pc`.
+# #### BIBLIOTHEQUES R SYSTEME
+# Les paquets `r-cran-*` installes via `apt` tombent dans `/usr/lib/R/...` alors que
+# `rocker/r-ver` utilise aussi `/usr/local/lib/R/...`. On force ici la visibilite des
+# deux emplacements pour eviter que le bootstrap recompilie inutilement depuis CRAN.
+# #### MENAGE VERSION WEB
+# La trajectoire lexicale / suivi a ete retiree de cette version web.
+# On en profite pour reduire ici la preinstallation R aux briques encore utiles
+# au pipeline actif :
+# - CHD
+# - AFC
+# - similitudes statiques
+# Les anciens paquets de l'interface Shiny / desktop ne sont plus precharges
+# au build et, si besoin ponctuel, seront reinstalles par le bootstrap runtime.
+# #### COMPILATION Rcpp / quanteda
+# `quanteda` retombe en compilation source sur cette image Ubuntu/R. Certains couples
+# GCC + Rcpp declenchent un `-Werror=format-security` dans les headers Rcpp, ce qui
+# casse le build alors qu'il ne s'agit pas d'une erreur fonctionnelle du package.
+# On neutralise uniquement cette promotion warning -> error dans Makevars.
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    gfortran \
+    git \
+    curl \
+    wget \
+    pkg-config \
+    python3 \
+    python3-pip \
+    ffmpeg \
+    python3-venv \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libcairo2-dev \
+    libfreetype6-dev \
+    libfribidi-dev \
+    libharfbuzz-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libicu-dev \
+    libgit2-dev \
+    libgl1 \
+    libglpk-dev \
+    libglu1-mesa-dev \
+    libglib2.0-0 \
+    libgsl-dev \
+    libuv1-dev \
+    libudunits2-dev \
+    libsm6 \
+    libxext6 \
+    pandoc \
+    && binary_r_packages="\
+      r-cran-ape \
+      r-cran-colorspace \
+      r-cran-dplyr \
+      r-cran-factoextra \
+      r-cran-factominer \
+      r-cran-fs \
+      r-cran-ggplot2 \
+      r-cran-htmlwidgets \
+      r-cran-htmltools \
+      r-cran-igraph \
+      r-cran-irlba \
+      r-cran-jsonlite \
+      r-cran-proxy \
+      r-cran-quanteda \
+      r-cran-rcolorbrewer \
+      r-cran-rgexf \
+      r-cran-rgl \
+      r-cran-sna \
+      r-cran-visnetwork \
+      r-cran-wordcloud \
+    " \
+    && available_r_packages="" \
+    && for pkg in $binary_r_packages; do \
+         if apt-cache show "$pkg" >/dev/null 2>&1; then \
+           available_r_packages="$available_r_packages $pkg"; \
+         else \
+           echo "APT package unavailable on this base image, skipped: $pkg"; \
+         fi; \
+       done \
+    && if [ -n "$available_r_packages" ]; then \
+         echo "Installing available binary R packages:$available_r_packages"; \
+         apt-get install -y --no-install-recommends $available_r_packages; \
+       fi \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /etc/R /root/.R \
+    && printf '%s\n' \
+      'CFLAGS += -Wno-error=format-security' \
+      'CXXFLAGS += -Wno-error=format-security' \
+      'CXX11FLAGS += -Wno-error=format-security' \
+      'CXX14FLAGS += -Wno-error=format-security' \
+      'CXX17FLAGS += -Wno-error=format-security' \
+      'CXX20FLAGS += -Wno-error=format-security' \
+      > /etc/R/Makevars.site \
+    && cp /etc/R/Makevars.site /root/.R/Makevars
+
+RUN useradd --create-home --shell /bin/bash app
+RUN mkdir -p /home/app/.R \
+    && cp /etc/R/Makevars.site /home/app/.R/Makevars \
+    && chown -R app:app /home/app/.R
+
+COPY docker/requirements-python.txt /tmp/requirements-python.txt
+# #### VPS / COOLIFY
+# On evite ici l'upgrade de pip/setuptools/wheel au build:
+# - cela n'ajoute aucune fonctionnalite a l'application
+# - cela augmente inutilement le volume telecharge et decompresse
+# - sur un builder Coolify deja charge, c'est un facteur de plantage supplementaire
+RUN python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /tmp/requirements-python.txt
+
+WORKDIR /app
+
+COPY --chown=app:app . /app
+
+# #### VPS / COOLIFY
+# Sur VPS/Coolify, le bootstrap build-time reste desactive par defaut.
+# Le premier lancement peut donc verifier/installer les packages manquants
+# dans le volume persistant sans faire echouer la construction de l'image.
+# #### BUILD COMPLET OPTIONNEL
+# Definir `IRAMUTEQ_BUILD_BOOTSTRAP=1` si vous souhaitez a nouveau:
+# - preinstaller les packages R au build
+# - executer le smoke-test CHD pendant le build
+RUN python3 -c "import fastapi, uvicorn, redis" \
+    && if [ "${IRAMUTEQ_BUILD_BOOTSTRAP}" = "1" ]; then \
+         Rscript /app/backend/r/bootstrap_iramuteq_env.R --mode install \
+         && sh /app/docker/smoke-test-chd.sh; \
+       else \
+         echo "Build R/CHD saute pour Coolify (IRAMUTEQ_BUILD_BOOTSTRAP=${IRAMUTEQ_BUILD_BOOTSTRAP})."; \
+       fi
+
+RUN chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /data/app /data/app/r-library /data/app/python-site-packages /tmp/iramuteq-lite \
+    && chown -R app:app /app /data/app /tmp/iramuteq-lite
+
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+  CMD wget -qO- "http://127.0.0.1:${PORT:-8000}/api/health" >/dev/null || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

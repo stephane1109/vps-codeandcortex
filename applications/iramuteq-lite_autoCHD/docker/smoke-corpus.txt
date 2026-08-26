@@ -1,0 +1,17 @@
+**** *groupe_alpha *periode_01
+Le projet avance avec une methode stable, une equipe motivee et des objectifs clairement decrits. Les echanges restent calmes, precis et centres sur l'organisation du travail.
+
+**** *groupe_alpha *periode_02
+Le projet avance encore, mais l'equipe mentionne davantage de fatigue, de retards et de questions sur la priorite des taches. Le discours devient plus prudent et plus analytique.
+
+**** *groupe_beta *periode_01
+Le second groupe insiste sur l'experimentation, la creativite et l'envie de tester plusieurs pistes. Les formulations sont dynamiques et souvent tournees vers la nouveaute.
+
+**** *groupe_beta *periode_02
+Le second groupe parle davantage d'ajustement, de tri des idees et de selection. Le lexique devient plus concret, plus comparatif et plus axe sur l'evaluation des resultats.
+
+**** *groupe_gamma *periode_01
+Le troisieme groupe decrit des tensions, des incomprehensions et un besoin de clarifier les roles. Les termes reviennent autour de la coordination, des blocages et de la relance du dialogue.
+
+**** *groupe_gamma *periode_02
+Le troisieme groupe evoque une amelioration progressive, un meilleur partage des decisions et une baisse des conflits. Le vocabulaire insiste sur l'accord, la stabilisation et la reprise de confiance.
