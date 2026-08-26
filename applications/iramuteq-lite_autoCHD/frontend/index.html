@@ -242,10 +242,24 @@
                     puis retient celle qui maximise le score structurel B.
                   </p>
                   <p class="section-copy">
-                    Le principe est de comparer plusieurs combinaisons possibles de classes, un peu comme aux echecs
-                    on compare plusieurs suites de coups avant de retenir la meilleure configuration globale.
-                    Le score B combine H, D et L pour privilegier la partition la plus coherente, la mieux separee
-                    et la plus stable lexicalement.
+                    Le parametre principal du mode auto est le nombre maximal de classes a explorer :
+                    on ne fixe pas d'avance la partition finale, on donne a la CHD une borne de recherche,
+                    puis l'application compare les partitions possibles de 2 classes jusqu'a cette limite.
+                  </p>
+                  <p class="section-copy">
+                    Le score structurel se construit a partir de trois composantes.
+                    `H` mesure l'homogeneite interne : plus `H` est eleve, plus les segments d'une meme classe
+                    se ressemblent lexicalement. `D` mesure la distinction minimale entre classes : plus `D`
+                    est eleve, plus les classes sont separees. `L` mesure la diffusion lexicale : plus `L`
+                    est eleve, plus les formes caracteristiques d'une classe sont reparties dans ses segments
+                    et ne reposent pas sur quelques segments atypiques.
+                  </p>
+                  <p class="section-copy">
+                    Le score global est `B = (H + D + L) / 3`. L'idee est proche d'un jeu d'echecs :
+                    plusieurs combinaisons sont possibles, mais la meilleure n'est pas forcement celle qui
+                    ajoute le plus de classes. C'est celle qui offre le meilleur equilibre entre coherence interne,
+                    separation entre classes et stabilite lexicale. Le gain `G` indique ensuite si le passage
+                    d'une partition a la suivante ameliore vraiment cette structure.
                   </p>
                 </article>
 
@@ -260,7 +274,7 @@
                 </article>
 
                 <article class="card">
-                  <h3>Scores par partition</h3>
+                  <h3>Tableaux Auto CHD par partition</h3>
                   <div id="autoChdTable" class="result-pane"></div>
                 </article>
               </div>

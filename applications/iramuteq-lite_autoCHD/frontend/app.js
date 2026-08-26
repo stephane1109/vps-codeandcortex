@@ -11031,23 +11031,9 @@ async function renderAutoChdExports(index) {
 
   try {
     const parsed = parseCsv(await metricsFile.text());
-    const numericColumns = parsed.headers.reduce((acc, header, index) => {
-      const key = normalizeAsciiKey(header).replace(/\s+/g, "_");
-      if (["k", "n_segments_assignes", "n_segments_non_assignes", "h", "d", "l", "b", "g"].includes(key)) {
-        acc.push(index);
-      }
-      return acc;
-    }, []);
-    const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-    renderTable(resultContainers.autoChdTable, parsed, {
+    renderAutoChdMetricsByPartition(resultContainers.autoChdTable, parsed, {
       title: "auto_chd_metrics.csv",
       emptyMessage: "Le tableau Auto CHD est vide.",
-      maxRows: parsed.rows.length,
-      cellRenderer: createFixedNumericCellRenderer({ digits: 4, numericColumns }),
-      rowClassName: ({ row }) => {
-        if (selectionColumnIndex === -1) return "";
-        return normalizeAsciiKey(row[selectionColumnIndex]) === "oui" ? "is-auto-chd-selected" : "";
-      }
     });
   } catch (error) {
     setContainerEmptyState(resultContainers.autoChdTable, "Impossible de lire les scores Auto CHD.");
@@ -11373,6 +11359,18 @@ function normalizeAsciiKey(value) {
     .toLowerCase();
 }
 
+function normalizeAutoChdPartitionValue(rawValue, fallbackK = "") {
+  const raw = String(rawValue || "").trim();
+  if (raw) {
+    const cleaned = raw.replace(/^partition\s+/i, "").trim();
+    if (/^p\d+$/i.test(cleaned)) return `P${cleaned.replace(/[^\d]/g, "")}`;
+    return cleaned;
+  }
+  const numeric = Number.parseInt(String(fallbackK || "").trim(), 10);
+  if (Number.isFinite(numeric) && numeric >= 2) return `P${numeric}`;
+  return "Partition";
+}
+
 function isStrictNumericCellValue(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return false;
@@ -11395,6 +11393,193 @@ function createFixedNumericCellRenderer({ digits = 4, numericColumns = [] } = {}
       text: Number.isInteger(numeric) ? String(numeric) : formatTableNumber(numeric, digits)
     };
   };
+}
+
+function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
+  if (!parsed || !Array.isArray(parsed.headers) || !Array.isArray(parsed.rows)) {
+    return { headers: [], rows: [], rowClasses: [] };
+  }
+
+  const partitionColumnIndex = headerIndex(parsed.headers, ["partition"]);
+  const kColumnIndex = headerIndex(parsed.headers, ["k"]);
+  const rowsSource = partitionLabel
+    ? parsed.rows.filter((row) => {
+        const label = normalizeAutoChdPartitionValue(
+          partitionColumnIndex === -1 ? "" : row[partitionColumnIndex],
+          kColumnIndex === -1 ? "" : row[kColumnIndex]
+        );
+        return label === partitionLabel;
+      })
+    : parsed.rows.slice();
+
+  const columnDefs = [
+    { keys: ["partition"], label: "partition" },
+    { keys: ["k"], label: "nb classes" },
+    { keys: ["n_segments_assignes"], label: "segments classes" },
+    { keys: ["n_segments_non_assignes"], label: "segments non classes" },
+    { keys: ["h"], label: "H" },
+    { keys: ["d"], label: "D" },
+    { keys: ["l"], label: "L" },
+    { keys: ["b"], label: "B" },
+    { keys: ["g"], label: "G" },
+    { keys: ["classes_effectifs"], label: "effectifs classes" },
+    { keys: ["classes_pourcentages"], label: "% classes" },
+    { keys: ["selection"], label: "statut" }
+  ]
+    .map((def) => ({
+      ...def,
+      index: headerIndex(parsed.headers, def.keys)
+    }))
+    .filter((def) => def.index !== -1);
+
+  const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
+  const rowClasses = [];
+  const rows = rowsSource.map((row) => {
+    const selectionRaw = selectionColumnIndex === -1 ? "" : row[selectionColumnIndex];
+    rowClasses.push(normalizeAsciiKey(selectionRaw) === "oui" ? "is-auto-chd-selected" : "");
+
+    return columnDefs.map((def) => {
+      if (def.label === "partition") {
+        return normalizeAutoChdPartitionValue(row[def.index], kColumnIndex === -1 ? "" : row[kColumnIndex]);
+      }
+      if (def.label === "statut") {
+        const status = normalizeAsciiKey(row[def.index]);
+        if (status === "oui") return "retenue";
+        if (status === "non") return "testee";
+      }
+      return row[def.index];
+    });
+  });
+
+  return {
+    headers: columnDefs.map((def) => def.label),
+    rows,
+    rowClasses
+  };
+}
+
+function getAutoChdNumericColumnIndexes(headers) {
+  if (!Array.isArray(headers)) return [];
+  const numericHeaders = new Set(["nb_classes", "segments_classes", "segments_non_classes", "h", "d", "l", "b", "g"]);
+  return headers.reduce((acc, header, index) => {
+    const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
+    if (numericHeaders.has(normalized)) acc.push(index);
+    return acc;
+  }, []);
+}
+
+function renderAutoChdMetricsByPartition(container, parsed, options = {}) {
+  clearContainer(container);
+
+  if (!parsed || !parsed.headers.length) {
+    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Auto CHD disponible."));
+    return;
+  }
+
+  const partitionColumnIndex = headerIndex(parsed.headers, ["partition"]);
+  const kColumnIndex = headerIndex(parsed.headers, ["k"]);
+  if (partitionColumnIndex === -1 && kColumnIndex === -1) {
+    const cloneParsed = extractAutoChdCloneParsed(parsed);
+    renderTable(
+      container,
+      { headers: cloneParsed.headers, rows: cloneParsed.rows },
+      {
+        title: options.title || "auto_chd_metrics.csv",
+        maxRows: cloneParsed.rows.length,
+        emptyMessage: options.emptyMessage,
+        rowClassName: ({ rowIndex }) => cloneParsed.rowClasses[rowIndex] || "",
+        cellRenderer: createFixedNumericCellRenderer({
+          digits: 4,
+          numericColumns: getAutoChdNumericColumnIndexes(cloneParsed.headers)
+        })
+      }
+    );
+    return;
+  }
+
+  const groups = new Map();
+  parsed.rows.forEach((row) => {
+    const partitionLabel = normalizeAutoChdPartitionValue(
+      partitionColumnIndex === -1 ? "" : row[partitionColumnIndex],
+      kColumnIndex === -1 ? "" : row[kColumnIndex]
+    );
+    if (!groups.has(partitionLabel)) groups.set(partitionLabel, []);
+    groups.get(partitionLabel).push(row);
+  });
+
+  if (!groups.size) {
+    const cloneParsed = extractAutoChdCloneParsed(parsed);
+    renderTable(
+      container,
+      { headers: cloneParsed.headers, rows: cloneParsed.rows },
+      {
+        title: options.title || "auto_chd_metrics.csv",
+        maxRows: cloneParsed.rows.length,
+        emptyMessage: options.emptyMessage,
+        rowClassName: ({ rowIndex }) => cloneParsed.rowClasses[rowIndex] || "",
+        cellRenderer: createFixedNumericCellRenderer({
+          digits: 4,
+          numericColumns: getAutoChdNumericColumnIndexes(cloneParsed.headers)
+        })
+      }
+    );
+    return;
+  }
+
+  const tabs = document.createElement("div");
+  tabs.className = "local-tabs";
+
+  const panelsWrap = document.createElement("div");
+  panelsWrap.className = "local-tab-panels";
+
+  const descriptors = sortClassLabels(groups.keys()).map((label) => ({
+    key: label,
+    label: `Partition ${label}`
+  }));
+
+  descriptors.forEach((descriptor, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `local-tab-button${index === 0 ? " is-active" : ""}`;
+    button.textContent = descriptor.label;
+
+    const panel = document.createElement("section");
+    panel.className = `local-tab-panel${index === 0 ? " is-active" : ""}`;
+    panel.hidden = index !== 0;
+
+    const cloneParsed = extractAutoChdCloneParsed(parsed, descriptor.key);
+    renderTable(
+      panel,
+      { headers: cloneParsed.headers, rows: cloneParsed.rows },
+      {
+        title: descriptor.label,
+        maxRows: cloneParsed.rows.length,
+        emptyMessage: options.emptyMessage,
+        rowClassName: ({ rowIndex }) => cloneParsed.rowClasses[rowIndex] || "",
+        cellRenderer: createFixedNumericCellRenderer({
+          digits: 4,
+          numericColumns: getAutoChdNumericColumnIndexes(cloneParsed.headers)
+        })
+      }
+    );
+
+    button.addEventListener("click", () => {
+      tabs.querySelectorAll(".local-tab-button").forEach((item) => item.classList.remove("is-active"));
+      panelsWrap.querySelectorAll(".local-tab-panel").forEach((item) => {
+        item.classList.remove("is-active");
+        item.hidden = true;
+      });
+      button.classList.add("is-active");
+      panel.classList.add("is-active");
+      panel.hidden = false;
+    });
+
+    tabs.appendChild(button);
+    panelsWrap.appendChild(panel);
+  });
+
+  container.appendChild(tabs);
+  container.appendChild(panelsWrap);
 }
 
 function getJsdNumericColumnIndexes(parsed, mode = "generic") {

@@ -10,6 +10,28 @@ Le mode **Auto CHD** ajoute une couche d'évaluation automatique du nombre de cl
 
 En pratique, le mode auto ne change pas l'algorithme de partitionnement. Il réutilise les partitions déjà produites par la CHD, puis compare leur qualité structurelle.
 
+## Resume rapide
+
+Si l'on veut comprendre Auto CHD rapidement, il faut retenir quatre idees.
+
+- le parametre principal est le **nombre maximal de classes a explorer** ;
+- la CHD produit plusieurs partitions possibles : `P2`, `P3`, `P4`, ..., `Pk` ;
+- chaque partition est evaluee avec `H`, `D` et `L` ;
+- la partition retenue est celle qui obtient le meilleur score `B`.
+
+Definitions courtes :
+
+- `H` = **homogeneite interne** : les segments d'une meme classe se ressemblent-ils vraiment ?
+- `D` = **distinction entre classes** : les classes sont-elles vraiment separees les unes des autres ?
+- `L` = **diffusion lexicale** : les formes caracteristiques d'une classe sont-elles bien reparties dans ses segments ?
+- `B` = **score structurel global** : moyenne simple de `H`, `D` et `L`.
+- `G` = **gain entre deux partitions successives** : l'ajout d'une classe ameliore-t-il vraiment la structure ?
+
+Formules de base :
+
+- `B(Pk) = (H + D + L) / 3`
+- `Gk = B(Pk) - B(Pk-1)`
+
 ## Principe général
 
 Le flux de calcul est le suivant :
@@ -51,6 +73,8 @@ Auto CHD suit la meme logique :
 - et que l'identite lexicale de chaque classe soit bien diffusee dans ses segments.
 
 Le score structurel `B` sert donc a comparer ces combinaisons et a retenir la configuration la plus convaincante.
+
+Dit autrement, Auto CHD ne cherche pas seulement une partition "possible". Il cherche la meilleure combinaison disponible dans l'etat actuel du corpus, comme on comparerait plusieurs positions aux echecs avant de retenir celle qui donne la structure la plus solide.
 
 ## Différence entre Manuel et Automatique
 
@@ -154,6 +178,10 @@ Le score `G` permet ensuite de lire ce que l'ajout d'une classe apporte ou non p
 Definitions simples :
 
 - un **parametre** est une option qui change soit la maniere dont le corpus est prepare, soit la maniere dont la CHD est calculee, soit la maniere dont Auto CHD compare les partitions.
+
+- **Nombre de classes : Manuel / Automatique** :
+  - en **manuel**, l'utilisateur fixe a l'avance la sortie attendue ;
+  - en **automatique**, l'utilisateur fixe une borne de recherche, puis Auto CHD choisit la meilleure partition parmi celles produites.
 
 Dans l'interface, les parametres les plus importants pour Auto CHD sont les suivants :
 
