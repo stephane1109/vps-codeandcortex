@@ -11400,6 +11400,7 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
     return { headers: [], rows: [], rowClasses: [] };
   }
 
+  const isPartitionScoped = Boolean(partitionLabel);
   const partitionColumnIndex = headerIndex(parsed.headers, ["partition"]);
   const kColumnIndex = headerIndex(parsed.headers, ["k"]);
   const rowsSource = partitionLabel
@@ -11413,8 +11414,8 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
     : parsed.rows.slice();
 
   const columnDefs = [
-    { keys: ["partition"], label: "partition" },
-    { keys: ["k"], label: "nb classes" },
+    ...(!isPartitionScoped ? [{ keys: ["partition"], label: "partition" }] : []),
+    ...(!isPartitionScoped ? [{ keys: ["k"], label: "nb classes" }] : []),
     { keys: ["n_segments_assignes"], label: "segments classes" },
     { keys: ["n_segments_non_assignes"], label: "segments non classes" },
     { keys: ["h"], label: "H" },
@@ -11446,6 +11447,9 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
         const status = normalizeAsciiKey(row[def.index]);
         if (status === "oui") return "retenue";
         if (status === "non") return "testee";
+      }
+      if (def.label === "effectifs classes" || def.label === "% classes") {
+        return String(row[def.index] ?? "").replace(/\s*\|\s*/g, "\n");
       }
       return row[def.index];
     });

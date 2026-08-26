@@ -325,6 +325,7 @@ textarea {
 .section-stack {
   display: grid;
   gap: 1rem;
+  min-width: 0;
 }
 
 .stack-grid--two {
@@ -334,6 +335,7 @@ textarea {
 
 .card {
   padding: 1.05rem;
+  min-width: 0;
 }
 
 .section-card {
@@ -1064,10 +1066,18 @@ progress {
 
 .local-tab-panel {
   display: none;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .local-tab-panel.is-active {
   display: block;
+}
+
+.local-tab-panels,
+.result-pane {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .result-pane:empty::before {
@@ -1253,6 +1263,49 @@ progress {
   aspect-ratio: 2 / 1;
   object-fit: contain;
   margin: 0 auto;
+}
+
+#autoChdPlot {
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(0.35rem, 1vw, 0.75rem);
+  max-height: min(78vh, 920px);
+}
+
+#autoChdPlot .result-image {
+  width: min(100%, 980px);
+  max-width: 980px;
+  max-height: min(74vh, 860px);
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto;
+  flex: 0 0 auto;
+}
+
+#autoChdTable {
+  min-width: 0;
+}
+
+#autoChdTable .result-table-wrap {
+  max-width: 100%;
+  overflow: auto;
+}
+
+#autoChdTable .result-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+#autoChdTable .result-table th:nth-child(8),
+#autoChdTable .result-table td:nth-child(8),
+#autoChdTable .result-table th:nth-child(9),
+#autoChdTable .result-table td:nth-child(9) {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  min-width: 10rem;
+  max-width: 14rem;
 }
 
 #suiviEntropyPlot,
