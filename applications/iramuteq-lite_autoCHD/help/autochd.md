@@ -29,6 +29,29 @@ Formules utilisées :
 
 Le score `G` est un indicateur complémentaire. Il sert à lire le gain entre deux partitions successives, mais il n'entre pas dans le calcul initial de `B`.
 
+## Intuition
+
+On peut comprendre Auto CHD comme une comparaison de plusieurs combinaisons possibles.
+
+- La CHD produit plusieurs etats possibles du corpus : `P2`, `P3`, `P4`, ..., `Pk`.
+- Auto CHD ne demande pas seulement "combien de classes puis-je fabriquer ?".
+- Il demande plutot "quelle est la meilleure combinaison de classes parmi celles que la CHD sait produire ?".
+
+L'image du jeu d'echecs peut aider :
+
+- a chaque coup, plusieurs suites sont possibles ;
+- toutes ne sont pas mauvaises, mais certaines donnent une position plus solide que d'autres ;
+- la meilleure decision n'est pas forcement celle qui ajoute le plus d'elements, mais celle qui donne l'equilibre global le plus robuste.
+
+Auto CHD suit la meme logique :
+
+- ajouter une classe de plus n'est pas automatiquement meilleur ;
+- il faut que cette nouvelle partition reste coherente a l'interieur des classes ;
+- il faut aussi qu'elle separe mieux les classes entre elles ;
+- et que l'identite lexicale de chaque classe soit bien diffusee dans ses segments.
+
+Le score structurel `B` sert donc a comparer ces combinaisons et a retenir la configuration la plus convaincante.
+
 ## Différence entre Manuel et Automatique
 
 - **Mode Manuel** : l'utilisateur choisit directement le nombre de classes avant l'analyse. La sortie finale correspond à ce réglage.
@@ -96,9 +119,43 @@ La partition automatique retenue est :
 
 - `P* = argmax B(Pk)`
 
+## Comment se construit le score structurel
+
+Le score `B` est une moyenne simple de trois questions posees a chaque partition :
+
+1. Les segments d'une meme classe se ressemblent-ils vraiment ?
+2. Les classes sont-elles vraiment distinctes entre elles ?
+3. Les mots caracteristiques sont-ils bien repartis dans les segments de chaque classe ?
+
+Ces trois questions correspondent respectivement a `H`, `D` et `L`.
+
+- `H` controle la coherence interne ;
+- `D` controle la separation minimale entre classes ;
+- `L` controle la diffusion des formes caracteristiques.
+
+Auto CHD ne cherche donc pas seulement une partition "possible". Il cherche la meilleure combinaison au sens structurel :
+
+- une partition peut avoir beaucoup de classes mais etre mal separee ;
+- une autre peut etre tres differenciee mais reposer sur quelques segments atypiques ;
+- une troisieme peut mieux equilibrer coherence, distinction et diffusion.
+
+C'est cette derniere logique qui est favorisee par le score `B`.
+
+Le score `G` permet ensuite de lire ce que l'ajout d'une classe apporte ou non par rapport a la partition precedente :
+
+- `G > 0` : la structure s'ameliore ;
+- `G proche de 0` : le gain est faible ;
+- `G < 0` : la nouvelle partition degrade l'equilibre global.
+
 ## Paramètres utilisés
 
 ### Paramètres visibles côté interface
+
+Definitions simples :
+
+- un **parametre** est une option qui change soit la maniere dont le corpus est prepare, soit la maniere dont la CHD est calculee, soit la maniere dont Auto CHD compare les partitions.
+
+Dans l'interface, les parametres les plus importants pour Auto CHD sont les suivants :
 
 - **`iramuteq_classes_mode`** :
   - `manuel` : comportement historique ;
@@ -108,21 +165,45 @@ La partition automatique retenue est :
   - en mode manuel : nombre de classes demandé ;
   - en mode auto : nombre maximal de classes à explorer.
 
+Définition :
+
+- c'est la borne de recherche.
+- en mode auto, ce n'est pas une promesse d'obtenir exactement `k` classes, mais la limite superieure des partitions a tester.
+
 - **`iramuteq_stats_mode`** :
   - mode de calcul des statistiques CHD utilisées pour les formes caractéristiques ;
   - ce paramètre intervient notamment dans le calcul de `L`.
+
+Définition :
+
+- il regle la maniere de calculer les statistiques classe x termes deja utilisees par l'application.
 
 - **`iramuteq_max_formes`** :
   - limite le nombre de formes conservées pour la CHD ;
   - influe donc indirectement sur les partitions et sur les scores auto.
 
+Définition :
+
+- plus ce nombre est eleve, plus le vocabulaire disponible pour la CHD est large ;
+- plus il est faible, plus l'analyse est resserree sur les formes les plus conservees.
+
 - **`segment_size`**, **`classificationMode`**, **`rst1`**, **`rst2`** :
   - ces paramètres déterminent la segmentation ;
   - ils influencent directement la structure des segments et donc la qualité des partitions évaluées.
 
+Définition :
+
+- ces parametres decident comment le texte est decoupe en segments avant la CHD ;
+- comme Auto CHD compare des partitions de segments, toute modification de segmentation change la base meme de la comparaison.
+
 - **`min_docfreq`** :
   - filtre les termes trop rares avant la CHD ;
   - modifie le vocabulaire effectivement analysé.
+
+Définition :
+
+- une forme trop rare peut etre retiree avant le calcul ;
+- ce filtre joue donc sur la stabilite des classes et sur les profils lexicaux compares par Auto CHD.
 
 - **Options de nettoyage et de dictionnaire** :
   - suppression de ponctuation ;
@@ -135,6 +216,11 @@ La partition automatique retenue est :
   - filtrage morphosyntaxique.
 
 Toutes ces options agissent en amont et modifient le corpus utilisé par la CHD et par Auto CHD.
+
+Définition :
+
+- Auto CHD n'evalue pas un corpus "brut" ;
+- il evalue toujours les partitions produites apres nettoyage, lemmatisation, dictionnaires eventuels et filtrages choisis par l'utilisateur.
 
 ### Paramètres internes du mode auto
 

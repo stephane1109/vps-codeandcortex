@@ -100,6 +100,7 @@ const annotationRemoveEntryBtn = document.getElementById("annotationRemoveEntryB
 const annotationDictTable = document.getElementById("annotationDictTable");
 const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
+const helpAutoChdMarkdownContent = document.getElementById("helpAutoChdMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
@@ -14730,6 +14731,7 @@ renderAnnotationDictionaryTable();
 renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
+void loadHelpMarkdown(helpAutoChdMarkdownContent, "autochd.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {

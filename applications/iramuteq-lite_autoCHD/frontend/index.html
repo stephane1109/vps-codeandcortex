@@ -241,6 +241,12 @@
                     En mode automatique, IRaMuTeQ-lite evalue les partitions P2...Pk a partir de la meme CHD,
                     puis retient celle qui maximise le score structurel B.
                   </p>
+                  <p class="section-copy">
+                    Le principe est de comparer plusieurs combinaisons possibles de classes, un peu comme aux echecs
+                    on compare plusieurs suites de coups avant de retenir la meilleure configuration globale.
+                    Le score B combine H, D et L pour privilegier la partition la plus coherente, la mieux separee
+                    et la plus stable lexicalement.
+                  </p>
                 </article>
 
                 <article class="card">
@@ -395,6 +401,7 @@
 
             <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
+              <button class="local-tab-button" data-help-subtab-target="help_auto_chd" type="button">Auto CHD</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
             </div>
 
@@ -402,6 +409,14 @@
               <article class="card prose-card">
                 <div id="helpMarkdownContent" class="markdown-content">
                   Chargement de <code>help/help.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_auto_chd" hidden>
+              <article class="card prose-card">
+                <div id="helpAutoChdMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/autochd.md</code>...
                 </div>
               </article>
             </section>
