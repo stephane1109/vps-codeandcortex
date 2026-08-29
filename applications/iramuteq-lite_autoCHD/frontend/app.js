@@ -101,6 +101,7 @@ const annotationDictTable = document.getElementById("annotationDictTable");
 const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpAutoChdMarkdownContent = document.getElementById("helpAutoChdMarkdownContent");
+const helpAutoDiscriminanteMarkdownContent = document.getElementById("helpAutoDiscriminanteMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
@@ -282,6 +283,9 @@ const suiviConfigSourceCards = Array.from(document.querySelectorAll("[data-suivi
 
 const resultContainers = {
   chdDendrogramme: document.getElementById("chdDendrogramme"),
+  autoDiscriminanteSummary: document.getElementById("autoDiscriminanteSummary"),
+  autoDiscriminantePlot: document.getElementById("autoDiscriminantePlot"),
+  autoDiscriminanteTable: document.getElementById("autoDiscriminanteTable"),
   autoChdSummary: document.getElementById("autoChdSummary"),
   autoChdPlot: document.getElementById("autoChdPlot"),
   autoChdTable: document.getElementById("autoChdTable"),
@@ -2006,14 +2010,19 @@ function renderClassesModeCard(card) {
   if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
 
   const isAuto = modeField.value === "auto";
-  kLabel.textContent = isAuto
-    ? "Nombre maximal de classes a explorer"
+  const isAutoDiscriminante = modeField.value === "auto_discriminante";
+  kLabel.textContent = (isAuto || isAutoDiscriminante)
+    ? (isAutoDiscriminante
+      ? "Nombre maximal de classes a explorer par configuration"
+      : "Nombre maximal de classes a explorer")
     : "Nombre de classes terminales de la phase 1";
 
   if (kHelp instanceof HTMLElement) {
     kHelp.textContent = isAuto
       ? "La CHD est calculee jusqu'a cette limite puis chaque partition P2...Pk est evaluee automatiquement."
-      : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
+      : isAutoDiscriminante
+        ? "Pour chaque configuration de la grille discriminante, la CHD est calculee jusqu'a cette limite puis le mode retient la combinaison la plus separante. Le temps de calcul peut etre nettement plus long."
+        : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
 }
 
@@ -10991,6 +11000,283 @@ function renderAutoChdSummary(container, payload) {
   }
 }
 
+function renderAutoDiscriminanteSummary(container, payload) {
+  if (!clearContainer(container)) return;
+
+  const selected = payload?.selected;
+  const selectedK = Number.parseInt(String(selected?.k_retenu ?? ""), 10);
+  if (!selected || !Number.isFinite(selectedK)) {
+    container.appendChild(createEmptyState("Aucune configuration discriminante retenue pour cette analyse."));
+    return;
+  }
+
+  const metrics = [
+    ["Configuration", selected.configuration_id || "N/A"],
+    ["Configurations testees", payload?.total_configurations],
+    ["Configurations valides", payload?.successful_configurations],
+    ["Profil morpho", selected.profil_morpho || "N/A"],
+    ["Lemmes", selected.lexique_utiliser_lemmes || "N/A"],
+    ["Stopwords", selected.retirer_stopwords || "N/A"],
+    ["Ponctuation", selected.supprimer_ponctuation || "N/A"],
+    ["Chiffres", selected.supprimer_chiffres || "N/A"],
+    ["min_docfreq", selected.min_docfreq],
+    ["Partition retenue", `P${selectedK}`],
+    ["H", formatTableNumber(selected.H, 4)],
+    ["D", formatTableNumber(selected.D, 4)],
+    ["L", formatTableNumber(selected.L, 4)],
+    ["B", formatTableNumber(selected.B, 4)],
+    ["E", formatTableNumber(selected.E, 4)],
+    ["S", formatTableNumber(selected.S, 4)]
+  ];
+
+  const grid = document.createElement("div");
+  grid.className = "summary-grid";
+
+  metrics.forEach(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "summary-card";
+
+    const title = document.createElement("p");
+    title.className = "summary-label";
+    title.textContent = label;
+
+    const body = document.createElement("strong");
+    body.className = "summary-value";
+    body.textContent = formatSummaryValue(value);
+
+    card.appendChild(title);
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+
+  const label = String(selected.configuration_label || "").trim();
+  if (label) {
+    const note = document.createElement("p");
+    note.className = "field-help";
+    note.textContent = `Combinaison retenue : ${label}`;
+    container.appendChild(note);
+  }
+
+  const counts = String(selected.classes_effectifs || "").trim();
+  if (counts) {
+    const note = document.createElement("p");
+    note.className = "field-help";
+    note.textContent = `Effectifs par classe : ${counts}`;
+    container.appendChild(note);
+  }
+
+  const percentages = String(selected.classes_pourcentages || "").trim();
+  if (percentages) {
+    const note = document.createElement("p");
+    note.className = "field-help";
+    note.textContent = `Pourcentages par classe : ${percentages}`;
+    container.appendChild(note);
+  }
+
+  const totalConfigurations = Number.parseInt(String(payload?.total_configurations ?? ""), 10);
+  const successfulConfigurations = Number.parseInt(String(payload?.successful_configurations ?? ""), 10);
+  if (Number.isFinite(totalConfigurations) && Number.isFinite(successfulConfigurations) && successfulConfigurations < totalConfigurations) {
+    const note = document.createElement("p");
+    note.className = "field-help";
+    note.textContent = `${successfulConfigurations} configuration(s) exploitable(s) sur ${totalConfigurations} ont produit une CHD discriminante valide.`;
+    container.appendChild(note);
+  }
+
+  const scoreNote = document.createElement("p");
+  scoreNote.className = "field-help";
+  scoreNote.textContent = "Le score discriminant S combine B, D et E : il favorise les partitions structurellement solides, lexicalement opposees et suffisamment equilibrees.";
+  container.appendChild(scoreNote);
+}
+
+function extractAutoDiscriminanteCloneParsed(parsed) {
+  if (!parsed || !Array.isArray(parsed.headers) || !Array.isArray(parsed.rows)) {
+    return { headers: [], rows: [], rowClasses: [] };
+  }
+
+  const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
+  const scoreColumnIndex = headerIndex(parsed.headers, ["s"]);
+  const distinctionColumnIndex = headerIndex(parsed.headers, ["d"]);
+  const structureColumnIndex = headerIndex(parsed.headers, ["b"]);
+
+  const rowsSource = parsed.rows.slice().sort((left, right) => {
+    const leftSelection = normalizeAsciiKey(selectionColumnIndex === -1 ? "" : left[selectionColumnIndex]);
+    const rightSelection = normalizeAsciiKey(selectionColumnIndex === -1 ? "" : right[selectionColumnIndex]);
+    const selectionRank = (value) => {
+      if (value === "retenue") return 0;
+      if (value === "testee") return 1;
+      if (value === "echec") return 2;
+      return 3;
+    };
+    const rankDiff = selectionRank(leftSelection) - selectionRank(rightSelection);
+    if (rankDiff !== 0) return rankDiff;
+
+    const scoreDiff = parseTableNumber(right[scoreColumnIndex]) - parseTableNumber(left[scoreColumnIndex]);
+    if (Number.isFinite(scoreDiff) && scoreDiff !== 0) return scoreDiff;
+
+    const distinctionDiff = parseTableNumber(right[distinctionColumnIndex]) - parseTableNumber(left[distinctionColumnIndex]);
+    if (Number.isFinite(distinctionDiff) && distinctionDiff !== 0) return distinctionDiff;
+
+    const structureDiff = parseTableNumber(right[structureColumnIndex]) - parseTableNumber(left[structureColumnIndex]);
+    if (Number.isFinite(structureDiff) && structureDiff !== 0) return structureDiff;
+
+    return String(left[0] || "").localeCompare(String(right[0] || ""), undefined, { numeric: true });
+  });
+
+  const columnDefs = [
+    { keys: ["configuration_id"], label: "configuration" },
+    { keys: ["profil_morpho"], label: "profil morpho" },
+    { keys: ["lexique_utiliser_lemmes"], label: "lemmes" },
+    { keys: ["retirer_stopwords"], label: "stopwords" },
+    { keys: ["supprimer_ponctuation"], label: "ponctuation" },
+    { keys: ["supprimer_chiffres"], label: "chiffres" },
+    { keys: ["min_docfreq"], label: "min_docfreq" },
+    { keys: ["n_segments"], label: "segments" },
+    { keys: ["n_formes"], label: "formes" },
+    { keys: ["k_retenu"], label: "k retenu" },
+    { keys: ["h"], label: "H" },
+    { keys: ["d"], label: "D" },
+    { keys: ["l"], label: "L" },
+    { keys: ["b"], label: "B" },
+    { keys: ["e"], label: "E" },
+    { keys: ["s"], label: "S" },
+    { keys: ["classes_effectifs"], label: "effectifs classes" },
+    { keys: ["classes_pourcentages"], label: "% classes" },
+    { keys: ["selection"], label: "statut" },
+    { keys: ["erreur"], label: "erreur" }
+  ]
+    .map((def) => ({
+      ...def,
+      index: headerIndex(parsed.headers, def.keys)
+    }))
+    .filter((def) => def.index !== -1);
+
+  const rowClasses = [];
+  const rows = rowsSource.map((row) => {
+    const selectionRaw = selectionColumnIndex === -1 ? "" : row[selectionColumnIndex];
+    rowClasses.push(normalizeAsciiKey(selectionRaw) === "retenue" ? "is-auto-chd-selected" : "");
+
+    return columnDefs.map((def) => {
+      if (def.label === "effectifs classes" || def.label === "% classes") {
+        return String(row[def.index] ?? "").replace(/\s*\|\s*/g, "\n");
+      }
+      return row[def.index];
+    });
+  });
+
+  return {
+    headers: columnDefs.map((def) => def.label),
+    rows,
+    rowClasses
+  };
+}
+
+function getAutoDiscriminanteNumericColumnIndexes(headers) {
+  if (!Array.isArray(headers)) return [];
+  const numericHeaders = new Set(["min_docfreq", "segments", "formes", "k_retenu", "h", "d", "l", "b", "e", "s"]);
+  return headers.reduce((acc, header, index) => {
+    const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
+    if (numericHeaders.has(normalized)) acc.push(index);
+    return acc;
+  }, []);
+}
+
+function renderAutoDiscriminanteMetrics(container, parsed, options = {}) {
+  clearContainer(container);
+
+  if (!parsed || !parsed.headers.length) {
+    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Auto discriminante disponible."));
+    return;
+  }
+
+  const cloneParsed = extractAutoDiscriminanteCloneParsed(parsed);
+  const numericRenderer = createFixedNumericCellRenderer({
+    digits: 4,
+    numericColumns: getAutoDiscriminanteNumericColumnIndexes(cloneParsed.headers)
+  });
+
+  renderTable(
+    container,
+    { headers: cloneParsed.headers, rows: cloneParsed.rows },
+    {
+      title: options.title || "auto_discriminante_metrics.csv",
+      maxRows: cloneParsed.rows.length,
+      emptyMessage: options.emptyMessage,
+      rowClassName: ({ rowIndex }) => cloneParsed.rowClasses[rowIndex] || "",
+      cellRenderer: ({ cell, row, rowIndex, columnIndex, headers }) => {
+        const numericCell = numericRenderer({ cell, row, rowIndex, columnIndex, headers });
+        if (numericCell) return numericCell;
+
+        const normalizedHeader = normalizeAsciiKey(headers[columnIndex]).replace(/\s+/g, "_");
+        if (normalizedHeader === "effectifs_classes" || normalizedHeader === "%_classes") {
+          return {
+            text: String(cell ?? ""),
+            className: "is-auto-discriminante-multiline"
+          };
+        }
+        if (normalizedHeader === "profil_morpho" || normalizedHeader === "erreur") {
+          return {
+            text: String(cell ?? ""),
+            className: "is-auto-discriminante-wrap-cell"
+          };
+        }
+        return null;
+      }
+    }
+  );
+}
+
+async function renderAutoDiscriminanteExports(index) {
+  const summaryFile = findFile(index, [(path) => path.endsWith("auto_discriminante_summary.json")]);
+  const metricsFile = findFile(index, [(path) => path.endsWith("auto_discriminante_metrics.csv")]);
+  const plotFile = findFile(index, [(path) => path.endsWith("auto_discriminante_score.png")]);
+  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Auto discriminante.";
+
+  if (!summaryFile && !metricsFile && !plotFile) {
+    setContainerEmptyState(resultContainers.autoDiscriminanteSummary, manualModeMessage);
+    setContainerEmptyState(resultContainers.autoDiscriminantePlot, manualModeMessage);
+    setContainerEmptyState(resultContainers.autoDiscriminanteTable, manualModeMessage);
+    return;
+  }
+
+  if (summaryFile) {
+    try {
+      const payload = JSON.parse(await summaryFile.text());
+      renderAutoDiscriminanteSummary(resultContainers.autoDiscriminanteSummary, payload);
+    } catch (error) {
+      setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Impossible de lire le resume Auto discriminante.");
+      log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
+    }
+  } else {
+    setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Le resume Auto discriminante est absent du dossier d'exports.");
+  }
+
+  renderImage(
+    resultContainers.autoDiscriminantePlot,
+    plotFile,
+    "Comparaison des scores discriminants par configuration",
+    "Le graphique Auto discriminante est absent du dossier d'exports."
+  );
+  makeResultImagePreviewable(resultContainers.autoDiscriminantePlot, "Score discriminant S", "Auto discriminante");
+
+  if (!metricsFile) {
+    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Le tableau Auto discriminante est absent du dossier d'exports.");
+    return;
+  }
+
+  try {
+    const parsed = parseCsv(await metricsFile.text());
+    renderAutoDiscriminanteMetrics(resultContainers.autoDiscriminanteTable, parsed, {
+      title: "auto_discriminante_metrics.csv",
+      emptyMessage: "Le tableau Auto discriminante est vide."
+    });
+  } catch (error) {
+    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Impossible de lire les scores Auto discriminante.");
+    log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
+  }
+}
+
 async function renderAutoChdExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("auto_chd_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("auto_chd_metrics.csv")]);
@@ -12823,6 +13109,7 @@ async function renderExports(entries, index) {
   }
 
   await safeRenderExportSection("CHD", async () => {
+    await renderAutoDiscriminanteExports(index);
     await renderAutoChdExports(index);
 
     const chdSegmentsFile = findFile(index, [(path) => path.endsWith("segments_par_classe.txt")]);
@@ -13042,6 +13329,9 @@ function resetResultPanes() {
   applySuiviPresentation();
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
+    autoDiscriminanteSummary: "Chargez un dossier d'exports pour afficher la configuration retenue en mode Auto discriminante.",
+    autoDiscriminantePlot: "Chargez un dossier d'exports pour afficher la comparaison des scores discriminants.",
+    autoDiscriminanteTable: "Chargez un dossier d'exports pour afficher les scores du mode Auto discriminante.",
     autoChdSummary: "Chargez un dossier d'exports pour afficher la partition retenue en mode Auto CHD.",
     autoChdPlot: "Chargez un dossier d'exports pour afficher la courbe du score B en mode Auto CHD.",
     autoChdTable: "Chargez un dossier d'exports pour afficher les scores Auto CHD par partition.",
@@ -14652,8 +14942,13 @@ async function startAnalysis(analysisKind = "chd") {
       `[info] Démarrage trajectoire lexicale : variable=${suiviVariableName || "auto"}, entretiens=${suiviSelectedUnits.length}, ${coucheLabel}, unité=${suiviLexicalUnitLabel}, prétraitement=${suiviPreprocessingLabel}${suiviFilterVariableName && suiviFilterModality ? `, filtre=${suiviFilterVariableName}=${suiviFilterModality}` : ""}`
     );
   } else {
+    const classesCountLabel = classesMode === "auto_discriminante"
+      ? "maxClassesParConfig"
+      : classesMode === "auto"
+        ? "maxClasses"
+        : "classes";
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}, ${classesMode === "auto" ? "maxClasses" : "classes"}=${kIramuteq}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}, ${classesCountLabel}=${kIramuteq}, minFreq=${minFreq}, stats=${statsMode}`
     );
   }
   progression.set(4, progressStartMessage);
@@ -14921,6 +15216,7 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpAutoChdMarkdownContent, "autochd.md");
+void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "auto_discriminante.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {

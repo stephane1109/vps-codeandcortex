@@ -1288,14 +1288,42 @@ progress {
   min-width: 0;
 }
 
+#autoDiscriminanteTable {
+  min-width: 0;
+}
+
+#autoDiscriminanteTable .result-table-wrap,
 #autoChdTable .result-table-wrap {
   max-width: 100%;
   overflow: auto;
 }
 
+#autoDiscriminanteTable .result-table,
 #autoChdTable .result-table {
   width: max-content;
   min-width: 100%;
+}
+
+#autoDiscriminanteTable .result-table th,
+#autoDiscriminanteTable .result-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#autoDiscriminanteTable .result-table th:nth-child(2),
+#autoDiscriminanteTable .result-table td:nth-child(2),
+#autoDiscriminanteTable .result-table th:nth-child(17),
+#autoDiscriminanteTable .result-table td:nth-child(17),
+#autoDiscriminanteTable .result-table th:nth-child(18),
+#autoDiscriminanteTable .result-table td:nth-child(18),
+#autoDiscriminanteTable .result-table th:nth-child(20),
+#autoDiscriminanteTable .result-table td:nth-child(20) {
+  min-width: 11rem;
+}
+
+#autoDiscriminanteTable .result-table td.is-auto-discriminante-multiline,
+#autoDiscriminanteTable .result-table td.is-auto-discriminante-wrap-cell {
+  white-space: pre-line;
 }
 
 #autoChdTable .result-table th:nth-child(8),

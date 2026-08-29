@@ -72,7 +72,7 @@
 lancer_moteur_chd_iramuteq <- function(
   dfm_obj,
   k,
-  classes_mode = c("manuel", "auto"),
+  classes_mode = c("manuel", "auto", "auto_discriminante"),
   mincl_mode = c("auto", "manuel"),
   mincl = 0,
   classif_mode = c("simple", "double"),
@@ -84,7 +84,10 @@ lancer_moteur_chd_iramuteq <- function(
   max_formes = 20000L,
   auto_stats_mode = c("vectorise", "classique"),
   auto_top_n_diffusion = 20L,
-  auto_p_seuil = 0.05
+  auto_p_seuil = 0.05,
+  auto_discriminant_base_config = NULL,
+  auto_discriminant_prepare_pipeline_fn = NULL,
+  auto_discriminant_log_fn = NULL
 ) {
   classes_mode <- match.arg(classes_mode)
   mincl_mode <- match.arg(mincl_mode)
@@ -96,7 +99,8 @@ lancer_moteur_chd_iramuteq <- function(
   reconstruire_classes_terminales_iramuteq_fn <- .obtenir_fonction_iramuteq("reconstruire_classes_terminales_iramuteq", env = environment())
   selection_automatique_classes_iramuteq_fn <- NULL
   resoudre_borne_chd_auto_iramuteq_fn <- NULL
-  if (identical(classes_mode, "auto")) {
+  selection_configuration_discriminante_iramuteq_fn <- NULL
+  if (classes_mode %in% c("auto", "auto_discriminante")) {
     resoudre_borne_chd_auto_iramuteq_fn <- .obtenir_fonction_iramuteq(
       "resoudre_borne_chd_auto_iramuteq",
       chemin_module = "iramuteqlite/autoCHD.R",
@@ -107,6 +111,70 @@ lancer_moteur_chd_iramuteq <- function(
       chemin_module = "iramuteqlite/autoCHD.R",
       env = environment()
     )
+  }
+  if (identical(classes_mode, "auto_discriminante")) {
+    selection_configuration_discriminante_iramuteq_fn <- .obtenir_fonction_iramuteq(
+      "selection_configuration_discriminante_iramuteq",
+      chemin_module = "iramuteqlite/autoCHD.R",
+      env = environment()
+    )
+  }
+
+  if (identical(classes_mode, "auto_discriminante")) {
+    if (!is.list(auto_discriminant_base_config)) {
+      stop("Mode auto discriminante: la configuration de base est manquante.")
+    }
+    if (!is.function(auto_discriminant_prepare_pipeline_fn)) {
+      stop("Mode auto discriminante: la fonction de preparation du pipeline est manquante.")
+    }
+
+    auto_discriminant_selection <- selection_configuration_discriminante_iramuteq_fn(
+      config_base = auto_discriminant_base_config,
+      preparer_pipeline_fn = auto_discriminant_prepare_pipeline_fn,
+      lancer_auto_chd_fn = function(dfm_obj, config_variant) {
+        lancer_moteur_chd_iramuteq(
+          dfm_obj = dfm_obj,
+          k = config_variant$k_iramuteq %||% k,
+          classes_mode = "auto",
+          mincl_mode = config_variant$iramuteq_mincl_mode %||% mincl_mode,
+          mincl = config_variant$iramuteq_mincl %||% mincl,
+          classif_mode = config_variant$iramuteq_classif_mode %||% classif_mode,
+          svd_method = config_variant$iramuteq_svd_method %||% svd_method,
+          mode_patate = mode_patate,
+          libsvdc_path = libsvdc_path,
+          binariser = binariser,
+          rscripts_dir = rscripts_dir,
+          max_formes = config_variant$iramuteq_max_formes %||% max_formes,
+          auto_stats_mode = config_variant$iramuteq_stats_mode %||% auto_stats_mode,
+          auto_top_n_diffusion = auto_top_n_diffusion,
+          auto_p_seuil = auto_p_seuil
+        )
+      },
+      log_fn = auto_discriminant_log_fn
+    )
+
+    selected_res <- auto_discriminant_selection$selected_result
+    selected_pipeline <- auto_discriminant_selection$selected_pipeline
+    classes <- suppressWarnings(as.integer(selected_res$classes))
+    classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
+    if (length(classes_valides) < 2L) {
+      stop("IRaMuTeQ-lite Auto discriminante n'a pas pu retenir au moins 2 classes exploitables.")
+    }
+
+    return(list(
+      engine = "iramuteq-lite",
+      chd = selected_res$chd,
+      classes_mode = classes_mode,
+      classes = selected_res$classes,
+      terminales = selected_res$terminales,
+      mincl = selected_res$mincl %||% NA_integer_,
+      fallback_mincl1 = selected_res$fallback_mincl1 %||% FALSE,
+      auto_selection = selected_res$auto_selection,
+      auto_discriminant_selection = auto_discriminant_selection,
+      selected_pipeline = selected_pipeline,
+      dfm_utilise = if (!is.null(selected_res$dfm_utilise)) selected_res$dfm_utilise else selected_pipeline$dfm_obj %||% dfm_obj,
+      max_formes_info = selected_res$max_formes_info
+    ))
   }
 
   chd_obj <- if (identical(classes_mode, "auto")) {
@@ -212,6 +280,8 @@ lancer_moteur_chd_iramuteq <- function(
     mincl = classes_obj$mincl,
     fallback_mincl1 = fallback_mincl1,
     auto_selection = NULL,
+    auto_discriminant_selection = NULL,
+    selected_pipeline = NULL,
     dfm_utilise = dfm_utilise,
     max_formes_info = chd_obj$max_formes_info
   )
