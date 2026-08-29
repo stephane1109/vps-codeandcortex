@@ -30,6 +30,8 @@ configure_runtime_library_paths()
   if (is.null(x) || length(x) == 0) y else x
 }
 
+.iramuteq_runtime_cache <- new.env(parent = emptyenv())
+
 parse_args <- function(args) {
   out <- list()
   i <- 1L
@@ -621,6 +623,11 @@ charger_lexique_fr <- function(repo_root) {
     stop(paste0("Fichier lexique introuvable: ", path))
   }
 
+  cache_key <- paste0("lexique_fr::", normalizePath(path, winslash = "/", mustWork = TRUE))
+  if (exists(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE))
+  }
+
   lexique <- utils::read.csv2(path, stringsAsFactors = FALSE, encoding = "UTF-8")
   colonnes_requises <- c("c_mot", "c_lemme", "c_morpho")
   if (!all(colonnes_requises %in% names(lexique))) {
@@ -631,7 +638,9 @@ charger_lexique_fr <- function(repo_root) {
   lexique$c_lemme <- tolower(trimws(as.character(lexique$c_lemme)))
   lexique$c_morpho <- trimws(as.character(lexique$c_morpho))
   lexique <- lexique[nzchar(lexique$c_mot) & nzchar(lexique$c_lemme), c("c_mot", "c_lemme", "c_morpho"), drop = FALSE]
-  lexique[!duplicated(lexique$c_mot), , drop = FALSE]
+  lexique <- lexique[!duplicated(lexique$c_mot), , drop = FALSE]
+  assign(cache_key, lexique, envir = .iramuteq_runtime_cache)
+  lexique
 }
 
 charger_expression_fr <- function(repo_root) {
@@ -649,6 +658,11 @@ charger_expression_fr <- function(repo_root) {
     )
   }
 
+  cache_key <- paste0("expression_fr::", normalizePath(path, winslash = "/", mustWork = TRUE))
+  if (exists(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE))
+  }
+
   expressions <- utils::read.csv2(path, stringsAsFactors = FALSE, encoding = "UTF-8")
   colonnes_requises <- c("dic_mot", "dic_norm")
   if (!all(colonnes_requises %in% names(expressions))) {
@@ -661,6 +675,7 @@ charger_expression_fr <- function(repo_root) {
   expressions <- expressions[nzchar(expressions$dic_mot) & nzchar(expressions$dic_norm), c("dic_mot", "dic_norm"), drop = FALSE]
   expressions <- expressions[!duplicated(expressions$dic_mot), , drop = FALSE]
   attr(expressions, "source_file") <- path
+  assign(cache_key, expressions, envir = .iramuteq_runtime_cache)
   expressions
 }
 

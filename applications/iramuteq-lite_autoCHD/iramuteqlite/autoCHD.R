@@ -647,11 +647,58 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
   as.integer(value_num)
 }
 
+.as_chr_auto_chd <- function(value, default = "") {
+  value_chr <- suppressWarnings(as.character(value[[1]] %||% default))
+  if (!length(value_chr) || is.na(value_chr[[1]])) return(as.character(default))
+  value_chr <- trimws(value_chr[[1]])
+  if (!nzchar(value_chr)) return(as.character(default))
+  value_chr
+}
+
 .as_chr_vec_auto_chd <- function(value) {
   if (is.null(value)) return(character(0))
   vals <- trimws(as.character(unlist(value, use.names = FALSE)))
   vals <- vals[!is.na(vals) & nzchar(vals)]
   unique(vals)
+}
+
+.normaliser_profil_exploration_auto_discriminante <- function(value, default = "complet") {
+  profile <- tolower(trimws(.as_chr_auto_chd(value, default)))
+  if (!profile %in% c("rapide", "equilibre", "complet")) {
+    profile <- default
+  }
+  profile
+}
+
+.label_profil_exploration_auto_discriminante <- function(profile) {
+  profile <- .normaliser_profil_exploration_auto_discriminante(profile, default = "complet")
+  switch(
+    profile,
+    rapide = "Rapide",
+    equilibre = "Equilibree",
+    complet = "Complete",
+    "Complete"
+  )
+}
+
+.empreinte_dfm_auto_chd <- function(dfm_obj) {
+  mat <- .as_dgc_matrix_auto_chd(dfm_obj, binary = FALSE)
+  tmp <- tempfile("autodisc_dfm_", fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  saveRDS(
+    object = list(
+      i = mat@i,
+      p = mat@p,
+      x = signif(mat@x, 10),
+      dim = mat@Dim,
+      dimnames = dimnames(mat)
+    ),
+    file = tmp,
+    compress = FALSE
+  )
+
+  unname(tools::md5sum(tmp)[[1]])
 }
 
 calculer_equilibre_classes_auto_chd <- function(classes) {
@@ -730,11 +777,22 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     stop("Auto discriminante: config_base manquante ou invalide.")
   }
 
+  search_profile <- .normaliser_profil_exploration_auto_discriminante(
+    config_base$iramuteq_auto_discriminante_profile,
+    default = "complet"
+  )
   min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
   use_lemmes_values <- c(FALSE, TRUE)
   remove_stopwords_values <- c(FALSE, TRUE)
   remove_punctuation_values <- c(FALSE, TRUE)
   remove_digits_values <- c(FALSE, TRUE)
+
+  if (identical(search_profile, "rapide")) {
+    use_lemmes_values <- c(.as_bool_auto_chd(config_base$lexique_utiliser_lemmes, TRUE))
+    remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
+  } else if (identical(search_profile, "equilibre")) {
+    remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
+  }
 
   morpho_profiles <- list(
     list(key = "aucun", keep_unknown = FALSE, exclude_etre = FALSE),
@@ -794,7 +852,11 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     }
   }
 
-  candidates
+  list(
+    profile = search_profile,
+    profile_label = .label_profil_exploration_auto_discriminante(search_profile),
+    candidates = candidates
+  )
 }
 
 .resume_configuration_auto_discriminante <- function(candidate) {
@@ -898,7 +960,10 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
     stop("Auto discriminante: lancer_auto_chd_fn doit etre une fonction.")
   }
 
-  candidates <- construire_grille_auto_discriminante_iramuteq(config_base)
+  grid_obj <- construire_grille_auto_discriminante_iramuteq(config_base)
+  candidates <- grid_obj$candidates %||% list()
+  search_profile <- grid_obj$profile %||% "complet"
+  search_profile_label <- grid_obj$profile_label %||% .label_profil_exploration_auto_discriminante(search_profile)
   total_candidates <- length(candidates)
   if (!length(candidates)) {
     stop("Auto discriminante: aucune configuration candidate n'a ete construite.")
@@ -907,7 +972,9 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
   if (is.function(log_fn)) {
     log_fn(
       paste0(
-        "Auto discriminante : recherche exhaustive sur ",
+        "Auto discriminante : profil ",
+        tolower(search_profile_label),
+        " - recherche sur ",
         total_candidates,
         " configurations discriminantes."
       ),
@@ -918,10 +985,13 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
   evaluation_rows <- vector("list", total_candidates)
   evaluation_details <- vector("list", total_candidates)
   best_idx <- NA_integer_
+  dfm_cache <- new.env(parent = emptyenv())
+  reused_count <- 0L
 
   for (i in seq_along(candidates)) {
     candidate <- candidates[[i]]
     progress_value <- 45 + floor((i / total_candidates) * 14)
+    dfm_fingerprint <- NULL
 
     if (is.function(log_fn) && (i == 1L || i == total_candidates || (i %% 10L) == 0L)) {
       log_fn(
@@ -947,20 +1017,55 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
           stop("Configuration trop pauvre apres pretraitement.")
         }
 
-        res_ira <- lancer_auto_chd_fn(
-          dfm_obj = pipeline_obj$dfm_obj,
-          config_variant = candidate$config
-        )
+        dfm_fingerprint <- .empreinte_dfm_auto_chd(pipeline_obj$dfm_obj)
+        cache_hit <- exists(dfm_fingerprint, envir = dfm_cache, inherits = FALSE)
+        if (isTRUE(cache_hit)) {
+          reused_count <<- reused_count + 1L
+          cached_attempt <- get(dfm_fingerprint, envir = dfm_cache, inherits = FALSE)
+          if (isTRUE(cached_attempt$ok)) {
+            row <- .ligne_succes_auto_discriminante(candidate, pipeline_obj, cached_attempt$res_ira)
+            list(
+              ok = TRUE,
+              row = row,
+              pipeline = pipeline_obj,
+              res_ira = cached_attempt$res_ira,
+              reused = TRUE,
+              fingerprint = dfm_fingerprint
+            )
+          } else {
+            list(
+              ok = FALSE,
+              row = .ligne_erreur_auto_discriminante(candidate, cached_attempt$error_message %||% "Echec reutilise depuis le cache DFM."),
+              error = cached_attempt$error,
+              reused = TRUE,
+              fingerprint = dfm_fingerprint
+            )
+          }
+        } else {
+          res_ira <- lancer_auto_chd_fn(
+            dfm_obj = pipeline_obj$dfm_obj,
+            config_variant = candidate$config
+          )
 
-        if (is.null(res_ira$auto_selection)) {
-          stop("La CHD auto n'a retourne aucune selection exploitable.")
+          if (is.null(res_ira$auto_selection)) {
+            stop("La CHD auto n'a retourne aucune selection exploitable.")
+          }
+
+          row <- .ligne_succes_auto_discriminante(candidate, pipeline_obj, res_ira)
+          cache_entry <- list(ok = TRUE, res_ira = res_ira)
+          assign(dfm_fingerprint, cache_entry, envir = dfm_cache)
+          list(ok = TRUE, row = row, pipeline = pipeline_obj, res_ira = res_ira, reused = FALSE, fingerprint = dfm_fingerprint)
         }
-
-        row <- .ligne_succes_auto_discriminante(candidate, pipeline_obj, res_ira)
-        list(ok = TRUE, row = row, pipeline = pipeline_obj, res_ira = res_ira)
       },
       error = function(err) {
-        list(ok = FALSE, row = .ligne_erreur_auto_discriminante(candidate, conditionMessage(err)), error = err)
+        if (!is.null(dfm_fingerprint) && nzchar(dfm_fingerprint)) {
+          assign(
+            dfm_fingerprint,
+            list(ok = FALSE, error = err, error_message = conditionMessage(err)),
+            envir = dfm_cache
+          )
+        }
+        list(ok = FALSE, row = .ligne_erreur_auto_discriminante(candidate, conditionMessage(err)), error = err, reused = FALSE)
       }
     )
 
@@ -1006,6 +1111,16 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
   if (is.function(log_fn)) {
     log_fn(
       paste0(
+        "Auto discriminante : ",
+        length(ls(dfm_cache)),
+        " DFM uniques calculees, ",
+        reused_count,
+        " configuration(s) ont reutilise une DFM deja testee."
+      ),
+      progress = 58
+    )
+    log_fn(
+      paste0(
         "Auto discriminante : configuration retenue -> ",
         best_row$configuration_label[[1]],
         " | k=",
@@ -1025,8 +1140,12 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
 
   list(
     mode = "auto_discriminante",
+    search_profile = search_profile,
+    search_profile_label = search_profile_label,
     total_configurations = total_candidates,
     successful_configurations = sum(metrics_df$selection != "echec", na.rm = TRUE),
+    unique_dfm_tested = length(ls(dfm_cache)),
+    reused_configurations = reused_count,
     evaluation = metrics_df,
     selected_index = best_idx,
     selected_metrics = best_row,
@@ -1119,8 +1238,12 @@ exporter_auto_discriminante_iramuteq <- function(selection_obj, output_dir) {
 
   payload <- list(
     mode = "auto_discriminante",
+    search_profile = selection_obj$search_profile %||% "complet",
+    search_profile_label = selection_obj$search_profile_label %||% .label_profil_exploration_auto_discriminante(selection_obj$search_profile %||% "complet"),
     total_configurations = selection_obj$total_configurations %||% NA_integer_,
     successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
+    unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
+    reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
     selected = if (!is.null(selected_df) && nrow(selected_df)) {
       .dataframe_row_to_list_auto_chd(selected_df[1, , drop = FALSE])
     } else {

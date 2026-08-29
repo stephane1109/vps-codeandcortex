@@ -239,8 +239,8 @@
                     <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
                   </div>
                   <p class="section-copy">
-                    En mode auto discriminante, IRaMuTeQ-lite teste de maniere exhaustive toutes les combinaisons
-                    du grille de parametres discriminants, puis relance Auto CHD a l'interieur de chaque configuration.
+                    En mode auto discriminante, IRaMuTeQ-lite teste la grille des parametres discriminants
+                    selon le profil d'exploration choisi, puis relance Auto CHD a l'interieur de chaque configuration.
                   </p>
                   <p class="section-copy">
                     L'objectif n'est plus seulement de choisir le meilleur nombre de classes pour une CHD donnee,
@@ -579,8 +579,8 @@
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
                   vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
-                  En auto discriminante, l'application teste exhaustivement la grille des parametres discriminants
-                  puis retient la configuration qui oppose le mieux les classes. Ce mode peut etre beaucoup plus long.
+                  En auto discriminante, l'application explore la grille des parametres discriminants
+                  selon le profil choisi puis retient la configuration qui oppose le mieux les classes.
                 </p>
               </div>
 
@@ -589,6 +589,20 @@
                 <input id="kIramuteq" type="number" min="2" value="10" />
                 <p class="field-help" data-k-iramuteq-help>
                   La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.
+                </p>
+              </div>
+
+              <div class="field" data-auto-discriminante-profile-field hidden>
+                <label for="autoDiscriminanteProfile">Exploration discriminante</label>
+                <select id="autoDiscriminanteProfile">
+                  <option value="equilibre">Equilibree (recommandee)</option>
+                  <option value="rapide">Rapide</option>
+                  <option value="complet">Complete</option>
+                </select>
+                <p class="field-help">
+                  Rapide garde vos reglages actuels pour les lemmes et la ponctuation.
+                  Equilibree explore aussi les lemmes. Complete teste toute la grille discriminante,
+                  mais prend plus de temps.
                 </p>
               </div>
             </div>

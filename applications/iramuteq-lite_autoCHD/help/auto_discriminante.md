@@ -32,9 +32,48 @@ On peut aussi utiliser une **metaphore de perceptron** :
 - le systeme "passe en revue" plusieurs activations possibles du corpus ;
 - puis il garde la combinaison qui separe le mieux les classes dans l'espace lexical.
 
-## Ce qui est teste
+## Profils d'exploration
 
-Le mode teste exhaustivement la **grille discriminante** suivante :
+Le mode propose maintenant trois niveaux d'exploration pour eviter des temps de calcul inutilement longs.
+
+### `Rapide`
+
+Ce profil teste :
+
+- tous les profils morphosyntaxiques ;
+- `stopwords` : `oui/non` ;
+- `chiffres` : `oui/non` ;
+- `min_docfreq` : `1`, `2`, `3` et la valeur courante si elle est differente.
+
+En revanche, il **garde vos reglages courants** pour :
+
+- la lemmatisation ;
+- la ponctuation.
+
+Il est utile pour un premier balayage quand vous cherchez vite des classes opposees.
+
+### `Equilibree`
+
+Ce profil teste :
+
+- tous les profils morphosyntaxiques ;
+- la lemmatisation : `oui/non` ;
+- `stopwords` : `oui/non` ;
+- `chiffres` : `oui/non` ;
+- `min_docfreq` : `1`, `2`, `3` et la valeur courante si elle est differente.
+
+En revanche, il **garde votre reglage courant** pour :
+
+- la ponctuation.
+
+C'est le meilleur compromis entre finesse et temps de calcul. C'est donc le profil recommande.
+
+### `Complete`
+
+Ce profil teste exhaustivement toute la grille discriminante, y compris la ponctuation.
+
+## Ce qui est teste
+Selon le profil choisi, le mode explore tout ou partie de la **grille discriminante** suivante :
 
 - profils morphosyntaxiques : `sans morpho`, `NOM`, `NOM+VER`, `NOM+ADJ+VER`
 - inclusion de `AUTRE_FORME` quand le filtrage morpho est actif
@@ -56,7 +95,7 @@ Pour garder un temps de calcul encore exploitable, les parametres structurels de
 - autres options qui ne servent pas directement a la discrimination lexicale
 
 Le mode **n'explore donc pas toutes les options de l'application sans limite**.
-Il explore toutes les combinaisons de la **grille discriminante utile**.
+Il explore, selon le profil choisi, tout ou partie de la **grille discriminante utile**.
 
 ## Etape 1 : Auto CHD dans chaque configuration
 
@@ -199,4 +238,10 @@ En pratique :
 
 Ce mode peut etre nettement plus long que le mode Auto CHD classique, surtout sur les gros corpus.
 
-Il faut le voir comme une **recherche exhaustive sur une grille discriminante**, pas comme un simple changement de `k`.
+Il faut le voir comme une **recherche sur une grille discriminante**, pas comme un simple changement de `k`.
+
+Si le corpus est volumineux :
+
+- commencez par `Rapide` ;
+- passez a `Equilibree` si vous voulez affiner ;
+- gardez `Complete` pour les verifications finales ou les corpus courts.

@@ -2007,10 +2007,15 @@ function renderClassesModeCard(card) {
   const modeField = card.querySelector("#classesMode, [data-source-id='classesMode']");
   const kLabel = card.querySelector("[data-k-iramuteq-label]");
   const kHelp = card.querySelector("[data-k-iramuteq-help]");
+  const autoDiscriminanteProfileField = card.querySelector("[data-auto-discriminante-profile-field]");
   if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
 
   const isAuto = modeField.value === "auto";
   const isAutoDiscriminante = modeField.value === "auto_discriminante";
+  if (autoDiscriminanteProfileField instanceof HTMLElement) {
+    autoDiscriminanteProfileField.hidden = !isAutoDiscriminante;
+    autoDiscriminanteProfileField.style.display = isAutoDiscriminante ? "" : "none";
+  }
   kLabel.textContent = (isAuto || isAutoDiscriminante)
     ? (isAutoDiscriminante
       ? "Nombre maximal de classes a explorer par configuration"
@@ -2021,7 +2026,7 @@ function renderClassesModeCard(card) {
     kHelp.textContent = isAuto
       ? "La CHD est calculee jusqu'a cette limite puis chaque partition P2...Pk est evaluee automatiquement."
       : isAutoDiscriminante
-        ? "Pour chaque configuration de la grille discriminante, la CHD est calculee jusqu'a cette limite puis le mode retient la combinaison la plus separante. Le temps de calcul peut etre nettement plus long."
+        ? "Pour chaque configuration de la grille discriminante, la CHD est calculee jusqu'a cette limite puis le mode retient la combinaison la plus separante. Le temps de calcul depend du profil d'exploration choisi."
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
 }
@@ -2101,6 +2106,7 @@ function buildJobConfig(analysisKind = "chd") {
     max_p: Number(document.getElementById("maxP").value) || 0.05,
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
     iramuteq_classes_mode: document.getElementById("classesMode").value,
+    iramuteq_auto_discriminante_profile: document.getElementById("autoDiscriminanteProfile")?.value || "equilibre",
     k_iramuteq: Number(document.getElementById("kIramuteq").value) || 3,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
     iramuteq_mincl_mode: document.getElementById("minclMode").value,
@@ -11012,8 +11018,11 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const metrics = [
     ["Configuration", selected.configuration_id || "N/A"],
+    ["Profil d'exploration", payload?.search_profile_label || payload?.search_profile || "N/A"],
     ["Configurations testees", payload?.total_configurations],
     ["Configurations valides", payload?.successful_configurations],
+    ["DFM uniques", payload?.unique_dfm_tested],
+    ["Configurations reutilisees", payload?.reused_configurations],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["Lemmes", selected.lexique_utiliser_lemmes || "N/A"],
     ["Stopwords", selected.retirer_stopwords || "N/A"],
@@ -14868,6 +14877,7 @@ async function startAnalysis(analysisKind = "chd") {
   const statsMode = document.getElementById("statsMode").value;
   const classesMode = document.getElementById("classesMode").value;
   const kIramuteq = Number(document.getElementById("kIramuteq").value);
+  const autoDiscriminanteProfile = String(document.getElementById("autoDiscriminanteProfile")?.value || "equilibre").trim();
   const tauriInvoke = getTauriInvoke();
   const isSimiMode = analysisKind === "simi";
   const isSuiviMode = analysisKind === "suivi";
@@ -14948,7 +14958,7 @@ async function startAnalysis(analysisKind = "chd") {
         ? "maxClasses"
         : "classes";
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}, ${classesCountLabel}=${kIramuteq}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}${classesMode === "auto_discriminante" ? `, profilAutoDiscriminante=${autoDiscriminanteProfile}` : ""}, ${classesCountLabel}=${kIramuteq}, minFreq=${minFreq}, stats=${statsMode}`
     );
   }
   progression.set(4, progressStartMessage);
