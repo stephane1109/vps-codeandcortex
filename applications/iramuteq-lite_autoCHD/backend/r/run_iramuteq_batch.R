@@ -1306,18 +1306,30 @@ run_batch <- function() {
           as.character(selected_discriminant$supprimer_chiffres %||% "n/a"),
           ", min_docfreq=",
           as.character(selected_discriminant$min_docfreq %||% "n/a"),
-          ", S=",
-          format(round(as.numeric(selected_discriminant$S), 4), nsmall = 4, trim = TRUE),
+          ", k=",
+          as.character(selected_discriminant$k_retenu %||% "n/a"),
+          ", A_theta=",
+          format(round(as.numeric(selected_discriminant$A_theta), 4), nsmall = 4, trim = TRUE),
+          ", A_dist=",
+          format(round(as.numeric(selected_discriminant$A_dist), 4), nsmall = 4, trim = TRUE),
+          ", A_rad=",
+          format(round(as.numeric(selected_discriminant$A_rad), 4), nsmall = 4, trim = TRUE),
+          ", A_align=",
+          format(round(as.numeric(selected_discriminant$A_align), 4), nsmall = 4, trim = TRUE),
+          ", A=",
+          format(round(as.numeric(selected_discriminant$A), 4), nsmall = 4, trim = TRUE),
           ")."
         ),
         progress = 60
       )
     }
     if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante") && is.list(res_ira$auto_selection) && is.data.frame(res_ira$auto_selection$selected_metrics)) {
+      auto_selection_mode <- as.character(res_ira$auto_selection$mode %||% "")
+      is_auto_afc_mode <- identical(classes_mode, "auto_afc_discriminante") || identical(auto_selection_mode, "auto_afc_discriminante")
       if (isTRUE(res_ira$auto_selection$k_max_reduced)) {
         log_info(
           paste0(
-            "Auto CHD : limite ramenee de ",
+            if (is_auto_afc_mode) "Auto AFC discriminante : limite ramenee de " else "Auto CHD : limite ramenee de ",
             res_ira$auto_selection$k_max_requested %||% NA_integer_,
             " a ",
             res_ira$auto_selection$k_max_tested %||% NA_integer_,
@@ -1329,7 +1341,7 @@ run_batch <- function() {
         )
       }
       selected_auto <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
-      if (identical(classes_mode, "auto_afc_discriminante")) {
+      if (is_auto_afc_mode) {
         log_info(
           paste0(
             "Auto AFC discriminante : partition retenue ",
@@ -1386,7 +1398,7 @@ run_batch <- function() {
           format(round(value_num, 4), nsmall = 4, trim = TRUE)
         }
         metrics_resume <- vapply(seq_len(nrow(metrics_auto)), function(i) {
-          if (identical(classes_mode, "auto_afc_discriminante")) {
+          if (is_auto_afc_mode) {
             paste0(
               as.character(metrics_auto$partition[[i]] %||% paste0("P", metrics_auto$k[[i]] %||% "")),
               "(A_theta=",
@@ -1422,7 +1434,7 @@ run_batch <- function() {
         }, character(1))
         log_info(
           paste0(
-            if (identical(classes_mode, "auto_afc_discriminante")) {
+            if (is_auto_afc_mode) {
               "Auto AFC discriminante : scores par partition -> "
             } else {
               "Auto CHD : scores par partition -> "
@@ -1435,7 +1447,7 @@ run_batch <- function() {
 
       if (isTRUE((res_ira$auto_selection$k_selected %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
-          if (identical(classes_mode, "auto_afc_discriminante")) {
+          if (is_auto_afc_mode) {
             "Auto AFC discriminante : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere partition disponible."
           } else {
             "Auto CHD : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere partition disponible."
@@ -2095,7 +2107,7 @@ run_batch <- function() {
       NA_character_
     },
     auto_discriminante_score = if (is.list(classes_info$auto_discriminant_selection) && is.data.frame(classes_info$auto_discriminant_selection$selected_metrics)) {
-      suppressWarnings(as.numeric(classes_info$auto_discriminant_selection$selected_metrics$S[[1]]))
+      suppressWarnings(as.numeric(classes_info$auto_discriminant_selection$selected_metrics$A[[1]]))
     } else {
       NA_real_
     },

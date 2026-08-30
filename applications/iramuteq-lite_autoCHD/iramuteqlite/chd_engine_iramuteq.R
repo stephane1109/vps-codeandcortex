@@ -141,7 +141,7 @@ lancer_moteur_chd_iramuteq <- function(
         lancer_moteur_chd_iramuteq(
           dfm_obj = dfm_obj,
           k = config_variant$k_iramuteq %||% k,
-          classes_mode = "auto",
+          classes_mode = "auto_afc_discriminante",
           mincl_mode = config_variant$iramuteq_mincl_mode %||% mincl_mode,
           mincl = config_variant$iramuteq_mincl %||% mincl,
           classif_mode = config_variant$iramuteq_classif_mode %||% classif_mode,

@@ -1174,14 +1174,6 @@ calculer_equilibre_classes_auto_chd <- function(classes) {
   .borner_score_auto_chd(entropy / max_entropy)
 }
 
-calculer_score_auto_discriminante <- function(B, D, E) {
-  values <- suppressWarnings(as.numeric(c(B, D, E)))
-  values[!is.finite(values) | is.na(values)] <- 0
-  values <- pmax(values, 0)
-  if (any(values <= 0)) return(0)
-  .borner_score_auto_chd(exp(mean(log(values))))
-}
-
 .definir_profil_morpho_auto_discriminant <- function(config_base,
                                                      profile_key = c("aucun", "nom", "nom_ver", "nom_adj_ver"),
                                                      keep_unknown = FALSE,
@@ -1286,7 +1278,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
               config_variant$supprimer_ponctuation <- remove_punctuation
               config_variant$supprimer_chiffres <- remove_digits
               config_variant$min_docfreq <- as.integer(min_docfreq)
-              config_variant$iramuteq_classes_mode <- "auto"
+              config_variant$iramuteq_classes_mode <- "auto_afc_discriminante"
 
               candidates[[index]] <- list(
                 id = sprintf("CFG%03d", index),
@@ -1353,8 +1345,11 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     D = NA_real_,
     L = NA_real_,
     B = NA_real_,
-    E = NA_real_,
-    S = NA_real_,
+    A_theta = NA_real_,
+    A_dist = NA_real_,
+    A_rad = NA_real_,
+    A_align = NA_real_,
+    A = NA_real_,
     classes_effectifs = NA_character_,
     classes_pourcentages = NA_character_,
     selection = "echec",
@@ -1369,13 +1364,6 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
   }
 
   selected_metrics <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
-  classes <- suppressWarnings(as.integer(res_ira$auto_selection$classes))
-  e_value <- calculer_equilibre_classes_auto_chd(classes)
-  s_value <- calculer_score_auto_discriminante(
-    B = suppressWarnings(as.numeric(selected_metrics$B[[1]])),
-    D = suppressWarnings(as.numeric(selected_metrics$D[[1]])),
-    E = e_value
-  )
 
   data.frame(
     configuration_id = candidate$id %||% NA_character_,
@@ -1393,8 +1381,11 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     D = .borner_score_auto_chd(selected_metrics$D[[1]]),
     L = .borner_score_auto_chd(selected_metrics$L[[1]]),
     B = .borner_score_auto_chd(selected_metrics$B[[1]]),
-    E = .borner_score_auto_chd(e_value),
-    S = .borner_score_auto_chd(s_value),
+    A_theta = .borner_score_auto_chd(selected_metrics$A_theta[[1]]),
+    A_dist = .borner_score_auto_chd(selected_metrics$A_dist[[1]]),
+    A_rad = .borner_score_auto_chd(selected_metrics$A_rad[[1]]),
+    A_align = .borner_score_auto_chd(selected_metrics$A_align[[1]]),
+    A = .borner_score_auto_chd(selected_metrics$A[[1]]),
     classes_effectifs = as.character(selected_metrics$classes_effectifs[[1]] %||% ""),
     classes_pourcentages = as.character(selected_metrics$classes_pourcentages[[1]] %||% ""),
     selection = "testee",
@@ -1531,23 +1522,30 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
 
     if (isTRUE(attempt$ok)) {
       current_row <- attempt$row
-      current_score <- suppressWarnings(as.numeric(current_row$S[[1]]))
-      current_D <- suppressWarnings(as.numeric(current_row$D[[1]]))
+      current_score <- suppressWarnings(as.numeric(current_row$A[[1]]))
+      current_A_theta <- suppressWarnings(as.numeric(current_row$A_theta[[1]]))
+      current_A_dist <- suppressWarnings(as.numeric(current_row$A_dist[[1]]))
       current_B <- suppressWarnings(as.numeric(current_row$B[[1]]))
 
       if (is.na(best_idx)) {
         best_idx <- i
       } else {
         best_row <- evaluation_rows[[best_idx]]
-        best_score <- suppressWarnings(as.numeric(best_row$S[[1]]))
-        best_D <- suppressWarnings(as.numeric(best_row$D[[1]]))
+        best_score <- suppressWarnings(as.numeric(best_row$A[[1]]))
+        best_A_theta <- suppressWarnings(as.numeric(best_row$A_theta[[1]]))
+        best_A_dist <- suppressWarnings(as.numeric(best_row$A_dist[[1]]))
         best_B <- suppressWarnings(as.numeric(best_row$B[[1]]))
 
         if (
           (is.finite(current_score) && !is.na(current_score) && (!is.finite(best_score) || is.na(best_score) || current_score > best_score + 1e-12)) ||
-          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 && is.finite(current_D) && (!is.finite(best_D) || current_D > best_D + 1e-12)) ||
           (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_D) && is.finite(best_D) && abs(current_D - best_D) <= 1e-12 &&
+             is.finite(current_A_theta) && (!is.finite(best_A_theta) || current_A_theta > best_A_theta + 1e-12)) ||
+          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_theta) && is.finite(best_A_theta) && abs(current_A_theta - best_A_theta) <= 1e-12 &&
+             is.finite(current_A_dist) && (!is.finite(best_A_dist) || current_A_dist > best_A_dist + 1e-12)) ||
+          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_theta) && is.finite(best_A_theta) && abs(current_A_theta - best_A_theta) <= 1e-12 &&
+             is.finite(current_A_dist) && is.finite(best_A_dist) && abs(current_A_dist - best_A_dist) <= 1e-12 &&
              is.finite(current_B) && (!is.finite(best_B) || current_B > best_B + 1e-12))
         ) {
           best_idx <- i
@@ -1582,14 +1580,18 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
         best_row$configuration_label[[1]],
         " | k=",
         best_row$k_retenu[[1]],
-        " | D=",
-        format(round(as.numeric(best_row$D[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | A_theta=",
+        format(round(as.numeric(best_row$A_theta[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | A_dist=",
+        format(round(as.numeric(best_row$A_dist[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | A_rad=",
+        format(round(as.numeric(best_row$A_rad[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | A_align=",
+        format(round(as.numeric(best_row$A_align[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | A=",
+        format(round(as.numeric(best_row$A[[1]]), 4), nsmall = 4, trim = TRUE),
         " | B=",
-        format(round(as.numeric(best_row$B[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | E=",
-        format(round(as.numeric(best_row$E[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | S=",
-        format(round(as.numeric(best_row$S[[1]]), 4), nsmall = 4, trim = TRUE)
+        format(round(as.numeric(best_row$B[[1]]), 4), nsmall = 4, trim = TRUE)
       ),
       progress = 59
     )
@@ -1620,8 +1622,8 @@ tracer_scores_auto_discriminante_iramuteq <- function(metrics_df, selected_id = 
   }
 
   df <- metrics_df
-  df$S_num <- suppressWarnings(as.numeric(df$S))
-  df <- df[is.finite(df$S_num) & !is.na(df$S_num), , drop = FALSE]
+  df$A_num <- suppressWarnings(as.numeric(df$A))
+  df <- df[is.finite(df$A_num) & !is.na(df$A_num), , drop = FALSE]
   if (!nrow(df)) {
     plot.new()
     text(0.5, 0.5, "Les scores discriminants sont indisponibles.", cex = 1.0)
@@ -1629,11 +1631,11 @@ tracer_scores_auto_discriminante_iramuteq <- function(metrics_df, selected_id = 
   }
 
   top_n <- .as_int_auto_chd(top_n, default = 12L, min_value = 1L)
-  df <- df[order(df$S_num, decreasing = TRUE), , drop = FALSE]
+  df <- df[order(df$A_num, decreasing = TRUE), , drop = FALSE]
   df <- utils::head(df, top_n)
 
   labels <- as.character(df$configuration_id)
-  values <- df$S_num
+  values <- df$A_num
   cols <- rep("#9cb7dc", length(values))
   if (!is.null(selected_id) && length(selected_id)) {
     idx_selected <- which(labels == as.character(selected_id[[1]]))
@@ -1651,8 +1653,8 @@ tracer_scores_auto_discriminante_iramuteq <- function(metrics_df, selected_id = 
     border = NA,
     las = 1,
     names.arg = rev(labels),
-    xlab = "Score discriminant S",
-    main = "Configurations les plus discriminantes"
+    xlab = "Score d'opposition AFC A",
+    main = "Configurations les plus opposees sur l'AFC"
   )
   graphics::grid(col = "#d6c8b8", lty = "dotted")
 

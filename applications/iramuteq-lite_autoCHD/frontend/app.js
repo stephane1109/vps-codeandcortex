@@ -11057,12 +11057,15 @@ function renderAutoDiscriminanteSummary(container, payload) {
     ["Chiffres", selected.supprimer_chiffres || "N/A"],
     ["min_docfreq", selected.min_docfreq],
     ["Partition retenue", `P${selectedK}`],
+    ["A_theta", formatTableNumber(selected.A_theta, 4)],
+    ["A_dist", formatTableNumber(selected.A_dist, 4)],
+    ["A_rad", formatTableNumber(selected.A_rad, 4)],
+    ["A_align", formatTableNumber(selected.A_align, 4)],
+    ["A", formatTableNumber(selected.A, 4)],
     ["H", formatTableNumber(selected.H, 4)],
     ["D", formatTableNumber(selected.D, 4)],
     ["L", formatTableNumber(selected.L, 4)],
-    ["B", formatTableNumber(selected.B, 4)],
-    ["E", formatTableNumber(selected.E, 4)],
-    ["S", formatTableNumber(selected.S, 4)]
+    ["B", formatTableNumber(selected.B, 4)]
   ];
 
   const grid = document.createElement("div");
@@ -11122,7 +11125,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const scoreNote = document.createElement("p");
   scoreNote.className = "field-help";
-  scoreNote.textContent = "Le score discriminant S combine B, D et E : il favorise les partitions structurellement solides, lexicalement opposees et suffisamment equilibrees.";
+  scoreNote.textContent = "Le mode Auto discriminante teste plusieurs configurations, puis ne garde qu'un seul resultat: celui dont les classes sont le plus opposees sur l'AFC a partir des coordonnees x,y, des angles entre classes et de l'alignement des termes a fort chi2.";
   container.appendChild(scoreNote);
 }
 
@@ -11132,8 +11135,9 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
   }
 
   const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const scoreColumnIndex = headerIndex(parsed.headers, ["s"]);
-  const distinctionColumnIndex = headerIndex(parsed.headers, ["d"]);
+  const scoreColumnIndex = headerIndex(parsed.headers, ["a"]);
+  const angleColumnIndex = headerIndex(parsed.headers, ["a_theta"]);
+  const distanceColumnIndex = headerIndex(parsed.headers, ["a_dist"]);
   const structureColumnIndex = headerIndex(parsed.headers, ["b"]);
 
   const rowsSource = parsed.rows.slice().sort((left, right) => {
@@ -11151,8 +11155,11 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
     const scoreDiff = parseTableNumber(right[scoreColumnIndex]) - parseTableNumber(left[scoreColumnIndex]);
     if (Number.isFinite(scoreDiff) && scoreDiff !== 0) return scoreDiff;
 
-    const distinctionDiff = parseTableNumber(right[distinctionColumnIndex]) - parseTableNumber(left[distinctionColumnIndex]);
-    if (Number.isFinite(distinctionDiff) && distinctionDiff !== 0) return distinctionDiff;
+    const angleDiff = parseTableNumber(right[angleColumnIndex]) - parseTableNumber(left[angleColumnIndex]);
+    if (Number.isFinite(angleDiff) && angleDiff !== 0) return angleDiff;
+
+    const distanceDiff = parseTableNumber(right[distanceColumnIndex]) - parseTableNumber(left[distanceColumnIndex]);
+    if (Number.isFinite(distanceDiff) && distanceDiff !== 0) return distanceDiff;
 
     const structureDiff = parseTableNumber(right[structureColumnIndex]) - parseTableNumber(left[structureColumnIndex]);
     if (Number.isFinite(structureDiff) && structureDiff !== 0) return structureDiff;
@@ -11171,12 +11178,15 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["k_retenu"], label: "k retenu" },
+    { keys: ["a_theta"], label: "A_theta" },
+    { keys: ["a_dist"], label: "A_dist" },
+    { keys: ["a_rad"], label: "A_rad" },
+    { keys: ["a_align"], label: "A_align" },
+    { keys: ["a"], label: "A" },
     { keys: ["h"], label: "H" },
     { keys: ["d"], label: "D" },
     { keys: ["l"], label: "L" },
     { keys: ["b"], label: "B" },
-    { keys: ["e"], label: "E" },
-    { keys: ["s"], label: "S" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
     { keys: ["selection"], label: "statut" },
@@ -11210,7 +11220,7 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
 
 function getAutoDiscriminanteNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "segments", "formes", "k_retenu", "h", "d", "l", "b", "e", "s"]);
+  const numericHeaders = new Set(["min_docfreq", "segments", "formes", "k_retenu", "a_theta", "a_dist", "a_rad", "a_align", "a", "h", "d", "l", "b"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -11291,10 +11301,10 @@ async function renderAutoDiscriminanteExports(index) {
   renderImage(
     resultContainers.autoDiscriminantePlot,
     plotFile,
-    "Comparaison des scores discriminants par configuration",
+    "Comparaison des scores d'opposition AFC par configuration",
     "Le graphique Auto discriminante est absent du dossier d'exports."
   );
-  makeResultImagePreviewable(resultContainers.autoDiscriminantePlot, "Score discriminant S", "Auto discriminante");
+  makeResultImagePreviewable(resultContainers.autoDiscriminantePlot, "Score AFC discriminant A", "Auto discriminante");
 
   if (!metricsFile) {
     setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Le tableau Auto discriminante est absent du dossier d'exports.");
