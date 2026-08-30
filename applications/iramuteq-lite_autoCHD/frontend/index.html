@@ -253,6 +253,18 @@
                   </p>
                 </article>
 
+                <article class="card prose-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Profils</p>
+                      <h3>Parametres des 3 configurations</h3>
+                    </div>
+                  </div>
+                  <div id="autoDiscriminanteAideMarkdownContent" class="markdown-content">
+                    Chargement de <code>help/aide_autodicriminante.md</code>...
+                  </div>
+                </article>
+
                 <article class="card">
                   <h3>Configuration retenue</h3>
                   <div id="autoDiscriminanteSummary" class="result-pane"></div>
@@ -312,7 +324,7 @@
                 </article>
 
                 <article class="card">
-                  <h3>Courbe du score B</h3>
+                  <h3>Courbe du score automatique</h3>
                   <div id="autoChdPlot" class="result-pane"></div>
                 </article>
 
@@ -574,11 +586,14 @@
                 <select id="classesMode" data-classes-mode-select>
                   <option value="manuel">Manuel</option>
                   <option value="auto">Automatique</option>
+                  <option value="auto_afc_discriminante">Auto AFC discriminante</option>
                   <option value="auto_discriminante">Auto discriminante</option>
                 </select>
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
                   vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
+                  En auto AFC discriminante, l'application compare les partitions de la meme CHD
+                  a partir des coordonnees AFC et des termes a fort chi2.
                   En auto discriminante, l'application explore la grille des parametres discriminants
                   selon le profil choisi puis retient la configuration qui oppose le mieux les classes.
                 </p>

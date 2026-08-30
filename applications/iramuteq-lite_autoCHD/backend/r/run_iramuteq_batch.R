@@ -305,11 +305,13 @@ ecrire_csv_6_decimales <- function(df, path, row.names = FALSE) {
 }
 
 coords_have_two_axes <- function(coords) {
-  !is.null(coords) && is.matrix(coords) && ncol(coords) >= 2
+  !is.null(coords) && (is.matrix(coords) || is.data.frame(coords)) && ncol(coords) >= 2
 }
 
 coords_have_at_least_one_axis <- function(coords) {
-  !is.null(coords) && (is.matrix(coords) || is.data.frame(coords)) && ncol(coords) >= 1
+  if (is.null(coords)) return(FALSE)
+  if (is.vector(coords)) return(length(coords) >= 1L)
+  (is.matrix(coords) || is.data.frame(coords)) && ncol(coords) >= 1
 }
 
 normaliser_id_classe_local <- function(x) {
@@ -1117,7 +1119,7 @@ run_batch <- function() {
   classif_mode <- scalar_chr(config$iramuteq_classif_mode, "simple")
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
   classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
-  if (!classes_mode %in% c("manuel", "auto", "auto_discriminante")) classes_mode <- "manuel"
+  if (!classes_mode %in% c("manuel", "auto", "auto_discriminante", "auto_afc_discriminante")) classes_mode <- "manuel"
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
       corpus_importe,
@@ -1311,7 +1313,7 @@ run_batch <- function() {
         progress = 60
       )
     }
-    if (classes_mode %in% c("auto", "auto_discriminante") && is.list(res_ira$auto_selection) && is.data.frame(res_ira$auto_selection$selected_metrics)) {
+    if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante") && is.list(res_ira$auto_selection) && is.data.frame(res_ira$auto_selection$selected_metrics)) {
       if (isTRUE(res_ira$auto_selection$k_max_reduced)) {
         log_info(
           paste0(
@@ -1327,27 +1329,53 @@ run_batch <- function() {
         )
       }
       selected_auto <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
-      log_info(
-        paste0(
-          "Auto CHD : partition retenue ",
-          as.character(selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")),
-          " (H=",
-          format(round(as.numeric(selected_auto$H), 4), nsmall = 4, trim = TRUE),
-          ", D=",
-          format(round(as.numeric(selected_auto$D), 4), nsmall = 4, trim = TRUE),
-          ", L=",
-          format(round(as.numeric(selected_auto$L), 4), nsmall = 4, trim = TRUE),
-          ", B=",
-          format(round(as.numeric(selected_auto$B), 4), nsmall = 4, trim = TRUE),
-          if (!is.na(suppressWarnings(as.numeric(selected_auto$G)))) {
-            paste0(", G=", format(round(as.numeric(selected_auto$G), 4), nsmall = 4, trim = TRUE))
-          } else {
-            ""
-          },
-          ")."
-        ),
-        progress = 57
-      )
+      if (identical(classes_mode, "auto_afc_discriminante")) {
+        log_info(
+          paste0(
+            "Auto AFC discriminante : partition retenue ",
+            as.character(selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")),
+            " (A_theta=",
+            format(round(as.numeric(selected_auto$A_theta), 4), nsmall = 4, trim = TRUE),
+            ", A_dist=",
+            format(round(as.numeric(selected_auto$A_dist), 4), nsmall = 4, trim = TRUE),
+            ", A_rad=",
+            format(round(as.numeric(selected_auto$A_rad), 4), nsmall = 4, trim = TRUE),
+            ", A_align=",
+            format(round(as.numeric(selected_auto$A_align), 4), nsmall = 4, trim = TRUE),
+            ", A=",
+            format(round(as.numeric(selected_auto$A), 4), nsmall = 4, trim = TRUE),
+            if (!is.na(suppressWarnings(as.numeric(selected_auto$GA)))) {
+              paste0(", GA=", format(round(as.numeric(selected_auto$GA), 4), nsmall = 4, trim = TRUE))
+            } else {
+              ""
+            },
+            ")."
+          ),
+          progress = 57
+        )
+      } else {
+        log_info(
+          paste0(
+            "Auto CHD : partition retenue ",
+            as.character(selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")),
+            " (H=",
+            format(round(as.numeric(selected_auto$H), 4), nsmall = 4, trim = TRUE),
+            ", D=",
+            format(round(as.numeric(selected_auto$D), 4), nsmall = 4, trim = TRUE),
+            ", L=",
+            format(round(as.numeric(selected_auto$L), 4), nsmall = 4, trim = TRUE),
+            ", B=",
+            format(round(as.numeric(selected_auto$B), 4), nsmall = 4, trim = TRUE),
+            if (!is.na(suppressWarnings(as.numeric(selected_auto$G)))) {
+              paste0(", G=", format(round(as.numeric(selected_auto$G), 4), nsmall = 4, trim = TRUE))
+            } else {
+              ""
+            },
+            ")."
+          ),
+          progress = 57
+        )
+      }
 
       metrics_auto <- res_ira$auto_selection$evaluation
       if (is.data.frame(metrics_auto) && nrow(metrics_auto)) {
@@ -1358,30 +1386,60 @@ run_batch <- function() {
           format(round(value_num, 4), nsmall = 4, trim = TRUE)
         }
         metrics_resume <- vapply(seq_len(nrow(metrics_auto)), function(i) {
-          paste0(
-            as.character(metrics_auto$partition[[i]] %||% paste0("P", metrics_auto$k[[i]] %||% "")),
-            "(H=",
-            fmt_auto_metric(metrics_auto$H[[i]]),
-            ", D=",
-            fmt_auto_metric(metrics_auto$D[[i]]),
-            ", L=",
-            fmt_auto_metric(metrics_auto$L[[i]]),
-            ", B=",
-            fmt_auto_metric(metrics_auto$B[[i]]),
-            ", G=",
-            fmt_auto_metric(metrics_auto$G[[i]]),
-            ")"
-          )
+          if (identical(classes_mode, "auto_afc_discriminante")) {
+            paste0(
+              as.character(metrics_auto$partition[[i]] %||% paste0("P", metrics_auto$k[[i]] %||% "")),
+              "(A_theta=",
+              fmt_auto_metric(metrics_auto$A_theta[[i]]),
+              ", A_dist=",
+              fmt_auto_metric(metrics_auto$A_dist[[i]]),
+              ", A_rad=",
+              fmt_auto_metric(metrics_auto$A_rad[[i]]),
+              ", A_align=",
+              fmt_auto_metric(metrics_auto$A_align[[i]]),
+              ", A=",
+              fmt_auto_metric(metrics_auto$A[[i]]),
+              ", GA=",
+              fmt_auto_metric(metrics_auto$GA[[i]]),
+              ")"
+            )
+          } else {
+            paste0(
+              as.character(metrics_auto$partition[[i]] %||% paste0("P", metrics_auto$k[[i]] %||% "")),
+              "(H=",
+              fmt_auto_metric(metrics_auto$H[[i]]),
+              ", D=",
+              fmt_auto_metric(metrics_auto$D[[i]]),
+              ", L=",
+              fmt_auto_metric(metrics_auto$L[[i]]),
+              ", B=",
+              fmt_auto_metric(metrics_auto$B[[i]]),
+              ", G=",
+              fmt_auto_metric(metrics_auto$G[[i]]),
+              ")"
+            )
+          }
         }, character(1))
         log_info(
-          paste0("Auto CHD : scores par partition -> ", paste(metrics_resume, collapse = " | ")),
+          paste0(
+            if (identical(classes_mode, "auto_afc_discriminante")) {
+              "Auto AFC discriminante : scores par partition -> "
+            } else {
+              "Auto CHD : scores par partition -> "
+            },
+            paste(metrics_resume, collapse = " | ")
+          ),
           progress = 57
         )
       }
 
       if (isTRUE((res_ira$auto_selection$k_selected %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
-          "Auto CHD : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere partition disponible.",
+          if (identical(classes_mode, "auto_afc_discriminante")) {
+            "Auto AFC discriminante : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere partition disponible."
+          } else {
+            "Auto CHD : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere partition disponible."
+          },
           progress = 57
         )
       }
@@ -1680,7 +1738,7 @@ run_batch <- function() {
     artifacts$wordclouds <- unname(vapply(list.files(wordcloud_dir, pattern = "\\.png$", full.names = TRUE), relative_to_output, character(1)))
     log_info("Mode IRaMuTeQ-lite : nuages de mots générés via wordcloud_iramuteq.R.", progress = 67)
 
-    if (classes_mode %in% c("auto", "auto_discriminante") && is.list(res_ira$auto_selection)) {
+    if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante") && is.list(res_ira$auto_selection)) {
       tryCatch({
         auto_exports <- exporter_auto_chd_iramuteq(res_ira$auto_selection, output_dir)
         artifacts$auto_chd <- list(
@@ -2017,6 +2075,8 @@ run_batch <- function() {
     classes_mode = classes_mode,
     classes_mode_label = if (identical(classes_mode, "auto_discriminante")) {
       "Auto discriminante"
+    } else if (identical(classes_mode, "auto_afc_discriminante")) {
+      "Auto AFC discriminante"
     } else if (identical(classes_mode, "auto")) {
       "Automatique"
     } else {

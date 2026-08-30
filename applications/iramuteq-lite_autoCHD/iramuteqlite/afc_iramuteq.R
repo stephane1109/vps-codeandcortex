@@ -40,12 +40,34 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
   c(-m, m)
 }
 
-.resoudre_axes_trace_afc <- function(coords, axes = c(1, 2)) {
-  if (is.null(coords) || !(is.matrix(coords) || is.data.frame(coords))) {
+.normaliser_coords_trace_afc <- function(coords) {
+  if (is.null(coords)) {
     return(NULL)
   }
 
-  n_axes <- ncol(coords)
+  if (is.vector(coords)) {
+    row_labels <- names(coords)
+    return(matrix(
+      as.numeric(coords),
+      ncol = 1L,
+      dimnames = list(row_labels, NULL)
+    ))
+  }
+
+  if (is.matrix(coords) || is.data.frame(coords)) {
+    return(as.matrix(coords))
+  }
+
+  NULL
+}
+
+.resoudre_axes_trace_afc <- function(coords, axes = c(1, 2)) {
+  coords_mat <- .normaliser_coords_trace_afc(coords)
+  if (is.null(coords_mat)) {
+    return(NULL)
+  }
+
+  n_axes <- ncol(coords_mat)
   if (!is.finite(n_axes) || n_axes < 1) {
     return(NULL)
   }
@@ -54,7 +76,7 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
   has_second <- n_axes >= 2L && length(axes) >= 2L
   ax2 <- if (has_second) max(1L, min(as.integer(axes[2]), n_axes)) else ax1
 
-  list(ax1 = ax1, ax2 = ax2, has_second = has_second)
+  list(ax1 = ax1, ax2 = ax2, has_second = has_second, coords = coords_mat)
 }
 
 .extraire_coordonnees_trace_afc <- function(coords, axes = c(1, 2)) {
@@ -63,9 +85,11 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
     stop("AFC : coordonnees insuffisantes pour le trace.")
   }
 
+  coords_mat <- resolved$coords
+
   list(
-    x = as.numeric(coords[, resolved$ax1]),
-    y = if (isTRUE(resolved$has_second)) as.numeric(coords[, resolved$ax2]) else rep(0, nrow(coords)),
+    x = as.numeric(coords_mat[, resolved$ax1]),
+    y = if (isTRUE(resolved$has_second)) as.numeric(coords_mat[, resolved$ax2]) else rep(0, nrow(coords_mat)),
     axes = resolved
   )
 }

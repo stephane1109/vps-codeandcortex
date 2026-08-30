@@ -102,6 +102,7 @@ const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpAutoChdMarkdownContent = document.getElementById("helpAutoChdMarkdownContent");
 const helpAutoDiscriminanteMarkdownContent = document.getElementById("helpAutoDiscriminanteMarkdownContent");
+const autoDiscriminanteAideMarkdownContent = document.getElementById("autoDiscriminanteAideMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
@@ -2011,12 +2012,13 @@ function renderClassesModeCard(card) {
   if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
 
   const isAuto = modeField.value === "auto";
+  const isAutoAfcDiscriminante = modeField.value === "auto_afc_discriminante";
   const isAutoDiscriminante = modeField.value === "auto_discriminante";
   if (autoDiscriminanteProfileField instanceof HTMLElement) {
     autoDiscriminanteProfileField.hidden = !isAutoDiscriminante;
     autoDiscriminanteProfileField.style.display = isAutoDiscriminante ? "" : "none";
   }
-  kLabel.textContent = (isAuto || isAutoDiscriminante)
+  kLabel.textContent = (isAuto || isAutoAfcDiscriminante || isAutoDiscriminante)
     ? (isAutoDiscriminante
       ? "Nombre maximal de classes a explorer par configuration"
       : "Nombre maximal de classes a explorer")
@@ -2025,6 +2027,8 @@ function renderClassesModeCard(card) {
   if (kHelp instanceof HTMLElement) {
     kHelp.textContent = isAuto
       ? "La CHD est calculee jusqu'a cette limite puis chaque partition P2...Pk est evaluee automatiquement."
+      : isAutoAfcDiscriminante
+        ? "La CHD est calculee jusqu'a cette limite puis les partitions P2...Pk sont comparees via l'AFC et les termes a fort chi2 pour retenir les classes les plus opposees."
       : isAutoDiscriminante
         ? "Pour chaque configuration de la grille discriminante, la CHD est calculee jusqu'a cette limite puis le mode retient la combinaison la plus separante. Le temps de calcul depend du profil d'exploration choisi."
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
@@ -10941,21 +10945,37 @@ function renderAutoChdSummary(container, payload) {
   const selectedK = Number.parseInt(String(payload?.selected_k ?? ""), 10);
   const requestedMax = Number.parseInt(String(payload?.k_max_requested ?? ""), 10);
   const testedMax = Number.parseInt(String(payload?.k_max_tested ?? ""), 10);
+  const mode = String(payload?.mode || "auto").trim();
+  const isAfcMode = mode === "auto_afc_discriminante";
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune selection automatique disponible pour cette analyse."));
     return;
   }
 
-  const metrics = [
-    ["Partition retenue", `P${selectedK}`],
-    ["k max demande", Number.isFinite(requestedMax) ? String(requestedMax) : "N/A"],
-    ["k max teste", Number.isFinite(testedMax) ? String(testedMax) : "N/A"],
-    ["H", formatTableNumber(selected.H, 4)],
-    ["D", formatTableNumber(selected.D, 4)],
-    ["L", formatTableNumber(selected.L, 4)],
-    ["B", formatTableNumber(selected.B, 4)],
-    ["G", Number.isFinite(parseTableNumber(selected.G)) ? formatTableNumber(selected.G, 4) : "N/A"]
-  ];
+  const metrics = isAfcMode
+    ? [
+        ["Mode", payload?.mode_label || "Auto AFC discriminante"],
+        ["Partition retenue", `P${selectedK}`],
+        ["k max demande", Number.isFinite(requestedMax) ? String(requestedMax) : "N/A"],
+        ["k max teste", Number.isFinite(testedMax) ? String(testedMax) : "N/A"],
+        ["A_theta", formatTableNumber(selected.A_theta, 4)],
+        ["A_dist", formatTableNumber(selected.A_dist, 4)],
+        ["A_rad", formatTableNumber(selected.A_rad, 4)],
+        ["A_align", formatTableNumber(selected.A_align, 4)],
+        ["A", formatTableNumber(selected.A, 4)],
+        ["B", formatTableNumber(selected.B, 4)],
+        ["GA", Number.isFinite(parseTableNumber(selected.GA)) ? formatTableNumber(selected.GA, 4) : "N/A"]
+      ]
+    : [
+        ["Partition retenue", `P${selectedK}`],
+        ["k max demande", Number.isFinite(requestedMax) ? String(requestedMax) : "N/A"],
+        ["k max teste", Number.isFinite(testedMax) ? String(testedMax) : "N/A"],
+        ["H", formatTableNumber(selected.H, 4)],
+        ["D", formatTableNumber(selected.D, 4)],
+        ["L", formatTableNumber(selected.L, 4)],
+        ["B", formatTableNumber(selected.B, 4)],
+        ["G", Number.isFinite(parseTableNumber(selected.G)) ? formatTableNumber(selected.G, 4) : "N/A"]
+      ];
 
   const grid = document.createElement("div");
   grid.className = "summary-grid";
@@ -11002,6 +11022,13 @@ function renderAutoChdSummary(container, payload) {
     note.textContent = reason
       ? `Limite ajustee automatiquement de ${requestedMax} a ${testedMax} classes : ${reason}.`
       : `Limite ajustee automatiquement de ${requestedMax} a ${testedMax} classes selon la structure du corpus.`;
+    container.appendChild(note);
+  }
+
+  if (isAfcMode) {
+    const note = document.createElement("p");
+    note.className = "field-help";
+    note.textContent = "Le score A combine l'opposition angulaire des classes, leur distance minimale, leur eloignement du centre AFC et l'alignement des termes a fort chi2 avec leur classe.";
     container.appendChild(note);
   }
 }
@@ -11289,8 +11316,12 @@ async function renderAutoDiscriminanteExports(index) {
 async function renderAutoChdExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("auto_chd_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("auto_chd_metrics.csv")]);
-  const plotFile = findFile(index, [(path) => path.endsWith("auto_chd_b_score.png")]);
-  const manualModeMessage = "Cette analyse CHD n'a pas utilise la selection automatique du nombre de classes.";
+  const plotFile = findFile(index, [
+    (path) => path.endsWith("auto_chd_afc_score.png"),
+    (path) => path.endsWith("auto_chd_b_score.png")
+  ]);
+  const manualModeMessage = "Cette analyse CHD n'a pas utilise un mode automatique de selection du nombre de classes.";
+  let summaryPayload = null;
 
   if (!summaryFile && !metricsFile && !plotFile) {
     setContainerEmptyState(resultContainers.autoChdSummary, manualModeMessage);
@@ -11301,8 +11332,8 @@ async function renderAutoChdExports(index) {
 
   if (summaryFile) {
     try {
-      const payload = JSON.parse(await summaryFile.text());
-      renderAutoChdSummary(resultContainers.autoChdSummary, payload);
+      summaryPayload = JSON.parse(await summaryFile.text());
+      renderAutoChdSummary(resultContainers.autoChdSummary, summaryPayload);
     } catch (error) {
       setContainerEmptyState(resultContainers.autoChdSummary, "Impossible de lire le resume Auto CHD.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
@@ -11311,13 +11342,18 @@ async function renderAutoChdExports(index) {
     setContainerEmptyState(resultContainers.autoChdSummary, "Le resume Auto CHD est absent du dossier d'exports.");
   }
 
+  const isAfcMode = String(summaryPayload?.mode || "").trim() === "auto_afc_discriminante";
   renderImage(
     resultContainers.autoChdPlot,
     plotFile,
-    "Courbe du score B par nombre de classes",
+    isAfcMode ? "Courbe du score AFC discriminant A par nombre de classes" : "Courbe du score B par nombre de classes",
     "Le graphique Auto CHD est absent du dossier d'exports."
   );
-  makeResultImagePreviewable(resultContainers.autoChdPlot, "Courbe du score B", "Auto CHD");
+  makeResultImagePreviewable(
+    resultContainers.autoChdPlot,
+    isAfcMode ? "Courbe du score A" : "Courbe du score B",
+    isAfcMode ? "Auto AFC discriminante" : "Auto CHD"
+  );
 
   if (!metricsFile) {
     setContainerEmptyState(resultContainers.autoChdTable, "Le tableau Auto CHD est absent du dossier d'exports.");
@@ -11717,7 +11753,13 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
     { keys: ["d"], label: "D" },
     { keys: ["l"], label: "L" },
     { keys: ["b"], label: "B" },
+    { keys: ["a_theta"], label: "A_theta" },
+    { keys: ["a_dist"], label: "A_dist" },
+    { keys: ["a_rad"], label: "A_rad" },
+    { keys: ["a_align"], label: "A_align" },
+    { keys: ["a"], label: "A" },
     { keys: ["g"], label: "G" },
+    { keys: ["ga"], label: "GA" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
     { keys: ["selection"], label: "statut" }
@@ -11759,7 +11801,7 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
 
 function getAutoChdNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["nb_classes", "segments_classes", "segments_non_classes", "h", "d", "l", "b", "g"]);
+  const numericHeaders = new Set(["nb_classes", "segments_classes", "segments_non_classes", "h", "d", "l", "b", "g", "a_theta", "a_dist", "a_rad", "a_align", "a", "ga"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -14954,7 +14996,7 @@ async function startAnalysis(analysisKind = "chd") {
   } else {
     const classesCountLabel = classesMode === "auto_discriminante"
       ? "maxClassesParConfig"
-      : classesMode === "auto"
+      : classesMode === "auto" || classesMode === "auto_afc_discriminante"
         ? "maxClasses"
         : "classes";
     log(
@@ -15227,6 +15269,7 @@ void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpAutoChdMarkdownContent, "autochd.md");
 void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "auto_discriminante.md");
+void loadHelpMarkdown(autoDiscriminanteAideMarkdownContent, "aide_autodicriminante.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {

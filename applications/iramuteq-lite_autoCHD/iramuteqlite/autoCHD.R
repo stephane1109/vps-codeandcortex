@@ -491,6 +491,10 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
 
   list(
     mode = "auto",
+    mode_label = "Auto CHD",
+    score_column = "B",
+    score_label = "Score structurel B",
+    score_plot_title = "Selection automatique du nombre de classes",
     classes = selected_partition$classes,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
@@ -507,7 +511,442 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   )
 }
 
-tracer_scores_auto_chd_iramuteq <- function(metrics_df, selected_k = NULL) {
+.moyenne_geometrique_scores_auto_chd <- function(values) {
+  values <- suppressWarnings(as.numeric(values))
+  values[!is.finite(values) | is.na(values)] <- 0
+  values <- pmax(values, 0)
+  if (!length(values) || any(values <= 0)) return(0)
+  .borner_score_auto_chd(exp(mean(log(values))))
+}
+
+.extraire_coordonnees_xy_auto_chd <- function(coords) {
+  if (is.null(coords)) {
+    return(NULL)
+  }
+
+  if (is.vector(coords)) {
+    row_labels <- names(coords)
+    mat <- matrix(
+      suppressWarnings(as.numeric(coords)),
+      ncol = 1L,
+      dimnames = list(row_labels, NULL)
+    )
+  } else if (is.matrix(coords) || is.data.frame(coords)) {
+    mat <- as.matrix(coords)
+  } else {
+    return(NULL)
+  }
+
+  if (nrow(mat) < 1L || ncol(mat) < 1L) {
+    return(NULL)
+  }
+
+  out <- cbind(
+    x = suppressWarnings(as.numeric(mat[, 1])),
+    y = if (ncol(mat) >= 2L) suppressWarnings(as.numeric(mat[, 2])) else rep(0, nrow(mat))
+  )
+  rownames(out) <- rownames(mat)
+  out
+}
+
+.selectionner_termes_caracteristiques_afc_auto_chd <- function(res_stats_df,
+                                                               top_n = 20L,
+                                                               p_seuil = 0.05) {
+  top_n <- .as_int_auto_chd(top_n, default = 20L, min_value = 1L)
+  if (is.null(res_stats_df) || !is.data.frame(res_stats_df) || !nrow(res_stats_df)) {
+    return(character(0))
+  }
+  if (!all(c("Terme", "Classe", "chi2") %in% names(res_stats_df))) {
+    return(character(0))
+  }
+
+  p_col <- if ("p" %in% names(res_stats_df)) "p" else if ("p_value" %in% names(res_stats_df)) "p_value" else NULL
+
+  df <- res_stats_df
+  df$Terme <- trimws(as.character(df$Terme))
+  df$Classe_num <- suppressWarnings(as.integer(df$Classe))
+  df$chi2_num <- suppressWarnings(as.numeric(df$chi2))
+  df$p_num <- if (!is.null(p_col)) suppressWarnings(as.numeric(df[[p_col]])) else NA_real_
+  df <- df[
+    nzchar(df$Terme) &
+      is.finite(df$Classe_num) &
+      !is.na(df$Classe_num) &
+      is.finite(df$chi2_num) &
+      !is.na(df$chi2_num) &
+      df$chi2_num > 0,
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(df)) {
+    return(character(0))
+  }
+
+  classes_uniques <- sort(unique(df$Classe_num))
+  termes <- character(0)
+
+  for (cl in classes_uniques) {
+    df_cl <- df[df$Classe_num == cl, , drop = FALSE]
+    if (!nrow(df_cl)) next
+    df_cl <- df_cl[order(df_cl$chi2_num, decreasing = TRUE), , drop = FALSE]
+
+    df_sig <- df_cl
+    if (!is.null(p_col)) {
+      df_sig <- df_cl[is.finite(df_cl$p_num) & !is.na(df_cl$p_num) & df_cl$p_num <= p_seuil, , drop = FALSE]
+      df_sig <- df_sig[order(df_sig$chi2_num, decreasing = TRUE), , drop = FALSE]
+    }
+
+    df_pick <- if (nrow(df_sig) > 0L) df_sig else df_cl
+    termes <- c(termes, utils::head(df_pick$Terme, top_n))
+  }
+
+  termes <- unique(termes[nzchar(termes)])
+  if (length(termes) >= 2L) {
+    return(termes)
+  }
+
+  unique(utils::head(df$Terme[order(df$chi2_num, decreasing = TRUE)], max(2L, top_n)))
+}
+
+calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
+                                                     res_stats_df,
+                                                     top_n = 20L,
+                                                     p_seuil = 0.05) {
+  coords_classes <- .extraire_coordonnees_xy_auto_chd(afc_obj$rowcoord)
+  coords_termes <- .extraire_coordonnees_xy_auto_chd(afc_obj$colcoord)
+  if (is.null(coords_classes) || is.null(coords_termes) || nrow(coords_classes) < 2L || nrow(coords_termes) < 2L) {
+    return(list(
+      A_theta = 0,
+      A_dist = 0,
+      A_rad = 0,
+      A_align = 0,
+      A = 0,
+      align_by_class = numeric(0)
+    ))
+  }
+
+  class_vectors <- coords_classes[, c("x", "y"), drop = FALSE]
+  class_norms <- sqrt(rowSums(class_vectors^2))
+
+  pair_index <- utils::combn(seq_len(nrow(class_vectors)), 2L)
+  angle_scores <- numeric(ncol(pair_index))
+  dist_values <- numeric(ncol(pair_index))
+  for (j in seq_len(ncol(pair_index))) {
+    i1 <- pair_index[1, j]
+    i2 <- pair_index[2, j]
+    v1 <- class_vectors[i1, ]
+    v2 <- class_vectors[i2, ]
+    n1 <- class_norms[[i1]]
+    n2 <- class_norms[[i2]]
+    cosine <- if (is.finite(n1) && is.finite(n2) && n1 > 0 && n2 > 0) {
+      sum(v1 * v2) / (n1 * n2)
+    } else {
+      1
+    }
+    cosine <- max(-1, min(1, cosine))
+    angle_scores[[j]] <- .borner_score_auto_chd((1 - cosine) / 2)
+    dist_values[[j]] <- sqrt(sum((v1 - v2)^2))
+  }
+
+  max_radius <- max(class_norms, na.rm = TRUE)
+  a_theta <- if (length(angle_scores)) .borner_score_auto_chd(mean(angle_scores)) else 0
+  a_dist <- if (length(dist_values) && is.finite(max_radius) && max_radius > 0) {
+    .borner_score_auto_chd(min(dist_values, na.rm = TRUE) / (2 * max_radius))
+  } else {
+    0
+  }
+  a_rad <- .borner_score_auto_chd(mean(class_norms / (class_norms + 1)))
+
+  p_col <- if ("p" %in% names(res_stats_df)) "p" else if ("p_value" %in% names(res_stats_df)) "p_value" else NULL
+  df <- res_stats_df
+  df$Terme <- trimws(as.character(df$Terme))
+  df$Classe_num <- suppressWarnings(as.integer(df$Classe))
+  df$chi2_num <- suppressWarnings(as.numeric(df$chi2))
+  df$p_num <- if (!is.null(p_col)) suppressWarnings(as.numeric(df[[p_col]])) else NA_real_
+
+  align_by_class <- stats::setNames(rep(0, nrow(class_vectors)), rownames(class_vectors))
+  for (class_label in rownames(class_vectors)) {
+    class_num <- suppressWarnings(as.integer(gsub("^Classe\\s+", "", class_label)))
+    class_vec <- class_vectors[class_label, ]
+    class_norm <- sqrt(sum(class_vec^2))
+    if (!is.finite(class_num) || is.na(class_num) || class_norm <= 0) {
+      align_by_class[[class_label]] <- 0
+      next
+    }
+
+    df_cl <- df[
+      df$Classe_num == class_num &
+        nzchar(df$Terme) &
+        is.finite(df$chi2_num) &
+        !is.na(df$chi2_num) &
+        df$chi2_num > 0 &
+        df$Terme %in% rownames(coords_termes),
+      ,
+      drop = FALSE
+    ]
+    if (!nrow(df_cl)) {
+      align_by_class[[class_label]] <- 0
+      next
+    }
+
+    df_cl <- df_cl[order(df_cl$chi2_num, decreasing = TRUE), , drop = FALSE]
+    df_sig <- df_cl
+    if (!is.null(p_col)) {
+      df_sig <- df_cl[is.finite(df_cl$p_num) & !is.na(df_cl$p_num) & df_cl$p_num <= p_seuil, , drop = FALSE]
+      df_sig <- df_sig[order(df_sig$chi2_num, decreasing = TRUE), , drop = FALSE]
+    }
+    df_pick <- if (nrow(df_sig) > 0L) df_sig else df_cl
+    df_pick <- utils::head(df_pick, .as_int_auto_chd(top_n, default = 20L, min_value = 1L))
+    if (!nrow(df_pick)) {
+      align_by_class[[class_label]] <- 0
+      next
+    }
+
+    term_coords <- coords_termes[match(df_pick$Terme, rownames(coords_termes)), , drop = FALSE]
+    term_norms <- sqrt(rowSums(term_coords^2))
+    weights <- sqrt(pmax(df_pick$chi2_num, 0))
+    good <- is.finite(term_norms) & term_norms > 0 & is.finite(weights) & weights > 0
+    if (!any(good)) {
+      align_by_class[[class_label]] <- 0
+      next
+    }
+
+    term_coords <- term_coords[good, , drop = FALSE]
+    term_norms <- term_norms[good]
+    weights <- weights[good]
+    cosines <- as.numeric((term_coords %*% class_vec) / (term_norms * class_norm))
+    cosines[!is.finite(cosines) | is.na(cosines)] <- -1
+    cosines <- pmax(-1, pmin(1, cosines))
+    align_by_class[[class_label]] <- .borner_score_auto_chd(stats::weighted.mean((cosines + 1) / 2, w = weights))
+  }
+
+  a_align <- .borner_score_auto_chd(mean(align_by_class))
+  a_score <- .moyenne_geometrique_scores_auto_chd(c(a_theta, a_dist, a_rad, a_align))
+
+  list(
+    A_theta = a_theta,
+    A_dist = a_dist,
+    A_rad = a_rad,
+    A_align = a_align,
+    A = a_score,
+    align_by_class = align_by_class
+  )
+}
+
+evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
+                                                               partition_obj,
+                                                               stats_mode = c("vectorise", "classique"),
+                                                               top_n_diffusion = 20L,
+                                                               top_n_afc = 20L,
+                                                               p_seuil = 0.05,
+                                                               afc_max_termes = 400L) {
+  stats_mode <- match.arg(stats_mode)
+  if (is.null(partition_obj) || is.null(partition_obj$classes)) {
+    stop("Auto AFC discriminante: partition invalide.")
+  }
+
+  classes <- suppressWarnings(as.integer(partition_obj$classes))
+  ok <- is.finite(classes) & !is.na(classes) & classes > 0L
+  counts <- table(classes[ok])
+  total_assigned <- sum(counts)
+  pct <- if (total_assigned > 0) 100 * counts / total_assigned else counts
+
+  fn_stats <- get0("construire_stats_classes_iramuteq", mode = "function", inherits = TRUE)
+  if (!is.function(fn_stats)) {
+    stop("Auto AFC discriminante: construire_stats_classes_iramuteq() est introuvable.")
+  }
+  fn_afc <- get0("executer_afc_classes", mode = "function", inherits = TRUE)
+  if (!is.function(fn_afc)) {
+    stop("Auto AFC discriminante: executer_afc_classes() est introuvable.")
+  }
+
+  res_stats_df <- fn_stats(
+    dfm_obj = dfm_obj,
+    classes = classes,
+    max_p = 1,
+    stats_mode = stats_mode
+  )
+
+  h_value <- calculer_homogeneite_auto_chd(dfm_obj, classes)
+  d_value <- calculer_distinction_auto_chd(dfm_obj, classes)
+  diffusion <- calculer_diffusion_auto_chd(
+    dfm_obj = dfm_obj,
+    classes = classes,
+    stats_mode = stats_mode,
+    top_n = top_n_diffusion,
+    p_seuil = p_seuil,
+    res_stats_df = res_stats_df
+  )
+  l_value <- diffusion$value
+  b_value <- .borner_score_auto_chd(mean(c(h_value, d_value, l_value)))
+
+  termes_cibles <- .selectionner_termes_caracteristiques_afc_auto_chd(
+    res_stats_df = res_stats_df,
+    top_n = top_n_afc,
+    p_seuil = p_seuil
+  )
+
+  afc_obj <- fn_afc(
+    dfm_obj = dfm_obj,
+    groupes = classes,
+    termes_cibles = if (length(termes_cibles) >= 2L) termes_cibles else NULL,
+    max_termes = .as_int_auto_chd(
+      if (length(termes_cibles) >= 2L) min(length(termes_cibles), afc_max_termes) else afc_max_termes,
+      default = 400L,
+      min_value = 2L
+    ),
+    seuil_p = p_seuil,
+    rv = NULL
+  )
+
+  afc_scores <- calculer_score_afc_discriminant_auto_chd(
+    afc_obj = afc_obj,
+    res_stats_df = res_stats_df,
+    top_n = top_n_afc,
+    p_seuil = p_seuil
+  )
+
+  metrics <- data.frame(
+    partition = paste0("P", partition_obj$k),
+    k = as.integer(partition_obj$k),
+    n_segments_assignes = as.integer(total_assigned),
+    n_segments_non_assignes = as.integer(sum(!ok)),
+    H = .borner_score_auto_chd(h_value),
+    D = .borner_score_auto_chd(d_value),
+    L = .borner_score_auto_chd(l_value),
+    B = .borner_score_auto_chd(b_value),
+    A_theta = .borner_score_auto_chd(afc_scores$A_theta),
+    A_dist = .borner_score_auto_chd(afc_scores$A_dist),
+    A_rad = .borner_score_auto_chd(afc_scores$A_rad),
+    A_align = .borner_score_auto_chd(afc_scores$A_align),
+    A = .borner_score_auto_chd(afc_scores$A),
+    classes_effectifs = .formatter_resume_classes_auto_chd(counts, digits = 0L),
+    classes_pourcentages = .formatter_resume_classes_auto_chd(pct, digits = 2L, suffix = "%"),
+    stringsAsFactors = FALSE
+  )
+
+  list(
+    partition = partition_obj,
+    metrics = metrics,
+    stats = res_stats_df,
+    diffusion_by_class = diffusion$by_class,
+    afc = afc_obj,
+    afc_align_by_class = afc_scores$align_by_class,
+    termes_cibles = termes_cibles
+  )
+}
+
+selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
+                                                         dfm_obj,
+                                                         k_max = NULL,
+                                                         stats_mode = c("vectorise", "classique"),
+                                                         top_n_diffusion = 20L,
+                                                         top_n_afc = 20L,
+                                                         p_seuil = 0.05,
+                                                         afc_max_termes = 400L) {
+  stats_mode <- match.arg(stats_mode)
+
+  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_max = k_max)
+  if (!length(partitions)) {
+    stop("Auto AFC discriminante: aucune partition exploitable entre 2 classes et la limite demandee.")
+  }
+
+  evaluations <- lapply(partitions, function(partition_obj) {
+    evaluer_partition_auto_afc_discriminante_iramuteq(
+      dfm_obj = dfm_obj,
+      partition_obj = partition_obj,
+      stats_mode = stats_mode,
+      top_n_diffusion = top_n_diffusion,
+      top_n_afc = top_n_afc,
+      p_seuil = p_seuil,
+      afc_max_termes = afc_max_termes
+    )
+  })
+
+  metrics_df <- do.call(rbind, lapply(evaluations, `[[`, "metrics"))
+  metrics_df <- metrics_df[order(metrics_df$k), , drop = FALSE]
+  metrics_df$G <- NA_real_
+  metrics_df$GA <- NA_real_
+
+  if (nrow(metrics_df) > 1L) {
+    b_values <- suppressWarnings(as.numeric(metrics_df$B))
+    a_values <- suppressWarnings(as.numeric(metrics_df$A))
+    gains_b <- rep(NA_real_, length(b_values))
+    gains_a <- rep(NA_real_, length(a_values))
+    gains_b[-1L] <- b_values[-1L] - b_values[-length(b_values)]
+    gains_a[-1L] <- a_values[-1L] - a_values[-length(a_values)]
+    metrics_df$G <- gains_b
+    metrics_df$GA <- gains_a
+  }
+
+  a_values <- suppressWarnings(as.numeric(metrics_df$A))
+  a_theta_values <- suppressWarnings(as.numeric(metrics_df$A_theta))
+  d_values <- suppressWarnings(as.numeric(metrics_df$D))
+  b_values <- suppressWarnings(as.numeric(metrics_df$B))
+  a_scores <- ifelse(is.finite(a_values) & !is.na(a_values), a_values, -Inf)
+  if (!any(is.finite(a_scores) & a_scores > -Inf)) {
+    stop("Auto AFC discriminante: aucun score AFC exploitable n'a pu etre calcule.")
+  }
+
+  selected_idx <- which.max(a_scores)
+  if (length(selected_idx) > 1L) {
+    selected_idx <- selected_idx[[1]]
+  }
+  for (idx in seq_len(nrow(metrics_df))) {
+    if (idx == selected_idx) next
+    better_a <- is.finite(a_values[[idx]]) && is.finite(a_values[[selected_idx]]) && (a_values[[idx]] > a_values[[selected_idx]] + 1e-12)
+    equal_a <- is.finite(a_values[[idx]]) && is.finite(a_values[[selected_idx]]) && abs(a_values[[idx]] - a_values[[selected_idx]]) <= 1e-12
+    better_theta <- is.finite(a_theta_values[[idx]]) && (!is.finite(a_theta_values[[selected_idx]]) || a_theta_values[[idx]] > a_theta_values[[selected_idx]] + 1e-12)
+    equal_theta <- is.finite(a_theta_values[[idx]]) && is.finite(a_theta_values[[selected_idx]]) && abs(a_theta_values[[idx]] - a_theta_values[[selected_idx]]) <= 1e-12
+    better_d <- is.finite(d_values[[idx]]) && (!is.finite(d_values[[selected_idx]]) || d_values[[idx]] > d_values[[selected_idx]] + 1e-12)
+    equal_d <- is.finite(d_values[[idx]]) && is.finite(d_values[[selected_idx]]) && abs(d_values[[idx]] - d_values[[selected_idx]]) <= 1e-12
+    better_b <- is.finite(b_values[[idx]]) && (!is.finite(b_values[[selected_idx]]) || b_values[[idx]] > b_values[[selected_idx]] + 1e-12)
+
+    if (better_a || (equal_a && better_theta) || (equal_a && equal_theta && better_d) || (equal_a && equal_theta && equal_d && better_b)) {
+      selected_idx <- idx
+    }
+  }
+
+  metrics_df$selection <- ifelse(seq_len(nrow(metrics_df)) == selected_idx, "oui", "non")
+
+  selected_partition <- partitions[[selected_idx]]
+  selected_evaluation <- evaluations[[selected_idx]]
+  k_max_tested <- suppressWarnings(max(as.integer(metrics_df$k), na.rm = TRUE))
+  k_max_requested <- suppressWarnings(as.integer(chd_obj$auto_k_requested %||% k_max[[1]] %||% k_max))
+  if (!length(k_max_requested) || is.na(k_max_requested) || !is.finite(k_max_requested)) {
+    k_max_requested <- as.integer(k_max_tested)
+  }
+  k_max_requested <- max(2L, k_max_requested)
+
+  list(
+    mode = "auto_afc_discriminante",
+    mode_label = "Auto AFC discriminante",
+    score_column = "A",
+    score_label = "Score AFC discriminant A",
+    score_plot_title = "Selection AFC discriminante du nombre de classes",
+    classes = selected_partition$classes,
+    classes_raw = selected_partition$classes_raw,
+    terminales = selected_partition$terminales,
+    k_selected = as.integer(metrics_df$k[[selected_idx]]),
+    k_max_requested = as.integer(k_max_requested),
+    k_max_tested = as.integer(k_max_tested),
+    k_max_reduced = isTRUE(k_max_tested < k_max_requested),
+    k_reduction_reason = chd_obj$auto_k_reduction_reason %||% NULL,
+    evaluation = metrics_df,
+    selected_metrics = metrics_df[selected_idx, , drop = FALSE],
+    selected_stats = selected_evaluation$stats,
+    selected_diffusion_by_class = selected_evaluation$diffusion_by_class,
+    selected_afc = selected_evaluation$afc,
+    selected_afc_align_by_class = selected_evaluation$afc_align_by_class,
+    selected_termes_cibles = selected_evaluation$termes_cibles,
+    partitions = partitions
+  )
+}
+
+tracer_scores_auto_chd_iramuteq <- function(metrics_df,
+                                            selected_k = NULL,
+                                            score_col = "B",
+                                            score_label = "Score structurel B",
+                                            plot_title = "Selection automatique du nombre de classes") {
   if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
     plot.new()
     text(0.5, 0.5, "Aucune partition automatique a afficher.", cex = 1.0)
@@ -515,7 +954,8 @@ tracer_scores_auto_chd_iramuteq <- function(metrics_df, selected_k = NULL) {
   }
 
   x <- suppressWarnings(as.integer(metrics_df$k))
-  y <- suppressWarnings(as.numeric(metrics_df$B))
+  score_values <- metrics_df[[score_col]]
+  y <- suppressWarnings(as.numeric(score_values))
   ok <- is.finite(x) & !is.na(x) & is.finite(y) & !is.na(y)
   x <- x[ok]
   y <- y[ok]
@@ -536,9 +976,9 @@ tracer_scores_auto_chd_iramuteq <- function(metrics_df, selected_k = NULL) {
     lwd = 2,
     col = "#8d1b1d",
     xlab = "Nombre de classes k",
-    ylab = "Score structurel B",
+    ylab = score_label,
     ylim = c(y_min, y_max),
-    main = "Selection automatique du nombre de classes"
+    main = plot_title
   )
   grid(col = "#d6c8b8", lty = "dotted")
 
@@ -585,10 +1025,17 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
 
   metrics_df <- selection_obj$evaluation
   selected_df <- selection_obj$selected_metrics
+  score_col <- as.character(selection_obj$score_column %||% "B")
+  score_label <- as.character(selection_obj$score_label %||% "Score structurel B")
+  score_plot_title <- as.character(selection_obj$score_plot_title %||% "Selection automatique du nombre de classes")
 
   metrics_csv <- file.path(output_dir, "auto_chd_metrics.csv")
   summary_json <- file.path(output_dir, "auto_chd_summary.json")
-  score_png <- file.path(output_dir, "auto_chd_b_score.png")
+  score_png <- if (identical(selection_obj$mode %||% "auto", "auto_afc_discriminante")) {
+    file.path(output_dir, "auto_chd_afc_score.png")
+  } else {
+    file.path(output_dir, "auto_chd_b_score.png")
+  }
 
   .write_metrics_csv_auto_chd(metrics_df, metrics_csv)
 
@@ -601,7 +1048,11 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
   })
 
   payload <- list(
-    mode = "auto",
+    mode = selection_obj$mode %||% "auto",
+    mode_label = selection_obj$mode_label %||% "Auto CHD",
+    score_column = score_col,
+    score_label = score_label,
+    score_plot_title = score_plot_title,
     selected_k = selection_obj$k_selected %||% NA_integer_,
     k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
     k_max_tested = selection_obj$k_max_tested %||% NA_integer_,
@@ -618,7 +1069,13 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
   jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")
 
   grDevices::png(score_png, width = 1800, height = 1100, res = 180)
-  tracer_scores_auto_chd_iramuteq(metrics_df, selected_k = selection_obj$k_selected)
+  tracer_scores_auto_chd_iramuteq(
+    metrics_df,
+    selected_k = selection_obj$k_selected,
+    score_col = score_col,
+    score_label = score_label,
+    plot_title = score_plot_title
+  )
   grDevices::dev.off()
 
   list(
