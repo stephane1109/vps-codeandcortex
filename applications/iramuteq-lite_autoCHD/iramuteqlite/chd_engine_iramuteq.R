@@ -96,6 +96,14 @@ lancer_moteur_chd_iramuteq <- function(
   classif_mode <- match.arg(classif_mode)
   svd_method <- match.arg(svd_method)
   auto_stats_mode <- match.arg(auto_stats_mode)
+  auto_k_min_effective <- suppressWarnings(as.integer(auto_k_min[[1]] %||% auto_k_min))
+  if (!length(auto_k_min_effective) || is.na(auto_k_min_effective) || !is.finite(auto_k_min_effective)) {
+    auto_k_min_effective <- 2L
+  }
+  auto_k_min_effective <- max(2L, auto_k_min_effective)
+  if (identical(classes_mode, "auto_afc_discriminante")) {
+    auto_k_min_effective <- 3L
+  }
 
   calculer_chd_iramuteq_fn <- .obtenir_fonction_iramuteq("calculer_chd_iramuteq", env = environment())
   reconstruire_classes_terminales_iramuteq_fn <- .obtenir_fonction_iramuteq("reconstruire_classes_terminales_iramuteq", env = environment())
@@ -154,7 +162,7 @@ lancer_moteur_chd_iramuteq <- function(
           rscripts_dir = rscripts_dir,
           max_formes = config_variant$iramuteq_max_formes %||% max_formes,
           auto_stats_mode = config_variant$iramuteq_stats_mode %||% auto_stats_mode,
-          auto_k_min = config_variant$iramuteq_auto_k_min %||% auto_k_min,
+          auto_k_min = config_variant$iramuteq_auto_k_min %||% auto_k_min_effective,
           auto_top_n_diffusion = auto_top_n_diffusion,
           auto_top_n_afc = auto_top_n_afc,
           auto_p_seuil = auto_p_seuil
@@ -221,7 +229,7 @@ lancer_moteur_chd_iramuteq <- function(
       auto_selection <- selection_afc_discriminante_classes_iramuteq_fn(
         chd_obj = chd_obj,
         dfm_obj = dfm_utilise,
-        k_min = auto_k_min,
+        k_min = auto_k_min_effective,
         k_max = k,
         stats_mode = auto_stats_mode,
         top_n_diffusion = auto_top_n_diffusion,
@@ -232,7 +240,7 @@ lancer_moteur_chd_iramuteq <- function(
       auto_selection <- selection_automatique_classes_iramuteq_fn(
         chd_obj = chd_obj,
         dfm_obj = dfm_utilise,
-        k_min = auto_k_min,
+        k_min = auto_k_min_effective,
         k_max = k,
         stats_mode = auto_stats_mode,
         top_n_diffusion = auto_top_n_diffusion,
@@ -248,13 +256,13 @@ lancer_moteur_chd_iramuteq <- function(
       }
       stop("IRaMuTeQ-lite Auto CHD n'a pas pu retenir au moins 2 classes exploitables.")
     }
-    if (is.finite(auto_k_min) && !is.na(auto_k_min) && auto_k_min >= 2L && length(classes_valides) < auto_k_min) {
+    if (is.finite(auto_k_min_effective) && !is.na(auto_k_min_effective) && auto_k_min_effective >= 2L && length(classes_valides) < auto_k_min_effective) {
       if (identical(classes_mode, "auto_afc_discriminante")) {
         stop(paste0(
           "IRaMuTeQ-lite Analyse discriminante optimisee a retenu ",
           length(classes_valides),
           " classes reelles, sous la borne minimale demandee (",
-          auto_k_min,
+          auto_k_min_effective,
           ")."
         ))
       }
@@ -262,7 +270,7 @@ lancer_moteur_chd_iramuteq <- function(
         "IRaMuTeQ-lite Auto CHD a retenu ",
         length(classes_valides),
         " classes reelles, sous la borne minimale demandee (",
-        auto_k_min,
+        auto_k_min_effective,
         ")."
       ))
     }

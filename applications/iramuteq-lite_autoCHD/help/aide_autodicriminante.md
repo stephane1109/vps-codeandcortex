@@ -7,7 +7,7 @@ Dans cette version, le mode **Analyse discriminante optimisee** ne teste plus un
 Il cherche un resultat plus discriminant avec une strategie ciblee :
 
 - le **plafond de classes** reste celui choisi dans l'interface ;
-- la **borne minimale d'exploration** reste celle choisie dans l'interface ;
+- la **borne minimale d'exploration** n'est pas demandee a l'utilisateur ;
 - le **filtrage morphosyntaxique** est force sur `NOM + VER` ;
 - le verbe `etre` est exclu ;
 - `min_docfreq` varie seulement de `2` a `5`.
@@ -34,12 +34,13 @@ Dans ce mode, l'utilisateur **ne choisit pas le `k` final**.
 
 L'application retient automatiquement la partition la plus discriminante.
 
-L'utilisateur fixe seulement le cadre de recherche :
+L'utilisateur fixe seulement le **plafond** de recherche :
 
-- `k_min` : borne minimale des partitions autorisees dans la comparaison ;
 - `k_iramuteq` : borne maximale des partitions explorees.
 
-Autrement dit, si le cadre explore est `P3...P10`, le resultat final peut etre `P3`, `P4`, `P5`... ou `P10`, selon le meilleur compromis discriminant.
+La borne minimale est **interne au mode** et fixee a `3` classes.
+
+Autrement dit, si la limite choisie est `10`, l'application compare automatiquement `P3...P10`, puis retient la partition la plus discriminante.
 
 ## Parametres fixes
 
@@ -87,7 +88,6 @@ Pour chaque valeur de `min_docfreq`, le mode lance une CHD normale jusqu'au `k` 
 
 Il conserve ensuite les partitions possibles :
 
-- `P2`
 - `P3`
 - `P4`
 - ...

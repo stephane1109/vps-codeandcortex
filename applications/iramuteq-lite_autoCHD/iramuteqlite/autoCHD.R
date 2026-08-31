@@ -1023,7 +1023,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
 
   partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
   if (!length(partitions)) {
-    stop("Analyse discriminante optimisee: aucune partition exploitable dans l'intervalle de classes demande.")
+    stop("Analyse discriminante optimisee: aucune partition exploitable entre 3 classes et la borne maximale demandee.")
   }
   partitions <- partitions[order(
     vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
@@ -1098,7 +1098,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   if (!length(k_min_requested) || is.na(k_min_requested) || !is.finite(k_min_requested)) {
     k_min_requested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
   }
-  k_min_requested <- max(2L, k_min_requested)
+  k_min_requested <- max(3L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
@@ -1357,7 +1357,11 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
 }
 
 .construire_kmax_auto_discriminante <- function(config_base, search_profile = "complet") {
-  k_min <- .as_int_auto_chd(config_base$iramuteq_auto_k_min, default = 3L, min_value = 2L)
+  k_min <- if (identical(search_profile, "ciblee")) {
+    3L
+  } else {
+    .as_int_auto_chd(config_base$iramuteq_auto_k_min, default = 3L, min_value = 2L)
+  }
   k_max <- .as_int_auto_chd(config_base$k_iramuteq, default = 10L, min_value = k_min)
   if (k_max < k_min) k_max <- k_min
 

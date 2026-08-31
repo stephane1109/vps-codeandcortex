@@ -2177,23 +2177,25 @@ function renderClassesModeCard(card) {
   const isAuto = modeField.value === "auto";
   const isAutoAfcDiscriminante = modeField.value === "auto_afc_discriminante";
   const usesAutoBounds = isAuto || isAutoAfcDiscriminante;
+  const usesUserDefinedMinBound = isAuto;
 
   if (autoKMinField instanceof HTMLElement) {
-    autoKMinField.hidden = !usesAutoBounds;
-    autoKMinField.style.display = usesAutoBounds ? "" : "none";
+    autoKMinField.hidden = !usesUserDefinedMinBound;
+    autoKMinField.style.display = usesUserDefinedMinBound ? "" : "none";
   }
 
   const autoMinValue = autoKMinInput instanceof HTMLInputElement
     ? Math.max(2, Number(autoKMinInput.value) || 3)
     : 2;
+  const effectiveAutoMin = isAutoAfcDiscriminante ? 3 : autoMinValue;
   if (autoKMinInput instanceof HTMLInputElement) {
     autoKMinInput.value = String(autoMinValue);
   }
   if (kInput instanceof HTMLInputElement) {
     const fallbackMax = usesAutoBounds ? 10 : 3;
-    const normalizedMax = Math.max(usesAutoBounds ? autoMinValue : 2, Number(kInput.value) || fallbackMax);
+    const normalizedMax = Math.max(usesAutoBounds ? effectiveAutoMin : 2, Number(kInput.value) || fallbackMax);
     kInput.value = String(normalizedMax);
-    kInput.min = String(usesAutoBounds ? autoMinValue : 2);
+    kInput.min = String(usesAutoBounds ? effectiveAutoMin : 2);
     if (autoKMinInput instanceof HTMLInputElement) {
       autoKMinInput.max = String(normalizedMax);
     }
@@ -2210,13 +2212,13 @@ function renderClassesModeCard(card) {
     kHelp.textContent = isAuto
       ? `La CHD est calculee jusqu'a cette limite puis chaque partition P${autoMinValue}...Pk est evaluee automatiquement.`
       : isAutoAfcDiscriminante
-        ? `La CHD est calculee jusqu'a cette limite puis les partitions P${autoMinValue}...Pk sont comparees via l'AFC et les termes a fort chi2 pour retenir le meilleur compromis discriminant.`
+        ? "La CHD est calculee jusqu'a cette limite puis l'application compare automatiquement les partitions a partir de 3 classes pour retenir le meilleur compromis discriminant."
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
   if (autoKMinHelp instanceof HTMLElement) {
-    autoKMinHelp.textContent = usesAutoBounds
+    autoKMinHelp.textContent = isAuto
       ? "Les partitions en dessous de cette borne sont ignorees pendant la selection automatique. Le k final reste choisi automatiquement."
-      : "Cette borne ne s'applique qu'aux modes automatiques.";
+      : "Cette borne ne s'applique qu'au mode Auto CHD.";
   }
 }
 
@@ -2226,7 +2228,8 @@ function renderClassesModeCards(scope = document) {
 
 function resolveClassesModeConfig() {
   const classesMode = document.getElementById("classesMode").value;
-  const autoKMin = Math.max(2, Number(document.getElementById("kIramuteqMinAuto")?.value) || 3);
+  const userAutoKMin = Math.max(2, Number(document.getElementById("kIramuteqMinAuto")?.value) || 3);
+  const autoKMin = classesMode === "auto_afc_discriminante" ? 3 : userAutoKMin;
   const kValue = Number(document.getElementById("kIramuteq").value);
   const effectiveK = classesMode === "manuel"
     ? (Number.isFinite(kValue) && kValue >= 2 ? kValue : 3)
@@ -15261,7 +15264,7 @@ async function startAnalysis(analysisKind = "chd") {
       `[info] Démarrage trajectoire lexicale : variable=${suiviVariableName || "auto"}, entretiens=${suiviSelectedUnits.length}, ${coucheLabel}, unité=${suiviLexicalUnitLabel}, prétraitement=${suiviPreprocessingLabel}${suiviFilterVariableName && suiviFilterModality ? `, filtre=${suiviFilterVariableName}=${suiviFilterModality}` : ""}`
     );
   } else {
-    const autoKMin = Math.max(2, Number(document.getElementById("kIramuteqMinAuto")?.value) || 3);
+    const { autoKMin } = resolveClassesModeConfig();
     const classesCountLabel = classesMode === "auto" || classesMode === "auto_afc_discriminante"
       ? "intervalleClasses"
       : "classes";
