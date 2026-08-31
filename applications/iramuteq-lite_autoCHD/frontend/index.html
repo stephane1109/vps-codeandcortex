@@ -195,6 +195,7 @@
 
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
               <button class="sub-nav-link is-active" data-subtab-target="dendrogramme" type="button">Dendrogramme</button>
+              <button class="sub-nav-link" data-subtab-target="auto_discriminante" type="button">Analyse discriminante optimisee</button>
               <button class="sub-nav-link" data-subtab-target="auto_chd" type="button">Auto CHD</button>
               <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
               <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
@@ -223,6 +224,41 @@
                     </select>
                   </div>
                   <div id="chdDendrogramme" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="auto_discriminante" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Selection</p>
+                      <h3>Analyse discriminante optimisee</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">
+                    Ce mode teste plusieurs configurations ciblees du meme corpus, puis retient un seul meilleur compromis.
+                  </p>
+                  <p class="section-copy">
+                    Le compromis retenu est celui qui oppose le mieux les classes sur l'AFC a partir des termes caracteristiques significatifs.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <h3>Meilleur compromis retenu</h3>
+                  <div id="autoDiscriminanteSummary" class="result-pane"></div>
+                </article>
+
+                <article class="card">
+                  <h3>Comparaison des compromis testes</h3>
+                  <div id="autoDiscriminantePlot" class="result-pane"></div>
+                </article>
+
+                <article class="card">
+                  <h3>Tableau des configurations testees</h3>
+                  <div id="autoDiscriminanteTable" class="result-pane"></div>
                 </article>
               </div>
             </section>
@@ -416,6 +452,7 @@
             <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
               <button class="local-tab-button" data-help-subtab-target="help_auto_chd" type="button">Auto CHD</button>
+              <button class="local-tab-button" data-help-subtab-target="help_auto_discriminante" type="button">Analyse discriminante optimisee</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
             </div>
 
@@ -431,6 +468,14 @@
               <article class="card prose-card">
                 <div id="helpAutoChdMarkdownContent" class="markdown-content">
                   Chargement de <code>help/autochd.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_auto_discriminante" hidden>
+              <article class="card prose-card">
+                <div id="helpAutoDiscriminanteMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/analyse_discriminante_optimisee.md</code>...
                 </div>
               </article>
             </section>
@@ -523,12 +568,12 @@
                 <select id="classesMode" data-classes-mode-select>
                   <option value="manuel">Manuel</option>
                   <option value="auto">Automatique</option>
-                  <option value="auto_afc_discriminante">CHD optimisee par AFC</option>
+                  <option value="auto_afc_discriminante">Analyse discriminante optimisee</option>
                 </select>
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
                   vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
-                  En mode CHD optimisee par AFC, l'application compare les partitions de la meme CHD
+                  En mode Analyse discriminante optimisee, l'application compare les partitions de la meme CHD
                   a partir des coordonnees AFC et des termes caracteristiques a fort chi2.
                 </p>
               </div>

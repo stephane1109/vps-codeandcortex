@@ -894,7 +894,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
                                                                afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
-    stop("CHD optimisee par AFC: partition invalide.")
+    stop("Analyse discriminante optimisee: partition invalide.")
   }
 
   classes <- suppressWarnings(as.integer(partition_obj$classes))
@@ -905,11 +905,11 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
 
   fn_stats <- get0("construire_stats_classes_iramuteq", mode = "function", inherits = TRUE)
   if (!is.function(fn_stats)) {
-    stop("CHD optimisee par AFC: construire_stats_classes_iramuteq() est introuvable.")
+    stop("Analyse discriminante optimisee: construire_stats_classes_iramuteq() est introuvable.")
   }
   fn_afc <- get0("executer_afc_classes", mode = "function", inherits = TRUE)
   if (!is.function(fn_afc)) {
-    stop("CHD optimisee par AFC: executer_afc_classes() est introuvable.")
+    stop("Analyse discriminante optimisee: executer_afc_classes() est introuvable.")
   }
 
   res_stats_df <- fn_stats(
@@ -1009,7 +1009,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
 
   partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
   if (!length(partitions)) {
-    stop("CHD optimisee par AFC: aucune partition exploitable dans l'intervalle de classes demande.")
+    stop("Analyse discriminante optimisee: aucune partition exploitable dans l'intervalle de classes demande.")
   }
   partitions <- partitions[order(
     vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
@@ -1049,7 +1049,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   b_values <- suppressWarnings(as.numeric(metrics_df$B))
   a_scores <- ifelse(is.finite(a_values) & !is.na(a_values), a_values, -Inf)
   if (!any(is.finite(a_scores) & a_scores > -Inf)) {
-    stop("CHD optimisee par AFC: aucun score AFC exploitable n'a pu etre calcule.")
+    stop("Analyse discriminante optimisee: aucun score AFC exploitable n'a pu etre calcule.")
   }
 
   selected_idx <- which.max(a_scores)
@@ -1089,7 +1089,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
     stop(paste0(
-      "CHD optimisee par AFC: la partition retenue ne respecte pas la borne minimale demandee (",
+      "Analyse discriminante optimisee: la partition retenue ne respecte pas la borne minimale demandee (",
       k_min_requested,
       " classes reelles minimum)."
     ))
@@ -1097,10 +1097,10 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
 
   list(
     mode = "auto_afc_discriminante",
-    mode_label = "CHD optimisee par AFC",
+    mode_label = "Analyse discriminante optimisee",
     score_column = "A",
     score_label = "Score AFC discriminant A",
-    score_plot_title = "Selection optimisee du nombre de classes par AFC",
+    score_plot_title = "Selection du meilleur compromis discriminant",
     classes = selected_partition$classes,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,

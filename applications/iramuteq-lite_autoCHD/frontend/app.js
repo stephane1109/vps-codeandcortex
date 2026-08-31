@@ -101,6 +101,7 @@ const annotationDictTable = document.getElementById("annotationDictTable");
 const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpAutoChdMarkdownContent = document.getElementById("helpAutoChdMarkdownContent");
+const helpAutoDiscriminanteMarkdownContent = document.getElementById("helpAutoDiscriminanteMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
@@ -2142,7 +2143,7 @@ function renderClassesModeCard(card) {
     kHelp.textContent = isAuto
       ? `La CHD est calculee jusqu'a cette limite puis chaque partition P${autoMinValue}...Pk est evaluee automatiquement.`
       : isAutoAfcDiscriminante
-        ? `La CHD est calculee jusqu'a cette limite puis les partitions P${autoMinValue}...Pk sont comparees via l'AFC et les termes a fort chi2 pour retenir les classes les plus opposees.`
+        ? `La CHD est calculee jusqu'a cette limite puis les partitions P${autoMinValue}...Pk sont comparees via l'AFC et les termes a fort chi2 pour retenir le meilleur compromis discriminant.`
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
   if (autoKMinHelp instanceof HTMLElement) {
@@ -8667,6 +8668,9 @@ function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
   } else {
     containers = [
       resultContainers.chdDendrogramme,
+      resultContainers.autoDiscriminanteSummary,
+      resultContainers.autoDiscriminantePlot,
+      resultContainers.autoDiscriminanteTable,
       resultContainers.autoChdSummary,
       resultContainers.autoChdPlot,
       resultContainers.autoChdTable,
@@ -11098,7 +11102,7 @@ function renderAutoChdSummary(container, payload) {
 
   const metrics = isAfcMode
     ? [
-        ["Mode", payload?.mode_label || "CHD optimisee par AFC"],
+        ["Mode", payload?.mode_label || "Analyse discriminante optimisee"],
         ["Partition retenue", `P${selectedK}`],
         ["k min demande", Number.isFinite(requestedMin) ? String(requestedMin) : "N/A"],
         ["k min teste", Number.isFinite(testedMin) ? String(testedMin) : "N/A"],
@@ -11287,6 +11291,25 @@ function renderAutoDiscriminanteSummary(container, payload) {
     container.appendChild(note);
   }
 
+  const compromiseNote = document.createElement("p");
+  compromiseNote.className = "field-help";
+  compromiseNote.textContent = `Meilleur compromis retenu : configuration ${selected.configuration_id || "N/A"}, partition P${selectedK}, score A = ${formatTableNumber(selected.A, 4)}.`;
+  container.appendChild(compromiseNote);
+
+  const compromiseVariables = [
+    `profil morpho=${formatSummaryValue(selected.profil_morpho || "N/A")}`,
+    `min_docfreq=${formatSummaryValue(selected.min_docfreq)}`,
+    `lemmes=${formatSummaryValue(selected.lexique_utiliser_lemmes || "N/A")}`,
+    `stopwords=${formatSummaryValue(selected.retirer_stopwords || "N/A")}`,
+    `ponctuation=${formatSummaryValue(selected.supprimer_ponctuation || "N/A")}`,
+    `chiffres=${formatSummaryValue(selected.supprimer_chiffres || "N/A")}`,
+    `k max teste=${formatSummaryValue(selected.k_max_explore)}`
+  ];
+  const variablesNote = document.createElement("p");
+  variablesNote.className = "field-help";
+  variablesNote.textContent = `Variables du compromis : ${compromiseVariables.join(" ; ")}.`;
+  container.appendChild(variablesNote);
+
   const counts = String(selected.classes_effectifs || "").trim();
   if (counts) {
     const note = document.createElement("p");
@@ -11314,7 +11337,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const scoreNote = document.createElement("p");
   scoreNote.className = "field-help";
-  scoreNote.textContent = "Le mode CHD optimisee par AFC garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et les termes significatifs a plus fort chi2, jusqu'a 10 par classe, s'opposent le mieux sur l'AFC.";
+  scoreNote.textContent = "Le mode Analyse discriminante optimisee garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et les termes significatifs a plus fort chi2, jusqu'a 10 par classe, s'opposent le mieux sur l'AFC.";
   container.appendChild(scoreNote);
 
   const topTermsByClass = payload?.selected_termes_cibles_par_classe && typeof payload.selected_termes_cibles_par_classe === "object"
@@ -11445,7 +11468,7 @@ function renderAutoDiscriminanteMetrics(container, parsed, options = {}) {
   clearContainer(container);
 
   if (!parsed || !parsed.headers.length) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau CHD optimisee par AFC disponible."));
+    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Analyse discriminante optimisee disponible."));
     return;
   }
 
@@ -11490,13 +11513,13 @@ async function renderAutoDiscriminanteExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("auto_discriminante_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("auto_discriminante_metrics.csv")]);
   const plotFile = findFile(index, [(path) => path.endsWith("auto_discriminante_score.png")]);
-  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode CHD optimisee par AFC.";
+  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Analyse discriminante optimisee.";
 
   if (!summaryFile && !metricsFile && !plotFile) {
     setContainerEmptyState(resultContainers.autoDiscriminanteSummary, manualModeMessage);
     setContainerEmptyState(resultContainers.autoDiscriminantePlot, manualModeMessage);
     setContainerEmptyState(resultContainers.autoDiscriminanteTable, manualModeMessage);
-    return;
+    return { active: false };
   }
 
   if (summaryFile) {
@@ -11504,36 +11527,38 @@ async function renderAutoDiscriminanteExports(index) {
       const payload = JSON.parse(await summaryFile.text());
       renderAutoDiscriminanteSummary(resultContainers.autoDiscriminanteSummary, payload);
     } catch (error) {
-      setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Impossible de lire le resume CHD optimisee par AFC.");
+      setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Impossible de lire le resume Analyse discriminante optimisee.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
     }
   } else {
-    setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Le resume CHD optimisee par AFC est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Le resume Analyse discriminante optimisee est absent du dossier d'exports.");
   }
 
   renderImage(
     resultContainers.autoDiscriminantePlot,
     plotFile,
     "Comparaison des scores d'opposition AFC par configuration",
-    "Le graphique CHD optimisee par AFC est absent du dossier d'exports."
+    "Le graphique Analyse discriminante optimisee est absent du dossier d'exports."
   );
-  makeResultImagePreviewable(resultContainers.autoDiscriminantePlot, "Score AFC discriminant A", "CHD optimisee par AFC");
+  makeResultImagePreviewable(resultContainers.autoDiscriminantePlot, "Score AFC discriminant A", "Analyse discriminante optimisee");
 
   if (!metricsFile) {
-    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Le tableau CHD optimisee par AFC est absent du dossier d'exports.");
-    return;
+    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Le tableau Analyse discriminante optimisee est absent du dossier d'exports.");
+    return { active: true };
   }
 
   try {
     const parsed = parseCsv(await metricsFile.text());
     renderAutoDiscriminanteMetrics(resultContainers.autoDiscriminanteTable, parsed, {
       title: "auto_discriminante_metrics.csv",
-      emptyMessage: "Le tableau CHD optimisee par AFC est vide."
+      emptyMessage: "Le tableau Analyse discriminante optimisee est vide."
     });
   } catch (error) {
-    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Impossible de lire les scores CHD optimisee par AFC.");
+    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Impossible de lire les scores Analyse discriminante optimisee.");
     log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
   }
+
+  return { active: true };
 }
 
 async function renderAutoChdExports(index) {
@@ -11544,13 +11569,14 @@ async function renderAutoChdExports(index) {
     (path) => path.endsWith("auto_chd_b_score.png")
   ]);
   const manualModeMessage = "Cette analyse CHD n'a pas utilise un mode automatique de selection du nombre de classes.";
+  const discriminantModeMessage = "Cette analyse utilise le mode Analyse discriminante optimisee. Consultez l'onglet dedie.";
   let summaryPayload = null;
 
   if (!summaryFile && !metricsFile && !plotFile) {
     setContainerEmptyState(resultContainers.autoChdSummary, manualModeMessage);
     setContainerEmptyState(resultContainers.autoChdPlot, manualModeMessage);
     setContainerEmptyState(resultContainers.autoChdTable, manualModeMessage);
-    return;
+    return { active: false };
   }
 
   if (summaryFile) {
@@ -11566,21 +11592,28 @@ async function renderAutoChdExports(index) {
   }
 
   const isAfcMode = String(summaryPayload?.mode || "").trim() === "auto_afc_discriminante";
+  if (isAfcMode) {
+    setContainerEmptyState(resultContainers.autoChdSummary, discriminantModeMessage);
+    setContainerEmptyState(resultContainers.autoChdPlot, discriminantModeMessage);
+    setContainerEmptyState(resultContainers.autoChdTable, discriminantModeMessage);
+    return { active: false, redirectedToDiscriminant: true };
+  }
+
   renderImage(
     resultContainers.autoChdPlot,
     plotFile,
-    isAfcMode ? "Courbe du score AFC discriminant A par nombre de classes" : "Courbe du score B par nombre de classes",
+    "Courbe du score B par nombre de classes",
     "Le graphique Auto CHD est absent du dossier d'exports."
   );
   makeResultImagePreviewable(
     resultContainers.autoChdPlot,
-    isAfcMode ? "Courbe du score A" : "Courbe du score B",
-    isAfcMode ? "CHD optimisee par AFC" : "Auto CHD"
+    "Courbe du score B",
+    "Auto CHD"
   );
 
   if (!metricsFile) {
     setContainerEmptyState(resultContainers.autoChdTable, "Le tableau Auto CHD est absent du dossier d'exports.");
-    return;
+    return { active: true };
   }
 
   try {
@@ -11593,6 +11626,8 @@ async function renderAutoChdExports(index) {
     setContainerEmptyState(resultContainers.autoChdTable, "Impossible de lire les scores Auto CHD.");
     log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
   }
+
+  return { active: true };
 }
 
 function renderZipfChart(summary) {
@@ -13378,6 +13413,7 @@ async function renderExports(entries, index) {
   clearObjectUrls();
   appState.chdSegmentsByClass = new Map();
   resetSimiTermsState();
+  let preferredChdSubTab = "dendrogramme";
 
   appState.chdDendrogramFiles = new Map([
     ["iramuteq", findFile(index, [(path) => path.endsWith("dendrogramme_chd.png")])],
@@ -13394,8 +13430,13 @@ async function renderExports(entries, index) {
   }
 
   await safeRenderExportSection("CHD", async () => {
-    await renderAutoDiscriminanteExports(index);
-    await renderAutoChdExports(index);
+    const autoDiscriminanteState = await renderAutoDiscriminanteExports(index);
+    const autoChdState = await renderAutoChdExports(index);
+    if (autoDiscriminanteState?.active) {
+      preferredChdSubTab = "auto_discriminante";
+    } else if (autoChdState?.active) {
+      preferredChdSubTab = "auto_chd";
+    }
 
     const chdSegmentsFile = findFile(index, [(path) => path.endsWith("segments_par_classe.txt")]);
     if (chdSegmentsFile) {
@@ -13551,6 +13592,8 @@ async function renderExports(entries, index) {
   } catch (error) {
     log(`[error] Finalisation du rendu des exports impossible : ${error?.message || String(error)}`);
   }
+
+  return { preferredChdSubTab };
 }
 
 async function handleExportsFolderSelection(fileList, navigationTarget = "resultats_chd") {
@@ -13568,8 +13611,10 @@ async function handleExportsFolderSelection(fileList, navigationTarget = "result
   setSidebarRuntimeStatus("Exports charges dans l'application", "success");
 
   let rendered = true;
+  let preferredChdSubTab = "dendrogramme";
   try {
-    await renderExports(entries, index);
+    const renderInfo = await renderExports(entries, index);
+    preferredChdSubTab = String(renderInfo?.preferredChdSubTab || "dendrogramme");
   } catch (error) {
     rendered = false;
     log(`[error] Rendu global des exports interrompu : ${error?.message || String(error)}`);
@@ -13584,7 +13629,7 @@ async function handleExportsFolderSelection(fileList, navigationTarget = "result
   }
   activateTopTab(navigationTarget);
   if (navigationTarget === "resultats_chd") {
-    activateChdSubTab("dendrogramme");
+    activateChdSubTab(preferredChdSubTab);
   } else if (navigationTarget === "suivi_longitudinal") {
     activateSuiviSubTab("suivi_indicateurs");
   }
@@ -13614,9 +13659,9 @@ function resetResultPanes() {
   applySuiviPresentation();
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
-    autoDiscriminanteSummary: "Chargez un dossier d'exports pour afficher la configuration retenue en mode CHD optimisee par AFC.",
+    autoDiscriminanteSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Analyse discriminante optimisee.",
     autoDiscriminantePlot: "Chargez un dossier d'exports pour afficher la comparaison des scores discriminants.",
-    autoDiscriminanteTable: "Chargez un dossier d'exports pour afficher les scores du mode CHD optimisee par AFC.",
+    autoDiscriminanteTable: "Chargez un dossier d'exports pour afficher les scores du mode Analyse discriminante optimisee.",
     autoChdSummary: "Chargez un dossier d'exports pour afficher la partition retenue en mode Auto CHD.",
     autoChdPlot: "Chargez un dossier d'exports pour afficher la courbe du score B en mode Auto CHD.",
     autoChdTable: "Chargez un dossier d'exports pour afficher les scores Auto CHD par partition.",
@@ -15539,6 +15584,7 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpAutoChdMarkdownContent, "autochd.md");
+void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "analyse_discriminante_optimisee.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {

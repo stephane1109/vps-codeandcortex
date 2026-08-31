@@ -244,14 +244,14 @@ lancer_moteur_chd_iramuteq <- function(
     classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
     if (length(classes_valides) < 2L) {
       if (identical(classes_mode, "auto_afc_discriminante")) {
-        stop("IRaMuTeQ-lite CHD optimisee par AFC n'a pas pu retenir au moins 2 classes exploitables.")
+        stop("IRaMuTeQ-lite Analyse discriminante optimisee n'a pas pu retenir au moins 2 classes exploitables.")
       }
       stop("IRaMuTeQ-lite Auto CHD n'a pas pu retenir au moins 2 classes exploitables.")
     }
     if (is.finite(auto_k_min) && !is.na(auto_k_min) && auto_k_min >= 2L && length(classes_valides) < auto_k_min) {
       if (identical(classes_mode, "auto_afc_discriminante")) {
         stop(paste0(
-          "IRaMuTeQ-lite CHD optimisee par AFC a retenu ",
+          "IRaMuTeQ-lite Analyse discriminante optimisee a retenu ",
           length(classes_valides),
           " classes reelles, sous la borne minimale demandee (",
           auto_k_min,

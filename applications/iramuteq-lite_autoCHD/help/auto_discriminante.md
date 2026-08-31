@@ -1,8 +1,8 @@
-# CHD optimisee par AFC
+# Analyse discriminante optimisee
 
 ## Objectif
 
-Le mode **CHD optimisee par AFC** cherche a produire des classes qui s'opposent le plus nettement possible sur le plan AFC, sans modifier la CHD d'origine ni le calcul du `chi2`.
+Le mode **Analyse discriminante optimisee** cherche a produire des classes qui s'opposent le plus nettement possible sur le plan AFC, sans modifier la CHD d'origine ni le calcul du `chi2`.
 
 Il procede en deux temps :
 
