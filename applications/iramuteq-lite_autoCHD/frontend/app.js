@@ -438,6 +438,7 @@ let analysisExecutionInProgress = false;
 let idleReleaseTimerId = null;
 let lastTicketInteractionAt = Date.now();
 let ticketReleasedLocally = false;
+let activeAnalysisJobId = "";
 
 const MORPHO_CATEGORIES = [
   "ADJ",
@@ -632,6 +633,25 @@ function scheduleIdleTicketRelease() {
 
 function releaseTicketOnPageHide() {
   if (analysisExecutionInProgress) {
+    const jobId = String(activeAnalysisJobId || readPersistedRunningAnalysis()?.jobId || "").trim();
+    if (jobId) {
+      clearPersistedRunningAnalysis(jobId);
+    }
+    const headers = { "Content-Type": "application/json" };
+    if (latestTicketSnapshot?.ticket_id) {
+      headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+    }
+    void fetch("/api/analysis/abandon", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      keepalive: true,
+      headers,
+      body: JSON.stringify({
+        jobId: jobId || null,
+        reason: "Analyse annulee : la page a ete quittee avant la fin du calcul."
+      })
+    }).catch(() => {});
     return;
   }
   if (!latestTicketSnapshot.enabled || !["actif", "attente"].includes(latestTicketSnapshot.statut)) {
@@ -15394,6 +15414,7 @@ async function startAnalysis(analysisKind = "chd") {
         corpusText,
         config
       });
+      activeAnalysisJobId = String(session?.jobId || "").trim();
       log(`[info] Job lancé : ${session.jobId}`);
     } catch (startError) {
       const resumedJobId = extractRunningAnalysisJobId(startError);
@@ -15403,6 +15424,7 @@ async function startAnalysis(analysisKind = "chd") {
       }
 
       session = { jobId: resumedJobId, resumed: true };
+      activeAnalysisJobId = String(resumedJobId || "").trim();
       progression.set(14, "Analyse deja en cours : reprise du suivi...");
       setSidebarRuntimeStatus("Analyse deja en cours sur le serveur. Reprise du suivi du job.", "warning");
       log(`[info] Analyse deja en cours sur le serveur. Reprise du suivi du job ${resumedJobId}.`);
@@ -15435,6 +15457,7 @@ async function startAnalysis(analysisKind = "chd") {
 
       if (snapshot.completed) {
         clearPersistedRunningAnalysis(session.jobId);
+        activeAnalysisJobId = "";
         if (!snapshot.success) {
           const failureLines = statusLogs.length ? statusLogs : [snapshot.message || "Le job Python a échoué."];
           throw new Error(failureLines.join("\n"));
@@ -15582,6 +15605,7 @@ async function startAnalysis(analysisKind = "chd") {
     progression.close();
   } finally {
     analysisExecutionInProgress = false;
+    activeAnalysisJobId = "";
     updateReleaseAccessButton();
     scheduleIdleTicketRelease();
     await refreshTicketSidebarStatus();
@@ -15628,6 +15652,13 @@ if (releaseAccessBtn) {
     } finally {
       await refreshTicketSidebarStatus();
       updateReleaseAccessButton();
+    }
+  });
+}
+if (runProgressDialog) {
+  runProgressDialog.addEventListener("cancel", (event) => {
+    if (analysisExecutionInProgress) {
+      event.preventDefault();
     }
   });
 }

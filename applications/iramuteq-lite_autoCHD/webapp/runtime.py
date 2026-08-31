@@ -4,6 +4,7 @@ import base64
 import json
 import mimetypes
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -109,11 +110,69 @@ def process_is_running(pid: Any) -> bool:
         return False
     if numeric_pid <= 0:
         return False
+    if hasattr(os, "waitpid") and hasattr(os, "WNOHANG"):
+        try:
+            waited_pid, _status = os.waitpid(numeric_pid, os.WNOHANG)
+            if waited_pid == numeric_pid:
+                return False
+        except ChildProcessError:
+            pass
+        except OSError:
+            pass
     try:
         os.kill(numeric_pid, 0)
     except OSError:
         return False
     return True
+
+
+def terminate_analysis_process(pid: Any, grace_seconds: float = 2.0) -> bool:
+    try:
+        numeric_pid = int(pid)
+    except (TypeError, ValueError):
+        return True
+    if numeric_pid <= 0 or not process_is_running(numeric_pid):
+        return True
+
+    pgid = None
+    if hasattr(os, "getpgid") and hasattr(os, "killpg"):
+        try:
+            pgid = os.getpgid(numeric_pid)
+        except OSError:
+            pgid = None
+
+    def _send(sig: int) -> bool:
+        try:
+            if pgid is not None:
+                os.killpg(pgid, sig)
+            else:
+                os.kill(numeric_pid, sig)
+            return True
+        except ProcessLookupError:
+            return True
+        except OSError:
+            return False
+
+    term_sig = getattr(signal, "SIGTERM", None)
+    kill_sig = getattr(signal, "SIGKILL", term_sig)
+
+    if term_sig is not None:
+        _send(term_sig)
+        deadline = time.time() + max(0.2, grace_seconds)
+        while time.time() < deadline:
+            if not process_is_running(numeric_pid):
+                return True
+            time.sleep(0.1)
+
+    if kill_sig is not None and process_is_running(numeric_pid):
+        _send(kill_sig)
+        deadline = time.time() + 1.5
+        while time.time() < deadline:
+            if not process_is_running(numeric_pid):
+                return True
+            time.sleep(0.05)
+
+    return not process_is_running(numeric_pid)
 
 
 def clear_analysis_lock(expected_job_id: str | None = None) -> None:
@@ -187,13 +246,13 @@ def current_analysis_lock() -> dict[str, Any] | None:
     return None
 
 
-def reserve_analysis_slot(corpus_name: str | None = None) -> None:
+def reserve_analysis_slot(corpus_name: str | None = None, job_id: str | None = None) -> None:
     active_lock = current_analysis_lock()
     if active_lock:
         raise RuntimeError(active_analysis_error_message(active_lock))
 
     payload = {
-        "job_id": "",
+        "job_id": str(job_id or "").strip(),
         "pid": None,
         "corpus_name": safe_input_name(corpus_name or "corpus.txt"),
         "created_at": int(time.time()),
@@ -223,6 +282,87 @@ def activate_analysis_lock(job_id: str, pid: int, corpus_name: str | None = None
             "updated_at": int(time.time()),
         },
     )
+
+
+def cancel_python_analysis(job_id: str | None = None, reason: str | None = None) -> dict[str, Any]:
+    active_lock = current_analysis_lock()
+    requested_job_id = str(job_id or "").strip()
+    active_job_id = str((active_lock or {}).get("job_id") or "").strip()
+
+    if active_lock and requested_job_id and active_job_id and requested_job_id != active_job_id:
+        raise RuntimeError("Le job actif ne correspond pas au job demande pour l'annulation.")
+
+    target_job_id = requested_job_id or active_job_id
+    if not active_lock:
+        return {
+            "success": True,
+            "cancelled": False,
+            "jobId": target_job_id,
+            "message": "Aucune analyse en cours a annuler.",
+        }
+
+    pid = active_lock.get("pid")
+    if pid and not terminate_analysis_process(pid):
+        raise RuntimeError("Impossible d'interrompre l'analyse en cours sur le serveur.")
+
+    message = str(reason or "").strip() or "Analyse annulee : la page a ete quittee avant la fin du calcul."
+    if target_job_id:
+        job_root = jobs_root() / target_job_id
+        job_root.mkdir(parents=True, exist_ok=True)
+        status_file = job_root / "status.json"
+        results_file = job_root / "results.json"
+        stdout_log = job_root / "stdout.log"
+        stderr_log = job_root / "stderr.log"
+
+        status_payload = try_read_json_file(status_file)
+        if not isinstance(status_payload, dict):
+            status_payload = {}
+
+        results_payload = try_read_json_file(results_file)
+        if not isinstance(results_payload, dict):
+            results_payload = {}
+
+        logs: list[str] = []
+        for source in (status_payload, results_payload):
+            for item in source.get("logs") or []:
+                line = str(item).strip()
+                if line and line not in logs:
+                    logs.append(line)
+        if message not in logs:
+            logs.append(message)
+
+        status_payload.update(
+            {
+                "job_id": target_job_id,
+                "state": "cancelled",
+                "progress": int(status_payload.get("progress") or 0),
+                "message": message,
+                "updated_at": int(time.time()),
+                "logs": logs,
+            }
+        )
+        write_json_file(status_file, status_payload)
+
+        results_payload.update(
+            {
+                "success": False,
+                "job_id": target_job_id,
+                "message": message,
+                "logs": logs,
+                "status_file": str(status_file),
+                "stdout_log": str(stdout_log),
+                "stderr_log": str(stderr_log),
+            }
+        )
+        write_json_file(results_file, results_payload)
+
+    clear_analysis_lock(expected_job_id=target_job_id or None)
+    return {
+        "success": True,
+        "cancelled": True,
+        "jobId": target_job_id,
+        "message": message,
+    }
 
 
 def safe_input_name(name: str) -> str:
@@ -600,9 +740,12 @@ def run_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, An
 
 
 def start_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, Any]) -> dict[str, str]:
-    reserve_analysis_slot(corpus_name)
     try:
         job_id, job_root, input_path, config_path = create_job_inputs(corpus_name, corpus_text, config)
+        reserve_analysis_slot(corpus_name, job_id=job_id)
+        active_lock = current_analysis_lock()
+        if not active_lock or str(active_lock.get("job_id") or "").strip() != job_id:
+            raise RuntimeError("Analyse annulee avant le lancement du job.")
         process = subprocess.Popen(
             backend_runner_command("run", input_path, config_path, job_id),
             cwd=PROJECT_ROOT,
@@ -611,9 +754,19 @@ def start_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, 
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
+        status_payload = try_read_json_file(job_root / "status.json")
+        if isinstance(status_payload, dict) and str(status_payload.get("state") or "").strip().lower() == "cancelled":
+            terminate_analysis_process(process.pid)
+            clear_analysis_lock(expected_job_id=job_id)
+            raise RuntimeError("Analyse annulee avant le lancement complet du job.")
         activate_analysis_lock(job_id, process.pid, corpus_name)
+        status_payload = try_read_json_file(job_root / "status.json")
+        if isinstance(status_payload, dict) and str(status_payload.get("state") or "").strip().lower() == "cancelled":
+            terminate_analysis_process(process.pid)
+            clear_analysis_lock(expected_job_id=job_id)
+            raise RuntimeError("Analyse annulee pendant le demarrage du job.")
     except Exception:
-        clear_analysis_lock()
+        clear_analysis_lock(expected_job_id=locals().get("job_id"))
         raise
     return {
         "jobId": job_id,
