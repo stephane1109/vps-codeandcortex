@@ -195,7 +195,6 @@
 
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
               <button class="sub-nav-link is-active" data-subtab-target="dendrogramme" type="button">Dendrogramme</button>
-              <button class="sub-nav-link" data-subtab-target="auto_discriminante" type="button">Auto discriminante</button>
               <button class="sub-nav-link" data-subtab-target="auto_chd" type="button">Auto CHD</button>
               <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
               <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
@@ -224,60 +223,6 @@
                     </select>
                   </div>
                   <div id="chdDendrogramme" class="result-pane"></div>
-                </article>
-              </div>
-            </section>
-
-            <section class="subpanel" data-subpanel="auto_discriminante" hidden>
-              <div class="section-stack">
-                <article class="card section-card">
-                  <div class="section-head">
-                    <div>
-                      <p class="card-kicker">Exploration</p>
-                      <h3>Auto discriminante</h3>
-                    </div>
-                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
-                  </div>
-                  <p class="section-copy">
-                    En mode auto discriminante, IRaMuTeQ-lite teste la grille des parametres discriminants
-                    selon le profil d'exploration choisi, puis relance Auto CHD a l'interieur de chaque configuration.
-                  </p>
-                  <p class="section-copy">
-                    L'objectif n'est plus seulement de choisir le meilleur nombre de classes pour une CHD donnee,
-                    mais la configuration qui produit les classes les plus opposees et les plus stables.
-                  </p>
-                  <p class="section-copy">
-                    Le score de configuration `S` combine trois dimensions complementaires :
-                    `B` pour la qualite structurelle de la partition retenue, `D` pour la separation minimale
-                    entre classes, et `E` pour l'equilibre global des classes retenues.
-                  </p>
-                </article>
-
-                <article class="card prose-card">
-                  <div class="section-head">
-                    <div>
-                      <p class="card-kicker">Profils</p>
-                      <h3>Parametres des 3 configurations</h3>
-                    </div>
-                  </div>
-                  <div id="autoDiscriminanteAideMarkdownContent" class="markdown-content">
-                    Chargement de <code>help/aide_autodicriminante.md</code>...
-                  </div>
-                </article>
-
-                <article class="card">
-                  <h3>Configuration retenue</h3>
-                  <div id="autoDiscriminanteSummary" class="result-pane"></div>
-                </article>
-
-                <article class="card">
-                  <h3>Configurations les plus discriminantes</h3>
-                  <div id="autoDiscriminantePlot" class="result-pane"></div>
-                </article>
-
-                <article class="card">
-                  <h3>Tableau des configurations testees</h3>
-                  <div id="autoDiscriminanteTable" class="result-pane"></div>
                 </article>
               </div>
             </section>
@@ -471,7 +416,6 @@
             <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
               <button class="local-tab-button" data-help-subtab-target="help_auto_chd" type="button">Auto CHD</button>
-              <button class="local-tab-button" data-help-subtab-target="help_auto_discriminante" type="button">Auto discriminante</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
             </div>
 
@@ -487,14 +431,6 @@
               <article class="card prose-card">
                 <div id="helpAutoChdMarkdownContent" class="markdown-content">
                   Chargement de <code>help/autochd.md</code>...
-                </div>
-              </article>
-            </section>
-
-            <section class="local-tab-panel" data-help-subpanel="help_auto_discriminante" hidden>
-              <article class="card prose-card">
-                <div id="helpAutoDiscriminanteMarkdownContent" class="markdown-content">
-                  Chargement de <code>help/auto_discriminante.md</code>...
                 </div>
               </article>
             </section>
@@ -587,15 +523,12 @@
                   <option value="manuel">Manuel</option>
                   <option value="auto">Automatique</option>
                   <option value="auto_afc_discriminante">Auto AFC discriminante</option>
-                  <option value="auto_discriminante">Auto discriminante</option>
                 </select>
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
                   vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
                   En auto AFC discriminante, l'application compare les partitions de la meme CHD
                   a partir des coordonnees AFC et des termes a fort chi2.
-                  En auto discriminante, l'application explore la grille des parametres discriminants
-                  selon le profil choisi puis retient la configuration qui oppose le mieux les classes.
                 </p>
               </div>
 
@@ -615,19 +548,6 @@
                 </p>
               </div>
 
-              <div class="field" data-auto-discriminante-profile-field hidden>
-                <label for="autoDiscriminanteProfile">Exploration discriminante</label>
-                <select id="autoDiscriminanteProfile">
-                  <option value="equilibre">Equilibree (recommandee)</option>
-                  <option value="rapide">Rapide</option>
-                  <option value="complet">Complete</option>
-                </select>
-                <p class="field-help">
-                  Rapide garde vos reglages actuels pour les lemmes et la ponctuation.
-                  Equilibree explore aussi les lemmes. Complete teste toute la grille discriminante,
-                  mais prend plus de temps.
-                </p>
-              </div>
             </div>
           </div>
 

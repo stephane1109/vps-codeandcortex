@@ -101,8 +101,6 @@ const annotationDictTable = document.getElementById("annotationDictTable");
 const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpAutoChdMarkdownContent = document.getElementById("helpAutoChdMarkdownContent");
-const helpAutoDiscriminanteMarkdownContent = document.getElementById("helpAutoDiscriminanteMarkdownContent");
-const autoDiscriminanteAideMarkdownContent = document.getElementById("autoDiscriminanteAideMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
@@ -2013,21 +2011,15 @@ function renderClassesModeCard(card) {
   const autoKMinInput = card.querySelector("#kIramuteqMinAuto, [data-source-id='kIramuteqMinAuto']");
   const autoKMinLabel = card.querySelector("[data-k-iramuteq-min-label]");
   const autoKMinHelp = card.querySelector("[data-k-iramuteq-min-help]");
-  const autoDiscriminanteProfileField = card.querySelector("[data-auto-discriminante-profile-field]");
   if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
 
   const isAuto = modeField.value === "auto";
   const isAutoAfcDiscriminante = modeField.value === "auto_afc_discriminante";
-  const isAutoDiscriminante = modeField.value === "auto_discriminante";
-  const usesAutoBounds = isAuto || isAutoAfcDiscriminante || isAutoDiscriminante;
+  const usesAutoBounds = isAuto || isAutoAfcDiscriminante;
 
   if (autoKMinField instanceof HTMLElement) {
     autoKMinField.hidden = !usesAutoBounds;
     autoKMinField.style.display = usesAutoBounds ? "" : "none";
-  }
-  if (autoDiscriminanteProfileField instanceof HTMLElement) {
-    autoDiscriminanteProfileField.hidden = !isAutoDiscriminante;
-    autoDiscriminanteProfileField.style.display = isAutoDiscriminante ? "" : "none";
   }
 
   const autoMinValue = autoKMinInput instanceof HTMLInputElement
@@ -2046,15 +2038,11 @@ function renderClassesModeCard(card) {
     }
   }
 
-  kLabel.textContent = (isAuto || isAutoAfcDiscriminante || isAutoDiscriminante)
-    ? (isAutoDiscriminante
-      ? "Nombre maximal de classes a explorer par configuration"
-      : "Nombre maximal de classes a explorer")
+  kLabel.textContent = (isAuto || isAutoAfcDiscriminante)
+    ? "Nombre maximal de classes a explorer"
     : "Nombre de classes terminales de la phase 1";
   if (autoKMinLabel instanceof HTMLElement) {
-    autoKMinLabel.textContent = isAutoDiscriminante
-      ? "Nombre minimal de classes retenables par configuration"
-      : "Nombre minimal de classes a retenir";
+    autoKMinLabel.textContent = "Nombre minimal de classes a retenir";
   }
 
   if (kHelp instanceof HTMLElement) {
@@ -2062,8 +2050,6 @@ function renderClassesModeCard(card) {
       ? `La CHD est calculee jusqu'a cette limite puis chaque partition P${autoMinValue}...Pk est evaluee automatiquement.`
       : isAutoAfcDiscriminante
         ? `La CHD est calculee jusqu'a cette limite puis les partitions P${autoMinValue}...Pk sont comparees via l'AFC et les termes a fort chi2 pour retenir les classes les plus opposees.`
-      : isAutoDiscriminante
-        ? `Pour chaque configuration de la grille discriminante, la CHD est calculee dans l'intervalle P${autoMinValue}...Pk puis le mode retient la combinaison la plus separante. Le temps de calcul depend du profil d'exploration choisi.`
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
   if (autoKMinHelp instanceof HTMLElement) {
@@ -2169,7 +2155,7 @@ function buildJobConfig(analysisKind = "chd") {
     max_p: Number(document.getElementById("maxP").value) || 0.05,
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
     iramuteq_classes_mode: classesMode,
-    iramuteq_auto_discriminante_profile: document.getElementById("autoDiscriminanteProfile")?.value || "equilibre",
+    iramuteq_auto_discriminante_profile: "equilibre",
     iramuteq_auto_k_min: autoKMin,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
@@ -15022,7 +15008,6 @@ async function startAnalysis(analysisKind = "chd") {
   const statsMode = document.getElementById("statsMode").value;
   const classesMode = document.getElementById("classesMode").value;
   const kIramuteq = Number(document.getElementById("kIramuteq").value);
-  const autoDiscriminanteProfile = String(document.getElementById("autoDiscriminanteProfile")?.value || "equilibre").trim();
   const tauriInvoke = getTauriInvoke();
   const isSimiMode = analysisKind === "simi";
   const isSuiviMode = analysisKind === "suivi";
@@ -15098,13 +15083,11 @@ async function startAnalysis(analysisKind = "chd") {
     );
   } else {
     const autoKMin = Math.max(2, Number(document.getElementById("kIramuteqMinAuto")?.value) || 3);
-    const classesCountLabel = classesMode === "auto_discriminante"
-      ? "intervalleClassesParConfig"
-      : classesMode === "auto" || classesMode === "auto_afc_discriminante"
-        ? "intervalleClasses"
-        : "classes";
+    const classesCountLabel = classesMode === "auto" || classesMode === "auto_afc_discriminante"
+      ? "intervalleClasses"
+      : "classes";
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}${classesMode === "auto_discriminante" ? `, profilAutoDiscriminante=${autoDiscriminanteProfile}` : ""}, ${classesMode === "auto" || classesMode === "auto_afc_discriminante" || classesMode === "auto_discriminante" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}, ${classesMode === "auto" || classesMode === "auto_afc_discriminante" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
     );
   }
   progression.set(4, progressStartMessage);
@@ -15372,8 +15355,6 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpAutoChdMarkdownContent, "autochd.md");
-void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "auto_discriminante.md");
-void loadHelpMarkdown(autoDiscriminanteAideMarkdownContent, "aide_autodicriminante.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {
