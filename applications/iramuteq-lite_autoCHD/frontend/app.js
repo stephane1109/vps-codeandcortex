@@ -2077,13 +2077,23 @@ function renderClassesModeCards(scope = document) {
   scope.querySelectorAll("[data-classes-mode-card]").forEach((card) => renderClassesModeCard(card));
 }
 
-function buildAnalysesConfig(analysisKind = "chd") {
+function resolveClassesModeConfig() {
   const classesMode = document.getElementById("classesMode").value;
   const autoKMin = Math.max(2, Number(document.getElementById("kIramuteqMinAuto")?.value) || 3);
   const kValue = Number(document.getElementById("kIramuteq").value);
   const effectiveK = classesMode === "manuel"
     ? (Number.isFinite(kValue) && kValue >= 2 ? kValue : 3)
     : Math.max(autoKMin, Number.isFinite(kValue) ? kValue : 10);
+
+  return {
+    classesMode,
+    autoKMin,
+    effectiveK
+  };
+}
+
+function buildAnalysesConfig(analysisKind = "chd") {
+  const { classesMode } = resolveClassesModeConfig();
   switch (analysisKind) {
     case "suivi":
       return {
@@ -2132,6 +2142,11 @@ function syncDendrogramSizing() {
 }
 
 function buildJobConfig(analysisKind = "chd") {
+  const {
+    classesMode,
+    autoKMin,
+    effectiveK
+  } = resolveClassesModeConfig();
   const simiThresholdValue = Number(document.getElementById("simiThreshold").value);
   const simiSpacingValue = Number(document.getElementById("simiSpacing")?.value);
   const simiSpacing = Number.isFinite(simiSpacingValue)
