@@ -601,6 +601,72 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   out
 }
 
+.calculer_scores_geometrie_vecteurs_auto_chd <- function(vectors) {
+  coords <- .extraire_coordonnees_xy_auto_chd(vectors)
+  if (is.null(coords) || nrow(coords) < 1L) {
+    return(list(
+      theta_mean = 0,
+      theta_min = 0,
+      dist_mean = 0,
+      dist_min = 0,
+      rad_mean = 0,
+      norms = numeric(0)
+    ))
+  }
+
+  vecs <- coords[, c("x", "y"), drop = FALSE]
+  norms <- sqrt(rowSums(vecs^2))
+  rad_scores <- norms / (norms + 1)
+  rad_scores[!is.finite(rad_scores) | is.na(rad_scores)] <- 0
+
+  out <- list(
+    theta_mean = 0,
+    theta_min = 0,
+    dist_mean = 0,
+    dist_min = 0,
+    rad_mean = .borner_score_auto_chd(mean(rad_scores)),
+    norms = norms
+  )
+
+  if (nrow(vecs) < 2L) {
+    return(out)
+  }
+
+  pair_index <- utils::combn(seq_len(nrow(vecs)), 2L)
+  angle_scores <- numeric(ncol(pair_index))
+  dist_scores <- numeric(ncol(pair_index))
+  max_radius <- suppressWarnings(max(norms, na.rm = TRUE))
+
+  for (j in seq_len(ncol(pair_index))) {
+    i1 <- pair_index[1, j]
+    i2 <- pair_index[2, j]
+    v1 <- vecs[i1, ]
+    v2 <- vecs[i2, ]
+    n1 <- norms[[i1]]
+    n2 <- norms[[i2]]
+    cosine <- if (is.finite(n1) && is.finite(n2) && n1 > 0 && n2 > 0) {
+      sum(v1 * v2) / (n1 * n2)
+    } else {
+      1
+    }
+    cosine <- max(-1, min(1, cosine))
+    angle_scores[[j]] <- .borner_score_auto_chd((1 - cosine) / 2)
+
+    dist_raw <- sqrt(sum((v1 - v2)^2))
+    dist_scores[[j]] <- if (is.finite(max_radius) && max_radius > 0) {
+      .borner_score_auto_chd(dist_raw / (2 * max_radius))
+    } else {
+      0
+    }
+  }
+
+  out$theta_mean <- if (length(angle_scores)) .borner_score_auto_chd(mean(angle_scores)) else 0
+  out$theta_min <- if (length(angle_scores)) .borner_score_auto_chd(min(angle_scores)) else 0
+  out$dist_mean <- if (length(dist_scores)) .borner_score_auto_chd(mean(dist_scores)) else 0
+  out$dist_min <- if (length(dist_scores)) .borner_score_auto_chd(min(dist_scores)) else 0
+  out
+}
+
 .selectionner_termes_caracteristiques_afc_auto_chd <- function(res_stats_df,
                                                                top_n = 20L,
                                                                p_seuil = 0.05) {
@@ -671,42 +737,18 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
       A_dist = 0,
       A_rad = 0,
       A_align = 0,
+      A_poles = 0,
       A = 0,
-      align_by_class = numeric(0)
+      align_by_class = numeric(0),
+      pole_align_by_class = numeric(0)
     ))
   }
 
   class_vectors <- coords_classes[, c("x", "y"), drop = FALSE]
-  class_norms <- sqrt(rowSums(class_vectors^2))
-
-  pair_index <- utils::combn(seq_len(nrow(class_vectors)), 2L)
-  angle_scores <- numeric(ncol(pair_index))
-  dist_values <- numeric(ncol(pair_index))
-  for (j in seq_len(ncol(pair_index))) {
-    i1 <- pair_index[1, j]
-    i2 <- pair_index[2, j]
-    v1 <- class_vectors[i1, ]
-    v2 <- class_vectors[i2, ]
-    n1 <- class_norms[[i1]]
-    n2 <- class_norms[[i2]]
-    cosine <- if (is.finite(n1) && is.finite(n2) && n1 > 0 && n2 > 0) {
-      sum(v1 * v2) / (n1 * n2)
-    } else {
-      1
-    }
-    cosine <- max(-1, min(1, cosine))
-    angle_scores[[j]] <- .borner_score_auto_chd((1 - cosine) / 2)
-    dist_values[[j]] <- sqrt(sum((v1 - v2)^2))
-  }
-
-  max_radius <- max(class_norms, na.rm = TRUE)
-  a_theta <- if (length(angle_scores)) .borner_score_auto_chd(mean(angle_scores)) else 0
-  a_dist <- if (length(dist_values) && is.finite(max_radius) && max_radius > 0) {
-    .borner_score_auto_chd(min(dist_values, na.rm = TRUE) / (2 * max_radius))
-  } else {
-    0
-  }
-  a_rad <- .borner_score_auto_chd(mean(class_norms / (class_norms + 1)))
+  class_geom <- .calculer_scores_geometrie_vecteurs_auto_chd(class_vectors)
+  a_theta <- .moyenne_geometrique_scores_auto_chd(c(class_geom$theta_mean, class_geom$theta_min))
+  a_dist <- .moyenne_geometrique_scores_auto_chd(c(class_geom$dist_mean, class_geom$dist_min))
+  a_rad <- .borner_score_auto_chd(class_geom$rad_mean)
 
   p_col <- if ("p" %in% names(res_stats_df)) "p" else if ("p_value" %in% names(res_stats_df)) "p_value" else NULL
   df <- res_stats_df
@@ -716,12 +758,15 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
   df$p_num <- if (!is.null(p_col)) suppressWarnings(as.numeric(df[[p_col]])) else NA_real_
 
   align_by_class <- stats::setNames(rep(0, nrow(class_vectors)), rownames(class_vectors))
+  pole_align_by_class <- stats::setNames(rep(0, nrow(class_vectors)), rownames(class_vectors))
+  poles_by_class <- list()
   for (class_label in rownames(class_vectors)) {
     class_num <- suppressWarnings(as.integer(gsub("^Classe\\s+", "", class_label)))
     class_vec <- class_vectors[class_label, ]
     class_norm <- sqrt(sum(class_vec^2))
     if (!is.finite(class_num) || is.na(class_num) || class_norm <= 0) {
       align_by_class[[class_label]] <- 0
+      pole_align_by_class[[class_label]] <- 0
       next
     }
 
@@ -737,6 +782,7 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
     ]
     if (!nrow(df_cl)) {
       align_by_class[[class_label]] <- 0
+      pole_align_by_class[[class_label]] <- 0
       next
     }
 
@@ -750,6 +796,7 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
     df_pick <- utils::head(df_pick, .as_int_auto_chd(top_n, default = 20L, min_value = 1L))
     if (!nrow(df_pick)) {
       align_by_class[[class_label]] <- 0
+      pole_align_by_class[[class_label]] <- 0
       next
     }
 
@@ -759,6 +806,7 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
     good <- is.finite(term_norms) & term_norms > 0 & is.finite(weights) & weights > 0
     if (!any(good)) {
       align_by_class[[class_label]] <- 0
+      pole_align_by_class[[class_label]] <- 0
       next
     }
 
@@ -769,18 +817,48 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
     cosines[!is.finite(cosines) | is.na(cosines)] <- -1
     cosines <- pmax(-1, pmin(1, cosines))
     align_by_class[[class_label]] <- .borner_score_auto_chd(stats::weighted.mean((cosines + 1) / 2, w = weights))
+
+    pole_vec <- c(
+      x = stats::weighted.mean(term_coords[, "x"], w = weights),
+      y = stats::weighted.mean(term_coords[, "y"], w = weights)
+    )
+    pole_norm <- sqrt(sum(pole_vec^2))
+    if (is.finite(pole_norm) && pole_norm > 0) {
+      pole_cosine <- sum(pole_vec * class_vec) / (pole_norm * class_norm)
+      pole_cosine <- max(-1, min(1, pole_cosine))
+      pole_align_by_class[[class_label]] <- .borner_score_auto_chd((pole_cosine + 1) / 2)
+      poles_by_class[[class_label]] <- pole_vec
+    } else {
+      pole_align_by_class[[class_label]] <- 0
+    }
   }
 
   a_align <- .borner_score_auto_chd(mean(align_by_class))
-  a_score <- .moyenne_geometrique_scores_auto_chd(c(a_theta, a_dist, a_rad, a_align))
+  poles_matrix <- if (length(poles_by_class)) {
+    out <- do.call(rbind, lapply(poles_by_class, function(vec) c(x = vec[["x"]], y = vec[["y"]])))
+    rownames(out) <- names(poles_by_class)
+    out
+  } else {
+    NULL
+  }
+  poles_geom <- .calculer_scores_geometrie_vecteurs_auto_chd(poles_matrix)
+  a_poles <- .moyenne_geometrique_scores_auto_chd(c(
+    .moyenne_geometrique_scores_auto_chd(c(poles_geom$theta_mean, poles_geom$theta_min)),
+    .moyenne_geometrique_scores_auto_chd(c(poles_geom$dist_mean, poles_geom$dist_min)),
+    .borner_score_auto_chd(poles_geom$rad_mean),
+    .borner_score_auto_chd(mean(pole_align_by_class))
+  ))
+  a_score <- .moyenne_geometrique_scores_auto_chd(c(a_theta, a_dist, a_rad, a_align, a_poles))
 
   list(
     A_theta = a_theta,
     A_dist = a_dist,
     A_rad = a_rad,
     A_align = a_align,
+    A_poles = a_poles,
     A = a_score,
-    align_by_class = align_by_class
+    align_by_class = align_by_class,
+    pole_align_by_class = pole_align_by_class
   )
 }
 
@@ -870,6 +948,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
     A_dist = .borner_score_auto_chd(afc_scores$A_dist),
     A_rad = .borner_score_auto_chd(afc_scores$A_rad),
     A_align = .borner_score_auto_chd(afc_scores$A_align),
+    A_poles = .borner_score_auto_chd(afc_scores$A_poles),
     A = .borner_score_auto_chd(afc_scores$A),
     classes_effectifs = .formatter_resume_classes_auto_chd(counts, digits = 0L),
     classes_pourcentages = .formatter_resume_classes_auto_chd(pct, digits = 2L, suffix = "%"),
@@ -883,6 +962,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
     diffusion_by_class = diffusion$by_class,
     afc = afc_obj,
     afc_align_by_class = afc_scores$align_by_class,
+    afc_pole_align_by_class = afc_scores$pole_align_by_class,
     termes_cibles = termes_cibles
   )
 }
@@ -1211,6 +1291,23 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
   )
 }
 
+.construire_kmax_auto_discriminante <- function(config_base, search_profile = "complet") {
+  k_min <- .as_int_auto_chd(config_base$iramuteq_auto_k_min, default = 3L, min_value = 2L)
+  k_max <- .as_int_auto_chd(config_base$k_iramuteq, default = 10L, min_value = k_min)
+  if (k_max < k_min) k_max <- k_min
+
+  values <- if (identical(search_profile, "rapide")) {
+    unique(c(k_min, min(k_max, 5L), k_max))
+  } else if (identical(search_profile, "equilibre")) {
+    unique(c(k_min, min(k_max, 5L), seq.int(k_min, k_max, by = 2L), k_max))
+  } else {
+    seq.int(k_min, k_max)
+  }
+
+  values <- sort(unique(as.integer(values[is.finite(values) & !is.na(values)])))
+  values[values >= k_min & values <= k_max]
+}
+
 .empreinte_dfm_auto_chd <- function(dfm_obj) {
   mat <- .as_dgc_matrix_auto_chd(dfm_obj, binary = FALSE)
   tmp <- tempfile("autodisc_dfm_", fileext = ".rds")
@@ -1303,6 +1400,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     config_base$iramuteq_auto_discriminante_profile,
     default = "complet"
   )
+  k_max_values <- .construire_kmax_auto_discriminante(config_base, search_profile = search_profile)
   min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
   use_lemmes_values <- c(FALSE, TRUE)
   remove_stopwords_values <- c(FALSE, TRUE)
@@ -1339,34 +1437,38 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
         for (remove_punctuation in remove_punctuation_values) {
           for (remove_digits in remove_digits_values) {
             for (min_docfreq in min_docfreq_values) {
-              index <- index + 1L
-              config_variant <- .definir_profil_morpho_auto_discriminant(
-                config_base = config_base,
-                profile_key = morpho$key,
-                keep_unknown = morpho$keep_unknown,
-                exclude_etre = morpho$exclude_etre
-              )
-              config_variant$lexique_utiliser_lemmes <- isTRUE(use_lemmes)
-              config_variant$retirer_stopwords <- remove_stopwords
-              config_variant$supprimer_ponctuation <- remove_punctuation
-              config_variant$supprimer_chiffres <- remove_digits
-              config_variant$min_docfreq <- as.integer(min_docfreq)
-              config_variant$iramuteq_classes_mode <- "auto_afc_discriminante"
-
-              candidates[[index]] <- list(
-                id = sprintf("CFG%03d", index),
-                config = config_variant,
-                profil_morpho = .label_profil_morpho_auto_discriminant(
-                  morpho$key,
+              for (k_max_candidate in k_max_values) {
+                index <- index + 1L
+                config_variant <- .definir_profil_morpho_auto_discriminant(
+                  config_base = config_base,
+                  profile_key = morpho$key,
                   keep_unknown = morpho$keep_unknown,
                   exclude_etre = morpho$exclude_etre
-                ),
-                lexique_utiliser_lemmes = isTRUE(use_lemmes),
-                retirer_stopwords = isTRUE(remove_stopwords),
-                supprimer_ponctuation = isTRUE(remove_punctuation),
-                supprimer_chiffres = isTRUE(remove_digits),
-                min_docfreq = as.integer(min_docfreq)
-              )
+                )
+                config_variant$lexique_utiliser_lemmes <- isTRUE(use_lemmes)
+                config_variant$retirer_stopwords <- remove_stopwords
+                config_variant$supprimer_ponctuation <- remove_punctuation
+                config_variant$supprimer_chiffres <- remove_digits
+                config_variant$min_docfreq <- as.integer(min_docfreq)
+                config_variant$k_iramuteq <- as.integer(k_max_candidate)
+                config_variant$iramuteq_classes_mode <- "auto_afc_discriminante"
+
+                candidates[[index]] <- list(
+                  id = sprintf("CFG%03d", index),
+                  config = config_variant,
+                  profil_morpho = .label_profil_morpho_auto_discriminant(
+                    morpho$key,
+                    keep_unknown = morpho$keep_unknown,
+                    exclude_etre = morpho$exclude_etre
+                  ),
+                  lexique_utiliser_lemmes = isTRUE(use_lemmes),
+                  retirer_stopwords = isTRUE(remove_stopwords),
+                  supprimer_ponctuation = isTRUE(remove_punctuation),
+                  supprimer_chiffres = isTRUE(remove_digits),
+                  min_docfreq = as.integer(min_docfreq),
+                  k_max_explore = as.integer(k_max_candidate)
+                )
+              }
             }
           }
         }
@@ -1397,6 +1499,8 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     ifelse(isTRUE(candidate$supprimer_chiffres), "supprimes", "conserves"),
     " | min_docfreq=",
     candidate$min_docfreq %||% NA_integer_,
+    " | kmax=",
+    candidate$k_max_explore %||% candidate$config$k_iramuteq %||% NA_integer_,
     "]"
   )
 }
@@ -1411,6 +1515,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     supprimer_ponctuation = ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     supprimer_chiffres = ifelse(isTRUE(candidate$supprimer_chiffres), "oui", "non"),
     min_docfreq = candidate$min_docfreq %||% NA_integer_,
+    k_max_explore = candidate$k_max_explore %||% candidate$config$k_iramuteq %||% NA_integer_,
     n_segments = NA_integer_,
     n_formes = NA_integer_,
     k_retenu = NA_integer_,
@@ -1422,6 +1527,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     A_dist = NA_real_,
     A_rad = NA_real_,
     A_align = NA_real_,
+    A_poles = NA_real_,
     A = NA_real_,
     classes_effectifs = NA_character_,
     classes_pourcentages = NA_character_,
@@ -1447,6 +1553,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     supprimer_ponctuation = ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     supprimer_chiffres = ifelse(isTRUE(candidate$supprimer_chiffres), "oui", "non"),
     min_docfreq = candidate$min_docfreq %||% NA_integer_,
+    k_max_explore = candidate$k_max_explore %||% candidate$config$k_iramuteq %||% NA_integer_,
     n_segments = suppressWarnings(as.integer(quanteda::ndoc(pipeline_obj$dfm_obj))),
     n_formes = suppressWarnings(as.integer(quanteda::nfeat(pipeline_obj$dfm_obj))),
     k_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_selected %||% selected_metrics$k[[1]])),
@@ -1458,6 +1565,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     A_dist = .borner_score_auto_chd(selected_metrics$A_dist[[1]]),
     A_rad = .borner_score_auto_chd(selected_metrics$A_rad[[1]]),
     A_align = .borner_score_auto_chd(selected_metrics$A_align[[1]]),
+    A_poles = .borner_score_auto_chd(selected_metrics$A_poles[[1]]),
     A = .borner_score_auto_chd(selected_metrics$A[[1]]),
     classes_effectifs = as.character(selected_metrics$classes_effectifs[[1]] %||% ""),
     classes_pourcentages = as.character(selected_metrics$classes_pourcentages[[1]] %||% ""),
@@ -1538,7 +1646,13 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
           stop("Configuration trop pauvre apres pretraitement.")
         }
 
-        dfm_fingerprint <- .empreinte_dfm_auto_chd(pipeline_obj$dfm_obj)
+        dfm_fingerprint <- paste(
+          .empreinte_dfm_auto_chd(pipeline_obj$dfm_obj),
+          candidate$config$k_iramuteq %||% candidate$k_max_explore %||% "",
+          candidate$config$iramuteq_auto_k_min %||% "",
+          candidate$config$iramuteq_stats_mode %||% "",
+          sep = "::"
+        )
         cache_hit <- exists(dfm_fingerprint, envir = dfm_cache, inherits = FALSE)
         if (isTRUE(cache_hit)) {
           reused_count <<- reused_count + 1L
@@ -1596,30 +1710,45 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
     if (isTRUE(attempt$ok)) {
       current_row <- attempt$row
       current_score <- suppressWarnings(as.numeric(current_row$A[[1]]))
+      current_A_poles <- suppressWarnings(as.numeric(current_row$A_poles[[1]]))
       current_A_theta <- suppressWarnings(as.numeric(current_row$A_theta[[1]]))
       current_A_dist <- suppressWarnings(as.numeric(current_row$A_dist[[1]]))
       current_B <- suppressWarnings(as.numeric(current_row$B[[1]]))
+      current_kmax <- suppressWarnings(as.integer(current_row$k_max_explore[[1]]))
 
       if (is.na(best_idx)) {
         best_idx <- i
       } else {
         best_row <- evaluation_rows[[best_idx]]
         best_score <- suppressWarnings(as.numeric(best_row$A[[1]]))
+        best_A_poles <- suppressWarnings(as.numeric(best_row$A_poles[[1]]))
         best_A_theta <- suppressWarnings(as.numeric(best_row$A_theta[[1]]))
         best_A_dist <- suppressWarnings(as.numeric(best_row$A_dist[[1]]))
         best_B <- suppressWarnings(as.numeric(best_row$B[[1]]))
+        best_kmax <- suppressWarnings(as.integer(best_row$k_max_explore[[1]]))
 
         if (
           (is.finite(current_score) && !is.na(current_score) && (!is.finite(best_score) || is.na(best_score) || current_score > best_score + 1e-12)) ||
           (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_poles) && (!is.finite(best_A_poles) || current_A_poles > best_A_poles + 1e-12)) ||
+          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_poles) && is.finite(best_A_poles) && abs(current_A_poles - best_A_poles) <= 1e-12 &&
              is.finite(current_A_theta) && (!is.finite(best_A_theta) || current_A_theta > best_A_theta + 1e-12)) ||
           (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_poles) && is.finite(best_A_poles) && abs(current_A_poles - best_A_poles) <= 1e-12 &&
              is.finite(current_A_theta) && is.finite(best_A_theta) && abs(current_A_theta - best_A_theta) <= 1e-12 &&
              is.finite(current_A_dist) && (!is.finite(best_A_dist) || current_A_dist > best_A_dist + 1e-12)) ||
           (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_poles) && is.finite(best_A_poles) && abs(current_A_poles - best_A_poles) <= 1e-12 &&
              is.finite(current_A_theta) && is.finite(best_A_theta) && abs(current_A_theta - best_A_theta) <= 1e-12 &&
              is.finite(current_A_dist) && is.finite(best_A_dist) && abs(current_A_dist - best_A_dist) <= 1e-12 &&
-             is.finite(current_B) && (!is.finite(best_B) || current_B > best_B + 1e-12))
+             is.finite(current_B) && (!is.finite(best_B) || current_B > best_B + 1e-12)) ||
+          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_A_poles) && is.finite(best_A_poles) && abs(current_A_poles - best_A_poles) <= 1e-12 &&
+             is.finite(current_A_theta) && is.finite(best_A_theta) && abs(current_A_theta - best_A_theta) <= 1e-12 &&
+             is.finite(current_A_dist) && is.finite(best_A_dist) && abs(current_A_dist - best_A_dist) <= 1e-12 &&
+             is.finite(current_B) && is.finite(best_B) && abs(current_B - best_B) <= 1e-12 &&
+             is.finite(current_kmax) && (!is.finite(best_kmax) || current_kmax > best_kmax))
         ) {
           best_idx <- i
         }
@@ -1661,6 +1790,8 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
         format(round(as.numeric(best_row$A_rad[[1]]), 4), nsmall = 4, trim = TRUE),
         " | A_align=",
         format(round(as.numeric(best_row$A_align[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | A_poles=",
+        format(round(as.numeric(best_row$A_poles[[1]]), 4), nsmall = 4, trim = TRUE),
         " | A=",
         format(round(as.numeric(best_row$A[[1]]), 4), nsmall = 4, trim = TRUE),
         " | B=",

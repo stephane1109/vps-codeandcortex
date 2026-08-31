@@ -1323,6 +1323,11 @@ run_batch <- function() {
           format(round(as.numeric(selected_discriminant$A_rad), 4), nsmall = 4, trim = TRUE),
           ", A_align=",
           format(round(as.numeric(selected_discriminant$A_align), 4), nsmall = 4, trim = TRUE),
+          if (!is.null(selected_discriminant$A_poles)) {
+            paste0(", A_poles=", format(round(as.numeric(selected_discriminant$A_poles), 4), nsmall = 4, trim = TRUE))
+          } else {
+            ""
+          },
           ", A=",
           format(round(as.numeric(selected_discriminant$A), 4), nsmall = 4, trim = TRUE),
           ")."
@@ -1378,6 +1383,11 @@ run_batch <- function() {
             format(round(as.numeric(selected_auto$A_rad), 4), nsmall = 4, trim = TRUE),
             ", A_align=",
             format(round(as.numeric(selected_auto$A_align), 4), nsmall = 4, trim = TRUE),
+            if (!is.null(selected_auto$A_poles)) {
+              paste0(", A_poles=", format(round(as.numeric(selected_auto$A_poles), 4), nsmall = 4, trim = TRUE))
+            } else {
+              ""
+            },
             ", A=",
             format(round(as.numeric(selected_auto$A), 4), nsmall = 4, trim = TRUE),
             if (!is.na(suppressWarnings(as.numeric(selected_auto$GA)))) {
@@ -1433,6 +1443,8 @@ run_batch <- function() {
               fmt_auto_metric(metrics_auto$A_rad[[i]]),
               ", A_align=",
               fmt_auto_metric(metrics_auto$A_align[[i]]),
+              ", A_poles=",
+              fmt_auto_metric(metrics_auto$A_poles[[i]]),
               ", A=",
               fmt_auto_metric(metrics_auto$A[[i]]),
               ", GA=",

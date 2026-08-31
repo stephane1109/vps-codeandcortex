@@ -11011,6 +11011,7 @@ function renderAutoChdSummary(container, payload) {
         ["A_dist", formatTableNumber(selected.A_dist, 4)],
         ["A_rad", formatTableNumber(selected.A_rad, 4)],
         ["A_align", formatTableNumber(selected.A_align, 4)],
+        ["A_poles", formatTableNumber(selected.A_poles, 4)],
         ["A", formatTableNumber(selected.A, 4)],
         ["B", formatTableNumber(selected.B, 4)],
         ["GA", Number.isFinite(parseTableNumber(selected.GA)) ? formatTableNumber(selected.GA, 4) : "N/A"]
@@ -11079,7 +11080,7 @@ function renderAutoChdSummary(container, payload) {
   if (isAfcMode) {
     const note = document.createElement("p");
     note.className = "field-help";
-    note.textContent = "Le score A combine l'opposition angulaire des classes, leur distance minimale, leur eloignement du centre AFC et l'alignement des termes a fort chi2 avec leur classe.";
+    note.textContent = "Le score A combine l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement des termes a fort chi2 et l'opposition de leurs poles lexicaux ponderes.";
     container.appendChild(note);
   }
 }
@@ -11111,11 +11112,13 @@ function renderAutoDiscriminanteSummary(container, payload) {
     ["Ponctuation", selected.supprimer_ponctuation || "N/A"],
     ["Chiffres", selected.supprimer_chiffres || "N/A"],
     ["min_docfreq", selected.min_docfreq],
+    ["k max teste", selected.k_max_explore],
     ["Partition retenue", `P${selectedK}`],
     ["A_theta", formatTableNumber(selected.A_theta, 4)],
     ["A_dist", formatTableNumber(selected.A_dist, 4)],
     ["A_rad", formatTableNumber(selected.A_rad, 4)],
     ["A_align", formatTableNumber(selected.A_align, 4)],
+    ["A_poles", formatTableNumber(selected.A_poles, 4)],
     ["A", formatTableNumber(selected.A, 4)],
     ["H", formatTableNumber(selected.H, 4)],
     ["D", formatTableNumber(selected.D, 4)],
@@ -11180,7 +11183,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const scoreNote = document.createElement("p");
   scoreNote.className = "field-help";
-  scoreNote.textContent = "Le mode Auto discriminante teste plusieurs configurations, puis ne garde qu'un seul resultat: celui dont les classes sont le plus opposees sur l'AFC a partir des coordonnees x,y, des angles entre classes et de l'alignement des termes a fort chi2.";
+  scoreNote.textContent = "Le mode Auto discriminante teste plusieurs configurations et plusieurs plafonds de classes, puis ne garde qu'un seul resultat: celui dont les classes et les poles lexicaux a fort chi2 sont le plus opposees sur l'AFC.";
   container.appendChild(scoreNote);
 }
 
@@ -11230,6 +11233,7 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
     { keys: ["supprimer_ponctuation"], label: "ponctuation" },
     { keys: ["supprimer_chiffres"], label: "chiffres" },
     { keys: ["min_docfreq"], label: "min_docfreq" },
+    { keys: ["k_max_explore"], label: "k max teste" },
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["k_retenu"], label: "k retenu" },
@@ -11237,6 +11241,7 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
     { keys: ["a_dist"], label: "A_dist" },
     { keys: ["a_rad"], label: "A_rad" },
     { keys: ["a_align"], label: "A_align" },
+    { keys: ["a_poles"], label: "A_poles" },
     { keys: ["a"], label: "A" },
     { keys: ["h"], label: "H" },
     { keys: ["d"], label: "D" },
@@ -11275,7 +11280,7 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
 
 function getAutoDiscriminanteNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "segments", "formes", "k_retenu", "a_theta", "a_dist", "a_rad", "a_align", "a", "h", "d", "l", "b"]);
+  const numericHeaders = new Set(["min_docfreq", "k_max_teste", "segments", "formes", "k_retenu", "a_theta", "a_dist", "a_rad", "a_align", "a_poles", "a", "h", "d", "l", "b"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -11822,6 +11827,7 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
     { keys: ["a_dist"], label: "A_dist" },
     { keys: ["a_rad"], label: "A_rad" },
     { keys: ["a_align"], label: "A_align" },
+    { keys: ["a_poles"], label: "A_poles" },
     { keys: ["a"], label: "A" },
     { keys: ["g"], label: "G" },
     { keys: ["ga"], label: "GA" },
@@ -11866,7 +11872,7 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
 
 function getAutoChdNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["nb_classes", "segments_classes", "segments_non_classes", "h", "d", "l", "b", "g", "a_theta", "a_dist", "a_rad", "a_align", "a", "ga"]);
+  const numericHeaders = new Set(["nb_classes", "segments_classes", "segments_non_classes", "h", "d", "l", "b", "g", "a_theta", "a_dist", "a_rad", "a_align", "a_poles", "a", "ga"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
