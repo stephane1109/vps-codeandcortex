@@ -11296,40 +11296,20 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const selected = payload?.selected;
   const selectedK = Number.parseInt(String(selected?.k_retenu ?? ""), 10);
-  const requestedMin = Number.parseInt(String(payload?.k_min_requested ?? ""), 10);
-  const requestedMax = Number.parseInt(String(payload?.k_max_requested ?? ""), 10);
-  const exploredRange = Number.isFinite(requestedMin) && Number.isFinite(requestedMax)
-    ? `P${requestedMin}...P${requestedMax}`
-    : "";
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune configuration discriminante retenue pour cette analyse."));
     return;
   }
 
   const metrics = [
-    ["Configuration", selected.configuration_id || "N/A"],
-    ["Profil d'exploration", payload?.search_profile_label || payload?.search_profile || "N/A"],
-    ["Configurations testees", payload?.total_configurations],
-    ["Configurations valides", payload?.successful_configurations],
-    ["DFM uniques", payload?.unique_dfm_tested],
-    ["Configurations reutilisees", payload?.reused_configurations],
+    ["Configuration retenue", selected.configuration_label || selected.configuration_id || "N/A"],
+    ["Partition retenue", `P${selectedK}`],
     ["Profil morpho", selected.profil_morpho || "N/A"],
+    ["min_docfreq", selected.min_docfreq],
     ["Lemmes", selected.lexique_utiliser_lemmes || "N/A"],
     ["Stopwords", selected.retirer_stopwords || "N/A"],
     ["Ponctuation", selected.supprimer_ponctuation || "N/A"],
-    ["Chiffres", selected.supprimer_chiffres || "N/A"],
-    ["min_docfreq", selected.min_docfreq],
-    ["Partition retenue", `P${selectedK}`],
-    ["A_theta", formatTableNumber(selected.A_theta, 4)],
-    ["A_dist", formatTableNumber(selected.A_dist, 4)],
-    ["A_rad", formatTableNumber(selected.A_rad, 4)],
-    ["A_align", formatTableNumber(selected.A_align, 4)],
-    ["A_poles", formatTableNumber(selected.A_poles, 4)],
-    ["A", formatTableNumber(selected.A, 4)],
-    ["H", formatTableNumber(selected.H, 4)],
-    ["D", formatTableNumber(selected.D, 4)],
-    ["L", formatTableNumber(selected.L, 4)],
-    ["B", formatTableNumber(selected.B, 4)]
+    ["Chiffres", selected.supprimer_chiffres || "N/A"]
   ];
 
   const grid = document.createElement("div");
@@ -11353,118 +11333,6 @@ function renderAutoDiscriminanteSummary(container, payload) {
   });
 
   container.appendChild(grid);
-
-  const label = String(selected.configuration_label || "").trim();
-  if (label) {
-    const note = document.createElement("p");
-    note.className = "field-help";
-    note.textContent = `Combinaison retenue : ${label}`;
-    container.appendChild(note);
-  }
-
-  const compromiseNote = document.createElement("p");
-  compromiseNote.className = "field-help";
-  compromiseNote.textContent = `Meilleur compromis retenu : configuration ${selected.configuration_id || "N/A"}, partition P${selectedK}, score A = ${formatTableNumber(selected.A, 4)}.`;
-  container.appendChild(compromiseNote);
-
-  if (exploredRange) {
-    const rangeNote = document.createElement("p");
-    rangeNote.className = "field-help";
-    rangeNote.textContent = `Cadre d'exploration : ${exploredRange}. Cette plage borne la recherche mais ne fixe pas le k final, qui est retenu automatiquement ici en P${selectedK}.`;
-    container.appendChild(rangeNote);
-  }
-
-  const optimizedParameters = [
-    exploredRange ? `partitions comparees=${exploredRange}` : "",
-    `filtrage morphosyntaxique impose=${formatSummaryValue(selected.profil_morpho || "NOM+VER (sans ETRE)")}`,
-    "AUTRE_FORME=non",
-    "min_docfreq teste=2, 3, 4, 5",
-    "termes AFC=tous les termes significatifs (p.value <= 0.05) tries par chi2"
-  ].filter(Boolean);
-  const optimizedParametersNote = document.createElement("p");
-  optimizedParametersNote.className = "field-help";
-  optimizedParametersNote.textContent = `Parametres manipules par l'optimisation : ${optimizedParameters.join(" ; ")}.`;
-  container.appendChild(optimizedParametersNote);
-
-  const discriminationValues = [
-    `A_theta=${formatTableNumber(selected.A_theta, 4)}`,
-    `A_dist=${formatTableNumber(selected.A_dist, 4)}`,
-    `A_rad=${formatTableNumber(selected.A_rad, 4)}`,
-    `A_align=${formatTableNumber(selected.A_align, 4)}`,
-    `A_poles=${formatTableNumber(selected.A_poles, 4)}`,
-    `A=${formatTableNumber(selected.A, 4)}`
-  ];
-  const discriminationValuesNote = document.createElement("p");
-  discriminationValuesNote.className = "field-help";
-  discriminationValuesNote.textContent = `Valeurs de discrimination retenues : ${discriminationValues.join(" ; ")}.`;
-  container.appendChild(discriminationValuesNote);
-
-  const compromiseVariables = [
-    `configuration=${formatSummaryValue(selected.configuration_id || "N/A")}`,
-    `partition=P${selectedK}`,
-    `profil morpho=${formatSummaryValue(selected.profil_morpho || "N/A")}`,
-    `min_docfreq=${formatSummaryValue(selected.min_docfreq)}`,
-    `lemmes=${formatSummaryValue(selected.lexique_utiliser_lemmes || "N/A")}`,
-    `stopwords=${formatSummaryValue(selected.retirer_stopwords || "N/A")}`,
-    `ponctuation=${formatSummaryValue(selected.supprimer_ponctuation || "N/A")}`,
-    `chiffres=${formatSummaryValue(selected.supprimer_chiffres || "N/A")}`
-  ];
-  const variablesNote = document.createElement("p");
-  variablesNote.className = "field-help";
-  variablesNote.textContent = `Parametres ayant contribue au resultat retenu : ${compromiseVariables.join(" ; ")}.`;
-  container.appendChild(variablesNote);
-
-  const counts = String(selected.classes_effectifs || "").trim();
-  if (counts) {
-    const note = document.createElement("p");
-    note.className = "field-help";
-    note.textContent = `Effectifs par classe : ${counts}`;
-    container.appendChild(note);
-  }
-
-  const percentages = String(selected.classes_pourcentages || "").trim();
-  if (percentages) {
-    const note = document.createElement("p");
-    note.className = "field-help";
-    note.textContent = `Pourcentages par classe : ${percentages}`;
-    container.appendChild(note);
-  }
-
-  const totalConfigurations = Number.parseInt(String(payload?.total_configurations ?? ""), 10);
-  const successfulConfigurations = Number.parseInt(String(payload?.successful_configurations ?? ""), 10);
-  if (Number.isFinite(totalConfigurations) && Number.isFinite(successfulConfigurations) && successfulConfigurations < totalConfigurations) {
-    const note = document.createElement("p");
-    note.className = "field-help";
-    note.textContent = `${successfulConfigurations} configuration(s) exploitable(s) sur ${totalConfigurations} ont produit une CHD discriminante valide.`;
-    container.appendChild(note);
-  }
-
-  const scoreNote = document.createElement("p");
-  scoreNote.className = "field-help";
-  scoreNote.textContent = "Le mode Analyse discriminante optimisee garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et tous les termes significatifs a p.value <= 0.05, tries par chi2, s'opposent le mieux sur l'AFC.";
-  container.appendChild(scoreNote);
-
-  const topTermsByClass = payload?.selected_termes_cibles_par_classe && typeof payload.selected_termes_cibles_par_classe === "object"
-    ? Object.entries(payload.selected_termes_cibles_par_classe)
-        .map(([classLabel, terms]) => [
-          String(classLabel || "").trim(),
-          Array.isArray(terms) ? terms.map((term) => String(term || "").trim()).filter(Boolean) : []
-        ])
-        .filter(([classLabel, terms]) => classLabel && terms.length)
-    : [];
-  if (topTermsByClass.length) {
-    const introNote = document.createElement("p");
-    introNote.className = "field-help";
-    introNote.textContent = "Tous les termes significatifs projetes sur l'AFC (p.value <= 0.05, tries par chi2) :";
-    container.appendChild(introNote);
-
-    topTermsByClass.forEach(([classLabel, terms]) => {
-      const classNote = document.createElement("p");
-      classNote.className = "field-help";
-      classNote.textContent = `${classLabel} : ${terms.join(", ")}.`;
-      container.appendChild(classNote);
-    });
-  }
 }
 
 function extractAutoDiscriminanteCloneParsed(parsed) {
