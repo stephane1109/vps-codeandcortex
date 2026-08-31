@@ -119,7 +119,31 @@ lister_partitions_chd_iramuteq <- function(chd_obj, k_min = NULL, k_max = NULL) 
     return(list())
   }
 
-  lapply(seq.int(k_min_use, k_max_use), function(k) extraire_partition_chd_iramuteq(chd_obj, k))
+  partitions <- lapply(seq.int(k_min_use, k_max_use), function(k) extraire_partition_chd_iramuteq(chd_obj, k))
+  partitions <- Filter(function(partition_obj) {
+    is.list(partition_obj) &&
+      is.finite(partition_obj$k) &&
+      !is.na(partition_obj$k) &&
+      partition_obj$k >= k_min_use
+  }, partitions)
+
+  if (!length(partitions)) {
+    return(list())
+  }
+
+  # Une borne minimale doit s'appliquer au nombre reel de classes produites,
+  # pas seulement au numero de colonne demande dans n1.
+  seen_k <- integer(0)
+  keep <- logical(length(partitions))
+  for (i in seq_along(partitions)) {
+    k_effectif <- suppressWarnings(as.integer(partitions[[i]]$k))
+    if (!is.finite(k_effectif) || is.na(k_effectif) || k_effectif < k_min_use) next
+    if (k_effectif %in% seen_k) next
+    keep[[i]] <- TRUE
+    seen_k <- c(seen_k, k_effectif)
+  }
+
+  partitions[keep]
 }
 
 resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
@@ -459,6 +483,10 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   if (!length(partitions)) {
     stop("Auto CHD: aucune partition exploitable dans l'intervalle de classes demande.")
   }
+  partitions <- partitions[order(
+    vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
+    vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$requested_k %||% partition_obj$k)), integer(1))
+  )]
 
   evaluations <- lapply(partitions, function(partition_obj) {
     evaluer_partition_auto_chd(
@@ -471,7 +499,6 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   })
 
   metrics_df <- do.call(rbind, lapply(evaluations, `[[`, "metrics"))
-  metrics_df <- metrics_df[order(metrics_df$k), , drop = FALSE]
   metrics_df$G <- NA_real_
 
   if (nrow(metrics_df) > 1L) {
@@ -504,6 +531,13 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   k_min_requested <- max(2L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
+  if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
+    stop(paste0(
+      "Auto CHD: la partition retenue ne respecte pas la borne minimale demandee (",
+      k_min_requested,
+      " classes reelles minimum)."
+    ))
+  }
 
   list(
     mode = "auto",
@@ -868,6 +902,10 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   if (!length(partitions)) {
     stop("Auto AFC discriminante: aucune partition exploitable dans l'intervalle de classes demande.")
   }
+  partitions <- partitions[order(
+    vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
+    vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$requested_k %||% partition_obj$k)), integer(1))
+  )]
 
   evaluations <- lapply(partitions, function(partition_obj) {
     evaluer_partition_auto_afc_discriminante_iramuteq(
@@ -882,7 +920,6 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   })
 
   metrics_df <- do.call(rbind, lapply(evaluations, `[[`, "metrics"))
-  metrics_df <- metrics_df[order(metrics_df$k), , drop = FALSE]
   metrics_df$G <- NA_real_
   metrics_df$GA <- NA_real_
 
@@ -941,6 +978,13 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   k_min_requested <- max(2L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
+  if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
+    stop(paste0(
+      "Auto AFC discriminante: la partition retenue ne respecte pas la borne minimale demandee (",
+      k_min_requested,
+      " classes reelles minimum)."
+    ))
+  }
 
   list(
     mode = "auto_afc_discriminante",
