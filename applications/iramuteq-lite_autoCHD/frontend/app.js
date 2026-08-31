@@ -322,6 +322,8 @@ const resultContainers = {
   simiGraph: document.getElementById("simiGraph")
 };
 
+const RUNNING_ANALYSIS_STORAGE_KEY = "iramuteq-lite-running-analysis";
+
 const appState = {
   corpusFileName: null,
   exportsFolderName: null,
@@ -1196,6 +1198,97 @@ function rememberAnalysisHistoryEntry(entry) {
   ];
   appState.activeAnalysisHistoryId = normalizedEntry.id;
   renderAnalysisHistory();
+}
+
+function normalizeRuntimeCorpusName(value) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return "";
+  const parts = rawValue.split(/[\\/]/);
+  return String(parts[parts.length - 1] || "").trim();
+}
+
+function readPersistedRunningAnalysis() {
+  try {
+    const raw = window.localStorage.getItem(RUNNING_ANALYSIS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const jobId = String(parsed.jobId || "").trim();
+    if (!jobId) return null;
+
+    return {
+      jobId,
+      corpusName: normalizeRuntimeCorpusName(parsed.corpusName),
+      analysisKind: String(parsed.analysisKind || "chd").trim() || "chd",
+      createdAt: String(parsed.createdAt || "").trim()
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function persistRunningAnalysis(entry) {
+  const jobId = String(entry?.jobId || "").trim();
+  if (!jobId) return;
+
+  try {
+    window.localStorage.setItem(
+      RUNNING_ANALYSIS_STORAGE_KEY,
+      JSON.stringify({
+        jobId,
+        corpusName: normalizeRuntimeCorpusName(entry?.corpusName),
+        analysisKind: String(entry?.analysisKind || "chd").trim() || "chd",
+        createdAt: String(entry?.createdAt || new Date().toISOString()).trim()
+      })
+    );
+  } catch (_error) {
+    // Ignore localStorage write errors and keep the analysis running.
+  }
+}
+
+function clearPersistedRunningAnalysis(expectedJobId = "") {
+  try {
+    const persisted = readPersistedRunningAnalysis();
+    if (!persisted) return;
+
+    const normalizedExpectedJobId = String(expectedJobId || "").trim();
+    if (normalizedExpectedJobId && persisted.jobId !== normalizedExpectedJobId) {
+      return;
+    }
+
+    window.localStorage.removeItem(RUNNING_ANALYSIS_STORAGE_KEY);
+  } catch (_error) {
+    // Ignore localStorage cleanup errors.
+  }
+}
+
+function extractRunningAnalysisJobId(error) {
+  const message = String(error?.message || error || "").trim();
+  if (!message) return "";
+  const match = message.match(/\bjob\s+([A-Za-z0-9_-]+)/i);
+  return match ? String(match[1] || "").trim() : "";
+}
+
+function getResumableRunningAnalysis(jobId, corpusName) {
+  const persisted = readPersistedRunningAnalysis();
+  if (!persisted) return null;
+
+  const normalizedJobId = String(jobId || "").trim();
+  if (!normalizedJobId || persisted.jobId !== normalizedJobId) {
+    return null;
+  }
+
+  const normalizedRequestedCorpus = normalizeRuntimeCorpusName(corpusName);
+  if (
+    normalizedRequestedCorpus &&
+    persisted.corpusName &&
+    persisted.corpusName !== normalizedRequestedCorpus
+  ) {
+    return null;
+  }
+
+  return persisted;
 }
 
 function splitCsvValues(value) {
@@ -15172,12 +15265,33 @@ async function startAnalysis(analysisKind = "chd") {
     progression.set(12, "Envoi du corpus au backend...");
     log("[info] Envoi du corpus à Python pour orchestration du job R.");
 
-    const session = await tauriInvoke("start_python_analysis", {
+    let session = null;
+    try {
+      session = await tauriInvoke("start_python_analysis", {
+        corpusName,
+        corpusText,
+        config
+      });
+      log(`[info] Job lancé : ${session.jobId}`);
+    } catch (startError) {
+      const resumedJobId = extractRunningAnalysisJobId(startError);
+      const resumableAnalysis = getResumableRunningAnalysis(resumedJobId, corpusName);
+      if (!resumableAnalysis) {
+        throw startError;
+      }
+
+      session = { jobId: resumedJobId, resumed: true };
+      progression.set(14, "Analyse deja en cours : reprise du suivi...");
+      setSidebarRuntimeStatus("Analyse deja en cours sur le serveur. Reprise du suivi du job.", "warning");
+      log(`[info] Analyse deja en cours sur le serveur. Reprise du suivi du job ${resumedJobId}.`);
+    }
+
+    persistRunningAnalysis({
+      jobId: session.jobId,
       corpusName,
-      corpusText,
-      config
+      analysisKind,
+      createdAt: new Date().toISOString()
     });
-    log(`[info] Job lancé : ${session.jobId}`);
 
     let payload = null;
     while (!payload) {
@@ -15198,6 +15312,7 @@ async function startAnalysis(analysisKind = "chd") {
       }
 
       if (snapshot.completed) {
+        clearPersistedRunningAnalysis(session.jobId);
         if (!snapshot.success) {
           const failureLines = statusLogs.length ? statusLogs : [snapshot.message || "Le job Python a échoué."];
           throw new Error(failureLines.join("\n"));
