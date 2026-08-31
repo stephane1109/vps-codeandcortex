@@ -1,8 +1,8 @@
-# Aide Auto discriminante
+# Aide CHD optimisee par AFC
 
 ## Objectif
 
-Dans cette version, le mode **Auto AFC discriminante** ne teste plus une grande grille exhaustive.
+Dans cette version, le mode **CHD optimisee par AFC** ne teste plus une grande grille exhaustive.
 
 Il cherche un resultat plus discriminant avec une strategie ciblee :
 

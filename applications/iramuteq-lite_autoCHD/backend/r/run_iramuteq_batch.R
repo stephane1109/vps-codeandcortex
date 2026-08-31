@@ -1261,7 +1261,7 @@ run_batch <- function() {
       auto_discriminant_log_fn = if (identical(engine_classes_mode, "auto_discriminante")) {
         if (identical(classes_mode, "auto_afc_discriminante")) {
           function(message, progress = NULL) {
-            msg <- sub("^Auto discriminante", "Auto AFC discriminante", as.character(message %||% ""))
+            msg <- sub("^Auto discriminante", "CHD optimisee par AFC", as.character(message %||% ""))
             log_info(msg, progress = progress %||% 57)
           }
         } else {
@@ -1294,7 +1294,7 @@ run_batch <- function() {
       log_info(
         paste0(
           if (identical(classes_mode, "auto_afc_discriminante")) {
-            "Auto AFC discriminante : pipeline retenu = "
+            "CHD optimisee par AFC : pipeline retenu = "
           } else {
             "Auto discriminante : pipeline retenu = "
           },
@@ -1334,7 +1334,7 @@ run_batch <- function() {
       log_info(
         paste0(
           if (identical(classes_mode, "auto_afc_discriminante")) {
-            "Auto AFC discriminante : configuration retenue "
+            "CHD optimisee par AFC : configuration retenue "
           } else {
             "Auto discriminante : configuration retenue "
           },
@@ -1379,7 +1379,7 @@ run_batch <- function() {
       if (isTRUE(res_ira$auto_selection$k_max_reduced)) {
         log_info(
           paste0(
-            if (is_auto_afc_mode) "Auto AFC discriminante : limite ramenee de " else "Auto CHD : limite ramenee de ",
+            if (is_auto_afc_mode) "CHD optimisee par AFC : limite ramenee de " else "Auto CHD : limite ramenee de ",
             res_ira$auto_selection$k_max_requested %||% NA_integer_,
             " a ",
             res_ira$auto_selection$k_max_tested %||% NA_integer_,
@@ -1393,7 +1393,7 @@ run_batch <- function() {
       if (!is.null(res_ira$auto_selection$k_min_requested)) {
         log_info(
           paste0(
-            if (is_auto_afc_mode) "Auto AFC discriminante : intervalle teste = " else "Auto CHD : intervalle teste = ",
+            if (is_auto_afc_mode) "CHD optimisee par AFC : intervalle teste = " else "Auto CHD : intervalle teste = ",
             "P",
             res_ira$auto_selection$k_min_tested %||% res_ira$auto_selection$k_min_requested %||% NA_integer_,
             " ... P",
@@ -1411,7 +1411,7 @@ run_batch <- function() {
       if (is_auto_afc_mode) {
         log_info(
           paste0(
-            "Auto AFC discriminante : partition retenue ",
+            "CHD optimisee par AFC : partition retenue ",
             as.character(selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")),
             " (A_theta=",
             format(round(as.numeric(selected_auto$A_theta), 4), nsmall = 4, trim = TRUE),
@@ -1509,7 +1509,7 @@ run_batch <- function() {
         log_info(
           paste0(
             if (is_auto_afc_mode) {
-              "Auto AFC discriminante : scores par partition -> "
+              "CHD optimisee par AFC : scores par partition -> "
             } else {
               "Auto CHD : scores par partition -> "
             },
@@ -1522,7 +1522,7 @@ run_batch <- function() {
       if (isTRUE((res_ira$auto_selection$k_selected %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
           if (is_auto_afc_mode) {
-            "Auto AFC discriminante : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere partition disponible."
+            "CHD optimisee par AFC : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere partition disponible."
           } else {
             "Auto CHD : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere partition disponible."
           },
@@ -1847,7 +1847,7 @@ run_batch <- function() {
         )
         log_info(
           if (identical(classes_mode, "auto_afc_discriminante")) {
-            "Exports simulation discriminante generes."
+            "Exports CHD optimisee par AFC generes."
           } else {
             "Exports Auto discriminante generes."
           },
@@ -1857,7 +1857,7 @@ run_batch <- function() {
         log_info(
           paste0(
             if (identical(classes_mode, "auto_afc_discriminante")) {
-              "Exports simulation discriminante indisponibles : "
+              "Exports CHD optimisee par AFC indisponibles : "
             } else {
               "Exports Auto discriminante indisponibles : "
             },
@@ -1883,7 +1883,7 @@ run_batch <- function() {
       termes_signif <- auto_afc_selected_terms
       log_info(
         paste0(
-          "AFC discriminante : projection finale des ",
+          "CHD optimisee par AFC : projection finale des ",
           length(termes_signif),
           " termes significatifs a plus fort chi2 retenus par classe par le mode auto."
         ),
@@ -2192,7 +2192,7 @@ run_batch <- function() {
     classes_mode_label = if (identical(classes_mode, "auto_discriminante")) {
       "Auto discriminante"
     } else if (identical(classes_mode, "auto_afc_discriminante")) {
-      "Auto AFC discriminante"
+      "CHD optimisee par AFC"
     } else if (identical(classes_mode, "auto")) {
       "Automatique"
     } else {

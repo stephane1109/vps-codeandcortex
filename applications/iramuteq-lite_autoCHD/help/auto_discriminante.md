@@ -1,8 +1,8 @@
-# Auto discriminante
+# CHD optimisee par AFC
 
 ## Objectif
 
-Le mode **Auto AFC discriminante** cherche a produire des classes qui s'opposent le plus nettement possible sur le plan AFC, sans modifier la CHD d'origine ni le calcul du `chi2`.
+Le mode **CHD optimisee par AFC** cherche a produire des classes qui s'opposent le plus nettement possible sur le plan AFC, sans modifier la CHD d'origine ni le calcul du `chi2`.
 
 Il procede en deux temps :
 

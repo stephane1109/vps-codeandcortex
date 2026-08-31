@@ -500,7 +500,7 @@
             <p class="field-help field-help--pvalue-note">
               Ce filtre sert à l'affichage de l'AFC, AFC des variables étoilées,
               du concordancier, des nuages de mots, mais dans les stats les formes
-              significatives à p ≤ 0.05 apparaissent en vert et les formes
+              significatives à `p <= 0.05` apparaissent en vert et les formes
               au-delà du seuil d'affichage restent affichées en rouge dans le tableau.
             </p>
           </div>
@@ -523,13 +523,13 @@
                 <select id="classesMode" data-classes-mode-select>
                   <option value="manuel">Manuel</option>
                   <option value="auto">Automatique</option>
-                  <option value="auto_afc_discriminante">Auto AFC discriminante</option>
+                  <option value="auto_afc_discriminante">CHD optimisee par AFC</option>
                 </select>
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
                   vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
-                  En auto AFC discriminante, l'application compare les partitions de la meme CHD
-                  a partir des coordonnees AFC et des termes a fort chi2.
+                  En mode CHD optimisee par AFC, l'application compare les partitions de la meme CHD
+                  a partir des coordonnees AFC et des termes caracteristiques a fort chi2.
                 </p>
               </div>
 
