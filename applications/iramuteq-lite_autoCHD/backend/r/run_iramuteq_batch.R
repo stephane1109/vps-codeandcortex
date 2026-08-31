@@ -1121,6 +1121,15 @@ run_batch <- function() {
   classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
   if (!classes_mode %in% c("manuel", "auto", "auto_discriminante", "auto_afc_discriminante")) classes_mode <- "manuel"
   engine_classes_mode <- if (identical(classes_mode, "auto_afc_discriminante")) "auto_discriminante" else classes_mode
+  classes_mode_label <- if (identical(classes_mode, "auto_afc_discriminante")) {
+    "Analyse discriminante optimisee"
+  } else if (identical(classes_mode, "auto")) {
+    "Automatique"
+  } else if (identical(classes_mode, "auto_discriminante")) {
+    "Auto discriminante"
+  } else {
+    "Manuel"
+  }
   config_chd <- config
   if (identical(classes_mode, "auto_afc_discriminante")) {
     config_chd$iramuteq_classes_mode <- "auto_discriminante"
@@ -1193,7 +1202,7 @@ run_batch <- function() {
         "Paramètres IRaMuTeQ-lite : k=",
         scalar_int(config$k_iramuteq, 10L, 2L),
         " | nombre_classes_mode=",
-        classes_mode,
+        classes_mode_label,
         if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante")) {
           paste0(" | k_min_auto=", auto_k_min)
         } else {

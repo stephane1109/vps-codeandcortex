@@ -11022,6 +11022,13 @@ function formatSummaryValue(value) {
   return String(value);
 }
 
+function getClassesModeLabel(mode) {
+  if (mode === "auto") return "Automatique";
+  if (mode === "auto_afc_discriminante") return "Analyse discriminante optimisee";
+  if (mode === "auto_discriminante") return "Auto discriminante";
+  return "Manuel";
+}
+
 function renderAnalysisSteps(logLines) {
   clearContainer(analysisSteps);
 
@@ -11295,6 +11302,19 @@ function renderAutoDiscriminanteSummary(container, payload) {
   compromiseNote.className = "field-help";
   compromiseNote.textContent = `Meilleur compromis retenu : configuration ${selected.configuration_id || "N/A"}, partition P${selectedK}, score A = ${formatTableNumber(selected.A, 4)}.`;
   container.appendChild(compromiseNote);
+
+  const discriminationValues = [
+    `A_theta=${formatTableNumber(selected.A_theta, 4)}`,
+    `A_dist=${formatTableNumber(selected.A_dist, 4)}`,
+    `A_rad=${formatTableNumber(selected.A_rad, 4)}`,
+    `A_align=${formatTableNumber(selected.A_align, 4)}`,
+    `A_poles=${formatTableNumber(selected.A_poles, 4)}`,
+    `A=${formatTableNumber(selected.A, 4)}`
+  ];
+  const discriminationValuesNote = document.createElement("p");
+  discriminationValuesNote.className = "field-help";
+  discriminationValuesNote.textContent = `Valeurs de discrimination retenues : ${discriminationValues.join(" ; ")}.`;
+  container.appendChild(discriminationValuesNote);
 
   const compromiseVariables = [
     `profil morpho=${formatSummaryValue(selected.profil_morpho || "N/A")}`,
@@ -15293,8 +15313,9 @@ async function startAnalysis(analysisKind = "chd") {
     const classesCountLabel = classesMode === "auto" || classesMode === "auto_afc_discriminante"
       ? "intervalleClasses"
       : "classes";
+    const classesModeLabel = getClassesModeLabel(classesMode);
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesMode}, ${classesMode === "auto" || classesMode === "auto_afc_discriminante" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${classesMode === "auto" || classesMode === "auto_afc_discriminante" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
     );
   }
   progression.set(4, progressStartMessage);
