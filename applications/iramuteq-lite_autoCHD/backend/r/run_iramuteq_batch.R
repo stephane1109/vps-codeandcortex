@@ -1885,7 +1885,7 @@ run_batch <- function() {
         paste0(
           "AFC discriminante : projection finale des ",
           length(termes_signif),
-          " termes a plus fort chi2 retenus par le mode auto."
+          " termes significatifs a plus fort chi2 retenus par classe par le mode auto."
         ),
         progress = 75
       )

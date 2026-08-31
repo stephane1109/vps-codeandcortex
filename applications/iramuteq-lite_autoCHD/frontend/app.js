@@ -11177,7 +11177,7 @@ function renderAutoChdSummary(container, payload) {
   if (isAfcMode) {
     const note = document.createElement("p");
     note.className = "field-help";
-    note.textContent = "Le score A part des 10 termes aux chi2 les plus forts, puis compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement de ces termes et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
+    note.textContent = "Le score A part des termes significatifs a plus fort chi2, en gardant jusqu'a 10 termes par classe, puis compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement de ces termes et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
     container.appendChild(note);
 
     if (selectedConfiguration && typeof selectedConfiguration === "object") {
@@ -11192,14 +11192,26 @@ function renderAutoChdSummary(container, payload) {
       container.appendChild(statsNote);
     }
 
-    const topTerms = Array.isArray(payload?.selected_termes_cibles)
-      ? payload.selected_termes_cibles.map((term) => String(term || "").trim()).filter(Boolean)
+    const topTermsByClass = payload?.selected_termes_cibles_par_classe && typeof payload.selected_termes_cibles_par_classe === "object"
+      ? Object.entries(payload.selected_termes_cibles_par_classe)
+          .map(([classLabel, terms]) => [
+            String(classLabel || "").trim(),
+            Array.isArray(terms) ? terms.map((term) => String(term || "").trim()).filter(Boolean) : []
+          ])
+          .filter(([classLabel, terms]) => classLabel && terms.length)
       : [];
-    if (topTerms.length) {
-      const topTermsNote = document.createElement("p");
-      topTermsNote.className = "field-help";
-      topTermsNote.textContent = `Top chi2 projetes sur l'AFC (${topTerms.length}) : ${topTerms.join(", ")}.`;
-      container.appendChild(topTermsNote);
+    if (topTermsByClass.length) {
+      const introNote = document.createElement("p");
+      introNote.className = "field-help";
+      introNote.textContent = "Top chi2 significatifs projetes sur l'AFC (10 max par classe) :";
+      container.appendChild(introNote);
+
+      topTermsByClass.forEach(([classLabel, terms]) => {
+        const classNote = document.createElement("p");
+        classNote.className = "field-help";
+        classNote.textContent = `${classLabel} : ${terms.join(", ")}.`;
+        container.appendChild(classNote);
+      });
     }
   }
 }
@@ -11302,17 +11314,29 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const scoreNote = document.createElement("p");
   scoreNote.className = "field-help";
-  scoreNote.textContent = "Le mode Auto discriminante garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et les 10 termes aux chi2 les plus forts s'opposent le mieux sur l'AFC.";
+  scoreNote.textContent = "Le mode Auto discriminante garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et les termes significatifs a plus fort chi2, jusqu'a 10 par classe, s'opposent le mieux sur l'AFC.";
   container.appendChild(scoreNote);
 
-  const topTerms = Array.isArray(payload?.selected_termes_cibles)
-    ? payload.selected_termes_cibles.map((term) => String(term || "").trim()).filter(Boolean)
+  const topTermsByClass = payload?.selected_termes_cibles_par_classe && typeof payload.selected_termes_cibles_par_classe === "object"
+    ? Object.entries(payload.selected_termes_cibles_par_classe)
+        .map(([classLabel, terms]) => [
+          String(classLabel || "").trim(),
+          Array.isArray(terms) ? terms.map((term) => String(term || "").trim()).filter(Boolean) : []
+        ])
+        .filter(([classLabel, terms]) => classLabel && terms.length)
     : [];
-  if (topTerms.length) {
-    const topTermsNote = document.createElement("p");
-    topTermsNote.className = "field-help";
-    topTermsNote.textContent = `Top chi2 projetes sur l'AFC (${topTerms.length}) : ${topTerms.join(", ")}.`;
-    container.appendChild(topTermsNote);
+  if (topTermsByClass.length) {
+    const introNote = document.createElement("p");
+    introNote.className = "field-help";
+    introNote.textContent = "Top chi2 significatifs projetes sur l'AFC (10 max par classe) :";
+    container.appendChild(introNote);
+
+    topTermsByClass.forEach(([classLabel, terms]) => {
+      const classNote = document.createElement("p");
+      classNote.className = "field-help";
+      classNote.textContent = `${classLabel} : ${terms.join(", ")}.`;
+      container.appendChild(classNote);
+    });
   }
 }
 

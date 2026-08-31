@@ -707,11 +707,25 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
     df <- df_sig
   }
 
-  df <- df[order(df$chi2_num, decreasing = TRUE), , drop = FALSE]
-  if (nrow(df) > 1L) {
-    df <- df[!duplicated(df$Terme), , drop = FALSE]
+  classes_uniques <- sort(unique(df$Classe_num))
+  rows_by_class <- lapply(classes_uniques, function(class_num) {
+    df_cl <- df[df$Classe_num == class_num, , drop = FALSE]
+    if (!nrow(df_cl)) {
+      return(df_cl[0, , drop = FALSE])
+    }
+    df_cl <- df_cl[order(df_cl$chi2_num, decreasing = TRUE), , drop = FALSE]
+    if (nrow(df_cl) > 1L) {
+      df_cl <- df_cl[!duplicated(df_cl$Terme), , drop = FALSE]
+    }
+    utils::head(df_cl, top_n)
+  })
+  rows_by_class <- rows_by_class[vapply(rows_by_class, nrow, integer(1)) > 0L]
+  if (!length(rows_by_class)) {
+    return(df[0, , drop = FALSE])
   }
-  utils::head(df, top_n)
+  out <- do.call(rbind, rows_by_class)
+  rownames(out) <- NULL
+  out[order(out$Classe_num, -out$chi2_num), , drop = FALSE]
 }
 
 .selectionner_termes_caracteristiques_afc_auto_chd <- function(res_stats_df,
@@ -726,6 +740,27 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
     return(character(0))
   }
   unique(as.character(df$Terme[nzchar(df$Terme)]))
+}
+
+.selectionner_termes_caracteristiques_par_classe_afc_auto_chd <- function(res_stats_df,
+                                                                          top_n = 10L,
+                                                                          p_seuil = 0.05) {
+  df <- .selectionner_lignes_chi2_afc_auto_chd(
+    res_stats_df = res_stats_df,
+    top_n = top_n,
+    p_seuil = p_seuil
+  )
+  if (is.null(df) || !is.data.frame(df) || !nrow(df)) {
+    return(list())
+  }
+
+  classes_uniques <- sort(unique(df$Classe_num))
+  out <- lapply(classes_uniques, function(class_num) {
+    df_cl <- df[df$Classe_num == class_num, , drop = FALSE]
+    unique(as.character(df_cl$Terme[nzchar(df_cl$Terme)]))
+  })
+  names(out) <- paste("Classe", classes_uniques)
+  out
 }
 
 calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
@@ -902,6 +937,11 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
     top_n = top_n_afc,
     p_seuil = p_seuil
   )
+  termes_cibles_par_classe <- .selectionner_termes_caracteristiques_par_classe_afc_auto_chd(
+    res_stats_df = res_stats_df,
+    top_n = top_n_afc,
+    p_seuil = p_seuil
+  )
 
   afc_obj <- fn_afc(
     dfm_obj = dfm_obj,
@@ -951,7 +991,8 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
     afc = afc_obj,
     afc_align_by_class = afc_scores$align_by_class,
     afc_pole_align_by_class = afc_scores$pole_align_by_class,
-    termes_cibles = termes_cibles
+    termes_cibles = termes_cibles,
+    termes_cibles_par_classe = termes_cibles_par_classe
   )
 }
 
@@ -1077,6 +1118,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
     selected_afc = selected_evaluation$afc,
     selected_afc_align_by_class = selected_evaluation$afc_align_by_class,
     selected_termes_cibles = selected_evaluation$termes_cibles,
+    selected_termes_cibles_par_classe = selected_evaluation$termes_cibles_par_classe,
     partitions = partitions
   )
 }
@@ -1219,6 +1261,12 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
     unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
     reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
     selected_termes_cibles = as.list(as.character(selection_obj$selected_termes_cibles %||% character(0))),
+    selected_termes_cibles_par_classe = stats::setNames(
+      lapply(selection_obj$selected_termes_cibles_par_classe %||% list(), function(terms) {
+        as.list(as.character(terms %||% character(0)))
+      }),
+      names(selection_obj$selected_termes_cibles_par_classe %||% list())
+    ),
     metrics = metrics_rows
   )
   jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")
@@ -1928,6 +1976,12 @@ exporter_auto_discriminante_iramuteq <- function(selection_obj, output_dir) {
     k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
     k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
     selected_termes_cibles = as.list(as.character(selection_obj$selected_result$auto_selection$selected_termes_cibles %||% character(0))),
+    selected_termes_cibles_par_classe = stats::setNames(
+      lapply(selection_obj$selected_result$auto_selection$selected_termes_cibles_par_classe %||% list(), function(terms) {
+        as.list(as.character(terms %||% character(0)))
+      }),
+      names(selection_obj$selected_result$auto_selection$selected_termes_cibles_par_classe %||% list())
+    ),
     selected = if (!is.null(selected_df) && nrow(selected_df)) {
       .dataframe_row_to_list_auto_chd(selected_df[1, , drop = FALSE])
     } else {
