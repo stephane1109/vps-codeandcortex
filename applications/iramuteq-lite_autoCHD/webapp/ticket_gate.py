@@ -158,20 +158,38 @@ def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
 
 
+def _ticket_data(client, ticket_id: str) -> dict[str, Any]:
+    return client.hgetall(_ticket_key(ticket_id)) or {}
+
+
+def _ticket_status(client, ticket_id: str) -> str:
+    data = _ticket_data(client, ticket_id)
+    return str(data.get("status") or "").strip().lower()
+
+
 def _cleanup_expired(client, cfg: dict[str, Any]) -> None:
     keys = _keys(cfg["app_id"])
-    for key in (keys["active"], keys["waiting"], _global_active_key()):
-        for ticket_id in _list_members(client, key):
-            if not client.exists(_ticket_key(ticket_id)):
-                client.zrem(key, ticket_id)
+    for ticket_id in _list_members(client, keys["active"]):
+        if not client.exists(_ticket_key(ticket_id)) or _ticket_status(client, ticket_id) != "actif":
+            client.zrem(keys["active"], ticket_id)
+
+    for ticket_id in _list_members(client, keys["waiting"]):
+        if not client.exists(_ticket_key(ticket_id)) or _ticket_status(client, ticket_id) != "attente":
+            client.zrem(keys["waiting"], ticket_id)
+
+    for ticket_id in _list_members(client, _global_active_key()):
+        if not client.exists(_ticket_key(ticket_id)) or _ticket_status(client, ticket_id) != "actif":
+            client.zrem(_global_active_key(), ticket_id)
 
 
 def _active_load(client) -> int:
     total = 0
     for ticket_id in _list_members(client, _global_active_key()):
-        data = client.hgetall(_ticket_key(ticket_id))
-        if data:
-            total += int(data.get("cost", 0))
+        data = _ticket_data(client, ticket_id)
+        if not data or str(data.get("status") or "").strip().lower() != "actif":
+            client.zrem(_global_active_key(), ticket_id)
+            continue
+        total += int(data.get("cost", 0))
     return total
 
 
@@ -274,16 +292,25 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             message="Aucun ticket associé a cette session.",
         )
 
-    data = client.hgetall(_ticket_key(ticket_id)) or {}
+    data = _ticket_data(client, ticket_id)
+    status = str(data.get("status", "inconnu"))
+    message = str(data.get("message", "")).strip()
+    if not message and status == "attente":
+        if _active_count(client, cfg) >= cfg["max_active"]:
+            message = "Application occupée."
+        elif not _can_activate(client, cfg):
+            message = "Capacité serveur temporairement saturée par une autre analyse."
+        else:
+            message = "Ticket en attente d'activation."
     return _build_snapshot(
         cfg,
         enabled=True,
-        statut=data.get("status", "inconnu"),
+        statut=status,
         active=active,
         queued=queued,
         ticket_id=ticket_id,
         position=_waiting_position(client, cfg, ticket_id),
-        message=data.get("message", ""),
+        message=message,
     )
 
 
@@ -296,8 +323,15 @@ def _public_status(client, cfg: dict[str, Any], bypass_message: str | None = Non
     _promote_waiting(client, cfg)
     active = _active_count(client, cfg)
     queued = _waiting_count(client, cfg)
-    statut = "occupee" if active >= cfg["max_active"] else "disponible"
-    message = "Application occupee." if statut == "occupee" else "Application disponible."
+    blocked_by_app = active >= cfg["max_active"]
+    blocked_by_server = not blocked_by_app and not _can_activate(client, cfg)
+    statut = "occupee" if blocked_by_app or blocked_by_server else "disponible"
+    if blocked_by_app:
+        message = "Application occupée."
+    elif blocked_by_server:
+        message = "Capacité serveur temporairement saturée par une autre analyse."
+    else:
+        message = "Application disponible."
     return _build_snapshot(cfg, enabled=True, statut=statut, active=active, queued=queued, message=message)
 
 

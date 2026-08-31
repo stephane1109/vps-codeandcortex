@@ -756,11 +756,11 @@ async function refreshTicketSidebarStatus() {
       return snapshot;
     }
     if (snapshot.statut === "attente") {
-      setSidebarTicketStatus(`File d'attente : position ${snapshot.position || "?"}`, "waiting");
+      setSidebarTicketStatus(formatWaitingTicketMessage(snapshot, "File d'attente."), "waiting");
       return snapshot;
     }
     if (snapshot.statut === "occupee") {
-      setSidebarTicketStatus("Application occupée", "waiting");
+      setSidebarTicketStatus(String(snapshot.message || "").trim() || "Application occupée", "waiting");
       return snapshot;
     }
     if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
@@ -790,7 +790,7 @@ async function claimPageTicketOnOpen() {
       return snapshot;
     }
     if (snapshot.statut === "attente") {
-      setSidebarTicketStatus(`File d'attente : position ${snapshot.position || "?"}`, "waiting");
+      setSidebarTicketStatus(formatWaitingTicketMessage(snapshot, "File d'attente."), "waiting");
       return snapshot;
     }
     if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
@@ -832,6 +832,11 @@ async function releaseAnalysisTicket({ silent = false } = {}) {
   }
 }
 
+function formatWaitingTicketMessage(snapshot, fallback = "Application occupée.") {
+  const baseMessage = String(snapshot?.message || "").trim() || fallback;
+  return `${baseMessage} Position dans la file : ${snapshot?.position || "?"}.`;
+}
+
 async function waitForAnalysisTicket(progressionController, logger) {
   let snapshot = await claimAnalysisTicket();
   if (!snapshot.enabled) {
@@ -845,7 +850,7 @@ async function waitForAnalysisTicket(progressionController, logger) {
 
   let lastWaitingMessage = "";
   while (snapshot.statut === "attente") {
-    const waitingMessage = `Application occupée. Position dans la file : ${snapshot.position || "?"}.`;
+    const waitingMessage = formatWaitingTicketMessage(snapshot);
     setSidebarTicketStatus(waitingMessage, "waiting");
     progressionController.set(8, waitingMessage);
     if (waitingMessage !== lastWaitingMessage) {
