@@ -239,7 +239,9 @@ def current_analysis_lock() -> dict[str, Any] | None:
     if process_is_running(payload.get("pid")):
         return payload
 
-    if not job_id and time.time() - created_at <= ANALYSIS_LOCK_STALE_SECONDS:
+    # Preserve the short pre-launch reservation window: a freshly created lock
+    # intentionally has no PID yet until the subprocess is spawned.
+    if time.time() - created_at <= ANALYSIS_LOCK_STALE_SECONDS:
         return payload
 
     clear_analysis_lock(expected_job_id=job_id or None)
