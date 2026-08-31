@@ -1120,6 +1120,12 @@ run_batch <- function() {
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
   classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
   if (!classes_mode %in% c("manuel", "auto", "auto_discriminante", "auto_afc_discriminante")) classes_mode <- "manuel"
+  engine_classes_mode <- if (identical(classes_mode, "auto_afc_discriminante")) "auto_discriminante" else classes_mode
+  config_chd <- config
+  if (identical(classes_mode, "auto_afc_discriminante")) {
+    config_chd$iramuteq_classes_mode <- "auto_discriminante"
+    config_chd$iramuteq_auto_discriminante_profile <- "complet"
+  }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
@@ -1224,20 +1230,20 @@ run_batch <- function() {
     )
     res_ira <- lancer_moteur_chd_iramuteq(
       dfm_obj = dfm_obj,
-      k = scalar_int(config$k_iramuteq, 10L, 2L),
-      classes_mode = classes_mode,
-      mincl_mode = scalar_chr(config$iramuteq_mincl_mode, "auto"),
-      mincl = scalar_int(config$iramuteq_mincl, 5L, 1L),
+      k = scalar_int(config_chd$k_iramuteq, 10L, 2L),
+      classes_mode = engine_classes_mode,
+      mincl_mode = scalar_chr(config_chd$iramuteq_mincl_mode, "auto"),
+      mincl = scalar_int(config_chd$iramuteq_mincl, 5L, 1L),
       classif_mode = classif_mode,
-      svd_method = scalar_chr(config$iramuteq_svd_method, "irlba"),
+      svd_method = scalar_chr(config_chd$iramuteq_svd_method, "irlba"),
       mode_patate = FALSE,
       binariser = TRUE,
       rscripts_dir = file.path(repo_root, "iramuteqlite"),
-      max_formes = scalar_int(config$iramuteq_max_formes, 20000L, 1L),
-      auto_stats_mode = scalar_chr(config$iramuteq_stats_mode, "vectorise"),
+      max_formes = scalar_int(config_chd$iramuteq_max_formes, 20000L, 1L),
+      auto_stats_mode = scalar_chr(config_chd$iramuteq_stats_mode, "vectorise"),
       auto_k_min = auto_k_min,
-      auto_discriminant_base_config = if (identical(classes_mode, "auto_discriminante")) config else NULL,
-      auto_discriminant_prepare_pipeline_fn = if (identical(classes_mode, "auto_discriminante")) {
+      auto_discriminant_base_config = if (identical(engine_classes_mode, "auto_discriminante")) config_chd else NULL,
+      auto_discriminant_prepare_pipeline_fn = if (identical(engine_classes_mode, "auto_discriminante")) {
         function(config_variant) {
           pipeline_env <- environment(preparer_pipeline_chd)
           original_log_info <- get0("log_info", envir = pipeline_env, inherits = FALSE)
@@ -1250,8 +1256,31 @@ run_batch <- function() {
       } else {
         NULL
       },
-      auto_discriminant_log_fn = if (identical(classes_mode, "auto_discriminante")) log_info else NULL
+      auto_discriminant_log_fn = if (identical(engine_classes_mode, "auto_discriminante")) {
+        if (identical(classes_mode, "auto_afc_discriminante")) {
+          function(message, progress = NULL) {
+            msg <- sub("^Auto discriminante", "Auto AFC discriminante", as.character(message %||% ""))
+            log_info(msg, progress = progress %||% 57)
+          }
+        } else {
+          log_info
+        }
+      } else {
+        NULL
+      }
     )
+    res_ira$classes_mode <- classes_mode
+    if (identical(classes_mode, "auto_afc_discriminante") &&
+        is.list(res_ira$auto_selection) &&
+        is.list(res_ira$auto_discriminant_selection)) {
+      res_ira$auto_selection$selected_configuration_metrics <- res_ira$auto_discriminant_selection$selected_metrics %||% NULL
+      res_ira$auto_selection$search_profile <- res_ira$auto_discriminant_selection$search_profile %||% NULL
+      res_ira$auto_selection$search_profile_label <- res_ira$auto_discriminant_selection$search_profile_label %||% NULL
+      res_ira$auto_selection$total_configurations <- res_ira$auto_discriminant_selection$total_configurations %||% NA_integer_
+      res_ira$auto_selection$successful_configurations <- res_ira$auto_discriminant_selection$successful_configurations %||% NA_integer_
+      res_ira$auto_selection$unique_dfm_tested <- res_ira$auto_discriminant_selection$unique_dfm_tested %||% NA_integer_
+      res_ira$auto_selection$reused_configurations <- res_ira$auto_discriminant_selection$reused_configurations %||% NA_integer_
+    }
     chd <- res_ira$chd
     if (is.list(res_ira$selected_pipeline)) {
       filtered_corpus <- res_ira$selected_pipeline$filtered_corpus %||% filtered_corpus
@@ -1262,7 +1291,11 @@ run_batch <- function() {
       corpus_stats <- res_ira$selected_pipeline$corpus_stats %||% corpus_stats
       log_info(
         paste0(
-          "Auto discriminante : pipeline retenu = ",
+          if (identical(classes_mode, "auto_afc_discriminante")) {
+            "Auto AFC discriminante : pipeline retenu = "
+          } else {
+            "Auto discriminante : pipeline retenu = "
+          },
           quanteda::ndoc(dfm_obj),
           " segments / ",
           quanteda::nfeat(dfm_obj),
@@ -1292,14 +1325,17 @@ run_batch <- function() {
     if (isTRUE(res_ira$fallback_mincl1)) {
       log_info("Ajustement automatique : reconstruction des classes avec mincl=1 pour éviter une fusion excessive des classes terminales.")
     }
-    if (identical(classes_mode, "auto_discriminante") &&
-        is.list(res_ira$auto_discriminant_selection) &&
+    if (is.list(res_ira$auto_discriminant_selection) &&
         is.data.frame(res_ira$auto_discriminant_selection$selected_metrics) &&
         nrow(res_ira$auto_discriminant_selection$selected_metrics)) {
       selected_discriminant <- res_ira$auto_discriminant_selection$selected_metrics[1, , drop = FALSE]
       log_info(
         paste0(
-          "Auto discriminante : configuration retenue ",
+          if (identical(classes_mode, "auto_afc_discriminante")) {
+            "Auto AFC discriminante : configuration retenue "
+          } else {
+            "Auto discriminante : configuration retenue "
+          },
           as.character(selected_discriminant$configuration_id %||% ""),
           " (",
           as.character(selected_discriminant$profil_morpho %||% "morpho n/a"),
@@ -1799,7 +1835,7 @@ run_batch <- function() {
         log_info(paste0("Exports Auto CHD indisponibles : ", e$message))
       })
     }
-    if (identical(classes_mode, "auto_discriminante") && is.list(res_ira$auto_discriminant_selection)) {
+    if (is.list(res_ira$auto_discriminant_selection)) {
       tryCatch({
         auto_discriminant_exports <- exporter_auto_discriminante_iramuteq(res_ira$auto_discriminant_selection, output_dir)
         artifacts$auto_discriminante <- list(
@@ -1807,9 +1843,25 @@ run_batch <- function() {
           summary_json = relative_to_output(auto_discriminant_exports$summary_json),
           score_png = relative_to_output(auto_discriminant_exports$score_png)
         )
-        log_info("Exports Auto discriminante generes.", progress = 69)
+        log_info(
+          if (identical(classes_mode, "auto_afc_discriminante")) {
+            "Exports simulation discriminante generes."
+          } else {
+            "Exports Auto discriminante generes."
+          },
+          progress = 69
+        )
       }, error = function(e) {
-        log_info(paste0("Exports Auto discriminante indisponibles : ", e$message))
+        log_info(
+          paste0(
+            if (identical(classes_mode, "auto_afc_discriminante")) {
+              "Exports simulation discriminante indisponibles : "
+            } else {
+              "Exports Auto discriminante indisponibles : "
+            },
+            e$message
+          )
+        )
       })
     }
 

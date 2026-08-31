@@ -802,7 +802,10 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
 
     term_coords <- coords_termes[match(df_pick$Terme, rownames(coords_termes)), , drop = FALSE]
     term_norms <- sqrt(rowSums(term_coords^2))
-    weights <- sqrt(pmax(df_pick$chi2_num, 0))
+    # La CHD et le chi2 d'origine restent inchanges :
+    # on utilise les termes les mieux classes par chi2, mais sans reponderer
+    # artificiellement leur contribution pendant l'evaluation AFC.
+    weights <- rep(1, nrow(df_pick))
     good <- is.finite(term_norms) & term_norms > 0 & is.finite(weights) & weights > 0
     if (!any(good)) {
       align_by_class[[class_label]] <- 0
@@ -1217,6 +1220,19 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
     } else {
       NULL
     },
+    selected_configuration = if (!is.null(selection_obj$selected_configuration_metrics) &&
+      is.data.frame(selection_obj$selected_configuration_metrics) &&
+      nrow(selection_obj$selected_configuration_metrics)) {
+      .dataframe_row_to_list_auto_chd(selection_obj$selected_configuration_metrics[1, , drop = FALSE])
+    } else {
+      NULL
+    },
+    search_profile = selection_obj$search_profile %||% NULL,
+    search_profile_label = selection_obj$search_profile_label %||% NULL,
+    total_configurations = selection_obj$total_configurations %||% NA_integer_,
+    successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
+    unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
+    reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
     metrics = metrics_rows
   )
   jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")

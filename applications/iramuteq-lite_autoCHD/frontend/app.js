@@ -10995,6 +10995,7 @@ function renderAutoChdSummary(container, payload) {
   const testedMax = Number.parseInt(String(payload?.k_max_tested ?? ""), 10);
   const mode = String(payload?.mode || "auto").trim();
   const isAfcMode = mode === "auto_afc_discriminante";
+  const selectedConfiguration = payload?.selected_configuration;
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune selection automatique disponible pour cette analyse."));
     return;
@@ -11081,8 +11082,20 @@ function renderAutoChdSummary(container, payload) {
   if (isAfcMode) {
     const note = document.createElement("p");
     note.className = "field-help";
-    note.textContent = "Le score A combine l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement des termes a fort chi2 et l'opposition de leurs poles lexicaux ponderes.";
+    note.textContent = "Le score A compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement des termes a fort chi2 et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
     container.appendChild(note);
+
+    if (selectedConfiguration && typeof selectedConfiguration === "object") {
+      const configNote = document.createElement("p");
+      configNote.className = "field-help";
+      configNote.textContent = `Configuration retenue : ${selectedConfiguration.configuration_label || selectedConfiguration.configuration_id || "N/A"}`;
+      container.appendChild(configNote);
+
+      const statsNote = document.createElement("p");
+      statsNote.className = "field-help";
+      statsNote.textContent = `Configurations testees : ${formatSummaryValue(payload?.total_configurations)} ; configurations valides : ${formatSummaryValue(payload?.successful_configurations)} ; DFM uniques : ${formatSummaryValue(payload?.unique_dfm_tested)}.`;
+      container.appendChild(statsNote);
+    }
   }
 }
 
