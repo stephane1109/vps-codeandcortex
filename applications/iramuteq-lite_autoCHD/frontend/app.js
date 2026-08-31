@@ -11259,10 +11259,7 @@ function renderAutoChdSummary(container, payload) {
     container.appendChild(note);
 
     if (selectedConfiguration && typeof selectedConfiguration === "object") {
-      const configNote = document.createElement("p");
-      configNote.className = "field-help";
-      configNote.textContent = `Configuration retenue : ${selectedConfiguration.configuration_label || selectedConfiguration.configuration_id || "N/A"}`;
-      container.appendChild(configNote);
+      appendAutoDiscriminanteConfigurationDetails(container, selectedConfiguration);
 
       const statsNote = document.createElement("p");
       statsNote.className = "field-help";
@@ -11294,6 +11291,34 @@ function renderAutoChdSummary(container, payload) {
   }
 }
 
+function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
+  if (!container || !configSource || typeof configSource !== "object") return;
+
+  const configId = String(configSource.configuration_id || configSource.id || "").trim();
+  const profilMorpho = String(configSource.profil_morpho || "").trim();
+  const minDocfreq = formatSummaryValue(configSource.min_docfreq);
+  const kMaxExplore = formatSummaryValue(configSource.k_max_explore || configSource.kmax || configSource.k_max_requested);
+
+  if (configId) {
+    const configNote = document.createElement("p");
+    configNote.className = "field-help";
+    configNote.textContent = `Configuration retenue : ${configId}`;
+    container.appendChild(configNote);
+  }
+
+  const variableParts = [];
+  if (profilMorpho) variableParts.push(`profil morpho = ${profilMorpho}`);
+  if (minDocfreq && minDocfreq !== "N/A") variableParts.push(`min_docfreq = ${minDocfreq}`);
+  if (kMaxExplore && kMaxExplore !== "N/A") variableParts.push(`k max explore = ${kMaxExplore}`);
+
+  if (variableParts.length) {
+    const variableNote = document.createElement("p");
+    variableNote.className = "field-help";
+    variableNote.textContent = `Variables retenues : ${variableParts.join(" ; ")}.`;
+    container.appendChild(variableNote);
+  }
+}
+
 function renderAutoDiscriminanteSummary(container, payload) {
   if (!clearContainer(container)) return;
 
@@ -11305,14 +11330,11 @@ function renderAutoDiscriminanteSummary(container, payload) {
   }
 
   const metrics = [
-    ["Configuration retenue", selected.configuration_label || selected.configuration_id || "N/A"],
+    ["Configuration", selected.configuration_id || "N/A"],
     ["Partition retenue", `P${selectedK}`],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq", selected.min_docfreq],
-    ["Lemmes", selected.lexique_utiliser_lemmes || "N/A"],
-    ["Stopwords", selected.retirer_stopwords || "N/A"],
-    ["Ponctuation", selected.supprimer_ponctuation || "N/A"],
-    ["Chiffres", selected.supprimer_chiffres || "N/A"]
+    ["k max explore", selected.k_max_explore || "N/A"]
   ];
 
   const grid = document.createElement("div");
@@ -11336,6 +11358,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
   });
 
   container.appendChild(grid);
+  appendAutoDiscriminanteConfigurationDetails(container, selected);
 }
 
 function extractAutoDiscriminanteCloneParsed(parsed) {
