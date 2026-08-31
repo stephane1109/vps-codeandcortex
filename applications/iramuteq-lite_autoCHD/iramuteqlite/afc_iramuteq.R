@@ -786,6 +786,36 @@ executer_afc_variables_etoilees <- function(corpus_aligne, groupes, max_modalite
   st
 }
 
+.resoudre_seuil_significativite_modalites_trace <- function(seuil_p = NULL) {
+  seuil_num <- suppressWarnings(as.numeric(seuil_p[[1]] %||% seuil_p))
+  if (!length(seuil_num) || is.na(seuil_num) || !is.finite(seuil_num) || seuil_num <= 0 || seuil_num > 0.05) {
+    return(0.05)
+  }
+  seuil_num
+}
+
+.filtrer_modalites_significatives_pour_trace <- function(st, seuil_p = 0.05) {
+  if (is.null(st) || !is.data.frame(st) || nrow(st) == 0) {
+    return(st)
+  }
+
+  p_col <- if ("p_value" %in% names(st)) {
+    "p_value"
+  } else if ("p.value" %in% names(st)) {
+    "p.value"
+  } else {
+    NULL
+  }
+  if (is.null(p_col)) {
+    return(st)
+  }
+
+  seuil_use <- .resoudre_seuil_significativite_modalites_trace(seuil_p)
+  p_vals <- suppressWarnings(as.numeric(st[[p_col]]))
+  keep <- is.finite(p_vals) & !is.na(p_vals) & p_vals <= seuil_use
+  st[keep, , drop = FALSE]
+}
+
 .tracer_modalites_etoilees_repli <- function(
   st,
   top_modalites = 120,
@@ -895,6 +925,23 @@ tracer_afc_variables_etoilees <- function(
   rc <- obj$rowcoord
   cc <- obj$colcoord
   st <- obj$modalites_stats
+  seuil_trace <- .resoudre_seuil_significativite_modalites_trace(obj$seuil_p %||% 0.05)
+  st <- .filtrer_modalites_significatives_pour_trace(st, seuil_p = seuil_trace)
+  if (is.null(st) || !is.data.frame(st) || nrow(st) == 0) {
+    plot.new()
+    text(
+      0.5,
+      0.5,
+      paste0(
+        "Aucune modalité étoilée significative à afficher.\n",
+        "(p.value <= ",
+        format(signif(seuil_trace, 3), trim = TRUE),
+        ")"
+      ),
+      cex = 1.02
+    )
+    return(invisible(NULL))
+  }
   coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
   coords_modalites <- .extraire_coordonnees_trace_afc(cc, axes = axes)
   axis_info <- coords_modalites$axes
@@ -910,7 +957,12 @@ tracer_afc_variables_etoilees <- function(
     .tracer_modalites_etoilees_repli(
       st,
       top_modalites = top_modalites,
-      message = "Moins de deux modalités sont projetables : affichage de secours par fréquence."
+      titre = "Variables étoilées significatives",
+      message = paste0(
+        "Moins de deux modalités significatives sont projetables (p.value <= ",
+        format(signif(seuil_trace, 3), trim = TRUE),
+        ") : affichage de secours par fréquence."
+      )
     )
     return(invisible(NULL))
   }
@@ -923,7 +975,12 @@ tracer_afc_variables_etoilees <- function(
     .tracer_modalites_etoilees_repli(
       st,
       top_modalites = top_modalites,
-      message = "AFC limitée à un seul axe ou coordonnées instables : affichage de secours par fréquence."
+      titre = "Variables étoilées significatives",
+      message = paste0(
+        "AFC limitée à un seul axe ou coordonnées instables pour les modalités significatives (p.value <= ",
+        format(signif(seuil_trace, 3), trim = TRUE),
+        ") : affichage de secours par fréquence."
+      )
     )
     return(invisible(NULL))
   }
