@@ -2687,10 +2687,21 @@ body.comparison-ab-fullscreen-open {
   font-weight: 600;
 }
 
+.result-table td.is-chd-significant-cell {
+  color: #146c43;
+  font-weight: 700;
+}
+
 .result-table td.is-chd-non-significant-cell .cell-button,
 .result-table .cell-button.is-chd-non-significant-cell {
   color: #842029;
   font-weight: 600;
+}
+
+.result-table td.is-chd-significant-cell .cell-button,
+.result-table .cell-button.is-chd-significant-cell {
+  color: #146c43;
+  font-weight: 700;
 }
 
 .result-table-caption {

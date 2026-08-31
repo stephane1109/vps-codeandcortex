@@ -12400,6 +12400,8 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
       ? (Number.isFinite(pValue) && pValue <= 0.01 ? "p <= 0.01" : "")
       : String(row[pThresholdIndex] ?? "").trim();
     const typeValue = typeIndex === -1 ? "" : normalizeChdTypeValue(row[typeIndex]);
+    const isSignificant05 = Number.isFinite(pValue) && pValue <= 0.05;
+    const isNonSignificantForDisplay = Number.isFinite(pValue) && pValue > significanceThreshold && !isSignificant05;
 
     return {
       values: [
@@ -12414,14 +12416,16 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
         pThresholdValue,
         typeValue
       ],
-      nonSignificant: Number.isFinite(pValue) && pValue > significanceThreshold
+      nonSignificant: isNonSignificantForDisplay,
+      significant: isSignificant05
     };
   });
 
   return {
     headers: ["num", "forme", "eff. s.t.", "eff. total", "pourcentage", "chi2", "p.value", "p.value (sci.)", "seuil p", "Type"],
     rows: cloneRows.map((entry) => entry.values),
-    rowClasses: cloneRows.map((entry) => (entry.nonSignificant ? "is-chd-non-significant" : ""))
+    rowClasses: cloneRows.map((entry) => (entry.nonSignificant ? "is-chd-non-significant" : "")),
+    significantRows: cloneRows.map((entry) => Boolean(entry.significant))
   };
 }
 
@@ -12488,14 +12492,17 @@ function renderChdStatsByClass(container, parsed, options = {}) {
         rowClassName: ({ rowIndex }) => cloneParsed.rowClasses[rowIndex] || "",
         cellClassName: ({ rowIndex, columnIndex, headers }) => {
           const isNonSignificant = cloneParsed.rowClasses[rowIndex] === "is-chd-non-significant";
-          if (!isNonSignificant) return "";
+          const isSignificant = Boolean(cloneParsed.significantRows?.[rowIndex]);
           const termColumnIndex = headerIndex(headers, ["forme", "terme"]);
           const pValueColumnIndexes = [
             headerIndex(headers, ["p.value", "p_value", "p"]),
             headerIndex(headers, ["p.value (sci.)"]),
             headerIndex(headers, ["seuil p"])
           ].filter((value) => value !== -1);
-          if (columnIndex === termColumnIndex || pValueColumnIndexes.includes(columnIndex)) {
+          if (isSignificant && (columnIndex === termColumnIndex || pValueColumnIndexes.includes(columnIndex))) {
+            return "is-chd-significant-cell";
+          }
+          if (isNonSignificant && (columnIndex === termColumnIndex || pValueColumnIndexes.includes(columnIndex))) {
             return "is-chd-non-significant-cell";
           }
           return "";
@@ -12506,9 +12513,12 @@ function renderChdStatsByClass(container, parsed, options = {}) {
           const termValue = String(cell || "").trim();
           if (!termValue) return null;
           const isNonSignificant = cloneParsed.rowClasses[rowIndex] === "is-chd-non-significant";
+          const isSignificant = Boolean(cloneParsed.significantRows?.[rowIndex]);
           return {
             clickable: true,
-            className: isNonSignificant ? "is-chd-non-significant-cell" : "",
+            className: isSignificant
+              ? "is-chd-significant-cell"
+              : (isNonSignificant ? "is-chd-non-significant-cell" : ""),
             onClick: () => openTermSegmentsDialog(normalizeClassValue(descriptor.label), termValue),
             onContextMenu: (event) =>
               openChdTermContextMenu({
