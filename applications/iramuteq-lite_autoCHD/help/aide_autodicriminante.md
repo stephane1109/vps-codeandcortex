@@ -95,19 +95,25 @@ Il conserve ensuite les partitions possibles :
 
 La CHD d'origine et le calcul du `chi2` ne sont pas modifies.
 
-## Etape 2 : selection automatique de la partition
+## Etape 2 : evaluation discriminante directe des partitions
 
-Dans chaque configuration, chaque partition `Pk` est d'abord evaluee par le score structurel classique :
+Dans l'**Analyse discriminante optimisee**, les partitions `Pk` ne sont pas d'abord retenues par `B` comme en Auto CHD.
 
-- `H` = homogeneite interne ;
-- `D` = distinction minimale entre classes ;
-- `L` = diffusion lexicale ;
-- `B = (H + D + L) / 3`.
+Le mode procede autrement :
 
-La meilleure partition de la configuration est donc :
+- il conserve les partitions `P3...Pk` produites par la meme CHD ;
+- il evalue directement chaque partition sur l'AFC ;
+- il compare ensuite ces partitions avec le score discriminant `A`.
 
-- `P* = argmax B(Pk)` pour Auto CHD ;
-- puis, dans l'Analyse discriminante optimisee, cette partition est aussi relue par l'AFC.
+La partition retenue dans une configuration est donc :
+
+- `P* = argmax A(Pk)`.
+
+Les indicateurs `H`, `D`, `L` et `B` sont toujours calcules, mais ils restent **complementaires** :
+
+- ils servent a decrire la structure de la partition ;
+- `B` peut aider a departager un ex aequo ;
+- ils ne pilotent pas la selection principale dans ce mode.
 
 ## Etape 3 : tous les termes significatifs par classe sur l'AFC
 
@@ -133,13 +139,18 @@ Le score `A` combine plusieurs aspects geometriques :
 - `A_align` : alignement des termes a fort `chi2` avec leur classe ;
 - `A_poles` : opposition des poles lexicaux construits a partir de ces termes.
 
-Le score global est ensuite une combinaison stricte de ces composantes.
+Le score global `A` est ensuite calcule a partir de ces composantes.
 
 En pratique, il favorise les configurations ou :
 
 - les classes ne sont pas collees ;
 - les classes ne regardent pas toutes dans la meme direction ;
 - les termes les plus discriminants soutiennent vraiment cette opposition.
+
+En pratique :
+
+- `A` sert a choisir la partition ;
+- `B` reste un indicateur structurel secondaire.
 
 ## Resultat final
 

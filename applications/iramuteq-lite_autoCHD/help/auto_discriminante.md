@@ -65,7 +65,6 @@ Pour chaque configuration candidate, l'application calcule une CHD normale jusqu
 
 Elle conserve ensuite les partitions :
 
-- `P2`
 - `P3`
 - `P4`
 - ...
@@ -73,7 +72,23 @@ Elle conserve ensuite les partitions :
 
 La CHD et le `chi2` historique ne sont pas modifies.
 
-## Etape 2 : lecture AFC de tous les chi2 significatifs par classe
+## Etape 2 : lecture AFC directe de chaque partition
+
+Dans ce mode, la partition n'est pas d'abord choisie par `B`.
+
+Le mode :
+
+- prend chaque partition `Pk` issue de la CHD ;
+- relit cette partition sur l'AFC ;
+- compare directement les partitions avec le score discriminant `A`.
+
+La partition retenue est donc :
+
+- `P* = argmax A(Pk)`.
+
+Les scores `H`, `D`, `L` et `B` restent calcules pour documenter la structure de la partition, mais ils ne commandent pas la selection principale.
+
+## Etape 3 : lecture AFC de tous les chi2 significatifs par classe
 
 Pour chaque partition, le mode repart des formes caracteristiques deja obtenues par la CHD.
 
@@ -98,6 +113,11 @@ Le score `A` combine plusieurs aspects geometriques :
 - `A_poles` : opposition des poles lexicaux formes par ces termes.
 
 Plus `A` est eleve, plus les classes sont separees, opposees et soutenues par des termes fortement discriminants.
+
+En pratique :
+
+- `A` sert au choix final ;
+- `B` reste un indicateur structurel complementaire.
 
 ## Resultat final
 
