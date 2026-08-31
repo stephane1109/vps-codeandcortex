@@ -2226,6 +2226,7 @@ function buildJobConfig(analysisKind = "chd") {
     autoKMin,
     effectiveK
   } = resolveClassesModeConfig();
+  const autoDiscriminanteProfile = classesMode === "auto_afc_discriminante" ? "ciblee" : "equilibre";
   const simiThresholdValue = Number(document.getElementById("simiThreshold").value);
   const simiSpacingValue = Number(document.getElementById("simiSpacing")?.value);
   const simiSpacing = Number.isFinite(simiSpacingValue)
@@ -2248,7 +2249,8 @@ function buildJobConfig(analysisKind = "chd") {
     max_p: Number(document.getElementById("maxP").value) || 0.05,
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
     iramuteq_classes_mode: classesMode,
-    iramuteq_auto_discriminante_profile: "equilibre",
+    iramuteq_auto_discriminante_profile: autoDiscriminanteProfile,
+    iramuteq_auto_top_n_afc: classesMode === "auto_afc_discriminante" ? 10 : 20,
     iramuteq_auto_k_min: autoKMin,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
@@ -11175,7 +11177,7 @@ function renderAutoChdSummary(container, payload) {
   if (isAfcMode) {
     const note = document.createElement("p");
     note.className = "field-help";
-    note.textContent = "Le score A compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement des termes a fort chi2 et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
+    note.textContent = "Le score A part des 10 termes aux chi2 les plus forts, puis compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement de ces termes et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
     container.appendChild(note);
 
     if (selectedConfiguration && typeof selectedConfiguration === "object") {
@@ -11188,6 +11190,16 @@ function renderAutoChdSummary(container, payload) {
       statsNote.className = "field-help";
       statsNote.textContent = `Configurations testees : ${formatSummaryValue(payload?.total_configurations)} ; configurations valides : ${formatSummaryValue(payload?.successful_configurations)} ; DFM uniques : ${formatSummaryValue(payload?.unique_dfm_tested)}.`;
       container.appendChild(statsNote);
+    }
+
+    const topTerms = Array.isArray(payload?.selected_termes_cibles)
+      ? payload.selected_termes_cibles.map((term) => String(term || "").trim()).filter(Boolean)
+      : [];
+    if (topTerms.length) {
+      const topTermsNote = document.createElement("p");
+      topTermsNote.className = "field-help";
+      topTermsNote.textContent = `Top chi2 projetes sur l'AFC (${topTerms.length}) : ${topTerms.join(", ")}.`;
+      container.appendChild(topTermsNote);
     }
   }
 }
@@ -11290,8 +11302,18 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const scoreNote = document.createElement("p");
   scoreNote.className = "field-help";
-  scoreNote.textContent = "Le mode Auto discriminante teste plusieurs configurations et plusieurs plafonds de classes, puis ne garde qu'un seul resultat: celui dont les classes et les poles lexicaux a fort chi2 sont le plus opposees sur l'AFC.";
+  scoreNote.textContent = "Le mode Auto discriminante garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et les 10 termes aux chi2 les plus forts s'opposent le mieux sur l'AFC.";
   container.appendChild(scoreNote);
+
+  const topTerms = Array.isArray(payload?.selected_termes_cibles)
+    ? payload.selected_termes_cibles.map((term) => String(term || "").trim()).filter(Boolean)
+    : [];
+  if (topTerms.length) {
+    const topTermsNote = document.createElement("p");
+    topTermsNote.className = "field-help";
+    topTermsNote.textContent = `Top chi2 projetes sur l'AFC (${topTerms.length}) : ${topTerms.join(", ")}.`;
+    container.appendChild(topTermsNote);
+  }
 }
 
 function extractAutoDiscriminanteCloneParsed(parsed) {

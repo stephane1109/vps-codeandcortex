@@ -85,6 +85,7 @@ lancer_moteur_chd_iramuteq <- function(
   auto_stats_mode = c("vectorise", "classique"),
   auto_k_min = 2L,
   auto_top_n_diffusion = 20L,
+  auto_top_n_afc = 10L,
   auto_p_seuil = 0.05,
   auto_discriminant_base_config = NULL,
   auto_discriminant_prepare_pipeline_fn = NULL,
@@ -155,6 +156,7 @@ lancer_moteur_chd_iramuteq <- function(
           auto_stats_mode = config_variant$iramuteq_stats_mode %||% auto_stats_mode,
           auto_k_min = config_variant$iramuteq_auto_k_min %||% auto_k_min,
           auto_top_n_diffusion = auto_top_n_diffusion,
+          auto_top_n_afc = auto_top_n_afc,
           auto_p_seuil = auto_p_seuil
         )
       },
@@ -223,6 +225,7 @@ lancer_moteur_chd_iramuteq <- function(
         k_max = k,
         stats_mode = auto_stats_mode,
         top_n_diffusion = auto_top_n_diffusion,
+        top_n_afc = auto_top_n_afc,
         p_seuil = auto_p_seuil
       )
     } else {

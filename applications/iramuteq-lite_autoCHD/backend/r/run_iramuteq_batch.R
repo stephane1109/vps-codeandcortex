@@ -1124,7 +1124,8 @@ run_batch <- function() {
   config_chd <- config
   if (identical(classes_mode, "auto_afc_discriminante")) {
     config_chd$iramuteq_classes_mode <- "auto_discriminante"
-    config_chd$iramuteq_auto_discriminante_profile <- "complet"
+    config_chd$iramuteq_auto_discriminante_profile <- scalar_chr(config$iramuteq_auto_discriminante_profile, "ciblee")
+    config_chd$iramuteq_auto_top_n_afc <- scalar_int(config$iramuteq_auto_top_n_afc, 10L, 2L)
   }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
   if (identical(classif_mode, "double")) {
@@ -1242,6 +1243,7 @@ run_batch <- function() {
       max_formes = scalar_int(config_chd$iramuteq_max_formes, 20000L, 1L),
       auto_stats_mode = scalar_chr(config_chd$iramuteq_stats_mode, "vectorise"),
       auto_k_min = auto_k_min,
+      auto_top_n_afc = scalar_int(config_chd$iramuteq_auto_top_n_afc, if (identical(classes_mode, "auto_afc_discriminante")) 10L else 20L, 2L),
       auto_discriminant_base_config = if (identical(engine_classes_mode, "auto_discriminante")) config_chd else NULL,
       auto_discriminant_prepare_pipeline_fn = if (identical(engine_classes_mode, "auto_discriminante")) {
         function(config_variant) {
@@ -1873,7 +1875,21 @@ run_batch <- function() {
     afc_dir <- file.path(output_dir, "afc")
     dir.create(afc_dir, recursive = TRUE, showWarnings = FALSE)
     termes_signif <- NULL
-    if (scalar_bool(config$filtrer_affichage_pvalue, TRUE) && !is.null(res_stats_df)) {
+    auto_afc_selected_terms <- unique(as.character(res_ira$auto_selection$selected_termes_cibles %||% character(0)))
+    auto_afc_selected_terms <- auto_afc_selected_terms[!is.na(auto_afc_selected_terms) & nzchar(auto_afc_selected_terms)]
+    if ((identical(classes_mode, "auto_afc_discriminante") ||
+         identical(as.character(res_ira$auto_selection$mode %||% ""), "auto_afc_discriminante")) &&
+        length(auto_afc_selected_terms) >= 2L) {
+      termes_signif <- auto_afc_selected_terms
+      log_info(
+        paste0(
+          "AFC discriminante : projection finale des ",
+          length(termes_signif),
+          " termes a plus fort chi2 retenus par le mode auto."
+        ),
+        progress = 75
+      )
+    } else if (scalar_bool(config$filtrer_affichage_pvalue, TRUE) && !is.null(res_stats_df)) {
       termes_signif <- unique(subset(res_stats_df, p <= scalar_num(config$max_p, 0.05))$Terme)
       termes_signif <- termes_signif[!is.na(termes_signif) & nzchar(termes_signif)]
       if (length(termes_signif) < 2) termes_signif <- NULL

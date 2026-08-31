@@ -2,105 +2,68 @@
 
 ## Objectif
 
-Le mode **Auto discriminante** ne cherche pas seulement le meilleur nombre de classes pour une CHD donnee.
-Il cherche la **meilleure combinaison de pretraitements discriminants**, puis, a l'interieur de chaque combinaison, il laisse **Auto CHD** choisir la meilleure partition `P2...Pk`.
+Le mode **Auto AFC discriminante** cherche a produire des classes qui s'opposent le plus nettement possible sur le plan AFC, sans modifier la CHD d'origine ni le calcul du `chi2`.
 
-Autrement dit :
+Il procede en deux temps :
 
-`Corpus -> grille de configurations -> Auto CHD par configuration -> score discriminant -> meilleure combinaison`
-
-Ce mode est utile quand on veut obtenir des classes :
-
-- plus opposees lexicalement ;
-- mieux separees ;
-- moins desequilibrees ;
-- plus proches d'une logique de "centroides bien distincts".
+- il lance plusieurs configurations ciblees du meme corpus ;
+- il ne conserve qu'un seul resultat final : la configuration et la partition qui donnent la meilleure opposition lexicale.
 
 ## Idee generale
 
-On peut se representer ce mode comme un **moteur d'echecs** qui compare plusieurs suites de coups avant de retenir la position la plus forte.
+On peut se representer ce mode comme un **moteur d'echecs** :
 
-- une configuration de pretraitement = une suite de coups possible ;
-- chaque configuration produit une CHD differente ;
-- pour chaque CHD, Auto CHD compare `P2`, `P3`, `P4`... jusqu'a `Pk` ;
-- le mode retient ensuite la combinaison qui donne la structure la plus discriminante.
+- il n'explore pas tous les coups possibles ;
+- il retient une petite famille de coups juges utiles ;
+- il compare les positions obtenues ;
+- il garde la meilleure combinaison globale.
 
-On peut aussi utiliser une **metaphore de perceptron** :
+On peut aussi utiliser la **metaphore du perceptron** au sens pedagogique :
 
-- ce n'est pas un vrai perceptron au sens technique ;
-- c'est une image pedagogique ;
-- le systeme "passe en revue" plusieurs activations possibles du corpus ;
-- puis il garde la combinaison qui separe le mieux les classes dans l'espace lexical.
+- le systeme active plusieurs variantes proches du corpus ;
+- il observe laquelle separe le mieux les classes dans l'espace AFC ;
+- il retient la configuration la plus discriminante.
 
-## Profils d'exploration
+## Ce qui varie reellement
 
-Le mode propose maintenant trois niveaux d'exploration pour eviter des temps de calcul inutilement longs.
+Dans cette version, la grille est volontairement reduite pour eviter les temps de calcul trop longs.
 
-### `Rapide`
+Le mode force :
 
-Ce profil teste :
+- `filtrage_morpho = TRUE`
+- `pos_lexique_a_conserver = NOM, VER`
+- `morpho_exclure_etre_verbe = TRUE`
+- `morpho_conserver_hors_lexique = FALSE`
 
-- tous les profils morphosyntaxiques ;
-- `stopwords` : `oui/non` ;
-- `chiffres` : `oui/non` ;
-- `min_docfreq` : `1`, `2`, `3` et la valeur courante si elle est differente.
+Puis il fait varier seulement :
 
-En revanche, il **garde vos reglages courants** pour :
+- `min_docfreq = 2`
+- `min_docfreq = 3`
+- `min_docfreq = 4`
+- `min_docfreq = 5`
 
-- la lemmatisation ;
-- la ponctuation.
-
-Il est utile pour un premier balayage quand vous cherchez vite des classes opposees.
-
-### `Equilibree`
-
-Ce profil teste :
-
-- tous les profils morphosyntaxiques ;
-- la lemmatisation : `oui/non` ;
-- `stopwords` : `oui/non` ;
-- `chiffres` : `oui/non` ;
-- `min_docfreq` : `1`, `2`, `3` et la valeur courante si elle est differente.
-
-En revanche, il **garde votre reglage courant** pour :
-
-- la ponctuation.
-
-C'est le meilleur compromis entre finesse et temps de calcul. C'est donc le profil recommande.
-
-### `Complete`
-
-Ce profil teste exhaustivement toute la grille discriminante, y compris la ponctuation.
-
-## Ce qui est teste
-Selon le profil choisi, le mode explore tout ou partie de la **grille discriminante** suivante :
-
-- profils morphosyntaxiques : `sans morpho`, `NOM`, `NOM+VER`, `NOM+ADJ+VER`
-- inclusion de `AUTRE_FORME` quand le filtrage morpho est actif
-- exclusion optionnelle de `etre` quand les verbes sont conserves
-- lemmatisation `lexique_utiliser_lemmes` : `oui/non`
-- retrait des stopwords : `oui/non`
-- suppression de la ponctuation : `oui/non`
-- suppression des chiffres : `oui/non`
-- `min_docfreq` : `1`, `2`, `3` et la valeur courante si elle est differente
+Le nombre de configurations teste est donc de **4**.
 
 ## Ce qui reste fixe
 
-Pour garder un temps de calcul encore exploitable, les parametres structurels de la CHD restent ceux choisis par l'utilisateur :
+Les autres parametres restent ceux choisis dans l'interface :
 
-- segmentation (`segment_size`, `rst1`, `rst2`)
-- type de classification terminale
-- methode SVD
-- nombre maximal de formes
-- autres options qui ne servent pas directement a la discrimination lexicale
+- le minimum de classes a retenir ;
+- le maximum de classes a explorer ;
+- la segmentation ;
+- la lemmatisation ;
+- le retrait des stopwords ;
+- la ponctuation ;
+- la conservation ou suppression des chiffres ;
+- la methode SVD ;
+- le nombre maximal de formes ;
+- les autres reglages du pipeline.
 
-Le mode **n'explore donc pas toutes les options de l'application sans limite**.
-Il explore, selon le profil choisi, tout ou partie de la **grille discriminante utile**.
+## Etape 1 : CHD et partitions
 
-## Etape 1 : Auto CHD dans chaque configuration
+Pour chaque configuration candidate, l'application calcule une CHD normale jusqu'au nombre maximal de classes demande.
 
-Pour chaque configuration candidate, l'application lance une CHD jusqu'a la borne `k` demandee.
-Elle conserve alors les partitions possibles :
+Elle conserve ensuite les partitions :
 
 - `P2`
 - `P3`
@@ -108,140 +71,43 @@ Elle conserve alors les partitions possibles :
 - ...
 - `Pk`
 
-Puis elle calcule pour chaque partition :
+La CHD et le `chi2` historique ne sont pas modifies.
 
-- `H` = homogeneite interne
-- `D` = distinction minimale entre classes
-- `L` = diffusion lexicale
-- `B` = score structurel
+## Etape 2 : lecture AFC des 10 plus forts chi2
 
-Formules :
+Pour chaque partition, le mode repart des formes caracteristiques deja obtenues par la CHD.
 
-- `B = (H + D + L) / 3`
-- `P* = argmax B(Pk)`
+Il :
 
-La meilleure partition de la configuration est donc d'abord choisie par **Auto CHD**.
+- trie les formes par `chi2` decroissant ;
+- garde les **10 meilleurs chi2** ;
+- recupere leurs coordonnees `x, y` sur l'AFC ;
+- compare leur orientation avec les classes.
 
-## Etape 2 : score discriminant entre configurations
+Le graphique AFC final de ce mode projette ces termes retenus.
 
-Une fois la meilleure partition de chaque configuration obtenue, le mode Auto discriminante compare les configurations entre elles avec trois composantes :
+## Le score discriminant
 
-- `B` : qualite structurelle globale de la partition retenue
-- `D` : distance minimale entre deux classes
-- `E` : equilibre des classes
+Le score `A` combine plusieurs aspects geometriques :
 
-### `H` : homogeneite interne
+- `A_theta` : opposition angulaire des classes ;
+- `A_dist` : distance entre classes ;
+- `A_rad` : eloignement des classes par rapport au centre ;
+- `A_align` : alignement des termes a fort `chi2` avec leur classe ;
+- `A_poles` : opposition des poles lexicaux formes par ces termes.
 
-`H` mesure a quel point les segments d'une meme classe se ressemblent lexicalement.
+Plus `A` est eleve, plus les classes sont separees, opposees et soutenues par des termes fortement discriminants.
 
-- pour chaque classe, on construit un profil lexical moyen ;
-- chaque segment est compare a ce profil ;
-- on calcule ensuite une moyenne par classe ;
-- la valeur finale est la moyenne non ponderee des classes.
+## Resultat final
 
-Plus `H` est eleve, plus chaque classe est coherent de l'interieur.
+Au final, le mode retient :
 
-### `D` : distinction entre classes
+- une configuration de pretraitement ;
+- une partition `Pk` ;
+- un AFC projete avec les 10 termes `chi2` retenus ;
+- les scores `A`, `A_theta`, `A_dist`, `A_rad`, `A_align`, `A_poles` ;
+- ainsi que `H`, `D`, `L`, `B` pour garder la lecture structurelle de la partition.
 
-`D` mesure la separation minimale entre les classes.
+Resume :
 
-- on construit le profil lexical de chaque classe ;
-- on calcule la divergence de Jensen-Shannon entre toutes les paires ;
-- on retient la plus petite distance.
-
-Formule :
-
-- `D = min JS(Ci, Cj)`
-
-Plus `D` est eleve, plus les classes s'opposent nettement.
-
-### `L` : diffusion lexicale
-
-`L` verifie que l'identite lexicale d'une classe ne repose pas sur quelques segments isoles.
-
-- on repart des formes caracteristiques deja calculees avec le `chi2` de la CHD ;
-- on garde les formes caracteristiques les plus fortes ;
-- on regarde dans combien de segments de la classe elles apparaissent ;
-- on prend une mediane par classe ;
-- puis le minimum entre classes.
-
-Formule :
-
-- `L = min(L1, ..., Lk)`
-
-Plus `L` est eleve, plus les formes caracteristiques sont vraiment diffusees dans la classe.
-
-### `B` : score structurel
-
-`B` est le compromis de base entre :
-
-- coherence interne (`H`)
-- separation (`D`)
-- diffusion (`L`)
-
-Formule :
-
-- `B = (H + D + L) / 3`
-
-### `E` : equilibre des classes
-
-`E` mesure si la partition retenue evite un desequilibre excessif.
-
-- il est calcule a partir de l'entropie normalisee des effectifs de classes ;
-- il vaut `1` quand les classes sont relativement equilibrees ;
-- il baisse quand une partition est ecrasee par une ou deux classes dominantes.
-
-`E` n'interdit pas les petites classes, mais il limite les faux bons resultats bases sur une separation forte avec des classes tres desequilibrees.
-
-### `S` : score discriminant final
-
-Le score final du mode Auto discriminante est :
-
-- `S = (B * D * E)^(1/3)`
-
-Cette moyenne geometrique est volontairement stricte :
-
-- si la structure est bonne mais que les classes sont peu opposees, `S` baisse ;
-- si la distinction est forte mais que les classes sont trop desequilibrees, `S` baisse ;
-- si une configuration est bonne partout, `S` monte.
-
-Le mode retient donc :
-
-- la configuration qui maximise `S`
-
-## Role du `chi2`
-
-Oui, le `chi2` existant de la CHD est bien pris en compte.
-
-Il intervient dans `L` :
-
-- les formes caracteristiques sont celles deja identifiees par la CHD ;
-- Auto discriminante ne remplace pas ce calcul ;
-- il s'appuie dessus pour verifier la diffusion des formes dans chaque classe.
-
-## Lecture pratique des sorties
-
-La sortie du mode fournit :
-
-- la configuration retenue
-- le nombre de classes retenu dans cette configuration
-- `H`, `D`, `L`, `B`, `E`, `S`
-- le tableau de toutes les configurations testees
-- un graphique des meilleurs scores discriminants
-
-En pratique :
-
-- si vous cherchez surtout la meilleure structure interne, utilisez **Auto CHD**
-- si vous cherchez les classes qui **s'opposent le mieux**, utilisez **Auto discriminante**
-
-## Point d'attention
-
-Ce mode peut etre nettement plus long que le mode Auto CHD classique, surtout sur les gros corpus.
-
-Il faut le voir comme une **recherche sur une grille discriminante**, pas comme un simple changement de `k`.
-
-Si le corpus est volumineux :
-
-- commencez par `Rapide` ;
-- passez a `Equilibree` si vous voulez affiner ;
-- gardez `Complete` pour les verifications finales ou les corpus courts.
+`Corpus -> 4 configurations ciblees -> CHD -> partitions Pk -> top 10 chi2 sur AFC -> resultat final le plus discriminant`

@@ -667,15 +667,15 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   out
 }
 
-.selectionner_termes_caracteristiques_afc_auto_chd <- function(res_stats_df,
-                                                               top_n = 20L,
-                                                               p_seuil = 0.05) {
-  top_n <- .as_int_auto_chd(top_n, default = 20L, min_value = 1L)
+.selectionner_lignes_chi2_afc_auto_chd <- function(res_stats_df,
+                                                   top_n = 10L,
+                                                   p_seuil = 0.05) {
+  top_n <- .as_int_auto_chd(top_n, default = 10L, min_value = 1L)
   if (is.null(res_stats_df) || !is.data.frame(res_stats_df) || !nrow(res_stats_df)) {
-    return(character(0))
+    return(data.frame())
   }
   if (!all(c("Terme", "Classe", "chi2") %in% names(res_stats_df))) {
-    return(character(0))
+    return(data.frame())
   }
 
   p_col <- if ("p" %in% names(res_stats_df)) "p" else if ("p_value" %in% names(res_stats_df)) "p_value" else NULL
@@ -696,38 +696,41 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
     drop = FALSE
   ]
   if (!nrow(df)) {
+    return(df[0, , drop = FALSE])
+  }
+
+  df_sig <- df
+  if (!is.null(p_col)) {
+    df_sig <- df[is.finite(df$p_num) & !is.na(df$p_num) & df$p_num <= p_seuil, , drop = FALSE]
+  }
+  if (nrow(df_sig) > 0L) {
+    df <- df_sig
+  }
+
+  df <- df[order(df$chi2_num, decreasing = TRUE), , drop = FALSE]
+  if (nrow(df) > 1L) {
+    df <- df[!duplicated(df$Terme), , drop = FALSE]
+  }
+  utils::head(df, top_n)
+}
+
+.selectionner_termes_caracteristiques_afc_auto_chd <- function(res_stats_df,
+                                                               top_n = 10L,
+                                                               p_seuil = 0.05) {
+  df <- .selectionner_lignes_chi2_afc_auto_chd(
+    res_stats_df = res_stats_df,
+    top_n = top_n,
+    p_seuil = p_seuil
+  )
+  if (is.null(df) || !is.data.frame(df) || !nrow(df)) {
     return(character(0))
   }
-
-  classes_uniques <- sort(unique(df$Classe_num))
-  termes <- character(0)
-
-  for (cl in classes_uniques) {
-    df_cl <- df[df$Classe_num == cl, , drop = FALSE]
-    if (!nrow(df_cl)) next
-    df_cl <- df_cl[order(df_cl$chi2_num, decreasing = TRUE), , drop = FALSE]
-
-    df_sig <- df_cl
-    if (!is.null(p_col)) {
-      df_sig <- df_cl[is.finite(df_cl$p_num) & !is.na(df_cl$p_num) & df_cl$p_num <= p_seuil, , drop = FALSE]
-      df_sig <- df_sig[order(df_sig$chi2_num, decreasing = TRUE), , drop = FALSE]
-    }
-
-    df_pick <- if (nrow(df_sig) > 0L) df_sig else df_cl
-    termes <- c(termes, utils::head(df_pick$Terme, top_n))
-  }
-
-  termes <- unique(termes[nzchar(termes)])
-  if (length(termes) >= 2L) {
-    return(termes)
-  }
-
-  unique(utils::head(df$Terme[order(df$chi2_num, decreasing = TRUE)], max(2L, top_n)))
+  unique(as.character(df$Terme[nzchar(df$Terme)]))
 }
 
 calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
                                                      res_stats_df,
-                                                     top_n = 20L,
+                                                     top_n = 10L,
                                                      p_seuil = 0.05) {
   coords_classes <- .extraire_coordonnees_xy_auto_chd(afc_obj$rowcoord)
   coords_termes <- .extraire_coordonnees_xy_auto_chd(afc_obj$colcoord)
@@ -750,12 +753,11 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
   a_dist <- .moyenne_geometrique_scores_auto_chd(c(class_geom$dist_mean, class_geom$dist_min))
   a_rad <- .borner_score_auto_chd(class_geom$rad_mean)
 
-  p_col <- if ("p" %in% names(res_stats_df)) "p" else if ("p_value" %in% names(res_stats_df)) "p_value" else NULL
-  df <- res_stats_df
-  df$Terme <- trimws(as.character(df$Terme))
-  df$Classe_num <- suppressWarnings(as.integer(df$Classe))
-  df$chi2_num <- suppressWarnings(as.numeric(df$chi2))
-  df$p_num <- if (!is.null(p_col)) suppressWarnings(as.numeric(df[[p_col]])) else NA_real_
+  top_rows <- .selectionner_lignes_chi2_afc_auto_chd(
+    res_stats_df = res_stats_df,
+    top_n = top_n,
+    p_seuil = p_seuil
+  )
 
   align_by_class <- stats::setNames(rep(0, nrow(class_vectors)), rownames(class_vectors))
   pole_align_by_class <- stats::setNames(rep(0, nrow(class_vectors)), rownames(class_vectors))
@@ -770,13 +772,10 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
       next
     }
 
-    df_cl <- df[
-      df$Classe_num == class_num &
-        nzchar(df$Terme) &
-        is.finite(df$chi2_num) &
-        !is.na(df$chi2_num) &
-        df$chi2_num > 0 &
-        df$Terme %in% rownames(coords_termes),
+    df_cl <- top_rows[
+      top_rows$Classe_num == class_num &
+        nzchar(top_rows$Terme) &
+        top_rows$Terme %in% rownames(coords_termes),
       ,
       drop = FALSE
     ]
@@ -786,26 +785,12 @@ calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
       next
     }
 
-    df_cl <- df_cl[order(df_cl$chi2_num, decreasing = TRUE), , drop = FALSE]
-    df_sig <- df_cl
-    if (!is.null(p_col)) {
-      df_sig <- df_cl[is.finite(df_cl$p_num) & !is.na(df_cl$p_num) & df_cl$p_num <= p_seuil, , drop = FALSE]
-      df_sig <- df_sig[order(df_sig$chi2_num, decreasing = TRUE), , drop = FALSE]
-    }
-    df_pick <- if (nrow(df_sig) > 0L) df_sig else df_cl
-    df_pick <- utils::head(df_pick, .as_int_auto_chd(top_n, default = 20L, min_value = 1L))
-    if (!nrow(df_pick)) {
-      align_by_class[[class_label]] <- 0
-      pole_align_by_class[[class_label]] <- 0
-      next
-    }
-
-    term_coords <- coords_termes[match(df_pick$Terme, rownames(coords_termes)), , drop = FALSE]
+    term_coords <- coords_termes[match(df_cl$Terme, rownames(coords_termes)), , drop = FALSE]
     term_norms <- sqrt(rowSums(term_coords^2))
     # La CHD et le chi2 d'origine restent inchanges :
     # on utilise les termes les mieux classes par chi2, mais sans reponderer
     # artificiellement leur contribution pendant l'evaluation AFC.
-    weights <- rep(1, nrow(df_pick))
+    weights <- rep(1, nrow(df_cl))
     good <- is.finite(term_norms) & term_norms > 0 & is.finite(weights) & weights > 0
     if (!any(good)) {
       align_by_class[[class_label]] <- 0
@@ -869,7 +854,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
                                                                partition_obj,
                                                                stats_mode = c("vectorise", "classique"),
                                                                top_n_diffusion = 20L,
-                                                               top_n_afc = 20L,
+                                                               top_n_afc = 10L,
                                                                p_seuil = 0.05,
                                                                afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
@@ -976,7 +961,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
                                                          k_max = NULL,
                                                          stats_mode = c("vectorise", "classique"),
                                                          top_n_diffusion = 20L,
-                                                         top_n_afc = 20L,
+                                                         top_n_afc = 10L,
                                                          p_seuil = 0.05,
                                                          afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
@@ -1233,6 +1218,7 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
     successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
     unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
     reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
+    selected_termes_cibles = as.list(as.character(selection_obj$selected_termes_cibles %||% character(0))),
     metrics = metrics_rows
   )
   jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")
@@ -1290,7 +1276,7 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
 
 .normaliser_profil_exploration_auto_discriminante <- function(value, default = "complet") {
   profile <- tolower(trimws(.as_chr_auto_chd(value, default)))
-  if (!profile %in% c("rapide", "equilibre", "complet")) {
+  if (!profile %in% c("rapide", "equilibre", "complet", "ciblee")) {
     profile <- default
   }
   profile
@@ -1302,6 +1288,7 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
     profile,
     rapide = "Rapide",
     equilibre = "Equilibree",
+    ciblee = "Ciblee",
     complet = "Complete",
     "Complete"
   )
@@ -1314,6 +1301,8 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
 
   values <- if (identical(search_profile, "rapide")) {
     unique(c(k_min, min(k_max, 5L), k_max))
+  } else if (identical(search_profile, "ciblee")) {
+    k_max
   } else if (identical(search_profile, "equilibre")) {
     unique(c(k_min, min(k_max, 5L), seq.int(k_min, k_max, by = 2L), k_max))
   } else {
@@ -1417,32 +1406,43 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     default = "complet"
   )
   k_max_values <- .construire_kmax_auto_discriminante(config_base, search_profile = search_profile)
-  min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
-  use_lemmes_values <- c(FALSE, TRUE)
-  remove_stopwords_values <- c(FALSE, TRUE)
-  remove_punctuation_values <- c(FALSE, TRUE)
-  remove_digits_values <- c(FALSE, TRUE)
+  if (identical(search_profile, "ciblee")) {
+    min_docfreq_values <- 2L:5L
+    use_lemmes_values <- c(.as_bool_auto_chd(config_base$lexique_utiliser_lemmes, FALSE))
+    remove_stopwords_values <- c(.as_bool_auto_chd(config_base$retirer_stopwords, FALSE))
+    remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
+    remove_digits_values <- c(.as_bool_auto_chd(config_base$supprimer_chiffres, FALSE))
+    morpho_profiles <- list(
+      list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = TRUE)
+    )
+  } else {
+    min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
+    use_lemmes_values <- c(FALSE, TRUE)
+    remove_stopwords_values <- c(FALSE, TRUE)
+    remove_punctuation_values <- c(FALSE, TRUE)
+    remove_digits_values <- c(FALSE, TRUE)
 
-  if (identical(search_profile, "rapide")) {
-    use_lemmes_values <- c(.as_bool_auto_chd(config_base$lexique_utiliser_lemmes, TRUE))
-    remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
-  } else if (identical(search_profile, "equilibre")) {
-    remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
+    if (identical(search_profile, "rapide")) {
+      use_lemmes_values <- c(.as_bool_auto_chd(config_base$lexique_utiliser_lemmes, TRUE))
+      remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
+    } else if (identical(search_profile, "equilibre")) {
+      remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
+    }
+
+    morpho_profiles <- list(
+      list(key = "aucun", keep_unknown = FALSE, exclude_etre = FALSE),
+      list(key = "nom", keep_unknown = FALSE, exclude_etre = FALSE),
+      list(key = "nom", keep_unknown = TRUE, exclude_etre = FALSE),
+      list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = FALSE),
+      list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = TRUE),
+      list(key = "nom_ver", keep_unknown = TRUE, exclude_etre = FALSE),
+      list(key = "nom_ver", keep_unknown = TRUE, exclude_etre = TRUE),
+      list(key = "nom_adj_ver", keep_unknown = FALSE, exclude_etre = FALSE),
+      list(key = "nom_adj_ver", keep_unknown = FALSE, exclude_etre = TRUE),
+      list(key = "nom_adj_ver", keep_unknown = TRUE, exclude_etre = FALSE),
+      list(key = "nom_adj_ver", keep_unknown = TRUE, exclude_etre = TRUE)
+    )
   }
-
-  morpho_profiles <- list(
-    list(key = "aucun", keep_unknown = FALSE, exclude_etre = FALSE),
-    list(key = "nom", keep_unknown = FALSE, exclude_etre = FALSE),
-    list(key = "nom", keep_unknown = TRUE, exclude_etre = FALSE),
-    list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = FALSE),
-    list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = TRUE),
-    list(key = "nom_ver", keep_unknown = TRUE, exclude_etre = FALSE),
-    list(key = "nom_ver", keep_unknown = TRUE, exclude_etre = TRUE),
-    list(key = "nom_adj_ver", keep_unknown = FALSE, exclude_etre = FALSE),
-    list(key = "nom_adj_ver", keep_unknown = FALSE, exclude_etre = TRUE),
-    list(key = "nom_adj_ver", keep_unknown = TRUE, exclude_etre = FALSE),
-    list(key = "nom_adj_ver", keep_unknown = TRUE, exclude_etre = TRUE)
-  )
 
   candidates <- list()
   index <- 0L
@@ -1927,6 +1927,7 @@ exporter_auto_discriminante_iramuteq <- function(selection_obj, output_dir) {
     reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
     k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
     k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
+    selected_termes_cibles = as.list(as.character(selection_obj$selected_result$auto_selection$selected_termes_cibles %||% character(0))),
     selected = if (!is.null(selected_df) && nrow(selected_df)) {
       .dataframe_row_to_list_auto_chd(selected_df[1, , drop = FALSE])
     } else {
