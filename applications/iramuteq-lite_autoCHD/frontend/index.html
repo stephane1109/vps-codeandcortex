@@ -2,15 +2,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IRaMuTeQ Lite</title>
+    <title>IRAMUTEQ Lab</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="app-header">
         <div class="brand-block">
-          <p class="eyebrow">IRAMUTEQ LITE</p>
-          <h1>IRAMUTEQ LITE</h1>
+          <p class="eyebrow">IRAMUTEQ Lab</p>
+          <h1>IRAMUTEQ Lab</h1>
           <p class="brand-copy">
             Tentative de reproduction de la CHD du (vrai !) 
             <a href="https://pratinaud.gitpages.huma-num.fr/iramuteq-website/" target="_blank" rel="noopener noreferrer">logiciel IRaMuTeQ (IRaMuTeQ - Pierre Ratinaud - LERASS)</a>
@@ -22,7 +22,7 @@
             Pour d'autres scripts/appli, vous pouvez consulter mon site :
             <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
           </p>
-          <p class="brand-copy">Version 0_4beta - modifiée 28-07-2026</p>
+          <p class="brand-copy">Version 0_1beta - modifiée 31-08-2026</p>
         </div>
 
         <nav class="top-nav" aria-label="Navigation principale">
@@ -326,7 +326,6 @@
                     </div>
                     <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
                   </div>
-                  <p class="section-copy">Les tableaux sont organisés par classe, comme dans l'UI R.</p>
                 </article>
 
                 <article class="card">
@@ -573,8 +572,10 @@
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
                   vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
-                  En mode Analyse discriminante optimisee, l'application compare les partitions de la meme CHD
-                  a partir des coordonnees AFC et des termes caracteristiques a fort chi2.
+                  En mode Analyse discriminante optimisee, vous ne fixez pas le nombre final de classes :
+                  vous donnez seulement une borne minimale et une borne maximale d'exploration, puis l'application
+                  compare les partitions de la meme CHD a partir des coordonnees AFC et des termes caracteristiques
+                  significatifs pour retenir automatiquement le meilleur compromis discriminant.
                 </p>
               </div>
 
@@ -587,10 +588,10 @@
               </div>
 
               <div class="field" data-auto-k-min-field hidden>
-                <label for="kIramuteqMinAuto" data-k-iramuteq-min-label>Nombre minimal de classes a retenir</label>
+                <label for="kIramuteqMinAuto" data-k-iramuteq-min-label>Borne minimale de classes a explorer</label>
                 <input id="kIramuteqMinAuto" type="number" min="2" value="3" data-classes-bound-input />
                 <p class="field-help" data-k-iramuteq-min-help>
-                  Les partitions en dessous de cette borne ne seront pas comparees.
+                  Les partitions en dessous de cette borne ne seront pas testees. Le nombre final de classes reste choisi automatiquement.
                 </p>
               </div>
 

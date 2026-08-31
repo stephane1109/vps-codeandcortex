@@ -5,6 +5,9 @@ Ce mode cherche **un seul meilleur compromis**.
 Il ne change ni la CHD, ni le calcul du `chi2`.
 Il relance seulement quelques configurations ciblees du meme corpus, puis compare leurs resultats sur l'AFC.
 
+L'utilisateur ne choisit donc pas le `k` final :
+il fixe seulement un cadre d'exploration, puis l'application retient automatiquement la partition la plus discriminante.
+
 ## Ce qui est teste
 
 - filtrage morphosyntaxique : `NOM + VER`

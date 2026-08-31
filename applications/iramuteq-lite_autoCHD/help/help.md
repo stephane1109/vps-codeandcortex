@@ -1,5 +1,5 @@
 ## www.codeandcortex.fr
-<small>IRAMUTEQ LITE - Stéphane Meurisse - Version 0_4beta - modifiée 28-07-2026</small>
+<small>IRAMUTEQ Lab - Stéphane Meurisse - Version 0_1beta - modifiée 31-08-2026</small>
 
 - <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">codeandcortex.fr</a>
 - <a href="https://www.codeandcortex.fr/comprendre-chd-methode-reinert/" target="_blank" rel="noopener noreferrer">Comprendre la CHD</a>

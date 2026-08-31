@@ -7,7 +7,7 @@ Dans cette version, le mode **Analyse discriminante optimisee** ne teste plus un
 Il cherche un resultat plus discriminant avec une strategie ciblee :
 
 - le **plafond de classes** reste celui choisi dans l'interface ;
-- le **minimum de classes** reste celui choisi dans l'interface ;
+- la **borne minimale d'exploration** reste celle choisie dans l'interface ;
 - le **filtrage morphosyntaxique** est force sur `NOM + VER` ;
 - le verbe `etre` est exclu ;
 - `min_docfreq` varie seulement de `2` a `5`.
@@ -28,12 +28,23 @@ On peut aussi garder la **metaphore du perceptron** au sens pedagogique :
 - il observe laquelle separe le mieux les classes ;
 - il garde une seule configuration finale.
 
+## Bornes d'exploration
+
+Dans ce mode, l'utilisateur **ne choisit pas le `k` final**.
+
+L'application retient automatiquement la partition la plus discriminante.
+
+L'utilisateur fixe seulement le cadre de recherche :
+
+- `k_min` : borne minimale des partitions autorisees dans la comparaison ;
+- `k_iramuteq` : borne maximale des partitions explorees.
+
+Autrement dit, si le cadre explore est `P3...P10`, le resultat final peut etre `P3`, `P4`, `P5`... ou `P10`, selon le meilleur compromis discriminant.
+
 ## Parametres fixes
 
 Ces parametres restent ceux choisis par l'utilisateur :
 
-- `k_min` : nombre minimal de classes a retenir ;
-- `k_iramuteq` : nombre maximal de classes a explorer ;
 - `segment_size`, `rst1`, `rst2` ;
 - `classif_mode` ;
 - `svd_method` ;

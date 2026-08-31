@@ -2203,7 +2203,7 @@ function renderClassesModeCard(card) {
     ? "Nombre maximal de classes a explorer"
     : "Nombre de classes terminales de la phase 1";
   if (autoKMinLabel instanceof HTMLElement) {
-    autoKMinLabel.textContent = "Nombre minimal de classes a retenir";
+    autoKMinLabel.textContent = "Borne minimale de classes a explorer";
   }
 
   if (kHelp instanceof HTMLElement) {
@@ -2215,7 +2215,7 @@ function renderClassesModeCard(card) {
   }
   if (autoKMinHelp instanceof HTMLElement) {
     autoKMinHelp.textContent = usesAutoBounds
-      ? "Les partitions en dessous de cette borne sont ignorees pendant la selection automatique."
+      ? "Les partitions en dessous de cette borne sont ignorees pendant la selection automatique. Le k final reste choisi automatiquement."
       : "Cette borne ne s'applique qu'aux modes automatiques.";
   }
 }
@@ -11178,10 +11178,7 @@ function renderAutoChdSummary(container, payload) {
     ? [
         ["Mode", payload?.mode_label || "Analyse discriminante optimisee"],
         ["Partition retenue", `P${selectedK}`],
-        ["k min demande", Number.isFinite(requestedMin) ? String(requestedMin) : "N/A"],
-        ["k min teste", Number.isFinite(testedMin) ? String(testedMin) : "N/A"],
-        ["k max demande", Number.isFinite(requestedMax) ? String(requestedMax) : "N/A"],
-        ["k max teste", Number.isFinite(testedMax) ? String(testedMax) : "N/A"],
+        ["Plage exploree", Number.isFinite(testedMin) && Number.isFinite(testedMax) ? `P${testedMin}...P${testedMax}` : "N/A"],
         ["A_theta", formatTableNumber(selected.A_theta, 4)],
         ["A_dist", formatTableNumber(selected.A_dist, 4)],
         ["A_rad", formatTableNumber(selected.A_rad, 4)],
@@ -11301,6 +11298,9 @@ function renderAutoDiscriminanteSummary(container, payload) {
   const selectedK = Number.parseInt(String(selected?.k_retenu ?? ""), 10);
   const requestedMin = Number.parseInt(String(payload?.k_min_requested ?? ""), 10);
   const requestedMax = Number.parseInt(String(payload?.k_max_requested ?? ""), 10);
+  const exploredRange = Number.isFinite(requestedMin) && Number.isFinite(requestedMax)
+    ? `P${requestedMin}...P${requestedMax}`
+    : "";
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune configuration discriminante retenue pour cette analyse."));
     return;
@@ -11313,15 +11313,12 @@ function renderAutoDiscriminanteSummary(container, payload) {
     ["Configurations valides", payload?.successful_configurations],
     ["DFM uniques", payload?.unique_dfm_tested],
     ["Configurations reutilisees", payload?.reused_configurations],
-    ["k min demande", Number.isFinite(requestedMin) ? String(requestedMin) : "N/A"],
-    ["k max demande", Number.isFinite(requestedMax) ? String(requestedMax) : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["Lemmes", selected.lexique_utiliser_lemmes || "N/A"],
     ["Stopwords", selected.retirer_stopwords || "N/A"],
     ["Ponctuation", selected.supprimer_ponctuation || "N/A"],
     ["Chiffres", selected.supprimer_chiffres || "N/A"],
     ["min_docfreq", selected.min_docfreq],
-    ["k max teste", selected.k_max_explore],
     ["Partition retenue", `P${selectedK}`],
     ["A_theta", formatTableNumber(selected.A_theta, 4)],
     ["A_dist", formatTableNumber(selected.A_dist, 4)],
@@ -11370,6 +11367,25 @@ function renderAutoDiscriminanteSummary(container, payload) {
   compromiseNote.textContent = `Meilleur compromis retenu : configuration ${selected.configuration_id || "N/A"}, partition P${selectedK}, score A = ${formatTableNumber(selected.A, 4)}.`;
   container.appendChild(compromiseNote);
 
+  if (exploredRange) {
+    const rangeNote = document.createElement("p");
+    rangeNote.className = "field-help";
+    rangeNote.textContent = `Cadre d'exploration : ${exploredRange}. Cette plage borne la recherche mais ne fixe pas le k final, qui est retenu automatiquement ici en P${selectedK}.`;
+    container.appendChild(rangeNote);
+  }
+
+  const optimizedParameters = [
+    exploredRange ? `partitions comparees=${exploredRange}` : "",
+    `filtrage morphosyntaxique impose=${formatSummaryValue(selected.profil_morpho || "NOM+VER (sans ETRE)")}`,
+    "AUTRE_FORME=non",
+    "min_docfreq teste=2, 3, 4, 5",
+    "termes AFC=tous les termes significatifs (p.value <= 0.05) tries par chi2"
+  ].filter(Boolean);
+  const optimizedParametersNote = document.createElement("p");
+  optimizedParametersNote.className = "field-help";
+  optimizedParametersNote.textContent = `Parametres manipules par l'optimisation : ${optimizedParameters.join(" ; ")}.`;
+  container.appendChild(optimizedParametersNote);
+
   const discriminationValues = [
     `A_theta=${formatTableNumber(selected.A_theta, 4)}`,
     `A_dist=${formatTableNumber(selected.A_dist, 4)}`,
@@ -11384,17 +11400,18 @@ function renderAutoDiscriminanteSummary(container, payload) {
   container.appendChild(discriminationValuesNote);
 
   const compromiseVariables = [
+    `configuration=${formatSummaryValue(selected.configuration_id || "N/A")}`,
+    `partition=P${selectedK}`,
     `profil morpho=${formatSummaryValue(selected.profil_morpho || "N/A")}`,
     `min_docfreq=${formatSummaryValue(selected.min_docfreq)}`,
     `lemmes=${formatSummaryValue(selected.lexique_utiliser_lemmes || "N/A")}`,
     `stopwords=${formatSummaryValue(selected.retirer_stopwords || "N/A")}`,
     `ponctuation=${formatSummaryValue(selected.supprimer_ponctuation || "N/A")}`,
-    `chiffres=${formatSummaryValue(selected.supprimer_chiffres || "N/A")}`,
-    `k max teste=${formatSummaryValue(selected.k_max_explore)}`
+    `chiffres=${formatSummaryValue(selected.supprimer_chiffres || "N/A")}`
   ];
   const variablesNote = document.createElement("p");
   variablesNote.className = "field-help";
-  variablesNote.textContent = `Variables du compromis : ${compromiseVariables.join(" ; ")}.`;
+  variablesNote.textContent = `Parametres ayant contribue au resultat retenu : ${compromiseVariables.join(" ; ")}.`;
   container.appendChild(variablesNote);
 
   const counts = String(selected.classes_effectifs || "").trim();
