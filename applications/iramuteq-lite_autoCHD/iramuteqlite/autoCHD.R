@@ -27,6 +27,11 @@ if (!exists("%||%", mode = "function", inherits = TRUE)) {
   max(0, min(1, value[[1]]))
 }
 
+.limite_top_n_active_auto_chd <- function(top_n) {
+  top_n_num <- suppressWarnings(as.integer(top_n[[1]] %||% NA))
+  length(top_n_num) > 0L && is.finite(top_n_num) && !is.na(top_n_num) && top_n_num >= 1L
+}
+
 .est_erreur_limite_partition_auto_chd <- function(err) {
   msg <- tolower(trimws(conditionMessage(err) %||% ""))
   if (!nzchar(msg)) return(FALSE)
@@ -668,9 +673,8 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
 }
 
 .selectionner_lignes_chi2_afc_auto_chd <- function(res_stats_df,
-                                                   top_n = 10L,
+                                                   top_n = NULL,
                                                    p_seuil = 0.05) {
-  top_n <- .as_int_auto_chd(top_n, default = 10L, min_value = 1L)
   if (is.null(res_stats_df) || !is.data.frame(res_stats_df) || !nrow(res_stats_df)) {
     return(data.frame())
   }
@@ -707,6 +711,12 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
     df <- df_sig
   }
 
+  top_n_num <- if (.limite_top_n_active_auto_chd(top_n)) {
+    suppressWarnings(as.integer(top_n[[1]]))
+  } else {
+    NA_integer_
+  }
+
   classes_uniques <- sort(unique(df$Classe_num))
   rows_by_class <- lapply(classes_uniques, function(class_num) {
     df_cl <- df[df$Classe_num == class_num, , drop = FALSE]
@@ -717,7 +727,11 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
     if (nrow(df_cl) > 1L) {
       df_cl <- df_cl[!duplicated(df_cl$Terme), , drop = FALSE]
     }
-    utils::head(df_cl, top_n)
+    if (is.finite(top_n_num) && !is.na(top_n_num) && top_n_num >= 1L) {
+      utils::head(df_cl, top_n_num)
+    } else {
+      df_cl
+    }
   })
   rows_by_class <- rows_by_class[vapply(rows_by_class, nrow, integer(1)) > 0L]
   if (!length(rows_by_class)) {
@@ -729,7 +743,7 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
 }
 
 .selectionner_termes_caracteristiques_afc_auto_chd <- function(res_stats_df,
-                                                               top_n = 10L,
+                                                               top_n = NULL,
                                                                p_seuil = 0.05) {
   df <- .selectionner_lignes_chi2_afc_auto_chd(
     res_stats_df = res_stats_df,
@@ -743,7 +757,7 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
 }
 
 .selectionner_termes_caracteristiques_par_classe_afc_auto_chd <- function(res_stats_df,
-                                                                          top_n = 10L,
+                                                                          top_n = NULL,
                                                                           p_seuil = 0.05) {
   df <- .selectionner_lignes_chi2_afc_auto_chd(
     res_stats_df = res_stats_df,
@@ -765,7 +779,7 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
 
 calculer_score_afc_discriminant_auto_chd <- function(afc_obj,
                                                      res_stats_df,
-                                                     top_n = 10L,
+                                                     top_n = NULL,
                                                      p_seuil = 0.05) {
   coords_classes <- .extraire_coordonnees_xy_auto_chd(afc_obj$rowcoord)
   coords_termes <- .extraire_coordonnees_xy_auto_chd(afc_obj$colcoord)
@@ -889,7 +903,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
                                                                partition_obj,
                                                                stats_mode = c("vectorise", "classique"),
                                                                top_n_diffusion = 20L,
-                                                               top_n_afc = 10L,
+                                                               top_n_afc = NULL,
                                                                p_seuil = 0.05,
                                                                afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
@@ -947,11 +961,11 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
     dfm_obj = dfm_obj,
     groupes = classes,
     termes_cibles = if (length(termes_cibles) >= 2L) termes_cibles else NULL,
-    max_termes = .as_int_auto_chd(
-      if (length(termes_cibles) >= 2L) min(length(termes_cibles), afc_max_termes) else afc_max_termes,
-      default = 400L,
-      min_value = 2L
-    ),
+    max_termes = if (length(termes_cibles) >= 2L) {
+      max(2L, suppressWarnings(as.integer(length(termes_cibles))))
+    } else {
+      .as_int_auto_chd(afc_max_termes, default = 400L, min_value = 2L)
+    },
     seuil_p = p_seuil,
     rv = NULL
   )
@@ -1002,7 +1016,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
                                                          k_max = NULL,
                                                          stats_mode = c("vectorise", "classique"),
                                                          top_n_diffusion = 20L,
-                                                         top_n_afc = 10L,
+                                                         top_n_afc = NULL,
                                                          p_seuil = 0.05,
                                                          afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)

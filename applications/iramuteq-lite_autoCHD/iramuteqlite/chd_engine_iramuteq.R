@@ -85,7 +85,7 @@ lancer_moteur_chd_iramuteq <- function(
   auto_stats_mode = c("vectorise", "classique"),
   auto_k_min = 2L,
   auto_top_n_diffusion = 20L,
-  auto_top_n_afc = 10L,
+  auto_top_n_afc = NULL,
   auto_p_seuil = 0.05,
   auto_discriminant_base_config = NULL,
   auto_discriminant_prepare_pipeline_fn = NULL,

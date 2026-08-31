@@ -1134,7 +1134,7 @@ run_batch <- function() {
   if (identical(classes_mode, "auto_afc_discriminante")) {
     config_chd$iramuteq_classes_mode <- "auto_discriminante"
     config_chd$iramuteq_auto_discriminante_profile <- scalar_chr(config$iramuteq_auto_discriminante_profile, "ciblee")
-    config_chd$iramuteq_auto_top_n_afc <- scalar_int(config$iramuteq_auto_top_n_afc, 10L, 2L)
+    config_chd$iramuteq_auto_top_n_afc <- NULL
   }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
   if (identical(classif_mode, "double")) {
@@ -1252,7 +1252,7 @@ run_batch <- function() {
       max_formes = scalar_int(config_chd$iramuteq_max_formes, 20000L, 1L),
       auto_stats_mode = scalar_chr(config_chd$iramuteq_stats_mode, "vectorise"),
       auto_k_min = auto_k_min,
-      auto_top_n_afc = scalar_int(config_chd$iramuteq_auto_top_n_afc, if (identical(classes_mode, "auto_afc_discriminante")) 10L else 20L, 2L),
+      auto_top_n_afc = if (identical(classes_mode, "auto_afc_discriminante")) NULL else scalar_int(config_chd$iramuteq_auto_top_n_afc, 20L, 2L),
       auto_discriminant_base_config = if (identical(engine_classes_mode, "auto_discriminante")) config_chd else NULL,
       auto_discriminant_prepare_pipeline_fn = if (identical(engine_classes_mode, "auto_discriminante")) {
         function(config_variant) {
@@ -1894,7 +1894,7 @@ run_batch <- function() {
         paste0(
           "Analyse discriminante optimisee : projection finale des ",
           length(termes_signif),
-          " termes significatifs a plus fort chi2 retenus par classe par le mode auto."
+          " termes significatifs (p.value <= 0.05), tries par chi2 dans chaque classe, retenus par le mode auto."
         ),
         progress = 75
       )

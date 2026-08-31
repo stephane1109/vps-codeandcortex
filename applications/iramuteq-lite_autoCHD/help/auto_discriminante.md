@@ -73,7 +73,7 @@ Elle conserve ensuite les partitions :
 
 La CHD et le `chi2` historique ne sont pas modifies.
 
-## Etape 2 : lecture AFC des 10 plus forts chi2 significatifs par classe
+## Etape 2 : lecture AFC de tous les chi2 significatifs par classe
 
 Pour chaque partition, le mode repart des formes caracteristiques deja obtenues par la CHD.
 
@@ -81,7 +81,7 @@ Il :
 
 - garde seulement les formes dont la `p-value` est significative ;
 - trie ces formes par `chi2` decroissant dans chaque classe ;
-- garde jusqu'a **10 meilleurs chi2 par classe** ;
+- garde tous les termes a `p.value <= 0.05` ;
 - recupere leurs coordonnees `x, y` sur l'AFC ;
 - compare leur orientation avec les classes.
 
@@ -105,10 +105,10 @@ Au final, le mode retient :
 
 - une configuration de pretraitement ;
 - une partition `Pk` ;
-- un AFC projete avec les termes `chi2` significatifs retenus, jusqu'a 10 par classe ;
+- un AFC projete avec tous les termes `chi2` significatifs retenus a `p.value <= 0.05` ;
 - les scores `A`, `A_theta`, `A_dist`, `A_rad`, `A_align`, `A_poles` ;
 - ainsi que `H`, `D`, `L`, `B` pour garder la lecture structurelle de la partition.
 
 Resume :
 
-`Corpus -> 4 configurations ciblees -> CHD -> partitions Pk -> top 10 chi2 significatifs par classe sur AFC -> resultat final le plus discriminant`
+`Corpus -> 4 configurations ciblees -> CHD -> partitions Pk -> tous les chi2 significatifs par classe sur AFC -> resultat final le plus discriminant`

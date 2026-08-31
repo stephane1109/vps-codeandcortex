@@ -2251,7 +2251,7 @@ function buildJobConfig(analysisKind = "chd") {
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
     iramuteq_classes_mode: classesMode,
     iramuteq_auto_discriminante_profile: autoDiscriminanteProfile,
-    iramuteq_auto_top_n_afc: classesMode === "auto_afc_discriminante" ? 10 : 20,
+    iramuteq_auto_top_n_afc: classesMode === "auto_afc_discriminante" ? null : 20,
     iramuteq_auto_k_min: autoKMin,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
@@ -11188,7 +11188,7 @@ function renderAutoChdSummary(container, payload) {
   if (isAfcMode) {
     const note = document.createElement("p");
     note.className = "field-help";
-    note.textContent = "Le score A part des termes significatifs a plus fort chi2, en gardant jusqu'a 10 termes par classe, puis compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement de ces termes et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
+    note.textContent = "Le score A part de tous les termes significatifs a p.value <= 0.05, tries par chi2 dans chaque classe, puis compare l'opposition angulaire des classes, leur distance, leur eloignement du centre AFC, l'alignement de ces termes et l'opposition de leurs poles lexicaux, sans modifier le chi2 d'origine.";
     container.appendChild(note);
 
     if (selectedConfiguration && typeof selectedConfiguration === "object") {
@@ -11214,7 +11214,7 @@ function renderAutoChdSummary(container, payload) {
     if (topTermsByClass.length) {
       const introNote = document.createElement("p");
       introNote.className = "field-help";
-      introNote.textContent = "Top chi2 significatifs projetes sur l'AFC (10 max par classe) :";
+      introNote.textContent = "Tous les termes significatifs projetes sur l'AFC (p.value <= 0.05, tries par chi2) :";
       container.appendChild(introNote);
 
       topTermsByClass.forEach(([classLabel, terms]) => {
@@ -11357,7 +11357,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const scoreNote = document.createElement("p");
   scoreNote.className = "field-help";
-  scoreNote.textContent = "Le mode Analyse discriminante optimisee garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et les termes significatifs a plus fort chi2, jusqu'a 10 par classe, s'opposent le mieux sur l'AFC.";
+  scoreNote.textContent = "Le mode Analyse discriminante optimisee garde le plafond de classes choisi par l'utilisateur, fixe le filtrage morphosyntaxique sur NOM+VER sans ETRE, fait seulement varier min_docfreq de 2 a 5, puis retient la configuration dont les classes et tous les termes significatifs a p.value <= 0.05, tries par chi2, s'opposent le mieux sur l'AFC.";
   container.appendChild(scoreNote);
 
   const topTermsByClass = payload?.selected_termes_cibles_par_classe && typeof payload.selected_termes_cibles_par_classe === "object"
@@ -11371,7 +11371,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
   if (topTermsByClass.length) {
     const introNote = document.createElement("p");
     introNote.className = "field-help";
-    introNote.textContent = "Top chi2 significatifs projetes sur l'AFC (10 max par classe) :";
+    introNote.textContent = "Tous les termes significatifs projetes sur l'AFC (p.value <= 0.05, tries par chi2) :";
     container.appendChild(introNote);
 
     topTermsByClass.forEach(([classLabel, terms]) => {

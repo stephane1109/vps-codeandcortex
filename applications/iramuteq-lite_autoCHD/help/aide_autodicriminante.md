@@ -98,15 +98,14 @@ La meilleure partition de la configuration est donc :
 - `P* = argmax B(Pk)` pour Auto CHD ;
 - puis, dans l'Analyse discriminante optimisee, cette partition est aussi relue par l'AFC.
 
-## Etape 3 : les 10 meilleurs chi2 significatifs par classe sur l'AFC
+## Etape 3 : tous les termes significatifs par classe sur l'AFC
 
-L'Analyse discriminante optimisee repart des **termes significatifs dont le `chi2` est le plus fort, en gardant jusqu'a 10 termes par classe**.
+L'Analyse discriminante optimisee repart de **tous les termes significatifs a `p.value <= 0.05`**, tries par `chi2` dans chaque classe.
 
 Principe :
 
 - dans chaque classe, on garde les formes caracteristiques dont la `p-value` est significative ;
 - on trie ces formes par `chi2` decroissant ;
-- on garde jusqu'a `10` termes par classe ;
 - on recupere leurs coordonnees `x, y` sur le plan AFC ;
 - on observe comment ces termes se placent par rapport aux classes ;
 - on prefere les configurations ou ces termes tirent les classes dans des directions opposees.
@@ -142,4 +141,4 @@ Le mode retient **un seul resultat final** :
 
 En resume :
 
-`Corpus -> 4 configurations ciblees -> CHD -> partitions Pk -> top 10 chi2 significatifs par classe sur AFC -> meilleur compromis discriminant`
+`Corpus -> 4 configurations ciblees -> CHD -> partitions Pk -> tous les termes significatifs par classe sur AFC -> meilleur compromis discriminant`

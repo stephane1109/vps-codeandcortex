@@ -17,8 +17,8 @@ Il relance seulement quelques configurations ciblees du meme corpus, puis compar
 Pour chaque configuration :
 
 - la CHD produit les partitions `P_k`
-- les termes caracteristiques significatifs sont tries par `chi2`
-- jusqu'a `10` termes par classe sont projetes sur l'AFC
+- tous les termes caracteristiques significatifs a `p.value <= 0.05` sont retenus
+- ces termes sont tries par `chi2` dans chaque classe puis projetes sur l'AFC
 - l'application retient la configuration dont les classes s'opposent le mieux
 
 ## Ce qui est affiche
@@ -27,4 +27,4 @@ Pour chaque configuration :
 - la partition retenue
 - le score discriminant `A`
 - les parametres qui ont produit ce compromis
-- les termes significatifs qui soutiennent ce resultat
+- les termes significatifs a `p.value <= 0.05` qui soutiennent ce resultat
