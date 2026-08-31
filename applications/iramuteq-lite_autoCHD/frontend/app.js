@@ -25,6 +25,7 @@ const runProgressTitle = document.getElementById("runProgressTitle");
 const runProgressMessage = document.getElementById("runProgressMessage");
 const runProgressBar = document.getElementById("runProgressBar");
 const runProgressValue = document.getElementById("runProgressValue");
+const stopAnalysisBtn = document.getElementById("stopAnalysisBtn");
 const startupBootstrapDialog = document.getElementById("startupBootstrapDialog");
 const startupBootstrapTitle = document.getElementById("startupBootstrapTitle");
 const startupBootstrapMessage = document.getElementById("startupBootstrapMessage");
@@ -439,6 +440,7 @@ let idleReleaseTimerId = null;
 let lastTicketInteractionAt = Date.now();
 let ticketReleasedLocally = false;
 let activeAnalysisJobId = "";
+let analysisStopRequested = false;
 
 const MORPHO_CATEGORIES = [
   "ADJ",
@@ -561,6 +563,12 @@ function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
   releaseAccessBtn.disabled = !canRelease || analysisExecutionInProgress;
 }
 
+function updateStopAnalysisButton() {
+  if (!stopAnalysisBtn) return;
+  stopAnalysisBtn.disabled = !analysisExecutionInProgress || analysisStopRequested;
+  stopAnalysisBtn.textContent = analysisStopRequested ? "Interruption..." : "Stopper l'analyse";
+}
+
 function resolveIdleReleaseMs(snapshot = latestTicketSnapshot) {
   return Math.max(60000, Number(snapshot?.idleReleaseMs || DEFAULT_TICKET_IDLE_RELEASE_MS));
 }
@@ -633,24 +641,9 @@ function scheduleIdleTicketRelease() {
 
 function releaseTicketOnPageHide() {
   if (analysisExecutionInProgress) {
-    const jobId = String(activeAnalysisJobId || readPersistedRunningAnalysis()?.jobId || "").trim();
-    if (jobId) {
-      clearPersistedRunningAnalysis(jobId);
-    }
-    const headers = { "Content-Type": "application/json" };
-    if (latestTicketSnapshot?.ticket_id) {
-      headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
-    }
-    void fetch("/api/analysis/abandon", {
-      method: "POST",
-      credentials: "same-origin",
-      cache: "no-store",
-      keepalive: true,
-      headers,
-      body: JSON.stringify({
-        jobId: jobId || null,
-        reason: "Analyse annulee : la page a ete quittee avant la fin du calcul."
-      })
+    void abandonActiveAnalysis({
+      reason: "Analyse annulee : la page a ete quittee avant la fin du calcul.",
+      silent: true
     }).catch(() => {});
     return;
   }
@@ -692,6 +685,55 @@ async function callTicketApi(path, { method = "GET", body = null } = {}) {
     throw new Error(String(detail));
   }
   return normalizeTicketSnapshot(payload);
+}
+
+function isAnalysisCancelledSnapshot(snapshot) {
+  return Boolean(snapshot?.completed) &&
+    !Boolean(snapshot?.success) &&
+    String(snapshot?.state || "").trim().toLowerCase() === "cancelled";
+}
+
+async function abandonActiveAnalysis({ reason = "Analyse annulee par l'utilisateur.", silent = false } = {}) {
+  const jobId = String(activeAnalysisJobId || readPersistedRunningAnalysis()?.jobId || "").trim();
+  if (jobId) {
+    clearPersistedRunningAnalysis(jobId);
+  }
+
+  const headers = { "Content-Type": "application/json" };
+  if (latestTicketSnapshot?.ticket_id) {
+    headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+  }
+
+  const response = await fetch("/api/analysis/abandon", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    keepalive: Boolean(silent),
+    headers,
+    body: JSON.stringify({
+      jobId: jobId || null,
+      reason
+    })
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (_error) {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const detail = payload?.detail || payload?.message || `Erreur HTTP ${response.status}`;
+    throw new Error(String(detail));
+  }
+
+  if (payload?.ticket) {
+    rememberTicketSnapshot(payload.ticket);
+    ticketReleasedLocally = true;
+  }
+
+  return payload;
 }
 
 async function refreshTicketSidebarStatus() {
@@ -15397,11 +15439,14 @@ async function startAnalysis(analysisKind = "chd") {
     let streamedLogCount = 0;
     let lastTicketHeartbeatAt = 0;
     let ticketHeartbeatWarningLogged = false;
+    analysisStopRequested = false;
+    updateStopAnalysisButton();
 
     analysisTicket = await waitForAnalysisTicket(progression, log);
     lastTicketHeartbeatAt = Date.now();
     analysisExecutionInProgress = true;
     updateReleaseAccessButton();
+    updateStopAnalysisButton();
     setSidebarRuntimeStatus("Analyse en cours. L'acces reste reserve pour cette session.");
 
     progression.set(12, "Envoi du corpus au backend...");
@@ -15458,6 +15503,12 @@ async function startAnalysis(analysisKind = "chd") {
       if (snapshot.completed) {
         clearPersistedRunningAnalysis(session.jobId);
         activeAnalysisJobId = "";
+        if (isAnalysisCancelledSnapshot(snapshot)) {
+          setSidebarRuntimeStatus("Analyse stoppee a votre demande.", "warning");
+          progression.set(Math.max(0, Number(snapshot.progress) || 0), snapshot.message || "Analyse annulee.");
+          progression.close();
+          return;
+        }
         if (!snapshot.success) {
           const failureLines = statusLogs.length ? statusLogs : [snapshot.message || "Le job Python a échoué."];
           throw new Error(failureLines.join("\n"));
@@ -15466,7 +15517,7 @@ async function startAnalysis(analysisKind = "chd") {
         break;
       }
 
-      if (analysisTicket?.enabled) {
+      if (!analysisStopRequested && analysisTicket?.enabled) {
         const now = Date.now();
         if (!lastTicketHeartbeatAt || now - lastTicketHeartbeatAt >= analysisTicket.heartbeatMs) {
           lastTicketHeartbeatAt = now;
@@ -15606,7 +15657,9 @@ async function startAnalysis(analysisKind = "chd") {
   } finally {
     analysisExecutionInProgress = false;
     activeAnalysisJobId = "";
+    analysisStopRequested = false;
     updateReleaseAccessButton();
+    updateStopAnalysisButton();
     scheduleIdleTicketRelease();
     await refreshTicketSidebarStatus();
   }
@@ -15652,6 +15705,30 @@ if (releaseAccessBtn) {
     } finally {
       await refreshTicketSidebarStatus();
       updateReleaseAccessButton();
+    }
+  });
+}
+if (stopAnalysisBtn) {
+  stopAnalysisBtn.addEventListener("click", async () => {
+    if (!analysisExecutionInProgress || analysisStopRequested) {
+      return;
+    }
+    analysisStopRequested = true;
+    updateStopAnalysisButton();
+    setSidebarRuntimeStatus("Interruption de l'analyse en cours...", "warning");
+    progression.set(Math.max(4, Number(runProgressBar?.value) || 4), "Interruption du calcul en cours...");
+    try {
+      const result = await abandonActiveAnalysis({
+        reason: "Analyse annulee par l'utilisateur depuis le bouton Stop."
+      });
+      const message = String(result?.message || "Analyse annulee par l'utilisateur.").trim();
+      log(`[info] ${message}`);
+      progression.set(Math.max(4, Number(runProgressBar?.value) || 4), message);
+    } catch (error) {
+      analysisStopRequested = false;
+      updateStopAnalysisButton();
+      setSidebarRuntimeStatus("Interruption impossible pour le moment.", "error");
+      log(`[error] Arret de l'analyse impossible : ${error?.message || String(error)}`);
     }
   });
 }
