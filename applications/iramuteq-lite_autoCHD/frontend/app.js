@@ -15605,7 +15605,7 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpAutoChdMarkdownContent, "autochd.md");
-void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "analyse_discriminante_optimisee.md");
+void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "aide_autodicriminante.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
   window.setTimeout(() => {

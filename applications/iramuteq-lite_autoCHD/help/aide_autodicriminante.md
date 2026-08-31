@@ -1,8 +1,8 @@
-# Aide CHD optimisee par AFC
+# Analyse discriminante optimisee
 
 ## Objectif
 
-Dans cette version, le mode **CHD optimisee par AFC** ne teste plus une grande grille exhaustive.
+Dans cette version, le mode **Analyse discriminante optimisee** ne teste plus une grande grille exhaustive.
 
 Il cherche un resultat plus discriminant avec une strategie ciblee :
 
@@ -96,11 +96,11 @@ Dans chaque configuration, chaque partition `Pk` est d'abord evaluee par le scor
 La meilleure partition de la configuration est donc :
 
 - `P* = argmax B(Pk)` pour Auto CHD ;
-- puis, dans le mode AFC discriminant, cette partition est aussi relue par l'AFC.
+- puis, dans l'Analyse discriminante optimisee, cette partition est aussi relue par l'AFC.
 
 ## Etape 3 : les 10 meilleurs chi2 significatifs par classe sur l'AFC
 
-Le mode AFC discriminant repart des **termes significatifs dont le `chi2` est le plus fort, en gardant jusqu'a 10 termes par classe**.
+L'Analyse discriminante optimisee repart des **termes significatifs dont le `chi2` est le plus fort, en gardant jusqu'a 10 termes par classe**.
 
 Principe :
 
