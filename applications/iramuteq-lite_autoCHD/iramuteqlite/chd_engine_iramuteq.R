@@ -83,6 +83,7 @@ lancer_moteur_chd_iramuteq <- function(
   rscripts_dir = NULL,
   max_formes = 20000L,
   auto_stats_mode = c("vectorise", "classique"),
+  auto_k_min = 2L,
   auto_top_n_diffusion = 20L,
   auto_p_seuil = 0.05,
   auto_discriminant_base_config = NULL,
@@ -152,6 +153,7 @@ lancer_moteur_chd_iramuteq <- function(
           rscripts_dir = rscripts_dir,
           max_formes = config_variant$iramuteq_max_formes %||% max_formes,
           auto_stats_mode = config_variant$iramuteq_stats_mode %||% auto_stats_mode,
+          auto_k_min = config_variant$iramuteq_auto_k_min %||% auto_k_min,
           auto_top_n_diffusion = auto_top_n_diffusion,
           auto_p_seuil = auto_p_seuil
         )
@@ -217,6 +219,7 @@ lancer_moteur_chd_iramuteq <- function(
       auto_selection <- selection_afc_discriminante_classes_iramuteq_fn(
         chd_obj = chd_obj,
         dfm_obj = dfm_utilise,
+        k_min = auto_k_min,
         k_max = k,
         stats_mode = auto_stats_mode,
         top_n_diffusion = auto_top_n_diffusion,
@@ -226,6 +229,7 @@ lancer_moteur_chd_iramuteq <- function(
       auto_selection <- selection_automatique_classes_iramuteq_fn(
         chd_obj = chd_obj,
         dfm_obj = dfm_utilise,
+        k_min = auto_k_min,
         k_max = k,
         stats_mode = auto_stats_mode,
         top_n_diffusion = auto_top_n_diffusion,

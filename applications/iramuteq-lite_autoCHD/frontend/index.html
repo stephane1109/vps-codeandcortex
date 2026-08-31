@@ -601,9 +601,17 @@
 
               <div class="field">
                 <label for="kIramuteq" data-k-iramuteq-label>Nombre de classes terminales de la phase 1</label>
-                <input id="kIramuteq" type="number" min="2" value="10" />
+                <input id="kIramuteq" type="number" min="2" value="10" data-classes-bound-input />
                 <p class="field-help" data-k-iramuteq-help>
                   La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.
+                </p>
+              </div>
+
+              <div class="field" data-auto-k-min-field hidden>
+                <label for="kIramuteqMinAuto" data-k-iramuteq-min-label>Nombre minimal de classes a retenir</label>
+                <input id="kIramuteqMinAuto" type="number" min="2" value="3" data-classes-bound-input />
+                <p class="field-help" data-k-iramuteq-min-help>
+                  Les partitions en dessous de cette borne ne seront pas comparees.
                 </p>
               </div>
 

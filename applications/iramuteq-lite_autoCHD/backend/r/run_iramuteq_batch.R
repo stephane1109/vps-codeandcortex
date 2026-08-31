@@ -1120,6 +1120,7 @@ run_batch <- function() {
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
   classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
   if (!classes_mode %in% c("manuel", "auto", "auto_discriminante", "auto_afc_discriminante")) classes_mode <- "manuel"
+  auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
       corpus_importe,
@@ -1186,6 +1187,11 @@ run_batch <- function() {
         scalar_int(config$k_iramuteq, 10L, 2L),
         " | nombre_classes_mode=",
         classes_mode,
+        if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante")) {
+          paste0(" | k_min_auto=", auto_k_min)
+        } else {
+          ""
+        },
         " | mincl_mode=",
         scalar_chr(config$iramuteq_mincl_mode, "auto"),
         if (identical(scalar_chr(config$iramuteq_mincl_mode, "auto"), "manuel")) {
@@ -1229,6 +1235,7 @@ run_batch <- function() {
       rscripts_dir = file.path(repo_root, "iramuteqlite"),
       max_formes = scalar_int(config$iramuteq_max_formes, 20000L, 1L),
       auto_stats_mode = scalar_chr(config$iramuteq_stats_mode, "vectorise"),
+      auto_k_min = auto_k_min,
       auto_discriminant_base_config = if (identical(classes_mode, "auto_discriminante")) config else NULL,
       auto_discriminant_prepare_pipeline_fn = if (identical(classes_mode, "auto_discriminante")) {
         function(config_variant) {
@@ -1335,6 +1342,23 @@ run_batch <- function() {
             res_ira$auto_selection$k_max_tested %||% NA_integer_,
             " classes (",
             res_ira$auto_selection$k_reduction_reason %||% "borne structurelle du corpus",
+            ")."
+          ),
+          progress = 57
+        )
+      }
+      if (!is.null(res_ira$auto_selection$k_min_requested)) {
+        log_info(
+          paste0(
+            if (is_auto_afc_mode) "Auto AFC discriminante : intervalle teste = " else "Auto CHD : intervalle teste = ",
+            "P",
+            res_ira$auto_selection$k_min_tested %||% res_ira$auto_selection$k_min_requested %||% NA_integer_,
+            " ... P",
+            res_ira$auto_selection$k_max_tested %||% res_ira$auto_selection$k_max_requested %||% NA_integer_,
+            " (demande: P",
+            res_ira$auto_selection$k_min_requested %||% NA_integer_,
+            " ... P",
+            res_ira$auto_selection$k_max_requested %||% NA_integer_,
             ")."
           ),
           progress = 57
@@ -2095,6 +2119,7 @@ run_batch <- function() {
       "Manuel"
     },
     auto_classes_selected = if (is.list(classes_info$auto_selection)) classes_info$auto_selection$k_selected %||% NA_integer_ else NA_integer_,
+    auto_classes_min_requested = if (is.list(classes_info$auto_selection)) classes_info$auto_selection$k_min_requested %||% NA_integer_ else NA_integer_,
     auto_classes_max_requested = if (is.list(classes_info$auto_selection)) classes_info$auto_selection$k_max_requested %||% NA_integer_ else NA_integer_,
     auto_classes_max_tested = if (is.list(classes_info$auto_selection) && is.data.frame(classes_info$auto_selection$evaluation)) {
       suppressWarnings(max(as.integer(classes_info$auto_selection$evaluation$k), na.rm = TRUE))

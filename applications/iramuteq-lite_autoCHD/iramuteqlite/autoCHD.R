@@ -99,18 +99,27 @@ extraire_partition_chd_iramuteq <- function(chd_obj, k) {
   )
 }
 
-lister_partitions_chd_iramuteq <- function(chd_obj, k_max = NULL) {
+lister_partitions_chd_iramuteq <- function(chd_obj, k_min = NULL, k_max = NULL) {
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
   if (is.null(n1)) stop("Auto CHD: objet CHD invalide ou sans matrice n1.")
 
   max_available <- ncol(n1) + 1L
+  if (is.null(k_min) || !length(k_min) || is.na(k_min[[1]]) || !is.finite(as.numeric(k_min[[1]]))) {
+    k_min_use <- 2L
+  } else {
+    k_min_use <- max(2L, as.integer(k_min[[1]]))
+  }
   if (is.null(k_max) || !length(k_max) || is.na(k_max[[1]]) || !is.finite(as.numeric(k_max[[1]]))) {
     k_max_use <- max_available
   } else {
     k_max_use <- min(max_available, max(2L, as.integer(k_max[[1]])))
   }
 
-  lapply(2:k_max_use, function(k) extraire_partition_chd_iramuteq(chd_obj, k))
+  if (k_min_use > k_max_use) {
+    return(list())
+  }
+
+  lapply(seq.int(k_min_use, k_max_use), function(k) extraire_partition_chd_iramuteq(chd_obj, k))
 }
 
 resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
@@ -439,15 +448,16 @@ evaluer_partition_auto_chd <- function(dfm_obj,
 
 selection_automatique_classes_iramuteq <- function(chd_obj,
                                                    dfm_obj,
+                                                   k_min = NULL,
                                                    k_max = NULL,
                                                    stats_mode = c("vectorise", "classique"),
                                                    top_n_diffusion = 20L,
                                                    p_seuil = 0.05) {
   stats_mode <- match.arg(stats_mode)
 
-  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_max = k_max)
+  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
   if (!length(partitions)) {
-    stop("Auto CHD: aucune partition exploitable entre 2 classes et la limite demandee.")
+    stop("Auto CHD: aucune partition exploitable dans l'intervalle de classes demande.")
   }
 
   evaluations <- lapply(partitions, function(partition_obj) {
@@ -484,10 +494,16 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   selected_evaluation <- evaluations[[selected_idx]]
   k_max_tested <- suppressWarnings(max(as.integer(metrics_df$k), na.rm = TRUE))
   k_max_requested <- suppressWarnings(as.integer(chd_obj$auto_k_requested %||% k_max[[1]] %||% k_max))
+  k_min_requested <- suppressWarnings(as.integer(k_min[[1]] %||% k_min))
   if (!length(k_max_requested) || is.na(k_max_requested) || !is.finite(k_max_requested)) {
     k_max_requested <- as.integer(k_max_tested)
   }
+  if (!length(k_min_requested) || is.na(k_min_requested) || !is.finite(k_min_requested)) {
+    k_min_requested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
+  }
+  k_min_requested <- max(2L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
+  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
 
   list(
     mode = "auto",
@@ -499,6 +515,8 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
     k_selected = as.integer(metrics_df$k[[selected_idx]]),
+    k_min_requested = as.integer(k_min_requested),
+    k_min_tested = as.integer(k_min_tested),
     k_max_requested = as.integer(k_max_requested),
     k_max_tested = as.integer(k_max_tested),
     k_max_reduced = isTRUE(k_max_tested < k_max_requested),
@@ -837,6 +855,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
 
 selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
                                                          dfm_obj,
+                                                         k_min = NULL,
                                                          k_max = NULL,
                                                          stats_mode = c("vectorise", "classique"),
                                                          top_n_diffusion = 20L,
@@ -845,9 +864,9 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
                                                          afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
 
-  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_max = k_max)
+  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
   if (!length(partitions)) {
-    stop("Auto AFC discriminante: aucune partition exploitable entre 2 classes et la limite demandee.")
+    stop("Auto AFC discriminante: aucune partition exploitable dans l'intervalle de classes demande.")
   }
 
   evaluations <- lapply(partitions, function(partition_obj) {
@@ -912,10 +931,16 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   selected_evaluation <- evaluations[[selected_idx]]
   k_max_tested <- suppressWarnings(max(as.integer(metrics_df$k), na.rm = TRUE))
   k_max_requested <- suppressWarnings(as.integer(chd_obj$auto_k_requested %||% k_max[[1]] %||% k_max))
+  k_min_requested <- suppressWarnings(as.integer(k_min[[1]] %||% k_min))
   if (!length(k_max_requested) || is.na(k_max_requested) || !is.finite(k_max_requested)) {
     k_max_requested <- as.integer(k_max_tested)
   }
+  if (!length(k_min_requested) || is.na(k_min_requested) || !is.finite(k_min_requested)) {
+    k_min_requested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
+  }
+  k_min_requested <- max(2L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
+  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
 
   list(
     mode = "auto_afc_discriminante",
@@ -927,6 +952,8 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
     k_selected = as.integer(metrics_df$k[[selected_idx]]),
+    k_min_requested = as.integer(k_min_requested),
+    k_min_tested = as.integer(k_min_tested),
     k_max_requested = as.integer(k_max_requested),
     k_max_tested = as.integer(k_max_tested),
     k_max_reduced = isTRUE(k_max_tested < k_max_requested),
@@ -1054,6 +1081,8 @@ exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
     score_label = score_label,
     score_plot_title = score_plot_title,
     selected_k = selection_obj$k_selected %||% NA_integer_,
+    k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
+    k_min_tested = selection_obj$k_min_tested %||% NA_integer_,
     k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
     k_max_tested = selection_obj$k_max_tested %||% NA_integer_,
     k_max_reduced = selection_obj$k_max_reduced %||% FALSE,
@@ -1605,6 +1634,8 @@ selection_configuration_discriminante_iramuteq <- function(config_base,
     successful_configurations = sum(metrics_df$selection != "echec", na.rm = TRUE),
     unique_dfm_tested = length(ls(dfm_cache)),
     reused_configurations = reused_count,
+    k_min_requested = best_detail$res_ira$auto_selection$k_min_requested %||% NA_integer_,
+    k_max_requested = best_detail$res_ira$auto_selection$k_max_requested %||% NA_integer_,
     evaluation = metrics_df,
     selected_index = best_idx,
     selected_metrics = best_row,
@@ -1703,6 +1734,8 @@ exporter_auto_discriminante_iramuteq <- function(selection_obj, output_dir) {
     successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
     unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
     reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
+    k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
+    k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
     selected = if (!is.null(selected_df) && nrow(selected_df)) {
       .dataframe_row_to_list_auto_chd(selected_df[1, , drop = FALSE])
     } else {
