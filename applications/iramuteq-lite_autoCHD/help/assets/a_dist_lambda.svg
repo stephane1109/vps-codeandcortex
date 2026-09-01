@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="320" viewBox="0 0 720 320" role="img" aria-labelledby="title desc">
   <title id="title">A_dist - distance entre classes</title>
-  <desc id="desc">Deux classes eloignees sur le plan AFC et une distance tracee entre elles. Le mot-exemple lambda se place pres de la classe 1.</desc>
+  <desc id="desc">Deux classes eloignees sur le plan AFC. La distance euclidienne est la diagonale d entre les deux classes, construite a partir de l'ecart horizontal dx et de l'ecart vertical dy. Le mot-exemple lambda se place pres de la classe 1.</desc>
   <rect width="720" height="320" rx="20" fill="#fbfaf7"/>
   <rect x="22" y="22" width="676" height="276" rx="18" fill="#ffffff" stroke="#e2ddd4"/>
   <text x="42" y="55" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2f2a27">A_dist</text>
@@ -9,12 +9,18 @@
   <line x1="170" y1="270" x2="170" y2="72" stroke="#d8d2c8" stroke-width="2"/>
   <circle cx="220" cy="125" r="16" fill="#41b3a3"/>
   <circle cx="565" cy="205" r="16" fill="#5979c9"/>
-  <line x1="236" y1="129" x2="549" y2="201" stroke="#7f756b" stroke-width="4" stroke-dasharray="10 8"/>
-  <text x="354" y="153" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">distance minimale entre classes</text>
+  <line x1="220" y1="125" x2="565" y2="125" stroke="#c7c1b6" stroke-width="3" stroke-dasharray="8 7"/>
+  <line x1="565" y1="125" x2="565" y2="205" stroke="#c7c1b6" stroke-width="3" stroke-dasharray="8 7"/>
+  <line x1="220" y1="125" x2="565" y2="205" stroke="#7f756b" stroke-width="4"/>
+  <path d="M549 125 L549 141 L565 141" fill="none" stroke="#7f756b" stroke-width="2.5"/>
+  <text x="374" y="118" font-family="Arial, sans-serif" font-size="14" fill="#8a8178">dx = x_j - x_i</text>
+  <text x="576" y="170" font-family="Arial, sans-serif" font-size="14" fill="#8a8178">dy = y_j - y_i</text>
+  <text x="353" y="172" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">d(i,j) = sqrt(dx^2 + dy^2)</text>
+  <text x="331" y="194" font-family="Arial, sans-serif" font-size="13" fill="#7f756b">distance euclidienne</text>
   <circle cx="260" cy="102" r="6" fill="#1f2937"/>
   <text x="272" y="108" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#1f2937">lambda</text>
   <text x="272" y="124" font-family="Arial, sans-serif" font-size="12" fill="#6d655d">mot exemple</text>
-  <text x="190" y="104" font-family="Arial, sans-serif" font-size="14" fill="#41b3a3">Classe 1</text>
-  <text x="518" y="232" font-family="Arial, sans-serif" font-size="14" fill="#5979c9">Classe 2</text>
-  <text x="370" y="100" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Si les classes restent loin les unes des autres, A_dist monte.</text>
+  <text x="188" y="102" font-family="Arial, sans-serif" font-size="14" fill="#41b3a3">Classe i</text>
+  <text x="518" y="232" font-family="Arial, sans-serif" font-size="14" fill="#5979c9">Classe j</text>
+  <text x="352" y="98" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">La diagonale entre deux classes est la distance euclidienne.</text>
 </svg>
