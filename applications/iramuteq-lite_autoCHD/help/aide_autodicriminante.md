@@ -6,11 +6,11 @@ Dans cette version, le mode **Analyse discriminante optimisée** ne teste plus u
 
 Il cherche un résultat plus discriminant avec une stratégie ciblée :
 
-- le **plafond de classes** reste celui choisi dans l'interface ;
-- la **borne minimale d'exploration** n'est pas demandée à l'utilisateur ;
+- `k_iramuteq` fixe le **plafond de classes exploré** ;
+- la **borne minimale d'exploration** est interne au mode et fixée à `3` classes ;
 - le **filtrage morphosyntaxique** est forcé sur `NOM + VER` ;
 - le verbe `être` est exclu ;
-- `min_docfreq` varie seulement de `2` à `5`.
+- `min_docfreq` est la variable testée automatiquement, de `2` à `5`.
 
 Le but est d'obtenir plus vite un résultat où les classes s'opposent nettement sur l'AFC.
 
@@ -47,6 +47,11 @@ Autrement dit, ce mode ne change pas toute l'analyse : il ne fait varier que ce 
 ## Paramètres testés automatiquement
 
 La grille est maintenant volontairement courte.
+
+Repères :
+
+- `k_iramuteq` n'est pas testé automatiquement : il fixe seulement la borne haute de la recherche ;
+- `min_docfreq` est la variable lexicale testée automatiquement dans ce mode.
 
 Filtrage morphosyntaxique imposé :
 

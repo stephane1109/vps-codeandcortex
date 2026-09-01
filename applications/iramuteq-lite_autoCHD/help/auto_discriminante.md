@@ -9,6 +9,12 @@ Il procède en deux temps :
 - il lance plusieurs configurations ciblées du même corpus ;
 - il ne conserve qu'un seul résultat final : la configuration et la partition qui donnent la meilleure opposition lexicale.
 
+Repères essentiels :
+
+- `k_iramuteq` fixe le plafond des partitions explorées ;
+- la borne minimale est interne au mode et fixée à `3` classes ;
+- `min_docfreq` est la variable testée automatiquement dans ce mode.
+
 ## Ce qui varie réellement
 
 Dans cette version, la grille est volontairement réduite pour éviter les temps de calcul trop longs.
@@ -31,8 +37,7 @@ Puis il fait varier seulement :
 
 Les autres paramètres restent ceux choisis dans l'interface :
 
-- le minimum de classes à retenir ;
-- le maximum de classes à explorer ;
+- le plafond de classes à explorer ;
 - la segmentation ;
 - la lemmatisation ;
 - le retrait des stopwords ;
@@ -68,8 +73,6 @@ Le mode :
 La partition retenue est donc :
 
 - `P* = argmax A(Pk)`.
-
-Les scores `H`, `D`, `L` et `B` restent calculés pour documenter la structure de la partition, mais ils ne commandent pas la sélection principale.
 
 ## Étape 3 : lecture AFC de tous les chi2 significatifs par classe
 
