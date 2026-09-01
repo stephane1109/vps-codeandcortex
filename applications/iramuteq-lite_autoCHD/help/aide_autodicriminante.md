@@ -87,12 +87,6 @@ La partition retenue dans une configuration est donc :
 
 - `P* = argmax A(Pk)`.
 
-Les indicateurs `H`, `D`, `L` et `B` sont toujours calculés, mais ils restent **complémentaires** :
-
-- ils servent à décrire la structure de la partition ;
-- `B` peut aider à départager un ex aequo ;
-- ils ne pilotent pas la sélection principale dans ce mode.
-
 ## Étape 3 : tous les termes significatifs par classe sur l'AFC
 
 L'Analyse discriminante optimisée repart de **tous les termes significatifs à `p.value <= 0.05`**, triés par `chi2` dans chaque classe.
