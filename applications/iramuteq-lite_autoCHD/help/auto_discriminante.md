@@ -9,21 +9,6 @@ Il procède en deux temps :
 - il lance plusieurs configurations ciblées du même corpus ;
 - il ne conserve qu'un seul résultat final : la configuration et la partition qui donnent la meilleure opposition lexicale.
 
-## Idée générale
-
-On peut se représenter ce mode comme un **moteur d'échecs** :
-
-- il n'explore pas tous les coups possibles ;
-- il retient une petite famille de coups jugés utiles ;
-- il compare les positions obtenues ;
-- il garde la meilleure combinaison globale.
-
-On peut aussi utiliser la **métaphore du perceptron** au sens pédagogique :
-
-- le système active plusieurs variantes proches du corpus ;
-- il observe laquelle sépare le mieux les classes dans l'espace AFC ;
-- il retient la configuration la plus discriminante.
-
 ## Ce qui varie réellement
 
 Dans cette version, la grille est volontairement réduite pour éviter les temps de calcul trop longs.

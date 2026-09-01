@@ -14,20 +14,6 @@ Il cherche un résultat plus discriminant avec une stratégie ciblée :
 
 Le but est d'obtenir plus vite un résultat où les classes s'opposent nettement sur l'AFC.
 
-## Idée générale
-
-On peut lire ce mode comme un **moteur d'échecs** :
-
-- il ne joue pas tous les coups possibles ;
-- il garde une famille de coups jugée utile ;
-- puis il compare les positions produites pour retenir la meilleure.
-
-On peut aussi garder la **métaphore du perceptron** au sens pédagogique :
-
-- le système active plusieurs versions proches du corpus ;
-- il observe laquelle sépare le mieux les classes ;
-- il garde une seule configuration finale.
-
 ## Bornes d'exploration
 
 Dans ce mode, l'utilisateur **ne choisit pas le `k` final**.
