@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="320" viewBox="0 0 720 320" role="img" aria-labelledby="title desc">
+  <title id="title">A_rad - eloignement par rapport au centre</title>
+  <desc id="desc">Les classes sortent du centre AFC. Le terme lambda se place loin du centre, avec la classe 1.</desc>
+  <rect width="720" height="320" rx="20" fill="#fbfaf7"/>
+  <rect x="22" y="22" width="676" height="276" rx="18" fill="#ffffff" stroke="#e2ddd4"/>
+  <text x="42" y="55" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2f2a27">A_rad</text>
+  <text x="42" y="80" font-family="Arial, sans-serif" font-size="14" fill="#6d655d">Eloignement des classes par rapport au centre AFC</text>
+  <circle cx="235" cy="168" r="24" fill="none" stroke="#d8d2c8" stroke-width="2"/>
+  <circle cx="235" cy="168" r="70" fill="none" stroke="#e8e2da" stroke-width="2" stroke-dasharray="6 8"/>
+  <circle cx="235" cy="168" r="120" fill="none" stroke="#efe8df" stroke-width="2" stroke-dasharray="6 8"/>
+  <circle cx="235" cy="168" r="7" fill="#2f2a27"/>
+  <text x="252" y="173" font-family="Arial, sans-serif" font-size="13" fill="#6d655d">centre</text>
+  <circle cx="330" cy="88" r="15" fill="#41b3a3"/>
+  <circle cx="365" cy="78" r="6" fill="#1f2937"/>
+  <text x="377" y="84" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#1f2937">lambda</text>
+  <circle cx="420" cy="230" r="15" fill="#ef8354"/>
+  <text x="304" y="64" font-family="Arial, sans-serif" font-size="14" fill="#41b3a3">Classe 1</text>
+  <text x="432" y="236" font-family="Arial, sans-serif" font-size="14" fill="#ef8354">Classe 2</text>
+  <text x="400" y="112" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Plus les classes sortent du centre, plus A_rad monte.</text>
+</svg>

@@ -156,6 +156,8 @@ On garde ensuite :
 
 Le score `A_theta` est la moyenne géométrique de ces deux valeurs.
 
+![Schema A_theta avec le terme lambda](assets/a_theta_lambda.svg)
+
 ### 2. `A_dist` : éloignement spatial des classes
 
 Pour chaque paire de classes `(i, j)`, on calcule la distance euclidienne :
@@ -170,6 +172,8 @@ On garde ensuite :
 - la plus petite distance observée entre deux classes.
 
 Le score `A_dist` est la moyenne géométrique de ces deux valeurs.
+
+![Schema A_dist avec le terme lambda](assets/a_dist_lambda.svg)
 
 ### 3. `A_rad` : sortie des classes hors du centre
 
@@ -187,6 +191,8 @@ Lecture :
 
 - une classe très proche du centre est peu discriminante ;
 - une classe plus éloignée du centre porte une opposition plus lisible.
+
+![Schema A_rad avec le terme lambda](assets/a_rad_lambda.svg)
 
 ### 4. `A_align` : cohérence entre une classe et ses termes significatifs
 
@@ -211,6 +217,8 @@ Lecture :
 - si les termes significatifs d'une classe partent dans sa direction, le score monte ;
 - s'ils se dispersent ou contredisent sa direction, le score baisse.
 
+![Schema A_align avec le terme lambda](assets/a_align_lambda.svg)
+
 ### 5. `A_poles` : opposition des pôles lexicaux
 
 Pour chaque classe, on construit un pôle lexical moyen à partir de ses termes significatifs :
@@ -225,6 +233,8 @@ On applique ensuite aux pôles la même logique géométrique :
 - alignement entre chaque pôle et la classe qu'il représente.
 
 Le score `A_poles` résume donc la position des "centroïdes" lexicaux des classes.
+
+![Schema A_poles avec le terme lambda](assets/a_poles_lambda.svg)
 
 ### 6. Score final `A`
 

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="320" viewBox="0 0 720 320" role="img" aria-labelledby="title desc">
+  <title id="title">A_poles - opposition des poles lexicaux</title>
+  <desc id="desc">Chaque classe possede un pole lexical moyen construit a partir de ses termes. Le mot lambda contribue au pole de la classe 1.</desc>
+  <rect width="720" height="320" rx="20" fill="#fbfaf7"/>
+  <rect x="22" y="22" width="676" height="276" rx="18" fill="#ffffff" stroke="#e2ddd4"/>
+  <text x="42" y="55" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2f2a27">A_poles</text>
+  <text x="42" y="80" font-family="Arial, sans-serif" font-size="14" fill="#6d655d">Opposition des poles lexicaux moyens construits par classe</text>
+  <line x1="140" y1="180" x2="610" y2="180" stroke="#d8d2c8" stroke-width="2"/>
+  <circle cx="232" cy="120" r="6" fill="#1f2937"/>
+  <text x="244" y="126" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#1f2937">lambda</text>
+  <circle cx="215" cy="150" r="5" fill="#41b3a3" opacity="0.65"/>
+  <circle cx="260" cy="138" r="5" fill="#41b3a3" opacity="0.65"/>
+  <circle cx="238" cy="168" r="5" fill="#41b3a3" opacity="0.65"/>
+  <circle cx="505" cy="208" r="5" fill="#5979c9" opacity="0.65"/>
+  <circle cx="532" cy="178" r="5" fill="#5979c9" opacity="0.65"/>
+  <circle cx="558" cy="218" r="5" fill="#5979c9" opacity="0.65"/>
+  <circle cx="236" cy="145" r="12" fill="#41b3a3"/>
+  <circle cx="530" cy="201" r="12" fill="#5979c9"/>
+  <line x1="248" y1="147" x2="518" y2="199" stroke="#7f756b" stroke-width="4" stroke-dasharray="10 8"/>
+  <text x="324" y="160" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">distance entre poles lexicaux</text>
+  <text x="184" y="196" font-family="Arial, sans-serif" font-size="14" fill="#41b3a3">pole lexical 1</text>
+  <text x="482" y="229" font-family="Arial, sans-serif" font-size="14" fill="#5979c9">pole lexical 2</text>
+  <text x="360" y="102" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Si les poles moyens s'opposent, A_poles monte.</text>
+</svg>
