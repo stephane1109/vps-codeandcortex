@@ -27,8 +27,6 @@ Puis il fait varier seulement :
 - `min_docfreq = 4`
 - `min_docfreq = 5`
 
-Le nombre de configurations testé est donc de **4**.
-
 ## Ce qui reste fixe
 
 Les autres paramètres restent ceux choisis dans l'interface :

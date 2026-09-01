@@ -62,12 +62,6 @@ Valeurs explorées :
 - `min_docfreq = 4`
 - `min_docfreq = 5`
 
-Le nombre de configurations testé est donc :
-
-- `4`
-
-et non plus des centaines ou des milliers.
-
 ## Étape 1 : une CHD par configuration
 
 Pour chaque valeur de `min_docfreq`, le mode lance une CHD normale jusqu'au `k` maximal demandé.
