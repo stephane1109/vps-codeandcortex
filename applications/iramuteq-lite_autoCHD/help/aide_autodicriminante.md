@@ -198,11 +198,18 @@ Lecture :
 
 ### 4. `A_align` : cohérence entre une classe et ses termes significatifs
 
+Sur le plan AFC, chaque classe et chaque terme projeté possède des coordonnées `x, y`.
+
+On lit donc :
+
+- la classe `i` comme un vecteur `v_i = (x_i, y_i)` partant de l'origine ;
+- le terme `t` comme un vecteur `t = (x_t, y_t)` partant lui aussi de l'origine.
+
 Pour chaque classe :
 
 - on prend tous ses termes significatifs `p.value <= 0.05` ;
 - on récupère leurs coordonnées `x, y` sur l'AFC ;
-- on calcule, pour chaque terme, son alignement avec le vecteur de la classe.
+- on calcule, pour chaque terme, l'angle entre son vecteur et le vecteur de la classe.
 
 Pour un terme `t` et une classe `i` :
 
@@ -216,6 +223,8 @@ Le score de la classe est la moyenne de ces alignements, puis `A_align` est la m
 
 Lecture :
 
+- on ne mesure pas seulement la proximité entre un mot et une classe ;
+- on mesure surtout s'ils pointent dans la même direction depuis l'origine de l'AFC ;
 - si les termes significatifs d'une classe partent dans sa direction, le score monte ;
 - s'ils se dispersent ou contredisent sa direction, le score baisse.
 
