@@ -242,15 +242,6 @@ En pratique :
 - `A` sert à choisir la partition ;
 - `B` reste un indicateur structurel secondaire.
 
-## Résultat final
-
-Le mode retient **un seul résultat final** :
-
-- une configuration de prétraitement ;
-- une partition `Pk` ;
-- un graphe AFC avec les termes les plus discriminants ;
-- les scores associés.
-
 En résumé :
 
 `Corpus -> 4 configurations ciblées -> CHD -> partitions Pk -> tous les termes significatifs par classe sur AFC -> meilleur compromis discriminant`

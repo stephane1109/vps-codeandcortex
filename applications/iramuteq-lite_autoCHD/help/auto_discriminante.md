@@ -102,16 +102,6 @@ En pratique :
 - `A` sert au choix final ;
 - `B` reste un indicateur structurel complémentaire.
 
-## Résultat final
-
-Au final, le mode retient :
-
-- une configuration de prétraitement ;
-- une partition `Pk` ;
-- un AFC projeté avec tous les termes `chi2` significatifs retenus à `p.value <= 0.05` ;
-- les scores `A`, `A_theta`, `A_dist`, `A_rad`, `A_align`, `A_poles` ;
-- ainsi que `H`, `D`, `L`, `B` pour garder la lecture structurelle de la partition.
-
 Résumé :
 
 `Corpus -> 4 configurations ciblées -> CHD -> partitions Pk -> tous les chi2 significatifs par classe sur AFC -> résultat final le plus discriminant`
