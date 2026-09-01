@@ -266,13 +266,13 @@
                     <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
                   </div>
                   <p class="section-copy">
-                    En mode automatique, IRaMuTeQ-lite evalue les partitions P2...Pk a partir de la meme CHD,
+                    En mode automatique, IRaMuTeQ-lite evalue les solutions de 2 a k classes a partir de la meme CHD,
                     puis retient celle qui maximise le score structurel B.
                   </p>
                   <p class="section-copy">
                     Le parametre principal du mode auto est le nombre maximal de classes a explorer :
-                    on ne fixe pas d'avance la partition finale, on donne a la CHD une borne de recherche,
-                    puis l'application compare les partitions possibles de 2 classes jusqu'a cette limite.
+                    on ne fixe pas d'avance le nombre final de classes, on donne a la CHD une borne de recherche,
+                    puis l'application compare les solutions possibles de 2 classes jusqu'a cette limite.
                   </p>
                   <p class="section-copy">
                     Le score structurel se construit a partir de trois composantes.
@@ -287,12 +287,12 @@
                     plusieurs combinaisons sont possibles, mais la meilleure n'est pas forcement celle qui
                     ajoute le plus de classes. C'est celle qui offre le meilleur equilibre entre coherence interne,
                     separation entre classes et stabilite lexicale. Le gain `G` indique ensuite si le passage
-                    d'une partition a la suivante ameliore vraiment cette structure.
+                    d'une solution en classes a la suivante ameliore vraiment cette structure.
                   </p>
                 </article>
 
                 <article class="card">
-                  <h3>Partition retenue</h3>
+                  <h3>Solution retenue</h3>
                   <div id="autoChdSummary" class="result-pane"></div>
                 </article>
 
@@ -302,7 +302,7 @@
                 </article>
 
                 <article class="card">
-                  <h3>Tableaux Auto CHD par partition</h3>
+                  <h3>Tableaux Auto CHD par nombre de classes</h3>
                   <div id="autoChdTable" class="result-pane"></div>
                 </article>
               </div>
@@ -563,10 +563,10 @@
                 </select>
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
-                  vous fixez seulement une limite maximale, puis Auto CHD compare P2...Pk.
+                  vous fixez seulement une limite maximale, puis Auto CHD compare les solutions de 2 a k classes.
                   En mode Analyse discriminante optimisee, vous ne fixez pas le nombre final de classes :
                   vous donnez seulement une limite maximale d'exploration, puis l'application compare
-                  automatiquement les partitions de la meme CHD a partir de 3 classes jusqu'a cette limite
+                  automatiquement les solutions en classes issues de la meme CHD a partir de 3 classes jusqu'a cette limite
                   pour retenir le meilleur compromis discriminant.
                 </p>
               </div>

@@ -16,7 +16,7 @@ IRaMuTeQ, développé par Pierre Ratinaud, est un logiciel libre devenu une réf
 La méthode de Reinert est une approche statistique d’analyse lexicale conçue pour dégager des « mondes lexicaux » dans un corpus. 
 L’idée est de repérer des ensembles de segments de texte qui partagent des vocabulaires proches. 
 
-La CHD, pour "Classification Hiérarchique Descendante", est l’algorithme de partitionnement associé à cette méthode. 
+La CHD, pour "Classification Hiérarchique Descendante", est l’algorithme de classification associé à cette méthode. 
 Il procède par divisions successives : on prend l’ensemble des segments, puis on le coupe en deux groupes maximisant leur différenciation lexicale. 
 Ensuite, chaque groupe peut être à nouveau subdivisé, et ainsi de suite, jusqu’à obtenir un nombre de classes jugé pertinent ou une limite imposée par les paramètres.
 
@@ -64,7 +64,7 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
 - **top_n (wordcloud)** : nombre de termes affichés dans les nuages de mots par classe.
 
 #### Paramètres CHD spécifiques IRaMuTeQ-lite
-- **Nombre de classes terminales de la phase 1 (`k_iramuteq`)** : nombre de classes cibles pour la phase de partition.
+- **Nombre de classes terminales de la phase 1 (`k_iramuteq`)** : nombre de classes cibles pour la phase de découpage en classes.
   - **mincl (auto/manuel)** : seuil minimal d'UCE pour conserver une classe terminale (mode automatique ou valeur manuelle). Ce paramètre semble etre différent de la logique "rainette"
 - **Type de classification terminale** :
   - `simple` : segmentation avec `segment_size`.

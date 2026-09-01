@@ -18,15 +18,15 @@ Le but est d'obtenir plus vite un résultat où les classes s'opposent nettement
 
 Dans ce mode, l'utilisateur **ne choisit pas le `k` final**.
 
-L'application retient automatiquement la partition la plus discriminante.
+L'application retient automatiquement la solution en classes la plus discriminante.
 
 L'utilisateur fixe seulement le **plafond** de recherche :
 
-- `k_iramuteq` : borne maximale des partitions explorées.
+- `k_iramuteq` : borne maximale des classes explorées.
 
 La borne minimale est **interne au mode** et fixée à `3` classes.
 
-Autrement dit, si la limite choisie est `10`, l'application compare automatiquement `P3...P10`, puis retient la partition la plus discriminante.
+Autrement dit, si la limite choisie est `10`, l'application compare automatiquement les solutions de `3` a `10` classes, puis retient celle qui discrimine le mieux les classes.
 
 ## Paramètres fixes
 
@@ -71,7 +71,7 @@ Valeurs explorées :
 
 Pour chaque valeur de `min_docfreq`, le mode lance une CHD normale jusqu'au `k` maximal demandé.
 
-Il conserve ensuite les partitions possibles :
+Il conserve ensuite les solutions possibles en classes :
 
 - `P3`
 - `P4`
@@ -80,15 +80,15 @@ Il conserve ensuite les partitions possibles :
 
 La CHD d'origine et le calcul du `chi2` ne sont pas modifiés.
 
-## Étape 2 : évaluation discriminante directe des partitions
+## Étape 2 : évaluation discriminante directe des solutions en classes
 
 Dans l'**Analyse discriminante optimisée**, le mode procède ainsi :
 
-- il conserve les partitions `P3...Pk` produites par la même CHD ;
-- il évalue directement chaque partition sur l'AFC ;
-- il compare ensuite ces partitions avec le score discriminant `A`.
+- il conserve les solutions `P3...Pk` produites par la même CHD ;
+- il évalue directement chaque solution sur l'AFC ;
+- il compare ensuite ces solutions en classes avec le score discriminant `A`.
 
-La partition retenue dans une configuration est donc :
+La solution retenue dans une configuration est donc :
 
 - `P* = argmax A(Pk)`.
 
@@ -269,7 +269,7 @@ Le score final est la moyenne géométrique des cinq composantes :
 
 - `A = GM(A_theta, A_dist, A_rad, A_align, A_poles)`.
 
-Cela veut dire qu'une partition n'est bien notée que si plusieurs conditions sont réunies en même temps :
+Cela veut dire qu'une solution en classes n'est bien notée que si plusieurs conditions sont réunies en même temps :
 
 - les classes s'opposent en direction ;
 - les classes sont séparées dans l'espace ;
@@ -281,9 +281,9 @@ En pratique, `A` cherche donc moins "le plus grand nombre de classes" que **la c
 
 En pratique :
 
-- `A` sert à choisir la partition ;
+- `A` sert à choisir la solution finale en classes ;
 - `B` reste un indicateur structurel secondaire.
 
 En résumé :
 
-`Corpus -> 4 configurations ciblées -> CHD -> partitions Pk -> tous les termes significatifs par classe sur AFC -> meilleur compromis discriminant`
+`Corpus -> 4 configurations ciblées -> CHD -> solutions de 3 a k classes -> tous les termes significatifs par classe sur AFC -> meilleur compromis discriminant`

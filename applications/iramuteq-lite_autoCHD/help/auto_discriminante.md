@@ -7,11 +7,11 @@ Le mode **Analyse discriminante optimisée** cherche à produire des classes qui
 Il procède en deux temps :
 
 - il lance plusieurs configurations ciblées du même corpus ;
-- il ne conserve qu'un seul résultat final : la configuration et la partition qui donnent la meilleure opposition lexicale.
+- il ne conserve qu'un seul résultat final : la configuration et la solution en classes qui donnent la meilleure opposition lexicale.
 
 Repères essentiels :
 
-- `k_iramuteq` fixe le plafond des partitions explorées ;
+- `k_iramuteq` fixe le plafond des classes explorées ;
 - la borne minimale est interne au mode et fixée à `3` classes ;
 - `min_docfreq` est la variable testée automatiquement dans ce mode.
 
@@ -47,11 +47,11 @@ Les autres paramètres restent ceux choisis dans l'interface :
 - le nombre maximal de formes ;
 - les autres réglages du pipeline.
 
-## Étape 1 : CHD et partitions
+## Étape 1 : CHD et solutions en classes
 
 Pour chaque configuration candidate, l'application calcule une CHD normale jusqu'au nombre maximal de classes demandé.
 
-Elle conserve ensuite les partitions :
+Elle conserve ensuite les solutions en classes :
 
 - `P3`
 - `P4`
@@ -60,23 +60,23 @@ Elle conserve ensuite les partitions :
 
 La CHD et le `chi2` historique ne sont pas modifiés.
 
-## Étape 2 : lecture AFC directe de chaque partition
+## Étape 2 : lecture AFC directe de chaque solution en classes
 
-Dans ce mode, la partition n'est pas d'abord choisie par `B`.
+Dans ce mode, la solution finale n'est pas d'abord choisie par `B`.
 
 Le mode :
 
-- prend chaque partition `Pk` issue de la CHD ;
-- relit cette partition sur l'AFC ;
-- compare directement les partitions avec le score discriminant `A`.
+- prend chaque solution `Pk` issue de la CHD ;
+- relit cette solution sur l'AFC ;
+- compare directement les solutions en classes avec le score discriminant `A`.
 
-La partition retenue est donc :
+La solution retenue est donc :
 
 - `P* = argmax A(Pk)`.
 
 ## Étape 3 : lecture AFC de tous les chi2 significatifs par classe
 
-Pour chaque partition, le mode repart des formes caractéristiques déjà obtenues par la CHD.
+Pour chaque solution en classes, le mode repart des formes caractéristiques déjà obtenues par la CHD.
 
 Il :
 
@@ -107,4 +107,4 @@ En pratique :
 
 Résumé :
 
-`Corpus -> 4 configurations ciblées -> CHD -> partitions Pk -> tous les chi2 significatifs par classe sur AFC -> résultat final le plus discriminant`
+`Corpus -> 4 configurations ciblées -> CHD -> solutions de 3 a k classes -> tous les chi2 significatifs par classe sur AFC -> resultat final le plus discriminant`

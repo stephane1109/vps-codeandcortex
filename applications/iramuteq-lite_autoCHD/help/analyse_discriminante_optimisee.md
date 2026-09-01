@@ -6,7 +6,7 @@ Il ne change ni la CHD, ni le calcul du `chi2`.
 Il relance seulement quelques configurations ciblees du meme corpus, puis compare leurs resultats sur l'AFC.
 
 L'utilisateur ne choisit donc pas le `k` final :
-il fixe seulement une limite maximale d'exploration, puis l'application compare automatiquement les partitions a partir de `3` classes et retient la plus discriminante.
+il fixe seulement une limite maximale d'exploration, puis l'application compare automatiquement les solutions en classes a partir de `3` classes et retient la plus discriminante.
 
 ## Ce qui est teste
 
@@ -19,7 +19,7 @@ il fixe seulement une limite maximale d'exploration, puis l'application compare 
 
 Pour chaque configuration :
 
-- la CHD produit les partitions `P_k`
+- la CHD produit plusieurs solutions de `3` a `k` classes
 - tous les termes caracteristiques significatifs a `p.value <= 0.05` sont retenus
 - ces termes sont tries par `chi2` dans chaque classe puis projetes sur l'AFC
 - l'application retient la configuration dont les classes s'opposent le mieux
@@ -27,7 +27,7 @@ Pour chaque configuration :
 ## Ce qui est affiche
 
 - la configuration retenue
-- la partition retenue
+- la solution retenue
 - le score discriminant `A`
 - les parametres qui ont produit ce compromis
 - les termes significatifs a `p.value <= 0.05` qui soutiennent ce resultat

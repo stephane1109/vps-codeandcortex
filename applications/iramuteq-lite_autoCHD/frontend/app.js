@@ -2209,14 +2209,14 @@ function renderClassesModeCard(card) {
 
   if (kHelp instanceof HTMLElement) {
     kHelp.textContent = isAuto
-      ? `La CHD est calculee jusqu'a cette limite puis chaque partition P${autoMinValue}...Pk est evaluee automatiquement.`
+      ? `La CHD est calculee jusqu'a cette limite puis chaque solution de ${autoMinValue} a k classes est evaluee automatiquement.`
       : isAutoAfcDiscriminante
-        ? "La CHD est calculee jusqu'a cette limite puis l'application compare automatiquement les partitions a partir de 3 classes pour retenir le meilleur compromis discriminant."
+        ? "La CHD est calculee jusqu'a cette limite puis l'application compare automatiquement les solutions en classes a partir de 3 classes pour retenir le meilleur compromis discriminant."
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
   if (autoKMinHelp instanceof HTMLElement) {
     autoKMinHelp.textContent = isAuto
-      ? "Les partitions en dessous de cette borne sont ignorees pendant la selection automatique. Le k final reste choisi automatiquement."
+      ? "Les solutions en classes en dessous de cette borne sont ignorees pendant la selection automatique. Le k final reste choisi automatiquement."
       : "Cette borne ne s'applique qu'au mode Auto CHD.";
   }
 }
@@ -11937,13 +11937,23 @@ function normalizeAsciiKey(value) {
 function normalizeAutoChdPartitionValue(rawValue, fallbackK = "") {
   const raw = String(rawValue || "").trim();
   if (raw) {
-    const cleaned = raw.replace(/^partition\s+/i, "").trim();
+    const cleaned = raw.replace(/^(?:partition|solution)\s+/i, "").trim();
     if (/^p\d+$/i.test(cleaned)) return `P${cleaned.replace(/[^\d]/g, "")}`;
     return cleaned;
   }
   const numeric = Number.parseInt(String(fallbackK || "").trim(), 10);
   if (Number.isFinite(numeric) && numeric >= 2) return `P${numeric}`;
   return "Partition";
+}
+
+function formatAutoChdSolutionLabel(rawValue, fallbackK = "") {
+  const normalized = normalizeAutoChdPartitionValue(rawValue, fallbackK);
+  const match = normalized.match(/^P(\d+)$/i);
+  if (match) return `${match[1]} classes`;
+  if (normalized && normalizeAsciiKey(normalized) !== "partition") return normalized;
+  const numeric = Number.parseInt(String(fallbackK || "").trim(), 10);
+  if (Number.isFinite(numeric) && numeric >= 2) return `${numeric} classes`;
+  return "Solution";
 }
 
 function isStrictNumericCellValue(value) {
@@ -11989,7 +11999,7 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
     : parsed.rows.slice();
 
   const columnDefs = [
-    ...(!isPartitionScoped ? [{ keys: ["partition"], label: "partition" }] : []),
+    ...(!isPartitionScoped ? [{ keys: ["partition"], label: "solution" }] : []),
     ...(!isPartitionScoped ? [{ keys: ["k"], label: "nb classes" }] : []),
     { keys: ["n_segments_assignes"], label: "segments classes" },
     { keys: ["n_segments_non_assignes"], label: "segments non classes" },
@@ -12022,8 +12032,8 @@ function extractAutoChdCloneParsed(parsed, partitionLabel = null) {
     rowClasses.push(normalizeAsciiKey(selectionRaw) === "oui" ? "is-auto-chd-selected" : "");
 
     return columnDefs.map((def) => {
-      if (def.label === "partition") {
-        return normalizeAutoChdPartitionValue(row[def.index], kColumnIndex === -1 ? "" : row[kColumnIndex]);
+      if (def.label === "solution") {
+        return formatAutoChdSolutionLabel(row[def.index], kColumnIndex === -1 ? "" : row[kColumnIndex]);
       }
       if (def.label === "statut") {
         const status = normalizeAsciiKey(row[def.index]);
@@ -12120,7 +12130,7 @@ function renderAutoChdMetricsByPartition(container, parsed, options = {}) {
 
   const descriptors = sortClassLabels(groups.keys()).map((label) => ({
     key: label,
-    label: `Partition ${label}`
+    label: formatAutoChdSolutionLabel(label)
   }));
 
   descriptors.forEach((descriptor, index) => {
@@ -13647,9 +13657,9 @@ function resetResultPanes() {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
     autoDiscriminanteSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Analyse discriminante optimisee.",
     autoDiscriminanteTable: "Chargez un dossier d'exports pour afficher les scores du mode Analyse discriminante optimisee.",
-    autoChdSummary: "Chargez un dossier d'exports pour afficher la partition retenue en mode Auto CHD.",
+    autoChdSummary: "Chargez un dossier d'exports pour afficher la solution retenue en mode Auto CHD.",
     autoChdPlot: "Chargez un dossier d'exports pour afficher la courbe du score B en mode Auto CHD.",
-    autoChdTable: "Chargez un dossier d'exports pour afficher les scores Auto CHD par partition.",
+    autoChdTable: "Chargez un dossier d'exports pour afficher les scores Auto CHD par nombre de classes.",
     chdStatsTable: "Chargez un dossier d'exports pour afficher les statistiques CHD.",
     chdConcordancier: "Chargez un dossier d'exports pour afficher le concordancier HTML.",
     chdWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots.",

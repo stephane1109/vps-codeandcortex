@@ -87,7 +87,7 @@ extraire_partition_chd_iramuteq <- function(chd_obj, k) {
 
   col_index <- k - 1L
   if (col_index > ncol(n1)) {
-    stop("Auto CHD: partition demandee indisponible dans n1.")
+    stop("Auto CHD: solution en classes demandee indisponible dans n1.")
   }
 
   classes_raw <- suppressWarnings(as.integer(n1[, col_index]))
@@ -209,7 +209,7 @@ resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
   }
 
   stop(
-    "Auto CHD: impossible de calculer une partition exploitable entre 2 et ",
+    "Auto CHD: impossible de calculer une solution exploitable entre 2 et ",
     k_requested,
     " classes."
   )
@@ -432,7 +432,7 @@ evaluer_partition_auto_chd <- function(dfm_obj,
                                        p_seuil = 0.05) {
   stats_mode <- match.arg(stats_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
-    stop("Auto CHD: partition invalide.")
+    stop("Auto CHD: solution en classes invalide.")
   }
 
   classes <- suppressWarnings(as.integer(partition_obj$classes))
@@ -486,7 +486,7 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
 
   partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
   if (!length(partitions)) {
-    stop("Auto CHD: aucune partition exploitable dans l'intervalle de classes demande.")
+    stop("Auto CHD: aucune solution exploitable dans l'intervalle de classes demande.")
   }
   partitions <- partitions[order(
     vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
@@ -538,7 +538,7 @@ selection_automatique_classes_iramuteq <- function(chd_obj,
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
     stop(paste0(
-      "Auto CHD: la partition retenue ne respecte pas la borne minimale demandee (",
+      "Auto CHD: la solution retenue ne respecte pas la borne minimale demandee (",
       k_min_requested,
       " classes reelles minimum)."
     ))
@@ -908,7 +908,7 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
                                                                afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
-    stop("Analyse discriminante optimisee: partition invalide.")
+    stop("Analyse discriminante optimisee: solution en classes invalide.")
   }
 
   classes <- suppressWarnings(as.integer(partition_obj$classes))
@@ -1023,7 +1023,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
 
   partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
   if (!length(partitions)) {
-    stop("Analyse discriminante optimisee: aucune partition exploitable entre 3 classes et la borne maximale demandee.")
+    stop("Analyse discriminante optimisee: aucune solution exploitable entre 3 classes et la borne maximale demandee.")
   }
   partitions <- partitions[order(
     vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
@@ -1103,7 +1103,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
     stop(paste0(
-      "Analyse discriminante optimisee: la partition retenue ne respecte pas la borne minimale demandee (",
+      "Analyse discriminante optimisee: la solution retenue ne respecte pas la borne minimale demandee (",
       k_min_requested,
       " classes reelles minimum)."
     ))
@@ -1144,7 +1144,7 @@ tracer_scores_auto_chd_iramuteq <- function(metrics_df,
                                             plot_title = "Selection automatique du nombre de classes") {
   if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
     plot.new()
-    text(0.5, 0.5, "Aucune partition automatique a afficher.", cex = 1.0)
+    text(0.5, 0.5, "Aucune solution automatique a afficher.", cex = 1.0)
     return(invisible(NULL))
   }
 

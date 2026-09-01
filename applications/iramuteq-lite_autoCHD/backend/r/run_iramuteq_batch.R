@@ -1417,11 +1417,26 @@ run_batch <- function() {
         )
       }
       selected_auto <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
+      formater_solution_classes <- function(k_value, fallback_label = NULL) {
+        k_num <- suppressWarnings(as.integer(k_value))
+        if (length(k_num) && !is.na(k_num) && is.finite(k_num)) {
+          return(paste0(k_num, " classes"))
+        }
+        fallback_text <- as.character(fallback_label %||% "")
+        if (nzchar(fallback_text)) {
+          return(fallback_text)
+        }
+        "solution en classes"
+      }
+      selected_solution_label <- formater_solution_classes(
+        selected_auto$k %||% res_ira$auto_selection$k_selected,
+        selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")
+      )
       if (is_auto_afc_mode) {
         log_info(
           paste0(
-            "Analyse discriminante optimisee : partition retenue ",
-            as.character(selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")),
+            "Analyse discriminante optimisee : solution retenue ",
+            selected_solution_label,
             " (A_theta=",
             format(round(as.numeric(selected_auto$A_theta), 4), nsmall = 4, trim = TRUE),
             ", A_dist=",
@@ -1449,8 +1464,8 @@ run_batch <- function() {
       } else {
         log_info(
           paste0(
-            "Auto CHD : partition retenue ",
-            as.character(selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")),
+            "Auto CHD : solution retenue ",
+            selected_solution_label,
             " (H=",
             format(round(as.numeric(selected_auto$H), 4), nsmall = 4, trim = TRUE),
             ", D=",
@@ -1481,7 +1496,7 @@ run_batch <- function() {
         metrics_resume <- vapply(seq_len(nrow(metrics_auto)), function(i) {
           if (is_auto_afc_mode) {
             paste0(
-              as.character(metrics_auto$partition[[i]] %||% paste0("P", metrics_auto$k[[i]] %||% "")),
+              formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
               "(A_theta=",
               fmt_auto_metric(metrics_auto$A_theta[[i]]),
               ", A_dist=",
@@ -1500,7 +1515,7 @@ run_batch <- function() {
             )
           } else {
             paste0(
-              as.character(metrics_auto$partition[[i]] %||% paste0("P", metrics_auto$k[[i]] %||% "")),
+              formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
               "(H=",
               fmt_auto_metric(metrics_auto$H[[i]]),
               ", D=",
@@ -1518,9 +1533,9 @@ run_batch <- function() {
         log_info(
           paste0(
             if (is_auto_afc_mode) {
-              "Analyse discriminante optimisee : scores par partition -> "
+              "Analyse discriminante optimisee : scores par nombre de classes -> "
             } else {
-              "Auto CHD : scores par partition -> "
+              "Auto CHD : scores par nombre de classes -> "
             },
             paste(metrics_resume, collapse = " | ")
           ),
@@ -1531,9 +1546,9 @@ run_batch <- function() {
       if (isTRUE((res_ira$auto_selection$k_selected %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
           if (is_auto_afc_mode) {
-            "Analyse discriminante optimisee : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere partition disponible."
+            "Analyse discriminante optimisee : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere solution disponible."
           } else {
-            "Auto CHD : la borne maximale testee est aussi la partition retenue. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere partition disponible."
+            "Auto CHD : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere solution disponible."
           },
           progress = 57
         )
