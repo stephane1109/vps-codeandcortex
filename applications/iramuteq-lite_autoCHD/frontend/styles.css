@@ -2934,10 +2934,19 @@ body.comparison-ab-fullscreen-open {
 
 .markdown-figure img {
   display: block;
+  width: min(100%, 980px);
   max-width: 100%;
+  height: auto;
+  margin: 0 auto;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
+}
+
+.markdown-figure {
+  width: 100%;
+  max-width: 980px;
+  margin: 1.15rem auto 1.2rem;
 }
 
 .markdown-figure figcaption,
