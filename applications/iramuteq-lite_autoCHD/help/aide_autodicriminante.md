@@ -131,21 +131,139 @@ Le graphique AFC final de ce mode projette justement ces termes retenus.
 
 ## Score discriminant AFC
 
-Le score `A` combine plusieurs aspects géométriques :
+Le score `A` combine plusieurs aspects géométriques.
 
-- `A_theta` : opposition angulaire des classes ;
-- `A_dist` : distance entre classes ;
-- `A_rad` : éloignement des classes par rapport au centre ;
-- `A_align` : alignement des termes à fort `chi2` avec leur classe ;
-- `A_poles` : opposition des pôles lexicaux construits à partir de ces termes.
+Il est calculé sur les coordonnées `x, y` de l'AFC :
 
-Le score global `A` est ensuite calculé à partir de ces composantes.
+- coordonnées des classes ;
+- coordonnées des termes caractéristiques significatifs ;
+- sans modifier la CHD ;
+- sans recalculer autrement le `chi2`.
 
-En pratique, il favorise les configurations où :
+Le `chi2` sert ici à **sélectionner les termes à relire sur l'AFC** :
 
-- les classes ne sont pas collées ;
-- les classes ne regardent pas toutes dans la même direction ;
-- les termes les plus discriminants soutiennent vraiment cette opposition.
+- on conserve les termes de chaque classe avec `p.value <= 0.05` ;
+- ces termes sont triés par `chi2` décroissant ;
+- ils servent ensuite à lire l'opposition géométrique des classes ;
+- ils ne sont pas repondérés artificiellement pendant le calcul de `A`.
+
+Autrement dit, `A` ne remplace pas le `chi2` :
+
+- le `chi2` identifie les termes caractéristiques ;
+- `A` mesure ensuite si ces termes et les classes s'opposent bien sur le plan AFC.
+
+### 1. `A_theta` : opposition angulaire des classes
+
+Chaque classe est lue comme un vecteur partant de l'origine vers son point AFC :
+
+- `v_i = (x_i, y_i)`.
+
+Pour chaque paire de classes `(i, j)`, on calcule le cosinus de l'angle :
+
+- `cos(i, j) = (v_i . v_j) / (||v_i|| ||v_j||)`.
+
+Puis on transforme cela en score d'opposition :
+
+- `s_theta(i, j) = (1 - cos(i, j)) / 2`.
+
+Lecture :
+
+- si deux classes pointent dans la même direction, le score tend vers `0` ;
+- si elles sont orthogonales, le score est autour de `0.5` ;
+- si elles sont diamétralement opposées, le score tend vers `1`.
+
+On garde ensuite :
+
+- la moyenne des oppositions angulaires entre toutes les paires ;
+- la plus faible opposition angulaire observée.
+
+Le score `A_theta` est la moyenne géométrique de ces deux valeurs.
+
+### 2. `A_dist` : éloignement spatial des classes
+
+Pour chaque paire de classes `(i, j)`, on calcule la distance euclidienne :
+
+- `d(i, j) = sqrt((x_i - x_j)^2 + (y_i - y_j)^2)`.
+
+Cette distance est normalisée par le rayon maximal observé sur le plan AFC pour rester dans une échelle comparable.
+
+On garde ensuite :
+
+- la moyenne des distances entre classes ;
+- la plus petite distance observée entre deux classes.
+
+Le score `A_dist` est la moyenne géométrique de ces deux valeurs.
+
+### 3. `A_rad` : sortie des classes hors du centre
+
+Pour chaque classe, on calcule sa distance à l'origine :
+
+- `r_i = sqrt(x_i^2 + y_i^2)`.
+
+Puis cette valeur est ramenée à un score borné :
+
+- `s_rad(i) = r_i / (r_i + 1)`.
+
+Le score `A_rad` est la moyenne de ces scores.
+
+Lecture :
+
+- une classe très proche du centre est peu discriminante ;
+- une classe plus éloignée du centre porte une opposition plus lisible.
+
+### 4. `A_align` : cohérence entre une classe et ses termes significatifs
+
+Pour chaque classe :
+
+- on prend tous ses termes significatifs `p.value <= 0.05` ;
+- on récupère leurs coordonnées `x, y` sur l'AFC ;
+- on calcule, pour chaque terme, son alignement avec le vecteur de la classe.
+
+Pour un terme `t` et une classe `i` :
+
+- `cos(t, i) = (t . v_i) / (||t|| ||v_i||)`.
+
+Puis :
+
+- `s_align(t, i) = (cos(t, i) + 1) / 2`.
+
+Le score de la classe est la moyenne de ces alignements, puis `A_align` est la moyenne entre classes.
+
+Lecture :
+
+- si les termes significatifs d'une classe partent dans sa direction, le score monte ;
+- s'ils se dispersent ou contredisent sa direction, le score baisse.
+
+### 5. `A_poles` : opposition des pôles lexicaux
+
+Pour chaque classe, on construit un pôle lexical moyen à partir de ses termes significatifs :
+
+- `pole_i = (moyenne des x des termes, moyenne des y des termes)`.
+
+On applique ensuite aux pôles la même logique géométrique :
+
+- opposition angulaire entre pôles ;
+- distance entre pôles ;
+- éloignement au centre ;
+- alignement entre chaque pôle et la classe qu'il représente.
+
+Le score `A_poles` résume donc la position des "centroïdes" lexicaux des classes.
+
+### 6. Score final `A`
+
+Le score final est la moyenne géométrique des cinq composantes :
+
+- `A = GM(A_theta, A_dist, A_rad, A_align, A_poles)`.
+
+Cela veut dire qu'une partition n'est bien notée que si plusieurs conditions sont réunies en même temps :
+
+- les classes s'opposent en direction ;
+- les classes sont séparées dans l'espace ;
+- les classes ne restent pas collées au centre ;
+- les termes significatifs soutiennent réellement cette opposition ;
+- les pôles lexicaux racontent la même structure.
+
+En pratique, `A` cherche donc moins "le plus grand nombre de classes" que **la configuration où les classes s'opposent le plus clairement**.
 
 En pratique :
 
