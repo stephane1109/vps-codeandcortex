@@ -285,7 +285,6 @@ const suiviConfigSourceCards = Array.from(document.querySelectorAll("[data-suivi
 const resultContainers = {
   chdDendrogramme: document.getElementById("chdDendrogramme"),
   autoDiscriminanteSummary: document.getElementById("autoDiscriminanteSummary"),
-  autoDiscriminantePlot: document.getElementById("autoDiscriminantePlot"),
   autoDiscriminanteTable: document.getElementById("autoDiscriminanteTable"),
   autoChdSummary: document.getElementById("autoChdSummary"),
   autoChdPlot: document.getElementById("autoChdPlot"),
@@ -8739,7 +8738,6 @@ function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
     containers = [
       resultContainers.chdDendrogramme,
       resultContainers.autoDiscriminanteSummary,
-      resultContainers.autoDiscriminantePlot,
       resultContainers.autoDiscriminanteTable,
       resultContainers.autoChdSummary,
       resultContainers.autoChdPlot,
@@ -11510,12 +11508,10 @@ function renderAutoDiscriminanteMetrics(container, parsed, options = {}) {
 async function renderAutoDiscriminanteExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("auto_discriminante_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("auto_discriminante_metrics.csv")]);
-  const plotFile = findFile(index, [(path) => path.endsWith("auto_discriminante_score.png")]);
   const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Analyse discriminante optimisee.";
 
-  if (!summaryFile && !metricsFile && !plotFile) {
+  if (!summaryFile && !metricsFile) {
     setContainerEmptyState(resultContainers.autoDiscriminanteSummary, manualModeMessage);
-    setContainerEmptyState(resultContainers.autoDiscriminantePlot, manualModeMessage);
     setContainerEmptyState(resultContainers.autoDiscriminanteTable, manualModeMessage);
     return { active: false };
   }
@@ -11531,14 +11527,6 @@ async function renderAutoDiscriminanteExports(index) {
   } else {
     setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Le resume Analyse discriminante optimisee est absent du dossier d'exports.");
   }
-
-  renderImage(
-    resultContainers.autoDiscriminantePlot,
-    plotFile,
-    "Comparaison des scores d'opposition AFC par configuration",
-    "Le graphique Analyse discriminante optimisee est absent du dossier d'exports."
-  );
-  makeResultImagePreviewable(resultContainers.autoDiscriminantePlot, "Score AFC discriminant A", "Analyse discriminante optimisee");
 
   if (!metricsFile) {
     setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Le tableau Analyse discriminante optimisee est absent du dossier d'exports.");
@@ -13658,7 +13646,6 @@ function resetResultPanes() {
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
     autoDiscriminanteSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Analyse discriminante optimisee.",
-    autoDiscriminantePlot: "Chargez un dossier d'exports pour afficher la comparaison des scores discriminants.",
     autoDiscriminanteTable: "Chargez un dossier d'exports pour afficher les scores du mode Analyse discriminante optimisee.",
     autoChdSummary: "Chargez un dossier d'exports pour afficher la partition retenue en mode Auto CHD.",
     autoChdPlot: "Chargez un dossier d'exports pour afficher la courbe du score B en mode Auto CHD.",
