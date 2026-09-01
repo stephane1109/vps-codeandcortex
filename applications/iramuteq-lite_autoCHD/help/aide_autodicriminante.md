@@ -99,7 +99,7 @@ Principe :
 - on observe comment ces termes se placent par rapport aux classes ;
 - on préfère les configurations où ces termes tirent les classes dans des directions opposées.
 
-Le graphique AFC final de ce mode projette justement ces termes retenus.
+Le graphique AFC final de ce mode projette ces termes retenus.
 
 ## Score discriminant AFC
 
