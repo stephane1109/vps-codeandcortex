@@ -232,9 +232,25 @@ Lecture :
 
 ### 5. `A_poles` : opposition des pôles lexicaux
 
-Pour chaque classe, on construit un pôle lexical moyen à partir de ses termes significatifs :
+Pour chaque classe, on repart de tous ses termes significatifs projetés sur l'AFC.
 
-- `pole_i = (moyenne des x des termes, moyenne des y des termes)`.
+Chaque terme possède donc des coordonnées :
+
+- `lambda = (x_lambda, y_lambda)`
+- `mot_2 = (x_2, y_2)`
+- `mot_3 = (x_3, y_3)`
+- etc.
+
+On construit alors un pôle lexical moyen, c'est-à-dire le centre moyen du nuage de mots de la classe :
+
+- `pole_i = (moyenne des x de tous les termes significatifs de la classe i, moyenne des y de tous les termes significatifs de la classe i)`.
+
+Autrement dit :
+
+- on additionne les coordonnées `x` de tous les mots significatifs de la classe, puis on divise par leur nombre ;
+- on fait la même chose pour les coordonnées `y`.
+
+Le pôle lexical est donc un point moyen sur l'AFC.
 
 On applique ensuite aux pôles la même logique géométrique :
 
