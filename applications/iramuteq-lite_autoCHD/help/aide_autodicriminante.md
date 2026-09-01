@@ -77,9 +77,7 @@ La CHD d'origine et le calcul du `chi2` ne sont pas modifiés.
 
 ## Étape 2 : évaluation discriminante directe des partitions
 
-Dans l'**Analyse discriminante optimisée**, les partitions `Pk` ne sont pas d'abord retenues par `B` comme en Auto CHD.
-
-Le mode procède autrement :
+Dans l'**Analyse discriminante optimisée**, le mode procède ainsi :
 
 - il conserve les partitions `P3...Pk` produites par la même CHD ;
 - il évalue directement chaque partition sur l'AFC ;
