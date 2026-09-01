@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360" role="img" aria-labelledby="title desc">
   <title id="title">A_align - alignement des termes avec leur classe</title>
-  <desc id="desc">Le plan AFC montre l'origine, les axes x et y, le vecteur de la classe i et le vecteur du mot-exemple lambda. Le petit angle entre les deux vecteurs illustre un bon alignement.</desc>
+  <desc id="desc">Le plan AFC montre l'origine, les axes x et y, le vecteur de la classe i et le vecteur du mot-exemple lambda. L'angle est mesure a l'origine entre les deux vecteurs pour lire leur alignement.</desc>
   <defs>
     <marker id="arrow-class" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
       <path d="M0,0 L8,4 L0,8 Z" fill="#41b3a3"/>
@@ -36,15 +36,14 @@
   <text x="372" y="294" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">x_i</text>
   <text x="175" y="129" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">y_i</text>
   <path d="M288 206 A44 44 0 0 1 316 186" fill="none" stroke="#7f756b" stroke-width="3"/>
-  <text x="320" y="188" font-family="Arial, sans-serif" font-size="13" fill="#7f756b">petit angle</text>
   <circle cx="320" cy="250" r="6" fill="#c7c1b6"/>
   <text x="332" y="255" font-family="Arial, sans-serif" font-size="13" fill="#8a8178">terme moins aligné</text>
   <line x1="210" y1="275" x2="320" y2="250" stroke="#c7c1b6" stroke-width="2" stroke-dasharray="6 6"/>
   <text x="474" y="120" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">On récupère sur l'AFC :</text>
   <text x="474" y="145" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- la classe i : (x_i, y_i)</text>
   <text x="474" y="168" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- le mot lambda : (x_t, y_t)</text>
-  <text x="474" y="200" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Puis on compare l'angle entre</text>
-  <text x="474" y="222" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">les deux vecteurs partant de l'origine.</text>
-  <text x="474" y="255" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">Petit angle = bon alignement</text>
-  <text x="474" y="278" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">Angle large = alignement faible</text>
+  <text x="474" y="200" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Puis on mesure, a l'origine,</text>
+  <text x="474" y="222" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">l'angle entre les deux vecteurs.</text>
+  <text x="474" y="255" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">Alignement fort si leurs directions sont proches.</text>
+  <text x="474" y="278" font-family="Arial, sans-serif" font-size="15" fill="#7f756b">Alignement faible si leurs directions divergent.</text>
 </svg>
