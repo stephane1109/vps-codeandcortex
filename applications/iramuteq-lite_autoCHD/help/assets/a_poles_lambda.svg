@@ -1,46 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="780" height="380" viewBox="0 0 780 380" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="440" viewBox="0 0 780 440" role="img" aria-labelledby="title desc">
   <title id="title">A_poles - opposition des poles lexicaux</title>
   <desc id="desc">Pour chaque classe, on prend tous les mots significatifs projetes sur l'AFC, puis on calcule le point moyen de leurs coordonnees x et y. Ce point moyen est le pole lexical.</desc>
-  <rect width="780" height="380" rx="20" fill="#fbfaf7"/>
-  <rect x="22" y="22" width="736" height="336" rx="18" fill="#ffffff" stroke="#e2ddd4"/>
+  <rect width="780" height="440" rx="20" fill="#fbfaf7"/>
+  <rect x="22" y="22" width="736" height="396" rx="18" fill="#ffffff" stroke="#e2ddd4"/>
   <text x="42" y="55" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2f2a27">A_poles</text>
   <text x="42" y="80" font-family="Arial, sans-serif" font-size="14" fill="#6d655d">Chaque pôle lexical est le centre moyen des mots significatifs d'une classe sur l'AFC</text>
-  <line x1="115" y1="295" x2="430" y2="295" stroke="#d8d2c8" stroke-width="2"/>
-  <line x1="185" y1="330" x2="185" y2="88" stroke="#d8d2c8" stroke-width="2"/>
-  <text x="436" y="300" font-family="Arial, sans-serif" font-size="13" fill="#6d655d">axe x</text>
+  <line x1="115" y1="335" x2="430" y2="335" stroke="#d8d2c8" stroke-width="2"/>
+  <line x1="185" y1="370" x2="185" y2="88" stroke="#d8d2c8" stroke-width="2"/>
+  <text x="436" y="340" font-family="Arial, sans-serif" font-size="13" fill="#6d655d">axe x</text>
   <text x="191" y="98" font-family="Arial, sans-serif" font-size="13" fill="#6d655d">axe y</text>
-  <circle cx="185" cy="295" r="7" fill="#2f2a27"/>
-  <text x="198" y="313" font-family="Arial, sans-serif" font-size="13" fill="#6d655d">origine</text>
-  <circle cx="255" cy="185" r="6" fill="#1f2937"/>
-  <text x="266" y="180" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#1f2937">lambda</text>
-  <text x="266" y="196" font-family="Arial, sans-serif" font-size="12" fill="#6d655d">(x_lambda, y_lambda)</text>
-  <circle cx="230" cy="218" r="5" fill="#41b3a3" opacity="0.75"/>
-  <text x="238" y="224" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">mot_2</text>
-  <circle cx="286" cy="206" r="5" fill="#41b3a3" opacity="0.75"/>
-  <text x="294" y="212" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">mot_3</text>
-  <circle cx="262" cy="246" r="5" fill="#41b3a3" opacity="0.75"/>
-  <text x="270" y="252" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">mot_4</text>
-  <circle cx="258" cy="214" r="13" fill="#41b3a3"/>
-  <text x="276" y="218" font-family="Arial, sans-serif" font-size="14" fill="#41b3a3">pole_i</text>
-  <text x="276" y="235" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">(moyenne des x, moyenne des y)</text>
-  <line x1="255" y1="185" x2="258" y2="214" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
-  <line x1="230" y1="218" x2="258" y2="214" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
-  <line x1="286" y1="206" x2="258" y2="214" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
-  <line x1="262" y1="246" x2="258" y2="214" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
-  <circle cx="555" cy="150" r="5" fill="#5979c9" opacity="0.75"/>
-  <circle cx="585" cy="198" r="5" fill="#5979c9" opacity="0.75"/>
-  <circle cx="615" cy="168" r="5" fill="#5979c9" opacity="0.75"/>
-  <circle cx="586" cy="172" r="13" fill="#5979c9"/>
-  <text x="604" y="176" font-family="Arial, sans-serif" font-size="14" fill="#5979c9">pole_j</text>
-  <text x="604" y="193" font-family="Arial, sans-serif" font-size="12" fill="#5979c9">(autre classe)</text>
-  <line x1="271" y1="212" x2="573" y2="174" stroke="#7f756b" stroke-width="4" stroke-dasharray="10 8"/>
-  <text x="380" y="182" font-family="Arial, sans-serif" font-size="14" fill="#7f756b">distance entre les deux pôles</text>
-  <text x="468" y="112" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Pour une classe i :</text>
-  <text x="468" y="138" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- on prend tous les mots significatifs sur l'AFC</text>
-  <text x="468" y="161" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- on récupère leurs coordonnées x et y</text>
-  <text x="468" y="184" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- on calcule leur point moyen</text>
-  <text x="468" y="217" font-family="Arial, sans-serif" font-size="14" fill="#7f756b">x_pole_i = moyenne(x_lambda, x_2, x_3, x_4)</text>
-  <text x="468" y="240" font-family="Arial, sans-serif" font-size="14" fill="#7f756b">y_pole_i = moyenne(y_lambda, y_2, y_3, y_4)</text>
-  <text x="468" y="273" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Le pôle lexical est donc le centre moyen</text>
-  <text x="468" y="295" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">du nuage de mots de la classe.</text>
+  <circle cx="185" cy="335" r="7" fill="#2f2a27"/>
+  <text x="198" y="353" font-family="Arial, sans-serif" font-size="13" fill="#6d655d">origine</text>
+  <circle cx="255" cy="205" r="6" fill="#1f2937"/>
+  <text x="266" y="200" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#1f2937">lambda</text>
+  <text x="266" y="216" font-family="Arial, sans-serif" font-size="12" fill="#6d655d">(x_lambda, y_lambda)</text>
+  <circle cx="230" cy="238" r="5" fill="#41b3a3" opacity="0.75"/>
+  <text x="238" y="244" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">mot_2</text>
+  <circle cx="286" cy="226" r="5" fill="#41b3a3" opacity="0.75"/>
+  <text x="294" y="232" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">mot_3</text>
+  <circle cx="262" cy="266" r="5" fill="#41b3a3" opacity="0.75"/>
+  <text x="270" y="272" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">mot_4</text>
+  <circle cx="258" cy="234" r="13" fill="#41b3a3"/>
+  <text x="276" y="238" font-family="Arial, sans-serif" font-size="14" fill="#41b3a3">pole_i</text>
+  <text x="276" y="255" font-family="Arial, sans-serif" font-size="12" fill="#41b3a3">(moyenne des x, moyenne des y)</text>
+  <line x1="255" y1="205" x2="258" y2="234" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
+  <line x1="230" y1="238" x2="258" y2="234" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
+  <line x1="286" y1="226" x2="258" y2="234" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
+  <line x1="262" y1="266" x2="258" y2="234" stroke="#7f756b" stroke-width="2" stroke-dasharray="6 6"/>
+  <circle cx="555" cy="168" r="5" fill="#5979c9" opacity="0.75"/>
+  <circle cx="585" cy="216" r="5" fill="#5979c9" opacity="0.75"/>
+  <circle cx="615" cy="186" r="5" fill="#5979c9" opacity="0.75"/>
+  <circle cx="586" cy="190" r="13" fill="#5979c9"/>
+  <text x="604" y="194" font-family="Arial, sans-serif" font-size="14" fill="#5979c9">pole_j</text>
+  <text x="604" y="211" font-family="Arial, sans-serif" font-size="12" fill="#5979c9">(autre classe)</text>
+  <line x1="271" y1="232" x2="573" y2="192" stroke="#7f756b" stroke-width="4" stroke-dasharray="10 8"/>
+  <text x="380" y="204" font-family="Arial, sans-serif" font-size="14" fill="#7f756b">distance entre les deux pôles</text>
+  <text x="468" y="124" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Pour une classe i :</text>
+  <text x="468" y="150" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- on prend tous les mots significatifs sur l'AFC</text>
+  <text x="468" y="173" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- on récupère leurs coordonnées x et y</text>
+  <text x="468" y="196" font-family="Arial, sans-serif" font-size="14" fill="#2f2a27">- on calcule leur point moyen</text>
+  <text x="468" y="235" font-family="Arial, sans-serif" font-size="14" fill="#7f756b">x_pole_i = moyenne(x_lambda, x_2, x_3, x_4)</text>
+  <text x="468" y="258" font-family="Arial, sans-serif" font-size="14" fill="#7f756b">y_pole_i = moyenne(y_lambda, y_2, y_3, y_4)</text>
+  <text x="468" y="296" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">Le pôle lexical est donc le centre moyen</text>
+  <text x="468" y="318" font-family="Arial, sans-serif" font-size="15" fill="#2f2a27">du nuage de mots de la classe.</text>
 </svg>

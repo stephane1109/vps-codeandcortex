@@ -164,7 +164,7 @@ Dans les schémas ci-dessous, `lambda` désigne simplement un mot-exemple projet
 
 Pour chaque paire de classes `(i, j)`, on calcule la distance euclidienne :
 
-- `d(i, j) = sqrt((x_i - x_j)^2 + (y_i - y_j)^2)`.
+- `d(i, j) = sqrt((x_i - x_j)² + (y_i - y_j)²)`.
 
 Cette distance est normalisée par le rayon maximal observé sur le plan AFC pour rester dans une échelle comparable.
 
@@ -181,7 +181,7 @@ Le score `A_dist` est la moyenne géométrique de ces deux valeurs.
 
 Pour chaque classe, on calcule sa distance à l'origine :
 
-- `r_i = sqrt(x_i^2 + y_i^2)`.
+- `r_i = sqrt(x_i² + y_i²)`.
 
 Puis cette valeur est ramenée à un score borné :
 
