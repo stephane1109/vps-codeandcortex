@@ -219,7 +219,9 @@ Puis :
 
 - `s_align(t, i) = (cos(t, i) + 1) / 2`.
 
-Le score de la classe est la moyenne de ces alignements, puis `A_align` est la moyenne entre classes.
+Techniquement, `A_align` repose donc sur une **similarité cosinus** entre le vecteur AFC du terme et le vecteur AFC de la classe.
+
+Le score de la classe est la moyenne de ces alignements cosinus, puis `A_align` est la moyenne entre classes.
 
 Lecture :
 

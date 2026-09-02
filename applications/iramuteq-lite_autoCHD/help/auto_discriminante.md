@@ -95,7 +95,7 @@ Le score `A` combine plusieurs aspects géométriques :
 - `A_theta` : opposition angulaire des classes ;
 - `A_dist` : distance entre classes ;
 - `A_rad` : éloignement des classes par rapport au centre ;
-- `A_align` : alignement des termes à fort `chi2` avec leur classe ;
+- `A_align` : similarité cosinus d'alignement entre les termes à fort `chi2` et leur classe ;
 - `A_poles` : opposition des pôles lexicaux formés par ces termes.
 
 Plus `A` est élevé, plus les classes sont séparées, opposées et soutenues par des termes fortement discriminants.
