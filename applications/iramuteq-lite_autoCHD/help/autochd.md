@@ -169,6 +169,26 @@ Le score `G` permet ensuite de lire ce que l'ajout d'une classe apporte ou non p
 - `G proche de 0` : le gain est faible ;
 - `G < 0` : la nouvelle solution degrade l'equilibre global.
 
+## Pourquoi `k max` peut parfois etre retenu
+
+Quand Auto CHD retient la derniere solution testee, cela ne signifie pas que `k max` est force dans le code.
+
+Cela signifie seulement que, dans la plage comparee :
+
+- `H` reste stable ou augmente encore ;
+- `D` continue a progresser ;
+- `L` ne baisse pas assez pour compenser.
+
+Dans ce cas, la moyenne `B = (H + D + L) / 3` reste maximale sur la derniere solution disponible.
+
+Ce comportement apparait plus facilement quand le lexique devient plus rare, par exemple avec :
+
+- un filtrage morphosyntaxique strict ;
+- un `min_docfreq` plus eleve ;
+- un vocabulaire deja tres contraste.
+
+Autrement dit, Auto CHD ne "force" pas `10` classes. Il compare simplement les solutions disponibles et peut, sur certains corpus, trouver son meilleur score sur la borne haute.
+
 ## Paramètres utilisés
 
 ### Paramètres visibles côté interface

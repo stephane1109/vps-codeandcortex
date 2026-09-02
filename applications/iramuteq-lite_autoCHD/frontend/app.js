@@ -11191,10 +11191,7 @@ function renderAutoChdSummary(container, payload) {
       ]
     : [
         ["Partition retenue", `P${selectedK}`],
-        ["k min demande", Number.isFinite(requestedMin) ? String(requestedMin) : "N/A"],
-        ["k min teste", Number.isFinite(testedMin) ? String(testedMin) : "N/A"],
-        ["k max demande", Number.isFinite(requestedMax) ? String(requestedMax) : "N/A"],
-        ["k max teste", Number.isFinite(testedMax) ? String(testedMax) : "N/A"],
+        ["Plage testee", Number.isFinite(testedMin) && Number.isFinite(testedMax) ? `P${testedMin}...P${testedMax}` : "N/A"],
         ["H", formatTableNumber(selected.H, 4)],
         ["D", formatTableNumber(selected.D, 4)],
         ["L", formatTableNumber(selected.L, 4)],
@@ -11223,6 +11220,21 @@ function renderAutoChdSummary(container, payload) {
   });
 
   container.appendChild(grid);
+
+  if (!isAfcMode) {
+    const formulaNote = document.createElement("p");
+    formulaNote.className = "field-help";
+    formulaNote.textContent = "Auto CHD retient la solution dont le score B est le plus eleve dans la plage testee. H = coherence interne des classes ; D = separation minimale entre classes (Jensen-Shannon) ; L = diffusion des termes caracteristiques significatifs (chi2, p.value <= 0.05) ; B = (H + D + L) / 3.";
+    container.appendChild(formulaNote);
+
+    const selectedAtMax = Number.isFinite(selectedK) && Number.isFinite(testedMax) && selectedK === testedMax;
+    const selectionNote = document.createElement("p");
+    selectionNote.className = "field-help";
+    selectionNote.textContent = selectedAtMax
+      ? `La derniere solution testee est retenue ici parce que son score B est le plus eleve sur P${testedMin}...P${testedMax}. Le plafond n'est pas force ; il gagne simplement la comparaison.`
+      : `La solution retenue n'est pas le plafond : B est maximal en P${selectedK} dans la plage P${testedMin}...P${testedMax}.`;
+    container.appendChild(selectionNote);
+  }
 
   const counts = String(selected.classes_effectifs || "").trim();
   if (counts) {
