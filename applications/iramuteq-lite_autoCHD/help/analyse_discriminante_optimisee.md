@@ -12,7 +12,7 @@ il fixe seulement une limite maximale d'exploration, puis l'application compare 
 
 - filtrage morphosyntaxique : `NOM + VER`
 - exclusion du verbe `etre`
-- `AUTRE_FORME` desactive
+- option `AUTRE_FORME` conservee selon le choix utilisateur
 - `min_docfreq` varie de `2` a `5`
 
 ## Comment le compromis est choisi

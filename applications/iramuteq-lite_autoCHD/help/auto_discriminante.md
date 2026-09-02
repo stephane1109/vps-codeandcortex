@@ -24,7 +24,7 @@ Le mode force :
 - `filtrage_morpho = TRUE`
 - `pos_lexique_a_conserver = NOM, VER`
 - `morpho_exclure_etre_verbe = TRUE`
-- `morpho_conserver_hors_lexique = FALSE`
+- `morpho_conserver_hors_lexique` reprend le choix utilisateur
 
 Puis il fait varier seulement :
 

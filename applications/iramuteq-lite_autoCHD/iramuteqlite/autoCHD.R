@@ -1185,13 +1185,14 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
   )
   k_max_values <- .construire_kmax_auto_discriminante(config_base, search_profile = search_profile)
   if (identical(search_profile, "ciblee")) {
+    keep_unknown_user <- .as_bool_auto_chd(config_base$morpho_conserver_hors_lexique, TRUE)
     min_docfreq_values <- 2L:5L
     use_lemmes_values <- c(.as_bool_auto_chd(config_base$lexique_utiliser_lemmes, FALSE))
     remove_stopwords_values <- c(.as_bool_auto_chd(config_base$retirer_stopwords, FALSE))
     remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
     remove_digits_values <- c(.as_bool_auto_chd(config_base$supprimer_chiffres, FALSE))
     morpho_profiles <- list(
-      list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = TRUE)
+      list(key = "nom_ver", keep_unknown = keep_unknown_user, exclude_etre = TRUE)
     )
   } else {
     min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
