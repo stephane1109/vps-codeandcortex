@@ -72,7 +72,7 @@
 lancer_moteur_chd_iramuteq <- function(
   dfm_obj,
   k,
-  classes_mode = c("manuel", "auto", "auto_discriminante", "auto_afc_discriminante"),
+  classes_mode = c("manuel", "auto_discriminante", "auto_afc_discriminante"),
   mincl_mode = c("auto", "manuel"),
   mincl = 0,
   classif_mode = c("simple", "double"),
@@ -107,18 +107,12 @@ lancer_moteur_chd_iramuteq <- function(
 
   calculer_chd_iramuteq_fn <- .obtenir_fonction_iramuteq("calculer_chd_iramuteq", env = environment())
   reconstruire_classes_terminales_iramuteq_fn <- .obtenir_fonction_iramuteq("reconstruire_classes_terminales_iramuteq", env = environment())
-  selection_automatique_classes_iramuteq_fn <- NULL
   selection_afc_discriminante_classes_iramuteq_fn <- NULL
   resoudre_borne_chd_auto_iramuteq_fn <- NULL
   selection_configuration_discriminante_iramuteq_fn <- NULL
-  if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante")) {
+  if (classes_mode %in% c("auto_discriminante", "auto_afc_discriminante")) {
     resoudre_borne_chd_auto_iramuteq_fn <- .obtenir_fonction_iramuteq(
       "resoudre_borne_chd_auto_iramuteq",
-      chemin_module = "iramuteqlite/autoCHD.R",
-      env = environment()
-    )
-    selection_automatique_classes_iramuteq_fn <- .obtenir_fonction_iramuteq(
-      "selection_automatique_classes_iramuteq",
       chemin_module = "iramuteqlite/autoCHD.R",
       env = environment()
     )
@@ -195,7 +189,7 @@ lancer_moteur_chd_iramuteq <- function(
     ))
   }
 
-  chd_obj <- if (classes_mode %in% c("auto", "auto_afc_discriminante")) {
+  chd_obj <- if (identical(classes_mode, "auto_afc_discriminante")) {
     resoudre_borne_chd_auto_iramuteq_fn(
       calculer_chd_fn = calculer_chd_iramuteq_fn,
       dfm_obj = dfm_obj,
@@ -224,50 +218,26 @@ lancer_moteur_chd_iramuteq <- function(
   auto_selection <- NULL
   fallback_mincl1 <- FALSE
 
-  if (classes_mode %in% c("auto", "auto_afc_discriminante")) {
-    if (identical(classes_mode, "auto_afc_discriminante")) {
-      auto_selection <- selection_afc_discriminante_classes_iramuteq_fn(
-        chd_obj = chd_obj,
-        dfm_obj = dfm_utilise,
-        k_min = auto_k_min_effective,
-        k_max = k,
-        stats_mode = auto_stats_mode,
-        top_n_diffusion = auto_top_n_diffusion,
-        top_n_afc = auto_top_n_afc,
-        p_seuil = auto_p_seuil
-      )
-    } else {
-      auto_selection <- selection_automatique_classes_iramuteq_fn(
-        chd_obj = chd_obj,
-        dfm_obj = dfm_utilise,
-        k_min = auto_k_min_effective,
-        k_max = k,
-        stats_mode = auto_stats_mode,
-        top_n_diffusion = auto_top_n_diffusion,
-        p_seuil = auto_p_seuil
-      )
-    }
+  if (identical(classes_mode, "auto_afc_discriminante")) {
+    auto_selection <- selection_afc_discriminante_classes_iramuteq_fn(
+      chd_obj = chd_obj,
+      dfm_obj = dfm_utilise,
+      k_min = auto_k_min_effective,
+      k_max = k,
+      stats_mode = auto_stats_mode,
+      top_n_diffusion = auto_top_n_diffusion,
+      top_n_afc = auto_top_n_afc,
+      p_seuil = auto_p_seuil
+    )
 
     classes <- suppressWarnings(as.integer(auto_selection$classes))
     classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
     if (length(classes_valides) < 2L) {
-      if (identical(classes_mode, "auto_afc_discriminante")) {
-        stop("IRaMuTeQ-lite Analyse discriminante optimisee n'a pas pu retenir au moins 2 classes exploitables.")
-      }
-      stop("IRaMuTeQ-lite Auto CHD n'a pas pu retenir au moins 2 classes exploitables.")
+      stop("IRaMuTeQ-lite Analyse discriminante optimisee n'a pas pu retenir au moins 2 classes exploitables.")
     }
     if (is.finite(auto_k_min_effective) && !is.na(auto_k_min_effective) && auto_k_min_effective >= 2L && length(classes_valides) < auto_k_min_effective) {
-      if (identical(classes_mode, "auto_afc_discriminante")) {
-        stop(paste0(
-          "IRaMuTeQ-lite Analyse discriminante optimisee a retenu ",
-          length(classes_valides),
-          " classes reelles, sous la borne minimale demandee (",
-          auto_k_min_effective,
-          ")."
-        ))
-      }
       stop(paste0(
-        "IRaMuTeQ-lite Auto CHD a retenu ",
+        "IRaMuTeQ-lite Analyse discriminante optimisee a retenu ",
         length(classes_valides),
         " classes reelles, sous la borne minimale demandee (",
         auto_k_min_effective,

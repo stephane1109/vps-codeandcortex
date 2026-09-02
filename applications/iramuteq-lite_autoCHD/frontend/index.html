@@ -193,7 +193,6 @@
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
               <button class="sub-nav-link is-active" data-subtab-target="dendrogramme" type="button">Dendrogramme</button>
               <button class="sub-nav-link" data-subtab-target="auto_discriminante" type="button">Analyse discriminante optimisee</button>
-              <button class="sub-nav-link" data-subtab-target="auto_chd" type="button">Auto CHD</button>
               <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
               <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
               <button class="sub-nav-link" data-subtab-target="nuage_de_mots" type="button">Nuage de mots</button>
@@ -251,59 +250,6 @@
                 <article class="card">
                   <h3>Tableau des configurations testees</h3>
                   <div id="autoDiscriminanteTable" class="result-pane"></div>
-                </article>
-              </div>
-            </section>
-
-            <section class="subpanel" data-subpanel="auto_chd" hidden>
-              <div class="section-stack">
-                <article class="card section-card">
-                  <div class="section-head">
-                    <div>
-                      <p class="card-kicker">Selection</p>
-                      <h3>Auto CHD</h3>
-                    </div>
-                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
-                  </div>
-                  <p class="section-copy">
-                    En mode automatique, IRaMuTeQ-lite evalue les solutions de 2 a k classes a partir de la meme CHD,
-                    puis retient celle qui maximise le score structurel B.
-                  </p>
-                  <p class="section-copy">
-                    Le parametre principal du mode auto est le nombre maximal de classes a explorer :
-                    on ne fixe pas d'avance le nombre final de classes, on donne a la CHD une borne de recherche,
-                    puis l'application compare les solutions possibles de 2 classes jusqu'a cette limite.
-                  </p>
-                  <p class="section-copy">
-                    Le score structurel se construit a partir de trois composantes.
-                    `H` mesure l'homogeneite interne : plus `H` est eleve, plus les segments d'une meme classe
-                    se ressemblent lexicalement. `D` mesure la distinction minimale entre classes : plus `D`
-                    est eleve, plus les classes sont separees. `L` mesure la diffusion lexicale : plus `L`
-                    est eleve, plus les formes caracteristiques d'une classe sont reparties dans ses segments
-                    et ne reposent pas sur quelques segments atypiques.
-                  </p>
-                  <p class="section-copy">
-                    Le score global est `B = (H + D + L) / 3`. L'idee est proche d'un jeu d'echecs :
-                    plusieurs combinaisons sont possibles, mais la meilleure n'est pas forcement celle qui
-                    ajoute le plus de classes. C'est celle qui offre le meilleur equilibre entre coherence interne,
-                    separation entre classes et stabilite lexicale. Le gain `G` indique ensuite si le passage
-                    d'une solution en classes a la suivante ameliore vraiment cette structure.
-                  </p>
-                </article>
-
-                <article class="card">
-                  <h3>Solution retenue</h3>
-                  <div id="autoChdSummary" class="result-pane"></div>
-                </article>
-
-                <article class="card">
-                  <h3>Courbe du score automatique</h3>
-                  <div id="autoChdPlot" class="result-pane"></div>
-                </article>
-
-                <article class="card">
-                  <h3>Tableaux Auto CHD par nombre de classes</h3>
-                  <div id="autoChdTable" class="result-pane"></div>
                 </article>
               </div>
             </section>
@@ -442,7 +388,6 @@
 
             <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
-              <button class="local-tab-button" data-help-subtab-target="help_auto_chd" type="button">Auto CHD</button>
               <button class="local-tab-button" data-help-subtab-target="help_auto_discriminante" type="button">Analyse discriminante optimisee</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
             </div>
@@ -451,14 +396,6 @@
               <article class="card prose-card">
                 <div id="helpMarkdownContent" class="markdown-content">
                   Chargement de <code>help/help.md</code>...
-                </div>
-              </article>
-            </section>
-
-            <section class="local-tab-panel" data-help-subpanel="help_auto_chd" hidden>
-              <article class="card prose-card">
-                <div id="helpAutoChdMarkdownContent" class="markdown-content">
-                  Chargement de <code>help/autochd.md</code>...
                 </div>
               </article>
             </section>
@@ -558,12 +495,10 @@
                 <label for="classesMode">Nombre de classes</label>
                 <select id="classesMode" data-classes-mode-select>
                   <option value="manuel">Manuel</option>
-                  <option value="auto">Automatique</option>
                   <option value="auto_afc_discriminante">Analyse discriminante optimisee</option>
                 </select>
                 <p class="field-help">
-                  En manuel, vous fixez le nombre de classes avant l'analyse. En automatique,
-                  vous fixez seulement une limite maximale, puis Auto CHD compare les solutions de 2 a k classes.
+                  En manuel, vous fixez le nombre de classes avant l'analyse.
                   En mode Analyse discriminante optimisee, vous ne fixez pas le nombre final de classes :
                   vous donnez seulement une limite maximale d'exploration, puis l'application compare
                   automatiquement les solutions en classes issues de la meme CHD a partir de 3 classes jusqu'a cette limite
@@ -576,14 +511,6 @@
                 <input id="kIramuteq" type="number" min="2" value="10" data-classes-bound-input />
                 <p class="field-help" data-k-iramuteq-help>
                   La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.
-                </p>
-              </div>
-
-              <div class="field" data-auto-k-min-field hidden>
-                <label for="kIramuteqMinAuto" data-k-iramuteq-min-label>Borne minimale de classes a explorer</label>
-                <input id="kIramuteqMinAuto" type="number" min="2" value="3" data-classes-bound-input />
-                <p class="field-help" data-k-iramuteq-min-help>
-                  Cette borne n'est utilisee qu'en mode Auto CHD.
                 </p>
               </div>
 

@@ -1119,14 +1119,10 @@ run_batch <- function() {
   classif_mode <- scalar_chr(config$iramuteq_classif_mode, "simple")
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
   classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
-  if (!classes_mode %in% c("manuel", "auto", "auto_discriminante", "auto_afc_discriminante")) classes_mode <- "manuel"
+  if (!classes_mode %in% c("manuel", "auto_afc_discriminante")) classes_mode <- "manuel"
   engine_classes_mode <- if (identical(classes_mode, "auto_afc_discriminante")) "auto_discriminante" else classes_mode
   classes_mode_label <- if (identical(classes_mode, "auto_afc_discriminante")) {
     "Analyse discriminante optimisee"
-  } else if (identical(classes_mode, "auto")) {
-    "Automatique"
-  } else if (identical(classes_mode, "auto_discriminante")) {
-    "Auto discriminante"
   } else {
     "Manuel"
   }
@@ -1203,7 +1199,7 @@ run_batch <- function() {
         scalar_int(config$k_iramuteq, 10L, 2L),
         " | nombre_classes_mode=",
         classes_mode_label,
-        if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante")) {
+        if (identical(classes_mode, "auto_afc_discriminante")) {
           paste0(" | k_min_auto=", auto_k_min)
         } else {
           ""
@@ -1382,13 +1378,11 @@ run_batch <- function() {
         progress = 60
       )
     }
-    if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante") && is.list(res_ira$auto_selection) && is.data.frame(res_ira$auto_selection$selected_metrics)) {
-      auto_selection_mode <- as.character(res_ira$auto_selection$mode %||% "")
-      is_auto_afc_mode <- identical(classes_mode, "auto_afc_discriminante") || identical(auto_selection_mode, "auto_afc_discriminante")
+    if (is.list(res_ira$auto_selection) && is.data.frame(res_ira$auto_selection$selected_metrics)) {
       if (isTRUE(res_ira$auto_selection$k_max_reduced)) {
         log_info(
           paste0(
-            if (is_auto_afc_mode) "Analyse discriminante optimisee : limite ramenee de " else "Auto CHD : limite ramenee de ",
+            "Analyse discriminante optimisee : limite ramenee de ",
             res_ira$auto_selection$k_max_requested %||% NA_integer_,
             " a ",
             res_ira$auto_selection$k_max_tested %||% NA_integer_,
@@ -1402,7 +1396,7 @@ run_batch <- function() {
       if (!is.null(res_ira$auto_selection$k_min_requested)) {
         log_info(
           paste0(
-            if (is_auto_afc_mode) "Analyse discriminante optimisee : intervalle teste = " else "Auto CHD : intervalle teste = ",
+            "Analyse discriminante optimisee : intervalle teste = ",
             "P",
             res_ira$auto_selection$k_min_tested %||% res_ira$auto_selection$k_min_requested %||% NA_integer_,
             " ... P",
@@ -1432,58 +1426,34 @@ run_batch <- function() {
         selected_auto$k %||% res_ira$auto_selection$k_selected,
         selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")
       )
-      if (is_auto_afc_mode) {
-        log_info(
-          paste0(
-            "Analyse discriminante optimisee : solution retenue ",
-            selected_solution_label,
-            " (A_theta=",
-            format(round(as.numeric(selected_auto$A_theta), 4), nsmall = 4, trim = TRUE),
-            ", A_dist=",
-            format(round(as.numeric(selected_auto$A_dist), 4), nsmall = 4, trim = TRUE),
-            ", A_rad=",
-            format(round(as.numeric(selected_auto$A_rad), 4), nsmall = 4, trim = TRUE),
-            ", A_align=",
-            format(round(as.numeric(selected_auto$A_align), 4), nsmall = 4, trim = TRUE),
-            if (!is.null(selected_auto$A_poles)) {
-              paste0(", A_poles=", format(round(as.numeric(selected_auto$A_poles), 4), nsmall = 4, trim = TRUE))
-            } else {
-              ""
-            },
-            ", A=",
-            format(round(as.numeric(selected_auto$A), 4), nsmall = 4, trim = TRUE),
-            if (!is.na(suppressWarnings(as.numeric(selected_auto$GA)))) {
-              paste0(", GA=", format(round(as.numeric(selected_auto$GA), 4), nsmall = 4, trim = TRUE))
-            } else {
-              ""
-            },
-            ")."
-          ),
-          progress = 57
-        )
-      } else {
-        log_info(
-          paste0(
-            "Auto CHD : solution retenue ",
-            selected_solution_label,
-            " (H=",
-            format(round(as.numeric(selected_auto$H), 4), nsmall = 4, trim = TRUE),
-            ", D=",
-            format(round(as.numeric(selected_auto$D), 4), nsmall = 4, trim = TRUE),
-            ", L=",
-            format(round(as.numeric(selected_auto$L), 4), nsmall = 4, trim = TRUE),
-            ", B=",
-            format(round(as.numeric(selected_auto$B), 4), nsmall = 4, trim = TRUE),
-            if (!is.na(suppressWarnings(as.numeric(selected_auto$G)))) {
-              paste0(", G=", format(round(as.numeric(selected_auto$G), 4), nsmall = 4, trim = TRUE))
-            } else {
-              ""
-            },
-            ")."
-          ),
-          progress = 57
-        )
-      }
+      log_info(
+        paste0(
+          "Analyse discriminante optimisee : solution retenue ",
+          selected_solution_label,
+          " (A_theta=",
+          format(round(as.numeric(selected_auto$A_theta), 4), nsmall = 4, trim = TRUE),
+          ", A_dist=",
+          format(round(as.numeric(selected_auto$A_dist), 4), nsmall = 4, trim = TRUE),
+          ", A_rad=",
+          format(round(as.numeric(selected_auto$A_rad), 4), nsmall = 4, trim = TRUE),
+          ", A_align=",
+          format(round(as.numeric(selected_auto$A_align), 4), nsmall = 4, trim = TRUE),
+          if (!is.null(selected_auto$A_poles)) {
+            paste0(", A_poles=", format(round(as.numeric(selected_auto$A_poles), 4), nsmall = 4, trim = TRUE))
+          } else {
+            ""
+          },
+          ", A=",
+          format(round(as.numeric(selected_auto$A), 4), nsmall = 4, trim = TRUE),
+          if (!is.na(suppressWarnings(as.numeric(selected_auto$GA)))) {
+            paste0(", GA=", format(round(as.numeric(selected_auto$GA), 4), nsmall = 4, trim = TRUE))
+          } else {
+            ""
+          },
+          ")."
+        ),
+        progress = 57
+      )
 
       metrics_auto <- res_ira$auto_selection$evaluation
       if (is.data.frame(metrics_auto) && nrow(metrics_auto)) {
@@ -1494,49 +1464,28 @@ run_batch <- function() {
           format(round(value_num, 4), nsmall = 4, trim = TRUE)
         }
         metrics_resume <- vapply(seq_len(nrow(metrics_auto)), function(i) {
-          if (is_auto_afc_mode) {
-            paste0(
-              formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
-              "(A_theta=",
-              fmt_auto_metric(metrics_auto$A_theta[[i]]),
-              ", A_dist=",
-              fmt_auto_metric(metrics_auto$A_dist[[i]]),
-              ", A_rad=",
-              fmt_auto_metric(metrics_auto$A_rad[[i]]),
-              ", A_align=",
-              fmt_auto_metric(metrics_auto$A_align[[i]]),
-              ", A_poles=",
-              fmt_auto_metric(metrics_auto$A_poles[[i]]),
-              ", A=",
-              fmt_auto_metric(metrics_auto$A[[i]]),
-              ", GA=",
-              fmt_auto_metric(metrics_auto$GA[[i]]),
-              ")"
-            )
-          } else {
-            paste0(
-              formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
-              "(H=",
-              fmt_auto_metric(metrics_auto$H[[i]]),
-              ", D=",
-              fmt_auto_metric(metrics_auto$D[[i]]),
-              ", L=",
-              fmt_auto_metric(metrics_auto$L[[i]]),
-              ", B=",
-              fmt_auto_metric(metrics_auto$B[[i]]),
-              ", G=",
-              fmt_auto_metric(metrics_auto$G[[i]]),
-              ")"
-            )
-          }
+          paste0(
+            formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
+            "(A_theta=",
+            fmt_auto_metric(metrics_auto$A_theta[[i]]),
+            ", A_dist=",
+            fmt_auto_metric(metrics_auto$A_dist[[i]]),
+            ", A_rad=",
+            fmt_auto_metric(metrics_auto$A_rad[[i]]),
+            ", A_align=",
+            fmt_auto_metric(metrics_auto$A_align[[i]]),
+            ", A_poles=",
+            fmt_auto_metric(metrics_auto$A_poles[[i]]),
+            ", A=",
+            fmt_auto_metric(metrics_auto$A[[i]]),
+            ", GA=",
+            fmt_auto_metric(metrics_auto$GA[[i]]),
+            ")"
+          )
         }, character(1))
         log_info(
           paste0(
-            if (is_auto_afc_mode) {
-              "Analyse discriminante optimisee : scores par nombre de classes -> "
-            } else {
-              "Auto CHD : scores par nombre de classes -> "
-            },
+            "Analyse discriminante optimisee : scores par nombre de classes -> ",
             paste(metrics_resume, collapse = " | ")
           ),
           progress = 57
@@ -1545,11 +1494,7 @@ run_batch <- function() {
 
       if (isTRUE((res_ira$auto_selection$k_selected %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
-          if (is_auto_afc_mode) {
-            "Analyse discriminante optimisee : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere solution disponible."
-          } else {
-            "Auto CHD : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score B est maximal sur la derniere solution disponible."
-          },
+          "Analyse discriminante optimisee : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere solution disponible.",
           progress = 57
         )
       }
@@ -1848,19 +1793,6 @@ run_batch <- function() {
     artifacts$wordclouds <- unname(vapply(list.files(wordcloud_dir, pattern = "\\.png$", full.names = TRUE), relative_to_output, character(1)))
     log_info("Mode IRaMuTeQ-lite : nuages de mots générés via wordcloud_iramuteq.R.", progress = 67)
 
-    if (classes_mode %in% c("auto", "auto_discriminante", "auto_afc_discriminante") && is.list(res_ira$auto_selection)) {
-      tryCatch({
-        auto_exports <- exporter_auto_chd_iramuteq(res_ira$auto_selection, output_dir)
-        artifacts$auto_chd <- list(
-          metrics_csv = relative_to_output(auto_exports$metrics_csv),
-          summary_json = relative_to_output(auto_exports$summary_json),
-          score_png = relative_to_output(auto_exports$score_png)
-        )
-        log_info("Exports Auto CHD generes.", progress = 69)
-      }, error = function(e) {
-        log_info(paste0("Exports Auto CHD indisponibles : ", e$message))
-      })
-    }
     if (is.list(res_ira$auto_discriminant_selection)) {
       tryCatch({
         auto_discriminant_exports <- exporter_auto_discriminante_iramuteq(res_ira$auto_discriminant_selection, output_dir)
@@ -2213,12 +2145,8 @@ run_batch <- function() {
     n_features = quanteda::nfeat(dfm_obj),
     n_classes = if (is.null(classes_ok)) 0L else length(unique(classes_ok)),
     classes_mode = classes_mode,
-    classes_mode_label = if (identical(classes_mode, "auto_discriminante")) {
-      "Auto discriminante"
-    } else if (identical(classes_mode, "auto_afc_discriminante")) {
+    classes_mode_label = if (identical(classes_mode, "auto_afc_discriminante")) {
       "Analyse discriminante optimisee"
-    } else if (identical(classes_mode, "auto")) {
-      "Automatique"
     } else {
       "Manuel"
     },

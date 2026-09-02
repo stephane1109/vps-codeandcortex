@@ -1,7 +1,7 @@
-# Role du fichier: autoCHD.R ajoute une couche optionnelle de selection
-# automatique du nombre de classes au-dessus de la CHD IRaMuTeQ-lite existante.
+# Role du fichier: autoCHD.R porte les calculs automatiques utilises par
+# l'analyse discriminante optimisee d'IRaMuTeQ-lite.
 # La CHD historique n'est pas modifiee: on reutilise ses partitions successives,
-# puis on calcule les scores H, D, L, B et G pour choisir la meilleure partition.
+# puis on evalue leur structure lexicale et leur discrimination sur l'AFC.
 
 if (!exists("%||%", mode = "function", inherits = TRUE)) {
   `%||%` <- function(x, y) {
@@ -78,16 +78,16 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
 
 extraire_partition_chd_iramuteq <- function(chd_obj, k) {
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
-  if (is.null(n1)) stop("Auto CHD: objet CHD invalide ou sans matrice n1.")
+  if (is.null(n1)) stop("Analyse discriminante optimisee: objet CHD invalide ou sans matrice n1.")
 
   k <- suppressWarnings(as.integer(k))
   if (!is.finite(k) || is.na(k) || k < 2L) {
-    stop("Auto CHD: k doit etre >= 2.")
+    stop("Analyse discriminante optimisee: k doit etre >= 2.")
   }
 
   col_index <- k - 1L
   if (col_index > ncol(n1)) {
-    stop("Auto CHD: solution en classes demandee indisponible dans n1.")
+    stop("Analyse discriminante optimisee: solution en classes demandee indisponible dans n1.")
   }
 
   classes_raw <- suppressWarnings(as.integer(n1[, col_index]))
@@ -106,7 +106,7 @@ extraire_partition_chd_iramuteq <- function(chd_obj, k) {
 
 lister_partitions_chd_iramuteq <- function(chd_obj, k_min = NULL, k_max = NULL) {
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
-  if (is.null(n1)) stop("Auto CHD: objet CHD invalide ou sans matrice n1.")
+  if (is.null(n1)) stop("Analyse discriminante optimisee: objet CHD invalide ou sans matrice n1.")
 
   max_available <- ncol(n1) + 1L
   if (is.null(k_min) || !length(k_min) || is.na(k_min[[1]]) || !is.finite(as.numeric(k_min[[1]]))) {
@@ -161,10 +161,10 @@ resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
                                              rscripts_dir = NULL,
                                              max_formes = 20000L) {
   if (!is.function(calculer_chd_fn)) {
-    stop("Auto CHD: calculer_chd_fn doit etre une fonction.")
+    stop("Analyse discriminante optimisee: calculer_chd_fn doit etre une fonction.")
   }
   if (is.null(dfm_obj)) {
-    stop("Auto CHD: dfm_obj manquant pour la recherche de la borne maximale.")
+    stop("Analyse discriminante optimisee: dfm_obj manquant pour la recherche de la borne maximale.")
   }
 
   svd_method <- match.arg(svd_method)
@@ -209,14 +209,14 @@ resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
   }
 
   stop(
-    "Auto CHD: impossible de calculer une solution exploitable entre 2 et ",
+    "Analyse discriminante optimisee: impossible de calculer une solution exploitable entre 2 et ",
     k_requested,
     " classes."
   )
 }
 
 .as_dgc_matrix_auto_chd <- function(dfm_obj, binary = FALSE) {
-  if (is.null(dfm_obj)) stop("Auto CHD: dfm_obj manquant.")
+  if (is.null(dfm_obj)) stop("Analyse discriminante optimisee: dfm_obj manquant.")
 
   mat <- tryCatch(
     methods::as(dfm_obj, "dgCMatrix"),
@@ -346,7 +346,7 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
 
   fn_stats <- get0("construire_stats_classes_iramuteq", mode = "function", inherits = TRUE)
   if (!is.function(fn_stats)) {
-    stop("Auto CHD: construire_stats_classes_iramuteq() est introuvable.")
+    stop("Analyse discriminante optimisee: construire_stats_classes_iramuteq() est introuvable.")
   }
 
   classes <- suppressWarnings(as.integer(classes))
@@ -425,148 +425,6 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
   )
 }
 
-evaluer_partition_auto_chd <- function(dfm_obj,
-                                       partition_obj,
-                                       stats_mode = c("vectorise", "classique"),
-                                       top_n_diffusion = 20L,
-                                       p_seuil = 0.05) {
-  stats_mode <- match.arg(stats_mode)
-  if (is.null(partition_obj) || is.null(partition_obj$classes)) {
-    stop("Auto CHD: solution en classes invalide.")
-  }
-
-  classes <- suppressWarnings(as.integer(partition_obj$classes))
-  ok <- is.finite(classes) & !is.na(classes) & classes > 0L
-  counts <- table(classes[ok])
-  total_assigned <- sum(counts)
-  pct <- if (total_assigned > 0) 100 * counts / total_assigned else counts
-
-  h_value <- calculer_homogeneite_auto_chd(dfm_obj, classes)
-  d_value <- calculer_distinction_auto_chd(dfm_obj, classes)
-  diffusion <- calculer_diffusion_auto_chd(
-    dfm_obj = dfm_obj,
-    classes = classes,
-    stats_mode = stats_mode,
-    top_n = top_n_diffusion,
-    p_seuil = p_seuil
-  )
-  l_value <- diffusion$value
-  b_value <- .borner_score_auto_chd(mean(c(h_value, d_value, l_value)))
-
-  metrics <- data.frame(
-    partition = paste0("P", partition_obj$k),
-    k = as.integer(partition_obj$k),
-    n_segments_assignes = as.integer(total_assigned),
-    n_segments_non_assignes = as.integer(sum(!ok)),
-    H = .borner_score_auto_chd(h_value),
-    D = .borner_score_auto_chd(d_value),
-    L = .borner_score_auto_chd(l_value),
-    B = .borner_score_auto_chd(b_value),
-    classes_effectifs = .formatter_resume_classes_auto_chd(counts, digits = 0L),
-    classes_pourcentages = .formatter_resume_classes_auto_chd(pct, digits = 2L, suffix = "%"),
-    stringsAsFactors = FALSE
-  )
-
-  list(
-    partition = partition_obj,
-    metrics = metrics,
-    stats = diffusion$stats,
-    diffusion_by_class = diffusion$by_class
-  )
-}
-
-selection_automatique_classes_iramuteq <- function(chd_obj,
-                                                   dfm_obj,
-                                                   k_min = NULL,
-                                                   k_max = NULL,
-                                                   stats_mode = c("vectorise", "classique"),
-                                                   top_n_diffusion = 20L,
-                                                   p_seuil = 0.05) {
-  stats_mode <- match.arg(stats_mode)
-
-  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
-  if (!length(partitions)) {
-    stop("Auto CHD: aucune solution exploitable dans l'intervalle de classes demande.")
-  }
-  partitions <- partitions[order(
-    vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
-    vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$requested_k %||% partition_obj$k)), integer(1))
-  )]
-
-  evaluations <- lapply(partitions, function(partition_obj) {
-    evaluer_partition_auto_chd(
-      dfm_obj = dfm_obj,
-      partition_obj = partition_obj,
-      stats_mode = stats_mode,
-      top_n_diffusion = top_n_diffusion,
-      p_seuil = p_seuil
-    )
-  })
-
-  metrics_df <- do.call(rbind, lapply(evaluations, `[[`, "metrics"))
-  metrics_df$G <- NA_real_
-
-  if (nrow(metrics_df) > 1L) {
-    b_values <- suppressWarnings(as.numeric(metrics_df$B))
-    gains <- rep(NA_real_, length(b_values))
-    gains[-1L] <- b_values[-1L] - b_values[-length(b_values)]
-    metrics_df$G <- gains
-  }
-
-  b_values <- suppressWarnings(as.numeric(metrics_df$B))
-  b_scores <- ifelse(is.finite(b_values) & !is.na(b_values), b_values, -Inf)
-  if (!any(is.finite(b_scores) & b_scores > -Inf)) {
-    stop("Auto CHD: aucun score B exploitable n'a pu etre calcule.")
-  }
-
-  selected_idx <- which.max(b_scores)
-  metrics_df$selection <- ifelse(seq_len(nrow(metrics_df)) == selected_idx, "oui", "non")
-
-  selected_partition <- partitions[[selected_idx]]
-  selected_evaluation <- evaluations[[selected_idx]]
-  k_max_tested <- suppressWarnings(max(as.integer(metrics_df$k), na.rm = TRUE))
-  k_max_requested <- suppressWarnings(as.integer(chd_obj$auto_k_requested %||% k_max[[1]] %||% k_max))
-  k_min_requested <- suppressWarnings(as.integer(k_min[[1]] %||% k_min))
-  if (!length(k_max_requested) || is.na(k_max_requested) || !is.finite(k_max_requested)) {
-    k_max_requested <- as.integer(k_max_tested)
-  }
-  if (!length(k_min_requested) || is.na(k_min_requested) || !is.finite(k_min_requested)) {
-    k_min_requested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
-  }
-  k_min_requested <- max(2L, k_min_requested)
-  k_max_requested <- max(2L, k_max_requested)
-  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
-  if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
-    stop(paste0(
-      "Auto CHD: la solution retenue ne respecte pas la borne minimale demandee (",
-      k_min_requested,
-      " classes reelles minimum)."
-    ))
-  }
-
-  list(
-    mode = "auto",
-    mode_label = "Auto CHD",
-    score_column = "B",
-    score_label = "Score structurel B",
-    score_plot_title = "Selection automatique du nombre de classes",
-    classes = selected_partition$classes,
-    classes_raw = selected_partition$classes_raw,
-    terminales = selected_partition$terminales,
-    k_selected = as.integer(metrics_df$k[[selected_idx]]),
-    k_min_requested = as.integer(k_min_requested),
-    k_min_tested = as.integer(k_min_tested),
-    k_max_requested = as.integer(k_max_requested),
-    k_max_tested = as.integer(k_max_tested),
-    k_max_reduced = isTRUE(k_max_tested < k_max_requested),
-    k_reduction_reason = chd_obj$auto_k_reduction_reason %||% NULL,
-    evaluation = metrics_df,
-    selected_metrics = metrics_df[selected_idx, , drop = FALSE],
-    selected_stats = selected_evaluation$stats,
-    selected_diffusion_by_class = selected_evaluation$diffusion_by_class,
-    partitions = partitions
-  )
-}
 
 .moyenne_geometrique_scores_auto_chd <- function(values) {
   values <- suppressWarnings(as.numeric(values))
@@ -1137,58 +995,6 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   )
 }
 
-tracer_scores_auto_chd_iramuteq <- function(metrics_df,
-                                            selected_k = NULL,
-                                            score_col = "B",
-                                            score_label = "Score structurel B",
-                                            plot_title = "Selection automatique du nombre de classes") {
-  if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
-    plot.new()
-    text(0.5, 0.5, "Aucune solution automatique a afficher.", cex = 1.0)
-    return(invisible(NULL))
-  }
-
-  x <- suppressWarnings(as.integer(metrics_df$k))
-  score_values <- metrics_df[[score_col]]
-  y <- suppressWarnings(as.numeric(score_values))
-  ok <- is.finite(x) & !is.na(x) & is.finite(y) & !is.na(y)
-  x <- x[ok]
-  y <- y[ok]
-
-  if (length(x) < 1L) {
-    plot.new()
-    text(0.5, 0.5, "Les scores B sont indisponibles.", cex = 1.0)
-    return(invisible(NULL))
-  }
-
-  y_min <- min(0, y)
-  y_max <- max(1, y)
-  plot(
-    x,
-    y,
-    type = "b",
-    pch = 19,
-    lwd = 2,
-    col = "#8d1b1d",
-    xlab = "Nombre de classes k",
-    ylab = score_label,
-    ylim = c(y_min, y_max),
-    main = plot_title
-  )
-  grid(col = "#d6c8b8", lty = "dotted")
-
-  if (!is.null(selected_k) && length(selected_k)) {
-    selected_k <- suppressWarnings(as.integer(selected_k[[1]]))
-    idx <- which(x == selected_k)
-    if (length(idx)) {
-      points(x[idx[1]], y[idx[1]], pch = 21, bg = "#f6c344", col = "#8d1b1d", cex = 1.7, lwd = 1.5)
-      text(x[idx[1]], y[idx[1]], labels = paste0("  P", selected_k), pos = 4, col = "#5f1a18")
-    }
-  }
-
-  invisible(NULL)
-}
-
 .dataframe_row_to_list_auto_chd <- function(df_row) {
   out <- as.list(df_row)
   for (nm in names(out)) {
@@ -1206,100 +1012,6 @@ tracer_scores_auto_chd_iramuteq <- function(metrics_df,
   } else {
     utils::write.csv(df, path, row.names = FALSE)
   }
-}
-
-exporter_auto_chd_iramuteq <- function(selection_obj, output_dir) {
-  if (is.null(selection_obj) || !is.list(selection_obj)) {
-    stop("Auto CHD: objet de selection automatique manquant.")
-  }
-  if (is.null(output_dir) || !nzchar(output_dir)) {
-    stop("Auto CHD: dossier de sortie manquant.")
-  }
-
-  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-
-  metrics_df <- selection_obj$evaluation
-  selected_df <- selection_obj$selected_metrics
-  score_col <- as.character(selection_obj$score_column %||% "B")
-  score_label <- as.character(selection_obj$score_label %||% "Score structurel B")
-  score_plot_title <- as.character(selection_obj$score_plot_title %||% "Selection automatique du nombre de classes")
-
-  metrics_csv <- file.path(output_dir, "auto_chd_metrics.csv")
-  summary_json <- file.path(output_dir, "auto_chd_summary.json")
-  score_png <- if (identical(selection_obj$mode %||% "auto", "auto_afc_discriminante")) {
-    file.path(output_dir, "auto_chd_afc_score.png")
-  } else {
-    file.path(output_dir, "auto_chd_b_score.png")
-  }
-
-  .write_metrics_csv_auto_chd(metrics_df, metrics_csv)
-
-  if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    stop("Auto CHD: le package jsonlite est requis pour exporter le resume JSON.")
-  }
-
-  metrics_rows <- lapply(seq_len(nrow(metrics_df)), function(i) {
-    .dataframe_row_to_list_auto_chd(metrics_df[i, , drop = FALSE])
-  })
-
-  payload <- list(
-    mode = selection_obj$mode %||% "auto",
-    mode_label = selection_obj$mode_label %||% "Auto CHD",
-    score_column = score_col,
-    score_label = score_label,
-    score_plot_title = score_plot_title,
-    selected_k = selection_obj$k_selected %||% NA_integer_,
-    k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
-    k_min_tested = selection_obj$k_min_tested %||% NA_integer_,
-    k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
-    k_max_tested = selection_obj$k_max_tested %||% NA_integer_,
-    k_max_reduced = selection_obj$k_max_reduced %||% FALSE,
-    k_reduction_reason = selection_obj$k_reduction_reason %||% NULL,
-    partition = paste0("P", selection_obj$k_selected %||% ""),
-    selected = if (!is.null(selected_df) && nrow(selected_df)) {
-      .dataframe_row_to_list_auto_chd(selected_df[1, , drop = FALSE])
-    } else {
-      NULL
-    },
-    selected_configuration = if (!is.null(selection_obj$selected_configuration_metrics) &&
-      is.data.frame(selection_obj$selected_configuration_metrics) &&
-      nrow(selection_obj$selected_configuration_metrics)) {
-      .dataframe_row_to_list_auto_chd(selection_obj$selected_configuration_metrics[1, , drop = FALSE])
-    } else {
-      NULL
-    },
-    search_profile = selection_obj$search_profile %||% NULL,
-    search_profile_label = selection_obj$search_profile_label %||% NULL,
-    total_configurations = selection_obj$total_configurations %||% NA_integer_,
-    successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
-    unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
-    reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
-    selected_termes_cibles = as.list(as.character(selection_obj$selected_termes_cibles %||% character(0))),
-    selected_termes_cibles_par_classe = stats::setNames(
-      lapply(selection_obj$selected_termes_cibles_par_classe %||% list(), function(terms) {
-        as.list(as.character(terms %||% character(0)))
-      }),
-      names(selection_obj$selected_termes_cibles_par_classe %||% list())
-    ),
-    metrics = metrics_rows
-  )
-  jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")
-
-  grDevices::png(score_png, width = 1800, height = 1100, res = 180)
-  tracer_scores_auto_chd_iramuteq(
-    metrics_df,
-    selected_k = selection_obj$k_selected,
-    score_col = score_col,
-    score_label = score_label,
-    plot_title = score_plot_title
-  )
-  grDevices::dev.off()
-
-  list(
-    metrics_csv = metrics_csv,
-    summary_json = summary_json,
-    score_png = score_png
-  )
 }
 
 .as_bool_auto_chd <- function(value, default = FALSE) {
