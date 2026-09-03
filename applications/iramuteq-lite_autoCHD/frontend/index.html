@@ -192,7 +192,8 @@
 
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
               <button class="sub-nav-link is-active" data-subtab-target="dendrogramme" type="button">Dendrogramme</button>
-              <button class="sub-nav-link" data-subtab-target="auto_discriminante" type="button">Analyse discriminante optimisee</button>
+              <button class="sub-nav-link" data-subtab-target="auto_discriminante" type="button">Analyse discriminante optimisée</button>
+              <button class="sub-nav-link" data-subtab-target="discrimination_simple" type="button">Discrimination simple</button>
               <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
               <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
               <button class="sub-nav-link" data-subtab-target="nuage_de_mots" type="button">Nuage de mots</button>
@@ -229,16 +230,16 @@
                 <article class="card section-card">
                   <div class="section-head">
                     <div>
-                      <p class="card-kicker">Selection</p>
-                      <h3>Analyse discriminante optimisee</h3>
+                      <p class="card-kicker">Sélection</p>
+                      <h3>Analyse discriminante optimisée</h3>
                     </div>
                     <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
                   </div>
                   <p class="section-copy">
-                    Ce mode teste plusieurs configurations ciblees du meme corpus, puis retient un seul meilleur compromis.
+                    Ce mode teste plusieurs configurations ciblées du même corpus, puis retient un seul meilleur compromis.
                   </p>
                   <p class="section-copy">
-                    Le compromis retenu est celui qui oppose le mieux les classes sur l'AFC a partir des termes caracteristiques significatifs.
+                    Le compromis retenu est celui qui oppose le mieux les classes sur l'AFC à partir des termes caractéristiques significatifs.
                   </p>
                 </article>
 
@@ -250,6 +251,36 @@
                 <article class="card">
                   <h3>Tableau des configurations testees</h3>
                   <div id="autoDiscriminanteTable" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="subpanel" data-subpanel="discrimination_simple" hidden>
+              <div class="section-stack">
+                <article class="card section-card">
+                  <div class="section-head">
+                    <div>
+                      <p class="card-kicker">Selection</p>
+                      <h3>Discrimination simple</h3>
+                    </div>
+                    <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
+                  </div>
+                  <p class="section-copy">
+                    Ce mode teste les mêmes configurations ciblées que le mode optimisé, puis retient un seul meilleur compromis.
+                  </p>
+                  <p class="section-copy">
+                    La selection repose uniquement sur les mots significatifs, leur chi2 et leurs coordonnees x,y sur l'AFC.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <h3>Meilleur compromis retenu</h3>
+                  <div id="discriminationSimpleSummary" class="result-pane"></div>
+                </article>
+
+                <article class="card">
+                  <h3>Tableau des configurations testees</h3>
+                  <div id="discriminationSimpleTable" class="result-pane"></div>
                 </article>
               </div>
             </section>
@@ -388,7 +419,7 @@
 
             <div class="local-tabs" role="tablist" aria-label="Sous-onglets Aide">
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
-              <button class="local-tab-button" data-help-subtab-target="help_auto_discriminante" type="button">Analyse discriminante optimisee</button>
+              <button class="local-tab-button" data-help-subtab-target="help_auto_discriminante" type="button">Analyse discriminante optimisée</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
             </div>
 
@@ -495,11 +526,12 @@
                 <label for="classesMode">Nombre de classes</label>
                 <select id="classesMode" data-classes-mode-select>
                   <option value="manuel">Manuel</option>
-                  <option value="auto_afc_discriminante">Analyse discriminante optimisee</option>
+                  <option value="auto_afc_discriminante">Analyse discriminante optimisée</option>
+                  <option value="discrimination_simple">Discrimination simple</option>
                 </select>
                 <p class="field-help">
                   En manuel, vous fixez le nombre de classes avant l'analyse.
-                  En mode Analyse discriminante optimisee, vous ne fixez pas le nombre final de classes :
+                  En mode Analyse discriminante optimisée, vous ne fixez pas le nombre final de classes :
                   vous donnez seulement une limite maximale d'exploration, puis l'application compare
                   automatiquement les solutions en classes issues de la meme CHD a partir de 3 classes jusqu'a cette limite
                   pour retenir le meilleur compromis discriminant.
