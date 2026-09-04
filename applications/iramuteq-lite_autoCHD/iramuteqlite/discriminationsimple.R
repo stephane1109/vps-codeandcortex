@@ -353,8 +353,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     mode = "discrimination_simple",
     mode_label = "Discrimination simple",
     score_column = "S",
-    score_label = "Score discrimination simple S",
-    score_plot_title = "Selection du meilleur compromis simple",
+    score_label = "Score discrimination AFC",
+    score_plot_title = "Selection de la configuration la plus discriminante",
     classes = selected_partition$classes,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
@@ -673,20 +673,12 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
       paste0(
         "Discrimination simple : configuration retenue -> ",
         best_row$configuration_label[[1]],
-        " | k=",
+        " | classes retenues=",
         best_row$k_retenu[[1]],
-        " | S_theta=",
-        format(round(as.numeric(best_row$S_theta[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | S_dist=",
-        format(round(as.numeric(best_row$S_dist[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | S_rad=",
-        format(round(as.numeric(best_row$S_rad[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | S_align=",
-        format(round(as.numeric(best_row$S_align[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | S=",
+        " | score discrimination AFC=",
         format(round(as.numeric(best_row$S[[1]]), 4), nsmall = 4, trim = TRUE),
-        " | B=",
-        format(round(as.numeric(best_row$B[[1]]), 4), nsmall = 4, trim = TRUE)
+        " | min_docfreq=",
+        best_row$min_docfreq[[1]]
       ),
       progress = 59
     )
@@ -750,8 +742,8 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     border = NA,
     las = 1,
     names.arg = rev(labels),
-    xlab = "Score discrimination simple S",
-    main = "Configurations les plus discriminantes sur les mots AFC"
+    xlab = "Score discrimination AFC",
+    main = "Configurations les plus discriminantes sur l'AFC"
   )
   graphics::grid(col = "#d6c8b8", lty = "dotted")
 
@@ -770,6 +762,36 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
   invisible(NULL)
 }
 
+.preparer_metrics_export_discrimination_simple <- function(metrics_df) {
+  if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
+    return(data.frame(stringsAsFactors = FALSE))
+  }
+
+  col <- function(name, default = NA) {
+    if (name %in% names(metrics_df)) metrics_df[[name]] else rep(default, nrow(metrics_df))
+  }
+
+  data.frame(
+    configuration_id = col("configuration_id", NA_character_),
+    profil_morpho = col("profil_morpho", NA_character_),
+    lexique_utiliser_lemmes = col("lexique_utiliser_lemmes", NA_character_),
+    retirer_stopwords = col("retirer_stopwords", NA_character_),
+    supprimer_ponctuation = col("supprimer_ponctuation", NA_character_),
+    supprimer_chiffres = col("supprimer_chiffres", NA_character_),
+    min_docfreq = suppressWarnings(as.integer(col("min_docfreq", NA_integer_))),
+    k_max_explore = suppressWarnings(as.integer(col("k_max_explore", NA_integer_))),
+    n_segments = suppressWarnings(as.integer(col("n_segments", NA_integer_))),
+    n_formes = suppressWarnings(as.integer(col("n_formes", NA_integer_))),
+    classes_retenues = suppressWarnings(as.integer(col("k_retenu", NA_integer_))),
+    score_discrimination = suppressWarnings(as.numeric(col("S", NA_real_))),
+    classes_effectifs = col("classes_effectifs", NA_character_),
+    classes_pourcentages = col("classes_pourcentages", NA_character_),
+    selection = col("selection", NA_character_),
+    erreur = col("erreur", NA_character_),
+    stringsAsFactors = FALSE
+  )
+}
+
 exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   if (is.null(selection_obj) || !is.list(selection_obj)) {
     stop("Discrimination simple: objet de selection manquant.")
@@ -782,11 +804,13 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
 
   metrics_df <- selection_obj$evaluation
   selected_df <- selection_obj$selected_metrics
+  metrics_public_df <- .preparer_metrics_export_discrimination_simple(metrics_df)
+  selected_public_df <- .preparer_metrics_export_discrimination_simple(selected_df)
   summary_json <- file.path(output_dir, "discrimination_simple_summary.json")
   metrics_csv <- file.path(output_dir, "discrimination_simple_metrics.csv")
   score_png <- file.path(output_dir, "discrimination_simple_score.png")
 
-  .write_metrics_csv_auto_chd(metrics_df, metrics_csv)
+  .write_metrics_csv_auto_chd(metrics_public_df, metrics_csv)
 
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     stop("Discrimination simple: le package jsonlite est requis pour exporter le resume JSON.")
@@ -809,13 +833,13 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
       }),
       names(selection_obj$selected_result$auto_selection$selected_termes_cibles_par_classe %||% list())
     ),
-    selected = if (!is.null(selected_df) && nrow(selected_df)) {
-      .dataframe_row_to_list_auto_chd(selected_df[1, , drop = FALSE])
+    selected = if (!is.null(selected_public_df) && nrow(selected_public_df)) {
+      .dataframe_row_to_list_auto_chd(selected_public_df[1, , drop = FALSE])
     } else {
       NULL
     },
-    metrics = lapply(seq_len(nrow(metrics_df)), function(i) {
-      .dataframe_row_to_list_auto_chd(metrics_df[i, , drop = FALSE])
+    metrics = lapply(seq_len(nrow(metrics_public_df)), function(i) {
+      .dataframe_row_to_list_auto_chd(metrics_public_df[i, , drop = FALSE])
     })
   )
   jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")

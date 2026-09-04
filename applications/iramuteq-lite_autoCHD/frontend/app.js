@@ -2165,6 +2165,7 @@ function renderClassesModeCard(card) {
   const kInput = card.querySelector("#kIramuteq, [data-source-id='kIramuteq']");
   const kLabel = card.querySelector("[data-k-iramuteq-label]");
   const kHelp = card.querySelector("[data-k-iramuteq-help]");
+  const modeDescription = card.querySelector("[data-classes-mode-description]");
   const autoKMinInput = card.querySelector("#kIramuteqMinAuto, [data-source-id='kIramuteqMinAuto']");
   if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
 
@@ -2184,16 +2185,24 @@ function renderClassesModeCard(card) {
   }
 
   kLabel.textContent = isAutoAfcDiscriminante
-    ? "Nombre maximal de classes a explorer"
+    ? "Nombre maximal de classes à explorer"
     : isDiscriminationSimple
-      ? "Nombre maximal de classes a explorer"
+      ? "Nombre maximal de classes à explorer"
       : "Nombre de classes terminales de la phase 1";
+
+  if (modeDescription instanceof HTMLElement) {
+    modeDescription.textContent = isAutoAfcDiscriminante
+      ? "En mode Analyse discriminante optimisée, vous ne fixez pas le nombre final de classes. Vous donnez seulement une limite maximale d'exploration, puis l'application compare automatiquement les solutions en classes issues de la même CHD pour retenir le meilleur compromis discriminant."
+      : isDiscriminationSimple
+        ? "En mode Discrimination simple, l'application simule 4 CHD ciblées du même corpus. Seul min_docfreq varie de 2 à 5, avec filtrage NOM + VER, exclusion de être et conservation de AUTRE_FORME selon votre choix. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC."
+        : "En manuel, vous fixez le nombre de classes avant l'analyse.";
+  }
 
   if (kHelp instanceof HTMLElement) {
     kHelp.textContent = isAutoAfcDiscriminante
-      ? "La CHD est calculee jusqu'a cette limite puis l'application compare automatiquement les solutions en classes a partir de 3 classes pour retenir le meilleur compromis discriminant."
+      ? "La CHD est calculée jusqu'à cette limite puis l'application compare automatiquement les solutions en classes à partir de 3 classes pour retenir le meilleur compromis discriminant."
       : isDiscriminationSimple
-        ? "La CHD est calculee jusqu'a cette limite puis l'application compare automatiquement les solutions en classes a partir de 3 classes en utilisant seulement les mots significatifs, leur chi2 et leurs coordonnees AFC."
+        ? "Le mode simule 4 CHD ciblées, une par valeur de min_docfreq de 2 à 5. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante."
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
 }
@@ -11140,6 +11149,16 @@ function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
   const profilMorpho = String(configSource.profil_morpho || "").trim();
   const minDocfreq = formatSummaryValue(configSource.min_docfreq);
   const kMaxExplore = formatSummaryValue(configSource.k_max_explore || configSource.kmax || configSource.k_max_requested);
+  const normalizeYesNoValue = (value, yesLabel = "oui", noLabel = "non") => {
+    const normalized = normalizeAsciiKey(value);
+    if (["oui", "true", "1", "yes"].includes(normalized)) return yesLabel;
+    if (["non", "false", "0", "no"].includes(normalized)) return noLabel;
+    return "";
+  };
+  const lemmes = normalizeYesNoValue(configSource.lexique_utiliser_lemmes);
+  const stopwords = normalizeYesNoValue(configSource.retirer_stopwords);
+  const ponctuation = normalizeYesNoValue(configSource.supprimer_ponctuation);
+  const chiffres = normalizeYesNoValue(configSource.supprimer_chiffres, "supprimés", "conservés");
 
   if (configId) {
     const configNote = document.createElement("p");
@@ -11150,8 +11169,12 @@ function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
 
   const variableParts = [];
   if (profilMorpho) variableParts.push(`profil morpho = ${profilMorpho}`);
+  if (lemmes) variableParts.push(`lemmes = ${lemmes}`);
+  if (stopwords) variableParts.push(`stopwords = ${stopwords}`);
+  if (ponctuation) variableParts.push(`ponctuation = ${ponctuation}`);
+  if (chiffres) variableParts.push(`chiffres = ${chiffres}`);
   if (minDocfreq && minDocfreq !== "N/A") variableParts.push(`min_docfreq = ${minDocfreq}`);
-  if (kMaxExplore && kMaxExplore !== "N/A") variableParts.push(`k max explore = ${kMaxExplore}`);
+  if (kMaxExplore && kMaxExplore !== "N/A") variableParts.push(`k max exploré = ${kMaxExplore}`);
 
   if (variableParts.length) {
     const variableNote = document.createElement("p");
@@ -11395,19 +11418,19 @@ function renderDiscriminationSimpleSummary(container, payload) {
   if (!clearContainer(container)) return;
 
   const selected = payload?.selected;
-  const selectedK = Number.parseInt(String(selected?.k_retenu ?? ""), 10);
+  const selectedK = Number.parseInt(String(selected?.classes_retenues ?? selected?.k_retenu ?? ""), 10);
   if (!selected || !Number.isFinite(selectedK)) {
-    container.appendChild(createEmptyState("Aucune configuration de discrimination simple n'a ete retenue pour cette analyse."));
+    container.appendChild(createEmptyState("Aucune configuration de discrimination simple n'a été retenue pour cette analyse."));
     return;
   }
 
   const metrics = [
-    ["Configuration", selected.configuration_id || "N/A"],
-    ["Partition retenue", `P${selectedK}`],
+    ["Configuration retenue", selected.configuration_id || "N/A"],
+    ["Classes retenues", selectedK],
     ["Profil morpho", selected.profil_morpho || "N/A"],
-    ["min_docfreq", selected.min_docfreq],
-    ["k max explore", selected.k_max_explore || "N/A"],
-    ["Score S", selected.S ?? selected.s ?? "N/A"]
+    ["min_docfreq retenu", selected.min_docfreq],
+    ["Configurations testées", payload?.total_configurations ?? "N/A"],
+    ["Score discrimination AFC", selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
   ];
 
   const grid = document.createElement("div");
@@ -11432,6 +11455,11 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   container.appendChild(grid);
   appendAutoDiscriminanteConfigurationDetails(container, selected);
+
+  const selectionNote = document.createElement("p");
+  selectionNote.className = "field-help";
+  selectionNote.textContent = `Le mode a simulé ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu celle où les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC opposent le mieux les classes.`;
+  container.appendChild(selectionNote);
 }
 
 function extractDiscriminationSimpleCloneParsed(parsed) {
@@ -11440,10 +11468,8 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
   }
 
   const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const scoreColumnIndex = headerIndex(parsed.headers, ["s"]);
-  const thetaColumnIndex = headerIndex(parsed.headers, ["s_theta"]);
-  const distanceColumnIndex = headerIndex(parsed.headers, ["s_dist"]);
-  const structureColumnIndex = headerIndex(parsed.headers, ["b"]);
+  const scoreColumnIndex = headerIndex(parsed.headers, ["score_discrimination", "s"]);
+  const classesColumnIndex = headerIndex(parsed.headers, ["classes_retenues", "k_retenu"]);
 
   const rowsSource = parsed.rows.slice().sort((left, right) => {
     const leftSelection = normalizeAsciiKey(selectionColumnIndex === -1 ? "" : left[selectionColumnIndex]);
@@ -11460,14 +11486,8 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     const scoreDiff = parseTableNumber(right[scoreColumnIndex]) - parseTableNumber(left[scoreColumnIndex]);
     if (Number.isFinite(scoreDiff) && scoreDiff !== 0) return scoreDiff;
 
-    const thetaDiff = parseTableNumber(right[thetaColumnIndex]) - parseTableNumber(left[thetaColumnIndex]);
-    if (Number.isFinite(thetaDiff) && thetaDiff !== 0) return thetaDiff;
-
-    const distanceDiff = parseTableNumber(right[distanceColumnIndex]) - parseTableNumber(left[distanceColumnIndex]);
-    if (Number.isFinite(distanceDiff) && distanceDiff !== 0) return distanceDiff;
-
-    const structureDiff = parseTableNumber(right[structureColumnIndex]) - parseTableNumber(left[structureColumnIndex]);
-    if (Number.isFinite(structureDiff) && structureDiff !== 0) return structureDiff;
+    const classesDiff = parseTableNumber(right[classesColumnIndex]) - parseTableNumber(left[classesColumnIndex]);
+    if (Number.isFinite(classesDiff) && classesDiff !== 0) return classesDiff;
 
     return String(left[0] || "").localeCompare(String(right[0] || ""), undefined, { numeric: true });
   });
@@ -11480,19 +11500,11 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["supprimer_ponctuation"], label: "ponctuation" },
     { keys: ["supprimer_chiffres"], label: "chiffres" },
     { keys: ["min_docfreq"], label: "min_docfreq" },
-    { keys: ["k_max_explore"], label: "k max teste" },
+    { keys: ["k_max_explore"], label: "k max exploré" },
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
-    { keys: ["k_retenu"], label: "k retenu" },
-    { keys: ["s_theta"], label: "S_theta" },
-    { keys: ["s_dist"], label: "S_dist" },
-    { keys: ["s_rad"], label: "S_rad" },
-    { keys: ["s_align"], label: "S_align" },
-    { keys: ["s"], label: "S" },
-    { keys: ["h"], label: "H" },
-    { keys: ["d"], label: "D" },
-    { keys: ["l"], label: "L" },
-    { keys: ["b"], label: "B" },
+    { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
+    { keys: ["score_discrimination", "s"], label: "score discrimination AFC" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
     { keys: ["selection"], label: "statut" },
@@ -11526,7 +11538,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_teste", "segments", "formes", "k_retenu", "s_theta", "s_dist", "s_rad", "s_align", "s", "h", "d", "l", "b"]);
+  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
