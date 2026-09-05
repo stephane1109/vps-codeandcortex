@@ -11431,7 +11431,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq retenu", selected.min_docfreq],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
-    ["Distance minimale AFC entre classes", selected.distance_minimale_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
+    ["Séparation relative AFC", selected.separation_relative_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
   ];
 
   const grid = document.createElement("div");
@@ -11459,7 +11459,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
-  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu celle dont les centres lexicaux de classes sont les plus éloignés sur l'AFC.`;
+  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu celle dont les classes sont les mieux séparées au regard de leur dispersion lexicale sur l'AFC.`;
   container.appendChild(selectionNote);
 }
 
@@ -11469,7 +11469,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
   }
 
   const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const scoreColumnIndex = headerIndex(parsed.headers, ["distance_minimale_afc", "score_discrimination", "s"]);
+  const scoreColumnIndex = headerIndex(parsed.headers, ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"]);
   const classesColumnIndex = headerIndex(parsed.headers, ["classes_retenues", "k_retenu"]);
 
   const rowsSource = parsed.rows.slice().sort((left, right) => {
@@ -11505,7 +11505,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
-    { keys: ["distance_minimale_afc", "score_discrimination", "s"], label: "distance minimale AFC" },
+    { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
     { keys: ["selection"], label: "statut" },
@@ -11539,7 +11539,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);

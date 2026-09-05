@@ -1422,8 +1422,8 @@ run_batch <- function() {
           as.character(selected_discriminant$min_docfreq %||% "n/a"),
           ", k=",
           as.character(selected_discriminant$k_retenu %||% "n/a"),
-          ", distance minimale AFC=",
-          format(round(as.numeric(selected_discriminant$S_distance_min %||% selected_discriminant$S), 4), nsmall = 4, trim = TRUE),
+          ", separation relative AFC=",
+          format(round(as.numeric(selected_discriminant$S_separation_min %||% selected_discriminant$S), 4), nsmall = 4, trim = TRUE),
           ")."
         ),
         progress = 60
@@ -1483,13 +1483,8 @@ run_batch <- function() {
           selected_solution_label,
           if (identical(classes_mode, "discrimination_simple")) {
             paste0(
-              " (distance minimale AFC=",
-              format(round(as.numeric(selected_auto$S_distance_min %||% selected_auto$S), 4), nsmall = 4, trim = TRUE),
-              if (!is.na(suppressWarnings(as.numeric(selected_auto$GS)))) {
-                paste0(", GS=", format(round(as.numeric(selected_auto$GS), 4), nsmall = 4, trim = TRUE))
-              } else {
-                ""
-              },
+              " (separation relative AFC=",
+              format(round(as.numeric(selected_auto$S_separation_min %||% selected_auto$S), 4), nsmall = 4, trim = TRUE),
               ")."
             )
           } else {
@@ -1533,10 +1528,8 @@ run_batch <- function() {
           if (identical(classes_mode, "discrimination_simple")) {
             paste0(
               formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
-              "(distance minimale AFC=",
-              fmt_auto_metric(metrics_auto$S_distance_min[[i]] %||% metrics_auto$S[[i]]),
-              ", GS=",
-              fmt_auto_metric(metrics_auto$GS[[i]]),
+              "(separation relative AFC=",
+              fmt_auto_metric(metrics_auto$S_separation_min[[i]] %||% metrics_auto$S[[i]]),
               ")"
             )
           } else {

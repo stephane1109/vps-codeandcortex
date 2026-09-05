@@ -53,12 +53,15 @@ Pour chaque CHD testée :
 - elle récupère leurs coordonnées `x, y` sur le plan AFC
 - elle calcule le centre lexical de chaque classe : la moyenne des coordonnées `x, y` de ses mots significatifs
 - elle calcule les distances euclidiennes entre tous les centres de classes
+- elle mesure aussi la dispersion des mots autour du centre de leur classe
 
-Le score retenu est la **plus petite** de ces distances, normalisée sur le plan AFC.
+Pour chaque paire de classes, l'application calcule :
 
-Cela évite une solution où deux classes sont très éloignées mais où deux autres se confondent presque : toutes les classes doivent rester séparées.
+`distance entre les deux centres / dispersion lexicale des deux classes`.
 
-En cas d'égalité, la moyenne des distances entre classes départage les deux solutions.
+Le score retenu est la plus petite de ces séparations relatives. Ainsi, toutes les classes doivent être distinctes par rapport à leur propre nuage de mots, qu'il y ait 3, 4, 5 ou 6 classes.
+
+En cas d'égalité, la moyenne des séparations relatives départage les deux solutions.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 
@@ -72,7 +75,7 @@ Le mode affiche seulement les éléments utiles à la lecture du résultat :
 - le profil morphosyntaxique retenu
 - la valeur `min_docfreq` retenue
 - le nombre de classes retenues
-- la distance minimale AFC entre les classes
+- la séparation relative AFC entre les classes
 - les effectifs des classes
 
 Les sous-calculs internes du score ne sont pas nécessaires pour l'interprétation courante.
