@@ -8,17 +8,6 @@ if (!exists("%||%", mode = "function", inherits = TRUE)) {
   }
 }
 
-.moyenne_simple_discrimination <- function(values) {
-  values <- suppressWarnings(as.numeric(values))
-  values <- values[is.finite(values) & !is.na(values)]
-  if (!length(values)) return(0)
-  .borner_score_auto_chd(mean(values))
-}
-
-.score_simple_pair <- function(mean_value, min_value) {
-  .moyenne_simple_discrimination(c(mean_value, min_value))
-}
-
 calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
                                                           res_stats_df,
                                                           top_n = NULL,
@@ -31,14 +20,11 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
   )
 
   empty_result <- list(
-    S_theta = 0,
-    S_dist = 0,
-    S_rad = 0,
-    S_align = 0,
     S = 0,
+    S_distance_min = 0,
+    S_distance_moyenne = 0,
     poles_by_class = NULL,
-    align_by_class = numeric(0),
-    rad_by_class = numeric(0),
+    distances_by_pair = numeric(0),
     termes_cibles = character(0),
     termes_cibles_par_classe = list()
   )
@@ -57,16 +43,8 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
     return(empty_result)
   }
 
-  term_norms_all <- sqrt(rowSums(coords_termes[, c("x", "y"), drop = FALSE]^2))
-  max_term_radius <- suppressWarnings(max(term_norms_all, na.rm = TRUE))
-  if (!is.finite(max_term_radius) || is.na(max_term_radius) || max_term_radius <= 0) {
-    max_term_radius <- 1
-  }
-
   class_ids <- sort(unique(top_rows$Classe_num))
   poles_by_class <- list()
-  align_by_class <- numeric(0)
-  rad_by_class <- numeric(0)
   termes_par_classe <- list()
 
   for (class_num in class_ids) {
@@ -75,39 +53,24 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
 
     df_cl <- df_cl[!duplicated(df_cl$Terme), , drop = FALSE]
     term_coords <- coords_termes[match(df_cl$Terme, rownames(coords_termes)), c("x", "y"), drop = FALSE]
-    term_norms <- sqrt(rowSums(term_coords^2))
-    weights <- pmax(suppressWarnings(as.numeric(df_cl$chi2_num %||% df_cl$chi2)), 0)
-
-    good <- is.finite(weights) & !is.na(weights) & weights > 0 &
-      is.finite(term_norms) & !is.na(term_norms) & term_norms > 0
+    good <- is.finite(term_coords[, "x"]) & is.finite(term_coords[, "y"])
     if (!any(good)) next
 
     df_cl <- df_cl[good, , drop = FALSE]
     term_coords <- term_coords[good, , drop = FALSE]
-    term_norms <- term_norms[good]
-    weights <- weights[good]
-
+    # Le chi2 selectionne les termes significatifs, sans les reponderer.
+    # Le centre de classe est uniquement la moyenne de leurs coordonnees AFC.
     pole_vec <- c(
-      x = stats::weighted.mean(term_coords[, "x"], w = weights),
-      y = stats::weighted.mean(term_coords[, "y"], w = weights)
+      x = mean(term_coords[, "x"]),
+      y = mean(term_coords[, "y"])
     )
-    pole_norm <- sqrt(sum(pole_vec^2))
-    if (!is.finite(pole_norm) || is.na(pole_norm) || pole_norm <= 0) next
 
     class_label <- paste0("Classe ", class_num)
     poles_by_class[[class_label]] <- pole_vec
-    rad_by_class[class_label] <- .borner_score_auto_chd(pole_norm / max_term_radius)
-
-    cosines <- as.numeric((term_coords %*% pole_vec) / (term_norms * pole_norm))
-    cosines[!is.finite(cosines) | is.na(cosines)] <- -1
-    cosines <- pmax(-1, pmin(1, cosines))
-    align_by_class[class_label] <- .borner_score_auto_chd(stats::weighted.mean((cosines + 1) / 2, w = weights))
     termes_par_classe[[class_label]] <- unique(as.character(df_cl$Terme))
   }
 
   if (length(poles_by_class) < 2L) {
-    empty_result$align_by_class <- align_by_class
-    empty_result$rad_by_class <- rad_by_class
     empty_result$termes_cibles <- unique(as.character(top_rows$Terme))
     empty_result$termes_cibles_par_classe <- termes_par_classe
     return(empty_result)
@@ -115,23 +78,31 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
 
   poles_matrix <- do.call(rbind, lapply(poles_by_class, function(vec) c(x = vec[["x"]], y = vec[["y"]])))
   rownames(poles_matrix) <- names(poles_by_class)
-  poles_geom <- .calculer_scores_geometrie_vecteurs_auto_chd(poles_matrix)
 
-  s_theta <- .score_simple_pair(poles_geom$theta_mean, poles_geom$theta_min)
-  s_dist <- .score_simple_pair(poles_geom$dist_mean, poles_geom$dist_min)
-  s_rad <- .moyenne_simple_discrimination(rad_by_class)
-  s_align <- .moyenne_simple_discrimination(align_by_class)
-  s_score <- .moyenne_simple_discrimination(c(s_theta, s_dist, s_rad, s_align))
+  # On compare toutes les paires de centres de classes sur les axes x et y.
+  # La distance minimale protege contre une solution ou deux classes restent proches.
+  pair_index <- utils::combn(seq_len(nrow(poles_matrix)), 2L)
+  distances_brutes <- vapply(seq_len(ncol(pair_index)), function(index) {
+    point_a <- poles_matrix[pair_index[1L, index], ]
+    point_b <- poles_matrix[pair_index[2L, index], ]
+    sqrt(sum((point_a - point_b)^2))
+  }, numeric(1))
+
+  term_norms <- sqrt(rowSums(coords_termes[, c("x", "y"), drop = FALSE]^2))
+  max_term_radius <- suppressWarnings(max(term_norms, na.rm = TRUE))
+  if (!is.finite(max_term_radius) || is.na(max_term_radius) || max_term_radius <= 0) {
+    max_term_radius <- 1
+  }
+  distances_norm <- pmin(1, pmax(0, distances_brutes / (2 * max_term_radius)))
+  s_distance_min <- .borner_score_auto_chd(min(distances_norm))
+  s_distance_moyenne <- .borner_score_auto_chd(mean(distances_norm))
 
   list(
-    S_theta = s_theta,
-    S_dist = s_dist,
-    S_rad = s_rad,
-    S_align = s_align,
-    S = s_score,
+    S = s_distance_min,
+    S_distance_min = s_distance_min,
+    S_distance_moyenne = s_distance_moyenne,
     poles_by_class = poles_matrix,
-    align_by_class = align_by_class,
-    rad_by_class = rad_by_class,
+    distances_by_pair = distances_norm,
     termes_cibles = unique(as.character(top_rows$Terme)),
     termes_cibles_par_classe = termes_par_classe
   )
@@ -224,11 +195,9 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     D = .borner_score_auto_chd(d_value),
     L = .borner_score_auto_chd(l_value),
     B = .borner_score_auto_chd(b_value),
-    S_theta = .borner_score_auto_chd(simple_scores$S_theta),
-    S_dist = .borner_score_auto_chd(simple_scores$S_dist),
-    S_rad = .borner_score_auto_chd(simple_scores$S_rad),
-    S_align = .borner_score_auto_chd(simple_scores$S_align),
     S = .borner_score_auto_chd(simple_scores$S),
+    S_distance_min = .borner_score_auto_chd(simple_scores$S_distance_min),
+    S_distance_moyenne = .borner_score_auto_chd(simple_scores$S_distance_moyenne),
     classes_effectifs = .formatter_resume_classes_auto_chd(counts, digits = 0L),
     classes_pourcentages = .formatter_resume_classes_auto_chd(pct, digits = 2L, suffix = "%"),
     stringsAsFactors = FALSE
@@ -242,8 +211,7 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     afc = afc_obj,
     termes_cibles = unique(as.character(simple_scores$termes_cibles %||% termes_cibles)),
     termes_cibles_par_classe = if (length(simple_scores$termes_cibles_par_classe)) simple_scores$termes_cibles_par_classe else termes_cibles_par_classe,
-    simple_align_by_class = simple_scores$align_by_class,
-    simple_rad_by_class = simple_scores$rad_by_class,
+    simple_distances_by_pair = simple_scores$distances_by_pair,
     simple_poles = simple_scores$poles_by_class
   )
 }
@@ -296,10 +264,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   }
 
   s_values <- suppressWarnings(as.numeric(metrics_df$S))
-  s_theta_values <- suppressWarnings(as.numeric(metrics_df$S_theta))
-  s_dist_values <- suppressWarnings(as.numeric(metrics_df$S_dist))
-  s_align_values <- suppressWarnings(as.numeric(metrics_df$S_align))
-  b_values <- suppressWarnings(as.numeric(metrics_df$B))
+  s_distance_moyenne_values <- suppressWarnings(as.numeric(metrics_df$S_distance_moyenne))
   s_scores <- ifelse(is.finite(s_values) & !is.na(s_values), s_values, -Inf)
   if (!any(is.finite(s_scores) & s_scores > -Inf)) {
     stop("Discrimination simple: aucun score simple exploitable n'a pu etre calcule.")
@@ -313,14 +278,9 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     if (idx == selected_idx) next
     better_s <- is.finite(s_values[[idx]]) && is.finite(s_values[[selected_idx]]) && (s_values[[idx]] > s_values[[selected_idx]] + 1e-12)
     equal_s <- is.finite(s_values[[idx]]) && is.finite(s_values[[selected_idx]]) && abs(s_values[[idx]] - s_values[[selected_idx]]) <= 1e-12
-    better_theta <- is.finite(s_theta_values[[idx]]) && (!is.finite(s_theta_values[[selected_idx]]) || s_theta_values[[idx]] > s_theta_values[[selected_idx]] + 1e-12)
-    equal_theta <- is.finite(s_theta_values[[idx]]) && is.finite(s_theta_values[[selected_idx]]) && abs(s_theta_values[[idx]] - s_theta_values[[selected_idx]]) <= 1e-12
-    better_dist <- is.finite(s_dist_values[[idx]]) && (!is.finite(s_dist_values[[selected_idx]]) || s_dist_values[[idx]] > s_dist_values[[selected_idx]] + 1e-12)
-    equal_dist <- is.finite(s_dist_values[[idx]]) && is.finite(s_dist_values[[selected_idx]]) && abs(s_dist_values[[idx]] - s_dist_values[[selected_idx]]) <= 1e-12
-    better_align <- is.finite(s_align_values[[idx]]) && (!is.finite(s_align_values[[selected_idx]]) || s_align_values[[idx]] > s_align_values[[selected_idx]] + 1e-12)
-    better_b <- is.finite(b_values[[idx]]) && (!is.finite(b_values[[selected_idx]]) || b_values[[idx]] > b_values[[selected_idx]] + 1e-12)
+    better_distance_moyenne <- is.finite(s_distance_moyenne_values[[idx]]) && (!is.finite(s_distance_moyenne_values[[selected_idx]]) || s_distance_moyenne_values[[idx]] > s_distance_moyenne_values[[selected_idx]] + 1e-12)
 
-    if (better_s || (equal_s && better_theta) || (equal_s && equal_theta && better_dist) || (equal_s && equal_theta && equal_dist && better_align) || (equal_s && equal_theta && equal_dist && better_b)) {
+    if (better_s || (equal_s && better_distance_moyenne)) {
       selected_idx <- idx
     }
   }
@@ -353,8 +313,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     mode = "discrimination_simple",
     mode_label = "Discrimination simple",
     score_column = "S",
-    score_label = "Score discrimination AFC",
-    score_plot_title = "Selection de la configuration la plus discriminante",
+    score_label = "Distance minimale AFC entre classes",
+    score_plot_title = "Selection de la configuration aux classes les plus separees",
     classes = selected_partition$classes,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
@@ -372,8 +332,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     selected_afc = selected_evaluation$afc,
     selected_termes_cibles = selected_evaluation$termes_cibles,
     selected_termes_cibles_par_classe = selected_evaluation$termes_cibles_par_classe,
-    selected_simple_align_by_class = selected_evaluation$simple_align_by_class,
-    selected_simple_rad_by_class = selected_evaluation$simple_rad_by_class,
+    selected_simple_distances_by_pair = selected_evaluation$simple_distances_by_pair,
     selected_simple_poles = selected_evaluation$simple_poles,
     partitions = partitions
   )
@@ -415,15 +374,9 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     n_segments = NA_integer_,
     n_formes = NA_integer_,
     k_retenu = NA_integer_,
-    H = NA_real_,
-    D = NA_real_,
-    L = NA_real_,
-    B = NA_real_,
-    S_theta = NA_real_,
-    S_dist = NA_real_,
-    S_rad = NA_real_,
-    S_align = NA_real_,
     S = NA_real_,
+    S_distance_min = NA_real_,
+    S_distance_moyenne = NA_real_,
     classes_effectifs = NA_character_,
     classes_pourcentages = NA_character_,
     selection = "echec",
@@ -452,15 +405,9 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     n_segments = suppressWarnings(as.integer(quanteda::ndoc(pipeline_obj$dfm_obj))),
     n_formes = suppressWarnings(as.integer(quanteda::nfeat(pipeline_obj$dfm_obj))),
     k_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_selected %||% selected_metrics$k[[1]])),
-    H = .borner_score_auto_chd(selected_metrics$H[[1]]),
-    D = .borner_score_auto_chd(selected_metrics$D[[1]]),
-    L = .borner_score_auto_chd(selected_metrics$L[[1]]),
-    B = .borner_score_auto_chd(selected_metrics$B[[1]]),
-    S_theta = .borner_score_auto_chd(selected_metrics$S_theta[[1]]),
-    S_dist = .borner_score_auto_chd(selected_metrics$S_dist[[1]]),
-    S_rad = .borner_score_auto_chd(selected_metrics$S_rad[[1]]),
-    S_align = .borner_score_auto_chd(selected_metrics$S_align[[1]]),
     S = .borner_score_auto_chd(selected_metrics$S[[1]]),
+    S_distance_min = .borner_score_auto_chd(selected_metrics$S_distance_min[[1]]),
+    S_distance_moyenne = .borner_score_auto_chd(selected_metrics$S_distance_moyenne[[1]]),
     classes_effectifs = as.character(selected_metrics$classes_effectifs[[1]] %||% ""),
     classes_pourcentages = as.character(selected_metrics$classes_pourcentages[[1]] %||% ""),
     selection = "testee",
@@ -516,10 +463,10 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     progress_value <- 45 + floor((i / total_candidates) * 14)
     dfm_fingerprint <- NULL
 
-    if (is.function(log_fn) && (i == 1L || i == total_candidates || (i %% 10L) == 0L)) {
+    if (is.function(log_fn) && (total_candidates <= 10L || i == 1L || i == total_candidates || (i %% 10L) == 0L)) {
       log_fn(
         paste0(
-          "Discrimination simple : test ",
+          "Discrimination simple : CHD ",
           i,
           "/",
           total_candidates,
@@ -603,45 +550,19 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     if (isTRUE(attempt$ok)) {
       current_row <- attempt$row
       current_score <- suppressWarnings(as.numeric(current_row$S[[1]]))
-      current_theta <- suppressWarnings(as.numeric(current_row$S_theta[[1]]))
-      current_dist <- suppressWarnings(as.numeric(current_row$S_dist[[1]]))
-      current_align <- suppressWarnings(as.numeric(current_row$S_align[[1]]))
-      current_b <- suppressWarnings(as.numeric(current_row$B[[1]]))
-      current_kmax <- suppressWarnings(as.integer(current_row$k_max_explore[[1]]))
+      current_distance_moyenne <- suppressWarnings(as.numeric(current_row$S_distance_moyenne[[1]]))
 
       if (is.na(best_idx)) {
         best_idx <- i
       } else {
         best_row <- evaluation_rows[[best_idx]]
         best_score <- suppressWarnings(as.numeric(best_row$S[[1]]))
-        best_theta <- suppressWarnings(as.numeric(best_row$S_theta[[1]]))
-        best_dist <- suppressWarnings(as.numeric(best_row$S_dist[[1]]))
-        best_align <- suppressWarnings(as.numeric(best_row$S_align[[1]]))
-        best_b <- suppressWarnings(as.numeric(best_row$B[[1]]))
-        best_kmax <- suppressWarnings(as.integer(best_row$k_max_explore[[1]]))
+        best_distance_moyenne <- suppressWarnings(as.numeric(best_row$S_distance_moyenne[[1]]))
 
         if (
           (is.finite(current_score) && !is.na(current_score) && (!is.finite(best_score) || is.na(best_score) || current_score > best_score + 1e-12)) ||
           (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_theta) && (!is.finite(best_theta) || current_theta > best_theta + 1e-12)) ||
-          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_theta) && is.finite(best_theta) && abs(current_theta - best_theta) <= 1e-12 &&
-             is.finite(current_dist) && (!is.finite(best_dist) || current_dist > best_dist + 1e-12)) ||
-          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_theta) && is.finite(best_theta) && abs(current_theta - best_theta) <= 1e-12 &&
-             is.finite(current_dist) && is.finite(best_dist) && abs(current_dist - best_dist) <= 1e-12 &&
-             is.finite(current_align) && (!is.finite(best_align) || current_align > best_align + 1e-12)) ||
-          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_theta) && is.finite(best_theta) && abs(current_theta - best_theta) <= 1e-12 &&
-             is.finite(current_dist) && is.finite(best_dist) && abs(current_dist - best_dist) <= 1e-12 &&
-             is.finite(current_align) && is.finite(best_align) && abs(current_align - best_align) <= 1e-12 &&
-             is.finite(current_b) && (!is.finite(best_b) || current_b > best_b + 1e-12)) ||
-          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_theta) && is.finite(best_theta) && abs(current_theta - best_theta) <= 1e-12 &&
-             is.finite(current_dist) && is.finite(best_dist) && abs(current_dist - best_dist) <= 1e-12 &&
-             is.finite(current_align) && is.finite(best_align) && abs(current_align - best_align) <= 1e-12 &&
-             is.finite(current_b) && is.finite(best_b) && abs(current_b - best_b) <= 1e-12 &&
-             is.finite(current_kmax) && (!is.finite(best_kmax) || current_kmax > best_kmax))
+             is.finite(current_distance_moyenne) && (!is.finite(best_distance_moyenne) || current_distance_moyenne > best_distance_moyenne + 1e-12))
         ) {
           best_idx <- i
         }
@@ -675,7 +596,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         best_row$configuration_label[[1]],
         " | classes retenues=",
         best_row$k_retenu[[1]],
-        " | score discrimination AFC=",
+        " | distance minimale AFC=",
         format(round(as.numeric(best_row$S[[1]]), 4), nsmall = 4, trim = TRUE),
         " | min_docfreq=",
         best_row$min_docfreq[[1]]
@@ -742,8 +663,8 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     border = NA,
     las = 1,
     names.arg = rev(labels),
-    xlab = "Score discrimination AFC",
-    main = "Configurations les plus discriminantes sur l'AFC"
+    xlab = "Distance minimale AFC entre classes (normalisee)",
+    main = "Configurations aux classes les plus separees sur l'AFC"
   )
   graphics::grid(col = "#d6c8b8", lty = "dotted")
 
@@ -783,7 +704,9 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     n_segments = suppressWarnings(as.integer(col("n_segments", NA_integer_))),
     n_formes = suppressWarnings(as.integer(col("n_formes", NA_integer_))),
     classes_retenues = suppressWarnings(as.integer(col("k_retenu", NA_integer_))),
-    score_discrimination = suppressWarnings(as.numeric(col("S", NA_real_))),
+    distance_minimale_afc = suppressWarnings(as.numeric(
+      if ("S_distance_min" %in% names(metrics_df)) col("S_distance_min") else col("S", NA_real_)
+    )),
     classes_effectifs = col("classes_effectifs", NA_character_),
     classes_pourcentages = col("classes_pourcentages", NA_character_),
     selection = col("selection", NA_character_),

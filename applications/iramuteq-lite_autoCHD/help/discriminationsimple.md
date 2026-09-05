@@ -26,7 +26,7 @@ Le reste est fixé ainsi :
 - exclusion du verbe `être`
 - `AUTRE_FORME` conservé ou non selon le choix utilisateur
 
-Autrement dit, le mode lance **4 CHD ciblées** du même corpus.
+Autrement dit, le mode exécute successivement **4 CHD ciblées** du même corpus.
 
 ## Nombre de classes
 
@@ -51,18 +51,18 @@ Pour chaque CHD testée :
 - l'application calcule les termes caractéristiques avec le `chi2` habituel
 - elle conserve les termes significatifs avec `p.value <= 0.05`
 - elle récupère leurs coordonnées `x, y` sur le plan AFC
-- elle compare la manière dont ces mots séparent les classes
+- elle calcule le centre lexical de chaque classe : la moyenne des coordonnées `x, y` de ses mots significatifs
+- elle calcule les distances euclidiennes entre tous les centres de classes
 
-Le principe est simple :
+Le score retenu est la **plus petite** de ces distances, normalisée sur le plan AFC.
 
-- plus les mots significatifs tirent les classes dans des directions opposées
-- plus les classes sont éloignées sur l'AFC
-- plus la solution est jugée discriminante
+Cela évite une solution où deux classes sont très éloignées mais où deux autres se confondent presque : toutes les classes doivent rester séparées.
 
-Le `chi2` n'est donc pas remplacé.
+En cas d'égalité, la moyenne des distances entre classes départage les deux solutions.
 
-Il sert toujours à repérer les termes caractéristiques.
-L'AFC sert ensuite à lire si ces termes opposent bien les classes dans l'espace.
+Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
+
+Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC sert ensuite à mesurer la distance entre les centres lexicaux des classes.
 
 ## Ce qui est affiché
 
@@ -72,7 +72,7 @@ Le mode affiche seulement les éléments utiles à la lecture du résultat :
 - le profil morphosyntaxique retenu
 - la valeur `min_docfreq` retenue
 - le nombre de classes retenues
-- le score final de discrimination AFC
+- la distance minimale AFC entre les classes
 - les effectifs des classes
 
 Les sous-calculs internes du score ne sont pas nécessaires pour l'interprétation courante.

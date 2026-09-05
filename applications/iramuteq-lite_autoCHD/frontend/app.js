@@ -2195,7 +2195,7 @@ function renderClassesModeCard(card) {
     modeDescription.textContent = isAutoAfcDiscriminante
       ? "En mode Analyse discriminante optimisée, vous ne fixez pas le nombre final de classes. Vous donnez seulement une limite maximale d'exploration, puis l'application compare automatiquement les solutions en classes issues de la même CHD pour retenir le meilleur compromis discriminant."
       : isDiscriminationSimple
-        ? "En mode Discrimination simple, l'application simule 4 CHD ciblées du même corpus. Seul min_docfreq varie de 2 à 5, avec filtrage NOM + VER, exclusion de être et conservation de AUTRE_FORME selon votre choix. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC."
+        ? "En mode Discrimination simple, l'application lance successivement 4 CHD ciblées du même corpus. Seul min_docfreq varie de 2 à 5, avec filtrage NOM + VER, exclusion de être et conservation de AUTRE_FORME selon votre choix. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC."
         : "En manuel, vous fixez le nombre de classes avant l'analyse.";
   }
 
@@ -2203,7 +2203,7 @@ function renderClassesModeCard(card) {
     kHelp.textContent = isAutoAfcDiscriminante
       ? "La CHD est calculée jusqu'à cette limite puis l'application compare automatiquement les solutions en classes à partir de 3 classes pour retenir le meilleur compromis discriminant."
       : isDiscriminationSimple
-        ? "Le mode simule 4 CHD ciblées, une par valeur de min_docfreq de 2 à 5. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante."
+        ? "Le mode lance 4 CHD ciblées, une par valeur de min_docfreq de 2 à 5. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante."
         : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
   }
 }
@@ -11431,7 +11431,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq retenu", selected.min_docfreq],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
-    ["Score discrimination AFC", selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
+    ["Distance minimale AFC entre classes", selected.distance_minimale_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
   ];
 
   const grid = document.createElement("div");
@@ -11459,7 +11459,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
-  selectionNote.textContent = `Le mode a simulé ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu celle où les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC opposent le mieux les classes.`;
+  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu celle dont les centres lexicaux de classes sont les plus éloignés sur l'AFC.`;
   container.appendChild(selectionNote);
 }
 
@@ -11469,7 +11469,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
   }
 
   const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const scoreColumnIndex = headerIndex(parsed.headers, ["score_discrimination", "s"]);
+  const scoreColumnIndex = headerIndex(parsed.headers, ["distance_minimale_afc", "score_discrimination", "s"]);
   const classesColumnIndex = headerIndex(parsed.headers, ["classes_retenues", "k_retenu"]);
 
   const rowsSource = parsed.rows.slice().sort((left, right) => {
@@ -11505,7 +11505,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
-    { keys: ["score_discrimination", "s"], label: "score discrimination AFC" },
+    { keys: ["distance_minimale_afc", "score_discrimination", "s"], label: "distance minimale AFC" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
     { keys: ["selection"], label: "statut" },
@@ -11539,7 +11539,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
