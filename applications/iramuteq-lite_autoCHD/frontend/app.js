@@ -2185,18 +2185,14 @@ function renderClassesModeCard(card) {
     kInput.min = String(usesAutoBounds ? effectiveAutoMin : 2);
   }
 
-  kLabel.textContent = isAutoAfcDiscriminante
-    ? "Nombre maximal de classes à explorer"
-    : isDiscriminationSimple
-      ? "Nombre maximal de classes à explorer"
-      : "Nombre de classes terminales de la phase 1";
+  kLabel.textContent = "Nombre maximal de classes à explorer";
 
   if (modeDescription instanceof HTMLElement) {
     modeDescription.textContent = isAutoAfcDiscriminante
       ? "En mode Analyse discriminante optimisée, vous ne fixez pas le nombre final de classes. Vous donnez seulement une limite maximale d'exploration, puis l'application compare automatiquement les solutions en classes issues de la même CHD pour retenir le meilleur compromis discriminant."
       : isDiscriminationSimple
         ? "En mode Discrimination simple, l'application lance successivement 4 CHD ciblées du même corpus. Seul min_docfreq varie de 2 à 5, avec filtrage NOM + VER, exclusion de être et conservation de AUTRE_FORME selon votre choix. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC."
-        : "En manuel, vous fixez le nombre de classes avant l'analyse.";
+        : "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
   }
 
   if (kHelp instanceof HTMLElement) {
@@ -2204,7 +2200,7 @@ function renderClassesModeCard(card) {
       ? "La CHD est calculée jusqu'à cette limite puis l'application compare automatiquement les solutions en classes à partir de 3 classes pour retenir le meilleur compromis discriminant."
       : isDiscriminationSimple
         ? "Le mode lance 4 CHD ciblées, une par valeur de min_docfreq de 2 à 5. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante."
-        : "La CHD conserve son fonctionnement actuel : vous choisissez directement le nombre de classes.";
+        : "Cette valeur borne le calcul de l'arbre CHD ; elle ne fixe pas le nombre final de classes, établi ensuite avec les règles terminales et mincl.";
   }
 }
 
