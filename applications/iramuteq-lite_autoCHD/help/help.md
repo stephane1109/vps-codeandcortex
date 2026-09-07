@@ -65,7 +65,7 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
 
 #### Paramètres CHD spécifiques IRaMuTeQ-lite
 - **Nombre de classes terminales de la phase 1 (`k_iramuteq`)** : nombre de classes cibles pour la phase de découpage en classes.
-  - **mincl (auto/manuel)** : seuil minimal d'UCE pour conserver une classe terminale (mode automatique ou valeur manuelle). Ce paramètre semble etre différent de la logique "rainette"
+  - **mincl** : seuil minimal d'UCE pour conserver une classe terminale. Il est saisi par l'utilisateur et vaut **5** par défaut ; il n'est jamais recalculé automatiquement.
 - **Type de classification terminale** :
   - `simple` : segmentation avec `segment_size`.
   - `double` : segmentation en deux passes avec **rst1** puis **rst2**.

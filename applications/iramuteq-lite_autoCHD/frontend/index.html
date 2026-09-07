@@ -519,18 +519,10 @@
           </div>
 
           <div class="field">
-            <label for="minclMode">Nombre minimum d'UCE par classe terminale (mincl)</label>
-            <select id="minclMode">
-              <option value="manuel" selected>Manuel (5 par défaut)</option>
-              <option value="auto">Automatique</option>
-            </select>
+            <label for="minclManual">Seuil minimum d'UCE par classe terminale (mincl)</label>
             <p class="field-help">
-              <strong>mincl n'est pas le nombre de classes.</strong> Il définit le nombre minimal de segments (UCE) requis pour conserver une classe terminale. Par défaut, le mode manuel utilise <code>mincl = 5</code> : chaque classe finale doit alors contenir au moins 5 segments. Le mode automatique calcule ce seuil à partir du corpus et peut regrouper davantage de classes.
+              <strong>mincl n'est pas le nombre de classes.</strong> Il définit le nombre minimal de segments (UCE) requis pour conserver une classe terminale. Cette valeur est choisie par l'utilisateur et vaut <code>5</code> par défaut. Elle n'est jamais recalculée automatiquement.
             </p>
-          </div>
-
-          <div class="field">
-            <label for="minclManual">mincl (manuel)</label>
             <input id="minclManual" type="number" min="1" value="5" />
           </div>
 

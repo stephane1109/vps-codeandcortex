@@ -1,6 +1,6 @@
 # Rôle du fichier: chd_engine_iramuteq.R encapsule le lancement du moteur CHD IRaMuTeQ-like.
 # Ce module sert de point d'entrée dédié pour exécuter la CHD historique et reconstruire
-# les classes terminales avec mincl (auto ou manuel).
+# les classes terminales avec le seuil mincl saisi par l'utilisateur.
 
 .obtenir_fonction_iramuteq <- function(nom_fonction,
                                        chemin_module = "iramuteqlite/chd_iramuteq.R",
@@ -73,7 +73,7 @@ lancer_moteur_chd_iramuteq <- function(
   dfm_obj,
   k,
   classes_mode = c("manuel", "discrimination_simple_config", "discrimination_simple_partition"),
-  mincl_mode = c("manuel", "auto"),
+  mincl_mode = "manuel",
   mincl = 5L,
   classif_mode = c("simple", "double"),
   svd_method = c("irlba", "svdR"),
@@ -92,7 +92,8 @@ lancer_moteur_chd_iramuteq <- function(
   auto_discriminant_log_fn = NULL
 ) {
   classes_mode <- match.arg(classes_mode)
-  mincl_mode <- match.arg(mincl_mode)
+  # Le seuil mincl est toujours celui saisi dans l'interface (5 par defaut).
+  mincl_mode <- "manuel"
   classif_mode <- match.arg(classif_mode)
   svd_method <- match.arg(svd_method)
   auto_stats_mode <- match.arg(auto_stats_mode)
@@ -148,7 +149,7 @@ lancer_moteur_chd_iramuteq <- function(
           dfm_obj = dfm_obj,
           k = config_variant$k_iramuteq %||% k,
           classes_mode = "discrimination_simple_partition",
-          mincl_mode = config_variant$iramuteq_mincl_mode %||% mincl_mode,
+          mincl_mode = "manuel",
           mincl = config_variant$iramuteq_mincl %||% mincl,
           classif_mode = config_variant$iramuteq_classif_mode %||% classif_mode,
           svd_method = config_variant$iramuteq_svd_method %||% svd_method,

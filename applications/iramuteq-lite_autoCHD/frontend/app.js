@@ -2298,7 +2298,7 @@ function buildJobConfig(analysisKind = "chd") {
     iramuteq_auto_k_min: autoKMin,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
-    iramuteq_mincl_mode: document.getElementById("minclMode").value || "manuel",
+    iramuteq_mincl_mode: "manuel",
     iramuteq_mincl: Number(document.getElementById("minclManual").value) || 5,
     iramuteq_classif_mode: document.getElementById("classificationMode").value,
     iramuteq_rst1: Number(document.getElementById("rst1").value) || 12,
@@ -11134,7 +11134,6 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   const profilMorpho = String(configSource.profil_morpho || "").trim();
   const minDocfreq = formatSummaryValue(configSource.min_docfreq);
   const mincl = formatSummaryValue(configSource.mincl);
-  const minclMode = String(configSource.mincl_mode || "").trim();
   const kMaxExplore = formatSummaryValue(configSource.k_max_explore || configSource.kmax || configSource.k_max_requested);
   const normalizeYesNoValue = (value, yesLabel = "oui", noLabel = "non") => {
     const normalized = normalizeAsciiKey(value);
@@ -11161,7 +11160,7 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   if (ponctuation) variableParts.push(`ponctuation = ${ponctuation}`);
   if (chiffres) variableParts.push(`chiffres = ${chiffres}`);
   if (minDocfreq && minDocfreq !== "N/A") variableParts.push(`min_docfreq = ${minDocfreq}`);
-  if (mincl && mincl !== "N/A") variableParts.push(`mincl = ${mincl}${minclMode ? ` (${minclMode})` : ""}`);
+  if (mincl && mincl !== "N/A") variableParts.push(`mincl = ${mincl}`);
   if (kMaxExplore && kMaxExplore !== "N/A") variableParts.push(`k max exploré = ${kMaxExplore}`);
 
   if (variableParts.length) {

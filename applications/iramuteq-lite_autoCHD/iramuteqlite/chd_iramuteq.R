@@ -1,27 +1,7 @@
 # Rôle du fichier: chd_iramuteq.R introduit une base "IRaMuTeQ-lite" pour la CHD.
 # Ce module prépare les entrées de CHD en respectant les options de nettoyage de l'application,
-# expose des utilitaires pour le calcul de mincl (convention IRaMuTeQ texte),
+# applique le seuil mincl saisi par l'utilisateur,
 # et fournit un calcul CHD réel en s'appuyant sur les scripts R historiques d'IRaMuTeQ.
-
-# Valeur mincl automatique (mode texte IRaMuTeQ):
-# mincl = round(n_uce / ind), avec ind = nbcl * 2 (double) sinon nbcl.
-
-calculer_mincl_auto_iramuteq <- function(n_uce, nbcl, classif_mode = c("double", "simple")) {
-  classif_mode <- match.arg(classif_mode)
-  n_uce <- as.integer(n_uce)
-  nbcl <- as.integer(nbcl)
-  
-  if (!is.finite(n_uce) || is.na(n_uce) || n_uce < 1) {
-    stop("mincl auto IRaMuTeQ: n_uce invalide.")
-  }
-  if (!is.finite(nbcl) || is.na(nbcl) || nbcl < 1) {
-    stop("mincl auto IRaMuTeQ: nbcl invalide.")
-  }
-  
-  ind <- if (identical(classif_mode, "double")) nbcl * 2L else nbcl
-  mincl <- round(n_uce / ind)
-  as.integer(max(1L, mincl))
-}
 
 # Normalise une liste d'options de nettoyage selon les clés utilisées dans l'UI.
 normaliser_options_nettoyage_iramuteq <- function(options_nettoyage = list()) {
@@ -270,12 +250,12 @@ calculer_chd_iramuteq <- function(
 reconstruire_classes_terminales_iramuteq <- function(
     chd_obj,
     mincl = 5L,
-    mincl_mode = c("manuel", "auto"),
+    mincl_mode = "manuel",
     classif_mode = c("simple", "double"),
     nb_classes_cible = NULL,
     respecter_nb_classes = TRUE
 ) {
-  mincl_mode <- match.arg(mincl_mode)
+  mincl_mode <- "manuel"
   classif_mode <- match.arg(classif_mode)
   
   n1 <- .normaliser_n1_chd(chd_obj$n1)
@@ -286,19 +266,8 @@ reconstruire_classes_terminales_iramuteq <- function(
     stop("CHD IRaMuTeQ-like: objet chd incomplet.")
   }
   
-  nbcl <- length(unique(n1[, ncol(n1)]))
-  nbcl <- max(2L, as.integer(nbcl))
-  
-  if (mincl_mode == "auto") {
-    mincl_use <- calculer_mincl_auto_iramuteq(
-      n_uce = nrow(n1),
-      nbcl = nbcl,
-      classif_mode = classif_mode
-    )
-  } else {
-    mincl_use <- as.integer(mincl)
-    if (!is.finite(mincl_use) || is.na(mincl_use) || mincl_use < 1) mincl_use <- 1L
-  }
+  mincl_use <- as.integer(mincl)
+  if (!is.finite(mincl_use) || is.na(mincl_use) || mincl_use < 1) mincl_use <- 5L
   
   terminales <- find.terminales(n1, list_mere, list_fille, mincl = mincl_use)
   if (is.character(terminales) && length(terminales) == 1 && terminales == "no clusters") {
@@ -306,14 +275,6 @@ reconstruire_classes_terminales_iramuteq <- function(
   }
   
   feuilles <- unique(as.integer(n1[, ncol(n1)]))
-  
-  if (isTRUE(respecter_nb_classes) && !is.null(nb_classes_cible) && is.finite(nb_classes_cible)) {
-    nb_classes_cible <- as.integer(nb_classes_cible)
-    if (nb_classes_cible >= 2 && length(feuilles) == nb_classes_cible && length(unique(terminales)) != nb_classes_cible) {
-      terminales <- sort(feuilles)
-      mincl_use <- 1L
-    }
-  }
   
   classes_finales <- rep(0L, nrow(n1))
   feuilles_docs <- suppressWarnings(as.integer(n1[, ncol(n1)]))

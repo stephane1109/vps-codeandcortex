@@ -18,23 +18,14 @@ ui_options_iramuteq <- function(defaults = NULL) {
       min = 1,
       step = 100
     ),
-    radioButtons(
-      "iramuteq_mincl_mode",
-      tagList(
-        "Nombre minimum d'UCE par classe terminale (mincl)",
-        tags$div(
-          style = "color: #c00; font-size: 0.9em; margin-top: 4px;",
-          "Ce paramètre définit le seuil minimal d'UCE pour conserver une classe terminale."
-        )
-      ),
-      choices = c("Manuel (5 par défaut)" = "manuel", "Automatique" = "auto"),
-      selected = valeur_defaut("iramuteq_mincl_mode", "manuel"),
-      inline = FALSE
+    tags$div(
+      "Nombre minimum d'UCE par classe terminale (mincl)",
+      tags$div(
+        style = "color: #c00; font-size: 0.9em; margin-top: 4px;",
+        "Seuil choisi par l'utilisateur, avec une valeur par defaut de 5 UCE. Il n'est jamais calcule automatiquement."
+      )
     ),
-    conditionalPanel(
-      condition = "input.iramuteq_mincl_mode == 'manuel'",
-      numericInput("iramuteq_mincl", "mincl (manuel)", value = valeur_defaut("iramuteq_mincl", 5), min = 1, step = 1)
-    ),
+    numericInput("iramuteq_mincl", "mincl", value = valeur_defaut("iramuteq_mincl", 5), min = 1, step = 1),
     radioButtons(
       "iramuteq_classif_mode",
       "Type de classification terminale",

@@ -1511,8 +1511,7 @@ register_events_lancer <- function(input, output, session, rv) {
           k_iramuteq <- suppressWarnings(as.integer(input$k_iramuteq))
           if (is.na(k_iramuteq) || k_iramuteq < 2L) k_iramuteq <- 10L
 
-          mincl_mode_iramuteq <- as.character(input$iramuteq_mincl_mode)
-          if (!mincl_mode_iramuteq %in% c("auto", "manuel")) mincl_mode_iramuteq <- "manuel"
+          mincl_mode_iramuteq <- "manuel"
 
           mincl_iramuteq <- suppressWarnings(as.integer(input$iramuteq_mincl))
           if (is.na(mincl_iramuteq) || mincl_iramuteq < 1L) mincl_iramuteq <- 5L
@@ -1532,8 +1531,7 @@ register_events_lancer <- function(input, output, session, rv) {
             rv,
             paste0(
               "Paramètres IRaMuTeQ-lite : k=", k_iramuteq,
-              " | mincl_mode=", mincl_mode_iramuteq,
-              if (identical(mincl_mode_iramuteq, "manuel")) paste0(" | mincl=", mincl_iramuteq) else "",
+              " | mincl=", mincl_iramuteq,
               " | classif_mode=", classif_mode_iramuteq,
               if (identical(classif_mode_iramuteq, "double")) paste0(" | rst1=", rst1_iramuteq, " | rst2=", rst2_iramuteq) else "",
               " | segmenter_sur_ponctuation_forte=", ifelse(isTRUE(input$segmenter_sur_ponctuation_forte), "1", "0"),

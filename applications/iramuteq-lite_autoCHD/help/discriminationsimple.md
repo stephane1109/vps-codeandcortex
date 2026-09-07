@@ -38,7 +38,7 @@ Il fixe seulement :
 
 Ensuite, pour chaque CHD testée, l'application compare automatiquement les solutions en classes à partir de `3` classes jusqu'à cette borne maximale.
 
-Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le réglage `mincl` n'est ni modifié ni remplacé par le mode automatique. Ainsi, avec `mincl` manuel fixé à `5`, l'étape `P5` correspond à la même CHD manuelle à cinq classes.
+Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le seuil `mincl` est toujours celui saisi par l'utilisateur, avec une valeur par défaut de `5` ; il n'est jamais recalculé. Ainsi, avec `mincl` fixé à `5`, l'étape `P5` correspond à la même CHD manuelle à cinq classes.
 
 Le résultat indique donc aussi le **k CHD pour le manuel**. Pour reproduire exactement la solution automatique, il faut reprendre la configuration affichée, ce `k` et les mêmes réglages `mincl` et classification.
 
