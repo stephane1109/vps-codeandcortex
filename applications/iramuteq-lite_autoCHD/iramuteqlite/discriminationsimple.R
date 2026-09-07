@@ -504,10 +504,10 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     stop("Discrimination simple: lancer_discrimination_simple_fn doit etre une fonction.")
   }
 
-  grid_obj <- construire_grille_auto_discriminante_iramuteq(config_base)
+  grid_obj <- construire_grille_discrimination_simple_iramuteq(config_base)
   candidates <- grid_obj$candidates %||% list()
   search_profile <- grid_obj$profile %||% "complet"
-  search_profile_label <- grid_obj$profile_label %||% .label_profil_exploration_auto_discriminante(search_profile)
+  search_profile_label <- grid_obj$profile_label %||% .label_profil_exploration_discrimination_simple(search_profile)
   total_candidates <- length(candidates)
   if (!length(candidates)) {
     stop("Discrimination simple: aucune configuration candidate n'a ete construite.")
@@ -835,7 +835,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   payload <- list(
     mode = "discrimination_simple",
     search_profile = selection_obj$search_profile %||% "complet",
-    search_profile_label = selection_obj$search_profile_label %||% .label_profil_exploration_auto_discriminante(selection_obj$search_profile %||% "complet"),
+    search_profile_label = selection_obj$search_profile_label %||% .label_profil_exploration_discrimination_simple(selection_obj$search_profile %||% "complet"),
     total_configurations = selection_obj$total_configurations %||% NA_integer_,
     successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
     unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,

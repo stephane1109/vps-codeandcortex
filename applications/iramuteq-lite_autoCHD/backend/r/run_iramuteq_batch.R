@@ -1119,28 +1119,23 @@ run_batch <- function() {
 
   classif_mode <- scalar_chr(config$iramuteq_classif_mode, "simple")
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
-  classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
-  if (!classes_mode %in% c("manuel", "auto_afc_discriminante", "discrimination_simple")) classes_mode <- "manuel"
+  requested_classes_mode <- scalar_chr(config$iramuteq_classes_mode, "manuel")
+  legacy_classes_mode <- !requested_classes_mode %in% c("manuel", "discrimination_simple")
+  classes_mode <- if (legacy_classes_mode) "manuel" else requested_classes_mode
   engine_classes_mode <- switch(
     classes_mode,
-    auto_afc_discriminante = "auto_discriminante",
     discrimination_simple = "discrimination_simple_config",
     classes_mode
   )
   classes_mode_label <- switch(
     classes_mode,
-    auto_afc_discriminante = "Analyse discriminante optimisee",
     discrimination_simple = "Discrimination simple",
     "Manuel"
   )
   config_chd <- config
-  if (identical(classes_mode, "auto_afc_discriminante")) {
-    config_chd$iramuteq_classes_mode <- "auto_discriminante"
-    config_chd$iramuteq_auto_discriminante_profile <- scalar_chr(config$iramuteq_auto_discriminante_profile, "ciblee")
-    config_chd$iramuteq_auto_top_n_afc <- NULL
-  } else if (identical(classes_mode, "discrimination_simple")) {
+  if (identical(classes_mode, "discrimination_simple")) {
     config_chd$iramuteq_classes_mode <- "discrimination_simple_config"
-    config_chd$iramuteq_auto_discriminante_profile <- scalar_chr(config$iramuteq_auto_discriminante_profile, "ciblee")
+    config_chd$iramuteq_discrimination_simple_profile <- scalar_chr(config$iramuteq_discrimination_simple_profile, "ciblee")
     config_chd$iramuteq_auto_top_n_afc <- NULL
   }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
@@ -1204,13 +1199,16 @@ run_batch <- function() {
   if (run_chd) {
     log_info("Calcul CHD.", progress = 52)
     log_info("Mode : classification IRaMuTeQ-lite.", progress = 52)
+    if (isTRUE(legacy_classes_mode)) {
+      log_info("Un ancien mode de selection des classes n'est plus disponible ; execution en mode Manuel.", progress = 52)
+    }
     log_info(
       paste0(
         "Paramètres IRaMuTeQ-lite : k=",
         scalar_int(config$k_iramuteq, 10L, 2L),
         " | nombre_classes_mode=",
         classes_mode_label,
-        if (classes_mode %in% c("auto_afc_discriminante", "discrimination_simple")) {
+        if (identical(classes_mode, "discrimination_simple")) {
           paste0(" | k_min_auto=", auto_k_min)
         } else {
           ""
@@ -1259,9 +1257,9 @@ run_batch <- function() {
       max_formes = scalar_int(config_chd$iramuteq_max_formes, 20000L, 1L),
       auto_stats_mode = scalar_chr(config_chd$iramuteq_stats_mode, "vectorise"),
       auto_k_min = auto_k_min,
-      auto_top_n_afc = if (classes_mode %in% c("auto_afc_discriminante", "discrimination_simple")) NULL else scalar_int(config_chd$iramuteq_auto_top_n_afc, 20L, 2L),
-      auto_discriminant_base_config = if (engine_classes_mode %in% c("auto_discriminante", "discrimination_simple_config")) config_chd else NULL,
-      auto_discriminant_prepare_pipeline_fn = if (engine_classes_mode %in% c("auto_discriminante", "discrimination_simple_config")) {
+      auto_top_n_afc = if (identical(classes_mode, "discrimination_simple")) NULL else scalar_int(config_chd$iramuteq_auto_top_n_afc, 20L, 2L),
+      auto_discriminant_base_config = if (identical(engine_classes_mode, "discrimination_simple_config")) config_chd else NULL,
+      auto_discriminant_prepare_pipeline_fn = if (identical(engine_classes_mode, "discrimination_simple_config")) {
         function(config_variant) {
           pipeline_env <- environment(preparer_pipeline_chd)
           original_log_info <- get0("log_info", envir = pipeline_env, inherits = FALSE)
@@ -1274,31 +1272,14 @@ run_batch <- function() {
       } else {
         NULL
       },
-      auto_discriminant_log_fn = if (engine_classes_mode %in% c("auto_discriminante", "discrimination_simple_config")) {
-        if (identical(classes_mode, "auto_afc_discriminante")) {
-          function(message, progress = NULL) {
-            msg <- sub("^Auto discriminante", "Analyse discriminante optimisee", as.character(message %||% ""))
-            log_info(msg, progress = progress %||% 57)
-          }
-        } else {
-          log_info
-        }
+      auto_discriminant_log_fn = if (identical(engine_classes_mode, "discrimination_simple_config")) {
+        log_info
       } else {
         NULL
       }
     )
     res_ira$classes_mode <- classes_mode
-    if (identical(classes_mode, "auto_afc_discriminante") &&
-        is.list(res_ira$auto_selection) &&
-        is.list(res_ira$auto_discriminant_selection)) {
-      res_ira$auto_selection$selected_configuration_metrics <- res_ira$auto_discriminant_selection$selected_metrics %||% NULL
-      res_ira$auto_selection$search_profile <- res_ira$auto_discriminant_selection$search_profile %||% NULL
-      res_ira$auto_selection$search_profile_label <- res_ira$auto_discriminant_selection$search_profile_label %||% NULL
-      res_ira$auto_selection$total_configurations <- res_ira$auto_discriminant_selection$total_configurations %||% NA_integer_
-      res_ira$auto_selection$successful_configurations <- res_ira$auto_discriminant_selection$successful_configurations %||% NA_integer_
-      res_ira$auto_selection$unique_dfm_tested <- res_ira$auto_discriminant_selection$unique_dfm_tested %||% NA_integer_
-      res_ira$auto_selection$reused_configurations <- res_ira$auto_discriminant_selection$reused_configurations %||% NA_integer_
-    } else if (identical(classes_mode, "discrimination_simple") &&
+    if (identical(classes_mode, "discrimination_simple") &&
         is.list(res_ira$auto_selection) &&
         is.list(res_ira$simple_discriminant_selection)) {
       res_ira$auto_selection$selected_configuration_metrics <- res_ira$simple_discriminant_selection$selected_metrics %||% NULL
@@ -1319,13 +1300,7 @@ run_batch <- function() {
       corpus_stats <- res_ira$selected_pipeline$corpus_stats %||% corpus_stats
       log_info(
         paste0(
-          if (identical(classes_mode, "auto_afc_discriminante")) {
-            "Analyse discriminante optimisee : pipeline retenu = "
-          } else if (identical(classes_mode, "discrimination_simple")) {
-            "Discrimination simple : pipeline retenu = "
-          } else {
-            "Auto discriminante : pipeline retenu = "
-          },
+          "Discrimination simple : pipeline retenu = ",
           quanteda::ndoc(dfm_obj),
           " segments / ",
           quanteda::nfeat(dfm_obj),
@@ -1352,52 +1327,7 @@ run_batch <- function() {
         progress = 56
       )
     }
-    if (is.list(res_ira$auto_discriminant_selection) &&
-        is.data.frame(res_ira$auto_discriminant_selection$selected_metrics) &&
-        nrow(res_ira$auto_discriminant_selection$selected_metrics)) {
-      selected_discriminant <- res_ira$auto_discriminant_selection$selected_metrics[1, , drop = FALSE]
-      log_info(
-        paste0(
-          if (identical(classes_mode, "auto_afc_discriminante")) {
-            "Analyse discriminante optimisee : configuration retenue "
-          } else {
-            "Auto discriminante : configuration retenue "
-          },
-          as.character(selected_discriminant$configuration_id %||% ""),
-          " (",
-          as.character(selected_discriminant$profil_morpho %||% "morpho n/a"),
-          ", lemmes=",
-          as.character(selected_discriminant$lexique_utiliser_lemmes %||% "n/a"),
-          ", stopwords=",
-          as.character(selected_discriminant$retirer_stopwords %||% "n/a"),
-          ", ponctuation=",
-          as.character(selected_discriminant$supprimer_ponctuation %||% "n/a"),
-          ", chiffres=",
-          as.character(selected_discriminant$supprimer_chiffres %||% "n/a"),
-          ", min_docfreq=",
-          as.character(selected_discriminant$min_docfreq %||% "n/a"),
-          ", k=",
-          as.character(selected_discriminant$k_retenu %||% "n/a"),
-          ", A_theta=",
-          format(round(as.numeric(selected_discriminant$A_theta), 4), nsmall = 4, trim = TRUE),
-          ", A_dist=",
-          format(round(as.numeric(selected_discriminant$A_dist), 4), nsmall = 4, trim = TRUE),
-          ", A_rad=",
-          format(round(as.numeric(selected_discriminant$A_rad), 4), nsmall = 4, trim = TRUE),
-          ", A_align=",
-          format(round(as.numeric(selected_discriminant$A_align), 4), nsmall = 4, trim = TRUE),
-          if (!is.null(selected_discriminant$A_poles)) {
-            paste0(", A_poles=", format(round(as.numeric(selected_discriminant$A_poles), 4), nsmall = 4, trim = TRUE))
-          } else {
-            ""
-          },
-          ", A=",
-          format(round(as.numeric(selected_discriminant$A), 4), nsmall = 4, trim = TRUE),
-          ")."
-        ),
-        progress = 60
-      )
-    } else if (is.list(res_ira$simple_discriminant_selection) &&
+    if (is.list(res_ira$simple_discriminant_selection) &&
         is.data.frame(res_ira$simple_discriminant_selection$selected_metrics) &&
         nrow(res_ira$simple_discriminant_selection$selected_metrics)) {
       selected_discriminant <- res_ira$simple_discriminant_selection$selected_metrics[1, , drop = FALSE]
@@ -1426,160 +1356,6 @@ run_batch <- function() {
         progress = 60
       )
     }
-    if (is.list(res_ira$auto_selection) && is.data.frame(res_ira$auto_selection$selected_metrics)) {
-      if (isTRUE(res_ira$auto_selection$k_max_reduced)) {
-        log_info(
-          paste0(
-            if (identical(classes_mode, "discrimination_simple")) "Discrimination simple : limite ramenee de " else "Analyse discriminante optimisee : limite ramenee de ",
-            res_ira$auto_selection$k_max_requested %||% NA_integer_,
-            " a ",
-            res_ira$auto_selection$k_max_tested %||% NA_integer_,
-            " classes (",
-            res_ira$auto_selection$k_reduction_reason %||% "borne structurelle du corpus",
-            ")."
-          ),
-          progress = 57
-        )
-      }
-      if (!is.null(res_ira$auto_selection$k_min_requested)) {
-        log_info(
-          paste0(
-            if (identical(classes_mode, "discrimination_simple")) "Discrimination simple : intervalle teste = " else "Analyse discriminante optimisee : intervalle teste = ",
-            "P",
-            res_ira$auto_selection$k_min_tested %||% res_ira$auto_selection$k_min_requested %||% NA_integer_,
-            " ... P",
-            res_ira$auto_selection$k_max_tested %||% res_ira$auto_selection$k_max_requested %||% NA_integer_,
-            " (demande: P",
-            res_ira$auto_selection$k_min_requested %||% NA_integer_,
-            " ... P",
-            res_ira$auto_selection$k_max_requested %||% NA_integer_,
-            ")."
-          ),
-          progress = 57
-        )
-      }
-      selected_auto <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
-      formater_solution_classes <- function(k_value, fallback_label = NULL) {
-        k_num <- suppressWarnings(as.integer(k_value))
-        if (length(k_num) && !is.na(k_num) && is.finite(k_num)) {
-          return(paste0(k_num, " classes"))
-        }
-        fallback_text <- as.character(fallback_label %||% "")
-        if (nzchar(fallback_text)) {
-          return(fallback_text)
-        }
-        "solution en classes"
-      }
-      selected_solution_label <- formater_solution_classes(
-        selected_auto$k %||% res_ira$auto_selection$k_selected,
-        selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")
-      )
-      selected_chd_step <- suppressWarnings(as.integer(
-        selected_auto$etape_chd %||% res_ira$auto_selection$k_chd_selected %||% selected_auto$k
-      ))
-      log_info(
-        paste0(
-          if (identical(classes_mode, "discrimination_simple")) "Discrimination simple : solution retenue " else "Analyse discriminante optimisee : solution retenue ",
-          selected_solution_label,
-          if (is.finite(selected_chd_step) && !is.na(selected_chd_step)) {
-            paste0(" (etape CHD P", selected_chd_step, ")")
-          } else {
-            ""
-          },
-          if (identical(classes_mode, "discrimination_simple")) {
-            paste0(
-              " (separation relative AFC=",
-              format(round(as.numeric(selected_auto$S_separation_min %||% selected_auto$S), 4), nsmall = 4, trim = TRUE),
-              ")."
-            )
-          } else {
-            paste0(
-              " (A_theta=",
-              format(round(as.numeric(selected_auto$A_theta), 4), nsmall = 4, trim = TRUE),
-              ", A_dist=",
-              format(round(as.numeric(selected_auto$A_dist), 4), nsmall = 4, trim = TRUE),
-              ", A_rad=",
-              format(round(as.numeric(selected_auto$A_rad), 4), nsmall = 4, trim = TRUE),
-              ", A_align=",
-              format(round(as.numeric(selected_auto$A_align), 4), nsmall = 4, trim = TRUE),
-              if (!is.null(selected_auto$A_poles)) {
-                paste0(", A_poles=", format(round(as.numeric(selected_auto$A_poles), 4), nsmall = 4, trim = TRUE))
-              } else {
-                ""
-              },
-              ", A=",
-              format(round(as.numeric(selected_auto$A), 4), nsmall = 4, trim = TRUE),
-              if (!is.na(suppressWarnings(as.numeric(selected_auto$GA)))) {
-                paste0(", GA=", format(round(as.numeric(selected_auto$GA), 4), nsmall = 4, trim = TRUE))
-              } else {
-                ""
-              },
-              ")."
-            )
-          }
-        ),
-        progress = 57
-      )
-
-      metrics_auto <- res_ira$auto_selection$evaluation
-      if (is.data.frame(metrics_auto) && nrow(metrics_auto)) {
-        order_key <- if ("etape_chd" %in% names(metrics_auto)) metrics_auto$etape_chd else metrics_auto$k
-        metrics_auto <- metrics_auto[order(suppressWarnings(as.integer(order_key))), , drop = FALSE]
-        fmt_auto_metric <- function(value) {
-          value_num <- suppressWarnings(as.numeric(value))
-          if (!length(value_num) || is.na(value_num) || !is.finite(value_num)) return("NA")
-          format(round(value_num, 4), nsmall = 4, trim = TRUE)
-        }
-        metrics_resume <- vapply(seq_len(nrow(metrics_auto)), function(i) {
-          if (identical(classes_mode, "discrimination_simple")) {
-            paste0(
-              formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
-              "(separation relative AFC=",
-              fmt_auto_metric(metrics_auto$S_separation_min[[i]] %||% metrics_auto$S[[i]]),
-              ")"
-            )
-          } else {
-            paste0(
-              formater_solution_classes(metrics_auto$k[[i]], metrics_auto$partition[[i]]),
-              "(A_theta=",
-              fmt_auto_metric(metrics_auto$A_theta[[i]]),
-              ", A_dist=",
-              fmt_auto_metric(metrics_auto$A_dist[[i]]),
-              ", A_rad=",
-              fmt_auto_metric(metrics_auto$A_rad[[i]]),
-              ", A_align=",
-              fmt_auto_metric(metrics_auto$A_align[[i]]),
-              ", A_poles=",
-              fmt_auto_metric(metrics_auto$A_poles[[i]]),
-              ", A=",
-              fmt_auto_metric(metrics_auto$A[[i]]),
-              ", GA=",
-              fmt_auto_metric(metrics_auto$GA[[i]]),
-              ")"
-            )
-          }
-        }, character(1))
-        log_info(
-          paste0(
-            if (identical(classes_mode, "discrimination_simple")) "Discrimination simple : scores par nombre de classes -> " else "Analyse discriminante optimisee : scores par nombre de classes -> ",
-            paste(metrics_resume, collapse = " | ")
-          ),
-          progress = 57
-        )
-      }
-
-      if (isTRUE((res_ira$auto_selection$k_chd_selected %||% selected_chd_step %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
-        log_info(
-          if (identical(classes_mode, "discrimination_simple")) {
-            "Discrimination simple : la borne maximale testee correspond aussi au nombre de classes retenu. Toutes les classes restent suffisamment separees au regard de leur dispersion lexicale jusqu'a cette solution."
-          } else {
-            "Analyse discriminante optimisee : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere solution disponible."
-          },
-          progress = 57
-        )
-      }
-    }
-
     classes <- as.integer(res_ira$classes)
     if (all(is.na(classes)) || length(unique(classes[classes > 0])) < 2) {
       stop("IRaMuTeQ-lite n'a pas pu produire au moins 2 classes exploitables.")
@@ -1588,7 +1364,6 @@ run_batch <- function() {
       terminales = res_ira$terminales,
       mincl = res_ira$mincl,
       auto_selection = res_ira$auto_selection,
-      auto_discriminant_selection = res_ira$auto_discriminant_selection,
       simple_discriminant_selection = res_ira$simple_discriminant_selection
     )
     quanteda::docvars(filtered_corpus, "Classes") <- classes
@@ -1874,36 +1649,6 @@ run_batch <- function() {
     artifacts$wordclouds <- unname(vapply(list.files(wordcloud_dir, pattern = "\\.png$", full.names = TRUE), relative_to_output, character(1)))
     log_info("Mode IRaMuTeQ-lite : nuages de mots générés via wordcloud_iramuteq.R.", progress = 67)
 
-    if (is.list(res_ira$auto_discriminant_selection)) {
-      tryCatch({
-        auto_discriminant_exports <- exporter_auto_discriminante_iramuteq(res_ira$auto_discriminant_selection, output_dir)
-        artifacts$auto_discriminante <- list(
-          metrics_csv = relative_to_output(auto_discriminant_exports$metrics_csv),
-          summary_json = relative_to_output(auto_discriminant_exports$summary_json),
-          score_png = relative_to_output(auto_discriminant_exports$score_png)
-        )
-        log_info(
-          if (identical(classes_mode, "auto_afc_discriminante")) {
-            "Exports Analyse discriminante optimisee generes."
-          } else {
-            "Exports Auto discriminante generes."
-          },
-          progress = 69
-        )
-      }, error = function(e) {
-        log_info(
-          paste0(
-            if (identical(classes_mode, "auto_afc_discriminante")) {
-              "Exports Analyse discriminante optimisee indisponibles : "
-            } else {
-              "Exports Auto discriminante indisponibles : "
-            },
-            e$message
-          )
-        )
-      })
-    }
-
     if (is.list(res_ira$simple_discriminant_selection)) {
       tryCatch({
         discrimination_simple_exports <- exporter_discrimination_simple_iramuteq(res_ira$simple_discriminant_selection, output_dir)
@@ -1928,19 +1673,7 @@ run_batch <- function() {
     termes_signif <- NULL
     auto_afc_selected_terms <- unique(as.character(res_ira$auto_selection$selected_termes_cibles %||% character(0)))
     auto_afc_selected_terms <- auto_afc_selected_terms[!is.na(auto_afc_selected_terms) & nzchar(auto_afc_selected_terms)]
-    if ((identical(classes_mode, "auto_afc_discriminante") ||
-         identical(as.character(res_ira$auto_selection$mode %||% ""), "auto_afc_discriminante")) &&
-        length(auto_afc_selected_terms) >= 2L) {
-      termes_signif <- auto_afc_selected_terms
-      log_info(
-        paste0(
-          "Analyse discriminante optimisee : projection finale des ",
-          length(termes_signif),
-          " termes significatifs (p.value <= 0.05), tries par chi2 dans chaque classe, retenus par le mode auto."
-        ),
-        progress = 75
-      )
-    } else if ((identical(classes_mode, "discrimination_simple") ||
+    if ((identical(classes_mode, "discrimination_simple") ||
          identical(as.character(res_ira$auto_selection$mode %||% ""), "discrimination_simple")) &&
         length(auto_afc_selected_terms) >= 2L) {
       termes_signif <- auto_afc_selected_terms
@@ -2260,16 +1993,6 @@ run_batch <- function() {
       suppressWarnings(max(as.integer(classes_info$auto_selection$evaluation$k), na.rm = TRUE))
     } else {
       NA_integer_
-    },
-    auto_discriminante_configuration = if (is.list(classes_info$auto_discriminant_selection) && is.data.frame(classes_info$auto_discriminant_selection$selected_metrics)) {
-      classes_info$auto_discriminant_selection$selected_metrics$configuration_id[[1]] %||% NA_character_
-    } else {
-      NA_character_
-    },
-    auto_discriminante_score = if (is.list(classes_info$auto_discriminant_selection) && is.data.frame(classes_info$auto_discriminant_selection$selected_metrics)) {
-      suppressWarnings(as.numeric(classes_info$auto_discriminant_selection$selected_metrics$A[[1]]))
-    } else {
-      NA_real_
     },
     discrimination_simple_configuration = if (is.list(classes_info$simple_discriminant_selection) && is.data.frame(classes_info$simple_discriminant_selection$selected_metrics)) {
       classes_info$simple_discriminant_selection$selected_metrics$configuration_id[[1]] %||% NA_character_

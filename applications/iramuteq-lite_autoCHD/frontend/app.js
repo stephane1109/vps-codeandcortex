@@ -101,7 +101,6 @@ const annotationRemoveEntryBtn = document.getElementById("annotationRemoveEntryB
 const annotationDictTable = document.getElementById("annotationDictTable");
 const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
-const helpAutoDiscriminanteMarkdownContent = document.getElementById("helpAutoDiscriminanteMarkdownContent");
 const helpDiscriminationSimpleMarkdownContent = document.getElementById("helpDiscriminationSimpleMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
@@ -284,8 +283,6 @@ const suiviConfigSourceCards = Array.from(document.querySelectorAll("[data-suivi
 
 const resultContainers = {
   chdDendrogramme: document.getElementById("chdDendrogramme"),
-  autoDiscriminanteSummary: document.getElementById("autoDiscriminanteSummary"),
-  autoDiscriminanteTable: document.getElementById("autoDiscriminanteTable"),
   discriminationSimpleSummary: document.getElementById("discriminationSimpleSummary"),
   discriminationSimpleTable: document.getElementById("discriminationSimpleTable"),
   chdStatsTable: document.getElementById("chdStatsTable"),
@@ -2170,9 +2167,8 @@ function renderClassesModeCard(card) {
   const autoKMinInput = card.querySelector("#kIramuteqMinAuto, [data-source-id='kIramuteqMinAuto']");
   if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
 
-  const isAutoAfcDiscriminante = modeField.value === "auto_afc_discriminante";
   const isDiscriminationSimple = modeField.value === "discrimination_simple";
-  const usesAutoBounds = isAutoAfcDiscriminante || isDiscriminationSimple;
+  const usesAutoBounds = isDiscriminationSimple;
 
   const effectiveAutoMin = 3;
   if (autoKMinInput instanceof HTMLInputElement) {
@@ -2188,17 +2184,13 @@ function renderClassesModeCard(card) {
   kLabel.textContent = "Nombre maximal de classes à explorer";
 
   if (modeDescription instanceof HTMLElement) {
-    modeDescription.textContent = isAutoAfcDiscriminante
-      ? "En mode Analyse discriminante optimisée, vous ne fixez pas le nombre final de classes. Vous donnez seulement une limite maximale d'exploration, puis l'application compare automatiquement les solutions en classes issues de la même CHD pour retenir le meilleur compromis discriminant."
-      : isDiscriminationSimple
+    modeDescription.textContent = isDiscriminationSimple
         ? "En mode Discrimination simple, l'application lance successivement 4 CHD ciblées du même corpus. Seul min_docfreq varie de 2 à 5, avec filtrage NOM + VER, exclusion de être et conservation de AUTRE_FORME selon votre choix. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC."
         : "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
   }
 
   if (kHelp instanceof HTMLElement) {
-    kHelp.textContent = isAutoAfcDiscriminante
-      ? "La CHD est calculée jusqu'à cette limite puis l'application compare automatiquement les solutions en classes à partir de 3 classes pour retenir le meilleur compromis discriminant."
-      : isDiscriminationSimple
+    kHelp.textContent = isDiscriminationSimple
         ? "Le mode lance 4 CHD ciblées, une par valeur de min_docfreq de 2 à 5. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante."
         : "Cette valeur borne le calcul de l'arbre CHD ; elle ne fixe pas le nombre final de classes, établi ensuite avec les règles terminales et mincl.";
   }
@@ -2278,7 +2270,7 @@ function buildJobConfig(analysisKind = "chd") {
     autoKMin,
     effectiveK
   } = resolveClassesModeConfig();
-  const autoDiscriminanteProfile = ["auto_afc_discriminante", "discrimination_simple"].includes(classesMode) ? "ciblee" : "equilibre";
+  const discriminationSimpleProfile = classesMode === "discrimination_simple" ? "ciblee" : "equilibre";
   const simiThresholdValue = Number(document.getElementById("simiThreshold").value);
   const simiSpacingValue = Number(document.getElementById("simiSpacing")?.value);
   const simiSpacing = Number.isFinite(simiSpacingValue)
@@ -2301,8 +2293,8 @@ function buildJobConfig(analysisKind = "chd") {
     max_p: Number(document.getElementById("maxP").value) || 0.05,
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
     iramuteq_classes_mode: classesMode,
-    iramuteq_auto_discriminante_profile: autoDiscriminanteProfile,
-    iramuteq_auto_top_n_afc: ["auto_afc_discriminante", "discrimination_simple"].includes(classesMode) ? null : 20,
+    iramuteq_discrimination_simple_profile: discriminationSimpleProfile,
+    iramuteq_auto_top_n_afc: classesMode === "discrimination_simple" ? null : 20,
     iramuteq_auto_k_min: autoKMin,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
@@ -8719,8 +8711,6 @@ function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
   } else {
     containers = [
       resultContainers.chdDendrogramme,
-      resultContainers.autoDiscriminanteSummary,
-      resultContainers.autoDiscriminanteTable,
       resultContainers.discriminationSimpleSummary,
       resultContainers.discriminationSimpleTable,
       resultContainers.chdStatsTable,
@@ -11072,9 +11062,7 @@ function formatSummaryValue(value) {
 }
 
 function getClassesModeLabel(mode) {
-  if (mode === "auto_afc_discriminante") return "Analyse discriminante optimisée";
   if (mode === "discrimination_simple") return "Discrimination simple";
-  if (mode === "auto_discriminante") return "Auto discriminante";
   return "Manuel";
 }
 
@@ -11139,7 +11127,7 @@ function renderAnalysisSummary(summary) {
   analysisSummary.appendChild(grid);
 }
 
-function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
+function appendDiscriminationConfigurationDetails(container, configSource) {
   if (!container || !configSource || typeof configSource !== "object") return;
 
   const configId = String(configSource.configuration_id || configSource.id || "").trim();
@@ -11184,247 +11172,6 @@ function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
   }
 }
 
-function renderAutoDiscriminanteSummary(container, payload) {
-  if (!clearContainer(container)) return;
-
-  const selected = payload?.selected;
-  const selectedK = Number.parseInt(String(selected?.k_retenu ?? ""), 10);
-  const selectedManualK = Number.parseInt(String(selected?.k_chd_retenu ?? selected?.etape_chd ?? selectedK), 10);
-  if (!selected || !Number.isFinite(selectedK)) {
-    container.appendChild(createEmptyState("Aucune configuration discriminante retenue pour cette analyse."));
-    return;
-  }
-
-  const metrics = [
-    ["Configuration", selected.configuration_id || "N/A"],
-    ["Classes finales", selectedK],
-    ["k CHD pour le manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
-    ["Profil morpho", selected.profil_morpho || "N/A"],
-    ["min_docfreq", selected.min_docfreq],
-    ["k max explore", selected.k_max_explore || "N/A"]
-  ];
-
-  const grid = document.createElement("div");
-  grid.className = "summary-grid";
-
-  metrics.forEach(([label, value]) => {
-    const card = document.createElement("article");
-    card.className = "summary-card";
-
-    const title = document.createElement("p");
-    title.className = "summary-label";
-    title.textContent = label;
-
-    const body = document.createElement("strong");
-    body.className = "summary-value";
-    body.textContent = formatSummaryValue(value);
-
-    card.appendChild(title);
-    card.appendChild(body);
-    grid.appendChild(card);
-  });
-
-  container.appendChild(grid);
-  appendAutoDiscriminanteConfigurationDetails(container, selected);
-
-  if (Number.isFinite(selectedManualK) && selectedManualK !== selectedK) {
-    const reproducibilityNote = document.createElement("p");
-    reproducibilityNote.className = "field-help";
-    reproducibilityNote.textContent = `Pour reproduire ce résultat en manuel, conservez la configuration retenue et utilisez k = ${selectedManualK}. Les ${selectedK} classes finales résultent ensuite de la règle mincl.`;
-    container.appendChild(reproducibilityNote);
-  }
-}
-
-function extractAutoDiscriminanteCloneParsed(parsed) {
-  if (!parsed || !Array.isArray(parsed.headers) || !Array.isArray(parsed.rows)) {
-    return { headers: [], rows: [], rowClasses: [] };
-  }
-
-  const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const scoreColumnIndex = headerIndex(parsed.headers, ["a"]);
-  const angleColumnIndex = headerIndex(parsed.headers, ["a_theta"]);
-  const distanceColumnIndex = headerIndex(parsed.headers, ["a_dist"]);
-  const structureColumnIndex = headerIndex(parsed.headers, ["b"]);
-
-  const rowsSource = parsed.rows.slice().sort((left, right) => {
-    const leftSelection = normalizeAsciiKey(selectionColumnIndex === -1 ? "" : left[selectionColumnIndex]);
-    const rightSelection = normalizeAsciiKey(selectionColumnIndex === -1 ? "" : right[selectionColumnIndex]);
-    const selectionRank = (value) => {
-      if (value === "retenue") return 0;
-      if (value === "testee") return 1;
-      if (value === "echec") return 2;
-      return 3;
-    };
-    const rankDiff = selectionRank(leftSelection) - selectionRank(rightSelection);
-    if (rankDiff !== 0) return rankDiff;
-
-    const scoreDiff = parseTableNumber(right[scoreColumnIndex]) - parseTableNumber(left[scoreColumnIndex]);
-    if (Number.isFinite(scoreDiff) && scoreDiff !== 0) return scoreDiff;
-
-    const angleDiff = parseTableNumber(right[angleColumnIndex]) - parseTableNumber(left[angleColumnIndex]);
-    if (Number.isFinite(angleDiff) && angleDiff !== 0) return angleDiff;
-
-    const distanceDiff = parseTableNumber(right[distanceColumnIndex]) - parseTableNumber(left[distanceColumnIndex]);
-    if (Number.isFinite(distanceDiff) && distanceDiff !== 0) return distanceDiff;
-
-    const structureDiff = parseTableNumber(right[structureColumnIndex]) - parseTableNumber(left[structureColumnIndex]);
-    if (Number.isFinite(structureDiff) && structureDiff !== 0) return structureDiff;
-
-    return String(left[0] || "").localeCompare(String(right[0] || ""), undefined, { numeric: true });
-  });
-
-  const columnDefs = [
-    { keys: ["configuration_id"], label: "configuration" },
-    { keys: ["profil_morpho"], label: "profil morpho" },
-    { keys: ["lexique_utiliser_lemmes"], label: "lemmes" },
-    { keys: ["retirer_stopwords"], label: "stopwords" },
-    { keys: ["supprimer_ponctuation"], label: "ponctuation" },
-    { keys: ["supprimer_chiffres"], label: "chiffres" },
-    { keys: ["min_docfreq"], label: "min_docfreq" },
-    { keys: ["k_max_explore"], label: "k max teste" },
-    { keys: ["n_segments"], label: "segments" },
-    { keys: ["n_formes"], label: "formes" },
-    { keys: ["k_retenu"], label: "classes finales" },
-    { keys: ["k_chd_retenu"], label: "k CHD manuel" },
-    { keys: ["a_theta"], label: "A_theta" },
-    { keys: ["a_dist"], label: "A_dist" },
-    { keys: ["a_rad"], label: "A_rad" },
-    { keys: ["a_align"], label: "A_align" },
-    { keys: ["a_poles"], label: "A_poles" },
-    { keys: ["a"], label: "A" },
-    { keys: ["h"], label: "H" },
-    { keys: ["d"], label: "D" },
-    { keys: ["l"], label: "L" },
-    { keys: ["b"], label: "B" },
-    { keys: ["classes_effectifs"], label: "effectifs classes" },
-    { keys: ["classes_pourcentages"], label: "% classes" },
-    { keys: ["selection"], label: "statut" },
-    { keys: ["erreur"], label: "erreur" }
-  ]
-    .map((def) => ({
-      ...def,
-      index: headerIndex(parsed.headers, def.keys)
-    }))
-    .filter((def) => def.index !== -1);
-
-  const rowClasses = [];
-  const rows = rowsSource.map((row) => {
-    const selectionRaw = selectionColumnIndex === -1 ? "" : row[selectionColumnIndex];
-    rowClasses.push(normalizeAsciiKey(selectionRaw) === "retenue" ? "is-auto-chd-selected" : "");
-
-    return columnDefs.map((def) => {
-      if (def.label === "effectifs classes" || def.label === "% classes") {
-        return String(row[def.index] ?? "").replace(/\s*\|\s*/g, "\n");
-      }
-      return row[def.index];
-    });
-  });
-
-  return {
-    headers: columnDefs.map((def) => def.label),
-    rows,
-    rowClasses
-  };
-}
-
-function getAutoDiscriminanteNumericColumnIndexes(headers) {
-  if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_teste", "segments", "formes", "k_retenu", "k_chd_retenu", "a_theta", "a_dist", "a_rad", "a_align", "a_poles", "a", "h", "d", "l", "b"]);
-  return headers.reduce((acc, header, index) => {
-    const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
-    if (numericHeaders.has(normalized)) acc.push(index);
-    return acc;
-  }, []);
-}
-
-function renderAutoDiscriminanteMetrics(container, parsed, options = {}) {
-  clearContainer(container);
-
-  if (!parsed || !parsed.headers.length) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Analyse discriminante optimisée disponible."));
-    return;
-  }
-
-  const cloneParsed = extractAutoDiscriminanteCloneParsed(parsed);
-  const numericRenderer = createFixedNumericCellRenderer({
-    digits: 4,
-    numericColumns: getAutoDiscriminanteNumericColumnIndexes(cloneParsed.headers)
-  });
-
-  renderTable(
-    container,
-    { headers: cloneParsed.headers, rows: cloneParsed.rows },
-    {
-      title: options.title || "auto_discriminante_metrics.csv",
-      maxRows: cloneParsed.rows.length,
-      emptyMessage: options.emptyMessage,
-      rowClassName: ({ rowIndex }) => cloneParsed.rowClasses[rowIndex] || "",
-      cellRenderer: ({ cell, row, rowIndex, columnIndex, headers }) => {
-        const numericCell = numericRenderer({ cell, row, rowIndex, columnIndex, headers });
-        if (numericCell) return numericCell;
-
-        const normalizedHeader = normalizeAsciiKey(headers[columnIndex]).replace(/\s+/g, "_");
-        if (normalizedHeader === "effectifs_classes" || normalizedHeader === "%_classes") {
-          return {
-            text: String(cell ?? ""),
-            className: "is-auto-discriminante-multiline"
-          };
-        }
-        if (normalizedHeader === "profil_morpho" || normalizedHeader === "erreur") {
-          return {
-            text: String(cell ?? ""),
-            className: "is-auto-discriminante-wrap-cell"
-          };
-        }
-        return null;
-      }
-    }
-  );
-}
-
-async function renderAutoDiscriminanteExports(index) {
-  const summaryFile = findFile(index, [(path) => path.endsWith("auto_discriminante_summary.json")]);
-  const metricsFile = findFile(index, [(path) => path.endsWith("auto_discriminante_metrics.csv")]);
-  const manualModeMessage = "Cette analyse CHD n'a pas utilisé le mode Analyse discriminante optimisée.";
-
-  if (!summaryFile && !metricsFile) {
-    setContainerEmptyState(resultContainers.autoDiscriminanteSummary, manualModeMessage);
-    setContainerEmptyState(resultContainers.autoDiscriminanteTable, manualModeMessage);
-    return { active: false };
-  }
-
-  if (summaryFile) {
-    try {
-      const payload = JSON.parse(await summaryFile.text());
-      renderAutoDiscriminanteSummary(resultContainers.autoDiscriminanteSummary, payload);
-    } catch (error) {
-      setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Impossible de lire le résumé Analyse discriminante optimisée.");
-      log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
-    }
-  } else {
-    setContainerEmptyState(resultContainers.autoDiscriminanteSummary, "Le résumé Analyse discriminante optimisée est absent du dossier d'exports.");
-  }
-
-  if (!metricsFile) {
-    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Le tableau Analyse discriminante optimisée est absent du dossier d'exports.");
-    return { active: true };
-  }
-
-  try {
-    const parsed = parseCsv(await metricsFile.text());
-    renderAutoDiscriminanteMetrics(resultContainers.autoDiscriminanteTable, parsed, {
-      title: "auto_discriminante_metrics.csv",
-      emptyMessage: "Le tableau Analyse discriminante optimisée est vide."
-    });
-  } catch (error) {
-    setContainerEmptyState(resultContainers.autoDiscriminanteTable, "Impossible de lire les scores Analyse discriminante optimisée.");
-    log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
-  }
-
-  return { active: true };
-}
-
-function renderDiscriminationSimpleSummary(container, payload) {
   if (!clearContainer(container)) return;
 
   const selected = payload?.selected;
@@ -11467,7 +11214,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
   });
 
   container.appendChild(grid);
-  appendAutoDiscriminanteConfigurationDetails(container, selected);
+  appendDiscriminationConfigurationDetails(container, selected);
 
   if (Number.isFinite(selectedManualK) && selectedManualK !== selectedK) {
     const reproducibilityNote = document.createElement("p");
@@ -11599,13 +11346,13 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
         if (normalizedHeader === "effectifs_classes" || normalizedHeader === "%_classes") {
           return {
             text: String(cell ?? ""),
-            className: "is-auto-discriminante-multiline"
+            className: "is-discrimination-simple-multiline"
           };
         }
         if (normalizedHeader === "profil_morpho" || normalizedHeader === "erreur") {
           return {
             text: String(cell ?? ""),
-            className: "is-auto-discriminante-wrap-cell"
+            className: "is-discrimination-simple-wrap-cell"
           };
         }
         return null;
@@ -13246,10 +12993,6 @@ async function renderExports(entries, index) {
   }
 
   await safeRenderExportSection("CHD", async () => {
-    const autoDiscriminanteState = await renderAutoDiscriminanteExports(index);
-    if (autoDiscriminanteState?.active) {
-      preferredChdSubTab = "auto_discriminante";
-    }
     const discriminationSimpleState = await renderDiscriminationSimpleExports(index);
     if (discriminationSimpleState?.active) {
       preferredChdSubTab = "discrimination_simple";
@@ -13476,8 +13219,6 @@ function resetResultPanes() {
   applySuiviPresentation();
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
-    autoDiscriminanteSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Analyse discriminante optimisée.",
-    autoDiscriminanteTable: "Chargez un dossier d'exports pour afficher les scores du mode Analyse discriminante optimisée.",
     discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Discrimination simple.",
     discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode Discrimination simple.",
     chdStatsTable: "Chargez un dossier d'exports pour afficher les statistiques CHD.",
@@ -15105,12 +14846,12 @@ async function startAnalysis(analysisKind = "chd") {
     );
   } else {
     const { autoKMin } = resolveClassesModeConfig();
-    const classesCountLabel = ["auto_afc_discriminante", "discrimination_simple"].includes(classesMode)
+    const classesCountLabel = classesMode === "discrimination_simple"
       ? "intervalleClasses"
       : "classes";
     const classesModeLabel = getClassesModeLabel(classesMode);
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${["auto_afc_discriminante", "discrimination_simple"].includes(classesMode) ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${classesMode === "discrimination_simple" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
     );
   }
   progression.set(4, progressStartMessage);
@@ -15414,7 +15155,6 @@ renderAnnotationDictionaryTable();
 renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
-void loadHelpMarkdown(helpAutoDiscriminanteMarkdownContent, "aide_autodicriminante.md");
 void loadHelpMarkdown(helpDiscriminationSimpleMarkdownContent, "discriminationsimple.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void claimPageTicketOnOpen().then(() => {
