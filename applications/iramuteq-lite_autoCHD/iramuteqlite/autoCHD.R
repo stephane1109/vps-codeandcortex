@@ -109,7 +109,7 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
 }
 
 .reconstruire_partition_auto_chd <- function(chd_step,
-                                              mincl = 0,
+                                              mincl = 5L,
                                               mincl_mode = c("auto", "manuel"),
                                               classif_mode = c("simple", "double")) {
   mincl_mode <- match.arg(mincl_mode)
@@ -129,27 +129,7 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
   )
 
   classes <- normaliser_partition_classes_iramuteq(classes_obj$classes)
-  classes_valides <- unique(classes[classes > 0L])
   fallback_mincl1 <- FALSE
-
-  # Le manuel applique ce meme garde-fou lorsqu'un mincl automatique ne laisse
-  # plus assez de classes exploitables. Il doit donc etre identique en auto.
-  if (length(classes_valides) < 2L) {
-    classes_obj_alt <- reconstruire_fn(
-      chd_obj = chd_step,
-      mincl = 1L,
-      mincl_mode = "manuel",
-      classif_mode = classif_mode,
-      nb_classes_cible = NULL,
-      respecter_nb_classes = FALSE
-    )
-    classes_alt <- normaliser_partition_classes_iramuteq(classes_obj_alt$classes)
-    if (length(unique(classes_alt[classes_alt > 0L])) >= 2L) {
-      classes_obj <- classes_obj_alt
-      classes <- classes_alt
-      fallback_mincl1 <- TRUE
-    }
-  }
 
   list(
     classes = classes,
@@ -161,7 +141,7 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
 
 extraire_partition_chd_iramuteq <- function(chd_obj,
                                              k,
-                                             mincl = 0,
+                                             mincl = 5L,
                                              mincl_mode = c("auto", "manuel"),
                                              classif_mode = c("simple", "double")) {
   mincl_mode <- match.arg(mincl_mode)
@@ -205,7 +185,7 @@ extraire_partition_chd_iramuteq <- function(chd_obj,
 lister_partitions_chd_iramuteq <- function(chd_obj,
                                             k_min = NULL,
                                             k_max = NULL,
-                                            mincl = 0,
+                                            mincl = 5L,
                                             mincl_mode = c("auto", "manuel"),
                                             classif_mode = c("simple", "double")) {
   mincl_mode <- match.arg(mincl_mode)

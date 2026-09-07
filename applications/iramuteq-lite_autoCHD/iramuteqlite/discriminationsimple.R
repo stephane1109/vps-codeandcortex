@@ -245,7 +245,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
                                                              dfm_obj,
                                                              k_min = NULL,
                                                              k_max = NULL,
-                                                             mincl = 0,
+                                                             mincl = 5L,
                                                              mincl_mode = c("auto", "manuel"),
                                                              classif_mode = c("simple", "double"),
                                                              stats_mode = c("vectorise", "classique"),
@@ -307,19 +307,39 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     stop("Discrimination simple: aucun score simple exploitable n'a pu etre calcule.")
   }
 
-  selected_idx <- which.max(s_scores)
-  if (length(selected_idx) > 1L) {
-    selected_idx <- selected_idx[[1]]
-  }
-  for (idx in seq_len(nrow(metrics_df))) {
-    if (idx == selected_idx) next
-    better_s <- is.finite(s_values[[idx]]) && is.finite(s_values[[selected_idx]]) && (s_values[[idx]] > s_values[[selected_idx]] + 1e-12)
-    equal_s <- is.finite(s_values[[idx]]) && is.finite(s_values[[selected_idx]]) && abs(s_values[[idx]] - s_values[[selected_idx]]) <= 1e-12
-    better_separation_moyenne <- is.finite(s_separation_moyenne_values[[idx]]) && (!is.finite(s_separation_moyenne_values[[selected_idx]]) || s_separation_moyenne_values[[idx]] > s_separation_moyenne_values[[selected_idx]] + 1e-12)
+  # S = 1 signifie que les centres de deux classes sont ecartes au moins de
+  # la somme de leurs dispersions medianes. Au-dela, les nuages lexicaux ne
+  # se recouvrent plus au niveau de leur enveloppe mediane. On retient alors
+  # la solution la plus detaillee qui conserve cette separation pour toutes
+  # les paires, plutot que de favoriser mecaniquement P3.
+  seuil_separation <- 1
+  metrics_df$separation_valide <- is.finite(s_values) & !is.na(s_values) & s_values >= seuil_separation
+  indices_valides <- which(metrics_df$separation_valide & is.finite(metrics_df$k) & !is.na(metrics_df$k))
 
-    if (better_s || (equal_s && better_separation_moyenne)) {
-      selected_idx <- idx
+  if (length(indices_valides)) {
+    k_max_valide <- max(as.integer(metrics_df$k[indices_valides]), na.rm = TRUE)
+    candidats_selection <- indices_valides[as.integer(metrics_df$k[indices_valides]) == k_max_valide]
+    ordre <- order(
+      -s_scores[candidats_selection],
+      -ifelse(is.finite(s_separation_moyenne_values[candidats_selection]), s_separation_moyenne_values[candidats_selection], -Inf),
+      -as.integer(metrics_df$etape_chd[candidats_selection])
+    )
+    selected_idx <- candidats_selection[[ordre[[1]]]]
+    selection_rule <- "plus_grand_nombre_de_classes_a_separation_valide"
+  } else {
+    # Si aucune solution ne franchit le seuil naturel S = 1, on conserve le
+    # meilleur ecart disponible et on signale explicitement ce repli.
+    selected_idx <- which.max(s_scores)
+    candidats_selection <- which(abs(s_scores - s_scores[[selected_idx]]) <= 1e-12)
+    if (length(candidats_selection) > 1L) {
+      ordre <- order(
+        -ifelse(is.finite(s_separation_moyenne_values[candidats_selection]), s_separation_moyenne_values[candidats_selection], -Inf),
+        -as.integer(metrics_df$k[candidats_selection]),
+        -as.integer(metrics_df$etape_chd[candidats_selection])
+      )
+      selected_idx <- candidats_selection[[ordre[[1]]]]
     }
+    selection_rule <- "meilleure_separation_en_absence_de_solution_valide"
   }
 
   metrics_df$selection <- ifelse(seq_len(nrow(metrics_df)) == selected_idx, "oui", "non")
@@ -352,6 +372,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     score_column = "S",
     score_label = "Separation relative AFC entre classes",
     score_plot_title = "Selection de la configuration aux classes les plus separees",
+    separation_threshold = seuil_separation,
+    selection_rule = selection_rule,
     classes = selected_partition$classes,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
@@ -412,6 +434,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     supprimer_ponctuation = ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     supprimer_chiffres = ifelse(isTRUE(candidate$supprimer_chiffres), "oui", "non"),
     min_docfreq = candidate$min_docfreq %||% NA_integer_,
+    mincl_mode = as.character(candidate$config$iramuteq_mincl_mode %||% NA_character_),
+    mincl = suppressWarnings(as.integer(candidate$config$iramuteq_mincl %||% NA_integer_)),
     k_max_explore = candidate$k_max_explore %||% candidate$config$k_iramuteq %||% NA_integer_,
     n_segments = NA_integer_,
     n_formes = NA_integer_,
@@ -420,6 +444,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     S = NA_real_,
     S_separation_min = NA_real_,
     S_separation_moyenne = NA_real_,
+    separation_valide = FALSE,
+    regle_selection = NA_character_,
     classes_effectifs = NA_character_,
     classes_pourcentages = NA_character_,
     selection = "echec",
@@ -444,6 +470,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     supprimer_ponctuation = ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     supprimer_chiffres = ifelse(isTRUE(candidate$supprimer_chiffres), "oui", "non"),
     min_docfreq = candidate$min_docfreq %||% NA_integer_,
+    mincl_mode = as.character(candidate$config$iramuteq_mincl_mode %||% NA_character_),
+    mincl = suppressWarnings(as.integer(res_ira$mincl %||% candidate$config$iramuteq_mincl %||% NA_integer_)),
     k_max_explore = candidate$k_max_explore %||% candidate$config$k_iramuteq %||% NA_integer_,
     n_segments = suppressWarnings(as.integer(quanteda::ndoc(pipeline_obj$dfm_obj))),
     n_formes = suppressWarnings(as.integer(quanteda::nfeat(pipeline_obj$dfm_obj))),
@@ -452,6 +480,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     S = suppressWarnings(as.numeric(selected_metrics$S[[1]])),
     S_separation_min = suppressWarnings(as.numeric(selected_metrics$S_separation_min[[1]])),
     S_separation_moyenne = suppressWarnings(as.numeric(selected_metrics$S_separation_moyenne[[1]])),
+    separation_valide = isTRUE(selected_metrics$separation_valide[[1]] %||% FALSE),
+    regle_selection = as.character(res_ira$auto_selection$selection_rule %||% ""),
     classes_effectifs = as.character(selected_metrics$classes_effectifs[[1]] %||% ""),
     classes_pourcentages = as.character(selected_metrics$classes_pourcentages[[1]] %||% ""),
     selection = "testee",
@@ -595,6 +625,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
       current_row <- attempt$row
       current_score <- suppressWarnings(as.numeric(current_row$S[[1]]))
       current_separation_moyenne <- suppressWarnings(as.numeric(current_row$S_separation_moyenne[[1]]))
+      current_separation_valide <- isTRUE(current_row$separation_valide[[1]])
 
       if (is.na(best_idx)) {
         best_idx <- i
@@ -602,10 +633,25 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         best_row <- evaluation_rows[[best_idx]]
         best_score <- suppressWarnings(as.numeric(best_row$S[[1]]))
         best_separation_moyenne <- suppressWarnings(as.numeric(best_row$S_separation_moyenne[[1]]))
+        best_separation_valide <- isTRUE(best_row$separation_valide[[1]])
+        current_k <- suppressWarnings(as.integer(current_row$k_retenu[[1]]))
+        best_k <- suppressWarnings(as.integer(best_row$k_retenu[[1]]))
 
         if (
-          (is.finite(current_score) && !is.na(current_score) && (!is.finite(best_score) || is.na(best_score) || current_score > best_score + 1e-12)) ||
-          (is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+          (current_separation_valide && !best_separation_valide) ||
+          (current_separation_valide && best_separation_valide &&
+             is.finite(current_k) && (!is.finite(best_k) || current_k > best_k)) ||
+          (current_separation_valide && best_separation_valide &&
+             is.finite(current_k) && is.finite(best_k) && current_k == best_k &&
+             is.finite(current_score) && (!is.finite(best_score) || current_score > best_score + 1e-12)) ||
+          (current_separation_valide && best_separation_valide &&
+             is.finite(current_k) && is.finite(best_k) && current_k == best_k &&
+             is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
+             is.finite(current_separation_moyenne) && (!is.finite(best_separation_moyenne) || current_separation_moyenne > best_separation_moyenne + 1e-12)) ||
+          (!current_separation_valide && !best_separation_valide &&
+             is.finite(current_score) && !is.na(current_score) && (!is.finite(best_score) || is.na(best_score) || current_score > best_score + 1e-12)) ||
+          (!current_separation_valide && !best_separation_valide &&
+             is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
              is.finite(current_separation_moyenne) && (!is.finite(best_separation_moyenne) || current_separation_moyenne > best_separation_moyenne + 1e-12))
         ) {
           best_idx <- i
@@ -744,6 +790,8 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     supprimer_ponctuation = col("supprimer_ponctuation", NA_character_),
     supprimer_chiffres = col("supprimer_chiffres", NA_character_),
     min_docfreq = suppressWarnings(as.integer(col("min_docfreq", NA_integer_))),
+    mincl_mode = col("mincl_mode", NA_character_),
+    mincl = suppressWarnings(as.integer(col("mincl", NA_integer_))),
     k_max_explore = suppressWarnings(as.integer(col("k_max_explore", NA_integer_))),
     n_segments = suppressWarnings(as.integer(col("n_segments", NA_integer_))),
     n_formes = suppressWarnings(as.integer(col("n_formes", NA_integer_))),

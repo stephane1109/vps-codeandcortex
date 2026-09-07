@@ -38,7 +38,7 @@ Il fixe seulement :
 
 Ensuite, pour chaque CHD testée, l'application compare automatiquement les solutions en classes à partir de `3` classes jusqu'à cette borne maximale.
 
-Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Ainsi, si une étape CHD `P8` est regroupée par `mincl`, elle peut produire par exemple `3` classes finales.
+Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le réglage `mincl` n'est ni modifié ni remplacé par le mode automatique. Ainsi, avec `mincl` manuel fixé à `5`, l'étape `P5` correspond à la même CHD manuelle à cinq classes.
 
 Le résultat indique donc aussi le **k CHD pour le manuel**. Pour reproduire exactement la solution automatique, il faut reprendre la configuration affichée, ce `k` et les mêmes réglages `mincl` et classification.
 
@@ -64,9 +64,11 @@ Pour chaque paire de classes, l'application calcule :
 
 `distance entre les deux centres / dispersion lexicale des deux classes`.
 
-Le score retenu est la plus petite de ces séparations relatives. Ainsi, toutes les classes doivent être distinctes par rapport à leur propre nuage de mots, qu'il y ait 3, 4, 5 ou 6 classes.
+La plus petite de ces séparations relatives est notée `S`. Une solution est considérée comme suffisamment discriminante lorsque `S >= 1` : même la paire de classes la plus proche reste alors séparée au moins de la somme de leurs dispersions lexicales médianes.
 
-En cas d'égalité, la moyenne des séparations relatives départage les deux solutions.
+Dans chaque configuration, le mode retient le plus grand nombre de classes qui respecte cette condition. Il ne choisit donc plus automatiquement `P3` seulement parce qu'une solution à trois classes a une séparation brute plus élevée. Si aucune solution ne franchit `S = 1`, le mode conserve la meilleure séparation disponible ; la moyenne des séparations départage les égalités.
+
+Les quatre configurations sont ensuite comparées selon la même logique : priorité au plus grand nombre de classes valides, puis à la meilleure séparation relative AFC.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 

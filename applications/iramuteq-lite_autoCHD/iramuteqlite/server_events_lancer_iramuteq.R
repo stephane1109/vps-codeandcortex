@@ -1575,13 +1575,6 @@ register_events_lancer <- function(input, output, session, rv) {
             dfm_obj <- res_ira$dfm_utilise
           }
 
-          if (isTRUE(res_ira$fallback_mincl1)) {
-            ajouter_log(
-              rv,
-              "Ajustement automatique: reconstruction des classes avec mincl=1 pour éviter une fusion excessive des classes terminales."
-            )
-          }
-
           groupes <- as.integer(res_ira$classes)
           if (all(is.na(groupes)) || length(unique(groupes[groupes > 0])) < 2) {
             stop("IRaMuTeQ-lite n'a pas pu produire au moins 2 classes exploitables.")

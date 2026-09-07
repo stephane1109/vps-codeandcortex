@@ -74,7 +74,7 @@ lancer_moteur_chd_iramuteq <- function(
   k,
   classes_mode = c("manuel", "auto_discriminante", "auto_afc_discriminante", "discrimination_simple_config", "discrimination_simple_partition"),
   mincl_mode = c("auto", "manuel"),
-  mincl = 0,
+  mincl = 5L,
   classif_mode = c("simple", "double"),
   svd_method = c("irlba", "svdR"),
   mode_patate = FALSE,
@@ -392,31 +392,8 @@ lancer_moteur_chd_iramuteq <- function(
     respecter_nb_classes = FALSE
   )
 
-  classes <- suppressWarnings(as.integer(classes_obj$classes))
-  classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
-
-  # Garde-fou: sur certains corpus, le mincl auto peut fusionner excessivement
-  # les feuilles terminales et ne laisser qu'une seule classe exploitable.
-  # On retente alors une reconstruction avec mincl = 1 pour conserver les
-  # classes terminales sans relancer la CHD complète.
-  if (length(classes_valides) < 2L) {
-    classes_obj_alt <- reconstruire_classes_terminales_iramuteq_fn(
-      chd_obj = chd_obj,
-      mincl = 1L,
-      mincl_mode = "manuel",
-      classif_mode = classif_mode,
-      nb_classes_cible = NULL,
-      respecter_nb_classes = FALSE
-    )
-
-    classes_alt <- suppressWarnings(as.integer(classes_obj_alt$classes))
-    classes_alt_valides <- unique(classes_alt[is.finite(classes_alt) & classes_alt > 0L])
-
-    if (length(classes_alt_valides) >= 2L) {
-      classes_obj <- classes_obj_alt
-      fallback_mincl1 <- TRUE
-    }
-  }
+  # La reconstruction respecte strictement le mincl choisi par l'utilisateur.
+  # Il ne doit jamais etre remplace silencieusement par mincl = 1.
 
   list(
     engine = "iramuteq-lite",

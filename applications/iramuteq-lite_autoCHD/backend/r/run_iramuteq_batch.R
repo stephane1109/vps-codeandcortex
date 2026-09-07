@@ -1352,9 +1352,6 @@ run_batch <- function() {
         progress = 56
       )
     }
-    if (isTRUE(res_ira$fallback_mincl1)) {
-      log_info("Ajustement automatique : reconstruction des classes avec mincl=1 pour éviter une fusion excessive des classes terminales.")
-    }
     if (is.list(res_ira$auto_discriminant_selection) &&
         is.data.frame(res_ira$auto_discriminant_selection$selected_metrics) &&
         nrow(res_ira$auto_discriminant_selection$selected_metrics)) {
@@ -1574,7 +1571,7 @@ run_batch <- function() {
       if (isTRUE((res_ira$auto_selection$k_chd_selected %||% selected_chd_step %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
           if (identical(classes_mode, "discrimination_simple")) {
-            "Discrimination simple : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score simple est maximal sur la derniere solution disponible."
+            "Discrimination simple : la borne maximale testee correspond aussi au nombre de classes retenu. Toutes les classes restent suffisamment separees au regard de leur dispersion lexicale jusqu'a cette solution."
           } else {
             "Analyse discriminante optimisee : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score AFC est maximal sur la derniere solution disponible."
           },
@@ -1951,7 +1948,7 @@ run_batch <- function() {
         paste0(
           "Discrimination simple : projection finale des ",
           length(termes_signif),
-          " termes significatifs (p.value <= 0.05), ponderes par le chi2 dans le score simple."
+          " termes significatifs (p.value <= 0.05), selectionnes par le chi2 sans ponderation supplementaire."
         ),
         progress = 75
       )

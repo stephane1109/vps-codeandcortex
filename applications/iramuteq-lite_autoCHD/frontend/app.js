@@ -2311,7 +2311,7 @@ function buildJobConfig(analysisKind = "chd") {
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
     iramuteq_mincl_mode: document.getElementById("minclMode").value,
-    iramuteq_mincl: Number(document.getElementById("minclManual").value) || 1,
+    iramuteq_mincl: Number(document.getElementById("minclManual").value) || 5,
     iramuteq_classif_mode: document.getElementById("classificationMode").value,
     iramuteq_rst1: Number(document.getElementById("rst1").value) || 12,
     iramuteq_rst2: Number(document.getElementById("rst2").value) || 14,
@@ -11149,6 +11149,8 @@ function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
   const configId = String(configSource.configuration_id || configSource.id || "").trim();
   const profilMorpho = String(configSource.profil_morpho || "").trim();
   const minDocfreq = formatSummaryValue(configSource.min_docfreq);
+  const mincl = formatSummaryValue(configSource.mincl);
+  const minclMode = String(configSource.mincl_mode || "").trim();
   const kMaxExplore = formatSummaryValue(configSource.k_max_explore || configSource.kmax || configSource.k_max_requested);
   const normalizeYesNoValue = (value, yesLabel = "oui", noLabel = "non") => {
     const normalized = normalizeAsciiKey(value);
@@ -11175,6 +11177,7 @@ function appendAutoDiscriminanteConfigurationDetails(container, configSource) {
   if (ponctuation) variableParts.push(`ponctuation = ${ponctuation}`);
   if (chiffres) variableParts.push(`chiffres = ${chiffres}`);
   if (minDocfreq && minDocfreq !== "N/A") variableParts.push(`min_docfreq = ${minDocfreq}`);
+  if (mincl && mincl !== "N/A") variableParts.push(`mincl = ${mincl}${minclMode ? ` (${minclMode})` : ""}`);
   if (kMaxExplore && kMaxExplore !== "N/A") variableParts.push(`k max exploré = ${kMaxExplore}`);
 
   if (variableParts.length) {
@@ -11442,6 +11445,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["k CHD pour le manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq retenu", selected.min_docfreq],
+    ["mincl", selected.mincl ?? "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
     ["Séparation relative AFC", selected.separation_relative_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
   ];
@@ -11478,7 +11482,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
-  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu celle dont les classes sont les mieux séparées au regard de leur dispersion lexicale sur l'AFC.`;
+  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution la plus détaillée dont toutes les classes restent séparées au regard de leur dispersion lexicale sur l'AFC.`;
   container.appendChild(selectionNote);
 }
 
@@ -11520,6 +11524,8 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["supprimer_ponctuation"], label: "ponctuation" },
     { keys: ["supprimer_chiffres"], label: "chiffres" },
     { keys: ["min_docfreq"], label: "min_docfreq" },
+    { keys: ["mincl_mode"], label: "mode mincl" },
+    { keys: ["mincl"], label: "mincl" },
     { keys: ["k_max_explore"], label: "k max exploré" },
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
@@ -11559,7 +11565,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "k_chd_retenu", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["min_docfreq", "mincl", "k_max_explore", "segments", "formes", "classes_retenues", "k_chd_retenu", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
