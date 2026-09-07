@@ -2306,7 +2306,7 @@ function buildJobConfig(analysisKind = "chd") {
     iramuteq_auto_k_min: autoKMin,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
-    iramuteq_mincl_mode: document.getElementById("minclMode").value,
+    iramuteq_mincl_mode: document.getElementById("minclMode").value || "manuel",
     iramuteq_mincl: Number(document.getElementById("minclManual").value) || 5,
     iramuteq_classif_mode: document.getElementById("classificationMode").value,
     iramuteq_rst1: Number(document.getElementById("rst1").value) || 12,

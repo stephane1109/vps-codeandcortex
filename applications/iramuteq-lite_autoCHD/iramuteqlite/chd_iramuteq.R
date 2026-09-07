@@ -269,8 +269,8 @@ calculer_chd_iramuteq <- function(
 # Reconstitue des classes finales depuis la sortie CHD et le principe find.terminales.
 reconstruire_classes_terminales_iramuteq <- function(
     chd_obj,
-    mincl = 0,
-    mincl_mode = c("auto", "manuel"),
+    mincl = 5L,
+    mincl_mode = c("manuel", "auto"),
     classif_mode = c("simple", "double"),
     nb_classes_cible = NULL,
     respecter_nb_classes = TRUE

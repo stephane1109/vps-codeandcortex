@@ -27,8 +27,8 @@ ui_options_iramuteq <- function(defaults = NULL) {
           "Ce paramètre définit le seuil minimal d'UCE pour conserver une classe terminale."
         )
       ),
-      choices = c("Automatique" = "auto", "Manuel" = "manuel"),
-      selected = valeur_defaut("iramuteq_mincl_mode", "auto"),
+      choices = c("Manuel (5 par défaut)" = "manuel", "Automatique" = "auto"),
+      selected = valeur_defaut("iramuteq_mincl_mode", "manuel"),
       inline = FALSE
     ),
     conditionalPanel(

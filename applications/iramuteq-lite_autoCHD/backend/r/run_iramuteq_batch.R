@@ -1216,8 +1216,8 @@ run_batch <- function() {
           ""
         },
         " | mincl_mode=",
-        scalar_chr(config$iramuteq_mincl_mode, "auto"),
-        if (identical(scalar_chr(config$iramuteq_mincl_mode, "auto"), "manuel")) {
+        scalar_chr(config$iramuteq_mincl_mode, "manuel"),
+        if (identical(scalar_chr(config$iramuteq_mincl_mode, "manuel"), "manuel")) {
           paste0(" | mincl=", scalar_int(config$iramuteq_mincl, 5L, 1L))
         } else {
           ""
@@ -1249,7 +1249,7 @@ run_batch <- function() {
       dfm_obj = dfm_obj,
       k = scalar_int(config_chd$k_iramuteq, 10L, 2L),
       classes_mode = engine_classes_mode,
-      mincl_mode = scalar_chr(config_chd$iramuteq_mincl_mode, "auto"),
+      mincl_mode = scalar_chr(config_chd$iramuteq_mincl_mode, "manuel"),
       mincl = scalar_int(config_chd$iramuteq_mincl, 5L, 1L),
       classif_mode = classif_mode,
       svd_method = scalar_chr(config_chd$iramuteq_svd_method, "irlba"),

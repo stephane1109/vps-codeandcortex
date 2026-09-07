@@ -73,7 +73,7 @@ lancer_moteur_chd_iramuteq <- function(
   dfm_obj,
   k,
   classes_mode = c("manuel", "auto_discriminante", "auto_afc_discriminante", "discrimination_simple_config", "discrimination_simple_partition"),
-  mincl_mode = c("auto", "manuel"),
+  mincl_mode = c("manuel", "auto"),
   mincl = 5L,
   classif_mode = c("simple", "double"),
   svd_method = c("irlba", "svdR"),

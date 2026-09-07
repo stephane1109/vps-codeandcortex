@@ -562,11 +562,11 @@
           <div class="field">
             <label for="minclMode">Nombre minimum d'UCE par classe terminale (mincl)</label>
             <select id="minclMode">
+              <option value="manuel" selected>Manuel (5 par défaut)</option>
               <option value="auto">Automatique</option>
-              <option value="manuel">Manuel</option>
             </select>
             <p class="field-help">
-              <strong>mincl n'est pas le nombre de classes.</strong> Il définit le nombre minimal de segments (UCE) requis pour conserver une classe terminale. Avec <code>mincl = 5</code>, chaque classe finale doit contenir au moins 5 segments. Le paramètre <code>k</code> concerne, lui, le nombre de classes demandé ou la limite explorée.
+              <strong>mincl n'est pas le nombre de classes.</strong> Il définit le nombre minimal de segments (UCE) requis pour conserver une classe terminale. Par défaut, le mode manuel utilise <code>mincl = 5</code> : chaque classe finale doit alors contenir au moins 5 segments. Le mode automatique calcule ce seuil à partir du corpus et peut regrouper davantage de classes.
             </p>
           </div>
 

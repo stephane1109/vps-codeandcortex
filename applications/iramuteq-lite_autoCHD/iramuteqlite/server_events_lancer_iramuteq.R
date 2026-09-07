@@ -1512,10 +1512,10 @@ register_events_lancer <- function(input, output, session, rv) {
           if (is.na(k_iramuteq) || k_iramuteq < 2L) k_iramuteq <- 10L
 
           mincl_mode_iramuteq <- as.character(input$iramuteq_mincl_mode)
-          if (!mincl_mode_iramuteq %in% c("auto", "manuel")) mincl_mode_iramuteq <- "auto"
+          if (!mincl_mode_iramuteq %in% c("auto", "manuel")) mincl_mode_iramuteq <- "manuel"
 
           mincl_iramuteq <- suppressWarnings(as.integer(input$iramuteq_mincl))
-          if (is.na(mincl_iramuteq) || mincl_iramuteq < 1L) mincl_iramuteq <- 1L
+          if (is.na(mincl_iramuteq) || mincl_iramuteq < 1L) mincl_iramuteq <- 5L
 
           classif_mode_iramuteq <- as.character(input$iramuteq_classif_mode)
           if (!classif_mode_iramuteq %in% c("simple", "double")) classif_mode_iramuteq <- "simple"
