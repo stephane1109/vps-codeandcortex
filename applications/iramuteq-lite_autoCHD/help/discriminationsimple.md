@@ -38,10 +38,15 @@ Il fixe seulement :
 
 Ensuite, pour chaque CHD testée, l'application compare automatiquement les solutions en classes à partir de `3` classes jusqu'à cette borne maximale.
 
+Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Ainsi, si une étape CHD `P8` est regroupée par `mincl`, elle peut produire par exemple `3` classes finales.
+
+Le résultat indique donc aussi le **k CHD pour le manuel**. Pour reproduire exactement la solution automatique, il faut reprendre la configuration affichée, ce `k` et les mêmes réglages `mincl` et classification.
+
 Le résultat final affiche donc :
 
 - la configuration retenue
-- le nombre de classes retenues
+- le nombre de classes finales retenues
+- le `k` CHD à utiliser en manuel
 - les variables qui ont conduit à ce résultat
 
 ## Comment la sélection est faite

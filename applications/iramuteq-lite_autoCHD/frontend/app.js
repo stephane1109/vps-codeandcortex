@@ -11190,6 +11190,7 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const selected = payload?.selected;
   const selectedK = Number.parseInt(String(selected?.k_retenu ?? ""), 10);
+  const selectedManualK = Number.parseInt(String(selected?.k_chd_retenu ?? selected?.etape_chd ?? selectedK), 10);
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune configuration discriminante retenue pour cette analyse."));
     return;
@@ -11197,7 +11198,8 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   const metrics = [
     ["Configuration", selected.configuration_id || "N/A"],
-    ["Partition retenue", `P${selectedK}`],
+    ["Classes finales", selectedK],
+    ["k CHD pour le manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq", selected.min_docfreq],
     ["k max explore", selected.k_max_explore || "N/A"]
@@ -11225,6 +11227,13 @@ function renderAutoDiscriminanteSummary(container, payload) {
 
   container.appendChild(grid);
   appendAutoDiscriminanteConfigurationDetails(container, selected);
+
+  if (Number.isFinite(selectedManualK) && selectedManualK !== selectedK) {
+    const reproducibilityNote = document.createElement("p");
+    reproducibilityNote.className = "field-help";
+    reproducibilityNote.textContent = `Pour reproduire ce résultat en manuel, conservez la configuration retenue et utilisez k = ${selectedManualK}. Les ${selectedK} classes finales résultent ensuite de la règle mincl.`;
+    container.appendChild(reproducibilityNote);
+  }
 }
 
 function extractAutoDiscriminanteCloneParsed(parsed) {
@@ -11276,7 +11285,8 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
     { keys: ["k_max_explore"], label: "k max teste" },
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
-    { keys: ["k_retenu"], label: "k retenu" },
+    { keys: ["k_retenu"], label: "classes finales" },
+    { keys: ["k_chd_retenu"], label: "k CHD manuel" },
     { keys: ["a_theta"], label: "A_theta" },
     { keys: ["a_dist"], label: "A_dist" },
     { keys: ["a_rad"], label: "A_rad" },
@@ -11320,7 +11330,7 @@ function extractAutoDiscriminanteCloneParsed(parsed) {
 
 function getAutoDiscriminanteNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_teste", "segments", "formes", "k_retenu", "a_theta", "a_dist", "a_rad", "a_align", "a_poles", "a", "h", "d", "l", "b"]);
+  const numericHeaders = new Set(["min_docfreq", "k_max_teste", "segments", "formes", "k_retenu", "k_chd_retenu", "a_theta", "a_dist", "a_rad", "a_align", "a_poles", "a", "h", "d", "l", "b"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -11420,6 +11430,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selected = payload?.selected;
   const selectedK = Number.parseInt(String(selected?.classes_retenues ?? selected?.k_retenu ?? ""), 10);
+  const selectedManualK = Number.parseInt(String(selected?.k_chd_retenu ?? selected?.etape_chd ?? selectedK), 10);
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune configuration de discrimination simple n'a été retenue pour cette analyse."));
     return;
@@ -11428,6 +11439,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
     ["Classes retenues", selectedK],
+    ["k CHD pour le manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq retenu", selected.min_docfreq],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
@@ -11456,6 +11468,13 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   container.appendChild(grid);
   appendAutoDiscriminanteConfigurationDetails(container, selected);
+
+  if (Number.isFinite(selectedManualK) && selectedManualK !== selectedK) {
+    const reproducibilityNote = document.createElement("p");
+    reproducibilityNote.className = "field-help";
+    reproducibilityNote.textContent = `Pour reproduire ce résultat en manuel, conservez la configuration retenue et utilisez k = ${selectedManualK}. Les ${selectedK} classes finales résultent ensuite de la règle mincl.`;
+    container.appendChild(reproducibilityNote);
+  }
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
@@ -11505,6 +11524,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
+    { keys: ["k_chd_retenu"], label: "k CHD manuel" },
     { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
@@ -11539,7 +11559,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["min_docfreq", "k_max_explore", "segments", "formes", "classes_retenues", "k_chd_retenu", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);

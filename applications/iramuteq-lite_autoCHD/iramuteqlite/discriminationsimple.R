@@ -210,7 +210,8 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
   )
 
   metrics <- data.frame(
-    partition = paste0("P", partition_obj$k),
+    partition = paste0("P", partition_obj$requested_k %||% partition_obj$k),
+    etape_chd = as.integer(partition_obj$requested_k %||% partition_obj$k),
     k = as.integer(partition_obj$k),
     n_segments_assignes = as.integer(total_assigned),
     n_segments_non_assignes = as.integer(sum(!ok)),
@@ -244,14 +245,26 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
                                                              dfm_obj,
                                                              k_min = NULL,
                                                              k_max = NULL,
+                                                             mincl = 0,
+                                                             mincl_mode = c("auto", "manuel"),
+                                                             classif_mode = c("simple", "double"),
                                                              stats_mode = c("vectorise", "classique"),
                                                              top_n_diffusion = 20L,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
                                                              afc_max_termes = 400L) {
+  mincl_mode <- match.arg(mincl_mode)
+  classif_mode <- match.arg(classif_mode)
   stats_mode <- match.arg(stats_mode)
 
-  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
+  partitions <- lister_partitions_chd_iramuteq(
+    chd_obj = chd_obj,
+    k_min = k_min,
+    k_max = k_max,
+    mincl = mincl,
+    mincl_mode = mincl_mode,
+    classif_mode = classif_mode
+  )
   if (!length(partitions)) {
     stop("Discrimination simple: aucune solution exploitable entre 3 classes et la borne maximale demandee.")
   }
@@ -313,7 +326,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
 
   selected_partition <- partitions[[selected_idx]]
   selected_evaluation <- evaluations[[selected_idx]]
-  k_max_tested <- suppressWarnings(max(as.integer(metrics_df$k), na.rm = TRUE))
+  k_max_tested <- suppressWarnings(max(as.integer(metrics_df$etape_chd), na.rm = TRUE))
   k_max_requested <- suppressWarnings(as.integer(chd_obj$auto_k_requested %||% k_max[[1]] %||% k_max))
   k_min_requested <- suppressWarnings(as.integer(k_min[[1]] %||% k_min))
   if (!length(k_max_requested) || is.na(k_max_requested) || !is.finite(k_max_requested)) {
@@ -324,7 +337,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   }
   k_min_requested <- max(3L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
-  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
+  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$etape_chd), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
     stop(paste0(
       "Discrimination simple: la solution retenue ne respecte pas la borne minimale demandee (",
@@ -343,6 +356,10 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
     k_selected = as.integer(metrics_df$k[[selected_idx]]),
+    k_chd_selected = as.integer(selected_partition$requested_k %||% metrics_df$etape_chd[[selected_idx]]),
+    mincl_selected = selected_partition$mincl %||% NA_integer_,
+    fallback_mincl1 = isTRUE(selected_partition$fallback_mincl1),
+    selected_chd = selected_partition$chd,
     k_min_requested = as.integer(k_min_requested),
     k_min_tested = as.integer(k_min_tested),
     k_max_requested = as.integer(k_max_requested),
@@ -399,6 +416,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     n_segments = NA_integer_,
     n_formes = NA_integer_,
     k_retenu = NA_integer_,
+    k_chd_retenu = NA_integer_,
     S = NA_real_,
     S_separation_min = NA_real_,
     S_separation_moyenne = NA_real_,
@@ -430,6 +448,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     n_segments = suppressWarnings(as.integer(quanteda::ndoc(pipeline_obj$dfm_obj))),
     n_formes = suppressWarnings(as.integer(quanteda::nfeat(pipeline_obj$dfm_obj))),
     k_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_selected %||% selected_metrics$k[[1]])),
+    k_chd_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_chd_selected %||% selected_metrics$etape_chd[[1]] %||% selected_metrics$k[[1]])),
     S = suppressWarnings(as.numeric(selected_metrics$S[[1]])),
     S_separation_min = suppressWarnings(as.numeric(selected_metrics$S_separation_min[[1]])),
     S_separation_moyenne = suppressWarnings(as.numeric(selected_metrics$S_separation_moyenne[[1]])),
@@ -729,6 +748,7 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     n_segments = suppressWarnings(as.integer(col("n_segments", NA_integer_))),
     n_formes = suppressWarnings(as.integer(col("n_formes", NA_integer_))),
     classes_retenues = suppressWarnings(as.integer(col("k_retenu", NA_integer_))),
+    k_chd_retenu = suppressWarnings(as.integer(col("k_chd_retenu", NA_integer_))),
     separation_relative_afc = suppressWarnings(as.numeric(
       if ("S_separation_min" %in% names(metrics_df)) col("S_separation_min") else col("S", NA_real_)
     )),

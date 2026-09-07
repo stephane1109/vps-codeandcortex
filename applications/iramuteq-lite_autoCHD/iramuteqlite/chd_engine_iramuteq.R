@@ -301,6 +301,9 @@ lancer_moteur_chd_iramuteq <- function(
       dfm_obj = dfm_utilise,
       k_min = auto_k_min_effective,
       k_max = k,
+      mincl = mincl,
+      mincl_mode = mincl_mode,
+      classif_mode = classif_mode,
       stats_mode = auto_stats_mode,
       top_n_diffusion = auto_top_n_diffusion,
       top_n_afc = auto_top_n_afc,
@@ -324,12 +327,12 @@ lancer_moteur_chd_iramuteq <- function(
 
     return(list(
       engine = "iramuteq-lite",
-      chd = chd_obj,
+      chd = auto_selection$selected_chd %||% chd_obj,
       classes_mode = classes_mode,
       classes = auto_selection$classes,
       terminales = auto_selection$terminales,
-      mincl = NA_integer_,
-      fallback_mincl1 = FALSE,
+      mincl = auto_selection$mincl_selected %||% NA_integer_,
+      fallback_mincl1 = isTRUE(auto_selection$fallback_mincl1),
       auto_selection = auto_selection,
       dfm_utilise = dfm_utilise,
       max_formes_info = chd_obj$max_formes_info
@@ -342,6 +345,9 @@ lancer_moteur_chd_iramuteq <- function(
       dfm_obj = dfm_utilise,
       k_min = auto_k_min_effective,
       k_max = k,
+      mincl = mincl,
+      mincl_mode = mincl_mode,
+      classif_mode = classif_mode,
       stats_mode = auto_stats_mode,
       top_n_diffusion = auto_top_n_diffusion,
       top_n_afc = auto_top_n_afc,
@@ -365,12 +371,12 @@ lancer_moteur_chd_iramuteq <- function(
 
     return(list(
       engine = "iramuteq-lite",
-      chd = chd_obj,
+      chd = auto_selection$selected_chd %||% chd_obj,
       classes_mode = classes_mode,
       classes = auto_selection$classes,
       terminales = auto_selection$terminales,
-      mincl = NA_integer_,
-      fallback_mincl1 = FALSE,
+      mincl = auto_selection$mincl_selected %||% NA_integer_,
+      fallback_mincl1 = isTRUE(auto_selection$fallback_mincl1),
       auto_selection = auto_selection,
       dfm_utilise = dfm_utilise,
       max_formes_info = chd_obj$max_formes_info

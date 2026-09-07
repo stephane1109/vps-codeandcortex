@@ -76,7 +76,96 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
   out
 }
 
-extraire_partition_chd_iramuteq <- function(chd_obj, k) {
+.extraire_etape_chd_auto_chd <- function(chd_obj, column_index) {
+  n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
+  if (is.null(n1)) stop("Analyse discriminante optimisee: objet CHD invalide ou sans matrice n1.")
+
+  column_index <- suppressWarnings(as.integer(column_index))
+  if (!is.finite(column_index) || is.na(column_index) || column_index < 1L || column_index > ncol(n1)) {
+    stop("Analyse discriminante optimisee: etape CHD indisponible.")
+  }
+
+  list_mere <- chd_obj$list_mere
+  list_fille <- chd_obj$list_fille
+  if (!is.list(list_mere) || !is.list(list_fille)) {
+    stop("Analyse discriminante optimisee: arbre CHD incomplet.")
+  }
+
+  # Chaque colonne de n1 correspond a une etape de division. Pour reproduire
+  # exactement le manuel, on tronque aussi l'arbre a cette etape avant de
+  # reconstruire les classes terminales avec mincl.
+  max_node <- as.integer((2L * column_index) + 1L)
+  chd_step <- chd_obj
+  chd_step$n1 <- n1[, seq_len(column_index), drop = FALSE]
+  chd_step$list_mere <- list_mere[seq_len(min(length(list_mere), max_node))]
+  chd_step$list_fille <- list_fille[seq_len(min(length(list_fille), max_node))]
+  chd_step$list_fille <- lapply(chd_step$list_fille, function(children) {
+    ids <- suppressWarnings(as.integer(children))
+    ids <- ids[is.finite(ids) & !is.na(ids) & ids > 0L]
+    if (length(ids) != 2L || any(ids > max_node)) return(NULL)
+    ids
+  })
+  chd_step
+}
+
+.reconstruire_partition_auto_chd <- function(chd_step,
+                                              mincl = 0,
+                                              mincl_mode = c("auto", "manuel"),
+                                              classif_mode = c("simple", "double")) {
+  mincl_mode <- match.arg(mincl_mode)
+  classif_mode <- match.arg(classif_mode)
+  reconstruire_fn <- get0("reconstruire_classes_terminales_iramuteq", mode = "function", inherits = TRUE)
+  if (!is.function(reconstruire_fn)) {
+    stop("Analyse discriminante optimisee: reconstruction des classes IRaMuTeQ introuvable.")
+  }
+
+  classes_obj <- reconstruire_fn(
+    chd_obj = chd_step,
+    mincl = mincl,
+    mincl_mode = mincl_mode,
+    classif_mode = classif_mode,
+    nb_classes_cible = NULL,
+    respecter_nb_classes = FALSE
+  )
+
+  classes <- normaliser_partition_classes_iramuteq(classes_obj$classes)
+  classes_valides <- unique(classes[classes > 0L])
+  fallback_mincl1 <- FALSE
+
+  # Le manuel applique ce meme garde-fou lorsqu'un mincl automatique ne laisse
+  # plus assez de classes exploitables. Il doit donc etre identique en auto.
+  if (length(classes_valides) < 2L) {
+    classes_obj_alt <- reconstruire_fn(
+      chd_obj = chd_step,
+      mincl = 1L,
+      mincl_mode = "manuel",
+      classif_mode = classif_mode,
+      nb_classes_cible = NULL,
+      respecter_nb_classes = FALSE
+    )
+    classes_alt <- normaliser_partition_classes_iramuteq(classes_obj_alt$classes)
+    if (length(unique(classes_alt[classes_alt > 0L])) >= 2L) {
+      classes_obj <- classes_obj_alt
+      classes <- classes_alt
+      fallback_mincl1 <- TRUE
+    }
+  }
+
+  list(
+    classes = classes,
+    terminales = suppressWarnings(as.integer(classes_obj$terminales)),
+    mincl = suppressWarnings(as.integer(classes_obj$mincl)),
+    fallback_mincl1 = fallback_mincl1
+  )
+}
+
+extraire_partition_chd_iramuteq <- function(chd_obj,
+                                             k,
+                                             mincl = 0,
+                                             mincl_mode = c("auto", "manuel"),
+                                             classif_mode = c("simple", "double")) {
+  mincl_mode <- match.arg(mincl_mode)
+  classif_mode <- match.arg(classif_mode)
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
   if (is.null(n1)) stop("Analyse discriminante optimisee: objet CHD invalide ou sans matrice n1.")
 
@@ -90,21 +179,37 @@ extraire_partition_chd_iramuteq <- function(chd_obj, k) {
     stop("Analyse discriminante optimisee: solution en classes demandee indisponible dans n1.")
   }
 
-  classes_raw <- suppressWarnings(as.integer(n1[, col_index]))
-  classes <- normaliser_partition_classes_iramuteq(classes_raw)
-  terminales <- sort(unique(classes_raw[is.finite(classes_raw) & !is.na(classes_raw) & classes_raw > 0L]))
+  classes_chd_brutes <- suppressWarnings(as.integer(n1[, col_index]))
+  chd_step <- .extraire_etape_chd_auto_chd(chd_obj, column_index = col_index)
+  reconstruction <- .reconstruire_partition_auto_chd(
+    chd_step = chd_step,
+    mincl = mincl,
+    mincl_mode = mincl_mode,
+    classif_mode = classif_mode
+  )
+  classes <- reconstruction$classes
 
   list(
     k = as.integer(length(unique(classes[classes > 0L]))),
     requested_k = as.integer(k),
     column_index = as.integer(col_index),
-    classes_raw = classes_raw,
+    classes_raw = classes_chd_brutes,
     classes = classes,
-    terminales = as.integer(terminales)
+    terminales = reconstruction$terminales,
+    mincl = reconstruction$mincl,
+    fallback_mincl1 = reconstruction$fallback_mincl1,
+    chd = chd_step
   )
 }
 
-lister_partitions_chd_iramuteq <- function(chd_obj, k_min = NULL, k_max = NULL) {
+lister_partitions_chd_iramuteq <- function(chd_obj,
+                                            k_min = NULL,
+                                            k_max = NULL,
+                                            mincl = 0,
+                                            mincl_mode = c("auto", "manuel"),
+                                            classif_mode = c("simple", "double")) {
+  mincl_mode <- match.arg(mincl_mode)
+  classif_mode <- match.arg(classif_mode)
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
   if (is.null(n1)) stop("Analyse discriminante optimisee: objet CHD invalide ou sans matrice n1.")
 
@@ -124,7 +229,15 @@ lister_partitions_chd_iramuteq <- function(chd_obj, k_min = NULL, k_max = NULL) 
     return(list())
   }
 
-  partitions <- lapply(seq.int(k_min_use, k_max_use), function(k) extraire_partition_chd_iramuteq(chd_obj, k))
+  partitions <- lapply(seq.int(k_min_use, k_max_use), function(k) {
+    extraire_partition_chd_iramuteq(
+      chd_obj = chd_obj,
+      k = k,
+      mincl = mincl,
+      mincl_mode = mincl_mode,
+      classif_mode = classif_mode
+    )
+  })
   partitions <- Filter(function(partition_obj) {
     is.list(partition_obj) &&
       is.finite(partition_obj$k) &&
@@ -136,19 +249,9 @@ lister_partitions_chd_iramuteq <- function(chd_obj, k_min = NULL, k_max = NULL) 
     return(list())
   }
 
-  # Une borne minimale doit s'appliquer au nombre reel de classes produites,
-  # pas seulement au numero de colonne demande dans n1.
-  seen_k <- integer(0)
-  keep <- logical(length(partitions))
-  for (i in seq_along(partitions)) {
-    k_effectif <- suppressWarnings(as.integer(partitions[[i]]$k))
-    if (!is.finite(k_effectif) || is.na(k_effectif) || k_effectif < k_min_use) next
-    if (k_effectif %in% seen_k) next
-    keep[[i]] <- TRUE
-    seen_k <- c(seen_k, k_effectif)
-  }
-
-  partitions[keep]
+  # Toutes les etapes sont conservees. Deux etapes peuvent avoir le meme
+  # nombre de classes finales tout en formant des groupes differents.
+  partitions
 }
 
 resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
@@ -836,7 +939,8 @@ evaluer_partition_auto_afc_discriminante_iramuteq <- function(dfm_obj,
   )
 
   metrics <- data.frame(
-    partition = paste0("P", partition_obj$k),
+    partition = paste0("P", partition_obj$requested_k %||% partition_obj$k),
+    etape_chd = as.integer(partition_obj$requested_k %||% partition_obj$k),
     k = as.integer(partition_obj$k),
     n_segments_assignes = as.integer(total_assigned),
     n_segments_non_assignes = as.integer(sum(!ok)),
@@ -872,14 +976,26 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
                                                          dfm_obj,
                                                          k_min = NULL,
                                                          k_max = NULL,
+                                                         mincl = 0,
+                                                         mincl_mode = c("auto", "manuel"),
+                                                         classif_mode = c("simple", "double"),
                                                          stats_mode = c("vectorise", "classique"),
                                                          top_n_diffusion = 20L,
                                                          top_n_afc = NULL,
                                                          p_seuil = 0.05,
                                                          afc_max_termes = 400L) {
+  mincl_mode <- match.arg(mincl_mode)
+  classif_mode <- match.arg(classif_mode)
   stats_mode <- match.arg(stats_mode)
 
-  partitions <- lister_partitions_chd_iramuteq(chd_obj, k_min = k_min, k_max = k_max)
+  partitions <- lister_partitions_chd_iramuteq(
+    chd_obj = chd_obj,
+    k_min = k_min,
+    k_max = k_max,
+    mincl = mincl,
+    mincl_mode = mincl_mode,
+    classif_mode = classif_mode
+  )
   if (!length(partitions)) {
     stop("Analyse discriminante optimisee: aucune solution exploitable entre 3 classes et la borne maximale demandee.")
   }
@@ -947,7 +1063,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
 
   selected_partition <- partitions[[selected_idx]]
   selected_evaluation <- evaluations[[selected_idx]]
-  k_max_tested <- suppressWarnings(max(as.integer(metrics_df$k), na.rm = TRUE))
+  k_max_tested <- suppressWarnings(max(as.integer(metrics_df$etape_chd), na.rm = TRUE))
   k_max_requested <- suppressWarnings(as.integer(chd_obj$auto_k_requested %||% k_max[[1]] %||% k_max))
   k_min_requested <- suppressWarnings(as.integer(k_min[[1]] %||% k_min))
   if (!length(k_max_requested) || is.na(k_max_requested) || !is.finite(k_max_requested)) {
@@ -958,7 +1074,7 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
   }
   k_min_requested <- max(3L, k_min_requested)
   k_max_requested <- max(2L, k_max_requested)
-  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$k), na.rm = TRUE))
+  k_min_tested <- suppressWarnings(min(as.integer(metrics_df$etape_chd), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
     stop(paste0(
       "Analyse discriminante optimisee: la solution retenue ne respecte pas la borne minimale demandee (",
@@ -977,6 +1093,10 @@ selection_afc_discriminante_classes_iramuteq <- function(chd_obj,
     classes_raw = selected_partition$classes_raw,
     terminales = selected_partition$terminales,
     k_selected = as.integer(metrics_df$k[[selected_idx]]),
+    k_chd_selected = as.integer(selected_partition$requested_k %||% metrics_df$etape_chd[[selected_idx]]),
+    mincl_selected = selected_partition$mincl %||% NA_integer_,
+    fallback_mincl1 = isTRUE(selected_partition$fallback_mincl1),
+    selected_chd = selected_partition$chd,
     k_min_requested = as.integer(k_min_requested),
     k_min_tested = as.integer(k_min_tested),
     k_max_requested = as.integer(k_max_requested),
@@ -1314,6 +1434,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     n_segments = NA_integer_,
     n_formes = NA_integer_,
     k_retenu = NA_integer_,
+    k_chd_retenu = NA_integer_,
     H = NA_real_,
     D = NA_real_,
     L = NA_real_,
@@ -1352,6 +1473,7 @@ construire_grille_auto_discriminante_iramuteq <- function(config_base) {
     n_segments = suppressWarnings(as.integer(quanteda::ndoc(pipeline_obj$dfm_obj))),
     n_formes = suppressWarnings(as.integer(quanteda::nfeat(pipeline_obj$dfm_obj))),
     k_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_selected %||% selected_metrics$k[[1]])),
+    k_chd_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_chd_selected %||% selected_metrics$etape_chd[[1]] %||% selected_metrics$k[[1]])),
     H = .borner_score_auto_chd(selected_metrics$H[[1]]),
     D = .borner_score_auto_chd(selected_metrics$D[[1]]),
     L = .borner_score_auto_chd(selected_metrics$L[[1]]),

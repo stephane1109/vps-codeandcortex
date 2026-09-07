@@ -1477,10 +1477,18 @@ run_batch <- function() {
         selected_auto$k %||% res_ira$auto_selection$k_selected,
         selected_auto$partition %||% paste0("P", res_ira$auto_selection$k_selected %||% "")
       )
+      selected_chd_step <- suppressWarnings(as.integer(
+        selected_auto$etape_chd %||% res_ira$auto_selection$k_chd_selected %||% selected_auto$k
+      ))
       log_info(
         paste0(
           if (identical(classes_mode, "discrimination_simple")) "Discrimination simple : solution retenue " else "Analyse discriminante optimisee : solution retenue ",
           selected_solution_label,
+          if (is.finite(selected_chd_step) && !is.na(selected_chd_step)) {
+            paste0(" (etape CHD P", selected_chd_step, ")")
+          } else {
+            ""
+          },
           if (identical(classes_mode, "discrimination_simple")) {
             paste0(
               " (separation relative AFC=",
@@ -1518,7 +1526,8 @@ run_batch <- function() {
 
       metrics_auto <- res_ira$auto_selection$evaluation
       if (is.data.frame(metrics_auto) && nrow(metrics_auto)) {
-        metrics_auto <- metrics_auto[order(suppressWarnings(as.integer(metrics_auto$k))), , drop = FALSE]
+        order_key <- if ("etape_chd" %in% names(metrics_auto)) metrics_auto$etape_chd else metrics_auto$k
+        metrics_auto <- metrics_auto[order(suppressWarnings(as.integer(order_key))), , drop = FALSE]
         fmt_auto_metric <- function(value) {
           value_num <- suppressWarnings(as.numeric(value))
           if (!length(value_num) || is.na(value_num) || !is.finite(value_num)) return("NA")
@@ -1562,7 +1571,7 @@ run_batch <- function() {
         )
       }
 
-      if (isTRUE((res_ira$auto_selection$k_selected %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
+      if (isTRUE((res_ira$auto_selection$k_chd_selected %||% selected_chd_step %||% NA_integer_) >= (res_ira$auto_selection$k_max_tested %||% NA_integer_))) {
         log_info(
           if (identical(classes_mode, "discrimination_simple")) {
             "Discrimination simple : la borne maximale testee correspond aussi au nombre de classes retenu. Cela signifie que, pour ce corpus, le score simple est maximal sur la derniere solution disponible."

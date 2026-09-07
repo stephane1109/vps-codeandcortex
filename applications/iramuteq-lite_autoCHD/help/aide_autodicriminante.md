@@ -28,6 +28,8 @@ La borne minimale est **interne au mode** et fixée à `3` classes.
 
 Autrement dit, si la limite choisie est `10`, l'application compare automatiquement les solutions de `3` a `10` classes, puis retient celle qui discrimine le mieux les classes.
 
+Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le résultat affiche donc à la fois le nombre de classes finales et le **k CHD pour le manuel**. Pour reproduire la solution retenue, il faut reprendre la configuration affichée, ce `k` et les mêmes réglages `mincl` et classification.
+
 ## Paramètres fixes
 
 Ces paramètres restent ceux choisis par l'utilisateur :
