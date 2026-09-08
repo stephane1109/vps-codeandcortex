@@ -1,6 +1,6 @@
 # Déploiement OVH VPS avec Coolify
 
-Cette application `iramuteq-lite_autoCHD` est la version **web uniquement** d'IRaMuTeQ Lab, pensée pour un VPS OVH avec :
+Cette application `iramuteq-lite` est la version **web uniquement** de `iramuteq-lite`, pensée pour un VPS OVH avec :
 
 - `FastAPI` pour le backend HTTP
 - le frontend statique conservé et servi comme application web
@@ -21,8 +21,8 @@ Le code desktop/Tauri natif n'est pas embarqué ici.
 ## Build local
 
 ```bash
-docker build -t iramuteq-lite-autochd .
-docker run --rm -p 8000:8000 iramuteq-lite-autochd
+docker build -t iramuteq-lite .
+docker run --rm -p 8000:8000 iramuteq-lite
 ```
 
 Application accessible ensuite sur :
@@ -34,7 +34,7 @@ Application accessible ensuite sur :
 1. Créer une nouvelle `Application`
 2. Connecter le dépôt Git `VPS`
 3. Choisir `Dockerfile`
-4. Définir le `Base Directory` sur `/applications/iramuteq-lite_autoCHD`
+4. Définir le `Base Directory` sur `/applications/iramuteq-lite`
 5. Définir le port exposé sur `8000`
 6. Ajouter un volume persistant monté sur `/data/app`
 
@@ -63,9 +63,7 @@ RGL_USE_NULL=TRUE
 IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL=1
 REDIS_URL=redis://redis:6379/0
 APP_TICKET_ENFORCED=1
-APP_TICKET_ID=iramuteq-lite_autoCHD
-APP_TICKET_LABEL=IRaMuTeQ Lab
-APP_TICKET_SESSION_COOKIE=iramuteq_autochd_ticket_session
+APP_TICKET_ID=iramuteq-lite
 APP_TICKET_MAX_ACTIVE=1
 APP_TICKET_COST=4
 CAPACITE_SERVEUR=6
@@ -113,7 +111,7 @@ Cela veut dire :
 
 1. Verifier que Coolify rebuild bien l'application a partir du dernier code.
 2. Forcer un nouveau build de l'image Docker, si possible sans cache.
-3. Confirmer que le `Base Directory` est bien `/applications/iramuteq-lite_autoCHD`.
+3. Confirmer que le `Base Directory` est bien `/applications/iramuteq-lite`.
 4. Verifier que `IRAMUTEQ_BOOTSTRAP_AUTO_INSTALL` vaut bien `1` en production Coolify.
 5. Verifier que `IRAMUTEQ_R_LIBS_USER` pointe vers `/data/app/r-library`.
 6. Verifier que `IRAMUTEQ_PYTHON_SITE_DIR` pointe vers `/data/app/python-site-packages`.

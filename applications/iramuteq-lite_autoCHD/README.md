@@ -1,6 +1,6 @@
-# iramuteq-lite_autoCHD
+# iramuteq-lite
 
-Version **web/VPS uniquement** d'IRaMuTeQ Lab, prévue pour Coolify sur le VPS OVH.
+Version **web/VPS uniquement** de `iramuteq-lite`, prévue pour Coolify sur le VPS OVH.
 
 ## Ce dossier contient
 
@@ -21,9 +21,9 @@ Version **web/VPS uniquement** d'IRaMuTeQ Lab, prévue pour Coolify sur le VPS O
 ## Coolify
 
 - Repo : `VPS`
-- Base Directory : `/applications/iramuteq-lite_autoCHD`
+- Base Directory : `/applications/iramuteq-lite`
 - Port : `8000`
-- Domaine conseillé : `iramuteqliteautochd.codeandcortex.fr`
+- Domaine conseillé : `iramuteqlite.codeandcortex.fr`
 
 ## Note build VPS
 

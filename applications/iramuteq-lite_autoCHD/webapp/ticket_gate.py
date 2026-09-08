@@ -25,7 +25,7 @@ Variables d'environnement a regler dans Coolify si besoin :
   Exemple : redis://:motdepasse@redis:6379/0
 
 - APP_TICKET_ID
-  Identifiant Redis de l'application. Laisse "iramuteq-lite_autoCHD" par defaut.
+  Identifiant Redis de l'application. Laisse "iramuteq-lite" par defaut.
 
 - APP_TICKET_MAX_ACTIVE
   Nombre maximal d'utilisateurs actifs en meme temps.
@@ -59,22 +59,7 @@ Variables d'environnement a regler dans Coolify si besoin :
 """
 
 
-DEFAULT_APP_TICKET_ID = "iramuteq-lite_autoCHD"
-LEGACY_SHARED_APP_TICKET_ID = "iramuteq-lite"
-DEFAULT_SESSION_COOKIE_NAME = "iramuteq_autochd_ticket_session"
-LEGACY_SHARED_SESSION_COOKIE_NAME = "iramuteq_ticket_session"
-
-
-def _ticket_session_cookie_name() -> str:
-    configured_name = str(os.getenv("APP_TICKET_SESSION_COOKIE", "")).strip()
-    # Les premieres images AutoCHD reutilisaient le cookie de l'application
-    # standard. On migre ce nom historique pour isoler les deux instances.
-    if configured_name in {"", LEGACY_SHARED_SESSION_COOKIE_NAME}:
-        return DEFAULT_SESSION_COOKIE_NAME
-    return configured_name
-
-
-SESSION_COOKIE_NAME = _ticket_session_cookie_name()
+SESSION_COOKIE_NAME = os.getenv("APP_TICKET_SESSION_COOKIE", "iramuteq_ticket_session")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -91,15 +76,10 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _config(default_app_id: str = DEFAULT_APP_TICKET_ID, app_label: str = "IRaMuTeQ Lab") -> dict[str, Any]:
-    configured_app_id = str(os.getenv("APP_TICKET_ID", "")).strip()
-    # L'ancien identifiant etait partage avec IRaMuTeQ Lite. Le garder ici
-    # melangeait les tickets des deux applications dans la meme file Redis.
-    if configured_app_id in {"", LEGACY_SHARED_APP_TICKET_ID}:
-        configured_app_id = default_app_id
+def _config(default_app_id: str = "iramuteq-lite", app_label: str = "IRaMuTeQ Lite") -> dict[str, Any]:
     return {
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
-        "app_id": configured_app_id,
+        "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
         "app_label": app_label,
         "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 1)),
         "cost": max(0, _env_int("APP_TICKET_COST", 4)),
@@ -469,7 +449,6 @@ def claim_ticket_for_request(request: Request) -> tuple[dict[str, Any], str]:
     client, message = _redis_client()
     if client is None:
         return _error_snapshot(cfg, message or "Redis indisponible."), session_id
-    _release_legacy_shared_ticket(client, cfg, request)
     return _claim_or_refresh(client, cfg, session_id), session_id
 
 
@@ -495,13 +474,8 @@ def release_ticket_for_request(request: Request) -> dict[str, Any]:
     if client is None:
         return _error_snapshot(cfg, message or "Redis indisponible.")
 
-    _release_ticket_for_session(client, cfg, session_id)
-    return _public_status(client, cfg)
-
-
-def _release_ticket_for_session(client, cfg: dict[str, Any], session_id: str | None) -> None:
     if not session_id:
-        return
+        return _public_status(client, cfg)
 
     session_key = _session_key(cfg["app_id"], session_id)
     ticket_id = client.get(session_key)
@@ -512,18 +486,7 @@ def _release_ticket_for_session(client, cfg: dict[str, Any], session_id: str | N
         client.delete(_ticket_key(ticket_id))
         client.delete(session_key)
     _promote_waiting(client, cfg)
-
-
-def _release_legacy_shared_ticket(client, cfg: dict[str, Any], request: Request) -> None:
-    if cfg["app_id"] != DEFAULT_APP_TICKET_ID:
-        return
-
-    legacy_session_id = str(request.cookies.get(LEGACY_SHARED_SESSION_COOKIE_NAME, "")).strip()
-    if not legacy_session_id:
-        return
-
-    legacy_cfg = {**cfg, "app_id": LEGACY_SHARED_APP_TICKET_ID}
-    _release_ticket_for_session(client, legacy_cfg, legacy_session_id)
+    return _public_status(client, cfg)
 
 
 def apply_session_cookie_headers(response, session_id: str | None) -> None:
@@ -538,14 +501,10 @@ def apply_session_cookie_headers(response, session_id: str | None) -> None:
         samesite="lax",
         path="/",
     )
-    if SESSION_COOKIE_NAME != LEGACY_SHARED_SESSION_COOKIE_NAME:
-        response.delete_cookie(key=LEGACY_SHARED_SESSION_COOKIE_NAME, path="/")
 
 
 def clear_session_cookie_headers(response) -> None:
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
-    if SESSION_COOKIE_NAME != LEGACY_SHARED_SESSION_COOKIE_NAME:
-        response.delete_cookie(key=LEGACY_SHARED_SESSION_COOKIE_NAME, path="/")
 
 
 def require_active_ticket(request: Request) -> dict[str, Any]:
