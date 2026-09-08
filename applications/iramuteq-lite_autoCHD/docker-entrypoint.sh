@@ -111,7 +111,9 @@ def env_int(name: str, default: int, minimum: int = 0) -> int:
 
 def infer_app_id() -> str:
     value = (os.getenv("APP_TICKET_ID") or "").strip()
-    if value:
+    # Les premieres versions AutoCHD reutilisaient l'identifiant de la version
+    # standard. On ignore cette valeur historique pour separer les deux files.
+    if value and value != "iramuteq-lite":
         return value
     value = extract(
         [
