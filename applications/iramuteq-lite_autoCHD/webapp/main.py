@@ -188,12 +188,12 @@ async def analysis_abandon(request: Request) -> JSONResponse:
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    # #### RESERVATION DU TICKET DES L'OUVERTURE DE LA PAGE
-    # Pour les grosses applications, on reserve le ticket des le chargement
-    # de l'interface afin que le dashboard affiche immediatement "Occupee".
-    snapshot, session_id = ticket_gate.claim_ticket_for_request(request)
+    # Ouvrir l'interface ne reserve pas de capacite. Le ticket est demande
+    # uniquement au lancement effectif d'une analyse par le frontend.
+    snapshot, session_id = ticket_gate.status_for_request(request)
     response = HTMLResponse(build_web_index())
-    ticket_gate.apply_session_cookie_headers(response, session_id)
+    if session_id:
+        ticket_gate.apply_session_cookie_headers(response, session_id)
     response.headers["X-Ticket-Status"] = str(snapshot.get("statut") or "")
     return response
 

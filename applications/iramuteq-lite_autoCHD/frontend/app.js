@@ -778,34 +778,8 @@ async function refreshTicketSidebarStatus() {
   }
 }
 
-async function claimPageTicketOnOpen() {
-  try {
-    const snapshot = await claimAnalysisTicket();
-    if (!snapshot.enabled) {
-      setSidebarTicketStatus("Application disponible", "idle");
-      return snapshot;
-    }
-    if (snapshot.statut === "actif") {
-      setSidebarTicketStatus("Session réservée sur cette application", "active");
-      return snapshot;
-    }
-    if (snapshot.statut === "attente") {
-      setSidebarTicketStatus(formatWaitingTicketMessage(snapshot, "File d'attente."), "waiting");
-      return snapshot;
-    }
-    if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
-      setSidebarTicketStatus(
-        snapshot.statut === "refuse" ? "File d'attente pleine" : "Accès serveur indisponible",
-        "error"
-      );
-      return snapshot;
-    }
-    setSidebarTicketStatus("Accès serveur indisponible", "error");
-    return snapshot;
-  } catch (error) {
-    setSidebarTicketStatus("Statut utilisateur indisponible", "error");
-    return null;
-  }
+async function initialiseTicketSidebarOnOpen() {
+  return refreshTicketSidebarStatus();
 }
 
 async function claimAnalysisTicket() {
@@ -15162,7 +15136,7 @@ void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpDiscriminationSimpleMarkdownContent, "discriminationsimple.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
-void claimPageTicketOnOpen().then(() => {
+void initialiseTicketSidebarOnOpen().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();
   }, 800);
