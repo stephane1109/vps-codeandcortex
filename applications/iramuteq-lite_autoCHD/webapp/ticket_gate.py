@@ -77,13 +77,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _config(default_app_id: str = "iramuteqlite_autochd", app_label: str = "IRaMuTeQ Lab") -> dict[str, Any]:
-    requested_app_id = os.getenv("APP_TICKET_ID", "").strip()
-    # Cette variante ne doit pas partager la file de l'application historique,
-    # meme si une ancienne variable Coolify subsiste apres le deploiement.
-    app_id = default_app_id if requested_app_id in {"", "iramuteq-lite"} else requested_app_id
     return {
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
-        "app_id": app_id,
+        "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
         "app_label": app_label,
         "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 1)),
         "cost": max(0, _env_int("APP_TICKET_COST", 4)),
