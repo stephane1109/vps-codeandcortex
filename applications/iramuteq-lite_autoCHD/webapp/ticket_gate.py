@@ -423,6 +423,33 @@ def _refresh_existing_ticket(client, cfg: dict[str, Any], session_id: str | None
     return _snapshot(client, cfg, ticket_id)
 
 
+def _status_existing_ticket(client, cfg: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    """Lire le ticket sans prolonger sa duree de vie.
+
+    Le frontend consulte le statut toutes les quinze secondes. Cette lecture ne
+    doit pas transformer une page inerte en session active indefiniment.
+    """
+    if client is None:
+        return _error_snapshot(cfg, "Redis indisponible : impossible de verifier le ticket.")
+    if not session_id:
+        return _public_status(client, cfg)
+
+    _publish_runtime_config(client, cfg)
+    _cleanup_expired(client, cfg)
+    _promote_waiting(client, cfg)
+
+    session_key = _session_key(cfg["app_id"], session_id)
+    ticket_id = client.get(session_key)
+    if not ticket_id:
+        return _public_status(client, cfg)
+
+    if not client.exists(_ticket_key(ticket_id)):
+        client.delete(session_key)
+        return _public_status(client, cfg)
+
+    return _snapshot(client, cfg, ticket_id)
+
+
 def _session_id_from_request(request: Request) -> str | None:
     value = request.cookies.get(SESSION_COOKIE_NAME, "").strip()
     return value or None
@@ -437,7 +464,7 @@ def status_for_request(request: Request) -> tuple[dict[str, Any], str | None]:
     session_id = _session_id_from_request(request)
     if client is None:
         return _error_snapshot(cfg, message or "Redis indisponible."), session_id
-    return _refresh_existing_ticket(client, cfg, session_id), session_id
+    return _status_existing_ticket(client, cfg, session_id), session_id
 
 
 def claim_ticket_for_request(request: Request) -> tuple[dict[str, Any], str]:
