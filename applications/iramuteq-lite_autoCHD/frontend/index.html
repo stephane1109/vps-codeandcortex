@@ -519,10 +519,18 @@
           </div>
 
           <div class="field">
-            <label for="minclManual">Seuil minimum d'UCE par classe terminale (mincl)</label>
+            <label for="minclMode">Nombre minimum d'UCE par classe terminale (mincl)</label>
+            <select id="minclMode">
+              <option value="auto">Automatique</option>
+              <option value="manuel">Manuel</option>
+            </select>
             <p class="field-help">
-              <strong>mincl n'est pas le nombre de classes.</strong> Il définit le nombre minimal de segments (UCE) requis pour conserver une classe terminale. Cette valeur est choisie par l'utilisateur et vaut <code>5</code> par défaut. Elle n'est jamais recalculée automatiquement.
+              Ce paramètre définit le seuil minimal d'UCE pour conserver une classe terminale.
             </p>
+          </div>
+
+          <div class="field">
+            <label for="minclManual">mincl (manuel)</label>
             <input id="minclManual" type="number" min="1" value="5" />
           </div>
 

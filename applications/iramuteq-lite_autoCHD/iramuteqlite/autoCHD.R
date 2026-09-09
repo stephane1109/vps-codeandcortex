@@ -109,10 +109,10 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
 }
 
 .reconstruire_partition_auto_chd <- function(chd_step,
-                                              mincl = 5L,
-                                              mincl_mode = "manuel",
+                                              mincl = 0,
+                                              mincl_mode = c("auto", "manuel"),
                                               classif_mode = c("simple", "double")) {
-  mincl_mode <- "manuel"
+  mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   reconstruire_fn <- get0("reconstruire_classes_terminales_iramuteq", mode = "function", inherits = TRUE)
   if (!is.function(reconstruire_fn)) {
@@ -141,10 +141,10 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
 
 extraire_partition_chd_iramuteq <- function(chd_obj,
                                              k,
-                                             mincl = 5L,
-                                             mincl_mode = "manuel",
+                                             mincl = 0,
+                                             mincl_mode = c("auto", "manuel"),
                                              classif_mode = c("simple", "double")) {
-  mincl_mode <- "manuel"
+  mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
   if (is.null(n1)) stop("Discrimination simple: objet CHD invalide ou sans matrice n1.")
@@ -185,10 +185,10 @@ extraire_partition_chd_iramuteq <- function(chd_obj,
 lister_partitions_chd_iramuteq <- function(chd_obj,
                                             k_min = NULL,
                                             k_max = NULL,
-                                            mincl = 5L,
-                                            mincl_mode = "manuel",
+                                            mincl = 0,
+                                            mincl_mode = c("auto", "manuel"),
                                             classif_mode = c("simple", "double")) {
-  mincl_mode <- "manuel"
+  mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
   if (is.null(n1)) stop("Discrimination simple: objet CHD invalide ou sans matrice n1.")
@@ -962,7 +962,7 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
                 config_variant$min_docfreq <- as.integer(min_docfreq)
                 config_variant$k_iramuteq <- as.integer(k_max_candidate)
                 config_variant$iramuteq_classes_mode <- "discrimination_simple_partition"
-                config_variant$iramuteq_mincl_mode <- "manuel"
+                config_variant$iramuteq_mincl_mode <- config_base$iramuteq_mincl_mode %||% "auto"
 
                 candidates[[index]] <- list(
                   id = sprintf("CFG%03d", index),

@@ -1133,7 +1133,6 @@ run_batch <- function() {
     "Manuel"
   )
   config_chd <- config
-  config_chd$iramuteq_mincl_mode <- "manuel"
   if (identical(classes_mode, "discrimination_simple")) {
     config_chd$iramuteq_classes_mode <- "discrimination_simple_config"
     config_chd$iramuteq_discrimination_simple_profile <- scalar_chr(config$iramuteq_discrimination_simple_profile, "ciblee")
@@ -1214,8 +1213,13 @@ run_batch <- function() {
         } else {
           ""
         },
-        " | mincl=",
-        scalar_int(config_chd$iramuteq_mincl, 5L, 1L),
+        " | mincl_mode=",
+        scalar_chr(config_chd$iramuteq_mincl_mode, "auto"),
+        if (identical(scalar_chr(config_chd$iramuteq_mincl_mode, "auto"), "manuel")) {
+          paste0(" | mincl=", scalar_int(config_chd$iramuteq_mincl, 5L, 1L))
+        } else {
+          ""
+        },
         " | classif_mode=",
         classif_mode,
         if (identical(classif_mode, "double")) {
@@ -1243,7 +1247,7 @@ run_batch <- function() {
       dfm_obj = dfm_obj,
       k = scalar_int(config_chd$k_iramuteq, 10L, 2L),
       classes_mode = engine_classes_mode,
-      mincl_mode = "manuel",
+      mincl_mode = scalar_chr(config_chd$iramuteq_mincl_mode, "auto"),
       mincl = scalar_int(config_chd$iramuteq_mincl, 5L, 1L),
       classif_mode = classif_mode,
       svd_method = scalar_chr(config_chd$iramuteq_svd_method, "irlba"),

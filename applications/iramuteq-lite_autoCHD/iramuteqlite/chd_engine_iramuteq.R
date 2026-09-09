@@ -1,6 +1,6 @@
 # Rôle du fichier: chd_engine_iramuteq.R encapsule le lancement du moteur CHD IRaMuTeQ-like.
 # Ce module sert de point d'entrée dédié pour exécuter la CHD historique et reconstruire
-# les classes terminales avec le seuil mincl saisi par l'utilisateur.
+# les classes terminales avec mincl (auto ou manuel).
 
 .obtenir_fonction_iramuteq <- function(nom_fonction,
                                        chemin_module = "iramuteqlite/chd_iramuteq.R",
@@ -73,8 +73,8 @@ lancer_moteur_chd_iramuteq <- function(
   dfm_obj,
   k,
   classes_mode = c("manuel", "discrimination_simple_config", "discrimination_simple_partition"),
-  mincl_mode = "manuel",
-  mincl = 5L,
+  mincl_mode = c("auto", "manuel"),
+  mincl = 0,
   classif_mode = c("simple", "double"),
   svd_method = c("irlba", "svdR"),
   mode_patate = FALSE,
@@ -92,8 +92,7 @@ lancer_moteur_chd_iramuteq <- function(
   auto_discriminant_log_fn = NULL
 ) {
   classes_mode <- match.arg(classes_mode)
-  # Le seuil mincl est toujours celui saisi dans l'interface (5 par defaut).
-  mincl_mode <- "manuel"
+  mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   svd_method <- match.arg(svd_method)
   auto_stats_mode <- match.arg(auto_stats_mode)
@@ -149,7 +148,7 @@ lancer_moteur_chd_iramuteq <- function(
           dfm_obj = dfm_obj,
           k = config_variant$k_iramuteq %||% k,
           classes_mode = "discrimination_simple_partition",
-          mincl_mode = "manuel",
+          mincl_mode = config_variant$iramuteq_mincl_mode %||% mincl_mode,
           mincl = config_variant$iramuteq_mincl %||% mincl,
           classif_mode = config_variant$iramuteq_classif_mode %||% classif_mode,
           svd_method = config_variant$iramuteq_svd_method %||% svd_method,
@@ -274,8 +273,29 @@ lancer_moteur_chd_iramuteq <- function(
     respecter_nb_classes = FALSE
   )
 
-  # La reconstruction respecte strictement le mincl choisi par l'utilisateur.
-  # Il ne doit jamais etre remplace silencieusement par mincl = 1.
+  classes <- suppressWarnings(as.integer(classes_obj$classes))
+  classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
+
+  # Garde-fou historique: si le seuil automatique ne laisse qu'une classe,
+  # reconstruire les feuilles avec mincl = 1 sans relancer la CHD.
+  if (length(classes_valides) < 2L) {
+    classes_obj_alt <- reconstruire_classes_terminales_iramuteq_fn(
+      chd_obj = chd_obj,
+      mincl = 1L,
+      mincl_mode = "manuel",
+      classif_mode = classif_mode,
+      nb_classes_cible = NULL,
+      respecter_nb_classes = FALSE
+    )
+
+    classes_alt <- suppressWarnings(as.integer(classes_obj_alt$classes))
+    classes_alt_valides <- unique(classes_alt[is.finite(classes_alt) & classes_alt > 0L])
+
+    if (length(classes_alt_valides) >= 2L) {
+      classes_obj <- classes_obj_alt
+      fallback_mincl1 <- TRUE
+    }
+  }
 
   list(
     engine = "iramuteq-lite",
