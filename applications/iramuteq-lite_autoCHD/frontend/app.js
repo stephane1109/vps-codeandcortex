@@ -11176,6 +11176,7 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   }
 }
 
+function renderDiscriminationSimpleSummary(container, payload) {
   if (!clearContainer(container)) return;
 
   const selected = payload?.selected;
