@@ -555,7 +555,12 @@ function normalizeTicketSnapshot(snapshot) {
 function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
   if (!releaseAccessBtn) return;
   const canRelease = Boolean(snapshot?.enabled) && ["actif", "attente"].includes(String(snapshot?.statut || ""));
-  releaseAccessBtn.disabled = !canRelease || analysisExecutionInProgress;
+  releaseAccessBtn.disabled = !canRelease || analysisStopRequested;
+  releaseAccessBtn.textContent = analysisStopRequested
+    ? "Interruption..."
+    : analysisExecutionInProgress
+      ? "Arrêter et libérer l'accès"
+      : "Libérer l'accès";
 }
 
 function updateStopAnalysisButton() {
@@ -15168,11 +15173,41 @@ if (releaseAccessBtn) {
   releaseAccessBtn.addEventListener("click", async () => {
     releaseAccessBtn.disabled = true;
     try {
+      if (analysisExecutionInProgress) {
+        const jobId = String(activeAnalysisJobId || readPersistedRunningAnalysis()?.jobId || "").trim();
+        if (!jobId) {
+          setSidebarRuntimeStatus("Initialisation de l'analyse : l'arrêt sera disponible dans quelques secondes.", "warning");
+          return;
+        }
+
+        analysisStopRequested = true;
+        updateReleaseAccessButton();
+        updateStopAnalysisButton();
+        setSidebarRuntimeStatus("Interruption de l'analyse et libération de l'accès...", "warning");
+        progression.set(Math.max(4, Number(runProgressBar?.value) || 4), "Interruption du calcul en cours...");
+        const result = await abandonActiveAnalysis({
+          reason: "Analyse annulée et accès libéré depuis la barre latérale."
+        });
+        const message = String(result?.message || "Analyse annulée et accès libéré.").trim();
+        log(`[info] ${message}`);
+        setSidebarRuntimeStatus("Analyse arrêtée et accès libéré.", "success");
+        return;
+      }
+
       const snapshot = await releaseAnalysisTicket();
       if (snapshot) {
         setSidebarRuntimeStatus("Accès libéré pour cette session.", "success");
       } else {
         setSidebarRuntimeStatus("Liberation a reessayer : le statut va etre reverifie.", "error");
+      }
+    } catch (error) {
+      if (analysisExecutionInProgress) {
+        analysisStopRequested = false;
+        updateStopAnalysisButton();
+        setSidebarRuntimeStatus("Interruption impossible pour le moment.", "error");
+        log(`[error] Arrêt et libération impossibles : ${error?.message || String(error)}`);
+      } else {
+        setSidebarRuntimeStatus("Libération à réessayer : le statut va être revérifié.", "error");
       }
     } finally {
       await refreshTicketSidebarStatus();
