@@ -40,13 +40,15 @@ Ensuite, pour chaque CHD testée, l'application compare automatiquement les solu
 
 Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le seuil `mincl` est toujours celui saisi par l'utilisateur, avec une valeur par défaut de `5` ; il n'est jamais recalculé. Ainsi, avec `mincl` fixé à `5`, l'étape `P5` correspond à la même CHD manuelle à cinq classes.
 
-Le résultat indique donc aussi le **k CHD pour le manuel**. Pour reproduire exactement la solution automatique, il faut reprendre la configuration affichée, ce `k` et les mêmes réglages `mincl` et classification.
+Le résultat indique aussi la **limite CHD à reprendre en manuel**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en manuel », puis relancez l'analyse. Cette limite ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
+
+Le graphique AFC final est construit avec tous les termes significatifs (`p.value <= 0.05`), exactement comme dans le mode Manuel. Les termes utilisés en interne pour comparer les quatre CHD restent réservés au calcul de la sélection et ne modifient pas le graphique final.
 
 Le résultat final affiche donc :
 
 - la configuration retenue
 - le nombre de classes finales retenues
-- le `k` CHD à utiliser en manuel
+- la limite CHD à reprendre en manuel
 - les variables qui ont conduit à ce résultat
 
 ## Comment la sélection est faite

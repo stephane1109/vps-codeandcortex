@@ -822,6 +822,20 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   selected_df <- selection_obj$selected_metrics
   metrics_public_df <- .preparer_metrics_export_discrimination_simple(metrics_df)
   selected_public_df <- .preparer_metrics_export_discrimination_simple(selected_df)
+  manual_replay_config <- selection_obj$selected_candidate$config %||% list()
+  manual_replay_k <- suppressWarnings(as.integer(
+    selection_obj$selected_result$auto_selection$k_chd_selected %||%
+      selected_df$k_chd_retenu[[1]] %||%
+      selected_df$k_retenu[[1]]
+  ))
+  if (!length(manual_replay_k) || is.na(manual_replay_k) || !is.finite(manual_replay_k)) {
+    manual_replay_k <- NULL
+  }
+  manual_replay_config$iramuteq_classes_mode <- "manuel"
+  if (!is.null(manual_replay_k)) {
+    manual_replay_config$k_iramuteq <- manual_replay_k
+  }
+  manual_replay_config$iramuteq_discrimination_simple_profile <- NULL
   summary_json <- file.path(output_dir, "discrimination_simple_summary.json")
   metrics_csv <- file.path(output_dir, "discrimination_simple_metrics.csv")
   score_png <- file.path(output_dir, "discrimination_simple_score.png")
@@ -842,6 +856,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
     reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
     k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
     k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
+    manual_replay_config = manual_replay_config,
     selected_termes_cibles = as.list(as.character(selection_obj$selected_result$auto_selection$selected_termes_cibles %||% character(0))),
     selected_termes_cibles_par_classe = stats::setNames(
       lapply(selection_obj$selected_result$auto_selection$selected_termes_cibles_par_classe %||% list(), function(terms) {

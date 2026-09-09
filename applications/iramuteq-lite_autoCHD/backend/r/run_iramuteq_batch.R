@@ -1671,24 +1671,22 @@ run_batch <- function() {
     afc_dir <- file.path(output_dir, "afc")
     dir.create(afc_dir, recursive = TRUE, showWarnings = FALSE)
     termes_signif <- NULL
-    auto_afc_selected_terms <- unique(as.character(res_ira$auto_selection$selected_termes_cibles %||% character(0)))
-    auto_afc_selected_terms <- auto_afc_selected_terms[!is.na(auto_afc_selected_terms) & nzchar(auto_afc_selected_terms)]
-    if ((identical(classes_mode, "discrimination_simple") ||
-         identical(as.character(res_ira$auto_selection$mode %||% ""), "discrimination_simple")) &&
-        length(auto_afc_selected_terms) >= 2L) {
-      termes_signif <- auto_afc_selected_terms
-      log_info(
-        paste0(
-          "Discrimination simple : projection finale des ",
-          length(termes_signif),
-          " termes significatifs (p.value <= 0.05), selectionnes par le chi2 sans ponderation supplementaire."
-        ),
-        progress = 75
-      )
-    } else if (scalar_bool(config$filtrer_affichage_pvalue, TRUE) && !is.null(res_stats_df)) {
+    if (scalar_bool(config$filtrer_affichage_pvalue, TRUE) && !is.null(res_stats_df)) {
       termes_signif <- unique(subset(res_stats_df, p <= scalar_num(config$max_p, 0.05))$Terme)
       termes_signif <- termes_signif[!is.na(termes_signif) & nzchar(termes_signif)]
       if (length(termes_signif) < 2) termes_signif <- NULL
+    }
+    if (identical(classes_mode, "discrimination_simple") && !is.null(termes_signif)) {
+      log_info(
+        paste0(
+          "Discrimination simple : AFC finale construite avec les ",
+          length(termes_signif),
+          " termes significatifs (p.value <= ",
+          scalar_num(config$max_p, 0.05),
+          "), comme en mode Manuel."
+        ),
+        progress = 75
+      )
     }
 
     groupes_docs <- quanteda::docvars(filtered_corpus_ok)$Classes

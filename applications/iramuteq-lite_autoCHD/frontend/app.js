@@ -11156,6 +11156,9 @@ function renderDiscriminationSimpleSummary(container, payload) {
   const selected = payload?.selected;
   const selectedK = Number.parseInt(String(selected?.classes_retenues ?? selected?.k_retenu ?? ""), 10);
   const selectedManualK = Number.parseInt(String(selected?.k_chd_retenu ?? selected?.etape_chd ?? selectedK), 10);
+  const manualReplayConfig = payload?.manual_replay_config && typeof payload.manual_replay_config === "object"
+    ? payload.manual_replay_config
+    : {};
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune configuration de discrimination simple n'a été retenue pour cette analyse."));
     return;
@@ -11164,7 +11167,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
     ["Classes retenues", selectedK],
-    ["k CHD pour le manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
+    ["Limite CHD à reprendre en manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["min_docfreq retenu", selected.min_docfreq],
     ["mincl", selected.mincl ?? "N/A"],
@@ -11195,11 +11198,68 @@ function renderDiscriminationSimpleSummary(container, payload) {
   container.appendChild(grid);
   appendDiscriminationConfigurationDetails(container, selected);
 
-  if (Number.isFinite(selectedManualK) && selectedManualK !== selectedK) {
+  if (Number.isFinite(selectedManualK)) {
     const reproducibilityNote = document.createElement("p");
     reproducibilityNote.className = "field-help";
-    reproducibilityNote.textContent = `Pour reproduire ce résultat en manuel, conservez la configuration retenue et utilisez k = ${selectedManualK}. Les ${selectedK} classes finales résultent ensuite de la règle mincl.`;
+    reproducibilityNote.textContent = `Pour reproduire exactement cette analyse en Manuel, reprenez la configuration retenue et fixez la limite d'exploration à ${selectedManualK}. Cette limite ne fixe pas le nombre final de classes : celui-ci reste déterminé par la CHD et mincl.`;
     container.appendChild(reproducibilityNote);
+
+    const replayButton = document.createElement("button");
+    replayButton.type = "button";
+    replayButton.className = "secondary-button";
+    replayButton.textContent = "Reprendre cette configuration en manuel";
+    replayButton.addEventListener("click", () => {
+      const setValue = (id, value) => {
+        const field = document.getElementById(id);
+        if (!field || value === undefined || value === null) return;
+        field.value = String(value);
+      };
+      const setChecked = (id, value) => {
+        const field = document.getElementById(id);
+        if (!(field instanceof HTMLInputElement) || value === undefined || value === null) return;
+        field.checked = value === true || ["true", "1", "oui", "yes"].includes(normalizeAsciiKey(value));
+      };
+
+      setValue("classesMode", "manuel");
+      setValue("kIramuteq", selectedManualK);
+      setValue("segmentSize", manualReplayConfig.segment_size);
+      setChecked("useStrongPunctuation", manualReplayConfig.segmenter_sur_ponctuation_forte);
+      setValue("minFreq", manualReplayConfig.min_docfreq ?? selected.min_docfreq);
+      setValue("maxP", manualReplayConfig.max_p);
+      setChecked("filterPvalue", manualReplayConfig.filtrer_affichage_pvalue);
+      setValue("iramuteqMaxFormes", manualReplayConfig.iramuteq_max_formes);
+      setValue("minclMode", manualReplayConfig.iramuteq_mincl_mode ?? selected.mincl_mode);
+      setValue("minclManual", manualReplayConfig.iramuteq_mincl ?? selected.mincl);
+      setValue("classificationMode", manualReplayConfig.iramuteq_classif_mode);
+      setValue("rst1", manualReplayConfig.iramuteq_rst1);
+      setValue("rst2", manualReplayConfig.iramuteq_rst2);
+      setValue("svdMethod", manualReplayConfig.iramuteq_svd_method);
+      setValue("statsMode", manualReplayConfig.iramuteq_stats_mode);
+      setValue("dictionarySource", manualReplayConfig.source_dictionnaire);
+      setChecked("useLemmas", manualReplayConfig.lexique_utiliser_lemmes);
+      setChecked("removePunctuation", manualReplayConfig.supprimer_ponctuation);
+      setChecked("removeDigits", manualReplayConfig.supprimer_chiffres);
+      setChecked("removeApostrophes", manualReplayConfig.supprimer_apostrophes);
+      setChecked("replaceHyphen", manualReplayConfig.remplacer_tirets_espaces);
+      setChecked("removeStopwords", manualReplayConfig.retirer_stopwords);
+      setChecked("morphoFilter", manualReplayConfig.filtrage_morpho);
+      setValue("posKeep", Array.isArray(manualReplayConfig.pos_lexique_a_conserver)
+        ? manualReplayConfig.pos_lexique_a_conserver.join(", ")
+        : manualReplayConfig.pos_lexique_a_conserver);
+      setChecked("excludeEtre", manualReplayConfig.morpho_exclure_etre_verbe);
+      setChecked("keepUnknownForms", manualReplayConfig.morpho_conserver_hors_lexique);
+      setChecked("reduceOverlap", manualReplayConfig.afc_reduire_chevauchement);
+      setValue("wordSizeMode", manualReplayConfig.afc_taille_mots);
+
+      renderClassesModeCards(document);
+      renderClassificationModeCards(document);
+      renderMorphoPickers(document);
+      renderAfcStarredVariablesPickers(document, { resetSelection: false });
+      renderSuiviControls(document, { resetSelection: false });
+      replayButton.disabled = true;
+      replayButton.textContent = "Configuration manuelle reprise";
+    });
+    container.appendChild(replayButton);
   }
 
   const selectionNote = document.createElement("p");
@@ -11252,7 +11312,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
-    { keys: ["k_chd_retenu"], label: "k CHD manuel" },
+    { keys: ["k_chd_retenu"], label: "limite CHD manuelle" },
     { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
