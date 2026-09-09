@@ -207,6 +207,12 @@ calculer_chd_iramuteq <- function(
   
   nb_tours <- as.integer(k) - 1L
   if (nb_tours < 1) nb_tours <- 1L
+
+  if (identical(svd_method, "irlba")) {
+    # irlba initialises with a random vector. A fixed seed makes the same CHD
+    # reproducible without changing its algorithm.
+    set.seed(20260909L)
+  }
   
   # Le moteur CHD historique écrit de nombreux print() et peut ouvrir un device
   # graphique implicite (Rplots.pdf) dans certains environnements headless.
