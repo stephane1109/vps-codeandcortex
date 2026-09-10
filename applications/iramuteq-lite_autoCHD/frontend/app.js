@@ -2278,7 +2278,7 @@ function buildJobConfig(analysisKind = "chd") {
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
     iramuteq_mincl_mode: document.getElementById("minclMode").value,
-    iramuteq_mincl: Number(document.getElementById("minclManual").value) || 1,
+    iramuteq_mincl: Number(document.getElementById("minclManual").value) || 5,
     iramuteq_classif_mode: document.getElementById("classificationMode").value,
     iramuteq_rst1: Number(document.getElementById("rst1").value) || 12,
     iramuteq_rst2: Number(document.getElementById("rst2").value) || 14,
