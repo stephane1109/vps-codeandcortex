@@ -1,4 +1,4 @@
-# Discrimination simple
+# Auto discriminante
 
 Ce mode cherche **une seule configuration CHD plus discriminante**.
 

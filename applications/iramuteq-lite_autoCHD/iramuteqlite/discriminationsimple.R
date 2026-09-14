@@ -140,7 +140,7 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
                                                              afc_max_termes = 400L) {
   stats_mode <- match.arg(stats_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
-    stop("Discrimination simple: solution en classes invalide.")
+    stop("Auto discriminante : solution en classes invalide.")
   }
 
   classes <- suppressWarnings(as.integer(partition_obj$classes))
@@ -151,11 +151,11 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
 
   fn_stats <- get0("construire_stats_classes_iramuteq", mode = "function", inherits = TRUE)
   if (!is.function(fn_stats)) {
-    stop("Discrimination simple: construire_stats_classes_iramuteq() est introuvable.")
+    stop("Auto discriminante : construire_stats_classes_iramuteq() est introuvable.")
   }
   fn_afc <- get0("executer_afc_classes", mode = "function", inherits = TRUE)
   if (!is.function(fn_afc)) {
-    stop("Discrimination simple: executer_afc_classes() est introuvable.")
+    stop("Auto discriminante : executer_afc_classes() est introuvable.")
   }
 
   res_stats_df <- fn_stats(
@@ -266,7 +266,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     classif_mode = classif_mode
   )
   if (!length(partitions)) {
-    stop("Discrimination simple: aucune solution exploitable entre 3 classes et la borne maximale demandee.")
+    stop("Auto discriminante : aucune solution exploitable entre 3 classes et la borne maximale demandee.")
   }
   partitions <- partitions[order(
     vapply(partitions, function(partition_obj) suppressWarnings(as.integer(partition_obj$k)), integer(1)),
@@ -304,7 +304,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   s_separation_moyenne_values <- suppressWarnings(as.numeric(metrics_df$S_separation_moyenne))
   s_scores <- ifelse(is.finite(s_values) & !is.na(s_values), s_values, -Inf)
   if (!any(is.finite(s_scores) & s_scores > -Inf)) {
-    stop("Discrimination simple: aucun score simple exploitable n'a pu etre calcule.")
+    stop("Auto discriminante : aucun score discriminant exploitable n'a pu etre calcule.")
   }
 
   # S = 1 indique que les centres de deux classes sont ecartes au moins de
@@ -347,7 +347,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   k_min_tested <- suppressWarnings(min(as.integer(metrics_df$etape_chd), na.rm = TRUE))
   if (!is.finite(selected_partition$k) || is.na(selected_partition$k) || selected_partition$k < k_min_requested) {
     stop(paste0(
-      "Discrimination simple: la solution retenue ne respecte pas la borne minimale demandee (",
+      "Auto discriminante : la solution retenue ne respecte pas la borne minimale demandee (",
       k_min_requested,
       " classes reelles minimum)."
     ))
@@ -355,7 +355,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
 
   list(
     mode = "discrimination_simple",
-    mode_label = "Discrimination simple",
+    mode_label = "Auto discriminante",
     score_column = "S",
     score_label = "Separation relative AFC entre classes",
     score_plot_title = "Selection de la configuration aux classes les plus separees",
@@ -443,7 +443,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
 
 .ligne_succes_discrimination_simple <- function(candidate, pipeline_obj, res_ira) {
   if (is.null(res_ira$auto_selection) || !is.data.frame(res_ira$auto_selection$selected_metrics) || !nrow(res_ira$auto_selection$selected_metrics)) {
-    stop("Discrimination simple: la configuration ne renvoie aucune selection exploitable.")
+    stop("Auto discriminante : la configuration ne renvoie aucune selection exploitable.")
   }
 
   selected_metrics <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
@@ -482,13 +482,13 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
                                                                    lancer_discrimination_simple_fn,
                                                                    log_fn = NULL) {
   if (!is.list(config_base)) {
-    stop("Discrimination simple: config_base doit etre une liste.")
+    stop("Auto discriminante : config_base doit etre une liste.")
   }
   if (!is.function(preparer_pipeline_fn)) {
-    stop("Discrimination simple: preparer_pipeline_fn doit etre une fonction.")
+    stop("Auto discriminante : preparer_pipeline_fn doit etre une fonction.")
   }
   if (!is.function(lancer_discrimination_simple_fn)) {
-    stop("Discrimination simple: lancer_discrimination_simple_fn doit etre une fonction.")
+    stop("Auto discriminante : lancer_discrimination_simple_fn doit etre une fonction.")
   }
 
   grid_obj <- construire_grille_discrimination_simple_iramuteq(config_base)
@@ -497,13 +497,13 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
   search_profile_label <- grid_obj$profile_label %||% .label_profil_exploration_discrimination_simple(search_profile)
   total_candidates <- length(candidates)
   if (!length(candidates)) {
-    stop("Discrimination simple: aucune configuration candidate n'a ete construite.")
+    stop("Auto discriminante : aucune configuration candidate n'a ete construite.")
   }
 
   if (is.function(log_fn)) {
     log_fn(
       paste0(
-        "Discrimination simple : profil ",
+        "Auto discriminante : profil ",
         tolower(search_profile_label),
         " - recherche sur ",
         total_candidates,
@@ -532,7 +532,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     if (is.function(log_fn) && (total_candidates <= 10L || i == 1L || i == total_candidates || (i %% 10L) == 0L)) {
       log_fn(
         paste0(
-          "Discrimination simple : CHD ",
+        "Auto discriminante : CHD ",
           i,
           "/",
           total_candidates,
@@ -614,7 +614,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
           )
 
           if (is.null(res_ira$auto_selection)) {
-            stop("La discrimination simple n'a retourne aucune selection exploitable.")
+            stop("Auto discriminante : aucune selection exploitable n'a ete retournee.")
           }
 
           row <- .ligne_succes_discrimination_simple(candidate, pipeline_obj, res_ira)
@@ -678,7 +678,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
   }
 
   if (is.na(best_idx)) {
-    stop("Discrimination simple: aucune configuration n'a produit de CHD exploitable.")
+    stop("Auto discriminante : aucune configuration n'a produit de CHD exploitable.")
   }
 
   metrics_df <- do.call(rbind, evaluation_rows)
@@ -689,7 +689,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
   if (is.function(log_fn)) {
     log_fn(
       paste0(
-        "Discrimination simple : ",
+        "Auto discriminante : ",
         length(ls(pipeline_cache)),
         " DFM uniques calculees, ",
         cache_stats$pipeline_reused_count,
@@ -701,7 +701,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     )
     log_fn(
       paste0(
-        "Discrimination simple : configuration retenue -> ",
+        "Auto discriminante : configuration retenue -> ",
         best_row$configuration_label[[1]],
         " | classes retenues=",
         best_row$k_retenu[[1]],
@@ -738,7 +738,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
 tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id = NULL, top_n = 12L) {
   if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
     plot.new()
-    text(0.5, 0.5, "Aucune configuration de discrimination simple a afficher.", cex = 1.0)
+    text(0.5, 0.5, "Aucune configuration Auto discriminante a afficher.", cex = 1.0)
     return(invisible(NULL))
   }
 
@@ -747,7 +747,7 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
   df <- df[is.finite(df$S_num) & !is.na(df$S_num), , drop = FALSE]
   if (!nrow(df)) {
     plot.new()
-    text(0.5, 0.5, "Les scores de discrimination simple sont indisponibles.", cex = 1.0)
+    text(0.5, 0.5, "Les scores Auto discriminante sont indisponibles.", cex = 1.0)
     return(invisible(NULL))
   }
 
@@ -831,10 +831,10 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
 
 exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   if (is.null(selection_obj) || !is.list(selection_obj)) {
-    stop("Discrimination simple: objet de selection manquant.")
+    stop("Auto discriminante : objet de selection manquant.")
   }
   if (is.null(output_dir) || !nzchar(output_dir)) {
-    stop("Discrimination simple: dossier de sortie manquant.")
+    stop("Auto discriminante : dossier de sortie manquant.")
   }
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -864,7 +864,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   .write_metrics_csv_auto_chd(metrics_public_df, metrics_csv)
 
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    stop("Discrimination simple: le package jsonlite est requis pour exporter le resume JSON.")
+    stop("Auto discriminante : le package jsonlite est requis pour exporter le resume JSON.")
   }
 
   payload <- list(

@@ -134,10 +134,10 @@ lancer_moteur_chd_iramuteq <- function(
 
   if (identical(classes_mode, "discrimination_simple_config")) {
     if (!is.list(auto_discriminant_base_config)) {
-      stop("Mode discrimination simple: la configuration de base est manquante.")
+      stop("Mode Auto discriminante : la configuration de base est manquante.")
     }
     if (!is.function(auto_discriminant_prepare_pipeline_fn)) {
-      stop("Mode discrimination simple: la fonction de preparation du pipeline est manquante.")
+      stop("Mode Auto discriminante : la fonction de preparation du pipeline est manquante.")
     }
 
     simple_discriminant_selection <- selection_configuration_discrimination_simple_iramuteq_fn(
@@ -172,7 +172,7 @@ lancer_moteur_chd_iramuteq <- function(
     classes <- suppressWarnings(as.integer(selected_res$classes))
     classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
     if (length(classes_valides) < 2L) {
-      stop("IRaMuTeQ-lite Discrimination simple n'a pas pu retenir au moins 2 classes exploitables.")
+      stop("IRaMuTeQ Lab Auto discriminante n'a pas pu retenir au moins 2 classes exploitables.")
     }
 
     return(list(
@@ -238,11 +238,11 @@ lancer_moteur_chd_iramuteq <- function(
     classes <- suppressWarnings(as.integer(auto_selection$classes))
     classes_valides <- unique(classes[is.finite(classes) & classes > 0L])
     if (length(classes_valides) < 2L) {
-      stop("IRaMuTeQ-lite Discrimination simple n'a pas pu retenir au moins 2 classes exploitables.")
+      stop("IRaMuTeQ Lab Auto discriminante n'a pas pu retenir au moins 2 classes exploitables.")
     }
     if (is.finite(auto_k_min_effective) && !is.na(auto_k_min_effective) && auto_k_min_effective >= 2L && length(classes_valides) < auto_k_min_effective) {
       stop(paste0(
-        "IRaMuTeQ-lite Discrimination simple a retenu ",
+        "IRaMuTeQ Lab Auto discriminante a retenu ",
         length(classes_valides),
         " classes reelles, sous la borne minimale demandee (",
         auto_k_min_effective,

@@ -32,12 +32,12 @@ modifies.
 | iramuteqlite/stats_chd.R | Identique | Calcul des chi2 identique. |
 | iramuteqlite/nettoyage_iramuteq.R | Identique | Pretraitement lexical identique. |
 | iramuteqlite/chd_iramuteq.R | Meme code historique, plus une graine fixe pour irlba | Stabilise les executions identiques. |
-| iramuteqlite/chd_engine_iramuteq.R | Etendu | Le branchement manuel appelle le calcul historique; les branches supplementaires ne sont utilisees que par Discrimination simple. |
+| iramuteqlite/chd_engine_iramuteq.R | Etendu | Le branchement manuel appelle le calcul historique; les branches supplementaires ne sont utilisees que par Auto discriminante. |
 | backend/r/run_iramuteq_batch.R | Etendu | Ajoute le routage des modes et un cache de lexique; en manuel, les valeurs saisies sont transmises au moteur CHD. |
-| Interface | Etendue | Ajoute le choix Manuel ou Discrimination simple; le mode manuel ne lance pas de simulation supplementaire. |
+| Interface | Etendue | Ajoute le choix Manuel ou Auto discriminante; le mode manuel ne lance pas de simulation supplementaire. |
 
 Les modules autoCHD.R et discriminationsimple.R sont charges pour le mode
-Discrimination simple. Ils ne sont pas appeles lorsque le mode Manuel est
+Auto discriminante. Ils ne sont pas appeles lorsque le mode Manuel est
 selectionne.
 
 ## Tests reproductibles
@@ -106,4 +106,3 @@ configuration.
 
 Le commit de reproductibilite doit etre redeploye par Coolify pour etre actif
 sur le domaine public.
-

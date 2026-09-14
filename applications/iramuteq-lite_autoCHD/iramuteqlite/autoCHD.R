@@ -1,5 +1,5 @@
 # Role du fichier: autoCHD.R fournit les utilitaires partages par les calculs
-# automatiques utilises par Discrimination simple.
+# automatiques utilises par Auto discriminante.
 # La CHD historique n'est pas modifiee: les utilitaires reutilisent ses
 # partitions successives et ses statistiques lexicales existantes.
 
@@ -78,17 +78,17 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
 
 .extraire_etape_chd_auto_chd <- function(chd_obj, column_index) {
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
-  if (is.null(n1)) stop("Discrimination simple: objet CHD invalide ou sans matrice n1.")
+  if (is.null(n1)) stop("Auto discriminante : objet CHD invalide ou sans matrice n1.")
 
   column_index <- suppressWarnings(as.integer(column_index))
   if (!is.finite(column_index) || is.na(column_index) || column_index < 1L || column_index > ncol(n1)) {
-    stop("Discrimination simple: etape CHD indisponible.")
+    stop("Auto discriminante : etape CHD indisponible.")
   }
 
   list_mere <- chd_obj$list_mere
   list_fille <- chd_obj$list_fille
   if (!is.list(list_mere) || !is.list(list_fille)) {
-    stop("Discrimination simple: arbre CHD incomplet.")
+    stop("Auto discriminante : arbre CHD incomplet.")
   }
 
   # Chaque colonne de n1 correspond a une etape de division. Pour reproduire
@@ -116,7 +116,7 @@ normaliser_partition_classes_iramuteq <- function(classes_raw) {
   classif_mode <- match.arg(classif_mode)
   reconstruire_fn <- get0("reconstruire_classes_terminales_iramuteq", mode = "function", inherits = TRUE)
   if (!is.function(reconstruire_fn)) {
-    stop("Discrimination simple: reconstruction des classes IRaMuTeQ introuvable.")
+    stop("Auto discriminante : reconstruction des classes IRaMuTeQ introuvable.")
   }
 
   classes_obj <- reconstruire_fn(
@@ -147,16 +147,16 @@ extraire_partition_chd_iramuteq <- function(chd_obj,
   mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
-  if (is.null(n1)) stop("Discrimination simple: objet CHD invalide ou sans matrice n1.")
+  if (is.null(n1)) stop("Auto discriminante : objet CHD invalide ou sans matrice n1.")
 
   k <- suppressWarnings(as.integer(k))
   if (!is.finite(k) || is.na(k) || k < 2L) {
-    stop("Discrimination simple: k doit etre >= 2.")
+    stop("Auto discriminante : k doit etre >= 2.")
   }
 
   col_index <- k - 1L
   if (col_index > ncol(n1)) {
-    stop("Discrimination simple: solution en classes demandee indisponible dans n1.")
+    stop("Auto discriminante : solution en classes demandee indisponible dans n1.")
   }
 
   classes_chd_brutes <- suppressWarnings(as.integer(n1[, col_index]))
@@ -191,7 +191,7 @@ lister_partitions_chd_iramuteq <- function(chd_obj,
   mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   n1 <- .normaliser_n1_auto_chd(chd_obj$n1)
-  if (is.null(n1)) stop("Discrimination simple: objet CHD invalide ou sans matrice n1.")
+  if (is.null(n1)) stop("Auto discriminante : objet CHD invalide ou sans matrice n1.")
 
   max_available <- ncol(n1) + 1L
   if (is.null(k_min) || !length(k_min) || is.na(k_min[[1]]) || !is.finite(as.numeric(k_min[[1]]))) {
@@ -244,10 +244,10 @@ resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
                                              rscripts_dir = NULL,
                                              max_formes = 20000L) {
   if (!is.function(calculer_chd_fn)) {
-    stop("Discrimination simple: calculer_chd_fn doit etre une fonction.")
+    stop("Auto discriminante : calculer_chd_fn doit etre une fonction.")
   }
   if (is.null(dfm_obj)) {
-    stop("Discrimination simple: dfm_obj manquant pour la recherche de la borne maximale.")
+    stop("Auto discriminante : dfm_obj manquant pour la recherche de la borne maximale.")
   }
 
   svd_method <- match.arg(svd_method)
@@ -292,14 +292,14 @@ resoudre_borne_chd_auto_iramuteq <- function(calculer_chd_fn,
   }
 
   stop(
-    "Discrimination simple: impossible de calculer une solution exploitable entre 2 et ",
+    "Auto discriminante : impossible de calculer une solution exploitable entre 2 et ",
     k_requested,
     " classes."
   )
 }
 
 .as_dgc_matrix_auto_chd <- function(dfm_obj, binary = FALSE) {
-  if (is.null(dfm_obj)) stop("Discrimination simple: dfm_obj manquant.")
+  if (is.null(dfm_obj)) stop("Auto discriminante : dfm_obj manquant.")
 
   mat <- tryCatch(
     methods::as(dfm_obj, "dgCMatrix"),
@@ -429,7 +429,7 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
 
   fn_stats <- get0("construire_stats_classes_iramuteq", mode = "function", inherits = TRUE)
   if (!is.function(fn_stats)) {
-    stop("Discrimination simple: construire_stats_classes_iramuteq() est introuvable.")
+    stop("Auto discriminante : construire_stats_classes_iramuteq() est introuvable.")
   }
 
   classes <- suppressWarnings(as.integer(classes))
@@ -896,7 +896,7 @@ calculer_equilibre_classes_auto_chd <- function(classes) {
 
 construire_grille_discrimination_simple_iramuteq <- function(config_base) {
   if (is.null(config_base) || !is.list(config_base)) {
-    stop("Discrimination simple: config_base manquante ou invalide.")
+    stop("Auto discriminante : config_base manquante ou invalide.")
   }
 
   search_profile <- .normaliser_profil_exploration_discrimination_simple(

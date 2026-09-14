@@ -1145,7 +1145,7 @@ run_batch <- function() {
   )
   classes_mode_label <- switch(
     classes_mode,
-    discrimination_simple = "Discrimination simple",
+    discrimination_simple = "Auto discriminante",
     "Manuel"
   )
   config_chd <- config
@@ -1318,7 +1318,7 @@ run_batch <- function() {
       corpus_stats <- res_ira$selected_pipeline$corpus_stats %||% corpus_stats
       log_info(
         paste0(
-          "Discrimination simple : pipeline retenu = ",
+          "Auto discriminante : pipeline retenu = ",
           quanteda::ndoc(dfm_obj),
           " segments / ",
           quanteda::nfeat(dfm_obj),
@@ -1351,7 +1351,7 @@ run_batch <- function() {
       selected_discriminant <- res_ira$simple_discriminant_selection$selected_metrics[1, , drop = FALSE]
       log_info(
         paste0(
-          "Discrimination simple : configuration retenue ",
+          "Auto discriminante : configuration retenue ",
           as.character(selected_discriminant$configuration_id %||% ""),
           " (",
           as.character(selected_discriminant$profil_morpho %||% "morpho n/a"),
@@ -1677,9 +1677,9 @@ run_batch <- function() {
           summary_json = relative_to_output(discrimination_simple_exports$summary_json),
           score_png = relative_to_output(discrimination_simple_exports$score_png)
         )
-        log_info("Exports Discrimination simple generes.", progress = 69)
+        log_info("Exports Auto discriminante generes.", progress = 69)
       }, error = function(e) {
-        log_info(paste0("Exports Discrimination simple indisponibles : ", e$message))
+        log_info(paste0("Exports Auto discriminante indisponibles : ", e$message))
       })
     }
 
@@ -1699,7 +1699,7 @@ run_batch <- function() {
     if (identical(classes_mode, "discrimination_simple") && !is.null(termes_signif)) {
       log_info(
         paste0(
-          "Discrimination simple : AFC finale construite avec les ",
+          "Auto discriminante : AFC finale construite avec les ",
           length(termes_signif),
           " termes significatifs (p.value <= ",
           scalar_num(config$max_p, 0.05),

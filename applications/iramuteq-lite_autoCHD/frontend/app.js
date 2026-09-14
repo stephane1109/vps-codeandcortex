@@ -2175,7 +2175,7 @@ function renderClassesModeCard(card) {
 
   if (modeDescription instanceof HTMLElement) {
     modeDescription.textContent = isDiscriminationSimple
-        ? `En mode Discrimination simple, l'application croise min_docfreq de 2 à 5 avec chaque plafond k max de 3 à ${effectiveK}, soit ${targetedChdCount} CHD ciblées. Le filtrage NOM + VER, l'exclusion de être et AUTRE_FORME restent ceux choisis dans l'interface. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC.`
+        ? `En mode Auto discriminante, l'application croise min_docfreq de 2 à 5 avec chaque plafond k max de 3 à ${effectiveK}, soit ${targetedChdCount} CHD ciblées. Le filtrage NOM + VER, l'exclusion de être et AUTRE_FORME restent ceux choisis dans l'interface. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC.`
         : "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
   }
 
@@ -11053,7 +11053,7 @@ function formatSummaryValue(value) {
 }
 
 function getClassesModeLabel(mode) {
-  if (mode === "discrimination_simple") return "Discrimination simple";
+  if (mode === "discrimination_simple") return "Auto discriminante";
   return "Manuel";
 }
 
@@ -11172,7 +11172,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ? payload.manual_replay_config
     : {};
   if (!selected || !Number.isFinite(selectedK)) {
-    container.appendChild(createEmptyState("Aucune configuration de discrimination simple n'a été retenue pour cette analyse."));
+    container.appendChild(createEmptyState("Aucune configuration Auto discriminante n'a été retenue pour cette analyse."));
     return;
   }
 
@@ -11371,7 +11371,7 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
   clearContainer(container);
 
   if (!parsed || !parsed.headers.length) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Discrimination simple disponible."));
+    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Auto discriminante disponible."));
     return;
   }
 
@@ -11415,7 +11415,7 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
 async function renderDiscriminationSimpleExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("discrimination_simple_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("discrimination_simple_metrics.csv")]);
-  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Discrimination simple.";
+  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Auto discriminante.";
 
   if (!summaryFile && !metricsFile) {
     setContainerEmptyState(resultContainers.discriminationSimpleSummary, manualModeMessage);
@@ -11428,15 +11428,15 @@ async function renderDiscriminationSimpleExports(index) {
       const payload = JSON.parse(await summaryFile.text());
       renderDiscriminationSimpleSummary(resultContainers.discriminationSimpleSummary, payload);
     } catch (error) {
-      setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume Discrimination simple.");
+      setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume Auto discriminante.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
     }
   } else {
-    setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Le resume Discrimination simple est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Le resume Auto discriminante est absent du dossier d'exports.");
   }
 
   if (!metricsFile) {
-    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Le tableau Discrimination simple est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Le tableau Auto discriminante est absent du dossier d'exports.");
     return { active: true };
   }
 
@@ -11444,10 +11444,10 @@ async function renderDiscriminationSimpleExports(index) {
     const parsed = parseCsv(await metricsFile.text());
     renderDiscriminationSimpleMetrics(resultContainers.discriminationSimpleTable, parsed, {
       title: "discrimination_simple_metrics.csv",
-      emptyMessage: "Le tableau Discrimination simple est vide."
+      emptyMessage: "Le tableau Auto discriminante est vide."
     });
   } catch (error) {
-    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Impossible de lire les scores Discrimination simple.");
+    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Impossible de lire les scores Auto discriminante.");
     log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
   }
 
@@ -13270,8 +13270,8 @@ function resetResultPanes() {
   applySuiviPresentation();
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
-    discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Discrimination simple.",
-    discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode Discrimination simple.",
+    discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Auto discriminante.",
+    discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode Auto discriminante.",
     chdStatsTable: "Chargez un dossier d'exports pour afficher les statistiques CHD.",
     chdConcordancier: "Chargez un dossier d'exports pour afficher le concordancier HTML.",
     chdWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots.",
