@@ -65,11 +65,17 @@ Pour chaque CHD testée :
 - elle calcule les distances euclidiennes entre tous les centres de classes
 - elle mesure aussi la dispersion des mots autour du centre de leur classe
 
-Pour chaque paire de classes, l'application calcule :
+Pour chaque classe, l'application calcule le centre moyen de ses mots significatifs sur le plan AFC (`x`, `y`), puis compare toutes les paires de classes :
 
-`distance entre les deux centres / dispersion lexicale des deux classes`.
+```ini
+S = distance entre deux centres / somme des dispersions lexicales
+```
 
-La plus petite de ces séparations relatives est notée `S`. Une valeur `S >= 1` indique que même la paire de classes la plus proche est séparée au moins de la somme de leurs dispersions lexicales médianes. C'est un repère de lecture, pas une condition de sélection.
+La valeur affichée est la plus faible de ces séparations : ici, même les deux classes les plus proches sont séparées de `4,091` fois leur dispersion lexicale combinée.
+
+Plus `S` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
+
+Une valeur `S >= 1` indique que même la paire de classes la plus proche est séparée au moins de la somme de leurs dispersions lexicales médianes. C'est un repère de lecture, pas une condition de sélection.
 
 Dans chaque configuration, le mode retient la solution qui maximise `S` : une solution à trois classes est donc retenue si elle est plus discriminante qu'une solution à cinq classes. En cas d'égalité de `S`, la moyenne des séparations départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
 
