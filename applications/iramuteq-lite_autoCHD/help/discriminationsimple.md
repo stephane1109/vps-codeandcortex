@@ -66,11 +66,11 @@ Pour chaque paire de classes, l'application calcule :
 
 `distance entre les deux centres / dispersion lexicale des deux classes`.
 
-La plus petite de ces séparations relatives est notée `S`. Une solution est considérée comme suffisamment discriminante lorsque `S >= 1` : même la paire de classes la plus proche reste alors séparée au moins de la somme de leurs dispersions lexicales médianes.
+La plus petite de ces séparations relatives est notée `S`. Une valeur `S >= 1` indique que même la paire de classes la plus proche est séparée au moins de la somme de leurs dispersions lexicales médianes. C'est un repère de lecture, pas une condition de sélection.
 
-Dans chaque configuration, le mode retient le plus grand nombre de classes qui respecte cette condition. Il ne choisit donc plus automatiquement `P3` seulement parce qu'une solution à trois classes a une séparation brute plus élevée. Si aucune solution ne franchit `S = 1`, le mode conserve la meilleure séparation disponible ; la moyenne des séparations départage les égalités.
+Dans chaque configuration, le mode retient la solution qui maximise `S` : une solution à trois classes est donc retenue si elle est plus discriminante qu'une solution à cinq classes. En cas d'égalité de `S`, la moyenne des séparations départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
 
-Les quatre configurations sont ensuite comparées selon la même logique : priorité au plus grand nombre de classes valides, puis à la meilleure séparation relative AFC.
+Les quatre configurations sont ensuite comparées selon la même règle : la meilleure séparation relative AFC est toujours prioritaire.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 

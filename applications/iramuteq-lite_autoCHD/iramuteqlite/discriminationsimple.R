@@ -307,40 +307,27 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     stop("Discrimination simple: aucun score simple exploitable n'a pu etre calcule.")
   }
 
-  # S = 1 signifie que les centres de deux classes sont ecartes au moins de
-  # la somme de leurs dispersions medianes. Au-dela, les nuages lexicaux ne
-  # se recouvrent plus au niveau de leur enveloppe mediane. On retient alors
-  # la solution la plus detaillee qui conserve cette separation pour toutes
-  # les paires, plutot que de favoriser mecaniquement P3.
+  # S = 1 indique que les centres de deux classes sont ecartes au moins de
+  # la somme de leurs dispersions medianes. Ce seuil sert a interpreter le
+  # resultat, mais la selection doit toujours privilegier la separation AFC
+  # maximale, quel que soit le nombre de classes obtenu.
   seuil_separation <- 1
   metrics_df$separation_valide <- is.finite(s_values) & !is.na(s_values) & s_values >= seuil_separation
-  indices_valides <- which(metrics_df$separation_valide & is.finite(metrics_df$k) & !is.na(metrics_df$k))
+  k_values <- suppressWarnings(as.integer(metrics_df$k))
+  etape_values <- suppressWarnings(as.integer(metrics_df$etape_chd))
+  k_tie_break <- ifelse(is.finite(k_values) & !is.na(k_values), k_values, Inf)
+  etape_tie_break <- ifelse(is.finite(etape_values) & !is.na(etape_values), etape_values, Inf)
+  s_moyenne_scores <- ifelse(
+    is.finite(s_separation_moyenne_values) & !is.na(s_separation_moyenne_values),
+    s_separation_moyenne_values,
+    -Inf
+  )
 
-  if (length(indices_valides)) {
-    k_max_valide <- max(as.integer(metrics_df$k[indices_valides]), na.rm = TRUE)
-    candidats_selection <- indices_valides[as.integer(metrics_df$k[indices_valides]) == k_max_valide]
-    ordre <- order(
-      -s_scores[candidats_selection],
-      -ifelse(is.finite(s_separation_moyenne_values[candidats_selection]), s_separation_moyenne_values[candidats_selection], -Inf),
-      -as.integer(metrics_df$etape_chd[candidats_selection])
-    )
-    selected_idx <- candidats_selection[[ordre[[1]]]]
-    selection_rule <- "plus_grand_nombre_de_classes_a_separation_valide"
-  } else {
-    # Si aucune solution ne franchit le seuil naturel S = 1, on conserve le
-    # meilleur ecart disponible et on signale explicitement ce repli.
-    selected_idx <- which.max(s_scores)
-    candidats_selection <- which(abs(s_scores - s_scores[[selected_idx]]) <= 1e-12)
-    if (length(candidats_selection) > 1L) {
-      ordre <- order(
-        -ifelse(is.finite(s_separation_moyenne_values[candidats_selection]), s_separation_moyenne_values[candidats_selection], -Inf),
-        -as.integer(metrics_df$k[candidats_selection]),
-        -as.integer(metrics_df$etape_chd[candidats_selection])
-      )
-      selected_idx <- candidats_selection[[ordre[[1]]]]
-    }
-    selection_rule <- "meilleure_separation_en_absence_de_solution_valide"
-  }
+  # Les departages ne s'appliquent qu'a score S egal : separation moyenne,
+  # puis solution la plus parcimonieuse et enfin etape CHD la plus courte.
+  ordre <- order(-s_scores, -s_moyenne_scores, k_tie_break, etape_tie_break, na.last = TRUE)
+  selected_idx <- ordre[[1]]
+  selection_rule <- "meilleure_separation_relative_afc"
 
   metrics_df$selection <- ifelse(seq_len(nrow(metrics_df)) == selected_idx, "oui", "non")
 
@@ -625,7 +612,6 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
       current_row <- attempt$row
       current_score <- suppressWarnings(as.numeric(current_row$S[[1]]))
       current_separation_moyenne <- suppressWarnings(as.numeric(current_row$S_separation_moyenne[[1]]))
-      current_separation_valide <- isTRUE(current_row$separation_valide[[1]])
 
       if (is.na(best_idx)) {
         best_idx <- i
@@ -633,26 +619,28 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         best_row <- evaluation_rows[[best_idx]]
         best_score <- suppressWarnings(as.numeric(best_row$S[[1]]))
         best_separation_moyenne <- suppressWarnings(as.numeric(best_row$S_separation_moyenne[[1]]))
-        best_separation_valide <- isTRUE(best_row$separation_valide[[1]])
         current_k <- suppressWarnings(as.integer(current_row$k_retenu[[1]]))
         best_k <- suppressWarnings(as.integer(best_row$k_retenu[[1]]))
+        current_etape <- suppressWarnings(as.integer(current_row$k_chd_retenu[[1]]))
+        best_etape <- suppressWarnings(as.integer(best_row$k_chd_retenu[[1]]))
+        current_score <- ifelse(is.finite(current_score), current_score, -Inf)
+        best_score <- ifelse(is.finite(best_score), best_score, -Inf)
+        current_separation_moyenne <- ifelse(is.finite(current_separation_moyenne), current_separation_moyenne, -Inf)
+        best_separation_moyenne <- ifelse(is.finite(best_separation_moyenne), best_separation_moyenne, -Inf)
+        current_k <- ifelse(is.finite(current_k), current_k, Inf)
+        best_k <- ifelse(is.finite(best_k), best_k, Inf)
+        current_etape <- ifelse(is.finite(current_etape), current_etape, Inf)
+        best_etape <- ifelse(is.finite(best_etape), best_etape, Inf)
 
+        # La meilleure separation minimale AFC est toujours prioritaire.
+        # Les autres criteres ne servent qu'a departager une egalite de S.
         if (
-          (current_separation_valide && !best_separation_valide) ||
-          (current_separation_valide && best_separation_valide &&
-             is.finite(current_k) && (!is.finite(best_k) || current_k > best_k)) ||
-          (current_separation_valide && best_separation_valide &&
-             is.finite(current_k) && is.finite(best_k) && current_k == best_k &&
-             is.finite(current_score) && (!is.finite(best_score) || current_score > best_score + 1e-12)) ||
-          (current_separation_valide && best_separation_valide &&
-             is.finite(current_k) && is.finite(best_k) && current_k == best_k &&
-             is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_separation_moyenne) && (!is.finite(best_separation_moyenne) || current_separation_moyenne > best_separation_moyenne + 1e-12)) ||
-          (!current_separation_valide && !best_separation_valide &&
-             is.finite(current_score) && !is.na(current_score) && (!is.finite(best_score) || is.na(best_score) || current_score > best_score + 1e-12)) ||
-          (!current_separation_valide && !best_separation_valide &&
-             is.finite(current_score) && is.finite(best_score) && abs(current_score - best_score) <= 1e-12 &&
-             is.finite(current_separation_moyenne) && (!is.finite(best_separation_moyenne) || current_separation_moyenne > best_separation_moyenne + 1e-12))
+          current_score > best_score + 1e-12 ||
+          (abs(current_score - best_score) <= 1e-12 &&
+             (current_separation_moyenne > best_separation_moyenne + 1e-12 ||
+              (abs(current_separation_moyenne - best_separation_moyenne) <= 1e-12 &&
+                 (current_k < best_k ||
+                  (current_k == best_k && current_etape < best_etape)))))
         ) {
           best_idx <- i
         }
