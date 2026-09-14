@@ -13,12 +13,13 @@ Le mode compare donc plusieurs résultats possibles, mais il ne renvoie **qu'un 
 
 ## Ce qui est testé automatiquement
 
-Dans ce mode, la grille est volontairement courte :
+Dans ce mode, la grille croise deux paramètres :
 
 - `min_docfreq = 2`
 - `min_docfreq = 3`
 - `min_docfreq = 4`
 - `min_docfreq = 5`
+- `k max = 3` jusqu'au plafond choisi dans l'interface, avec un maximum de `10`
 
 Le reste est fixé ainsi :
 
@@ -26,7 +27,9 @@ Le reste est fixé ainsi :
 - exclusion du verbe `être`
 - `AUTRE_FORME` conservé ou non selon le choix utilisateur
 
-Autrement dit, le mode exécute successivement **4 CHD ciblées** du même corpus.
+Avec un plafond à `10`, le mode exécute donc **32 CHD ciblées** : les quatre valeurs de `min_docfreq` sont combinées avec les huit plafonds `k max` de `3` à `10`.
+
+Le `mincl` et le type de classification terminale restent ceux choisis dans les paramètres CHD ; ils ne font pas partie de cette grille de simulation.
 
 ## Nombre de classes
 
@@ -34,15 +37,15 @@ L'utilisateur ne choisit pas le nombre final de classes.
 
 Il fixe seulement :
 
-- `k_iramuteq` : la borne maximale des classes explorées
+- `k_iramuteq` : la borne maximale des classes explorées, comprise entre `3` et `10`
 
-Ensuite, pour chaque CHD testée, l'application compare automatiquement les solutions en classes à partir de `3` classes jusqu'à cette borne maximale.
+Ensuite, l'application relance une CHD pour chaque valeur de `k max` comprise entre `3` et cette borne, et compare les solutions réalisables ayant au moins trois classes.
 
-Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le seuil `mincl` est toujours celui saisi par l'utilisateur, avec une valeur par défaut de `5` ; il n'est jamais recalculé. Ainsi, avec `mincl` fixé à `5`, l'étape `P5` correspond à la même CHD manuelle à cinq classes.
+Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le seuil `mincl` est conservé depuis les paramètres CHD et n'est pas une variable de recherche de ce mode.
 
 Le résultat indique aussi la **limite CHD à reprendre en manuel**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en manuel », puis relancez l'analyse. Cette limite ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
 
-Le graphique AFC final est construit avec tous les termes significatifs (`p.value <= 0.05`), exactement comme dans le mode Manuel. Les termes utilisés en interne pour comparer les quatre CHD restent réservés au calcul de la sélection et ne modifient pas le graphique final.
+Le graphique AFC final est construit avec tous les termes significatifs (`p.value <= 0.05`), exactement comme dans le mode Manuel. Les termes utilisés en interne pour comparer les CHD testées restent réservés au calcul de la sélection et ne modifient pas le graphique final.
 
 Le résultat final affiche donc :
 
@@ -70,7 +73,7 @@ La plus petite de ces séparations relatives est notée `S`. Une valeur `S >= 1`
 
 Dans chaque configuration, le mode retient la solution qui maximise `S` : une solution à trois classes est donc retenue si elle est plus discriminante qu'une solution à cinq classes. En cas d'égalité de `S`, la moyenne des séparations départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
 
-Les quatre configurations sont ensuite comparées selon la même règle : la meilleure séparation relative AFC est toujours prioritaire.
+Toutes les configurations `min_docfreq x k max` sont ensuite comparées selon la même règle : la meilleure séparation relative AFC est toujours prioritaire.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 

@@ -1289,6 +1289,8 @@ run_batch <- function() {
       res_ira$auto_selection$successful_configurations <- res_ira$simple_discriminant_selection$successful_configurations %||% NA_integer_
       res_ira$auto_selection$unique_dfm_tested <- res_ira$simple_discriminant_selection$unique_dfm_tested %||% NA_integer_
       res_ira$auto_selection$reused_configurations <- res_ira$simple_discriminant_selection$reused_configurations %||% NA_integer_
+      res_ira$auto_selection$unique_chd_tested <- res_ira$simple_discriminant_selection$unique_chd_tested %||% NA_integer_
+      res_ira$auto_selection$reused_chd_configurations <- res_ira$simple_discriminant_selection$reused_chd_configurations %||% NA_integer_
     }
     chd <- res_ira$chd
     if (is.list(res_ira$selected_pipeline)) {
@@ -1347,8 +1349,10 @@ run_batch <- function() {
           as.character(selected_discriminant$supprimer_chiffres %||% "n/a"),
           ", min_docfreq=",
           as.character(selected_discriminant$min_docfreq %||% "n/a"),
-          ", k=",
+          ", classes retenues=",
           as.character(selected_discriminant$k_retenu %||% "n/a"),
+          ", k max=",
+          as.character(selected_discriminant$k_max_explore %||% selected_discriminant$k_chd_retenu %||% "n/a"),
           ", separation relative AFC=",
           format(round(as.numeric(selected_discriminant$S_separation_min %||% selected_discriminant$S), 4), nsmall = 4, trim = TRUE),
           ")."

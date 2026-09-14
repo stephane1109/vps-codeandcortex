@@ -2150,27 +2150,38 @@ function renderClassesModeCard(card) {
   const usesAutoBounds = isDiscriminationSimple;
 
   const effectiveAutoMin = 3;
+  const effectiveAutoMax = 10;
   if (autoKMinInput instanceof HTMLInputElement) {
     autoKMinInput.value = String(effectiveAutoMin);
   }
+  let effectiveK = usesAutoBounds ? effectiveAutoMax : 3;
   if (kInput instanceof HTMLInputElement) {
     const fallbackMax = usesAutoBounds ? 10 : 3;
     const normalizedMax = Math.max(usesAutoBounds ? effectiveAutoMin : 2, Number(kInput.value) || fallbackMax);
-    kInput.value = String(normalizedMax);
+    effectiveK = usesAutoBounds ? Math.min(effectiveAutoMax, normalizedMax) : normalizedMax;
+    kInput.value = String(effectiveK);
     kInput.min = String(usesAutoBounds ? effectiveAutoMin : 2);
+    if (usesAutoBounds) {
+      kInput.max = String(effectiveAutoMax);
+    } else {
+      kInput.removeAttribute("max");
+    }
   }
 
-  kLabel.textContent = "Nombre maximal de classes à explorer";
+  kLabel.textContent = isDiscriminationSimple
+    ? "Nombre maximal de classes à explorer (3 à 10)"
+    : "Nombre maximal de classes à explorer";
+  const targetedChdCount = 4 * (effectiveK - effectiveAutoMin + 1);
 
   if (modeDescription instanceof HTMLElement) {
     modeDescription.textContent = isDiscriminationSimple
-        ? "En mode Discrimination simple, l'application lance successivement 4 CHD ciblées du même corpus. Seul min_docfreq varie de 2 à 5, avec filtrage NOM + VER, exclusion de être et conservation de AUTRE_FORME selon votre choix. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC."
+        ? `En mode Discrimination simple, l'application croise min_docfreq de 2 à 5 avec chaque plafond k max de 3 à ${effectiveK}, soit ${targetedChdCount} CHD ciblées. Le filtrage NOM + VER, l'exclusion de être et AUTRE_FORME restent ceux choisis dans l'interface. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC.`
         : "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
   }
 
   if (kHelp instanceof HTMLElement) {
     kHelp.textContent = isDiscriminationSimple
-        ? "Le mode lance 4 CHD ciblées, une par valeur de min_docfreq de 2 à 5. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante."
+        ? `Le mode teste min_docfreq = 2, 3, 4, 5 et k max = 3 à ${effectiveK}. Le mincl reste celui choisi dans les paramètres CHD. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante.`
         : "Cette valeur borne le calcul de l'arbre CHD ; elle ne fixe pas le nombre final de classes, établi ensuite avec les règles terminales et mincl.";
   }
 }
@@ -2182,10 +2193,11 @@ function renderClassesModeCards(scope = document) {
 function resolveClassesModeConfig() {
   const classesMode = document.getElementById("classesMode").value;
   const autoKMin = 3;
+  const autoKMax = 10;
   const kValue = Number(document.getElementById("kIramuteq").value);
   const effectiveK = classesMode === "manuel"
     ? (Number.isFinite(kValue) && kValue >= 2 ? kValue : 3)
-    : Math.max(autoKMin, Number.isFinite(kValue) ? kValue : 10);
+    : Math.min(autoKMax, Math.max(autoKMin, Number.isFinite(kValue) ? kValue : autoKMax));
 
   return {
     classesMode,
@@ -11264,7 +11276,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
-  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution la plus détaillée dont toutes les classes restent séparées au regard de leur dispersion lexicale sur l'AFC.`;
+  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution dont la séparation relative AFC est la plus élevée.`;
   container.appendChild(selectionNote);
 }
 

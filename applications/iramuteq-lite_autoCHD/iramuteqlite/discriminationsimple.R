@@ -516,13 +516,18 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
   evaluation_rows <- vector("list", total_candidates)
   evaluation_details <- vector("list", total_candidates)
   best_idx <- NA_integer_
-  dfm_cache <- new.env(parent = emptyenv())
-  reused_count <- 0L
+  pipeline_cache <- new.env(parent = emptyenv())
+  chd_cache <- new.env(parent = emptyenv())
+  cache_stats <- new.env(parent = emptyenv())
+  cache_stats$pipeline_reused_count <- 0L
+  cache_stats$chd_reused_count <- 0L
 
   for (i in seq_along(candidates)) {
     candidate <- candidates[[i]]
     progress_value <- 45 + floor((i / total_candidates) * 14)
+    pipeline_key <- NULL
     dfm_fingerprint <- NULL
+    chd_fingerprint <- NULL
 
     if (is.function(log_fn) && (total_candidates <= 10L || i == 1L || i == total_candidates || (i %% 10L) == 0L)) {
       log_fn(
@@ -540,25 +545,49 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
 
     attempt <- tryCatch(
       {
-        pipeline_obj <- preparer_pipeline_fn(candidate$config)
-        if (is.null(pipeline_obj$dfm_obj)) {
-          stop("DFM indisponible pour cette configuration.")
+        # Dans le profil cible, seul min_docfreq modifie le DFM. Les plafonds
+        # k max reutilisent donc la preparation lexicale deja construite.
+        pipeline_key <- if (identical(search_profile, "ciblee")) {
+          paste0("ciblee::min_docfreq=", candidate$min_docfreq %||% "")
+        } else {
+          paste0("configuration::", candidate$id %||% i)
         }
-        if (quanteda::ndoc(pipeline_obj$dfm_obj) < 2L || quanteda::nfeat(pipeline_obj$dfm_obj) < 2L) {
-          stop("Configuration trop pauvre apres pretraitement.")
+        if (exists(pipeline_key, envir = pipeline_cache, inherits = FALSE)) {
+          cache_stats$pipeline_reused_count <- cache_stats$pipeline_reused_count + 1L
+          pipeline_entry <- get(pipeline_key, envir = pipeline_cache, inherits = FALSE)
+        } else {
+          pipeline_obj <- preparer_pipeline_fn(candidate$config)
+          if (is.null(pipeline_obj$dfm_obj)) {
+            stop("DFM indisponible pour cette configuration.")
+          }
+          if (quanteda::ndoc(pipeline_obj$dfm_obj) < 2L || quanteda::nfeat(pipeline_obj$dfm_obj) < 2L) {
+            stop("Configuration trop pauvre apres pretraitement.")
+          }
+          pipeline_entry <- list(
+            pipeline = pipeline_obj,
+            dfm_fingerprint = .empreinte_dfm_auto_chd(pipeline_obj$dfm_obj)
+          )
+          assign(pipeline_key, pipeline_entry, envir = pipeline_cache)
         }
+        pipeline_obj <- pipeline_entry$pipeline
+        dfm_fingerprint <- pipeline_entry$dfm_fingerprint
 
-        dfm_fingerprint <- paste(
-          .empreinte_dfm_auto_chd(pipeline_obj$dfm_obj),
+        chd_fingerprint <- paste(
+          dfm_fingerprint,
           candidate$config$k_iramuteq %||% candidate$k_max_explore %||% "",
           candidate$config$iramuteq_auto_k_min %||% "",
+          candidate$config$iramuteq_mincl_mode %||% "",
+          candidate$config$iramuteq_mincl %||% "",
+          candidate$config$iramuteq_classif_mode %||% "",
+          candidate$config$iramuteq_svd_method %||% "",
+          candidate$config$iramuteq_max_formes %||% "",
           candidate$config$iramuteq_stats_mode %||% "",
           sep = "::"
         )
-        cache_hit <- exists(dfm_fingerprint, envir = dfm_cache, inherits = FALSE)
+        cache_hit <- exists(chd_fingerprint, envir = chd_cache, inherits = FALSE)
         if (isTRUE(cache_hit)) {
-          reused_count <<- reused_count + 1L
-          cached_attempt <- get(dfm_fingerprint, envir = dfm_cache, inherits = FALSE)
+          cache_stats$chd_reused_count <- cache_stats$chd_reused_count + 1L
+          cached_attempt <- get(chd_fingerprint, envir = chd_cache, inherits = FALSE)
           if (isTRUE(cached_attempt$ok)) {
             row <- .ligne_succes_discrimination_simple(candidate, pipeline_obj, cached_attempt$res_ira)
             list(
@@ -567,15 +596,15 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
               pipeline = pipeline_obj,
               res_ira = cached_attempt$res_ira,
               reused = TRUE,
-              fingerprint = dfm_fingerprint
+              fingerprint = chd_fingerprint
             )
           } else {
             list(
               ok = FALSE,
-              row = .ligne_erreur_discrimination_simple(candidate, cached_attempt$error_message %||% "Echec reutilise depuis le cache DFM."),
+              row = .ligne_erreur_discrimination_simple(candidate, cached_attempt$error_message %||% "Echec reutilise depuis le cache CHD."),
               error = cached_attempt$error,
               reused = TRUE,
-              fingerprint = dfm_fingerprint
+              fingerprint = chd_fingerprint
             )
           }
         } else {
@@ -589,16 +618,16 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
           }
 
           row <- .ligne_succes_discrimination_simple(candidate, pipeline_obj, res_ira)
-          assign(dfm_fingerprint, list(ok = TRUE, res_ira = res_ira), envir = dfm_cache)
-          list(ok = TRUE, row = row, pipeline = pipeline_obj, res_ira = res_ira, reused = FALSE, fingerprint = dfm_fingerprint)
+          assign(chd_fingerprint, list(ok = TRUE, res_ira = res_ira), envir = chd_cache)
+          list(ok = TRUE, row = row, pipeline = pipeline_obj, res_ira = res_ira, reused = FALSE, fingerprint = chd_fingerprint)
         }
       },
       error = function(err) {
-        if (!is.null(dfm_fingerprint) && nzchar(dfm_fingerprint)) {
+        if (!is.null(chd_fingerprint) && nzchar(chd_fingerprint)) {
           assign(
-            dfm_fingerprint,
+            chd_fingerprint,
             list(ok = FALSE, error = err, error_message = conditionMessage(err)),
-            envir = dfm_cache
+            envir = chd_cache
           )
         }
         list(ok = FALSE, row = .ligne_erreur_discrimination_simple(candidate, conditionMessage(err)), error = err, reused = FALSE)
@@ -661,10 +690,12 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     log_fn(
       paste0(
         "Discrimination simple : ",
-        length(ls(dfm_cache)),
+        length(ls(pipeline_cache)),
         " DFM uniques calculees, ",
-        reused_count,
-        " configuration(s) ont reutilise une DFM deja testee."
+        cache_stats$pipeline_reused_count,
+        " configuration(s) ont reutilise leur DFM ; ",
+        length(ls(chd_cache)),
+        " CHD ont ete lancees."
       ),
       progress = 58
     )
@@ -689,8 +720,10 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     search_profile_label = search_profile_label,
     total_configurations = total_candidates,
     successful_configurations = sum(metrics_df$selection != "echec", na.rm = TRUE),
-    unique_dfm_tested = length(ls(dfm_cache)),
-    reused_configurations = reused_count,
+    unique_dfm_tested = length(ls(pipeline_cache)),
+    reused_configurations = cache_stats$pipeline_reused_count,
+    unique_chd_tested = length(ls(chd_cache)),
+    reused_chd_configurations = cache_stats$chd_reused_count,
     k_min_requested = best_detail$res_ira$auto_selection$k_min_requested %||% NA_integer_,
     k_max_requested = best_detail$res_ira$auto_selection$k_max_requested %||% NA_integer_,
     evaluation = metrics_df,
@@ -842,6 +875,8 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
     successful_configurations = selection_obj$successful_configurations %||% NA_integer_,
     unique_dfm_tested = selection_obj$unique_dfm_tested %||% NA_integer_,
     reused_configurations = selection_obj$reused_configurations %||% NA_integer_,
+    unique_chd_tested = selection_obj$unique_chd_tested %||% NA_integer_,
+    reused_chd_configurations = selection_obj$reused_chd_configurations %||% NA_integer_,
     k_min_requested = selection_obj$k_min_requested %||% NA_integer_,
     k_max_requested = selection_obj$k_max_requested %||% NA_integer_,
     manual_replay_config = manual_replay_config,

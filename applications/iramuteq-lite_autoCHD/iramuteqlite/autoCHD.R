@@ -790,12 +790,17 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
     .as_int_auto_chd(config_base$iramuteq_auto_k_min, default = 3L, min_value = 2L)
   }
   k_max <- .as_int_auto_chd(config_base$k_iramuteq, default = 10L, min_value = k_min)
+  if (identical(search_profile, "ciblee")) {
+    k_max <- min(k_max, 10L)
+  }
   if (k_max < k_min) k_max <- k_min
 
   values <- if (identical(search_profile, "rapide")) {
     unique(c(k_min, min(k_max, 5L), k_max))
   } else if (identical(search_profile, "ciblee")) {
-    k_max
+    # Le plafond est un parametre de simulation : chaque valeur entre 3 et
+    # la borne choisie produit sa propre CHD pour le meme min_docfreq.
+    seq.int(k_min, k_max)
   } else if (identical(search_profile, "equilibre")) {
     unique(c(k_min, min(k_max, 5L), seq.int(k_min, k_max, by = 2L), k_max))
   } else {
