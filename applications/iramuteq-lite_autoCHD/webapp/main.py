@@ -15,6 +15,23 @@ app = FastAPI(title="IRaMuTeQ Lite Web", docs_url=None, redoc_url=None)
 _MISSING = object()
 
 
+def ticket_json_response(
+    payload: dict[str, Any],
+    *,
+    session_id: str | None = None,
+    clear_session: bool = False,
+) -> JSONResponse:
+    response = JSONResponse(payload)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    if clear_session:
+        ticket_gate.clear_session_cookie_headers(response)
+    else:
+        ticket_gate.apply_session_cookie_headers(response, session_id)
+    return response
+
+
 def build_web_index() -> str:
     index_path = runtime.frontend_root() / "index.html"
     html = index_path.read_text(encoding="utf-8")
@@ -115,33 +132,25 @@ def health() -> dict[str, str]:
 @app.get("/api/tickets/status")
 def ticket_status(request: Request) -> JSONResponse:
     snapshot, session_id = ticket_gate.status_for_request(request)
-    response = JSONResponse(snapshot)
-    ticket_gate.apply_session_cookie_headers(response, session_id)
-    return response
+    return ticket_json_response(snapshot, session_id=session_id)
 
 
 @app.post("/api/tickets/claim")
 def ticket_claim(request: Request) -> JSONResponse:
     snapshot, session_id = ticket_gate.claim_ticket_for_request(request)
-    response = JSONResponse(snapshot)
-    ticket_gate.apply_session_cookie_headers(response, session_id)
-    return response
+    return ticket_json_response(snapshot, session_id=session_id)
 
 
 @app.post("/api/tickets/heartbeat")
 def ticket_heartbeat(request: Request) -> JSONResponse:
     snapshot, session_id = ticket_gate.heartbeat_ticket_for_request(request)
-    response = JSONResponse(snapshot)
-    ticket_gate.apply_session_cookie_headers(response, session_id)
-    return response
+    return ticket_json_response(snapshot, session_id=session_id)
 
 
 @app.post("/api/tickets/release")
 def ticket_release(request: Request) -> JSONResponse:
     snapshot = ticket_gate.release_ticket_for_request(request)
-    response = JSONResponse(snapshot)
-    ticket_gate.clear_session_cookie_headers(response)
-    return response
+    return ticket_json_response(snapshot, clear_session=True)
 
 
 @app.post("/api/analysis/abandon")
