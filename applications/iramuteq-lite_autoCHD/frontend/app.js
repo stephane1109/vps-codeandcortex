@@ -11144,21 +11144,26 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
     container.appendChild(configNote);
   }
 
-  const variableParts = [];
-  if (profilMorpho) variableParts.push(`profil morpho = ${profilMorpho}`);
-  if (lemmes) variableParts.push(`lemmes = ${lemmes}`);
-  if (stopwords) variableParts.push(`stopwords = ${stopwords}`);
-  if (ponctuation) variableParts.push(`ponctuation = ${ponctuation}`);
-  if (chiffres) variableParts.push(`chiffres = ${chiffres}`);
-  if (minDocfreq && minDocfreq !== "N/A") variableParts.push(`min_docfreq = ${minDocfreq}`);
-  if (mincl && mincl !== "N/A") variableParts.push(`mincl = ${mincl}`);
-  if (kMaxExplore && kMaxExplore !== "N/A") variableParts.push(`k max exploré = ${kMaxExplore}`);
+  const fixedParts = [];
+  if (profilMorpho) fixedParts.push(`profil morpho = ${profilMorpho}`);
+  if (lemmes) fixedParts.push(`lemmes = ${lemmes}`);
+  if (stopwords) fixedParts.push(`stopwords = ${stopwords}`);
+  if (ponctuation) fixedParts.push(`ponctuation = ${ponctuation}`);
+  if (chiffres) fixedParts.push(`chiffres = ${chiffres}`);
+  if (mincl && mincl !== "N/A") fixedParts.push(`mincl = ${mincl}`);
 
-  if (variableParts.length) {
+  if (fixedParts.length) {
     const variableNote = document.createElement("p");
     variableNote.className = "field-help";
-    variableNote.textContent = `Variables retenues : ${variableParts.join(" ; ")}.`;
+    variableNote.textContent = `Autres paramètres de la configuration retenue : ${fixedParts.join(" ; ")}.`;
     container.appendChild(variableNote);
+  }
+
+  if (minDocfreq !== "N/A" || kMaxExplore !== "N/A") {
+    const testedNote = document.createElement("p");
+    testedNote.className = "field-help";
+    testedNote.textContent = `Paramètres testés retenus : min_docfreq = ${minDocfreq} ; k max = ${kMaxExplore}.`;
+    container.appendChild(testedNote);
   }
 }
 
@@ -11178,10 +11183,11 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
+    ["min_docfreq testé retenu", selected.min_docfreq],
+    ["k max testé retenu", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
     ["Classes retenues", selectedK],
     ["Limite CHD à reprendre en manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
-    ["min_docfreq retenu", selected.min_docfreq],
     ["mincl", selected.mincl ?? "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
     ["Séparation relative AFC", selected.separation_relative_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
@@ -11312,23 +11318,17 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
   const columnDefs = [
     { keys: ["configuration_id"], label: "configuration" },
-    { keys: ["profil_morpho"], label: "profil morpho" },
-    { keys: ["lexique_utiliser_lemmes"], label: "lemmes" },
-    { keys: ["retirer_stopwords"], label: "stopwords" },
-    { keys: ["supprimer_ponctuation"], label: "ponctuation" },
-    { keys: ["supprimer_chiffres"], label: "chiffres" },
-    { keys: ["min_docfreq"], label: "min_docfreq" },
+    { keys: ["min_docfreq"], label: "min_docfreq testé" },
+    { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "k max testé" },
+    { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
+    { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
+    { keys: ["selection"], label: "statut" },
     { keys: ["mincl_mode"], label: "mode mincl" },
     { keys: ["mincl"], label: "mincl" },
-    { keys: ["k_max_explore"], label: "k max exploré" },
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
-    { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
-    { keys: ["k_chd_retenu"], label: "limite CHD manuelle" },
-    { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
     { keys: ["classes_pourcentages"], label: "% classes" },
-    { keys: ["selection"], label: "statut" },
     { keys: ["erreur"], label: "erreur" }
   ]
     .map((def) => ({
@@ -11357,9 +11357,63 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
   };
 }
 
+function getDiscriminationSimpleDistinctValues(parsed, keys, options = {}) {
+  const index = headerIndex(parsed?.headers, keys);
+  if (index === -1 || !Array.isArray(parsed?.rows)) return [];
+
+  const rawValues = parsed.rows
+    .map((row) => String(row?.[index] ?? "").trim())
+    .filter((value) => value && !["na", "n/a", "null"].includes(normalizeAsciiKey(value)));
+
+  if (!rawValues.length) return [];
+  if (!options.numeric) return [...new Set(rawValues)];
+
+  const numericValues = rawValues.map((value) => parseTableNumber(value));
+  if (!numericValues.every(Number.isFinite)) return [...new Set(rawValues)];
+  return [...new Set(numericValues)]
+    .sort((left, right) => left - right)
+    .map((value) => formatSummaryValue(value));
+}
+
+function appendDiscriminationSimpleTableContext(container, parsed) {
+  if (!container || !parsed?.headers?.length) return;
+
+  const minDocfreqValues = getDiscriminationSimpleDistinctValues(parsed, ["min_docfreq"], { numeric: true });
+  const kMaxValues = getDiscriminationSimpleDistinctValues(parsed, ["k_max_explore", "kmax", "k_iramuteq"], { numeric: true });
+  const context = document.createElement("div");
+  context.className = "discrimination-simple-table-context";
+
+  const testedParameters = document.createElement("p");
+  testedParameters.className = "field-help";
+  testedParameters.textContent = `Chaque ligne correspond à une CHD. Les deux paramètres croisés sont : min_docfreq testé = ${minDocfreqValues.join(", ") || "non disponible"} ; k max testé = ${kMaxValues.join(", ") || "non disponible"}.`;
+  context.appendChild(testedParameters);
+
+  const fixedSettings = [
+    ["profil morpho", ["profil_morpho"]],
+    ["lemmes", ["lexique_utiliser_lemmes"]],
+    ["stopwords", ["retirer_stopwords"]],
+    ["ponctuation", ["supprimer_ponctuation"]],
+    ["chiffres", ["supprimer_chiffres"]]
+  ]
+    .map(([label, keys]) => {
+      const values = getDiscriminationSimpleDistinctValues(parsed, keys);
+      return values.length === 1 ? `${label} = ${values[0]}` : "";
+    })
+    .filter(Boolean);
+
+  if (fixedSettings.length) {
+    const fixedParameters = document.createElement("p");
+    fixedParameters.className = "field-help";
+    fixedParameters.textContent = `Paramètres fixes communs à toutes les CHD : ${fixedSettings.join(" ; ")}.`;
+    context.appendChild(fixedParameters);
+  }
+
+  container.insertBefore(context, container.firstChild);
+}
+
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq", "mincl", "k_max_explore", "segments", "formes", "classes_retenues", "k_chd_retenu", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -11410,6 +11464,8 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
       }
     }
   );
+
+  appendDiscriminationSimpleTableContext(container, parsed);
 }
 
 async function renderDiscriminationSimpleExports(index) {

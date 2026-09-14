@@ -1286,15 +1286,14 @@ progress {
   overflow-wrap: anywhere;
 }
 
-#discriminationSimpleTable .result-table th:nth-child(2),
-#discriminationSimpleTable .result-table td:nth-child(2),
-#discriminationSimpleTable .result-table th:nth-child(17),
-#discriminationSimpleTable .result-table td:nth-child(17),
-#discriminationSimpleTable .result-table th:nth-child(18),
-#discriminationSimpleTable .result-table td:nth-child(18),
-#discriminationSimpleTable .result-table th:nth-child(20),
-#discriminationSimpleTable .result-table td:nth-child(20) {
-  min-width: 11rem;
+#discriminationSimpleTable .result-table th:nth-child(-n + 5),
+#discriminationSimpleTable .result-table td:nth-child(-n + 5) {
+  min-width: 8.5rem;
+}
+
+#discriminationSimpleTable .result-table th:nth-child(13),
+#discriminationSimpleTable .result-table td:nth-child(13) {
+  min-width: 14rem;
 }
 
 #discriminationSimpleTable .result-table td.is-discrimination-simple-multiline,
