@@ -20,6 +20,8 @@ DEFAULT_APP_DATA_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "iramuteq-lite-
 ANALYSIS_LOCK_FILENAME = "active-analysis.json"
 ANALYSIS_LOCK_STALE_SECONDS = 300
 TERMINAL_JOB_STATES = {"cancelled", "completed", "done", "error", "failed", "success", "succeeded"}
+JSON_READ_ATTEMPTS = 4
+JSON_READ_RETRY_SECONDS = 0.05
 TEXT_EXTENSIONS = {
     ".csv",
     ".html",
@@ -93,12 +95,35 @@ def analysis_lock_path() -> Path:
 
 
 def write_json_file(path: Path, payload: Any) -> None:
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        temp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(temp_path, path)
+    finally:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def read_json_file_with_retry(path: Path) -> Any:
+    last_error: OSError | json.JSONDecodeError | None = None
+    for attempt in range(JSON_READ_ATTEMPTS):
+        try:
+            return read_json_file(path)
+        except (OSError, json.JSONDecodeError) as error:
+            last_error = error
+            if attempt + 1 < JSON_READ_ATTEMPTS:
+                time.sleep(JSON_READ_RETRY_SECONDS * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"Lecture JSON impossible : {path}")
 
 
 def try_read_json_file(path: Path) -> Any | None:
     try:
-        return read_json_file(path)
+        return read_json_file_with_retry(path)
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return None
 
@@ -805,7 +830,24 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             "stderrLog": str(stderr_log),
         }
 
-    status = read_json_file(status_file)
+    status = try_read_json_file(status_file)
+    if not isinstance(status, dict):
+        return {
+            "jobId": job_id,
+            "state": "running",
+            "progress": 0,
+            "message": "Mise a jour du suivi en cours. Nouvelle tentative automatique.",
+            "logs": [],
+            "completed": False,
+            "success": False,
+            "outputDir": None,
+            "summary": None,
+            "files": [],
+            "statusFile": str(status_file),
+            "resultsFile": str(results_file),
+            "stdoutLog": str(stdout_log),
+            "stderrLog": str(stderr_log),
+        }
     state = str(status.get("state") or "running")
     progress = int(status.get("progress") or 0)
     message = str(status.get("message") or "")
@@ -829,7 +871,24 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             "stderrLog": str(stderr_log),
         }
 
-    result_payload = read_json_file(results_file)
+    result_payload = try_read_json_file(results_file)
+    if not isinstance(result_payload, dict):
+        return {
+            "jobId": job_id,
+            "state": state,
+            "progress": progress,
+            "message": "Finalisation des resultats en cours. Nouvelle tentative automatique.",
+            "logs": logs,
+            "completed": False,
+            "success": False,
+            "outputDir": None,
+            "summary": None,
+            "files": [],
+            "statusFile": str(status_file),
+            "resultsFile": str(results_file),
+            "stdoutLog": str(stdout_log),
+            "stderrLog": str(stderr_log),
+        }
     success = bool(result_payload.get("success"))
     output_dir = result_payload.get("output_dir")
     files: list[dict[str, str]] = []

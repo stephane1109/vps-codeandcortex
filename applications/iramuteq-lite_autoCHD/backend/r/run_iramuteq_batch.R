@@ -231,6 +231,22 @@ dir.create(dirname(results_file), recursive = TRUE, showWarnings = FALSE)
 
 job_logs <- character(0)
 
+write_json_atomic <- function(payload, path) {
+  target_dir <- dirname(path)
+  dir.create(target_dir, recursive = TRUE, showWarnings = FALSE)
+  temp_path <- tempfile(
+    pattern = paste0(".", basename(path), "-"),
+    tmpdir = target_dir,
+    fileext = ".tmp"
+  )
+  on.exit(unlink(temp_path, force = TRUE), add = TRUE)
+
+  jsonlite::write_json(payload, temp_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  if (!file.rename(temp_path, path)) {
+    stop(paste0("Impossible de publier atomiquement le fichier JSON : ", path))
+  }
+}
+
 relative_to_output <- function(path) {
   if (is.null(path) || !nzchar(path) || !file.exists(path)) return(NULL)
   rel <- sub(paste0("^", normalizePath(output_dir, winslash = "/", mustWork = FALSE), "/?"), "", normalizePath(path, winslash = "/", mustWork = FALSE))
@@ -248,7 +264,7 @@ write_status <- function(state = "running", progress = 0, message = "", extra = 
     ),
     extra
   )
-  jsonlite::write_json(payload, status_file, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  write_json_atomic(payload, status_file)
 }
 
 log_info <- function(message, progress = NULL) {
@@ -2018,7 +2034,7 @@ run_batch <- function() {
     summary = summary,
     logs = job_logs
   )
-  jsonlite::write_json(payload, results_file, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  write_json_atomic(payload, results_file)
   write_status(state = "completed", progress = 100, message = "Analyse terminée.", extra = list(summary = summary, artifacts = artifacts))
   invisible(payload)
 }
@@ -2061,7 +2077,7 @@ preview_simi_terms_batch <- function() {
     ordered_terms = unname(as.character(simi_terms$ordered_terms)),
     logs = job_logs
   )
-  jsonlite::write_json(payload, results_file, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  write_json_atomic(payload, results_file)
   write_status(state = "completed", progress = 100, message = "Prévisualisation des similitudes terminée.")
   invisible(payload)
 }
@@ -2075,7 +2091,7 @@ if (identical(mode, "preview_simi_terms")) {
       log_info(paste0("ERREUR: ", message))
       write_status(state = "failed", progress = 100, message = message)
       payload <- list(success = FALSE, message = message, logs = job_logs)
-      jsonlite::write_json(payload, results_file, auto_unbox = TRUE, pretty = TRUE, null = "null")
+      write_json_atomic(payload, results_file)
       quit(save = "no", status = 1)
     }
   )
@@ -2087,17 +2103,14 @@ tryCatch(
   error = function(e) {
     log_info(paste0("ERREUR: ", conditionMessage(e)))
     write_status(state = "failed", progress = 100, message = conditionMessage(e))
-    jsonlite::write_json(
+    write_json_atomic(
       list(
         success = FALSE,
         output_dir = output_dir,
         message = conditionMessage(e),
         logs = job_logs
       ),
-      results_file,
-      auto_unbox = TRUE,
-      pretty = TRUE,
-      null = "null"
+      results_file
     )
     quit(status = 1)
   }

@@ -6,6 +6,7 @@ import site
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 import importlib.util
 from importlib import metadata as importlib_metadata
@@ -14,6 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+JSON_READ_ATTEMPTS = 4
+JSON_READ_RETRY_SECONDS = 0.05
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -21,11 +25,32 @@ def utc_now() -> str:
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        temp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(temp_path, path)
+    finally:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    last_error: OSError | json.JSONDecodeError | None = None
+    for attempt in range(JSON_READ_ATTEMPTS):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError(f"Le fichier JSON doit contenir un objet : {path}")
+            return payload
+        except (OSError, json.JSONDecodeError) as error:
+            last_error = error
+            if attempt + 1 < JSON_READ_ATTEMPTS:
+                time.sleep(JSON_READ_RETRY_SECONDS * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"Lecture JSON impossible : {path}")
 
 
 def is_placeholder_message(message: str) -> bool:
