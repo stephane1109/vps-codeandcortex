@@ -22,6 +22,7 @@ ANALYSIS_LOCK_STALE_SECONDS = 300
 TERMINAL_JOB_STATES = {"cancelled", "completed", "done", "error", "failed", "success", "succeeded"}
 JSON_READ_ATTEMPTS = 4
 JSON_READ_RETRY_SECONDS = 0.05
+APP_INSTANCE_ID = os.environ.get("HOSTNAME", "").strip() or f"local-{os.getpid()}"
 TEXT_EXTENSIONS = {
     ".csv",
     ".html",
@@ -151,6 +152,17 @@ def process_is_running(pid: Any) -> bool:
     return True
 
 
+def analysis_process_is_running(pid: Any) -> bool:
+    """Avoid mistaking a reused PID after a container restart for the old job."""
+    if not process_is_running(pid):
+        return False
+    try:
+        command = Path(f"/proc/{int(pid)}/cmdline").read_bytes().decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return True
+    return "run_job.py" in command
+
+
 def terminate_analysis_process(pid: Any, grace_seconds: float = 2.0) -> bool:
     try:
         numeric_pid = int(pid)
@@ -217,6 +229,69 @@ def clear_analysis_lock(expected_job_id: str | None = None) -> None:
         return
 
 
+def mark_interrupted_analysis(job_id: str, message: str) -> None:
+    """Turn a job stopped by a container restart into a readable terminal result."""
+    job_root = jobs_root() / job_id
+    status_file = job_root / "status.json"
+    results_file = job_root / "results.json"
+    status_payload = try_read_json_file(status_file) if status_file.exists() else {}
+    if not isinstance(status_payload, dict):
+        status_payload = {}
+
+    current_state = str(status_payload.get("state") or "").strip().lower()
+    if current_state in TERMINAL_JOB_STATES or results_file.exists():
+        return
+
+    logs = [str(item) for item in status_payload.get("logs") or [] if str(item).strip()]
+    error_log = f"[error] {message}"
+    if error_log not in logs:
+        logs.append(error_log)
+    status_payload.update(
+        {
+            "job_id": job_id,
+            "state": "failed",
+            "progress": int(status_payload.get("progress") or 0),
+            "message": message,
+            "logs": logs,
+            "updated_at": int(time.time()),
+        }
+    )
+    write_json_file(status_file, status_payload)
+    write_json_file(
+        results_file,
+        {
+            "success": False,
+            "job_id": job_id,
+            "message": message,
+            "logs": logs,
+            "status_file": str(status_file),
+        },
+    )
+
+
+def recover_interrupted_analysis(job_id: str) -> bool:
+    """Recover a persisted job whose runner disappeared with an old container."""
+    payload = try_read_json_file(analysis_lock_path())
+    if not isinstance(payload, dict) or str(payload.get("job_id") or "").strip() != job_id:
+        return False
+
+    created_at = int(payload.get("created_at") or time.time())
+    instance_id = str(payload.get("instance_id") or "").strip()
+    pid = payload.get("pid")
+    message = ""
+    if instance_id and instance_id != APP_INSTANCE_ID:
+        message = "Analyse interrompue par un redéploiement de l'application. Relancez-la."
+    elif pid and not analysis_process_is_running(pid) and time.time() - created_at > 5:
+        message = "Le processus d'analyse s'est arrêté avant la fin du calcul. Relancez l'analyse."
+
+    if not message:
+        return False
+
+    mark_interrupted_analysis(job_id, message)
+    clear_analysis_lock(expected_job_id=job_id)
+    return True
+
+
 def active_analysis_error_message(lock_payload: dict[str, Any]) -> str:
     job_id = str(lock_payload.get("job_id") or "").strip()
     corpus_name = str(lock_payload.get("corpus_name") or "").strip()
@@ -245,6 +320,9 @@ def current_analysis_lock() -> dict[str, Any] | None:
     job_id = str(payload.get("job_id") or "").strip()
     created_at = int(payload.get("created_at") or time.time())
 
+    if job_id and recover_interrupted_analysis(job_id):
+        return None
+
     if job_id:
         job_root = jobs_root() / job_id
         results_file = job_root / "results.json"
@@ -261,8 +339,17 @@ def current_analysis_lock() -> dict[str, Any] | None:
                 clear_analysis_lock(expected_job_id=job_id)
                 return None
 
-    if process_is_running(payload.get("pid")):
+    if analysis_process_is_running(payload.get("pid")):
         return payload
+
+    if payload.get("pid") and time.time() - created_at > 5:
+        if job_id:
+            mark_interrupted_analysis(
+                job_id,
+                "Le processus d'analyse s'est arrêté avant la fin du calcul. Relancez l'analyse.",
+            )
+        clear_analysis_lock(expected_job_id=job_id or None)
+        return None
 
     # Preserve the short pre-launch reservation window: a freshly created lock
     # intentionally has no PID yet until the subprocess is spawned.
@@ -282,6 +369,7 @@ def reserve_analysis_slot(corpus_name: str | None = None, job_id: str | None = N
         "job_id": str(job_id or "").strip(),
         "pid": None,
         "corpus_name": safe_input_name(corpus_name or "corpus.txt"),
+        "instance_id": APP_INSTANCE_ID,
         "created_at": int(time.time()),
     }
 
@@ -305,6 +393,7 @@ def activate_analysis_lock(job_id: str, pid: int, corpus_name: str | None = None
             "job_id": str(job_id or "").strip(),
             "pid": int(pid),
             "corpus_name": safe_input_name(corpus_name or "corpus.txt"),
+            "instance_id": APP_INSTANCE_ID,
             "created_at": int(time.time()),
             "updated_at": int(time.time()),
         },
@@ -803,9 +892,12 @@ def start_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, 
 
 
 def read_python_analysis_status(job_id: str) -> dict[str, Any]:
-    job_root = jobs_root() / str(job_id or "").strip()
     if not str(job_id or "").strip():
         raise ValueError("Identifiant de job manquant.")
+
+    job_id = str(job_id).strip()
+    recover_interrupted_analysis(job_id)
+    job_root = jobs_root() / job_id
 
     status_file = job_root / "status.json"
     results_file = job_root / "results.json"

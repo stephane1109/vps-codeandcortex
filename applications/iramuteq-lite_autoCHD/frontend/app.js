@@ -15008,10 +15008,29 @@ async function startAnalysis(analysisKind = "chd") {
     });
 
     let payload = null;
+    let statusReadFailures = 0;
     while (!payload) {
-      const snapshot = await tauriInvoke("read_python_analysis_status", {
-        jobId: session.jobId
-      });
+      let snapshot;
+      try {
+        snapshot = await tauriInvoke("read_python_analysis_status", {
+          jobId: session.jobId
+        });
+        statusReadFailures = 0;
+      } catch (statusError) {
+        statusReadFailures += 1;
+        const retryDelay = Math.min(5000, 500 * statusReadFailures);
+        if (statusReadFailures === 1 || statusReadFailures % 5 === 0) {
+          log(
+            `[info] Suivi temporairement indisponible (${statusError?.message || String(statusError)}). Nouvelle tentative ${statusReadFailures}/30.`
+          );
+        }
+        setSidebarRuntimeStatus("Connexion au suivi temporairement indisponible : nouvelle tentative automatique.", "warning");
+        if (statusReadFailures >= 30) {
+          throw statusError;
+        }
+        await wait(retryDelay);
+        continue;
+      }
 
       const progressValue = Math.max(4, Math.min(99, Number(snapshot.progress) || 0));
       progression.set(
