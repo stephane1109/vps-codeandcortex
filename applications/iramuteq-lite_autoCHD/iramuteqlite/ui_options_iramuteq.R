@@ -33,7 +33,14 @@ ui_options_iramuteq <- function(defaults = NULL) {
     ),
     conditionalPanel(
       condition = "input.iramuteq_mincl_mode == 'manuel'",
-      numericInput("iramuteq_mincl", "mincl (manuel)", value = valeur_defaut("iramuteq_mincl", 5), min = 1, step = 1)
+      tagList(
+        numericInput("iramuteq_mincl", "mincl (manuel)", value = valeur_defaut("iramuteq_mincl", 5), min = 1, step = 1),
+        tags$div(
+          style = "color: #666; font-size: 0.9em; margin-top: -8px; margin-bottom: 12px;",
+          tags$strong("mincl n'est pas le nombre de classes. "),
+          "Il fixe le nombre minimal de segments de texte (UCE) qu'une classe terminale doit contenir pour être conservée. Avec 5, une classe de moins de 5 UCE n'est pas retenue comme classe terminale. Une valeur plus haute réduit les petites classes ; une valeur plus basse les autorise."
+        )
+      )
     ),
     radioButtons(
       "iramuteq_classif_mode",

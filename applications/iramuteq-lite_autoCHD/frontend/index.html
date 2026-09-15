@@ -532,6 +532,9 @@
           <div class="field">
             <label for="minclManual">mincl (manuel)</label>
             <input id="minclManual" type="number" min="1" value="5" />
+            <p class="field-help">
+              <strong>mincl n'est pas le nombre de classes.</strong> Il fixe le nombre minimal de segments de texte (UCE) qu'une classe terminale doit contenir pour être conservée. Avec <code>5</code>, une classe de moins de 5 UCE n'est pas retenue comme classe terminale. Une valeur plus haute réduit les petites classes ; une valeur plus basse les autorise.
+            </p>
           </div>
 
           <div class="field field--full" data-classification-mode-card>
