@@ -1816,7 +1816,7 @@ register_events_lancer <- function(input, output, session, rv) {
             if (!is.null(input$afc_top_termes) && is.finite(input$afc_top_termes)) top_termes <- as.integer(input$afc_top_termes)
 
             png(afc_classes_png, width = 1800, height = 1400, res = 180)
-            try(tracer_afc_classes_seules(rv$afc_obj, axes = c(1, 2), cex_labels = 1.05), silent = TRUE)
+            try(tracer_afc_classes_seules(rv$afc_obj, axes = c(1, 2), cex_labels = 1.05, top_termes = top_termes), silent = TRUE)
             dev.off()
 
             png(afc_termes_png, width = 2000, height = 1600, res = 180)

@@ -108,6 +108,32 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
   list(xlim = xlim_use, ylim = ylim_use)
 }
 
+.selectionner_termes_trace_afc <- function(obj, axes = c(1, 2), top_termes = 120L) {
+  if (is.null(obj$colcoord) || is.null(obj$termes_stats)) return(NULL)
+
+  cc <- obj$colcoord
+  st <- obj$termes_stats
+  coords_termes <- .extraire_coordonnees_trace_afc(cc, axes = axes)
+
+  st <- st[!is.na(st$Terme) & nzchar(st$Terme), , drop = FALSE]
+  st <- st[order(-st$frequency), , drop = FALSE]
+  if (!is.null(top_termes) && is.finite(top_termes) && nrow(st) > top_termes) {
+    st <- st[seq_len(top_termes), , drop = FALSE]
+  }
+
+  st <- st[st$Terme %in% rownames(cc), , drop = FALSE]
+  if (nrow(st) < 2L) return(NULL)
+
+  mots <- st$Terme
+  list(
+    stats = st,
+    mots = mots,
+    x = coords_termes$x[match(mots, rownames(cc))],
+    y = coords_termes$y[match(mots, rownames(cc))],
+    axes = coords_termes$axes
+  )
+}
+
 .etiquette_axe_y_afc <- function(axis_info) {
   if (isTRUE(axis_info$has_second)) {
     return(paste0("Axe ", axis_info$ax2))
@@ -376,14 +402,23 @@ executer_afc_classes <- function(dfm_obj, groupes, termes_cibles = NULL, max_ter
 }
 
 # Tracé AFC des classes uniquement
-tracer_afc_classes_seules <- function(obj, axes = c(1, 2), cex_labels = 1.0) {
+tracer_afc_classes_seules <- function(obj, axes = c(1, 2), cex_labels = 1.0, top_termes = 120L) {
   if (is.null(obj$ca) || is.null(obj$rowcoord)) stop("AFC classes : objet incomplet.")
   rc <- obj$rowcoord
   coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
   x_c <- coords_classes$x
   y_c <- coords_classes$y
   axis_info <- coords_classes$axes
-  lim <- .calculer_limites_trace_afc(x_c, y_c, axis_info$has_second)
+  # Même échelle que le graphe classes + termes pour ne pas accentuer visuellement
+  # l'éloignement des classes dans le tracé limité aux centroïdes.
+  termes_trace <- .selectionner_termes_trace_afc(obj, axes = axes, top_termes = top_termes)
+  x_lim <- x_c
+  y_lim <- y_c
+  if (!is.null(termes_trace)) {
+    x_lim <- c(x_lim, termes_trace$x)
+    y_lim <- c(y_lim, termes_trace$y)
+  }
+  lim <- .calculer_limites_trace_afc(x_lim, y_lim, axis_info$has_second)
   label_pos <- if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L)
   plot(
     0, 0,
@@ -421,29 +456,19 @@ tracer_afc_classes_termes <- function(
   taille_sel <- match.arg(taille_sel)
 
   rc <- obj$rowcoord
-  cc <- obj$colcoord
-  st <- obj$termes_stats
   coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
-  coords_termes <- .extraire_coordonnees_trace_afc(cc, axes = axes)
-  axis_info <- coords_termes$axes
-
-  st <- st[!is.na(st$Terme) & nzchar(st$Terme), , drop = FALSE]
-  st <- st[order(-st$frequency), , drop = FALSE]
-
-  if (!is.null(top_termes) && is.finite(top_termes) && nrow(st) > top_termes) {
-    st <- st[seq_len(top_termes), , drop = FALSE]
-  }
-
-  st <- st[st$Terme %in% rownames(cc), , drop = FALSE]
-  if (nrow(st) < 2) {
+  termes_trace <- .selectionner_termes_trace_afc(obj, axes = axes, top_termes = top_termes)
+  if (is.null(termes_trace)) {
     plot.new()
     text(0.5, 0.5, "AFC : pas assez de termes à tracer.", cex = 1.1)
     return(invisible(NULL))
   }
 
-  mots <- st$Terme
-  x_m <- coords_termes$x[match(mots, rownames(cc))]
-  y_m <- coords_termes$y[match(mots, rownames(cc))]
+  st <- termes_trace$stats
+  mots <- termes_trace$mots
+  x_m <- termes_trace$x
+  y_m <- termes_trace$y
+  axis_info <- termes_trace$axes
 
   x_c <- coords_classes$x
   y_c <- coords_classes$y
