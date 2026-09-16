@@ -330,6 +330,8 @@ const appState = {
   activeAnalysisHistoryId: null,
   analysisHistoryRetentionDays: null,
   corpusText: "",
+  corpusLoading: false,
+  corpusLoadToken: 0,
   afcStarredVariablesChoices: [],
   corpusStarredDocs: [],
   corpusStarredModalitiesByVariable: {},
@@ -1160,7 +1162,7 @@ function getAnalysisHistoryStatusLabel(entry) {
 }
 
 function getAnalysisHistoryMeta(entry) {
-  const parts = [entry?.corpusName || "Corpus courant"];
+  const parts = [];
   const statusLabel = getAnalysisHistoryStatusLabel(entry);
   if (statusLabel) parts.push(statusLabel);
   if (entry?.persisted && entry?.expiresAt) {
@@ -1402,9 +1404,104 @@ function getMultimodalHistoryKind(scriptName) {
   return "multimodal_audio";
 }
 
+function getAnalysisHistoryCorpusName(entry) {
+  return String(entry?.corpusName || "").trim() || "Corpus sans nom";
+}
+
+function getAnalysisHistoryCorpusKey(corpusName) {
+  return String(corpusName || "Corpus sans nom").trim().toLocaleLowerCase("fr-FR");
+}
+
+function groupAnalysisHistoryByCorpus(entries) {
+  const groups = new Map();
+  entries.forEach((entry) => {
+    const corpusName = getAnalysisHistoryCorpusName(entry);
+    const key = getAnalysisHistoryCorpusKey(corpusName);
+    if (!groups.has(key)) {
+      groups.set(key, { key, corpusName, entries: [] });
+    }
+    groups.get(key).entries.push(entry);
+  });
+  return Array.from(groups.values());
+}
+
+function createAnalysisHistoryItem(entry) {
+  const item = document.createElement("div");
+  item.className = `analysis-history-item${entry.id === appState.activeAnalysisHistoryId ? " is-active" : ""}`;
+
+  const mainButton = document.createElement("button");
+  mainButton.type = "button";
+  mainButton.className = "analysis-history-item-main";
+
+  const title = document.createElement("span");
+  title.className = "analysis-history-item-title";
+  title.textContent = getAnalysisHistoryLabel(entry);
+
+  const meta = document.createElement("span");
+  meta.className = "analysis-history-item-meta";
+  meta.textContent = getAnalysisHistoryMeta(entry);
+
+  mainButton.appendChild(title);
+  if (meta.textContent) mainButton.appendChild(meta);
+  mainButton.addEventListener("click", () => {
+    void activateAnalysisHistoryEntry(entry.id);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "analysis-history-actions";
+
+  if (!entry.persisted || (entry.completed && entry.success)) {
+    const downloadButton = document.createElement("button");
+    downloadButton.type = "button";
+    downloadButton.className = "secondary-button analysis-history-download";
+    downloadButton.textContent = "Télécharger";
+    downloadButton.addEventListener("click", () => {
+      if (entry.persisted && entry.analysisId) {
+        void downloadPersistentAnalysisArchive(entry, downloadButton);
+        return;
+      }
+      void downloadResultsArchive({
+        outputDir: entry.outputDir,
+        entryCount: Array.isArray(entry.artifacts) ? entry.artifacts.length : 0,
+        archiveBaseName: getAnalysisHistoryArchiveBaseName(entry),
+        pendingButton: downloadButton
+      });
+    });
+    actions.appendChild(downloadButton);
+  }
+
+  if (entry.persisted && entry.completed) {
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "analysis-history-delete";
+    deleteButton.textContent = "Supprimer";
+    deleteButton.addEventListener("click", () => {
+      void deletePersistentAnalysisEntry(entry).catch((error) => {
+        setSidebarRuntimeStatus("Suppression impossible.", "error");
+        log(`[error] Suppression de l'analyse impossible : ${error?.message || String(error)}`);
+      });
+    });
+    actions.appendChild(deleteButton);
+  }
+
+  item.appendChild(mainButton);
+  if (actions.childElementCount) item.appendChild(actions);
+  return item;
+}
+
 function renderAnalysisHistory() {
   if (!analysisHistory) return;
 
+  const existingFolders = new Set(
+    Array.from(analysisHistory.querySelectorAll(".analysis-history-folder"))
+      .map((folder) => String(folder.dataset.corpusKey || ""))
+      .filter(Boolean)
+  );
+  const expandedFolders = new Set(
+    Array.from(analysisHistory.querySelectorAll(".analysis-history-folder[open]"))
+      .map((folder) => String(folder.dataset.corpusKey || ""))
+      .filter(Boolean)
+  );
   analysisHistory.innerHTML = "";
 
   if (!Array.isArray(appState.analysisHistory) || !appState.analysisHistory.length) {
@@ -1416,68 +1513,35 @@ function renderAnalysisHistory() {
     return;
   }
 
-  appState.analysisHistory.forEach((entry) => {
-    const item = document.createElement("div");
-    item.className = `analysis-history-item${entry.id === appState.activeAnalysisHistoryId ? " is-active" : ""}`;
+  groupAnalysisHistoryByCorpus(appState.analysisHistory).forEach((group) => {
+    const folder = document.createElement("details");
+    folder.className = "analysis-history-folder";
+    folder.dataset.corpusKey = group.key;
+    folder.open = !existingFolders.has(group.key) || expandedFolders.has(group.key);
 
-    const mainButton = document.createElement("button");
-    mainButton.type = "button";
-    mainButton.className = "analysis-history-item-main";
+    const summary = document.createElement("summary");
+    summary.className = "analysis-history-folder-summary";
 
-    const title = document.createElement("span");
-    title.className = "analysis-history-item-title";
-    title.textContent = getAnalysisHistoryLabel(entry);
+    const corpusName = document.createElement("span");
+    corpusName.className = "analysis-history-folder-name";
+    corpusName.textContent = group.corpusName;
 
-    const meta = document.createElement("span");
-    meta.className = "analysis-history-item-meta";
-    meta.textContent = getAnalysisHistoryMeta(entry);
+    const count = document.createElement("span");
+    count.className = "analysis-history-folder-count";
+    count.textContent = group.entries.length === 1 ? "1 analyse" : `${group.entries.length} analyses`;
 
-    mainButton.appendChild(title);
-    mainButton.appendChild(meta);
-    mainButton.addEventListener("click", () => {
-      void activateAnalysisHistoryEntry(entry.id);
+    summary.appendChild(corpusName);
+    summary.appendChild(count);
+
+    const entries = document.createElement("div");
+    entries.className = "analysis-history-folder-entries";
+    group.entries.forEach((entry) => {
+      entries.appendChild(createAnalysisHistoryItem(entry));
     });
 
-    const actions = document.createElement("div");
-    actions.className = "analysis-history-actions";
-
-    if (!entry.persisted || (entry.completed && entry.success)) {
-      const downloadButton = document.createElement("button");
-      downloadButton.type = "button";
-      downloadButton.className = "secondary-button analysis-history-download";
-      downloadButton.textContent = "Télécharger";
-      downloadButton.addEventListener("click", () => {
-        if (entry.persisted && entry.analysisId) {
-          void downloadPersistentAnalysisArchive(entry, downloadButton);
-          return;
-        }
-        void downloadResultsArchive({
-          outputDir: entry.outputDir,
-          entryCount: Array.isArray(entry.artifacts) ? entry.artifacts.length : 0,
-          archiveBaseName: getAnalysisHistoryArchiveBaseName(entry),
-          pendingButton: downloadButton
-        });
-      });
-      actions.appendChild(downloadButton);
-    }
-
-    if (entry.persisted && entry.completed) {
-      const deleteButton = document.createElement("button");
-      deleteButton.type = "button";
-      deleteButton.className = "analysis-history-delete";
-      deleteButton.textContent = "Supprimer";
-      deleteButton.addEventListener("click", () => {
-        void deletePersistentAnalysisEntry(entry).catch((error) => {
-          setSidebarRuntimeStatus("Suppression impossible.", "error");
-          log(`[error] Suppression de l'analyse impossible : ${error?.message || String(error)}`);
-        });
-      });
-      actions.appendChild(deleteButton);
-    }
-
-    item.appendChild(mainButton);
-    if (actions.childElementCount) item.appendChild(actions);
-    analysisHistory.appendChild(item);
+    folder.appendChild(summary);
+    folder.appendChild(entries);
+    analysisHistory.appendChild(folder);
   });
 }
 
@@ -12998,9 +13062,10 @@ async function renderLongitudinalExports(index) {
   );
 }
 
-async function loadCorpusPreview(file) {
+async function loadCorpusPreview(file, loadToken) {
   try {
     const text = await file.text();
+    if (loadToken !== appState.corpusLoadToken) return false;
     const starredMetadata = extractStarredMetadataFromCorpusText(text);
     appState.corpusText = text;
     appState.afcStarredVariablesChoices = starredMetadata.variables;
@@ -13010,7 +13075,9 @@ async function loadCorpusPreview(file) {
     corpusPreview.textContent = preview || "Le fichier est vide.";
     renderAfcStarredVariablesPickers(document, { resetSelection: true });
     renderSuiviControls(document, { resetSelection: true });
+    return true;
   } catch (error) {
+    if (loadToken !== appState.corpusLoadToken) return false;
     appState.corpusText = "";
     appState.afcStarredVariablesChoices = [];
     appState.corpusStarredDocs = [];
@@ -13019,6 +13086,7 @@ async function loadCorpusPreview(file) {
     renderAfcStarredVariablesPickers(document, { resetSelection: true });
     renderSuiviControls(document, { resetSelection: true });
     log(`[error] Lecture du fichier impossible: ${error.message}`);
+    return false;
   }
 }
 
@@ -15169,8 +15237,11 @@ annotationDownloadCsvBtn?.addEventListener("click", async () => {
 
 corpusFileInput.addEventListener("change", async () => {
   const selectedFile = corpusFileInput.files?.[0];
+  const loadToken = appState.corpusLoadToken + 1;
+  appState.corpusLoadToken = loadToken;
 
   if (!selectedFile) {
+    appState.corpusLoading = false;
     appState.corpusFileName = null;
     appState.corpusText = "";
     appState.afcStarredVariablesChoices = [];
@@ -15190,10 +15261,24 @@ corpusFileInput.addEventListener("change", async () => {
   }
 
   resetResultPanes();
+  appState.corpusLoading = true;
   appState.corpusFileName = selectedFile.name;
-  fileInfo.textContent = `Fichier: ${selectedFile.name} (${getFileSizeLabel(selectedFile)})`;
+  appState.corpusText = "";
+  appState.afcStarredVariablesChoices = [];
+  appState.corpusStarredDocs = [];
+  appState.corpusStarredModalitiesByVariable = {};
+  corpusPreview.textContent = "Lecture du nouveau corpus...";
+  fileInfo.textContent = `Lecture du fichier : ${selectedFile.name} (${getFileSizeLabel(selectedFile)})`;
   setSidebarRuntimeStatus("");
-  await loadCorpusPreview(selectedFile);
+  if (annotationCorpusText) annotationCorpusText.value = "";
+  const loaded = await loadCorpusPreview(selectedFile, loadToken);
+  if (loadToken !== appState.corpusLoadToken) return;
+  appState.corpusLoading = false;
+  if (!loaded) {
+    fileInfo.textContent = `Fichier illisible : ${selectedFile.name}`;
+    return;
+  }
+  fileInfo.textContent = `Fichier: ${selectedFile.name} (${getFileSizeLabel(selectedFile)})`;
   if (annotationCorpusText) {
     annotationCorpusText.value = appState.corpusText;
   }
@@ -15257,8 +15342,14 @@ async function startAnalysis(analysisKind = "chd") {
 
   const selectedFile = corpusFileInput.files?.[0] || null;
   const corpusName = String(appState.corpusFileName || selectedFile?.name || "").trim();
+  if (appState.corpusLoading) {
+    activateTopTab("corpus");
+    log("[info] Lecture du nouveau corpus en cours. Attendez la fin de l'import avant de lancer l'analyse.");
+    return;
+  }
+  const corpusText = String(appState.corpusText || "");
 
-  if (!corpusName || !String(appState.corpusText || "").trim()) {
+  if (!corpusName || !corpusText.trim()) {
     activateTopTab("corpus");
     log("[error] Veuillez importer un corpus avant de lancer l'analyse.");
     return;
@@ -15415,9 +15506,6 @@ async function startAnalysis(analysisKind = "chd") {
       return;
     }
 
-    const corpusText = String(appState.corpusText || "").trim()
-      ? appState.corpusText
-      : await selectedFile.text();
     const config = buildJobConfig(analysisKind);
     let streamedLogCount = 0;
     let lastTicketHeartbeatAt = 0;

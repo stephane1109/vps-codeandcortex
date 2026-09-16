@@ -865,6 +865,70 @@ textarea {
   line-height: 1.28;
 }
 
+.analysis-history-folder {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.analysis-history-folder-summary {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.66rem 0.7rem;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.analysis-history-folder-summary::-webkit-details-marker {
+  display: none;
+}
+
+.analysis-history-folder-summary::before {
+  content: "+";
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.analysis-history-folder[open] .analysis-history-folder-summary::before {
+  content: "-";
+}
+
+.analysis-history-folder-summary:hover,
+.analysis-history-folder-summary:focus-visible {
+  background: rgba(159, 29, 32, 0.05);
+  outline: none;
+}
+
+.analysis-history-folder-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.analysis-history-folder-count {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.analysis-history-folder-entries {
+  display: grid;
+  gap: 0.48rem;
+  margin: 0 0.58rem 0.58rem 1.1rem;
+  padding: 0.08rem 0 0 0.62rem;
+  border-left: 1px solid var(--line);
+}
+
 .analysis-history-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
