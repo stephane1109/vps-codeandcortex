@@ -95,6 +95,12 @@ APPLICATIONS_PAR_DEFAUT = {
         "cout": 4,
         "duree_ticket": 300,
     },
+    "iramuteqlite_autochd": {
+        "label": "IRaMuTeQ Lab",
+        "max_active": 1,
+        "cout": 4,
+        "duree_ticket": 300,
+    },
     "stopmotion_opticalflow": {
         "label": "StopMotion",
         "max_active": 1,
