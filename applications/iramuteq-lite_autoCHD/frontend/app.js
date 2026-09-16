@@ -12656,7 +12656,7 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
       ? formatScientificNumber(pValue, 6)
       : String(row[pScientificIndex] ?? "").trim();
     const pThresholdValue = pThresholdIndex === -1
-      ? (Number.isFinite(pValue) && pValue <= 0.01 ? "p <= 0.01" : "")
+      ? (Number.isFinite(pValue) && pValue <= 0.01 ? "p ≤ 0.01" : "")
       : String(row[pThresholdIndex] ?? "").trim();
     const typeValue = typeIndex === -1 ? "" : normalizeChdTypeValue(row[typeIndex]);
     const isSignificant05 = Number.isFinite(pValue) && pValue <= 0.05;

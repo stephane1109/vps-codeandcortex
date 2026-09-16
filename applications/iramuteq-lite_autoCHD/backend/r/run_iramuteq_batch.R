@@ -313,7 +313,7 @@ formatter_p_seuil_01_batch <- function(x) {
   ifelse(
     is.na(vals),
     NA_character_,
-    ifelse(vals <= 0.01, "p <= 0.01", "")
+    ifelse(vals <= 0.01, "p ≤ 0.01", "")
   )
 }
 
