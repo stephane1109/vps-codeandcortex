@@ -34,7 +34,7 @@ Application accessible ensuite sur :
 1. Créer une nouvelle `Application`
 2. Connecter le dépôt Git `VPS`
 3. Choisir `Dockerfile`
-4. Définir le `Base Directory` sur `/applications/iramuteq-lite`
+4. Définir le `Base Directory` sur `/applications/iramuteq-lite_autoCHD`
 5. Définir le port exposé sur `8000`
 6. Ajouter un volume persistant monté sur `/data/app`
 
@@ -71,6 +71,9 @@ APP_TICKET_TTL_SECONDS=300
 APP_TICKET_MAX_WAITING=20
 APP_TICKET_WAIT_REFRESH_MS=10000
 APP_TICKET_HEARTBEAT_MS=30000
+IRAMUTEQ_ANALYSIS_RETENTION_DAYS=30
+IRAMUTEQ_ANALYSIS_OWNER_COOKIE_DAYS=90
+IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE=1
 ```
 
 Optionnel si vous voulez explicitement reactiver le bootstrap build-time :
@@ -89,6 +92,18 @@ La configuration recommandee est maintenant :
 
 Dans ce mode, le deploiement Coolify est beaucoup plus fiable: l'image se construit sans lancer toute la chaine CHD au build, puis l'application complete l'installation au runtime dans `/data/app` si necessaire.
 Si vous forcez `IRAMUTEQ_BUILD_BOOTSTRAP=1`, le build Docker relance aussi un test de fumee CHD sur `docker/smoke-corpus.txt` : si `stats_par_classe.csv`, `segments_par_classe.txt`, `dendrogramme_chd.png` ou `segments_par_classe.html` ne sont pas produits, le build echoue.
+
+## Historique personnel des analyses
+
+L'interface conserve les analyses du meme navigateur dans `/data/app/analysis-history.sqlite3`.
+Un cookie anonyme, `HttpOnly` et sécurisé associe ce navigateur a ses propres analyses : aucun compte ni mot de passe n'est demandé.
+
+- `IRAMUTEQ_ANALYSIS_RETENTION_DAYS=30` : durée de conservation des résultats ; les jobs terminés expirés sont supprimés avec leurs exports.
+- `IRAMUTEQ_ANALYSIS_OWNER_COOKIE_DAYS=90` : durée de conservation de l'identifiant anonyme du navigateur.
+- `IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE=1` : à conserver en production HTTPS ; utiliser `0` uniquement pour un test local en HTTP.
+
+Le corpus source est retiré dès qu'une analyse est finalisée. Les exports restent disponibles depuis la section « Mes analyses » jusqu'à leur expiration ou leur suppression manuelle.
+Le même historique n'est pas partageable entre navigateurs ou ordinateurs sans ajouter ultérieurement un véritable système de compte.
 
 ## TTL ticket utilisateur
 

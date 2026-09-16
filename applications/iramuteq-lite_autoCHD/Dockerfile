@@ -22,6 +22,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APP_TICKET_MAX_WAITING=20 \
     APP_TICKET_WAIT_REFRESH_MS=10000 \
     APP_TICKET_HEARTBEAT_MS=30000 \
+    IRAMUTEQ_ANALYSIS_RETENTION_DAYS=30 \
+    IRAMUTEQ_ANALYSIS_OWNER_COOKIE_DAYS=90 \
+    IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE=1 \
     APP_TICKET_ENFORCED=1
 
 # #### VARIABLES D'ENVIRONNEMENT A MODIFIER DANS COOLIFY
@@ -30,6 +33,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - APP_TICKET_COST selon la charge reelle du VPS
 # - APP_TICKET_TTL_SECONDS=300 par defaut, soit 5 minutes avant expiration
 #   automatique si le ticket n'est plus rafraichi
+# - IRAMUTEQ_ANALYSIS_RETENTION_DAYS=30 pour conserver les exports personnels
+# - IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE=1 en production HTTPS
 # - IRAMUTEQ_R_LIBS_USER=/data/app/r-library pour conserver
 #   les packages R installes au runtime dans le volume persistant Coolify
 # - IRAMUTEQ_PYTHON_SITE_DIR=/data/app/python-site-packages pour conserver

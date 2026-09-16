@@ -4,6 +4,7 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -33,6 +34,7 @@ TEXT_EXTENSIONS = {
     ".txt",
     ".xml",
 }
+JOB_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def env_truthy(name: str) -> bool:
@@ -56,6 +58,36 @@ def frontend_root() -> Path:
 
 def jobs_root() -> Path:
     return ensure_directory(app_data_root() / "jobs")
+
+
+def job_root_for_id(job_id: str) -> Path:
+    normalized_job_id = str(job_id or "").strip()
+    if not normalized_job_id or not JOB_ID_PATTERN.fullmatch(normalized_job_id):
+        raise ValueError("Identifiant de job invalide.")
+
+    root = jobs_root().resolve()
+    candidate = (root / normalized_job_id).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:  # pragma: no cover - protected by the pattern above
+        raise PermissionError("Le job demandé est en dehors du répertoire autorisé.") from error
+    return candidate
+
+
+def remove_job_directory(job_id: str) -> None:
+    job_root = job_root_for_id(job_id)
+    if job_root.is_dir():
+        shutil.rmtree(job_root)
+
+
+def remove_job_input(job_id: str) -> None:
+    """Drop the raw corpus once a terminal job has produced its reusable exports."""
+    job_root = job_root_for_id(job_id)
+    if not job_root.is_dir():
+        return
+    for input_path in job_root.glob("input-*"):
+        if input_path.is_file():
+            input_path.unlink()
 
 
 def downloads_root() -> Path:
@@ -697,6 +729,13 @@ def collect_artifact_files(output_dir: Path) -> list[dict[str, str]]:
     return artifacts
 
 
+def count_artifact_files(output_dir: Path) -> int:
+    root = output_dir.resolve()
+    if not root.is_dir():
+        return 0
+    return sum(1 for path in root.rglob("*") if path.is_file())
+
+
 def resolve_help_path(relative_path: str) -> Path:
     requested = str(relative_path or "").replace("\\", "/").strip()
     if not requested:
@@ -891,13 +930,13 @@ def start_python_analysis(corpus_name: str, corpus_text: str, config: dict[str, 
     }
 
 
-def read_python_analysis_status(job_id: str) -> dict[str, Any]:
+def read_python_analysis_status(job_id: str, *, include_files: bool = True) -> dict[str, Any]:
     if not str(job_id or "").strip():
         raise ValueError("Identifiant de job manquant.")
 
     job_id = str(job_id).strip()
     recover_interrupted_analysis(job_id)
-    job_root = jobs_root() / job_id
+    job_root = job_root_for_id(job_id)
 
     status_file = job_root / "status.json"
     results_file = job_root / "results.json"
@@ -916,6 +955,7 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             "outputDir": None,
             "summary": None,
             "files": [],
+            "artifactCount": 0,
             "statusFile": str(status_file),
             "resultsFile": str(results_file),
             "stdoutLog": str(stdout_log),
@@ -935,6 +975,7 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             "outputDir": None,
             "summary": None,
             "files": [],
+            "artifactCount": 0,
             "statusFile": str(status_file),
             "resultsFile": str(results_file),
             "stdoutLog": str(stdout_log),
@@ -957,6 +998,7 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             "outputDir": None,
             "summary": None,
             "files": [],
+            "artifactCount": 0,
             "statusFile": str(status_file),
             "resultsFile": str(results_file),
             "stdoutLog": str(stdout_log),
@@ -976,6 +1018,7 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
             "outputDir": None,
             "summary": None,
             "files": [],
+            "artifactCount": 0,
             "statusFile": str(status_file),
             "resultsFile": str(results_file),
             "stdoutLog": str(stdout_log),
@@ -984,11 +1027,14 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
     success = bool(result_payload.get("success"))
     output_dir = result_payload.get("output_dir")
     files: list[dict[str, str]] = []
+    artifact_count = 0
     if success and output_dir:
         output_dir_path = Path(str(output_dir)).resolve()
         if output_dir_path.is_dir():
-            files = collect_artifact_files(output_dir_path)
-        if not files:
+            artifact_count = count_artifact_files(output_dir_path)
+            if include_files:
+                files = collect_artifact_files(output_dir_path)
+        if not artifact_count:
             success = False
             message = missing_artifacts_message(
                 output_dir_path,
@@ -1014,6 +1060,7 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
         "outputDir": str(Path(output_dir).resolve()) if output_dir else None,
         "summary": result_payload.get("summary"),
         "files": files,
+        "artifactCount": artifact_count,
         "statusFile": str(result_payload.get("status_file") or status_file),
         "resultsFile": str(results_file),
         "stdoutLog": str(result_payload.get("stdout_log") or stdout_log),

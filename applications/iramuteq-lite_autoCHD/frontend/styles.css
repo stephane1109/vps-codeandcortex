@@ -925,6 +925,28 @@ textarea {
   white-space: nowrap;
 }
 
+.analysis-history-actions {
+  display: grid;
+  gap: 0.38rem;
+  justify-items: end;
+}
+
+.analysis-history-delete {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.analysis-history-delete:hover,
+.analysis-history-delete:focus-visible {
+  color: var(--accent);
+}
+
 .download-results-status {
   margin: 0.75rem 0 0;
   font-size: 0.86rem;

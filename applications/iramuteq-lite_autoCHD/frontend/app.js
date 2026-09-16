@@ -328,6 +328,7 @@ const appState = {
   exportEntries: [],
   analysisHistory: [],
   activeAnalysisHistoryId: null,
+  analysisHistoryRetentionDays: null,
   corpusText: "",
   afcStarredVariablesChoices: [],
   corpusStarredDocs: [],
@@ -641,10 +642,7 @@ function scheduleIdleTicketRelease() {
 
 function releaseTicketOnPageHide() {
   if (analysisExecutionInProgress) {
-    void abandonActiveAnalysis({
-      reason: "Analyse annulee : la page a ete quittee avant la fin du calcul.",
-      silent: true
-    }).catch(() => {});
+    // The server job is independent from the page and remains recoverable on return.
     return;
   }
   if (!latestTicketSnapshot.enabled || !["actif", "attente"].includes(latestTicketSnapshot.statut)) {
@@ -1101,9 +1099,252 @@ function getAnalysisHistoryArchiveBaseName(entry) {
   return `${corpusPart}_${kindPart}_${datePart}`;
 }
 
+function isPersistentAnalysisHistoryAvailable() {
+  return Boolean(window.__TAURI__?.isWebRuntime);
+}
+
+async function callAnalysisHistoryApi(path, { method = "GET", body = null } = {}) {
+  const headers = body === null ? {} : { "Content-Type": "application/json" };
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers,
+    body: body === null ? undefined : JSON.stringify(body)
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+  if (!response.ok) {
+    const detail = payload && typeof payload === "object" ? payload.detail || payload.message : payload;
+    throw new Error(detail || `Erreur HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+function normalizePersistentAnalysisHistoryEntry(value) {
+  const analysisId = String(value?.id || value?.analysisId || "").trim();
+  if (!analysisId) return null;
+  return {
+    id: analysisId,
+    analysisId,
+    persisted: true,
+    jobId: String(value?.jobId || "").trim() || null,
+    analysisKind: String(value?.analysisKind || "chd").trim() || "chd",
+    createdAt: String(value?.createdAt || "").trim() || new Date().toISOString(),
+    updatedAt: String(value?.updatedAt || "").trim(),
+    expiresAt: String(value?.expiresAt || "").trim(),
+    corpusName: String(value?.corpusName || "").trim(),
+    folderName: String(value?.jobId || analysisId).trim(),
+    outputDir: String(value?.outputDir || "").trim() || null,
+    navigationTarget: String(value?.navigationTarget || "resultats_chd").trim() || "resultats_chd",
+    status: String(value?.status || "running").trim().toLowerCase() || "running",
+    completed: Boolean(value?.completed),
+    success: typeof value?.success === "boolean" ? value.success : null,
+    message: String(value?.message || "").trim(),
+    summary: value?.summary || null,
+    logs: Array.isArray(value?.logs) ? value.logs : [],
+    artifactCount: Number(value?.artifactCount) || 0,
+    artifacts: Array.isArray(value?.artifacts) ? value.artifacts : []
+  };
+}
+
+function getAnalysisHistoryStatusLabel(entry) {
+  if (!entry?.persisted) return "";
+  if (!entry.completed) {
+    if (entry.status === "queued") return "En attente";
+    return "En cours";
+  }
+  if (entry.success) return "Terminée";
+  if (entry.status === "cancelled") return "Arrêtée";
+  return "En échec";
+}
+
+function getAnalysisHistoryMeta(entry) {
+  const parts = [entry?.corpusName || "Corpus courant"];
+  const statusLabel = getAnalysisHistoryStatusLabel(entry);
+  if (statusLabel) parts.push(statusLabel);
+  if (entry?.persisted && entry?.expiresAt) {
+    const expiryLabel = formatAnalysisDateTime(entry.expiresAt);
+    if (expiryLabel) parts.push(`Conservée jusqu'au ${expiryLabel}`);
+  }
+  return parts.join(" · ");
+}
+
+function mergePersistentAnalysisHistory(entries) {
+  const existingEntries = new Map(
+    appState.analysisHistory.map((entry) => [String(entry?.id || ""), entry])
+  );
+  const persistentEntries = entries
+    .map((entry) => normalizePersistentAnalysisHistoryEntry(entry))
+    .filter(Boolean)
+    .map((entry) => {
+      const existing = existingEntries.get(entry.id);
+      if (!existing) return entry;
+      return {
+        ...entry,
+        outputDir: existing.outputDir || entry.outputDir,
+        artifacts: Array.isArray(existing.artifacts) && existing.artifacts.length
+          ? existing.artifacts
+          : entry.artifacts
+      };
+    });
+  const transientEntries = appState.analysisHistory.filter((entry) => !entry?.persisted);
+  appState.analysisHistory = [...persistentEntries, ...transientEntries];
+}
+
+async function loadPersistentAnalysisHistory() {
+  if (!isPersistentAnalysisHistoryAvailable()) return;
+  try {
+    const payload = await callAnalysisHistoryApi("/api/analyses");
+    mergePersistentAnalysisHistory(Array.isArray(payload?.analyses) ? payload.analyses : []);
+    appState.analysisHistoryRetentionDays = Number(payload?.retentionDays) || null;
+    renderAnalysisHistory();
+
+    const runningAnalysis = appState.analysisHistory.find((entry) => entry?.persisted && !entry.completed);
+    if (runningAnalysis) {
+      setSidebarRuntimeStatus("Une analyse se poursuit sur le serveur. Ouvrez sa ligne pour consulter son avancement.", "warning");
+    }
+  } catch (error) {
+    log(`[info] Historique distant temporairement indisponible : ${error?.message || String(error)}`);
+  }
+}
+
+function replaceAnalysisHistoryEntry(entry) {
+  appState.analysisHistory = appState.analysisHistory.map((current) =>
+    current.id === entry.id ? { ...current, ...entry } : current
+  );
+}
+
+async function refreshPersistentAnalysisEntry(entry) {
+  const payload = await callAnalysisHistoryApi(`/api/analyses/${encodeURIComponent(entry.analysisId)}`);
+  const refreshed = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
+  if (!refreshed) {
+    throw new Error("Réponse d'historique invalide.");
+  }
+  const existing = appState.analysisHistory.find((current) => current.id === refreshed.id);
+  if (existing?.artifacts?.length) refreshed.artifacts = existing.artifacts;
+  if (existing?.outputDir) refreshed.outputDir = existing.outputDir;
+  replaceAnalysisHistoryEntry(refreshed);
+  return { entry: refreshed, snapshot: payload?.snapshot || {} };
+}
+
+async function downloadPersistentAnalysisArchive(entry, pendingButton) {
+  if (!entry?.analysisId || !entry.completed || !entry.success) return;
+  const button = pendingButton instanceof HTMLButtonElement ? pendingButton : null;
+  const defaultLabel = button?.textContent || "Télécharger";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Téléchargement...";
+  }
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = `/api/analyses/${encodeURIComponent(entry.analysisId)}/archive`;
+    anchor.download = `${getAnalysisHistoryArchiveBaseName(entry)}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setDownloadResultsStatus("Téléchargement de l'archive lancé.", { isError: false });
+    log(`[info] Téléchargement demandé : ${getAnalysisHistoryLabel(entry)}.`);
+  } finally {
+    window.setTimeout(() => {
+      if (button) {
+        button.disabled = false;
+        button.textContent = defaultLabel;
+      }
+    }, 400);
+  }
+}
+
+async function deletePersistentAnalysisEntry(entry) {
+  if (!entry?.analysisId || !entry.completed) return;
+  const confirmed = window.confirm(`Supprimer définitivement l'analyse « ${getAnalysisHistoryLabel(entry)} » et ses exports ?`);
+  if (!confirmed) return;
+  await callAnalysisHistoryApi(`/api/analyses/${encodeURIComponent(entry.analysisId)}`, { method: "DELETE" });
+  const wasActive = appState.activeAnalysisHistoryId === entry.id;
+  appState.analysisHistory = appState.analysisHistory.filter((current) => current.id !== entry.id);
+  if (wasActive) {
+    resetResultPanes();
+  } else {
+    renderAnalysisHistory();
+  }
+  setSidebarRuntimeStatus("Analyse supprimée définitivement.", "success");
+  log(`[info] Analyse supprimée : ${getAnalysisHistoryLabel(entry)}.`);
+}
+
+async function activatePersistentAnalysisHistoryEntry(entry) {
+  let refreshed;
+  try {
+    refreshed = await refreshPersistentAnalysisEntry(entry);
+  } catch (error) {
+    log(`[error] Réouverture de l'analyse impossible : ${error?.message || String(error)}`);
+    return;
+  }
+
+  const currentEntry = refreshed.entry;
+  const snapshot = refreshed.snapshot;
+  appState.activeAnalysisHistoryId = currentEntry.id;
+  renderAnalysisHistory();
+
+  if (!snapshot?.completed) {
+    renderAnalysisSteps(Array.isArray(snapshot?.logs) ? snapshot.logs : []);
+    renderAnalysisSummary(snapshot?.summary || null);
+    setSidebarRuntimeStatus("Analyse toujours en cours sur le serveur.", "warning");
+    log(`[info] ${snapshot?.message || "Analyse toujours en cours."}`);
+    return;
+  }
+
+  if (!snapshot?.success) {
+    renderAnalysisSteps(Array.isArray(snapshot?.logs) ? snapshot.logs : []);
+    renderAnalysisSummary(snapshot?.summary || null);
+    setSidebarRuntimeStatus("Cette analyse n'a pas produit de résultats exploitables.", "error");
+    log(`[error] ${snapshot?.message || "Analyse terminée sans résultats exploitables."}`);
+    return;
+  }
+
+  try {
+    const payload = await callAnalysisHistoryApi(`/api/analyses/${encodeURIComponent(currentEntry.analysisId)}/artifacts`);
+    const artifacts = Array.isArray(payload?.artifacts) ? payload.artifacts : [];
+    if (!artifacts.length) {
+      throw new Error("Aucun export n'a été conservé pour cette analyse.");
+    }
+
+    const restoredEntry = normalizePersistentAnalysisHistoryEntry(payload?.analysis) || currentEntry;
+    restoredEntry.outputDir = String(payload?.snapshot?.outputDir || currentEntry.outputDir || "").trim() || null;
+    restoredEntry.artifacts = artifacts;
+    restoredEntry.summary = payload?.snapshot?.summary || restoredEntry.summary;
+    restoredEntry.logs = Array.isArray(payload?.snapshot?.logs) ? payload.snapshot.logs : restoredEntry.logs;
+    replaceAnalysisHistoryEntry(restoredEntry);
+    appState.outputDir = restoredEntry.outputDir;
+
+    const virtualFiles = artifacts.map((artifact) =>
+      createVirtualFileFromArtifact(artifact, restoredEntry.folderName || restoredEntry.jobId || restoredEntry.id)
+    );
+    await handleExportsFolderSelection(virtualFiles, restoredEntry.navigationTarget || "resultats_chd");
+    renderAnalysisSteps(restoredEntry.logs);
+    renderAnalysisSummary(restoredEntry.summary || null);
+    renderZipfChart(restoredEntry.summary || null);
+    setSidebarRuntimeStatus("Résultats restaurés depuis votre historique.", "success");
+    log(`[info] Résultats rechargés : ${getAnalysisHistoryLabel(restoredEntry)}.`);
+    renderAnalysisHistory();
+  } catch (error) {
+    setSidebarRuntimeStatus("Restauration des exports impossible.", "error");
+    log(`[error] Restauration des exports impossible : ${error?.message || String(error)}`);
+  }
+}
+
 async function activateAnalysisHistoryEntry(entryId) {
   const entry = appState.analysisHistory.find((item) => item.id === entryId);
-  if (!entry || !Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  if (!entry) {
+    log("[error] Réouverture de l'analyse impossible : analyse introuvable.");
+    return;
+  }
+
+  if (entry.persisted && entry.analysisId && isPersistentAnalysisHistoryAvailable()) {
+    await activatePersistentAnalysisHistoryEntry(entry);
+    return;
+  }
+
+  if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
     log("[error] Réouverture de l'analyse impossible : aucun export mémorisé.");
     return;
   }
@@ -1169,7 +1410,8 @@ function renderAnalysisHistory() {
   if (!Array.isArray(appState.analysisHistory) || !appState.analysisHistory.length) {
     const empty = document.createElement("p");
     empty.className = "muted analysis-history-empty";
-    empty.textContent = "Les analyses lancées s'afficheront ici.";
+    const retentionDays = Number(appState.analysisHistoryRetentionDays) || 30;
+    empty.textContent = `Vos analyses apparaîtront ici et resteront disponibles après reconnexion pendant ${retentionDays} jours.`;
     analysisHistory.appendChild(empty);
     return;
   }
@@ -1188,7 +1430,7 @@ function renderAnalysisHistory() {
 
     const meta = document.createElement("span");
     meta.className = "analysis-history-item-meta";
-    meta.textContent = entry.corpusName || "Corpus courant";
+    meta.textContent = getAnalysisHistoryMeta(entry);
 
     mainButton.appendChild(title);
     mainButton.appendChild(meta);
@@ -1196,42 +1438,76 @@ function renderAnalysisHistory() {
       void activateAnalysisHistoryEntry(entry.id);
     });
 
-    const downloadButton = document.createElement("button");
-    downloadButton.type = "button";
-    downloadButton.className = "secondary-button analysis-history-download";
-    downloadButton.textContent = "Télécharger";
-    downloadButton.addEventListener("click", () => {
-      void downloadResultsArchive({
-        outputDir: entry.outputDir,
-        entryCount: Array.isArray(entry.artifacts) ? entry.artifacts.length : 0,
-        archiveBaseName: getAnalysisHistoryArchiveBaseName(entry),
-        pendingButton: downloadButton
+    const actions = document.createElement("div");
+    actions.className = "analysis-history-actions";
+
+    if (!entry.persisted || (entry.completed && entry.success)) {
+      const downloadButton = document.createElement("button");
+      downloadButton.type = "button";
+      downloadButton.className = "secondary-button analysis-history-download";
+      downloadButton.textContent = "Télécharger";
+      downloadButton.addEventListener("click", () => {
+        if (entry.persisted && entry.analysisId) {
+          void downloadPersistentAnalysisArchive(entry, downloadButton);
+          return;
+        }
+        void downloadResultsArchive({
+          outputDir: entry.outputDir,
+          entryCount: Array.isArray(entry.artifacts) ? entry.artifacts.length : 0,
+          archiveBaseName: getAnalysisHistoryArchiveBaseName(entry),
+          pendingButton: downloadButton
+        });
       });
-    });
+      actions.appendChild(downloadButton);
+    }
+
+    if (entry.persisted && entry.completed) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "analysis-history-delete";
+      deleteButton.textContent = "Supprimer";
+      deleteButton.addEventListener("click", () => {
+        void deletePersistentAnalysisEntry(entry).catch((error) => {
+          setSidebarRuntimeStatus("Suppression impossible.", "error");
+          log(`[error] Suppression de l'analyse impossible : ${error?.message || String(error)}`);
+        });
+      });
+      actions.appendChild(deleteButton);
+    }
 
     item.appendChild(mainButton);
-    item.appendChild(downloadButton);
+    if (actions.childElementCount) item.appendChild(actions);
     analysisHistory.appendChild(item);
   });
 }
 
 function rememberAnalysisHistoryEntry(entry) {
-  if (!entry || !Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  const persisted = Boolean(entry?.persisted || entry?.analysisId);
+  if (!entry || (!persisted && (!Array.isArray(entry.artifacts) || !entry.artifacts.length))) {
     return;
   }
 
   const normalizedEntry = {
-    id: entry.id || entry.jobId || `${entry.analysisKind || "chd"}-${Date.now()}`,
+    id: entry.id || entry.analysisId || entry.jobId || `${entry.analysisKind || "chd"}-${Date.now()}`,
+    analysisId: entry.analysisId || (persisted ? entry.id : null),
+    persisted,
     jobId: entry.jobId || null,
     analysisKind: entry.analysisKind || "chd",
     createdAt: entry.createdAt || new Date().toISOString(),
+    updatedAt: entry.updatedAt || "",
+    expiresAt: entry.expiresAt || "",
     corpusName: entry.corpusName || appState.corpusFileName || "",
     folderName: entry.folderName || entry.jobId || "exports",
     outputDir: entry.outputDir || null,
     navigationTarget: entry.navigationTarget || "resultats_chd",
+    status: entry.status || (persisted ? "running" : "completed"),
+    completed: persisted ? Boolean(entry.completed) : true,
+    success: typeof entry.success === "boolean" ? entry.success : (persisted ? null : true),
+    message: entry.message || "",
     summary: entry.summary || null,
     logs: Array.isArray(entry.logs) ? entry.logs : [],
-    artifacts: entry.artifacts
+    artifactCount: Number(entry.artifactCount) || (Array.isArray(entry.artifacts) ? entry.artifacts.length : 0),
+    artifacts: Array.isArray(entry.artifacts) ? entry.artifacts : []
   };
 
   appState.analysisHistory = [
@@ -1263,6 +1539,7 @@ function readPersistedRunningAnalysis() {
       jobId,
       corpusName: normalizeRuntimeCorpusName(parsed.corpusName),
       analysisKind: String(parsed.analysisKind || "chd").trim() || "chd",
+      analysisId: String(parsed.analysisId || "").trim(),
       createdAt: String(parsed.createdAt || "").trim()
     };
   } catch (_error) {
@@ -1281,6 +1558,7 @@ function persistRunningAnalysis(entry) {
         jobId,
         corpusName: normalizeRuntimeCorpusName(entry?.corpusName),
         analysisKind: String(entry?.analysisKind || "chd").trim() || "chd",
+        analysisId: String(entry?.analysisId || "").trim(),
         createdAt: String(entry?.createdAt || new Date().toISOString()).trim()
       })
     );
@@ -13422,7 +13700,6 @@ function resetResultPanes() {
   appState.outputDir = null;
   appState.exportsFolderName = null;
   appState.exportEntries = [];
-  appState.analysisHistory = [];
   appState.activeAnalysisHistoryId = null;
   appState.chdSegmentsByClass = new Map();
   appState.jsdConcordancierRows = [];
@@ -15163,7 +15440,11 @@ async function startAnalysis(analysisKind = "chd") {
       session = await tauriInvoke("start_python_analysis", {
         corpusName,
         corpusText,
-        config
+        config,
+        history: {
+          analysisKind,
+          navigationTarget
+        }
       });
       activeAnalysisJobId = String(session?.jobId || "").trim();
       log(`[info] Job lancé : ${session.jobId}`);
@@ -15174,7 +15455,7 @@ async function startAnalysis(analysisKind = "chd") {
         throw startError;
       }
 
-      session = { jobId: resumedJobId, resumed: true };
+      session = { jobId: resumedJobId, analysisId: resumableAnalysis.analysisId || "", resumed: true };
       activeAnalysisJobId = String(resumedJobId || "").trim();
       progression.set(14, "Analyse deja en cours : reprise du suivi...");
       setSidebarRuntimeStatus("Analyse deja en cours sur le serveur. Reprise du suivi du job.", "warning");
@@ -15185,8 +15466,25 @@ async function startAnalysis(analysisKind = "chd") {
       jobId: session.jobId,
       corpusName,
       analysisKind,
+      analysisId: session.analysisId || "",
       createdAt: new Date().toISOString()
     });
+    if (session.analysisId) {
+      rememberAnalysisHistoryEntry({
+        id: session.analysisId,
+        analysisId: session.analysisId,
+        persisted: true,
+        jobId: session.jobId,
+        analysisKind,
+        createdAt: new Date().toISOString(),
+        corpusName,
+        navigationTarget,
+        status: "running",
+        completed: false,
+        success: null,
+        artifacts: []
+      });
+    }
 
     let payload = null;
     let statusReadFailures = 0;
@@ -15228,6 +15526,26 @@ async function startAnalysis(analysisKind = "chd") {
       if (snapshot.completed) {
         clearPersistedRunningAnalysis(session.jobId);
         activeAnalysisJobId = "";
+        if (session?.analysisId) {
+          rememberAnalysisHistoryEntry({
+            id: session.analysisId,
+            analysisId: session.analysisId,
+            persisted: true,
+            jobId: session.jobId,
+            analysisKind,
+            createdAt: new Date().toISOString(),
+            corpusName,
+            navigationTarget,
+            status: snapshot.state || "completed",
+            completed: true,
+            success: Boolean(snapshot.success),
+            message: snapshot.message || "",
+            summary: snapshot.summary || null,
+            logs: Array.isArray(snapshot.logs) ? snapshot.logs : [],
+            artifactCount: Number(snapshot.artifactCount) || 0,
+            artifacts: []
+          });
+        }
         if (isAnalysisCancelledSnapshot(snapshot)) {
           setSidebarRuntimeStatus("Analyse stoppee a votre demande.", "warning");
           progression.set(Math.max(0, Number(snapshot.progress) || 0), snapshot.message || "Analyse annulee.");
@@ -15313,7 +15631,9 @@ async function startAnalysis(analysisKind = "chd") {
 
       try {
         rememberAnalysisHistoryEntry({
-          id: payload.jobId || `${analysisKind}-${Date.now()}`,
+          id: session?.analysisId || payload.jobId || `${analysisKind}-${Date.now()}`,
+          analysisId: session?.analysisId || "",
+          persisted: Boolean(session?.analysisId),
           jobId: payload.jobId || null,
           analysisKind,
           createdAt: new Date().toISOString(),
@@ -15405,6 +15725,7 @@ populateAnnotationMorphoOptions();
 renderAnnotationDictionaryTable();
 renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
+void loadPersistentAnalysisHistory();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpDiscriminationSimpleMarkdownContent, "discriminationsimple.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
