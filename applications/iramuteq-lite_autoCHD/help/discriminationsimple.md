@@ -107,13 +107,3 @@ Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 
 Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC sert ensuite à mesurer la distance entre les centres lexicaux des classes.
-
-## À quoi sert ce mode
-
-Ce mode sert à obtenir plus vite une CHD où les classes sont **mieux opposées lexicalement**, sans tester manuellement plusieurs réglages.
-
-L'idée est donc :
-
-- lancer quelques variantes utiles
-- comparer leur séparation sur l'AFC
-- retenir automatiquement la plus discriminante
