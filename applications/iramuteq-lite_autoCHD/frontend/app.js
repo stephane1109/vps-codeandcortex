@@ -13,6 +13,7 @@ const downloadResultsBtn = document.getElementById("downloadResultsBtn");
 const fileInfo = document.getElementById("fileInfo");
 const downloadResultsStatus = document.getElementById("downloadResultsStatus");
 const analysisHistory = document.getElementById("analysisHistory");
+const purgeAnalysisHistoryBtn = document.getElementById("purgeAnalysisHistoryBtn");
 const sidebarStatus = document.getElementById("sidebarStatus");
 const sidebarStatusPill = document.querySelector(".status-pill");
 const sidebarStatusDot = document.querySelector(".status-dot");
@@ -329,6 +330,7 @@ const appState = {
   analysisHistory: [],
   activeAnalysisHistoryId: null,
   analysisHistoryRetentionDays: null,
+  analysisHistoryPurgeInProgress: false,
   corpusText: "",
   corpusLoading: false,
   corpusLoadToken: 0,
@@ -1273,6 +1275,65 @@ async function deletePersistentAnalysisEntry(entry) {
   log(`[info] Analyse supprimée : ${getAnalysisHistoryLabel(entry)}.`);
 }
 
+function getPurgeableAnalysisHistoryEntries() {
+  return appState.analysisHistory.filter((entry) =>
+    entry?.persisted && entry?.completed && String(entry?.analysisId || "").trim()
+  );
+}
+
+function updateAnalysisHistoryPurgeButton() {
+  if (!purgeAnalysisHistoryBtn) return;
+
+  const canPurge = isPersistentAnalysisHistoryAvailable() && getPurgeableAnalysisHistoryEntries().length > 0;
+  purgeAnalysisHistoryBtn.hidden = !canPurge;
+  purgeAnalysisHistoryBtn.disabled = Boolean(appState.analysisHistoryPurgeInProgress);
+  purgeAnalysisHistoryBtn.textContent = appState.analysisHistoryPurgeInProgress
+    ? "Purge en cours..."
+    : "Purger mon historique";
+}
+
+async function purgePersistentAnalysisHistory() {
+  if (!isPersistentAnalysisHistoryAvailable() || appState.analysisHistoryPurgeInProgress) return;
+
+  const entries = getPurgeableAnalysisHistoryEntries();
+  if (!entries.length) return;
+
+  const countLabel = entries.length === 1 ? "cette analyse terminée" : `ces ${entries.length} analyses terminées`;
+  const confirmed = window.confirm(
+    `Supprimer définitivement ${countLabel} de votre historique et leurs exports ? Les analyses en cours seront conservées.`
+  );
+  if (!confirmed) return;
+
+  appState.analysisHistoryPurgeInProgress = true;
+  updateAnalysisHistoryPurgeButton();
+  try {
+    const payload = await callAnalysisHistoryApi("/api/analyses", { method: "DELETE" });
+    const deletedIds = new Set(
+      (Array.isArray(payload?.analysisIds) ? payload.analysisIds : [])
+        .map((analysisId) => String(analysisId || "").trim())
+        .filter(Boolean)
+    );
+    if (!deletedIds.size) {
+      setSidebarRuntimeStatus("Aucune analyse terminée à purger.", "warning");
+      return;
+    }
+
+    const activeWasDeleted = deletedIds.has(String(appState.activeAnalysisHistoryId || ""));
+    appState.analysisHistory = appState.analysisHistory.filter((entry) => !deletedIds.has(String(entry?.id || "")));
+    if (activeWasDeleted) {
+      appState.activeAnalysisHistoryId = null;
+      resetResultPanes();
+    }
+    renderAnalysisHistory();
+    const deletedLabel = deletedIds.size === 1 ? "1 analyse supprimée définitivement." : `${deletedIds.size} analyses supprimées définitivement.`;
+    setSidebarRuntimeStatus(deletedLabel, "success");
+    log(`[info] Historique purgé : ${deletedLabel}`);
+  } finally {
+    appState.analysisHistoryPurgeInProgress = false;
+    updateAnalysisHistoryPurgeButton();
+  }
+}
+
 async function activatePersistentAnalysisHistoryEntry(entry) {
   let refreshed;
   try {
@@ -1490,6 +1551,7 @@ function createAnalysisHistoryItem(entry) {
 }
 
 function renderAnalysisHistory() {
+  updateAnalysisHistoryPurgeButton();
   if (!analysisHistory) return;
 
   const existingFolders = new Set(
@@ -2593,7 +2655,7 @@ function renderClassesModeCard(card) {
 
   if (!isDiscriminationSimple) {
     if (modeDescription instanceof HTMLElement) {
-      modeDescription.textContent = "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
+      modeDescription.textContent = "En mode Normal aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
     }
     return;
   }
@@ -11513,7 +11575,7 @@ function formatSummaryValue(value) {
 
 function getClassesModeLabel(mode) {
   if (mode === "discrimination_simple") return "Auto discriminante";
-  return "Manuel";
+  return "Normal";
 }
 
 function renderAnalysisSteps(logLines) {
@@ -11646,7 +11708,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["min_docfreq testé retenu", selected.min_docfreq],
     ["k max testé retenu", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
     ["Classes retenues", selectedK],
-    ["Limite CHD à reprendre en manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
+    ["Limite CHD à reprendre en mode Normal", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
     [
@@ -11684,13 +11746,13 @@ function renderDiscriminationSimpleSummary(container, payload) {
   if (Number.isFinite(selectedManualK)) {
     const reproducibilityNote = document.createElement("p");
     reproducibilityNote.className = "field-help";
-    reproducibilityNote.textContent = `Pour reproduire exactement cette analyse en Manuel, reprenez la configuration retenue et fixez la limite d'exploration à ${selectedManualK}. Cette limite ne fixe pas le nombre final de classes : celui-ci reste déterminé par la CHD et mincl.`;
+    reproducibilityNote.textContent = `Pour reproduire exactement cette analyse en mode Normal, reprenez la configuration retenue et fixez la limite d'exploration à ${selectedManualK}. Cette limite ne fixe pas le nombre final de classes : celui-ci reste déterminé par la CHD et mincl.`;
     container.appendChild(reproducibilityNote);
 
     const replayButton = document.createElement("button");
     replayButton.type = "button";
     replayButton.className = "secondary-button";
-    replayButton.textContent = "Reprendre cette configuration en manuel";
+    replayButton.textContent = "Reprendre cette configuration en mode Normal";
     replayButton.addEventListener("click", () => {
       const setValue = (id, value) => {
         const field = document.getElementById(id);
@@ -11740,7 +11802,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
       renderAfcStarredVariablesPickers(document, { resetSelection: false });
       renderSuiviControls(document, { resetSelection: false });
       replayButton.disabled = true;
-      replayButton.textContent = "Configuration manuelle reprise";
+      replayButton.textContent = "Configuration normale reprise";
     });
     container.appendChild(replayButton);
   }
@@ -15847,6 +15909,14 @@ void initialiseTicketSidebarOnOpen().then(() => {
 window.setInterval(() => {
   void refreshTicketSidebarStatus();
 }, 15000);
+if (purgeAnalysisHistoryBtn) {
+  purgeAnalysisHistoryBtn.addEventListener("click", () => {
+    void purgePersistentAnalysisHistory().catch((error) => {
+      setSidebarRuntimeStatus("Purge de l'historique impossible.", "error");
+      log(`[error] Purge de l'historique impossible : ${error?.message || String(error)}`);
+    });
+  });
+}
 if (releaseAccessBtn) {
   releaseAccessBtn.addEventListener("click", async () => {
     releaseAccessBtn.disabled = true;

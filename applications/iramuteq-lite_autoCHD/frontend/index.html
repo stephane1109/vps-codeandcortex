@@ -47,7 +47,12 @@
             <p id="fileInfo" class="muted sidebar-file-info">Aucun fichier sélectionné.</p>
             <p id="downloadResultsStatus" class="muted sidebar-note"></p>
             <section class="sidebar-history-block" aria-labelledby="analysisHistoryTitle">
-              <p id="analysisHistoryTitle" class="sidebar-kicker">Mes analyses</p>
+              <div class="sidebar-history-heading">
+                <p id="analysisHistoryTitle" class="sidebar-kicker">Mes analyses</p>
+                <button id="purgeAnalysisHistoryBtn" class="analysis-history-purge" type="button" hidden>
+                  Purger mon historique
+                </button>
+              </div>
               <div id="analysisHistory" class="analysis-history">
                 <p class="muted analysis-history-empty">Vos analyses apparaîtront ici et resteront disponibles après reconnexion.</p>
               </div>
@@ -494,7 +499,7 @@
               <div class="field">
                 <label for="classesMode">Nombre de classes</label>
                 <select id="classesMode" data-classes-mode-select>
-                  <option value="manuel">Manuel</option>
+                  <option value="manuel">Normal</option>
                   <option value="discrimination_simple">Auto discriminante</option>
                 </select>
                 <p class="field-help" data-classes-mode-description>

@@ -1146,7 +1146,7 @@ run_batch <- function() {
   classes_mode_label <- switch(
     classes_mode,
     discrimination_simple = "Auto discriminante",
-    "Manuel"
+    "Normal"
   )
   config_chd <- config
   if (identical(classes_mode, "discrimination_simple")) {
@@ -1216,7 +1216,7 @@ run_batch <- function() {
     log_info("Calcul CHD.", progress = 52)
     log_info("Mode : classification IRaMuTeQ-lite.", progress = 52)
     if (isTRUE(legacy_classes_mode)) {
-      log_info("Un ancien mode de selection des classes n'est plus disponible ; execution en mode Manuel.", progress = 52)
+      log_info("Un ancien mode de selection des classes n'est plus disponible ; execution en mode Normal.", progress = 52)
     }
     log_info(
       paste0(
@@ -1703,7 +1703,7 @@ run_batch <- function() {
           length(termes_signif),
           " termes significatifs (p.value <= ",
           scalar_num(config$max_p, 0.05),
-          "), comme en mode Manuel."
+          "), comme en mode Normal."
         ),
         progress = 75
       )

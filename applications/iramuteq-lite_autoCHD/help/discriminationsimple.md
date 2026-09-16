@@ -34,15 +34,15 @@ Pour chaque valeur de `k max` sélectionnée, l'application explore les solution
 
 Quand `mincl` fait partie de la grille, le résultat final indique la valeur qui a contribué au meilleur compromis. Lorsqu'il reste fixe, le même réglage est conservé dans toutes les simulations.
 
-Le résultat indique aussi la **limite CHD à reprendre en manuel**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en manuel », puis relancez l'analyse. Cette limite ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
+Le résultat indique aussi la **limite CHD à reprendre en mode Normal**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en mode Normal », puis relancez l'analyse. Cette limite ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
 
-Le graphique AFC final est construit avec tous les termes significatifs (`p.value <= 0.05`), exactement comme dans le mode Manuel. Les termes utilisés en interne pour comparer les CHD testées restent réservés au calcul de la sélection et ne modifient pas le graphique final.
+Le graphique AFC final est construit avec tous les termes significatifs (`p.value <= 0.05`), exactement comme dans le mode Normal. Les termes utilisés en interne pour comparer les CHD testées restent réservés au calcul de la sélection et ne modifient pas le graphique final.
 
 Le résultat final affiche donc :
 
 - la configuration retenue
 - le nombre de classes finales retenues
-- la limite CHD à reprendre en manuel
+- la limite CHD à reprendre en mode Normal
 - les variables qui ont conduit à ce résultat
 
 ## Comment la sélection est faite

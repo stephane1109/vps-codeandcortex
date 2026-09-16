@@ -858,6 +858,48 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.sidebar-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-history-heading .sidebar-kicker {
+  margin: 0;
+}
+
+.analysis-history-purge {
+  flex: 0 0 auto;
+  padding: 0.34rem 0.48rem;
+  border: 1px solid rgba(182, 45, 45, 0.34);
+  border-radius: 8px;
+  background: transparent;
+  color: #a12626;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.15;
+  cursor: pointer;
+}
+
+.analysis-history-purge:hover,
+.analysis-history-purge:focus-visible {
+  border-color: #b62d2d;
+  background: rgba(182, 45, 45, 0.07);
+  outline: none;
+}
+
+.analysis-history-purge:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.analysis-history-purge[hidden] {
+  display: none;
+}
+
 .analysis-history {
   display: grid;
   gap: 0.55rem;

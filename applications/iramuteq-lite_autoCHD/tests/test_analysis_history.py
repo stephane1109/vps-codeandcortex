@@ -119,6 +119,115 @@ class AnalysisHistoryStoreTests(unittest.TestCase):
             self.assertEqual([item["jobId"] for item in expired], ["web-456"])
             self.assertEqual(analysis_history.list_owned_analyses(data_root, "owner-a"), [])
 
+    def test_bulk_purge_keeps_running_and_other_owner_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            data_root = Path(temporary_directory)
+            completed = analysis_history.create_analysis(
+                data_root,
+                owner_hash="owner-a",
+                job_id="web-completed",
+                corpus_name="corpus-test.txt",
+                analysis_kind="chd",
+                navigation_target="resultats_chd",
+            )
+            running = analysis_history.create_analysis(
+                data_root,
+                owner_hash="owner-a",
+                job_id="web-running",
+                corpus_name="corpus-test.txt",
+                analysis_kind="chd",
+                navigation_target="resultats_chd",
+            )
+            other_owner = analysis_history.create_analysis(
+                data_root,
+                owner_hash="owner-b",
+                job_id="web-other-owner",
+                corpus_name="corpus-test.txt",
+                analysis_kind="chd",
+                navigation_target="resultats_chd",
+            )
+            analysis_history.update_analysis_from_snapshot(
+                data_root,
+                owner_hash="owner-a",
+                analysis_id=completed["id"],
+                snapshot={"state": "completed", "completed": True, "success": True},
+            )
+
+            deleted = analysis_history.delete_completed_owned_analyses(data_root, "owner-a")
+
+            self.assertEqual([record["id"] for record in deleted], [completed["id"]])
+            self.assertEqual(
+                [record["id"] for record in analysis_history.list_owned_analyses(data_root, "owner-a")],
+                [running["id"]],
+            )
+            self.assertEqual(
+                [record["id"] for record in analysis_history.list_owned_analyses(data_root, "owner-b")],
+                [other_owner["id"]],
+            )
+
+    def test_http_bulk_purge_removes_only_completed_owned_job_directories(self) -> None:
+        from webapp.main import app
+
+        previous_data_root = os.environ.get("IRAMUTEQ_APP_DATA_DIR")
+        previous_cookie_secure = os.environ.get("IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE")
+        try:
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                data_root = Path(temporary_directory)
+                os.environ["IRAMUTEQ_APP_DATA_DIR"] = str(data_root)
+                os.environ["IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE"] = "0"
+                client = TestClient(app)
+                client.get("/api/analyses")
+                owner_token = client.cookies.get(analysis_history.OWNER_COOKIE_NAME)
+                self.assertTrue(owner_token)
+                owner_hash = analysis_history._hash_owner_token(owner_token)
+
+                completed_root = data_root / "jobs" / "web-901"
+                running_root = data_root / "jobs" / "web-902"
+                completed_root.mkdir(parents=True)
+                running_root.mkdir(parents=True)
+                completed = analysis_history.create_analysis(
+                    data_root,
+                    owner_hash=owner_hash,
+                    job_id="web-901",
+                    corpus_name="corpus-fini.txt",
+                    analysis_kind="chd",
+                    navigation_target="resultats_chd",
+                )
+                running = analysis_history.create_analysis(
+                    data_root,
+                    owner_hash=owner_hash,
+                    job_id="web-902",
+                    corpus_name="corpus-en-cours.txt",
+                    analysis_kind="chd",
+                    navigation_target="resultats_chd",
+                )
+                analysis_history.update_analysis_from_snapshot(
+                    data_root,
+                    owner_hash=owner_hash,
+                    analysis_id=completed["id"],
+                    snapshot={"state": "completed", "completed": True, "success": True},
+                )
+
+                response = client.delete("/api/analyses")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["analysisIds"], [completed["id"]])
+                self.assertFalse(completed_root.exists())
+                self.assertTrue(running_root.exists())
+                self.assertEqual(
+                    [record["id"] for record in analysis_history.list_owned_analyses(data_root, owner_hash)],
+                    [running["id"]],
+                )
+        finally:
+            if previous_data_root is None:
+                os.environ.pop("IRAMUTEQ_APP_DATA_DIR", None)
+            else:
+                os.environ["IRAMUTEQ_APP_DATA_DIR"] = previous_data_root
+            if previous_cookie_secure is None:
+                os.environ.pop("IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE", None)
+            else:
+                os.environ["IRAMUTEQ_ANALYSIS_OWNER_COOKIE_SECURE"] = previous_cookie_secure
+
     def test_http_history_restores_only_the_owner_exports(self) -> None:
         from webapp.main import app
 

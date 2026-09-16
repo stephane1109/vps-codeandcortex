@@ -299,6 +299,22 @@ def delete_owned_analysis(data_root: Path, owner_hash: str, analysis_id: str) ->
     return record
 
 
+def delete_completed_owned_analyses(data_root: Path, owner_hash: str) -> list[dict[str, Any]]:
+    """Delete only completed analyses owned by one browser and return their job metadata."""
+    with _connect(data_root) as connection:
+        rows = connection.execute(
+            """
+            SELECT * FROM analyses
+            WHERE owner_hash = ? AND completed = 1
+            ORDER BY created_at DESC
+            """,
+            (owner_hash,),
+        ).fetchall()
+        if rows:
+            connection.executemany("DELETE FROM analyses WHERE id = ?", [(row["id"],) for row in rows])
+    return [_record_from_row(row, include_internal=True) for row in rows]
+
+
 def purge_expired_analyses(data_root: Path) -> list[dict[str, Any]]:
     now = int(time.time())
     with _connect(data_root) as connection:

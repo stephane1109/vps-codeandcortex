@@ -319,6 +319,28 @@ def list_analyses(request: Request) -> JSONResponse:
     )
 
 
+@app.delete("/api/analyses")
+def purge_completed_analyses(request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    data_root = runtime.app_data_root()
+    purge_expired_analysis_history()
+    deleted_records = analysis_history.delete_completed_owned_analyses(data_root, owner_hash)
+
+    for record in deleted_records:
+        try:
+            runtime.remove_job_directory(str(record.get("jobId") or ""))
+        except (OSError, ValueError):
+            continue
+
+    return analysis_json_response(
+        {
+            "deleted": len(deleted_records),
+            "analysisIds": [record["id"] for record in deleted_records],
+        },
+        owner_token,
+    )
+
+
 @app.get("/api/analyses/{analysis_id}/artifacts")
 def read_analysis_artifacts(analysis_id: str, request: Request) -> JSONResponse:
     owner_hash, owner_token = analysis_history.owner_for_request(request)
