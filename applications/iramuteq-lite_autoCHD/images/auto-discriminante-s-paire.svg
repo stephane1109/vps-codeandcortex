@@ -19,7 +19,7 @@
 
   <rect width="1440" height="900" fill="url(#paper)"/>
   <rect x="42" y="38" width="1356" height="824" rx="30" fill="#ffffff" stroke="#e3ddd2" stroke-width="2" filter="url(#shadow)"/>
-  <text x="96" y="112" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="700">2. Une paire de classes : distance et dispersion</text>
+  <text x="96" y="112" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="700">Distance et dispersion</text>
   <text x="96" y="151" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20">La distance entre les centres est rapportée à l'étalement lexical de chaque classe.</text>
 
   <rect x="88" y="194" width="824" height="514" rx="22" fill="#fbfdfd" stroke="#d8e4e5" stroke-width="2"/>
@@ -75,9 +75,10 @@
   <text x="1003" y="425" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">rᵢ et rⱼ : dispersion médiane</text>
   <text x="1003" y="456" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">des mots autour de Cᵢ et Cⱼ.</text>
   <rect x="1003" y="496" width="300" height="83" rx="16" fill="#e8f3ef"/>
-  <text x="1035" y="547" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="27" font-weight="700">s(i,j) = d(i,j)</text>
+  <text x="1035" y="547" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="27" font-weight="700">s(i,j) =</text>
+  <text x="1225" y="547" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="27" font-weight="700" text-anchor="middle">d(i,j)</text>
   <line x1="1168" y1="556" x2="1281" y2="556" stroke="#176553" stroke-width="2"/>
-  <text x="1182" y="587" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="700">rᵢ + rⱼ</text>
+  <text x="1225" y="587" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="700" text-anchor="middle">rᵢ + rⱼ</text>
   <text x="1003" y="636" fill="#8b4e36" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">Centres éloignés + nuages compacts</text>
   <text x="1003" y="665" fill="#8b4e36" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">donnent un s(i,j) élevé.</text>
 
