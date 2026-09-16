@@ -2136,53 +2136,156 @@ function renderClassificationModeCards(scope = document) {
   scope.querySelectorAll("[data-classification-mode-card]").forEach((card) => renderClassificationModeCard(card));
 }
 
+const AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS = {
+  mincl: {
+    toggleId: "autoDiscriminantVaryMincl",
+    minId: "autoDiscriminantMinclMin",
+    maxId: "autoDiscriminantMinclMax",
+    lowerBound: 5,
+    upperBound: 10,
+    defaultEnabled: false,
+    label: "mincl"
+  },
+  minDocfreq: {
+    toggleId: "autoDiscriminantVaryMinDocfreq",
+    minId: "autoDiscriminantMinDocfreqMin",
+    maxId: "autoDiscriminantMinDocfreqMax",
+    lowerBound: 2,
+    upperBound: 5,
+    defaultEnabled: true,
+    label: "min_docfreq"
+  },
+  kMax: {
+    toggleId: "autoDiscriminantVaryKMax",
+    minId: "autoDiscriminantKMaxMin",
+    maxId: "autoDiscriminantKMaxMax",
+    lowerBound: 3,
+    upperBound: 10,
+    defaultEnabled: true,
+    label: "k max"
+  }
+};
+
+function findClassesModeControl(scope, id) {
+  return scope?.querySelector(`#${id}, [data-source-id="${id}"]`) || null;
+}
+
+function readBoundedIntegerInput(input, lowerBound, upperBound, fallback) {
+  const rawValue = Number(input?.value);
+  const value = Number.isFinite(rawValue)
+    ? Math.min(upperBound, Math.max(lowerBound, Math.round(rawValue)))
+    : fallback;
+
+  if (input instanceof HTMLInputElement) {
+    input.min = String(lowerBound);
+    input.max = String(upperBound);
+    input.value = String(value);
+  }
+  return value;
+}
+
+function getAutoDiscriminantSettings(scope = document) {
+  const settings = {};
+
+  Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
+    const toggle = findClassesModeControl(scope, definition.toggleId);
+    const minInput = findClassesModeControl(scope, definition.minId);
+    const maxInput = findClassesModeControl(scope, definition.maxId);
+    const rawMin = readBoundedIntegerInput(minInput, definition.lowerBound, definition.upperBound, definition.lowerBound);
+    const rawMax = readBoundedIntegerInput(maxInput, definition.lowerBound, definition.upperBound, definition.upperBound);
+    const min = Math.min(rawMin, rawMax);
+    const max = Math.max(rawMin, rawMax);
+
+    if (minInput instanceof HTMLInputElement) minInput.value = String(min);
+    if (maxInput instanceof HTMLInputElement) maxInput.value = String(max);
+
+    settings[key] = {
+      enabled: toggle instanceof HTMLInputElement ? toggle.checked : definition.defaultEnabled,
+      min,
+      max,
+      label: definition.label
+    };
+  });
+
+  return settings;
+}
+
+function countAutoDiscriminantConfigurations(settings) {
+  return Object.values(settings).reduce(
+    (count, parameter) => count * (parameter.enabled ? parameter.max - parameter.min + 1 : 1),
+    1
+  );
+}
+
+function describeAutoDiscriminantParameter(parameter, options = {}) {
+  const label = options.manual && parameter.enabled ? `${parameter.label} manuel` : parameter.label;
+  return parameter.enabled
+    ? `${label} = ${parameter.min} à ${parameter.max}`
+    : `${label} fixe`;
+}
+
 function renderClassesModeCard(card) {
   if (!card) return;
-  const modeField = card.querySelector("#classesMode, [data-source-id='classesMode']");
-  const kInput = card.querySelector("#kIramuteq, [data-source-id='kIramuteq']");
-  const kLabel = card.querySelector("[data-k-iramuteq-label]");
-  const kHelp = card.querySelector("[data-k-iramuteq-help]");
+  const modeField = findClassesModeControl(card, "classesMode");
+  const kInput = findClassesModeControl(card, "kIramuteq");
   const modeDescription = card.querySelector("[data-classes-mode-description]");
-  const autoKMinInput = card.querySelector("#kIramuteqMinAuto, [data-source-id='kIramuteqMinAuto']");
-  if (!(modeField instanceof HTMLSelectElement) || !(kLabel instanceof HTMLElement)) return;
+  const manualKField = card.querySelector("[data-manual-k-field]");
+  const autoOptions = card.querySelector("[data-auto-discriminant-options]");
+  const autoSummary = card.querySelector("[data-auto-discriminant-summary]");
+  const autoWarning = card.querySelector("[data-auto-discriminant-warning]");
+  if (!(modeField instanceof HTMLSelectElement)) return;
 
   const isDiscriminationSimple = modeField.value === "discrimination_simple";
-  const usesAutoBounds = isDiscriminationSimple;
-
-  const effectiveAutoMin = 3;
-  const effectiveAutoMax = 10;
-  if (autoKMinInput instanceof HTMLInputElement) {
-    autoKMinInput.value = String(effectiveAutoMin);
-  }
-  let effectiveK = usesAutoBounds ? effectiveAutoMax : 3;
   if (kInput instanceof HTMLInputElement) {
-    const fallbackMax = usesAutoBounds ? 10 : 3;
-    const normalizedMax = Math.max(usesAutoBounds ? effectiveAutoMin : 2, Number(kInput.value) || fallbackMax);
-    effectiveK = usesAutoBounds ? Math.min(effectiveAutoMax, normalizedMax) : normalizedMax;
-    kInput.value = String(effectiveK);
-    kInput.min = String(usesAutoBounds ? effectiveAutoMin : 2);
-    if (usesAutoBounds) {
-      kInput.max = String(effectiveAutoMax);
-    } else {
-      kInput.removeAttribute("max");
-    }
+    const manualK = Number(kInput.value);
+    kInput.value = String(Number.isFinite(manualK) && manualK >= 2 ? Math.round(manualK) : 3);
+    kInput.min = "2";
+    kInput.removeAttribute("max");
   }
 
-  kLabel.textContent = isDiscriminationSimple
-    ? "Nombre maximal de classes à explorer (3 à 10)"
-    : "Nombre maximal de classes à explorer";
-  const targetedChdCount = 4 * (effectiveK - effectiveAutoMin + 1);
+  if (manualKField instanceof HTMLElement) manualKField.hidden = isDiscriminationSimple;
+  if (autoOptions instanceof HTMLElement) autoOptions.hidden = !isDiscriminationSimple;
+
+  if (!isDiscriminationSimple) {
+    if (modeDescription instanceof HTMLElement) {
+      modeDescription.textContent = "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
+    }
+    return;
+  }
+
+  const settings = getAutoDiscriminantSettings(card);
+  Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
+    const option = card.querySelector(`[data-auto-discriminant-option="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
+    const range = card.querySelector(`[data-auto-discriminant-range="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
+    const enabled = settings[key].enabled;
+    option?.classList.toggle("is-disabled", !enabled);
+    range?.querySelectorAll("input").forEach((input) => {
+      input.disabled = !enabled;
+    });
+  });
+
+  const targetedChdCount = countAutoDiscriminantConfigurations(settings);
+  const parametersDescription = [
+    describeAutoDiscriminantParameter(settings.mincl, { manual: true }),
+    describeAutoDiscriminantParameter(settings.minDocfreq),
+    describeAutoDiscriminantParameter(settings.kMax)
+  ].join(" ; ");
 
   if (modeDescription instanceof HTMLElement) {
-    modeDescription.textContent = isDiscriminationSimple
-        ? `En mode Auto discriminante, l'application croise min_docfreq de 2 à 5 avec chaque plafond k max de 3 à ${effectiveK}, soit ${targetedChdCount} CHD ciblées. Le filtrage NOM + VER, l'exclusion de être et AUTRE_FORME restent ceux choisis dans l'interface. Elle retient ensuite la configuration dont les mots significatifs se séparent le mieux sur l'AFC.`
-        : "En manuel aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
+    modeDescription.textContent = "En mode Auto discriminante, l'application simule les combinaisons que vous avez choisies, puis retient celle dont les classes sont les mieux séparées sur l'AFC.";
   }
 
-  if (kHelp instanceof HTMLElement) {
-    kHelp.textContent = isDiscriminationSimple
-        ? `Le mode teste min_docfreq = 2, 3, 4, 5 et k max = 3 à ${effectiveK}. Le mincl reste celui choisi dans les paramètres CHD. Il compare ensuite les mots significatifs, leur chi2 et leurs coordonnées x,y sur l'AFC pour retenir la configuration la plus discriminante.`
-        : "Cette valeur borne le calcul de l'arbre CHD ; elle ne fixe pas le nombre final de classes, établi ensuite avec les règles terminales et mincl.";
+  if (autoSummary instanceof HTMLElement) {
+    autoSummary.textContent = targetedChdCount > 1
+      ? `Grille prévue : ${parametersDescription}. ${targetedChdCount} configurations CHD seront comparées.`
+      : `Grille prévue : ${parametersDescription}. 1 configuration CHD sera comparée.`;
+  }
+  if (autoWarning instanceof HTMLElement) {
+    const isLargeGrid = targetedChdCount > 64;
+    autoWarning.hidden = !isLargeGrid;
+    autoWarning.textContent = isLargeGrid
+      ? `${targetedChdCount} CHD sont demandées : le calcul peut être long, surtout pour un corpus volumineux.`
+      : "";
   }
 }
 
@@ -2193,16 +2296,17 @@ function renderClassesModeCards(scope = document) {
 function resolveClassesModeConfig() {
   const classesMode = document.getElementById("classesMode").value;
   const autoKMin = 3;
-  const autoKMax = 10;
   const kValue = Number(document.getElementById("kIramuteq").value);
+  const autoDiscriminant = getAutoDiscriminantSettings(document);
   const effectiveK = classesMode === "manuel"
     ? (Number.isFinite(kValue) && kValue >= 2 ? kValue : 3)
-    : Math.min(autoKMax, Math.max(autoKMin, Number.isFinite(kValue) ? kValue : autoKMax));
+    : autoDiscriminant.kMax.max;
 
   return {
     classesMode,
     autoKMin,
-    effectiveK
+    effectiveK,
+    autoDiscriminant
   };
 }
 
@@ -2259,7 +2363,8 @@ function buildJobConfig(analysisKind = "chd") {
   const {
     classesMode,
     autoKMin,
-    effectiveK
+    effectiveK,
+    autoDiscriminant
   } = resolveClassesModeConfig();
   const discriminationSimpleProfile = classesMode === "discrimination_simple" ? "ciblee" : "equilibre";
   const simiThresholdValue = Number(document.getElementById("simiThreshold").value);
@@ -2287,6 +2392,15 @@ function buildJobConfig(analysisKind = "chd") {
     iramuteq_discrimination_simple_profile: discriminationSimpleProfile,
     iramuteq_auto_top_n_afc: classesMode === "discrimination_simple" ? null : 20,
     iramuteq_auto_k_min: autoKMin,
+    iramuteq_discrimination_simple_vary_mincl: autoDiscriminant.mincl.enabled,
+    iramuteq_discrimination_simple_mincl_min: autoDiscriminant.mincl.min,
+    iramuteq_discrimination_simple_mincl_max: autoDiscriminant.mincl.max,
+    iramuteq_discrimination_simple_vary_min_docfreq: autoDiscriminant.minDocfreq.enabled,
+    iramuteq_discrimination_simple_min_docfreq_min: autoDiscriminant.minDocfreq.min,
+    iramuteq_discrimination_simple_min_docfreq_max: autoDiscriminant.minDocfreq.max,
+    iramuteq_discrimination_simple_vary_k_max: autoDiscriminant.kMax.enabled,
+    iramuteq_discrimination_simple_k_max_min: autoDiscriminant.kMax.min,
+    iramuteq_discrimination_simple_k_max_max: autoDiscriminant.kMax.max,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
     iramuteq_mincl_mode: document.getElementById("minclMode").value,
@@ -11150,7 +11264,6 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   if (stopwords) fixedParts.push(`stopwords = ${stopwords}`);
   if (ponctuation) fixedParts.push(`ponctuation = ${ponctuation}`);
   if (chiffres) fixedParts.push(`chiffres = ${chiffres}`);
-  if (mincl && mincl !== "N/A") fixedParts.push(`mincl = ${mincl}`);
 
   if (fixedParts.length) {
     const variableNote = document.createElement("p");
@@ -11159,10 +11272,10 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
     container.appendChild(variableNote);
   }
 
-  if (minDocfreq !== "N/A" || kMaxExplore !== "N/A") {
+  if (mincl !== "N/A" || minDocfreq !== "N/A" || kMaxExplore !== "N/A") {
     const testedNote = document.createElement("p");
     testedNote.className = "field-help";
-    testedNote.textContent = `Paramètres testés retenus : min_docfreq = ${minDocfreq} ; k max = ${kMaxExplore}.`;
+    testedNote.textContent = `Paramètres testés retenus : mincl = ${mincl} ; min_docfreq = ${minDocfreq} ; k max = ${kMaxExplore}.`;
     container.appendChild(testedNote);
   }
 }
@@ -11183,12 +11296,12 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
+    ["mincl testé retenu", selected.mincl ?? "N/A"],
     ["min_docfreq testé retenu", selected.min_docfreq],
     ["k max testé retenu", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
     ["Classes retenues", selectedK],
     ["Limite CHD à reprendre en manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
-    ["mincl", selected.mincl ?? "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
     ["Séparation relative AFC", selected.separation_relative_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
   ];
@@ -11318,13 +11431,13 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
 
   const columnDefs = [
     { keys: ["configuration_id"], label: "configuration" },
+    { keys: ["mincl"], label: "mincl testé" },
     { keys: ["min_docfreq"], label: "min_docfreq testé" },
     { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "k max testé" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
     { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
     { keys: ["selection"], label: "statut" },
     { keys: ["mincl_mode"], label: "mode mincl" },
-    { keys: ["mincl"], label: "mincl" },
     { keys: ["n_segments"], label: "segments" },
     { keys: ["n_formes"], label: "formes" },
     { keys: ["classes_effectifs"], label: "effectifs classes" },
@@ -11378,6 +11491,7 @@ function getDiscriminationSimpleDistinctValues(parsed, keys, options = {}) {
 function appendDiscriminationSimpleTableContext(container, parsed) {
   if (!container || !parsed?.headers?.length) return;
 
+  const minclValues = getDiscriminationSimpleDistinctValues(parsed, ["mincl"], { numeric: true });
   const minDocfreqValues = getDiscriminationSimpleDistinctValues(parsed, ["min_docfreq"], { numeric: true });
   const kMaxValues = getDiscriminationSimpleDistinctValues(parsed, ["k_max_explore", "kmax", "k_iramuteq"], { numeric: true });
   const context = document.createElement("div");
@@ -11385,7 +11499,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
   const testedParameters = document.createElement("p");
   testedParameters.className = "field-help";
-  testedParameters.textContent = `Chaque ligne correspond à une CHD. Les deux paramètres croisés sont : min_docfreq testé = ${minDocfreqValues.join(", ") || "non disponible"} ; k max testé = ${kMaxValues.join(", ") || "non disponible"}.`;
+  testedParameters.textContent = `Chaque ligne correspond à une CHD. Valeurs explorées : mincl = ${minclValues.join(", ") || "non disponible"} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; k max = ${kMaxValues.join(", ") || "non disponible"}. Une seule valeur signifie que le paramètre est resté fixe.`;
   context.appendChild(testedParameters);
 
   const fixedSettings = [
@@ -11413,7 +11527,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["mincl_teste", "min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -14057,7 +14171,7 @@ document.addEventListener("change", (event) => {
     }
     return;
   }
-  if (target.matches("[data-classes-bound-input]")) {
+  if (target.matches("[data-classes-bound-input], [data-auto-discriminant-toggle], [data-auto-discriminant-range-input]")) {
     const card = target.closest("[data-classes-mode-card]");
     if (card) {
       renderClassesModeCard(card);
@@ -14080,7 +14194,7 @@ document.addEventListener("change", (event) => {
 document.addEventListener("input", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-  if (!target.matches("[data-classes-bound-input]")) return;
+  if (!target.matches("[data-classes-bound-input], [data-auto-discriminant-range-input]")) return;
   const card = target.closest("[data-classes-mode-card]");
   if (card) {
     renderClassesModeCard(card);
@@ -14876,8 +14990,9 @@ async function startAnalysis(analysisKind = "chd") {
   const analysis = document.getElementById("analysisType").value;
   const minFreq = Number(document.getElementById("minFreq").value);
   const statsMode = document.getElementById("statsMode").value;
-  const classesMode = document.getElementById("classesMode").value;
-  const kIramuteq = Number(document.getElementById("kIramuteq").value);
+  const classesModeConfig = resolveClassesModeConfig();
+  const classesMode = classesModeConfig.classesMode;
+  const kIramuteq = classesModeConfig.effectiveK;
   const tauriInvoke = getTauriInvoke();
   const isSimiMode = analysisKind === "simi";
   const isSuiviMode = analysisKind === "suivi";
@@ -14952,13 +15067,23 @@ async function startAnalysis(analysisKind = "chd") {
       `[info] Démarrage trajectoire lexicale : variable=${suiviVariableName || "auto"}, entretiens=${suiviSelectedUnits.length}, ${coucheLabel}, unité=${suiviLexicalUnitLabel}, prétraitement=${suiviPreprocessingLabel}${suiviFilterVariableName && suiviFilterModality ? `, filtre=${suiviFilterVariableName}=${suiviFilterModality}` : ""}`
     );
   } else {
-    const { autoKMin } = resolveClassesModeConfig();
+    const { autoKMin, autoDiscriminant } = classesModeConfig;
     const classesCountLabel = classesMode === "discrimination_simple"
       ? "intervalleClasses"
       : "classes";
     const classesModeLabel = getClassesModeLabel(classesMode);
+    const autoParameters = classesMode === "discrimination_simple"
+      ? [
+        describeAutoDiscriminantParameter(autoDiscriminant.mincl, { manual: true }),
+        describeAutoDiscriminantParameter(autoDiscriminant.minDocfreq),
+        describeAutoDiscriminantParameter(autoDiscriminant.kMax)
+      ].join(", ")
+      : "";
+    const autoCount = classesMode === "discrimination_simple"
+      ? countAutoDiscriminantConfigurations(autoDiscriminant)
+      : 0;
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${classesMode === "discrimination_simple" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${classesMode === "discrimination_simple" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}, grille=${autoCount} CHD (${autoParameters})` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
     );
   }
   progression.set(4, progressStartMessage);

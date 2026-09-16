@@ -403,6 +403,11 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     " | chiffres=",
     ifelse(isTRUE(candidate$supprimer_chiffres), "supprimes", "conserves"),
+    " | mincl=",
+    candidate$mincl %||% candidate$config$iramuteq_mincl %||% NA_integer_,
+    " (",
+    candidate$config$iramuteq_mincl_mode %||% "auto",
+    ")",
     " | min_docfreq=",
     candidate$min_docfreq %||% NA_integer_,
     " | kmax=",
@@ -708,7 +713,9 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         " | separation relative AFC=",
         format(round(as.numeric(best_row$S[[1]]), 4), nsmall = 4, trim = TRUE),
         " | min_docfreq=",
-        best_row$min_docfreq[[1]]
+        best_row$min_docfreq[[1]],
+        " | mincl=",
+        best_row$mincl[[1]]
       ),
       progress = 59
     )
@@ -857,6 +864,15 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
     manual_replay_config$k_iramuteq <- manual_replay_k
   }
   manual_replay_config$iramuteq_discrimination_simple_profile <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_vary_mincl <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_mincl_min <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_mincl_max <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_vary_min_docfreq <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_min_docfreq_min <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_min_docfreq_max <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_vary_k_max <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_k_max_min <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_k_max_max <- NULL
   summary_json <- file.path(output_dir, "discrimination_simple_summary.json")
   metrics_csv <- file.path(output_dir, "discrimination_simple_metrics.csv")
   score_png <- file.path(output_dir, "discrimination_simple_score.png")

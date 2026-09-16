@@ -11,37 +11,27 @@ On peut le lire comme si un analyste refaisait plusieurs fois la même CHD avec 
 
 Le mode compare donc plusieurs résultats possibles, mais il ne renvoie **qu'un seul compromis final**.
 
-## Ce qui est testé automatiquement
+## Paramètres à croiser
 
-Dans ce mode, la grille croise deux paramètres :
+En mode Auto discriminante, l'utilisateur coche les paramètres qu'il veut faire varier. Les paramètres non cochés restent fixes pendant toutes les simulations.
 
-- `min_docfreq = 2`
-- `min_docfreq = 3`
-- `min_docfreq = 4`
-- `min_docfreq = 5`
-- `k max = 3` jusqu'au plafond choisi dans l'interface, avec un maximum de `10`
+- `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le réglage `mincl` choisi dans les paramètres CHD est conservé.
+- `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
+- `k max` : de `3` à `10`. Il s'agit du plafond de l'arbre CHD exploré par une simulation, et non du nombre final de classes.
 
-Le reste est fixé ainsi :
+Le filtrage morphosyntaxique reste ciblé sur `NOM + VER`, avec exclusion du verbe `être`. L'option `AUTRE_FORME` reste celle choisie par l'utilisateur.
 
-- filtrage morphosyntaxique sur `NOM + VER`
-- exclusion du verbe `être`
-- `AUTRE_FORME` conservé ou non selon le choix utilisateur
+Par défaut, `min_docfreq` et `k max` sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5` et `k max = 3…10`, cela représente **32 CHD**.
 
-Avec un plafond à `10`, le mode exécute donc **32 CHD ciblées** : les quatre valeurs de `min_docfreq` sont combinées avec les huit plafonds `k max` de `3` à `10`.
-
-Le `mincl` et le type de classification terminale restent ceux choisis dans les paramètres CHD ; ils ne font pas partie de cette grille de simulation.
+Si les trois paramètres sont cochés avec toutes leurs bornes, la grille compte `6 × 4 × 8 = 192` CHD. L'interface l'indique avant le lancement, car ce calcul peut être long sur un corpus volumineux.
 
 ## Nombre de classes
 
 L'utilisateur ne choisit pas le nombre final de classes.
 
-Il fixe seulement :
+Pour chaque valeur de `k max` sélectionnée, l'application explore les solutions réalisables à partir de trois classes, puis compare les résultats entre simulations. Le nombre de classes finalement retenu dépend donc de la CHD et des règles terminales, notamment `mincl`.
 
-- `k_iramuteq` : la borne maximale des classes explorées, comprise entre `3` et `10`
-
-Ensuite, l'application relance une CHD pour chaque valeur de `k max` comprise entre `3` et cette borne, et compare les solutions réalisables ayant au moins trois classes.
-
-Chaque solution est reconstruite avec les mêmes règles terminales que le mode manuel : `mincl` et le type de classification choisi. Le seuil `mincl` est conservé depuis les paramètres CHD et n'est pas une variable de recherche de ce mode.
+Quand `mincl` fait partie de la grille, le résultat final indique la valeur qui a contribué au meilleur compromis. Lorsqu'il reste fixe, le même réglage est conservé dans toutes les simulations.
 
 Le résultat indique aussi la **limite CHD à reprendre en manuel**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en manuel », puis relancez l'analyse. Cette limite ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
 
@@ -79,7 +69,7 @@ Une valeur `S >= 1` indique que même la paire de classes la plus proche est sé
 
 Dans chaque configuration, le mode retient la solution qui maximise `S` : une solution à trois classes est donc retenue si elle est plus discriminante qu'une solution à cinq classes. En cas d'égalité de `S`, la moyenne des séparations départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
 
-Toutes les configurations `min_docfreq x k max` sont ensuite comparées selon la même règle : la meilleure séparation relative AFC est toujours prioritaire.
+Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la même règle : la meilleure séparation relative AFC est toujours prioritaire.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 
@@ -91,6 +81,7 @@ Le mode affiche seulement les éléments utiles à la lecture du résultat :
 
 - la configuration retenue
 - le profil morphosyntaxique retenu
+- la valeur `mincl` retenue
 - la valeur `min_docfreq` retenue
 - le nombre de classes retenues
 - la séparation relative AFC entre les classes

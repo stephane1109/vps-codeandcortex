@@ -763,6 +763,53 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
   unique(vals)
 }
 
+.bornes_exploration_discrimination_simple <- function(config_base,
+                                                       min_key,
+                                                       max_key,
+                                                       lower_bound,
+                                                       upper_bound,
+                                                       default_min,
+                                                       default_max) {
+  value_min <- .as_int_auto_chd(config_base[[min_key]], default = default_min, min_value = lower_bound)
+  value_max <- .as_int_auto_chd(config_base[[max_key]], default = default_max, min_value = lower_bound)
+  value_min <- min(as.integer(upper_bound), max(as.integer(lower_bound), value_min))
+  value_max <- min(as.integer(upper_bound), max(as.integer(lower_bound), value_max))
+
+  list(
+    min = as.integer(min(value_min, value_max)),
+    max = as.integer(max(value_min, value_max))
+  )
+}
+
+.valeurs_exploration_discrimination_simple <- function(config_base,
+                                                        vary_key,
+                                                        min_key,
+                                                        max_key,
+                                                        fixed_value,
+                                                        lower_bound,
+                                                        upper_bound,
+                                                        default_min,
+                                                        default_max,
+                                                        default_fixed,
+                                                        default_vary = TRUE) {
+  vary <- .as_bool_auto_chd(config_base[[vary_key]], default_vary)
+  bounds <- .bornes_exploration_discrimination_simple(
+    config_base = config_base,
+    min_key = min_key,
+    max_key = max_key,
+    lower_bound = lower_bound,
+    upper_bound = upper_bound,
+    default_min = default_min,
+    default_max = default_max
+  )
+
+  if (isTRUE(vary)) {
+    return(seq.int(bounds$min, bounds$max))
+  }
+
+  as.integer(.as_int_auto_chd(fixed_value, default = default_fixed, min_value = 1L))
+}
+
 .normaliser_profil_exploration_discrimination_simple <- function(value, default = "complet") {
   profile <- tolower(trimws(.as_chr_auto_chd(value, default)))
   if (!profile %in% c("rapide", "equilibre", "complet", "ciblee")) {
@@ -784,6 +831,26 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
 }
 
 .construire_kmax_discrimination_simple <- function(config_base, search_profile = "complet") {
+  if (identical(search_profile, "ciblee")) {
+    default_max <- min(10L, .as_int_auto_chd(config_base$k_iramuteq, default = 10L, min_value = 3L))
+    bounds <- .bornes_exploration_discrimination_simple(
+      config_base = config_base,
+      min_key = "iramuteq_discrimination_simple_k_max_min",
+      max_key = "iramuteq_discrimination_simple_k_max_max",
+      lower_bound = 3L,
+      upper_bound = 10L,
+      default_min = 3L,
+      default_max = default_max
+    )
+    vary_k_max <- .as_bool_auto_chd(config_base$iramuteq_discrimination_simple_vary_k_max, TRUE)
+    if (isTRUE(vary_k_max)) {
+      return(seq.int(bounds$min, bounds$max))
+    }
+
+    # When k max is fixed, the selected upper bound is the single value to use.
+    return(as.integer(bounds$max))
+  }
+
   k_min <- if (identical(search_profile, "ciblee")) {
     3L
   } else {
@@ -797,10 +864,6 @@ calculer_diffusion_auto_chd <- function(dfm_obj,
 
   values <- if (identical(search_profile, "rapide")) {
     unique(c(k_min, min(k_max, 5L), k_max))
-  } else if (identical(search_profile, "ciblee")) {
-    # Le plafond est un parametre de simulation : chaque valeur entre 3 et
-    # la borne choisie produit sa propre CHD pour le meme min_docfreq.
-    seq.int(k_min, k_max)
   } else if (identical(search_profile, "equilibre")) {
     unique(c(k_min, min(k_max, 5L), seq.int(k_min, k_max, by = 2L), k_max))
   } else {
@@ -906,7 +969,33 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
   k_max_values <- .construire_kmax_discrimination_simple(config_base, search_profile = search_profile)
   if (identical(search_profile, "ciblee")) {
     keep_unknown_user <- .as_bool_auto_chd(config_base$morpho_conserver_hors_lexique, TRUE)
-    min_docfreq_values <- 2L:5L
+    min_docfreq_values <- .valeurs_exploration_discrimination_simple(
+      config_base = config_base,
+      vary_key = "iramuteq_discrimination_simple_vary_min_docfreq",
+      min_key = "iramuteq_discrimination_simple_min_docfreq_min",
+      max_key = "iramuteq_discrimination_simple_min_docfreq_max",
+      fixed_value = config_base$min_docfreq,
+      lower_bound = 2L,
+      upper_bound = 5L,
+      default_min = 2L,
+      default_max = 5L,
+      default_fixed = 3L,
+      default_vary = TRUE
+    )
+    vary_mincl <- .as_bool_auto_chd(config_base$iramuteq_discrimination_simple_vary_mincl, FALSE)
+    mincl_values <- .valeurs_exploration_discrimination_simple(
+      config_base = config_base,
+      vary_key = "iramuteq_discrimination_simple_vary_mincl",
+      min_key = "iramuteq_discrimination_simple_mincl_min",
+      max_key = "iramuteq_discrimination_simple_mincl_max",
+      fixed_value = config_base$iramuteq_mincl,
+      lower_bound = 5L,
+      upper_bound = 10L,
+      default_min = 5L,
+      default_max = 10L,
+      default_fixed = 5L,
+      default_vary = FALSE
+    )
     use_lemmes_values <- c(.as_bool_auto_chd(config_base$lexique_utiliser_lemmes, FALSE))
     remove_stopwords_values <- c(.as_bool_auto_chd(config_base$retirer_stopwords, FALSE))
     remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
@@ -916,6 +1005,8 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
     )
   } else {
     min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
+    mincl_values <- .as_int_auto_chd(config_base$iramuteq_mincl, default = 5L, min_value = 1L)
+    vary_mincl <- FALSE
     use_lemmes_values <- c(FALSE, TRUE)
     remove_stopwords_values <- c(FALSE, TRUE)
     remove_punctuation_values <- c(FALSE, TRUE)
@@ -951,39 +1042,43 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
       for (remove_stopwords in remove_stopwords_values) {
         for (remove_punctuation in remove_punctuation_values) {
           for (remove_digits in remove_digits_values) {
-            for (min_docfreq in min_docfreq_values) {
-              for (k_max_candidate in k_max_values) {
-                index <- index + 1L
-                config_variant <- .definir_profil_morpho_discrimination_simple(
-                  config_base = config_base,
-                  profile_key = morpho$key,
-                  keep_unknown = morpho$keep_unknown,
-                  exclude_etre = morpho$exclude_etre
-                )
-                config_variant$lexique_utiliser_lemmes <- isTRUE(use_lemmes)
-                config_variant$retirer_stopwords <- remove_stopwords
-                config_variant$supprimer_ponctuation <- remove_punctuation
-                config_variant$supprimer_chiffres <- remove_digits
-                config_variant$min_docfreq <- as.integer(min_docfreq)
-                config_variant$k_iramuteq <- as.integer(k_max_candidate)
-                config_variant$iramuteq_classes_mode <- "discrimination_simple_partition"
-                config_variant$iramuteq_mincl_mode <- config_base$iramuteq_mincl_mode %||% "auto"
-
-                candidates[[index]] <- list(
-                  id = sprintf("CFG%03d", index),
-                  config = config_variant,
-                  profil_morpho = .label_profil_morpho_discrimination_simple(
-                    morpho$key,
+            for (mincl_candidate in mincl_values) {
+              for (min_docfreq in min_docfreq_values) {
+                for (k_max_candidate in k_max_values) {
+                  index <- index + 1L
+                  config_variant <- .definir_profil_morpho_discrimination_simple(
+                    config_base = config_base,
+                    profile_key = morpho$key,
                     keep_unknown = morpho$keep_unknown,
                     exclude_etre = morpho$exclude_etre
-                  ),
-                  lexique_utiliser_lemmes = isTRUE(use_lemmes),
-                  retirer_stopwords = isTRUE(remove_stopwords),
-                  supprimer_ponctuation = isTRUE(remove_punctuation),
-                  supprimer_chiffres = isTRUE(remove_digits),
-                  min_docfreq = as.integer(min_docfreq),
-                  k_max_explore = as.integer(k_max_candidate)
-                )
+                  )
+                  config_variant$lexique_utiliser_lemmes <- isTRUE(use_lemmes)
+                  config_variant$retirer_stopwords <- remove_stopwords
+                  config_variant$supprimer_ponctuation <- remove_punctuation
+                  config_variant$supprimer_chiffres <- remove_digits
+                  config_variant$min_docfreq <- as.integer(min_docfreq)
+                  config_variant$k_iramuteq <- as.integer(k_max_candidate)
+                  config_variant$iramuteq_classes_mode <- "discrimination_simple_partition"
+                  config_variant$iramuteq_mincl_mode <- if (isTRUE(vary_mincl)) "manuel" else config_base$iramuteq_mincl_mode %||% "auto"
+                  config_variant$iramuteq_mincl <- as.integer(mincl_candidate)
+
+                  candidates[[index]] <- list(
+                    id = sprintf("CFG%03d", index),
+                    config = config_variant,
+                    profil_morpho = .label_profil_morpho_discrimination_simple(
+                      morpho$key,
+                      keep_unknown = morpho$keep_unknown,
+                      exclude_etre = morpho$exclude_etre
+                    ),
+                    lexique_utiliser_lemmes = isTRUE(use_lemmes),
+                    retirer_stopwords = isTRUE(remove_stopwords),
+                    supprimer_ponctuation = isTRUE(remove_punctuation),
+                    supprimer_chiffres = isTRUE(remove_digits),
+                    mincl = as.integer(mincl_candidate),
+                    min_docfreq = as.integer(min_docfreq),
+                    k_max_explore = as.integer(k_max_candidate)
+                  )
+                }
               }
             }
           }

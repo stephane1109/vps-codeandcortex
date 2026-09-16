@@ -235,7 +235,7 @@
                     <button class="primary-button" type="button" data-open-chd-dialog>Paramètres de l'analyse CHD</button>
                   </div>
                   <p class="section-copy">
-                    Ce mode teste quatre configurations ciblées du même corpus, puis retient un seul meilleur compromis.
+                    Ce mode compare les configurations CHD sélectionnées, puis retient le compromis dont les classes sont les plus discriminantes sur l'AFC.
                   </p>
                   <p class="section-copy">
                     La selection repose uniquement sur les mots significatifs, leur chi2 et leurs coordonnees x,y sur l'AFC.
@@ -502,14 +502,66 @@
                 </p>
               </div>
 
-              <div class="field">
-                <label for="kIramuteq" data-k-iramuteq-label>Nombre maximal de classes à explorer</label>
+              <div class="field" data-manual-k-field>
+                <label for="kIramuteq">Nombre maximal de classes à explorer</label>
                 <input id="kIramuteq" type="number" min="2" value="10" data-classes-bound-input />
-                <p class="field-help" data-k-iramuteq-help>
-                  En Auto discriminante, cette limite est comprise entre 3 et 10 et est croisée avec min_docfreq.
+                <p class="field-help">
+                  Cette valeur borne le calcul de l'arbre CHD ; elle ne fixe pas le nombre final de classes.
                 </p>
               </div>
 
+            </div>
+
+            <div class="auto-discriminant-options" data-auto-discriminant-options hidden>
+              <p class="auto-discriminant-options__title">Paramètres à croiser</p>
+              <p class="field-help">
+                Cochez uniquement les paramètres à faire varier. Les paramètres non cochés restent fixes pendant toutes les simulations.
+              </p>
+
+              <div class="auto-discriminant-options__grid">
+                <div class="auto-discriminant-option" data-auto-discriminant-option="mincl">
+                  <label class="check-option">
+                    <input id="autoDiscriminantVaryMincl" type="checkbox" data-auto-discriminant-toggle="mincl" />
+                    <span>Croiser mincl (manuel)</span>
+                  </label>
+                  <div class="auto-discriminant-range" data-auto-discriminant-range="mincl">
+                    <label for="autoDiscriminantMinclMin">De</label>
+                    <input id="autoDiscriminantMinclMin" type="number" min="5" max="10" value="5" data-auto-discriminant-range-input="mincl" />
+                    <label for="autoDiscriminantMinclMax">à</label>
+                    <input id="autoDiscriminantMinclMax" type="number" min="5" max="10" value="10" data-auto-discriminant-range-input="mincl" />
+                  </div>
+                  <p class="field-help">Lorsque cette option est cochée, les simulations utilisent mincl en mode manuel.</p>
+                </div>
+
+                <div class="auto-discriminant-option" data-auto-discriminant-option="min_docfreq">
+                  <label class="check-option">
+                    <input id="autoDiscriminantVaryMinDocfreq" type="checkbox" checked data-auto-discriminant-toggle="min_docfreq" />
+                    <span>Croiser la fréquence minimale des termes (min_docfreq)</span>
+                  </label>
+                  <div class="auto-discriminant-range" data-auto-discriminant-range="min_docfreq">
+                    <label for="autoDiscriminantMinDocfreqMin">De</label>
+                    <input id="autoDiscriminantMinDocfreqMin" type="number" min="2" max="5" value="2" data-auto-discriminant-range-input="min_docfreq" />
+                    <label for="autoDiscriminantMinDocfreqMax">à</label>
+                    <input id="autoDiscriminantMinDocfreqMax" type="number" min="2" max="5" value="5" data-auto-discriminant-range-input="min_docfreq" />
+                  </div>
+                </div>
+
+                <div class="auto-discriminant-option" data-auto-discriminant-option="k_max">
+                  <label class="check-option">
+                    <input id="autoDiscriminantVaryKMax" type="checkbox" checked data-auto-discriminant-toggle="k_max" />
+                    <span>Croiser le nombre maximal de classes à explorer (k max)</span>
+                  </label>
+                  <div class="auto-discriminant-range" data-auto-discriminant-range="k_max">
+                    <label for="autoDiscriminantKMaxMin">De</label>
+                    <input id="autoDiscriminantKMaxMin" type="number" min="3" max="10" value="3" data-auto-discriminant-range-input="k_max" />
+                    <label for="autoDiscriminantKMaxMax">à</label>
+                    <input id="autoDiscriminantKMaxMax" type="number" min="3" max="10" value="10" data-auto-discriminant-range-input="k_max" />
+                  </div>
+                </div>
+              </div>
+
+              <p class="field-help" data-auto-discriminant-summary></p>
+              <p class="field-help field-help--auto-discriminant-warning" data-auto-discriminant-warning hidden></p>
             </div>
           </div>
 

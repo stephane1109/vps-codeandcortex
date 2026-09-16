@@ -453,6 +453,65 @@ textarea {
   font-weight: 400;
 }
 
+.field-help--auto-discriminant-warning {
+  color: #9f1d20;
+  font-weight: 600;
+}
+
+.auto-discriminant-options {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.9rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 72%, var(--surface-muted));
+}
+
+.auto-discriminant-options__title {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.auto-discriminant-options__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.auto-discriminant-option {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-muted);
+  transition: opacity 160ms ease, border-color 160ms ease;
+}
+
+.auto-discriminant-option.is-disabled {
+  opacity: 0.62;
+}
+
+.auto-discriminant-range {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.auto-discriminant-range label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.auto-discriminant-range input {
+  min-width: 0;
+}
+
 .suivi-help-note {
   max-width: 64rem;
 }
@@ -1286,8 +1345,8 @@ progress {
   overflow-wrap: anywhere;
 }
 
-#discriminationSimpleTable .result-table th:nth-child(-n + 5),
-#discriminationSimpleTable .result-table td:nth-child(-n + 5) {
+#discriminationSimpleTable .result-table th:nth-child(-n + 6),
+#discriminationSimpleTable .result-table td:nth-child(-n + 6) {
   min-width: 8.5rem;
 }
 
@@ -3473,6 +3532,10 @@ code {
   .fields-grid--compact,
   .form-grid,
   .field-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .auto-discriminant-options__grid {
     grid-template-columns: 1fr;
   }
 
