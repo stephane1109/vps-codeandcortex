@@ -108,21 +108,6 @@ Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondé
 
 Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC sert ensuite à mesurer la distance entre les centres lexicaux des classes.
 
-## Ce qui est affiché
-
-Le mode affiche seulement les éléments utiles à la lecture du résultat :
-
-- la configuration retenue
-- le profil morphosyntaxique retenu
-- la valeur `mincl` retenue
-- la valeur `min_docfreq` retenue
-- le nombre de classes retenues
-- la séparation robuste AFC entre les classes
-- la pire paire AFC comme garde-fou
-- les effectifs des classes
-
-Les sous-calculs internes du score ne sont pas nécessaires pour l'interprétation courante.
-
 ## À quoi sert ce mode
 
 Ce mode sert à obtenir plus vite une CHD où les classes sont **mieux opposées lexicalement**, sans tester manuellement plusieurs réglages.
