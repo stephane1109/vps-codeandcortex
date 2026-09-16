@@ -878,10 +878,11 @@ def lire_statut_application(
         configuration_globale,
         configurations_brutes,
     )
+    capacite_serveur = configuration_globale["capacite_serveur"]
     capacity_blocked = (
         queued == 0
         and active <= 0
-        and active_load + int(configuration["cout"]) > int(configuration["capacite_serveur"])
+        and active_load + int(configuration["cout"]) > capacite_serveur
     )
 
     if not configuration.get("runtime_sync"):
@@ -907,7 +908,7 @@ def lire_statut_application(
     meta_text = None
     if capacity_blocked:
         meta_text = (
-            f"Charge serveur {active_load}/{configuration['capacite_serveur']} · "
+            f"Charge serveur {active_load}/{capacite_serveur} · "
             f"coût appli {configuration['cout']}"
         )
 
