@@ -56,11 +56,27 @@ Pour chaque CHD testée :
 - elle calcule les distances euclidiennes entre tous les centres de classes
 - elle mesure aussi la dispersion des mots autour du centre de leur classe
 
+### 1. Construire un centre lexical par classe
+
+Chaque mot significatif (`p.value <= 0.05`) d'une classe possède une position sur le plan AFC. Pour une classe `i`, l'application calcule le centre de ces positions : `C_i = (moyenne des x, moyenne des y)`.
+
+![Des mots significatifs aux centres lexicaux sur le plan AFC](images/auto-discriminante-s-centres.svg)
+
+Le point central ne représente donc pas un nouveau mot : c'est le centroïde lexical de la classe sur l'AFC.
+
+### 2. Comparer une paire de classes
+
 Pour chaque classe, l'application calcule le centre moyen de ses mots significatifs sur le plan AFC (`x`, `y`), puis compare toutes les paires de classes :
 
 ```ini
 s(i,j) = distance entre les centres i et j / somme de leurs dispersions lexicales
 ```
+
+![Distance entre deux centres AFC et dispersions lexicales](images/auto-discriminante-s-paire.svg)
+
+La distance au numérateur est la distance euclidienne entre les deux centres. Chaque dispersion au dénominateur est la médiane des distances entre les mots significatifs de la classe et son centre. Ainsi, deux classes éloignées avec des mots bien regroupés obtiennent une valeur `s(i,j)` élevée.
+
+### 3. Construire le score robuste S
 
 Pour chaque classe `i`, le mode repère ensuite sa classe concurrente la plus proche :
 
@@ -73,6 +89,8 @@ Le score qui choisit la CHD est :
 ```ini
 S_robuste = médiane des s_proche(i)
 ```
+
+![Voisins lexicaux les plus proches et médiane qui forme S robuste](images/auto-discriminante-s-robuste.svg)
 
 Il décrit donc la séparation du voisin lexical le plus proche pour une classe typique. Cette médiane évite qu'une seule paire particulièrement proche impose mécaniquement une solution à trois classes.
 

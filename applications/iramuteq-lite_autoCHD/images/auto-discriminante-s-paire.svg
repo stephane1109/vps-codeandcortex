@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Calcul de la séparation relative entre deux classes AFC</title>
+  <desc id="desc">Deux nuages de mots sont représentés avec leurs centres, leurs dispersions et la distance qui les sépare.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fffdf9"/>
+      <stop offset="1" stop-color="#f3f7f8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#25333b" flood-opacity=".10"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#334d59"/>
+    </marker>
+    <marker id="arrow-reverse" markerWidth="10" markerHeight="10" refX="2" refY="3" orient="auto">
+      <path d="M8,0 L0,3 L8,6 Z" fill="#334d59"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#paper)"/>
+  <rect x="42" y="38" width="1356" height="824" rx="30" fill="#ffffff" stroke="#e3ddd2" stroke-width="2" filter="url(#shadow)"/>
+  <text x="96" y="112" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="700">2. Une paire de classes : distance et dispersion</text>
+  <text x="96" y="151" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20">La distance entre les centres est rapportée à l'étalement lexical de chaque classe.</text>
+
+  <rect x="88" y="194" width="824" height="514" rx="22" fill="#fbfdfd" stroke="#d8e4e5" stroke-width="2"/>
+  <line x1="153" y1="633" x2="839" y2="633" stroke="#d9e2e3" stroke-width="2"/>
+  <line x1="153" y1="633" x2="153" y2="254" stroke="#d9e2e3" stroke-width="2"/>
+  <text x="792" y="665" fill="#789097" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="17">Axe 1</text>
+  <text x="115" y="270" fill="#789097" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="17" transform="rotate(-90 115 270)">Axe 2</text>
+
+  <circle cx="359" cy="418" r="151" fill="#4d89c9" fill-opacity=".10" stroke="#3e7fbe" stroke-width="3" stroke-dasharray="10 9"/>
+  <circle cx="359" cy="418" r="93" fill="none" stroke="#3e7fbe" stroke-width="1.5" stroke-opacity=".34"/>
+  <circle cx="268" cy="343" r="10" fill="#3e7fbe"/>
+  <circle cx="325" cy="305" r="9" fill="#3e7fbe"/>
+  <circle cx="401" cy="337" r="11" fill="#3e7fbe"/>
+  <circle cx="447" cy="413" r="9" fill="#3e7fbe"/>
+  <circle cx="400" cy="505" r="10" fill="#3e7fbe"/>
+  <circle cx="306" cy="526" r="8" fill="#3e7fbe"/>
+  <circle cx="246" cy="438" r="8" fill="#3e7fbe"/>
+  <circle cx="359" cy="418" r="15" fill="#173b43" stroke="#ffffff" stroke-width="5"/>
+  <text x="379" y="425" fill="#173b43" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700">Cᵢ</text>
+  <text x="276" y="602" fill="#326ba8" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700">Classe i</text>
+
+  <circle cx="697" cy="418" r="122" fill="#f08b5d" fill-opacity=".11" stroke="#e67a4b" stroke-width="3" stroke-dasharray="10 9"/>
+  <circle cx="697" cy="418" r="72" fill="none" stroke="#e67a4b" stroke-width="1.5" stroke-opacity=".36"/>
+  <circle cx="628" cy="365" r="9" fill="#e67a4b"/>
+  <circle cx="678" cy="332" r="11" fill="#e67a4b"/>
+  <circle cx="753" cy="358" r="9" fill="#e67a4b"/>
+  <circle cx="790" cy="424" r="10" fill="#e67a4b"/>
+  <circle cx="743" cy="484" r="8" fill="#e67a4b"/>
+  <circle cx="670" cy="508" r="9" fill="#e67a4b"/>
+  <circle cx="618" cy="444" r="8" fill="#e67a4b"/>
+  <circle cx="697" cy="418" r="15" fill="#173b43" stroke="#ffffff" stroke-width="5"/>
+  <text x="717" y="425" fill="#173b43" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700">Cⱼ</text>
+  <text x="635" y="566" fill="#b55531" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700">Classe j</text>
+
+  <line x1="379" y1="238" x2="677" y2="238" stroke="#334d59" stroke-width="3" marker-start="url(#arrow-reverse)" marker-end="url(#arrow)"/>
+  <line x1="359" y1="256" x2="359" y2="400" stroke="#a6b8bc" stroke-width="2" stroke-dasharray="7 7"/>
+  <line x1="697" y1="256" x2="697" y2="400" stroke="#a6b8bc" stroke-width="2" stroke-dasharray="7 7"/>
+  <rect x="458" y="202" width="144" height="61" rx="13" fill="#eaf0f1"/>
+  <text x="489" y="241" fill="#28434f" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="700">d(i,j)</text>
+
+  <line x1="359" y1="418" x2="243" y2="514" stroke="#3e7fbe" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="183" y="548" fill="#326ba8" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700">rᵢ</text>
+  <text x="181" y="578" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="16">dispersion médiane</text>
+  <line x1="697" y1="418" x2="806" y2="337" stroke="#e67a4b" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="814" y="319" fill="#b55531" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700">rⱼ</text>
+  <text x="814" y="347" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="16">dispersion médiane</text>
+
+  <rect x="960" y="194" width="386" height="514" rx="22" fill="#f8f4ed" stroke="#eadcc7" stroke-width="2"/>
+  <text x="1003" y="263" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="700">Score de la paire</text>
+  <line x1="1003" y1="287" x2="1303" y2="287" stroke="#dfd5c7" stroke-width="2"/>
+  <text x="1003" y="342" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">d(i,j) : distance euclidienne</text>
+  <text x="1003" y="373" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">entre les deux centres.</text>
+  <text x="1003" y="425" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">rᵢ et rⱼ : dispersion médiane</text>
+  <text x="1003" y="456" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">des mots autour de Cᵢ et Cⱼ.</text>
+  <rect x="1003" y="496" width="300" height="83" rx="16" fill="#e8f3ef"/>
+  <text x="1035" y="547" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="27" font-weight="700">s(i,j) = d(i,j)</text>
+  <line x1="1168" y1="556" x2="1281" y2="556" stroke="#176553" stroke-width="2"/>
+  <text x="1182" y="587" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="700">rᵢ + rⱼ</text>
+  <text x="1003" y="636" fill="#8b4e36" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">Centres éloignés + nuages compacts</text>
+  <text x="1003" y="665" fill="#8b4e36" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">donnent un s(i,j) élevé.</text>
+
+  <rect x="88" y="735" width="1258" height="86" rx="18" fill="#edf4f4"/>
+  <circle cx="132" cy="781" r="10" fill="#2f9d89"/>
+  <text x="158" y="776" fill="#33515a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">La dispersion n'est pas la taille de la classe : elle mesure seulement la façon dont ses mots significatifs sont regroupés</text>
+  <text x="158" y="804" fill="#33515a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">autour de leur centre AFC.</text>
+</svg>
