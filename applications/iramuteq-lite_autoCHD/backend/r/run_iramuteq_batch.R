@@ -299,13 +299,50 @@ formater_df_csv_6_decimales <- function(df) {
   out
 }
 
-formatter_p_scientifique_batch <- function(x) {
+formatter_p_affiche_batch <- function(x) {
   vals <- suppressWarnings(as.numeric(x))
   ifelse(
     is.na(vals),
     NA_character_,
-    ifelse(vals == 0, "0", format(vals, scientific = TRUE, digits = 6))
+    ifelse(vals == 0, "< 1e-323", formatC(vals, format = "f", digits = 6))
   )
+}
+
+formatter_p_scientifique_batch <- function(x, log_p = NULL) {
+  vals <- suppressWarnings(as.numeric(x))
+  logs <- rep(NA_real_, length(vals))
+  if (!is.null(log_p)) {
+    logs_in <- suppressWarnings(as.numeric(log_p))
+    n <- min(length(logs), length(logs_in))
+    if (n > 0L) logs[seq_len(n)] <- logs_in[seq_len(n)]
+  }
+
+  out <- rep(NA_character_, length(vals))
+  has_log <- !is.na(logs) & is.finite(logs)
+  if (any(has_log)) {
+    log10_vals <- logs[has_log] / log(10)
+    exponents <- floor(log10_vals)
+    mantissas <- round(10^(log10_vals - exponents), digits = 5L)
+    carry <- mantissas >= 10
+    if (any(carry)) {
+      mantissas[carry] <- mantissas[carry] / 10
+      exponents[carry] <- exponents[carry] + 1L
+    }
+    out[has_log] <- paste0(
+      formatC(mantissas, format = "f", digits = 5L),
+      sprintf("e%+03d", as.integer(exponents))
+    )
+  }
+
+  fallback <- !has_log & !is.na(vals)
+  if (any(fallback)) {
+    out[fallback] <- ifelse(
+      vals[fallback] == 0,
+      "< 1e-323",
+      format(vals[fallback], scientific = TRUE, digits = 6)
+    )
+  }
+  out
 }
 
 formatter_p_seuil_01_batch <- function(x) {
@@ -1509,8 +1546,11 @@ run_batch <- function() {
       }
     }
     stats_file <- file.path(output_dir, "stats_par_classe.csv")
-    res_stats_df$p_scientifique <- formatter_p_scientifique_batch(res_stats_df$p)
+    p_log <- if ("p_log" %in% names(res_stats_df)) res_stats_df$p_log else NULL
+    res_stats_df$p_affiche <- formatter_p_affiche_batch(res_stats_df$p)
+    res_stats_df$p_scientifique <- formatter_p_scientifique_batch(res_stats_df$p, p_log)
     res_stats_df$p_seuil_01 <- formatter_p_seuil_01_batch(res_stats_df$p)
+    res_stats_df$p_log <- NULL
     ecrire_csv_6_decimales(res_stats_df, stats_file, row.names = FALSE)
     artifacts$stats_par_classe <- relative_to_output(stats_file)
 

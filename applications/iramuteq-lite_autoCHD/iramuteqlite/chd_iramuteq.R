@@ -413,10 +413,14 @@ construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats
     
     signe <- ifelse(a >= exp11, 1, -1)
     chi_sign <- chi_abs * signe
-    pval <- stats::pchisq(chi_abs, df = 1, lower.tail = FALSE)
-    pval[!is.finite(pval) | is.na(pval)] <- 1
+    # La p-value numérique reste utilisée pour les filtres. Le logarithme
+    # conserve toutefois les valeurs trop petites pour le format double.
+    log_pval <- suppressWarnings(stats::pchisq(chi_abs, df = 1, lower.tail = FALSE, log.p = TRUE))
+    log_pval[is.na(log_pval) | is.nan(log_pval) | log_pval > 0] <- 0
+    pval <- exp(log_pval)
+    pval[is.na(pval) | is.nan(pval)] <- 1
     
-    list(chi2 = chi_sign, p = pval)
+    list(chi2 = chi_sign, p = pval, log_p = log_pval)
   }
   
   calc_chi_sign_classique <- function(a, b, c, d) {
@@ -424,20 +428,24 @@ construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats
       tb <- matrix(c(ai, bi, ci, di), nrow = 2, byrow = TRUE)
       chi <- suppressWarnings(stats::chisq.test(tb, correct = FALSE))
       stat <- suppressWarnings(as.numeric(chi$statistic))
-      pval <- suppressWarnings(as.numeric(chi$p.value))
       exp11 <- suppressWarnings(as.numeric(chi$expected[1, 1]))
       
       if (!is.finite(stat) || is.na(stat)) stat <- 0
-      if (!is.finite(pval) || is.na(pval)) pval <- 1
       if (!is.finite(exp11) || is.na(exp11)) exp11 <- ai
+
+      log_pval <- suppressWarnings(stats::pchisq(stat, df = 1, lower.tail = FALSE, log.p = TRUE))
+      if (is.na(log_pval) || is.nan(log_pval) || log_pval > 0) log_pval <- 0
+      pval <- exp(log_pval)
+      if (is.na(pval) || is.nan(pval)) pval <- 1
       
       signe <- ifelse(ai >= exp11, 1, -1)
-      c(chi2 = stat * signe, p = pval)
+      c(chi2 = stat * signe, p = pval, log_p = log_pval)
     }, a, b, c, d)
     
     list(
       chi2 = as.numeric(chi_mat["chi2", ]),
-      p = as.numeric(chi_mat["p", ])
+      p = as.numeric(chi_mat["p", ]),
+      log_p = as.numeric(chi_mat["log_p", ])
     )
   }
   
@@ -521,6 +529,7 @@ construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats
       occ_st = as.numeric(freq_cl),
       occ_total = as.numeric(occ_par_terme),
       p = as.numeric(chi_p$p),
+      p_log = as.numeric(chi_p$log_p),
       Classe = as.integer(cl),
       stringsAsFactors = FALSE
     )

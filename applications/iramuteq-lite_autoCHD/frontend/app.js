@@ -12446,6 +12446,25 @@ function formatScientificNumber(value, digits = 6) {
   return numeric.toExponential(Math.max(0, digits - 1));
 }
 
+function formatChdPValue(value, digits = 6) {
+  const numeric = parseTableNumber(value);
+  if (!Number.isFinite(numeric)) return "";
+  if (numeric === 0) return "< 1e-323";
+  return formatTableNumber(numeric, digits);
+}
+
+function formatChdPScientificValue(value, pValue) {
+  const text = String(value ?? "").trim();
+  if (Number(pValue) === 0 && (!text || /^0(?:[.,]0*)?$/.test(text))) {
+    return "< 1e-323";
+  }
+  return text || formatChdPValue(pValue);
+}
+
+function normalizeChdPThresholdValue(value) {
+  return String(value ?? "").trim().replace(/^p\s*<=\s*/i, "p ≤ ");
+}
+
 function normalizeChdTypeValue(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   return ["", "na", "nan", "null", "undefined"].includes(normalized) ? "" : normalized;
@@ -12600,6 +12619,7 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
   const effTotalIndex = headerIndex(parsed.headers, ["eff_total"]);
   const percentageIndex = headerIndex(parsed.headers, ["pourcentage"]);
   const pIndex = headerIndex(parsed.headers, ["p", "p_value"]);
+  const pDisplayIndex = headerIndex(parsed.headers, ["p_affiche", "p_value_affiche"]);
   const pScientificIndex = headerIndex(parsed.headers, ["p_scientifique"]);
   const pThresholdIndex = headerIndex(parsed.headers, ["p_seuil_01"]);
   const typeIndex = headerIndex(parsed.headers, ["type", "pos"]);
@@ -12652,12 +12672,15 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
 
     const chi2 = chi2Index === -1 ? Number.NaN : parseTableNumber(row[chi2Index]);
     const pValue = pIndex === -1 ? Number.NaN : parseTableNumber(row[pIndex]);
+    const pDisplayValue = pDisplayIndex === -1
+      ? formatChdPValue(pValue)
+      : String(row[pDisplayIndex] ?? "").trim();
     const pScientificValue = pScientificIndex === -1
-      ? formatScientificNumber(pValue, 6)
-      : String(row[pScientificIndex] ?? "").trim();
+      ? formatChdPValue(pValue)
+      : formatChdPScientificValue(row[pScientificIndex], pValue);
     const pThresholdValue = pThresholdIndex === -1
       ? (Number.isFinite(pValue) && pValue <= 0.01 ? "p ≤ 0.01" : "")
-      : String(row[pThresholdIndex] ?? "").trim();
+      : normalizeChdPThresholdValue(row[pThresholdIndex]);
     const typeValue = typeIndex === -1 ? "" : normalizeChdTypeValue(row[typeIndex]);
     const isSignificant05 = Number.isFinite(pValue) && pValue <= 0.05;
     const isNonSignificantForDisplay = Number.isFinite(pValue) && pValue > significanceThreshold && !isSignificant05;
@@ -12670,7 +12693,7 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
         Number.isFinite(effTotal) ? String(Math.round(effTotal)) : "",
         formatTableNumber(percentage, 2),
         formatTableNumber(chi2, 3),
-        formatTableNumber(pValue, 6),
+        pDisplayValue,
         pScientificValue,
         pThresholdValue,
         typeValue
