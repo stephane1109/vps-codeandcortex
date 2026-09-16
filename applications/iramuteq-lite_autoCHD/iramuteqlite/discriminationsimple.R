@@ -21,11 +21,13 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
 
   empty_result <- list(
     S = 0,
+    S_separation_robuste = 0,
     S_separation_min = 0,
     S_separation_moyenne = 0,
     poles_by_class = NULL,
     dispersions_by_class = numeric(0),
     separations_by_pair = numeric(0),
+    separations_plus_proches_by_class = numeric(0),
     termes_cibles = character(0),
     termes_cibles_par_classe = list()
   )
@@ -116,16 +118,38 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
     dispersion_pair <- dispersions_effectives[[class_a]] + dispersions_effectives[[class_b]]
     distance_centres / max(dispersion_pair, .Machine$double.eps)
   }, numeric(1))
-  s_separation_min <- min(separations_by_pair)
+  separations_plus_proches_by_class <- vapply(seq_len(nrow(poles_matrix)), function(class_index) {
+    pair_positions <- which(pair_index[1L, ] == class_index | pair_index[2L, ] == class_index)
+    class_separations <- separations_by_pair[pair_positions]
+    class_separations <- class_separations[is.finite(class_separations)]
+    if (!length(class_separations)) return(NA_real_)
+    min(class_separations)
+  }, numeric(1))
+  names(separations_plus_proches_by_class) <- rownames(poles_matrix)
+
+  valid_nearest_separations <- separations_plus_proches_by_class[
+    is.finite(separations_plus_proches_by_class) & !is.na(separations_plus_proches_by_class)
+  ]
+  if (!length(valid_nearest_separations)) {
+    return(empty_result)
+  }
+
+  # Le score de selection est la separation du voisin le plus proche pour
+  # chaque classe, resumee par sa mediane. Une seule paire tres proche ne
+  # peut donc plus imposer mecanquement une solution a trois classes.
+  s_separation_robuste <- stats::median(valid_nearest_separations)
+  s_separation_min <- min(valid_nearest_separations)
   s_separation_moyenne <- mean(separations_by_pair)
 
   list(
-    S = s_separation_min,
+    S = s_separation_robuste,
+    S_separation_robuste = s_separation_robuste,
     S_separation_min = s_separation_min,
     S_separation_moyenne = s_separation_moyenne,
     poles_by_class = poles_matrix,
     dispersions_by_class = dispersions_effectives,
     separations_by_pair = separations_by_pair,
+    separations_plus_proches_by_class = separations_plus_proches_by_class,
     termes_cibles = unique(as.character(top_rows$Terme)),
     termes_cibles_par_classe = termes_par_classe
   )
@@ -220,6 +244,7 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     L = .borner_score_auto_chd(l_value),
     B = .borner_score_auto_chd(b_value),
     S = suppressWarnings(as.numeric(simple_scores$S)),
+    S_separation_robuste = suppressWarnings(as.numeric(simple_scores$S_separation_robuste)),
     S_separation_min = suppressWarnings(as.numeric(simple_scores$S_separation_min)),
     S_separation_moyenne = suppressWarnings(as.numeric(simple_scores$S_separation_moyenne)),
     classes_effectifs = .formatter_resume_classes_auto_chd(counts, digits = 0L),
@@ -301,33 +326,32 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   }
 
   s_values <- suppressWarnings(as.numeric(metrics_df$S))
-  s_separation_moyenne_values <- suppressWarnings(as.numeric(metrics_df$S_separation_moyenne))
+  s_separation_min_values <- suppressWarnings(as.numeric(metrics_df$S_separation_min))
   s_scores <- ifelse(is.finite(s_values) & !is.na(s_values), s_values, -Inf)
   if (!any(is.finite(s_scores) & s_scores > -Inf)) {
     stop("Auto discriminante : aucun score discriminant exploitable n'a pu etre calcule.")
   }
 
-  # S = 1 indique que les centres de deux classes sont ecartes au moins de
-  # la somme de leurs dispersions medianes. Ce seuil sert a interpreter le
-  # resultat, mais la selection doit toujours privilegier la separation AFC
-  # maximale, quel que soit le nombre de classes obtenu.
+  # S_min = 1 indique que meme la paire la plus proche est ecartee au moins
+  # de la somme de ses dispersions medianes. Ce repere reste un garde-fou de
+  # lecture : la selection privilegie le score robuste S.
   seuil_separation <- 1
-  metrics_df$separation_valide <- is.finite(s_values) & !is.na(s_values) & s_values >= seuil_separation
+  metrics_df$separation_valide <- is.finite(s_separation_min_values) & !is.na(s_separation_min_values) & s_separation_min_values >= seuil_separation
   k_values <- suppressWarnings(as.integer(metrics_df$k))
   etape_values <- suppressWarnings(as.integer(metrics_df$etape_chd))
   k_tie_break <- ifelse(is.finite(k_values) & !is.na(k_values), k_values, Inf)
   etape_tie_break <- ifelse(is.finite(etape_values) & !is.na(etape_values), etape_values, Inf)
-  s_moyenne_scores <- ifelse(
-    is.finite(s_separation_moyenne_values) & !is.na(s_separation_moyenne_values),
-    s_separation_moyenne_values,
+  s_min_scores <- ifelse(
+    is.finite(s_separation_min_values) & !is.na(s_separation_min_values),
+    s_separation_min_values,
     -Inf
   )
 
-  # Les departages ne s'appliquent qu'a score S egal : separation moyenne,
+  # Les departages ne s'appliquent qu'a score robuste S egal : pire paire,
   # puis solution la plus parcimonieuse et enfin etape CHD la plus courte.
-  ordre <- order(-s_scores, -s_moyenne_scores, k_tie_break, etape_tie_break, na.last = TRUE)
+  ordre <- order(-s_scores, -s_min_scores, k_tie_break, etape_tie_break, na.last = TRUE)
   selected_idx <- ordre[[1]]
-  selection_rule <- "meilleure_separation_relative_afc"
+  selection_rule <- "meilleure_separation_robuste_afc"
 
   metrics_df$selection <- ifelse(seq_len(nrow(metrics_df)) == selected_idx, "oui", "non")
 
@@ -357,7 +381,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     mode = "discrimination_simple",
     mode_label = "Auto discriminante",
     score_column = "S",
-    score_label = "Separation relative AFC entre classes",
+    score_label = "Separation robuste AFC entre classes",
     score_plot_title = "Selection de la configuration aux classes les plus separees",
     separation_threshold = seuil_separation,
     selection_rule = selection_rule,
@@ -434,6 +458,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     k_retenu = NA_integer_,
     k_chd_retenu = NA_integer_,
     S = NA_real_,
+    S_separation_robuste = NA_real_,
     S_separation_min = NA_real_,
     S_separation_moyenne = NA_real_,
     separation_valide = FALSE,
@@ -470,6 +495,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     k_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_selected %||% selected_metrics$k[[1]])),
     k_chd_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_chd_selected %||% selected_metrics$etape_chd[[1]] %||% selected_metrics$k[[1]])),
     S = suppressWarnings(as.numeric(selected_metrics$S[[1]])),
+    S_separation_robuste = suppressWarnings(as.numeric(selected_metrics$S_separation_robuste[[1]])),
     S_separation_min = suppressWarnings(as.numeric(selected_metrics$S_separation_min[[1]])),
     S_separation_moyenne = suppressWarnings(as.numeric(selected_metrics$S_separation_moyenne[[1]])),
     separation_valide = isTRUE(selected_metrics$separation_valide[[1]] %||% FALSE),
@@ -645,34 +671,34 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     if (isTRUE(attempt$ok)) {
       current_row <- attempt$row
       current_score <- suppressWarnings(as.numeric(current_row$S[[1]]))
-      current_separation_moyenne <- suppressWarnings(as.numeric(current_row$S_separation_moyenne[[1]]))
+      current_separation_min <- suppressWarnings(as.numeric(current_row$S_separation_min[[1]]))
 
       if (is.na(best_idx)) {
         best_idx <- i
       } else {
         best_row <- evaluation_rows[[best_idx]]
         best_score <- suppressWarnings(as.numeric(best_row$S[[1]]))
-        best_separation_moyenne <- suppressWarnings(as.numeric(best_row$S_separation_moyenne[[1]]))
+        best_separation_min <- suppressWarnings(as.numeric(best_row$S_separation_min[[1]]))
         current_k <- suppressWarnings(as.integer(current_row$k_retenu[[1]]))
         best_k <- suppressWarnings(as.integer(best_row$k_retenu[[1]]))
         current_etape <- suppressWarnings(as.integer(current_row$k_chd_retenu[[1]]))
         best_etape <- suppressWarnings(as.integer(best_row$k_chd_retenu[[1]]))
         current_score <- ifelse(is.finite(current_score), current_score, -Inf)
         best_score <- ifelse(is.finite(best_score), best_score, -Inf)
-        current_separation_moyenne <- ifelse(is.finite(current_separation_moyenne), current_separation_moyenne, -Inf)
-        best_separation_moyenne <- ifelse(is.finite(best_separation_moyenne), best_separation_moyenne, -Inf)
+        current_separation_min <- ifelse(is.finite(current_separation_min), current_separation_min, -Inf)
+        best_separation_min <- ifelse(is.finite(best_separation_min), best_separation_min, -Inf)
         current_k <- ifelse(is.finite(current_k), current_k, Inf)
         best_k <- ifelse(is.finite(best_k), best_k, Inf)
         current_etape <- ifelse(is.finite(current_etape), current_etape, Inf)
         best_etape <- ifelse(is.finite(best_etape), best_etape, Inf)
 
-        # La meilleure separation minimale AFC est toujours prioritaire.
-        # Les autres criteres ne servent qu'a departager une egalite de S.
+        # Le score robuste est prioritaire. La pire paire ne sert qu'a
+        # departager deux configurations aussi robustes l'une que l'autre.
         if (
           current_score > best_score + 1e-12 ||
           (abs(current_score - best_score) <= 1e-12 &&
-             (current_separation_moyenne > best_separation_moyenne + 1e-12 ||
-              (abs(current_separation_moyenne - best_separation_moyenne) <= 1e-12 &&
+             (current_separation_min > best_separation_min + 1e-12 ||
+              (abs(current_separation_min - best_separation_min) <= 1e-12 &&
                  (current_k < best_k ||
                   (current_k == best_k && current_etape < best_etape)))))
         ) {
@@ -710,8 +736,10 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         best_row$configuration_label[[1]],
         " | classes retenues=",
         best_row$k_retenu[[1]],
-        " | separation relative AFC=",
+        " | separation robuste AFC=",
         format(round(as.numeric(best_row$S[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | pire paire AFC=",
+        format(round(as.numeric(best_row$S_separation_min[[1]]), 4), nsmall = 4, trim = TRUE),
         " | min_docfreq=",
         best_row$min_docfreq[[1]],
         " | mincl=",
@@ -781,7 +809,7 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     border = NA,
     las = 1,
     names.arg = rev(labels),
-    xlab = "Separation relative AFC entre classes",
+    xlab = "Separation robuste AFC entre classes",
     main = "Configurations aux classes les plus separees sur l'AFC"
   )
   graphics::grid(col = "#d6c8b8", lty = "dotted")
@@ -825,8 +853,12 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     n_formes = suppressWarnings(as.integer(col("n_formes", NA_integer_))),
     classes_retenues = suppressWarnings(as.integer(col("k_retenu", NA_integer_))),
     k_chd_retenu = suppressWarnings(as.integer(col("k_chd_retenu", NA_integer_))),
-    separation_relative_afc = suppressWarnings(as.numeric(
-      if ("S_separation_min" %in% names(metrics_df)) col("S_separation_min") else col("S", NA_real_)
+    separation_robuste_afc = suppressWarnings(as.numeric(col("S", NA_real_))),
+    separation_minimale_afc = suppressWarnings(as.numeric(
+      if ("S_separation_min" %in% names(metrics_df)) col("S_separation_min") else NA_real_
+    )),
+    separation_moyenne_afc = suppressWarnings(as.numeric(
+      if ("S_separation_moyenne" %in% names(metrics_df)) col("S_separation_moyenne") else NA_real_
     )),
     classes_effectifs = col("classes_effectifs", NA_character_),
     classes_pourcentages = col("classes_pourcentages", NA_character_),

@@ -468,6 +468,10 @@ textarea {
   background: color-mix(in srgb, var(--surface) 72%, var(--surface-muted));
 }
 
+.auto-discriminant-options[hidden] {
+  display: none !important;
+}
+
 .auto-discriminant-options__title {
   margin: 0;
   font-size: 0.96rem;

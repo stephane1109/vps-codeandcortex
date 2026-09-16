@@ -2586,7 +2586,10 @@ function renderClassesModeCard(card) {
   }
 
   if (manualKField instanceof HTMLElement) manualKField.hidden = isDiscriminationSimple;
-  if (autoOptions instanceof HTMLElement) autoOptions.hidden = !isDiscriminationSimple;
+  if (autoOptions instanceof HTMLElement) {
+    autoOptions.hidden = !isDiscriminationSimple;
+    autoOptions.setAttribute("aria-hidden", String(!isDiscriminationSimple));
+  }
 
   if (!isDiscriminationSimple) {
     if (modeDescription instanceof HTMLElement) {
@@ -2614,7 +2617,7 @@ function renderClassesModeCard(card) {
   ].join(" ; ");
 
   if (modeDescription instanceof HTMLElement) {
-    modeDescription.textContent = "En mode Auto discriminante, l'application simule les combinaisons que vous avez choisies, puis retient celle dont les classes sont les mieux séparées sur l'AFC.";
+    modeDescription.textContent = "En mode Auto discriminante, l'application simule les combinaisons que vous avez choisies, puis retient celle dont la séparation robuste des classes est la meilleure sur l'AFC.";
   }
 
   if (autoSummary instanceof HTMLElement) {
@@ -11636,6 +11639,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     return;
   }
 
+  const hasRobustScore = Object.prototype.hasOwnProperty.call(selected, "separation_robuste_afc");
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
     ["mincl testé retenu", selected.mincl ?? "N/A"],
@@ -11645,8 +11649,14 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["Limite CHD à reprendre en manuel", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
-    ["Séparation relative AFC", selected.separation_relative_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"]
+    [
+      hasRobustScore ? "Séparation robuste AFC" : "Séparation relative AFC",
+      selected.separation_robuste_afc ?? selected.separation_relative_afc ?? selected.score_discrimination ?? selected.S ?? selected.s ?? "N/A"
+    ]
   ];
+  if (hasRobustScore) {
+    metrics.push(["Pire paire AFC", selected.separation_minimale_afc ?? selected.S_separation_min ?? "N/A"]);
+  }
 
   const grid = document.createElement("div");
   grid.className = "summary-grid";
@@ -11737,7 +11747,9 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
-  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution dont la séparation relative AFC est la plus élevée.`;
+  selectionNote.textContent = hasRobustScore
+    ? `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution dont la séparation robuste AFC est la plus élevée. La pire paire AFC reste affichée comme garde-fou.`
+    : `Cette analyse historique a été sélectionnée selon l'ancienne séparation relative AFC.`;
   container.appendChild(selectionNote);
 }
 
@@ -11747,7 +11759,10 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
   }
 
   const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const scoreColumnIndex = headerIndex(parsed.headers, ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"]);
+  const robustScoreColumnIndex = headerIndex(parsed.headers, ["separation_robuste_afc"]);
+  const scoreColumnIndex = robustScoreColumnIndex !== -1
+    ? robustScoreColumnIndex
+    : headerIndex(parsed.headers, ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"]);
   const classesColumnIndex = headerIndex(parsed.headers, ["classes_retenues", "k_retenu"]);
 
   const rowsSource = parsed.rows.slice().sort((left, right) => {
@@ -11771,13 +11786,20 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     return String(left[0] || "").localeCompare(String(right[0] || ""), undefined, { numeric: true });
   });
 
+  const scoreColumnDef = robustScoreColumnIndex !== -1
+    ? { keys: ["separation_robuste_afc"], label: "séparation robuste AFC" }
+    : { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" };
+  const minimumPairColumnDef = robustScoreColumnIndex !== -1
+    ? [{ keys: ["separation_minimale_afc", "s_separation_min"], label: "pire paire AFC" }]
+    : [];
   const columnDefs = [
     { keys: ["configuration_id"], label: "configuration" },
     { keys: ["mincl"], label: "mincl testé" },
     { keys: ["min_docfreq"], label: "min_docfreq testé" },
     { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "k max testé" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
-    { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation relative AFC" },
+    scoreColumnDef,
+    ...minimumPairColumnDef,
     { keys: ["selection"], label: "statut" },
     { keys: ["mincl_mode"], label: "mode mincl" },
     { keys: ["n_segments"], label: "segments" },
@@ -11869,7 +11891,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["mincl_teste", "min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_relative_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["mincl_teste", "min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);

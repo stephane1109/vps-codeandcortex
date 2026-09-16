@@ -14,6 +14,7 @@ Le mode compare donc plusieurs résultats possibles, mais il ne renvoie **qu'un 
 ## Paramètres à croiser
 
 En mode Auto discriminante, l'utilisateur coche les paramètres qu'il veut faire varier. Les paramètres non cochés restent fixes pendant toutes les simulations.
+Cette boîte n'apparaît que lorsque « Auto discriminante » est sélectionné dans « Nombre de classes ».
 
 - `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le réglage `mincl` choisi dans les paramètres CHD est conservé.
 - `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
@@ -58,18 +59,32 @@ Pour chaque CHD testée :
 Pour chaque classe, l'application calcule le centre moyen de ses mots significatifs sur le plan AFC (`x`, `y`), puis compare toutes les paires de classes :
 
 ```ini
-S = distance entre deux centres / somme des dispersions lexicales
+s(i,j) = distance entre les centres i et j / somme de leurs dispersions lexicales
 ```
 
-La valeur affichée est la plus faible de ces séparations : ici, même les deux classes les plus proches sont séparées de `4,091` fois leur dispersion lexicale combinée.
+Pour chaque classe `i`, le mode repère ensuite sa classe concurrente la plus proche :
 
-Plus `S` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
+```ini
+s_proche(i) = minimum des s(i,j)
+```
 
-Une valeur `S >= 1` indique que même la paire de classes la plus proche est séparée au moins de la somme de leurs dispersions lexicales médianes. C'est un repère de lecture, pas une condition de sélection.
+Le score qui choisit la CHD est :
 
-Dans chaque configuration, le mode retient la solution qui maximise `S` : une solution à trois classes est donc retenue si elle est plus discriminante qu'une solution à cinq classes. En cas d'égalité de `S`, la moyenne des séparations départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
+```ini
+S_robuste = médiane des s_proche(i)
+```
 
-Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la même règle : la meilleure séparation relative AFC est toujours prioritaire.
+Il décrit donc la séparation du voisin lexical le plus proche pour une classe typique. Cette médiane évite qu'une seule paire particulièrement proche impose mécaniquement une solution à trois classes.
+
+La **pire paire AFC** reste affichée séparément : c'est le minimum de tous les `s(i,j)`. Elle sert de garde-fou pour signaler deux classes potentiellement trop proches, sans diriger seule la sélection.
+
+Plus `S_robuste` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
+
+Une valeur de pire paire AFC `>= 1` indique que même la paire de classes la plus proche est séparée au moins de la somme de leurs dispersions lexicales médianes. C'est un repère de lecture, pas une condition de sélection.
+
+Dans chaque configuration, le mode retient la solution qui maximise `S_robuste`. En cas d'égalité, la pire paire AFC la plus élevée départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
+
+Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la même règle : la meilleure séparation robuste AFC est toujours prioritaire.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 
@@ -84,7 +99,8 @@ Le mode affiche seulement les éléments utiles à la lecture du résultat :
 - la valeur `mincl` retenue
 - la valeur `min_docfreq` retenue
 - le nombre de classes retenues
-- la séparation relative AFC entre les classes
+- la séparation robuste AFC entre les classes
+- la pire paire AFC comme garde-fou
 - les effectifs des classes
 
 Les sous-calculs internes du score ne sont pas nécessaires pour l'interprétation courante.
