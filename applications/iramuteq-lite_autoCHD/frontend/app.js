@@ -2566,7 +2566,7 @@ const AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS = {
     lowerBound: 3,
     upperBound: 10,
     defaultEnabled: true,
-    label: "k max"
+    label: "classes terminales phase 1"
   }
 };
 
@@ -11682,7 +11682,7 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   if (mincl !== "N/A" || minDocfreq !== "N/A" || kMaxExplore !== "N/A") {
     const testedNote = document.createElement("p");
     testedNote.className = "field-help";
-    testedNote.textContent = `Paramètres testés retenus : mincl = ${mincl} ; min_docfreq = ${minDocfreq} ; k max = ${kMaxExplore}.`;
+    testedNote.textContent = `Paramètres testés retenus : mincl = ${mincl} ; min_docfreq = ${minDocfreq} ; classes terminales phase 1 = ${kMaxExplore}.`;
     container.appendChild(testedNote);
   }
 }
@@ -11706,9 +11706,9 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["Configuration retenue", selected.configuration_id || "N/A"],
     ["mincl testé retenu", selected.mincl ?? "N/A"],
     ["min_docfreq testé retenu", selected.min_docfreq],
-    ["k max testé retenu", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
+    ["Classes terminales phase 1 testées", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
     ["Classes retenues", selectedK],
-    ["Limite CHD à reprendre en mode Normal", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
+    ["Classes terminales phase 1 à reprendre", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
     [
@@ -11746,7 +11746,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
   if (Number.isFinite(selectedManualK)) {
     const reproducibilityNote = document.createElement("p");
     reproducibilityNote.className = "field-help";
-    reproducibilityNote.textContent = `Pour reproduire exactement cette analyse en mode Normal, reprenez la configuration retenue et fixez la limite d'exploration à ${selectedManualK}. Cette limite ne fixe pas le nombre final de classes : celui-ci reste déterminé par la CHD et mincl.`;
+    reproducibilityNote.textContent = `Pour reproduire exactement cette analyse en mode Normal, reprenez la configuration retenue et fixez le nombre de classes terminales de la phase 1 à ${selectedManualK}. Ce paramètre ne fixe pas le nombre final de classes : celui-ci reste déterminé par la CHD et mincl.`;
     container.appendChild(reproducibilityNote);
 
     const replayButton = document.createElement("button");
@@ -11858,7 +11858,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     { keys: ["configuration_id"], label: "configuration" },
     { keys: ["mincl"], label: "mincl testé" },
     { keys: ["min_docfreq"], label: "min_docfreq testé" },
-    { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "k max testé" },
+    { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "classes phase 1 testées" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
     scoreColumnDef,
     ...minimumPairColumnDef,
@@ -11925,7 +11925,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
   const testedParameters = document.createElement("p");
   testedParameters.className = "field-help";
-  testedParameters.textContent = `Chaque ligne correspond à une CHD. Valeurs explorées : mincl = ${minclValues.join(", ") || "non disponible"} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; k max = ${kMaxValues.join(", ") || "non disponible"}. Une seule valeur signifie que le paramètre est resté fixe.`;
+  testedParameters.textContent = `Chaque ligne correspond à une CHD. Valeurs explorées : mincl = ${minclValues.join(", ") || "non disponible"} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"}. Une seule valeur signifie que le paramètre est resté fixe.`;
   context.appendChild(testedParameters);
 
   const fixedSettings = [

@@ -18,11 +18,11 @@ Cette boîte n'apparaît que lorsque « Auto discriminante » est sélectionné 
 
 - `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le réglage `mincl` choisi dans les paramètres CHD est conservé.
 - `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
-- `k max` : de `3` à `10`. Il s'agit du plafond de l'arbre CHD exploré par une simulation, et non du nombre final de classes.
+- `Nombre de classes terminales de la phase 1` : de `3` à `10`. C'est exactement le même paramètre `k_iramuteq` que dans le mode Normal. Chaque valeur est testée par une simulation ; elle ne fixe pas le nombre final de classes.
 
 Le filtrage morphosyntaxique reste ciblé sur `NOM + VER`, avec exclusion du verbe `être`. L'option `AUTRE_FORME` reste celle choisie par l'utilisateur.
 
-Par défaut, `min_docfreq` et `k max` sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5` et `k max = 3…10`, cela représente **32 CHD**.
+Par défaut, `min_docfreq` et le nombre de classes terminales de la phase 1 sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5` et une phase 1 de `3…10`, cela représente **32 CHD**.
 
 Si les trois paramètres sont cochés avec toutes leurs bornes, la grille compte `6 × 4 × 8 = 192` CHD. L'interface l'indique avant le lancement, car ce calcul peut être long sur un corpus volumineux.
 
@@ -30,11 +30,11 @@ Si les trois paramètres sont cochés avec toutes leurs bornes, la grille compte
 
 L'utilisateur ne choisit pas le nombre final de classes.
 
-Pour chaque valeur de `k max` sélectionnée, l'application explore les solutions réalisables à partir de trois classes, puis compare les résultats entre simulations. Le nombre de classes finalement retenu dépend donc de la CHD et des règles terminales, notamment `mincl`.
+Pour chaque valeur sélectionnée du nombre de classes terminales de la phase 1, l'application relance la même CHD, puis compare les résultats entre simulations. Le nombre de classes finalement retenu dépend donc de la CHD et des règles terminales, notamment `mincl`.
 
 Quand `mincl` fait partie de la grille, le résultat final indique la valeur qui a contribué au meilleur compromis. Lorsqu'il reste fixe, le même réglage est conservé dans toutes les simulations.
 
-Le résultat indique aussi la **limite CHD à reprendre en mode Normal**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en mode Normal », puis relancez l'analyse. Cette limite ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
+Le résultat indique aussi le **nombre de classes terminales de la phase 1 à reprendre en mode Normal**. Pour reproduire exactement la solution automatique, utilisez le bouton « Reprendre cette configuration en mode Normal », puis relancez l'analyse. Ce paramètre ne fixe pas le nombre final de classes : la CHD et `mincl` le déterminent comme d'habitude.
 
 Le graphique AFC final est construit avec tous les termes significatifs (`p.value <= 0.05`), exactement comme dans le mode Normal. Les termes utilisés en interne pour comparer les CHD testées restent réservés au calcul de la sélection et ne modifient pas le graphique final.
 
@@ -42,7 +42,7 @@ Le résultat final affiche donc :
 
 - la configuration retenue
 - le nombre de classes finales retenues
-- la limite CHD à reprendre en mode Normal
+- le nombre de classes terminales de la phase 1 à reprendre en mode Normal
 - les variables qui ont conduit à ce résultat
 
 ## Comment la sélection est faite

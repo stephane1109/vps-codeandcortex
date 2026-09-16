@@ -1367,7 +1367,7 @@ run_batch <- function() {
           as.character(selected_discriminant$min_docfreq %||% "n/a"),
           ", classes retenues=",
           as.character(selected_discriminant$k_retenu %||% "n/a"),
-          ", k max=",
+          ", classes terminales phase 1=",
           as.character(selected_discriminant$k_max_explore %||% selected_discriminant$k_chd_retenu %||% "n/a"),
           ", separation relative AFC=",
           format(round(as.numeric(selected_discriminant$S_separation_min %||% selected_discriminant$S), 4), nsmall = 4, trim = TRUE),

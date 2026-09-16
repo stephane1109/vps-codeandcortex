@@ -434,7 +434,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     ")",
     " | min_docfreq=",
     candidate$min_docfreq %||% NA_integer_,
-    " | kmax=",
+    " | classes_phase_1=",
     candidate$k_max_explore %||% candidate$config$k_iramuteq %||% NA_integer_,
     "]"
   )
@@ -576,8 +576,8 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
 
     attempt <- tryCatch(
       {
-        # Dans le profil cible, seul min_docfreq modifie le DFM. Les plafonds
-        # k max reutilisent donc la preparation lexicale deja construite.
+        # Dans le profil cible, seul min_docfreq modifie le DFM. Les variantes
+        # de la phase 1 reutilisent donc la preparation lexicale deja construite.
         pipeline_key <- if (identical(search_profile, "ciblee")) {
           paste0("ciblee::min_docfreq=", candidate$min_docfreq %||% "")
         } else {
