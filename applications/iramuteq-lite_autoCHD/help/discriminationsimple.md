@@ -92,7 +92,7 @@ S_robuste = médiane des s_proche(i)
 
 ![Voisins lexicaux les plus proches et médiane qui forme S robuste](images/auto-discriminante-s-robuste.svg)
 
-Dans l'exemple du schéma, les cinq valeurs sont `2,0 ; 2,0 ; 4,0 ; 4,0 ; 7,0`. La médiane est donc la troisième valeur, `4,0`.
+Dans l'exemple du schéma, les cinq valeurs sont `2,13 ; 2,13 ; 3,72 ; 4,86 ; 7,27`. La médiane est donc la troisième valeur, `3,72`. Les deux premières valeurs sont identiques parce que les classes 1 et 2 sont mutuellement les plus proches : le même score de paire est alors lu depuis chacune des deux classes.
 
 Il décrit donc la séparation du voisin lexical le plus proche pour une classe typique. Cette médiane évite qu'une seule paire particulièrement proche impose mécaniquement une solution à trois classes.
 
