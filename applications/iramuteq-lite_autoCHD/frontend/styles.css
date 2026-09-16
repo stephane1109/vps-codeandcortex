@@ -913,17 +913,18 @@ textarea {
 
 .analysis-history-folder {
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(127, 137, 145, 0.24);
+  border-radius: 13px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 248, 249, 0.72));
+  box-shadow: 0 1px 1px rgba(33, 42, 49, 0.05);
 }
 
 .analysis-history-folder-summary {
   display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr) auto;
-  gap: 0.45rem;
+  grid-template-columns: 0.58rem 1.18rem minmax(0, 1fr) auto;
+  gap: 0.42rem;
   align-items: center;
-  padding: 0.66rem 0.7rem;
+  padding: 0.64rem 0.7rem;
   color: var(--ink);
   cursor: pointer;
   list-style: none;
@@ -934,22 +935,67 @@ textarea {
 }
 
 .analysis-history-folder-summary::before {
-  content: "+";
-  color: var(--accent);
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  justify-self: center;
+  border-right: 2px solid #87929a;
+  border-bottom: 2px solid #87929a;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease, border-color 150ms ease;
 }
 
 .analysis-history-folder[open] .analysis-history-folder-summary::before {
-  content: "-";
+  transform: rotate(45deg) translate(-0.08rem, -0.08rem);
+  border-color: var(--accent);
 }
 
 .analysis-history-folder-summary:hover,
 .analysis-history-folder-summary:focus-visible {
   background: rgba(159, 29, 32, 0.05);
   outline: none;
+}
+
+.analysis-history-folder-icon {
+  position: relative;
+  display: block;
+  width: 1.14rem;
+  height: 0.9rem;
+  transform: translateY(-0.02rem);
+}
+
+.analysis-history-folder-icon::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0.04rem;
+  left: 0.08rem;
+  width: 0.5rem;
+  height: 0.28rem;
+  border: 1px solid rgba(160, 111, 16, 0.3);
+  border-bottom: 0;
+  border-radius: 0.2rem 0.2rem 0 0;
+  background: linear-gradient(180deg, #f7dc86, #edc25b);
+}
+
+.analysis-history-folder-icon::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 0.72rem;
+  border: 1px solid rgba(160, 111, 16, 0.32);
+  border-radius: 0.17rem;
+  background: linear-gradient(180deg, #f8db7c, #eab54a);
+  box-shadow: 0 0.08rem 0.12rem rgba(113, 78, 16, 0.14);
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.analysis-history-folder[open] .analysis-history-folder-icon::after {
+  transform: translateY(0.07rem) skewX(-5deg);
+  background: linear-gradient(180deg, #f9dd85, #e8b349);
 }
 
 .analysis-history-folder-name {
@@ -970,12 +1016,13 @@ textarea {
 .analysis-history-folder-entries {
   display: grid;
   gap: 0.48rem;
-  margin: 0 0.58rem 0.58rem 1.1rem;
-  padding: 0.08rem 0 0 0.62rem;
-  border-left: 1px solid var(--line);
+  margin: 0 0.58rem 0.62rem 1.56rem;
+  padding: 0.1rem 0 0.04rem 0.7rem;
+  border-left: 1px solid rgba(127, 137, 145, 0.3);
 }
 
 .analysis-history-item {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.7rem;
@@ -985,6 +1032,15 @@ textarea {
   border-radius: 14px;
   background: var(--surface-muted);
   transition: border-color 140ms ease, background 140ms ease;
+}
+
+.analysis-history-item::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -0.7rem;
+  width: 0.7rem;
+  border-top: 1px solid rgba(127, 137, 145, 0.3);
 }
 
 .analysis-history-item:hover,
@@ -1001,13 +1057,55 @@ textarea {
 .analysis-history-item-main {
   width: 100%;
   display: grid;
-  gap: 0.2rem;
+  grid-template-columns: 0.94rem minmax(0, 1fr);
+  gap: 0.54rem;
+  align-items: center;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+}
+
+.analysis-history-document-icon {
+  position: relative;
+  display: block;
+  width: 0.82rem;
+  height: 1.04rem;
+  border: 1px solid #b7c0c7;
+  border-radius: 0.13rem;
+  background: linear-gradient(180deg, #ffffff, #e9edf0);
+  box-shadow: 0 0.05rem 0.1rem rgba(40, 50, 58, 0.08);
+}
+
+.analysis-history-document-icon::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 0;
+  height: 0;
+  border-top: 0.31rem solid #d8e0e5;
+  border-left: 0.31rem solid transparent;
+}
+
+.analysis-history-document-icon::after {
+  content: "";
+  position: absolute;
+  top: 0.48rem;
+  left: 0.17rem;
+  width: 0.43rem;
+  height: 0.06rem;
+  border-radius: 1rem;
+  background: #aeb9c1;
+  box-shadow: 0 0.16rem 0 #c2cbd1, 0 0.32rem 0 #c2cbd1;
+}
+
+.analysis-history-item-content {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
 }
 
 .analysis-history-item-main:hover,

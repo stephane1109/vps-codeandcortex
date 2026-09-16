@@ -1494,6 +1494,13 @@ function createAnalysisHistoryItem(entry) {
   mainButton.type = "button";
   mainButton.className = "analysis-history-item-main";
 
+  const documentIcon = document.createElement("span");
+  documentIcon.className = "analysis-history-document-icon";
+  documentIcon.setAttribute("aria-hidden", "true");
+
+  const content = document.createElement("span");
+  content.className = "analysis-history-item-content";
+
   const title = document.createElement("span");
   title.className = "analysis-history-item-title";
   title.textContent = getAnalysisHistoryLabel(entry);
@@ -1502,8 +1509,10 @@ function createAnalysisHistoryItem(entry) {
   meta.className = "analysis-history-item-meta";
   meta.textContent = getAnalysisHistoryMeta(entry);
 
-  mainButton.appendChild(title);
-  if (meta.textContent) mainButton.appendChild(meta);
+  content.appendChild(title);
+  if (meta.textContent) content.appendChild(meta);
+  mainButton.appendChild(documentIcon);
+  mainButton.appendChild(content);
   mainButton.addEventListener("click", () => {
     void activateAnalysisHistoryEntry(entry.id);
   });
@@ -1584,6 +1593,10 @@ function renderAnalysisHistory() {
     const summary = document.createElement("summary");
     summary.className = "analysis-history-folder-summary";
 
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "analysis-history-folder-icon";
+    folderIcon.setAttribute("aria-hidden", "true");
+
     const corpusName = document.createElement("span");
     corpusName.className = "analysis-history-folder-name";
     corpusName.textContent = group.corpusName;
@@ -1592,6 +1605,7 @@ function renderAnalysisHistory() {
     count.className = "analysis-history-folder-count";
     count.textContent = group.entries.length === 1 ? "1 analyse" : `${group.entries.length} analyses`;
 
+    summary.appendChild(folderIcon);
     summary.appendChild(corpusName);
     summary.appendChild(count);
 
