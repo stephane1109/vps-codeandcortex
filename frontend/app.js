@@ -422,6 +422,7 @@ const appState = {
   termChartExport: null
 };
 
+const TICKET_REFERENCE_STORAGE_KEY = "iramuteq-ticket-reference-v1";
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
 let latestTicketSnapshot = normalizeTicketSnapshot({});
 let analysisExecutionInProgress = false;
@@ -540,8 +541,52 @@ function normalizeTicketSnapshot(snapshot) {
     waitRefreshMs: Number(snapshot?.wait_refresh_ms || 10000),
     heartbeatMs: Number(snapshot?.heartbeat_ms || 30000),
     idleReleaseMs: Number(snapshot?.idle_release_ms || DEFAULT_TICKET_IDLE_RELEASE_MS),
+    released: typeof snapshot?.released === "boolean" ? snapshot.released : null,
     message: String(snapshot?.message || "")
   };
+}
+
+function normalizeTicketReference(value) {
+  const ticketId = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(ticketId) ? ticketId : "";
+}
+
+function readStoredTicketReference() {
+  try {
+    return normalizeTicketReference(window.sessionStorage.getItem(TICKET_REFERENCE_STORAGE_KEY));
+  } catch (_error) {
+    return "";
+  }
+}
+
+function persistTicketReference(ticketId) {
+  const normalizedTicketId = normalizeTicketReference(ticketId);
+  if (!normalizedTicketId) return;
+  try {
+    window.sessionStorage.setItem(TICKET_REFERENCE_STORAGE_KEY, normalizedTicketId);
+  } catch (_error) {
+    // A ticket can still be recovered from its cookie when session storage is unavailable.
+  }
+}
+
+function clearStoredTicketReference() {
+  try {
+    window.sessionStorage.removeItem(TICKET_REFERENCE_STORAGE_KEY);
+  } catch (_error) {
+    // Ignore private browsing and storage policy errors.
+  }
+}
+
+function getTicketReferenceForRequest() {
+  return normalizeTicketReference(latestTicketSnapshot?.ticket_id) || readStoredTicketReference();
+}
+
+function restorePersistedTicketReference() {
+  const ticketId = readStoredTicketReference();
+  if (!ticketId || latestTicketSnapshot.ticket_id) return;
+  latestTicketSnapshot.ticket_id = ticketId;
+  latestTicketSnapshot.ticketId = ticketId;
+  window.__APP_TICKET_CURRENT_ID__ = ticketId;
 }
 
 function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
@@ -560,16 +605,17 @@ function rememberUserInteraction() {
 }
 
 function rememberTicketSnapshot(snapshot) {
-  const previousTicketId = String(latestTicketSnapshot?.ticket_id || "").trim();
   latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
-  if (!latestTicketSnapshot.ticket_id && analysisExecutionInProgress && previousTicketId) {
-    latestTicketSnapshot.ticket_id = previousTicketId;
-    latestTicketSnapshot.ticketId = previousTicketId;
+  const ticketId = normalizeTicketReference(latestTicketSnapshot.ticket_id);
+  if (ticketId) {
+    latestTicketSnapshot.ticket_id = ticketId;
+    latestTicketSnapshot.ticketId = ticketId;
+    ticketReleasedLocally = false;
+    persistTicketReference(ticketId);
+  } else if (latestTicketSnapshot.enabled) {
+    clearStoredTicketReference();
   }
   window.__APP_TICKET_CURRENT_ID__ = String(latestTicketSnapshot.ticket_id || "").trim();
-  if (["actif", "attente"].includes(latestTicketSnapshot.statut)) {
-    ticketReleasedLocally = false;
-  }
   updateReleaseAccessButton(latestTicketSnapshot);
   scheduleIdleTicketRelease();
   return latestTicketSnapshot;
@@ -592,7 +638,7 @@ async function autoReleaseTicketAfterInactivity() {
   }
 
   const snapshot = await releaseAnalysisTicket({ silent: true });
-  if (snapshot) {
+  if (snapshot && snapshot.released !== false) {
     setSidebarRuntimeStatus("Accès libéré automatiquement après inactivité.", "success");
     await refreshTicketSidebarStatus();
   }
@@ -627,20 +673,22 @@ function releaseTicketOnPageHide() {
   if (!latestTicketSnapshot.enabled || !["actif", "attente"].includes(latestTicketSnapshot.statut)) {
     return;
   }
+  const ticketId = getTicketReferenceForRequest();
   void fetch("/api/tickets/release", {
     method: "POST",
     credentials: "same-origin",
     keepalive: true,
-    headers: latestTicketSnapshot?.ticket_id
-      ? { "X-App-Ticket-Id": String(latestTicketSnapshot.ticket_id) }
+    headers: ticketId
+      ? { "X-App-Ticket-Id": ticketId }
       : undefined
   }).catch(() => {});
 }
 
 async function callTicketApi(path, { method = "GET", body = null } = {}) {
   const headers = body ? { "Content-Type": "application/json" } : {};
-  if (latestTicketSnapshot?.ticket_id) {
-    headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+  const ticketId = getTicketReferenceForRequest();
+  if (ticketId) {
+    headers["X-App-Ticket-Id"] = ticketId;
   }
   const response = await fetch(path, {
     method,
@@ -716,8 +764,16 @@ async function heartbeatAnalysisTicket() {
 
 async function releaseAnalysisTicket({ silent = false } = {}) {
   try {
-    const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
+    const releasedSnapshot = await callTicketApi("/api/tickets/release", { method: "POST" });
+    if (releasedSnapshot.released === false) {
+      if (!silent) {
+        setSidebarTicketStatus("Aucun ticket réservé n'a été trouvé pour cette session.", "warning");
+      }
+      return releasedSnapshot;
+    }
     ticketReleasedLocally = true;
+    clearStoredTicketReference();
+    const snapshot = rememberTicketSnapshot(releasedSnapshot);
     if (!silent) {
       await refreshTicketSidebarStatus();
     }
@@ -14518,6 +14574,7 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
+restorePersistedTicketReference();
 void refreshTicketSidebarStatus().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();
@@ -14531,7 +14588,9 @@ if (releaseAccessBtn) {
     releaseAccessBtn.disabled = true;
     try {
       const snapshot = await releaseAnalysisTicket();
-      if (snapshot) {
+      if (snapshot?.released === false) {
+        setSidebarRuntimeStatus("Aucun accès réservé n'était associé à cette session.", "warning");
+      } else if (snapshot) {
         setSidebarRuntimeStatus("Accès libéré pour cette session.", "success");
       } else {
         setSidebarRuntimeStatus("Liberation a reessayer : le statut va etre reverifie.", "error");
