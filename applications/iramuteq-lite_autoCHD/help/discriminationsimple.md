@@ -20,7 +20,7 @@ Cette boîte n'apparaît que lorsque « Auto discriminante » est sélectionné 
 - `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
 - `Nombre de classes terminales de la phase 1` : de `3` à `10`. C'est exactement le même paramètre `k_iramuteq` que dans le mode Normal. Chaque valeur est testée par une simulation ; elle ne fixe pas le nombre final de classes.
 
-Dans ce mode, le filtrage morphosyntaxique est fixé à `NOM + VER`, avec exclusion du verbe `être`. Les formes `AUTRE_FORME` sont automatiquement conservées dans chaque CHD testée : ce n'est pas un paramètre croisé et le réglage général du mode Normal ne le modifie pas.
+Dans ce mode, le filtrage morphosyntaxique est fixé à `NOM + VER`, avec exclusion du verbe `être`. Les formes `AUTRE_FORME` sont automatiquement conservées.
 
 Par défaut, `min_docfreq` et le nombre de classes terminales de la phase 1 sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5` et une phase 1 de `3…10`, cela représente **32 CHD**.
 
