@@ -321,6 +321,7 @@ const resultContainers = {
 };
 
 const RUNNING_ANALYSIS_STORAGE_KEY = "iramuteq-lite-running-analysis";
+const TICKET_REFERENCE_STORAGE_KEY = "iramuteq-ticket-reference-v1";
 
 const appState = {
   corpusFileName: null,
@@ -559,6 +560,43 @@ function normalizeTicketSnapshot(snapshot) {
   };
 }
 
+function normalizeTicketReference(value) {
+  const ticketId = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(ticketId) ? ticketId : "";
+}
+
+function readStoredTicketReference() {
+  try {
+    return normalizeTicketReference(window.sessionStorage.getItem(TICKET_REFERENCE_STORAGE_KEY));
+  } catch (_error) {
+    return "";
+  }
+}
+
+function persistTicketReference(ticketId) {
+  const normalizedTicketId = normalizeTicketReference(ticketId);
+  if (!normalizedTicketId) return;
+  try {
+    window.sessionStorage.setItem(TICKET_REFERENCE_STORAGE_KEY, normalizedTicketId);
+  } catch (_error) {
+    // The running-analysis record remains a fallback when session storage is unavailable.
+  }
+}
+
+function clearStoredTicketReference() {
+  try {
+    window.sessionStorage.removeItem(TICKET_REFERENCE_STORAGE_KEY);
+  } catch (_error) {
+    // Ignore private browsing and storage policy errors.
+  }
+}
+
+function getTicketReferenceForRequest() {
+  return normalizeTicketReference(latestTicketSnapshot?.ticket_id)
+    || readStoredTicketReference()
+    || normalizeTicketReference(readPersistedRunningAnalysis()?.ticketId);
+}
+
 function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
   if (!releaseAccessBtn) return;
   const canRelease = Boolean(snapshot?.enabled) && ["actif", "attente"].includes(String(snapshot?.statut || ""));
@@ -603,15 +641,24 @@ function rememberTicketSnapshot(snapshot) {
   const previousTicketId = String(latestTicketSnapshot?.ticket_id || "").trim();
   latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
   const persistedTicketId = String(readPersistedRunningAnalysis()?.ticketId || "").trim();
-  const ticketIdToKeep = previousTicketId || persistedTicketId;
-  if (!latestTicketSnapshot.ticket_id && !ticketReleasedLocally && (analysisExecutionInProgress || persistedTicketId) && ticketIdToKeep) {
-    latestTicketSnapshot.ticket_id = ticketIdToKeep;
-    latestTicketSnapshot.ticketId = ticketIdToKeep;
+  const ticketId = normalizeTicketReference(latestTicketSnapshot.ticket_id);
+  if (ticketId) {
+    latestTicketSnapshot.ticket_id = ticketId;
+    latestTicketSnapshot.ticketId = ticketId;
+    ticketReleasedLocally = false;
+    persistTicketReference(ticketId);
+  } else if (!latestTicketSnapshot.enabled && !ticketReleasedLocally) {
+    const ticketIdToKeep = normalizeTicketReference(previousTicketId)
+      || readStoredTicketReference()
+      || normalizeTicketReference(persistedTicketId);
+    if (ticketIdToKeep) {
+      latestTicketSnapshot.ticket_id = ticketIdToKeep;
+      latestTicketSnapshot.ticketId = ticketIdToKeep;
+    }
+  } else if (latestTicketSnapshot.enabled) {
+    clearStoredTicketReference();
   }
   window.__APP_TICKET_CURRENT_ID__ = String(latestTicketSnapshot.ticket_id || "").trim();
-  if (["actif", "attente"].includes(latestTicketSnapshot.statut)) {
-    ticketReleasedLocally = false;
-  }
   updateReleaseAccessButton(latestTicketSnapshot);
   scheduleIdleTicketRelease();
   return latestTicketSnapshot;
@@ -634,7 +681,7 @@ async function autoReleaseTicketAfterInactivity() {
   }
 
   const snapshot = await releaseAnalysisTicket({ silent: true });
-  if (snapshot) {
+  if (snapshot && snapshot.released !== false) {
     setSidebarRuntimeStatus("Accès libéré automatiquement après inactivité.", "success");
     await refreshTicketSidebarStatus();
   }
@@ -670,20 +717,22 @@ function releaseTicketOnPageHide() {
   if (!latestTicketSnapshot.enabled || !["actif", "attente"].includes(latestTicketSnapshot.statut)) {
     return;
   }
+  const ticketId = getTicketReferenceForRequest();
   void fetch("/api/tickets/release", {
     method: "POST",
     credentials: "same-origin",
     keepalive: true,
-    headers: latestTicketSnapshot?.ticket_id
-      ? { "X-App-Ticket-Id": String(latestTicketSnapshot.ticket_id) }
+    headers: ticketId
+      ? { "X-App-Ticket-Id": ticketId }
       : undefined
   }).catch(() => {});
 }
 
 async function callTicketApi(path, { method = "GET", body = null } = {}) {
   const headers = body ? { "Content-Type": "application/json" } : {};
-  if (latestTicketSnapshot?.ticket_id) {
-    headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+  const ticketId = getTicketReferenceForRequest();
+  if (ticketId) {
+    headers["X-App-Ticket-Id"] = ticketId;
   }
   const response = await fetch(path, {
     method,
@@ -720,8 +769,9 @@ async function abandonActiveAnalysis({ reason = "Analyse annulee par l'utilisate
   }
 
   const headers = { "Content-Type": "application/json" };
-  if (latestTicketSnapshot?.ticket_id) {
-    headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+  const ticketId = getTicketReferenceForRequest();
+  if (ticketId) {
+    headers["X-App-Ticket-Id"] = ticketId;
   }
 
   const response = await fetch("/api/analysis/abandon", {
@@ -813,7 +863,14 @@ async function heartbeatAnalysisTicket() {
 async function releaseAnalysisTicket({ silent = false } = {}) {
   try {
     const releasedSnapshot = await callTicketApi("/api/tickets/release", { method: "POST" });
+    if (releasedSnapshot.released === false) {
+      if (!silent) {
+        setSidebarTicketStatus("Aucun ticket réservé n'a été trouvé pour cette session.", "warning");
+      }
+      return releasedSnapshot;
+    }
     ticketReleasedLocally = true;
+    clearStoredTicketReference();
     const snapshot = rememberTicketSnapshot(releasedSnapshot);
     if (!silent) {
       await refreshTicketSidebarStatus();
@@ -1729,11 +1786,13 @@ function persistRunningAnalysis(entry) {
 }
 
 function restorePersistedTicketReference() {
-  const ticketId = String(readPersistedRunningAnalysis()?.ticketId || "").trim();
+  const ticketId = readStoredTicketReference()
+    || normalizeTicketReference(readPersistedRunningAnalysis()?.ticketId);
   if (!ticketId || latestTicketSnapshot.ticket_id) return;
   latestTicketSnapshot.ticket_id = ticketId;
   latestTicketSnapshot.ticketId = ticketId;
   window.__APP_TICKET_CURRENT_ID__ = ticketId;
+  persistTicketReference(ticketId);
 }
 
 function clearPersistedRunningAnalysis(expectedJobId = "") {
