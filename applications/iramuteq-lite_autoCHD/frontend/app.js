@@ -11755,6 +11755,10 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   const profilMorpho = String(configSource.profil_morpho || "").trim();
   const minDocfreq = formatSummaryValue(configSource.min_docfreq);
   const mincl = formatSummaryValue(configSource.mincl);
+  const minclMode = normalizeAsciiKey(configSource.mincl_mode ?? configSource.iramuteq_mincl_mode);
+  const minclLabel = minclMode === "manuel"
+    ? "mincl manuel testé"
+    : "seuil mincl automatique appliqué";
   const kMaxExplore = formatSummaryValue(configSource.k_max_explore || configSource.kmax || configSource.k_max_requested);
   const normalizeYesNoValue = (value, yesLabel = "oui", noLabel = "non") => {
     const normalized = normalizeAsciiKey(value);
@@ -11791,8 +11795,15 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   if (mincl !== "N/A" || minDocfreq !== "N/A" || kMaxExplore !== "N/A") {
     const testedNote = document.createElement("p");
     testedNote.className = "field-help";
-    testedNote.textContent = `Paramètres testés retenus : mincl = ${mincl} ; min_docfreq = ${minDocfreq} ; classes terminales phase 1 = ${kMaxExplore}.`;
+    testedNote.textContent = `Paramètres retenus : ${minclLabel} = ${mincl} ; min_docfreq = ${minDocfreq} ; classes terminales phase 1 = ${kMaxExplore}.`;
     container.appendChild(testedNote);
+
+    if (minclMode !== "manuel" && mincl !== "N/A") {
+      const autoMinclNote = document.createElement("p");
+      autoMinclNote.className = "field-help";
+      autoMinclNote.textContent = "En mode mincl automatique, ce seuil est recalculé par la CHD pour chaque configuration. Il ne fait pas partie des paramètres croisés.";
+      container.appendChild(autoMinclNote);
+    }
   }
 }
 
@@ -11817,9 +11828,13 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ?? selected.S
     ?? selected.s
     ?? "N/A";
+  const selectedMinclMode = normalizeAsciiKey(selected.mincl_mode ?? manualReplayConfig.iramuteq_mincl_mode);
+  const selectedMinclLabel = selectedMinclMode === "manuel"
+    ? "mincl manuel testé retenu"
+    : "seuil mincl automatique appliqué";
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
-    ["mincl testé retenu", selected.mincl ?? "N/A"],
+    [selectedMinclLabel, selected.mincl ?? "N/A"],
     ["min_docfreq testé retenu", selected.min_docfreq],
     ["Classes terminales phase 1 testées", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
     ["Classes retenues", selectedK],
@@ -11960,7 +11975,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     : { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation AFC" };
   const columnDefs = [
     { keys: ["configuration_id"], label: "configuration" },
-    { keys: ["mincl"], label: "mincl testé" },
+    { keys: ["mincl"], label: "seuil mincl appliqué" },
     { keys: ["min_docfreq"], label: "min_docfreq testé" },
     { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "classes phase 1 testées" },
     { keys: ["classes_retenues", "k_retenu"], label: "classes retenues" },
@@ -12021,6 +12036,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
   if (!container || !parsed?.headers?.length) return;
 
   const minclValues = getDiscriminationSimpleDistinctValues(parsed, ["mincl"], { numeric: true });
+  const minclModes = getDiscriminationSimpleDistinctValues(parsed, ["mincl_mode"]);
   const minDocfreqValues = getDiscriminationSimpleDistinctValues(parsed, ["min_docfreq"], { numeric: true });
   const kMaxValues = getDiscriminationSimpleDistinctValues(parsed, ["k_max_explore", "kmax", "k_iramuteq"], { numeric: true });
   const context = document.createElement("div");
@@ -12028,7 +12044,16 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
   const testedParameters = document.createElement("p");
   testedParameters.className = "field-help";
-  testedParameters.textContent = `Chaque ligne correspond à une CHD. Valeurs explorées : mincl = ${minclValues.join(", ") || "non disponible"} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"}. Une seule valeur signifie que le paramètre est resté fixe.`;
+  const minclMode = minclModes.length === 1 ? normalizeAsciiKey(minclModes[0]) : "";
+  const minclDescription = minclMode === "auto"
+    ? `seuil mincl automatique appliqué = ${minclValues.join(", ") || "non disponible"}`
+    : minclMode === "manuel"
+      ? `mincl manuel testé = ${minclValues.join(", ") || "non disponible"}`
+      : `seuil mincl appliqué = ${minclValues.join(", ") || "non disponible"}`;
+  const gridNote = minclMode === "auto"
+    ? "Le seuil mincl automatique peut changer entre les lignes, car la CHD le recalcule pour chaque configuration."
+    : "Une seule valeur signifie que le paramètre est resté fixe.";
+  testedParameters.textContent = `Chaque ligne correspond à une CHD. ${minclDescription} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"}. ${gridNote}`;
   context.appendChild(testedParameters);
 
   const fixedSettings = [
@@ -12056,7 +12081,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["mincl_teste", "min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["mincl_teste", "seuil_mincl_applique", "min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);

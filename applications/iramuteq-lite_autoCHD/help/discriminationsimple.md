@@ -16,7 +16,7 @@ Le mode compare donc plusieurs résultats possibles, mais il ne renvoie **qu'un 
 En mode Auto discriminante, l'utilisateur coche les paramètres qu'il veut faire varier. Les paramètres non cochés restent fixes pendant toutes les simulations.
 Cette boîte n'apparaît que lorsque « Auto discriminante » est sélectionné dans « Nombre de classes ».
 
-- `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le réglage `mincl` choisi dans les paramètres CHD est conservé.
+- `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le mode `mincl` choisi dans les paramètres CHD est conservé.
 - `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
 - `Nombre de classes terminales de la phase 1` : de `3` à `10`. C'est exactement le même paramètre `k_iramuteq` que dans le mode Normal. Chaque valeur est testée par une simulation ; elle ne fixe pas le nombre final de classes.
 
@@ -25,6 +25,10 @@ Dans ce mode, le filtrage morphosyntaxique est fixé à `NOM + VER`, avec exclus
 Par défaut, `min_docfreq` et le nombre de classes terminales de la phase 1 sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5` et une phase 1 de `3…10`, cela représente **32 CHD**.
 
 Si les trois paramètres sont cochés avec toutes leurs bornes, la grille compte `6 × 4 × 8 = 192` CHD. L'interface l'indique avant le lancement, car ce calcul peut être long sur un corpus volumineux.
+
+### Seuil mincl automatique
+
+Lorsque le mode `mincl` est réglé sur `Automatique`, `mincl` ne fait pas partie des paramètres croisés. Pour chaque CHD, le moteur calcule son seuil interne à partir du nombre de segments et des classes disponibles à cette étape : `arrondi(segments / classes)` en classification simple, ou `arrondi(segments / (2 × classes))` en classification double. La valeur affichée, par exemple `90`, est donc un **seuil automatique appliqué**, et non une valeur choisie ou testée par l'utilisateur.
 
 ## Nombre de classes
 
