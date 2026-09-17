@@ -2764,7 +2764,7 @@ function renderClassesModeCard(card) {
 
   if (!isDiscriminationSimple) {
     if (modeDescription instanceof HTMLElement) {
-      modeDescription.textContent = "En mode Normal aussi, le nombre final de classes est déterminé après le calcul de la CHD. Vous donnez seulement une limite maximale d'exploration.";
+      modeDescription.textContent = "En mode Normal, vous choisissez tous les paramètres de la CHD avant le lancement.";
     }
     return;
   }
