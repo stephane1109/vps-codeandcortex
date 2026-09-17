@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
-  <title id="title">Du voisin lexical le plus proche au score robuste S</title>
-  <desc id="desc">Cinq classes sont comparées à leur voisin le plus proche, puis la valeur centrale de ces scores produit S robuste.</desc>
+  <title id="title">Du voisin lexical le plus proche au score S</title>
+  <desc id="desc">Cinq classes sont comparées à leur voisin le plus proche, puis la valeur centrale de ces scores produit S.</desc>
   <defs>
     <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0" stop-color="#fffdf9"/>
@@ -16,7 +16,7 @@
 
   <rect width="1440" height="900" fill="url(#paper)"/>
   <rect x="42" y="38" width="1356" height="824" rx="30" fill="#ffffff" stroke="#e3ddd2" stroke-width="2" filter="url(#shadow)"/>
-  <text x="96" y="112" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="700">3. Du voisin le plus proche au score robuste S</text>
+  <text x="96" y="112" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="700">3. Du voisin le plus proche au score S</text>
   <text x="96" y="151" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20">Chaque classe regarde d'abord la classe dont elle est lexicalement la plus proche.</text>
 
   <rect x="88" y="194" width="732" height="532" rx="22" fill="#f9fbfb" stroke="#d8e4e5" stroke-width="2"/>
@@ -60,7 +60,7 @@
   <text x="126" y="702" fill="#71858b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="16">Traits pleins : voisin le plus proche d'au moins une classe. Traits pointillés : autres paires.</text>
 
   <rect x="862" y="194" width="484" height="532" rx="22" fill="#f8f4ed" stroke="#eadcc7" stroke-width="2"/>
-  <text x="905" y="247" fill="#3a4d54" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700">B. Former le score robuste</text>
+  <text x="905" y="247" fill="#3a4d54" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700">B. Former le score S</text>
   <text x="905" y="296" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18">Valeurs classées dans cet exemple :</text>
 
   <rect x="905" y="316" width="398" height="40" rx="12" fill="#eef4f3"/>
@@ -76,10 +76,10 @@
   <path d="M1104 556 L1104 585" stroke="#6d7f85" stroke-width="3" marker-end="url(#arrow)"/>
   <rect x="905" y="600" width="398" height="94" rx="16" fill="#e5f4ef"/>
   <text x="932" y="632" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18">Cinq valeurs : la médiane est celle du milieu.</text>
-  <text x="932" y="663" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="700">S_robuste = 3,72</text>
+  <text x="932" y="663" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="700">S = 3,72</text>
   <text x="932" y="686" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="15">3e valeur de [2,13 ; 2,13 ; 3,72 ; 4,86 ; 7,27]</text>
 
   <rect x="88" y="744" width="1258" height="78" rx="17" fill="#edf4f4"/>
-  <text x="121" y="777" fill="#34525b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">La CHD retenue est celle dont S_robuste est le plus élevé. La pire paire est le minimum de toutes les paires :</text>
-  <text x="121" y="806" fill="#34525b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">elle sert seulement de garde-fou et de départage en cas d'égalité.</text>
+  <text x="121" y="777" fill="#34525b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">La CHD retenue est celle dont S est le plus élevé.</text>
+  <text x="121" y="806" fill="#34525b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">En cas d'égalité, le mode retient la solution avec le moins de classes.</text>
 </svg>

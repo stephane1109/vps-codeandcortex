@@ -76,7 +76,7 @@ s(i,j) = distance entre les centres i et j / somme de leurs dispersions lexicale
 
 La distance au numérateur est la distance euclidienne entre les deux centres. Chaque dispersion au dénominateur est la médiane des distances entre les mots significatifs de la classe et son centre. Ainsi, deux classes éloignées avec des mots bien regroupés obtiennent une valeur `s(i,j)` élevée.
 
-### 3. Construire le score robuste S
+### 3. Construire le score S
 
 Pour chaque classe `i`, le mode repère ensuite sa classe concurrente la plus proche :
 
@@ -87,24 +87,22 @@ s_proche(i) = minimum des s(i,j)
 Le score qui choisit la CHD est :
 
 ```ini
-S_robuste = médiane des s_proche(i)
+S = médiane des s_proche(i)
 ```
 
-![Voisins lexicaux les plus proches et médiane qui forme S robuste](images/auto-discriminante-s-robuste.svg)
+![Voisins lexicaux les plus proches et médiane qui forme le score S](images/auto-discriminante-s-robuste.svg)
 
 Dans l'exemple du schéma, les cinq valeurs sont `2,13 ; 2,13 ; 3,72 ; 4,86 ; 7,27`. La médiane est donc la troisième valeur, `3,72`. Les deux premières valeurs sont identiques parce que les classes 1 et 2 sont mutuellement les plus proches : le même score de paire est alors lu depuis chacune des deux classes.
 
 Il décrit donc la séparation du voisin lexical le plus proche pour une classe typique. Cette médiane évite qu'une seule paire particulièrement proche impose mécaniquement une solution à trois classes.
 
-La **pire paire AFC** reste affichée séparément : c'est le minimum de tous les `s(i,j)`. Elle sert de garde-fou pour signaler deux classes potentiellement trop proches, sans diriger seule la sélection.
+Les distances entre paires sont nécessaires uniquement pour trouver le voisin le plus proche de chaque classe. Elles ne sont ni affichées, ni utilisées comme un second score.
 
-Plus `S_robuste` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
+Plus `S` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
 
-Une valeur de pire paire AFC `>= 1` indique que même la paire de classes la plus proche est séparée au moins de la somme de leurs dispersions lexicales médianes. C'est un repère de lecture, pas une condition de sélection.
+Dans chaque configuration, le mode retient la solution qui maximise `S`. En cas d'égalité, il retient la solution avec le moins de classes, puis celle dont la phase 1 est la plus courte.
 
-Dans chaque configuration, le mode retient la solution qui maximise `S_robuste`. En cas d'égalité, la pire paire AFC la plus élevée départage les solutions ; s'il y a encore égalité, le mode retient la solution avec le moins de classes.
-
-Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la même règle : la meilleure séparation robuste AFC est toujours prioritaire.
+Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la même règle : la meilleure séparation AFC est toujours prioritaire.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 

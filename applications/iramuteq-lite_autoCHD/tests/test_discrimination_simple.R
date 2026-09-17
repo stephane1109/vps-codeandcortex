@@ -30,21 +30,19 @@ score <- calculer_score_discrimination_simple_iramuteq(
 )
 
 stopifnot(
-  abs(score$S_separation_min - 2) < 1e-9,
   abs(score$S - 12.5) < 1e-9,
-  score$S > score$S_separation_min
+  !("S_separation_robuste" %in% names(score)),
+  !("S_separation_min" %in% names(score))
 )
 
 public_metrics <- .preparer_metrics_export_discrimination_simple(data.frame(
   k_retenu = 4L,
   k_chd_retenu = 4L,
-  S = score$S,
-  S_separation_min = score$S_separation_min,
-  S_separation_moyenne = score$S_separation_moyenne
+  S = score$S
 ))
 stopifnot(
-  abs(public_metrics$separation_robuste_afc[[1]] - score$S) < 1e-9,
-  abs(public_metrics$separation_minimale_afc[[1]] - score$S_separation_min) < 1e-9
+  abs(public_metrics$separation_afc[[1]] - score$S) < 1e-9,
+  !("separation_minimale_afc" %in% names(public_metrics))
 )
 
 cat("test_discrimination_simple.R: OK\n")

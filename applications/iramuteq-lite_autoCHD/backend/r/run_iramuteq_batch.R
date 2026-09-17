@@ -1406,8 +1406,8 @@ run_batch <- function() {
           as.character(selected_discriminant$k_retenu %||% "n/a"),
           ", classes terminales phase 1=",
           as.character(selected_discriminant$k_max_explore %||% selected_discriminant$k_chd_retenu %||% "n/a"),
-          ", separation relative AFC=",
-          format(round(as.numeric(selected_discriminant$S_separation_min %||% selected_discriminant$S), 4), nsmall = 4, trim = TRUE),
+          ", separation AFC=",
+          format(round(as.numeric(selected_discriminant$S %||% NA_real_), 4), nsmall = 4, trim = TRUE),
           ")."
         ),
         progress = 60
