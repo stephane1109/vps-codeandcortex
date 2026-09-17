@@ -19,13 +19,12 @@ Cette boîte n'apparaît que lorsque « Auto discriminante » est sélectionné 
 - `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le réglage `mincl` choisi dans les paramètres CHD est conservé.
 - `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
 - `Nombre de classes terminales de la phase 1` : de `3` à `10`. C'est exactement le même paramètre `k_iramuteq` que dans le mode Normal. Chaque valeur est testée par une simulation ; elle ne fixe pas le nombre final de classes.
-- `AUTRE_FORME` : lorsqu'elle est cochée, chaque combinaison est calculée deux fois : une fois en conservant les formes non reconnues par le lexique, puis une fois en les excluant. La configuration finale indique la variante retenue.
 
-Le filtrage morphosyntaxique reste ciblé sur `NOM + VER`, avec exclusion du verbe `être`. `AUTRE_FORME` fait donc réellement partie des calculs Auto discriminante si son croisement est activé : ce n'est plus un simple réglage fixe choisi avant le lancement.
+Dans ce mode, le filtrage morphosyntaxique est fixé à `NOM + VER`, avec exclusion du verbe `être`. Les formes `AUTRE_FORME` sont automatiquement conservées dans chaque CHD testée : ce n'est pas un paramètre croisé et le réglage général du mode Normal ne le modifie pas.
 
-Par défaut, `min_docfreq`, le nombre de classes terminales de la phase 1 et `AUTRE_FORME` sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5`, une phase 1 de `3…10` et les deux variantes `AUTRE_FORME`, cela représente **64 CHD**.
+Par défaut, `min_docfreq` et le nombre de classes terminales de la phase 1 sont cochés, tandis que `mincl` reste fixe. Avec `min_docfreq = 2…5` et une phase 1 de `3…10`, cela représente **32 CHD**.
 
-Si les quatre paramètres sont cochés avec toutes leurs bornes, la grille compte `6 × 4 × 8 × 2 = 384` CHD. L'interface l'indique avant le lancement, car ce calcul peut être long sur un corpus volumineux.
+Si les trois paramètres sont cochés avec toutes leurs bornes, la grille compte `6 × 4 × 8 = 192` CHD. L'interface l'indique avant le lancement, car ce calcul peut être long sur un corpus volumineux.
 
 ## Nombre de classes
 

@@ -968,12 +968,6 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
   )
   k_max_values <- .construire_kmax_discrimination_simple(config_base, search_profile = search_profile)
   if (identical(search_profile, "ciblee")) {
-    keep_unknown_user <- .as_bool_auto_chd(config_base$morpho_conserver_hors_lexique, TRUE)
-    vary_autre_forme <- .as_bool_auto_chd(
-      config_base$iramuteq_discrimination_simple_vary_autre_forme,
-      TRUE
-    )
-    keep_unknown_values <- if (isTRUE(vary_autre_forme)) c(FALSE, TRUE) else keep_unknown_user
     min_docfreq_values <- .valeurs_exploration_discrimination_simple(
       config_base = config_base,
       vary_key = "iramuteq_discrimination_simple_vary_min_docfreq",
@@ -1005,9 +999,11 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
     remove_stopwords_values <- c(.as_bool_auto_chd(config_base$retirer_stopwords, FALSE))
     remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
     remove_digits_values <- c(.as_bool_auto_chd(config_base$supprimer_chiffres, FALSE))
-    morpho_profiles <- lapply(keep_unknown_values, function(keep_unknown) {
-      list(key = "nom_ver", keep_unknown = isTRUE(keep_unknown), exclude_etre = TRUE)
-    })
+    # Auto discriminante utilise toujours NOM + VER, sans ETRE, avec les
+    # formes hors lexique incluses dans chaque CHD testee.
+    morpho_profiles <- list(
+      list(key = "nom_ver", keep_unknown = TRUE, exclude_etre = TRUE)
+    )
   } else {
     min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
     mincl_values <- .as_int_auto_chd(config_base$iramuteq_mincl, default = 5L, min_value = 1L)
@@ -1079,7 +1075,6 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
                     retirer_stopwords = isTRUE(remove_stopwords),
                     supprimer_ponctuation = isTRUE(remove_punctuation),
                     supprimer_chiffres = isTRUE(remove_digits),
-                    autre_forme = isTRUE(morpho$keep_unknown),
                     mincl = as.integer(mincl_candidate),
                     min_docfreq = as.integer(min_docfreq),
                     k_max_explore = as.integer(k_max_candidate)

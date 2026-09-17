@@ -1400,8 +1400,6 @@ run_batch <- function() {
           as.character(selected_discriminant$supprimer_ponctuation %||% "n/a"),
           ", chiffres=",
           as.character(selected_discriminant$supprimer_chiffres %||% "n/a"),
-          ", AUTRE_FORME=",
-          as.character(selected_discriminant$autre_forme %||% "n/a"),
           ", min_docfreq=",
           as.character(selected_discriminant$min_docfreq %||% "n/a"),
           ", classes retenues=",
