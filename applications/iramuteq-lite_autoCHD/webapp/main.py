@@ -277,8 +277,8 @@ async def analysis_abandon(request: Request) -> JSONResponse:
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    # Ouvrir l'interface ne reserve pas de capacite. Le ticket est demande
-    # uniquement au lancement effectif d'une analyse par le frontend.
+    # The frontend reserves a ticket when the interface opens so the dashboard
+    # reflects active sessions; it releases it on exit, inactivity, or request.
     snapshot, session_id = ticket_gate.status_for_request(request)
     response = HTMLResponse(build_web_index())
     if session_id:

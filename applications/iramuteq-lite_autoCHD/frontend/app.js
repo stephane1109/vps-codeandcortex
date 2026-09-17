@@ -849,6 +849,13 @@ async function refreshTicketSidebarStatus() {
 }
 
 async function initialiseTicketSidebarOnOpen() {
+  try {
+    // The dashboard represents opened application sessions, not only launched jobs.
+    await claimAnalysisTicket();
+  } catch (error) {
+    setSidebarTicketStatus("Accès serveur indisponible", "error");
+    return rememberTicketSnapshot({ enabled: false, message: error?.message || String(error) });
+  }
   return refreshTicketSidebarStatus();
 }
 
