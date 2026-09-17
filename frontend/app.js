@@ -754,6 +754,17 @@ async function refreshTicketSidebarStatus() {
   }
 }
 
+async function initialiseTicketSidebarOnOpen() {
+  try {
+    // The dashboard represents opened application sessions, not only launched jobs.
+    await claimAnalysisTicket();
+  } catch (error) {
+    setSidebarTicketStatus("Accès serveur indisponible", "error");
+    return rememberTicketSnapshot({ enabled: false, message: error?.message || String(error) });
+  }
+  return refreshTicketSidebarStatus();
+}
+
 async function claimAnalysisTicket() {
   return rememberTicketSnapshot(await callTicketApi("/api/tickets/claim", { method: "POST" }));
 }
@@ -14575,7 +14586,7 @@ void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 restorePersistedTicketReference();
-void refreshTicketSidebarStatus().then(() => {
+void initialiseTicketSidebarOnOpen().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();
   }, 800);
