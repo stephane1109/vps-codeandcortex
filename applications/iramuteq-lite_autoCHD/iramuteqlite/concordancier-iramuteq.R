@@ -283,7 +283,7 @@ generer_concordancier_iramuteq_html <- function(
   writeLines("<html><head><meta charset='utf-8'/>", con)
   writeLines("<style>body{font-family:Inter,Segoe UI,Arial,sans-serif;line-height:1.55;color:#1f2937;background:#f8fafc;padding:10px;} h1,h2,h3{color:#0f172a;} .classe-heading{color:#b42318;font-size:1.42rem;font-weight:700;margin:0 0 .65rem 0;} span.highlight{background-color:yellow;color:inherit;font-weight:inherit;padding:0;border-radius:0;} p.segment{margin:0 0 .55rem 0;padding:.45rem .55rem;border-radius:.55rem;background:#ffffff;box-shadow:0 1px 3px rgba(15,23,42,.08);} .classe-bloc{margin-bottom:1.25rem;padding:.7rem .85rem;border:1px solid #e2e8f0;border-radius:.75rem;background:#fefefe;box-shadow:0 2px 8px rgba(15,23,42,.05);}</style>", con)
   writeLines("</head><body>", con)
-  writeLines("<h1>Concordancier IRaMuTeQ-like</h1>", con)
+  writeLines("<h1>Concordancier IRaMuTeQ-Lab</h1>", con)
   writeLines("<h2>Segments par classe</h2>", con)
   writeLines(if (isTRUE(filtrer_pvalue)) "<h3>Filtrage: p ≤ seuil</h3>" else "<h3>Filtrage: χ² positif (sans filtre p-value)</h3>", con)
 
@@ -424,7 +424,7 @@ generer_concordancier_afc_html <- function(chemin_sortie, afc_table_mots, rv = N
   if (length(classes) == 0) return(NULL)
 
   if (!is.null(rv)) {
-    ajouter_log(rv, "Concordancier IRaMuTeQ-like : génération d'un fallback HTML à partir du concordancier AFC.")
+    ajouter_log(rv, "Concordancier IRaMuTeQ-Lab : génération d'un fallback HTML à partir du concordancier AFC.")
   }
 
   con <- file(chemin_sortie, open = "wt", encoding = "UTF-8")
