@@ -404,6 +404,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     " | chiffres=",
     ifelse(isTRUE(candidate$supprimer_chiffres), "supprimes", "conserves"),
+    " | AUTRE_FORME=",
+    ifelse(isTRUE(candidate$autre_forme %||% candidate$config$morpho_conserver_hors_lexique), "oui", "non"),
     " | mincl=",
     candidate$mincl %||% candidate$config$iramuteq_mincl %||% NA_integer_,
     " (",
@@ -426,6 +428,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     retirer_stopwords = ifelse(isTRUE(candidate$retirer_stopwords), "oui", "non"),
     supprimer_ponctuation = ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     supprimer_chiffres = ifelse(isTRUE(candidate$supprimer_chiffres), "oui", "non"),
+    autre_forme = ifelse(isTRUE(candidate$autre_forme %||% candidate$config$morpho_conserver_hors_lexique), "oui", "non"),
     min_docfreq = candidate$min_docfreq %||% NA_integer_,
     mincl_mode = candidate$config$iramuteq_mincl_mode %||% "auto",
     mincl = suppressWarnings(as.integer(candidate$config$iramuteq_mincl %||% NA_integer_)),
@@ -458,6 +461,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     retirer_stopwords = ifelse(isTRUE(candidate$retirer_stopwords), "oui", "non"),
     supprimer_ponctuation = ifelse(isTRUE(candidate$supprimer_ponctuation), "oui", "non"),
     supprimer_chiffres = ifelse(isTRUE(candidate$supprimer_chiffres), "oui", "non"),
+    autre_forme = ifelse(isTRUE(candidate$autre_forme %||% candidate$config$morpho_conserver_hors_lexique), "oui", "non"),
     min_docfreq = candidate$min_docfreq %||% NA_integer_,
     mincl_mode = candidate$config$iramuteq_mincl_mode %||% "auto",
     mincl = suppressWarnings(as.integer(res_ira$mincl %||% candidate$config$iramuteq_mincl %||% NA_integer_)),
@@ -543,10 +547,15 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
 
     attempt <- tryCatch(
       {
-        # Dans le profil cible, seul min_docfreq modifie le DFM. Les variantes
-        # de la phase 1 reutilisent donc la preparation lexicale deja construite.
+        # Dans le profil cible, min_docfreq et AUTRE_FORME modifient le DFM.
+        # Les variantes de phase 1 reutilisent la preparation lexicale associee.
         pipeline_key <- if (identical(search_profile, "ciblee")) {
-          paste0("ciblee::min_docfreq=", candidate$min_docfreq %||% "")
+          paste0(
+            "ciblee::autre_forme=",
+            ifelse(isTRUE(candidate$autre_forme %||% candidate$config$morpho_conserver_hors_lexique), "oui", "non"),
+            "::min_docfreq=",
+            candidate$min_docfreq %||% ""
+          )
         } else {
           paste0("configuration::", candidate$id %||% i)
         }
@@ -804,6 +813,7 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     retirer_stopwords = col("retirer_stopwords", NA_character_),
     supprimer_ponctuation = col("supprimer_ponctuation", NA_character_),
     supprimer_chiffres = col("supprimer_chiffres", NA_character_),
+    autre_forme = col("autre_forme", NA_character_),
     min_docfreq = suppressWarnings(as.integer(col("min_docfreq", NA_integer_))),
     mincl_mode = col("mincl_mode", NA_character_),
     mincl = suppressWarnings(as.integer(col("mincl", NA_integer_))),
@@ -858,6 +868,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   manual_replay_config$iramuteq_discrimination_simple_vary_k_max <- NULL
   manual_replay_config$iramuteq_discrimination_simple_k_max_min <- NULL
   manual_replay_config$iramuteq_discrimination_simple_k_max_max <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_vary_autre_forme <- NULL
   summary_json <- file.path(output_dir, "discrimination_simple_summary.json")
   metrics_csv <- file.path(output_dir, "discrimination_simple_metrics.csv")
   score_png <- file.path(output_dir, "discrimination_simple_score.png")

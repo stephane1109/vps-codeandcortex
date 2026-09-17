@@ -564,6 +564,14 @@
                   </div>
                   <p class="field-help">Ce réglage utilise le même paramètre que « Nombre de classes terminales de la phase 1 » en mode Normal. Il ne fixe pas le nombre final de classes.</p>
                 </div>
+
+                <div class="auto-discriminant-option" data-auto-discriminant-option="autre_forme">
+                  <label class="check-option">
+                    <input id="autoDiscriminantVaryAutreForme" type="checkbox" checked data-auto-discriminant-toggle="autre_forme" />
+                    <span>Croiser AUTRE_FORME</span>
+                  </label>
+                  <p class="field-help">Chaque combinaison est testée une fois en conservant les formes non reconnues par le lexique, puis une fois en les excluant.</p>
+                </div>
               </div>
 
               <p class="field-help" data-auto-discriminant-summary></p>
@@ -1067,6 +1075,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260917-open-ticket"></script>
+    <script type="module" src="./app.js?v=20260917-autre-forme-grid"></script>
   </body>
 </html>

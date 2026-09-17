@@ -2676,6 +2676,12 @@ const AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS = {
     upperBound: 10,
     defaultEnabled: true,
     label: "classes terminales phase 1"
+  },
+  autreForme: {
+    toggleId: "autoDiscriminantVaryAutreForme",
+    defaultEnabled: true,
+    variantCount: 2,
+    label: "AUTRE_FORME"
   }
 };
 
@@ -2702,6 +2708,17 @@ function getAutoDiscriminantSettings(scope = document) {
 
   Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
     const toggle = findClassesModeControl(scope, definition.toggleId);
+    const enabled = toggle instanceof HTMLInputElement ? toggle.checked : definition.defaultEnabled;
+
+    if (Number.isInteger(definition.variantCount)) {
+      settings[key] = {
+        enabled,
+        variantCount: definition.variantCount,
+        label: definition.label
+      };
+      return;
+    }
+
     const minInput = findClassesModeControl(scope, definition.minId);
     const maxInput = findClassesModeControl(scope, definition.maxId);
     const rawMin = readBoundedIntegerInput(minInput, definition.lowerBound, definition.upperBound, definition.lowerBound);
@@ -2713,7 +2730,7 @@ function getAutoDiscriminantSettings(scope = document) {
     if (maxInput instanceof HTMLInputElement) maxInput.value = String(max);
 
     settings[key] = {
-      enabled: toggle instanceof HTMLInputElement ? toggle.checked : definition.defaultEnabled,
+      enabled,
       min,
       max,
       label: definition.label
@@ -2725,16 +2742,33 @@ function getAutoDiscriminantSettings(scope = document) {
 
 function countAutoDiscriminantConfigurations(settings) {
   return Object.values(settings).reduce(
-    (count, parameter) => count * (parameter.enabled ? parameter.max - parameter.min + 1 : 1),
+    (count, parameter) => {
+      const variants = Number.isInteger(parameter.variantCount)
+        ? parameter.variantCount
+        : parameter.max - parameter.min + 1;
+      return count * (parameter.enabled ? variants : 1);
+    },
     1
   );
 }
 
 function describeAutoDiscriminantParameter(parameter, options = {}) {
   const label = options.manual && parameter.enabled ? `${parameter.label} manuel` : parameter.label;
+  if (Number.isInteger(parameter.variantCount)) {
+    return parameter.enabled ? `${label} = conservée / exclue` : `${label} fixe`;
+  }
   return parameter.enabled
     ? `${label} = ${parameter.min} à ${parameter.max}`
     : `${label} fixe`;
+}
+
+function autoDiscriminantDataKey(key) {
+  const keys = {
+    minDocfreq: "min_docfreq",
+    kMax: "k_max",
+    autreForme: "autre_forme"
+  };
+  return keys[key] || key;
 }
 
 function renderClassesModeCard(card) {
@@ -2771,8 +2805,9 @@ function renderClassesModeCard(card) {
 
   const settings = getAutoDiscriminantSettings(card);
   Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
-    const option = card.querySelector(`[data-auto-discriminant-option="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
-    const range = card.querySelector(`[data-auto-discriminant-range="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
+    const dataKey = autoDiscriminantDataKey(key);
+    const option = card.querySelector(`[data-auto-discriminant-option="${dataKey}"]`);
+    const range = card.querySelector(`[data-auto-discriminant-range="${dataKey}"]`);
     const enabled = settings[key].enabled;
     option?.classList.toggle("is-disabled", !enabled);
     range?.querySelectorAll("input").forEach((input) => {
@@ -2784,7 +2819,8 @@ function renderClassesModeCard(card) {
   const parametersDescription = [
     describeAutoDiscriminantParameter(settings.mincl, { manual: true }),
     describeAutoDiscriminantParameter(settings.minDocfreq),
-    describeAutoDiscriminantParameter(settings.kMax)
+    describeAutoDiscriminantParameter(settings.kMax),
+    describeAutoDiscriminantParameter(settings.autreForme)
   ].join(" ; ");
 
   if (modeDescription instanceof HTMLElement) {
@@ -2797,7 +2833,7 @@ function renderClassesModeCard(card) {
       : `Grille prévue : ${parametersDescription}. 1 configuration CHD sera comparée.`;
   }
   if (autoWarning instanceof HTMLElement) {
-    const isLargeGrid = targetedChdCount > 64;
+    const isLargeGrid = targetedChdCount >= 64;
     autoWarning.hidden = !isLargeGrid;
     autoWarning.textContent = isLargeGrid
       ? `${targetedChdCount} CHD sont demandées : le calcul peut être long, surtout pour un corpus volumineux.`
@@ -2917,6 +2953,7 @@ function buildJobConfig(analysisKind = "chd") {
     iramuteq_discrimination_simple_vary_k_max: autoDiscriminant.kMax.enabled,
     iramuteq_discrimination_simple_k_max_min: autoDiscriminant.kMax.min,
     iramuteq_discrimination_simple_k_max_max: autoDiscriminant.kMax.max,
+    iramuteq_discrimination_simple_vary_autre_forme: autoDiscriminant.autreForme.enabled,
     k_iramuteq: effectiveK,
     iramuteq_max_formes: Number(document.getElementById("iramuteqMaxFormes").value) || 20000,
     iramuteq_mincl_mode: document.getElementById("minclMode").value,
@@ -11766,6 +11803,11 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   const stopwords = normalizeYesNoValue(configSource.retirer_stopwords);
   const ponctuation = normalizeYesNoValue(configSource.supprimer_ponctuation);
   const chiffres = normalizeYesNoValue(configSource.supprimer_chiffres, "supprimés", "conservés");
+  const autreForme = normalizeYesNoValue(
+    configSource.autre_forme ?? configSource.morpho_conserver_hors_lexique,
+    "conservée",
+    "exclue"
+  );
 
   if (configId) {
     const configNote = document.createElement("p");
@@ -11780,6 +11822,7 @@ function appendDiscriminationConfigurationDetails(container, configSource) {
   if (stopwords) fixedParts.push(`stopwords = ${stopwords}`);
   if (ponctuation) fixedParts.push(`ponctuation = ${ponctuation}`);
   if (chiffres) fixedParts.push(`chiffres = ${chiffres}`);
+  if (autreForme) fixedParts.push(`AUTRE_FORME = ${autreForme}`);
 
   if (fixedParts.length) {
     const variableNote = document.createElement("p");
@@ -11805,6 +11848,12 @@ function renderDiscriminationSimpleSummary(container, payload) {
   const manualReplayConfig = payload?.manual_replay_config && typeof payload.manual_replay_config === "object"
     ? payload.manual_replay_config
     : {};
+  const normalizeYesNoValue = (value, yesLabel = "oui", noLabel = "non") => {
+    const normalized = normalizeAsciiKey(value);
+    if (["oui", "true", "1", "yes"].includes(normalized)) return yesLabel;
+    if (["non", "false", "0", "no"].includes(normalized)) return noLabel;
+    return "";
+  };
   if (!selected || !Number.isFinite(selectedK)) {
     container.appendChild(createEmptyState("Aucune configuration Auto discriminante n'a été retenue pour cette analyse."));
     return;
@@ -11817,8 +11866,14 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ?? selected.S
     ?? selected.s
     ?? "N/A";
+  const selectedAutreForme = normalizeYesNoValue(
+    selected.autre_forme ?? manualReplayConfig.morpho_conserver_hors_lexique,
+    "conservée",
+    "exclue"
+  );
   const metrics = [
     ["Configuration retenue", selected.configuration_id || "N/A"],
+    ["AUTRE_FORME", selectedAutreForme || "N/A"],
     ["mincl testé retenu", selected.mincl ?? "N/A"],
     ["min_docfreq testé retenu", selected.min_docfreq],
     ["Classes terminales phase 1 testées", selected.k_max_explore ?? selected.kmax ?? selected.k_max_requested ?? "N/A"],
@@ -11960,6 +12015,7 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     : { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation AFC" };
   const columnDefs = [
     { keys: ["configuration_id"], label: "configuration" },
+    { keys: ["autre_forme"], label: "AUTRE_FORME" },
     { keys: ["mincl"], label: "mincl testé" },
     { keys: ["min_docfreq"], label: "min_docfreq testé" },
     { keys: ["k_max_explore", "kmax", "k_iramuteq"], label: "classes phase 1 testées" },
@@ -12023,12 +12079,13 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
   const minclValues = getDiscriminationSimpleDistinctValues(parsed, ["mincl"], { numeric: true });
   const minDocfreqValues = getDiscriminationSimpleDistinctValues(parsed, ["min_docfreq"], { numeric: true });
   const kMaxValues = getDiscriminationSimpleDistinctValues(parsed, ["k_max_explore", "kmax", "k_iramuteq"], { numeric: true });
+  const autreFormeValues = getDiscriminationSimpleDistinctValues(parsed, ["autre_forme"]);
   const context = document.createElement("div");
   context.className = "discrimination-simple-table-context";
 
   const testedParameters = document.createElement("p");
   testedParameters.className = "field-help";
-  testedParameters.textContent = `Chaque ligne correspond à une CHD. Valeurs explorées : mincl = ${minclValues.join(", ") || "non disponible"} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"}. Une seule valeur signifie que le paramètre est resté fixe.`;
+  testedParameters.textContent = `Chaque ligne correspond à une CHD. Valeurs explorées : mincl = ${minclValues.join(", ") || "non disponible"} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"} ; AUTRE_FORME = ${autreFormeValues.join(", ") || "non disponible"}. Une seule valeur signifie que le paramètre est resté fixe.`;
   context.appendChild(testedParameters);
 
   const fixedSettings = [
@@ -12036,7 +12093,8 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
     ["lemmes", ["lexique_utiliser_lemmes"]],
     ["stopwords", ["retirer_stopwords"]],
     ["ponctuation", ["supprimer_ponctuation"]],
-    ["chiffres", ["supprimer_chiffres"]]
+    ["chiffres", ["supprimer_chiffres"]],
+    ["AUTRE_FORME", ["autre_forme"]]
   ]
     .map(([label, keys]) => {
       const values = getDiscriminationSimpleDistinctValues(parsed, keys);
@@ -15654,7 +15712,8 @@ async function startAnalysis(analysisKind = "chd") {
       ? [
         describeAutoDiscriminantParameter(autoDiscriminant.mincl, { manual: true }),
         describeAutoDiscriminantParameter(autoDiscriminant.minDocfreq),
-        describeAutoDiscriminantParameter(autoDiscriminant.kMax)
+        describeAutoDiscriminantParameter(autoDiscriminant.kMax),
+        describeAutoDiscriminantParameter(autoDiscriminant.autreForme)
       ].join(", ")
       : "";
     const autoCount = classesMode === "discrimination_simple"
