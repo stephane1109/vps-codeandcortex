@@ -12081,7 +12081,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["mincl_teste", "seuil_mincl_applique", "min_docfreq_teste", "k_max_teste", "mincl", "segments", "formes", "classes_retenues", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["mincl_teste", "seuil_mincl_applique", "min_docfreq_teste", "k_max_teste", "classes_phase_1_testees", "mincl", "segments", "formes", "classes_retenues", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
