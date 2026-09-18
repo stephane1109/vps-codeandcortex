@@ -2679,6 +2679,29 @@ const AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS = {
   }
 };
 
+const AUTO_DISCRIMINANT_SCORE_MODE_DEFINITIONS = {
+  s_lexical: {
+    label: "Score S lexical",
+    description: "Le score S compare les centres lexicaux construits à partir des mots significatifs et leur dispersion."
+  },
+  afc_classes_direct: {
+    label: "Distance directe des classes AFC",
+    description: "Cette méthode compare directement les positions réelles de Classe 1, Classe 2, etc. sur les axes 1 et 2 de l'AFC (ca$row$coord), sans moyenne ni médiane de mots."
+  }
+};
+
+function normalizeAutoDiscriminantScoreMode(value) {
+  const mode = String(value || "").trim();
+  return Object.hasOwn(AUTO_DISCRIMINANT_SCORE_MODE_DEFINITIONS, mode)
+    ? mode
+    : "s_lexical";
+}
+
+function getAutoDiscriminantScoreModeDetails(value) {
+  const mode = normalizeAutoDiscriminantScoreMode(value);
+  return { mode, ...AUTO_DISCRIMINANT_SCORE_MODE_DEFINITIONS[mode] };
+}
+
 function findClassesModeControl(scope, id) {
   return scope?.querySelector(`#${id}, [data-source-id="${id}"]`) || null;
 }
@@ -2723,6 +2746,13 @@ function getAutoDiscriminantSettings(scope = document) {
   return settings;
 }
 
+function getAutoDiscriminantScoreMode(scope = document) {
+  const select = findClassesModeControl(scope, "autoDiscriminantScoreMode");
+  const mode = normalizeAutoDiscriminantScoreMode(select?.value);
+  if (select instanceof HTMLSelectElement) select.value = mode;
+  return mode;
+}
+
 function countAutoDiscriminantConfigurations(settings) {
   return Object.values(settings).reduce(
     (count, parameter) => count * (parameter.enabled ? parameter.max - parameter.min + 1 : 1),
@@ -2746,6 +2776,7 @@ function renderClassesModeCard(card) {
   const autoOptions = card.querySelector("[data-auto-discriminant-options]");
   const autoSummary = card.querySelector("[data-auto-discriminant-summary]");
   const autoWarning = card.querySelector("[data-auto-discriminant-warning]");
+  const autoScoreHelp = card.querySelector("[data-auto-discriminant-score-help]");
   if (!(modeField instanceof HTMLSelectElement)) return;
 
   const isDiscriminationSimple = modeField.value === "discrimination_simple";
@@ -2770,6 +2801,7 @@ function renderClassesModeCard(card) {
   }
 
   const settings = getAutoDiscriminantSettings(card);
+  const scoreDetails = getAutoDiscriminantScoreModeDetails(getAutoDiscriminantScoreMode(card));
   Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
     const option = card.querySelector(`[data-auto-discriminant-option="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
     const range = card.querySelector(`[data-auto-discriminant-range="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
@@ -2788,13 +2820,16 @@ function renderClassesModeCard(card) {
   ].join(" ; ");
 
   if (modeDescription instanceof HTMLElement) {
-    modeDescription.textContent = "En mode Auto discriminante, l'application simule les combinaisons que vous avez choisies, puis retient celle dont la séparation AFC des classes est la meilleure.";
+    modeDescription.textContent = `En mode Auto discriminante, l'application simule les combinaisons que vous avez choisies, puis retient celle dont le critère « ${scoreDetails.label} » est le plus élevé.`;
+  }
+  if (autoScoreHelp instanceof HTMLElement) {
+    autoScoreHelp.textContent = scoreDetails.description;
   }
 
   if (autoSummary instanceof HTMLElement) {
     autoSummary.textContent = targetedChdCount > 1
-      ? `Grille prévue : ${parametersDescription}. ${targetedChdCount} configurations CHD seront comparées.`
-      : `Grille prévue : ${parametersDescription}. 1 configuration CHD sera comparée.`;
+      ? `Grille prévue : ${parametersDescription}. Critère : ${scoreDetails.label}. ${targetedChdCount} configurations CHD seront comparées.`
+      : `Grille prévue : ${parametersDescription}. Critère : ${scoreDetails.label}. 1 configuration CHD sera comparée.`;
   }
   if (autoWarning instanceof HTMLElement) {
     const isLargeGrid = targetedChdCount > 64;
@@ -2814,6 +2849,7 @@ function resolveClassesModeConfig() {
   const autoKMin = 3;
   const kValue = Number(document.getElementById("kIramuteq").value);
   const autoDiscriminant = getAutoDiscriminantSettings(document);
+  const autoDiscriminantScoreMode = getAutoDiscriminantScoreMode(document);
   const effectiveK = classesMode === "manuel"
     ? (Number.isFinite(kValue) && kValue >= 2 ? kValue : 3)
     : autoDiscriminant.kMax.max;
@@ -2822,7 +2858,8 @@ function resolveClassesModeConfig() {
     classesMode,
     autoKMin,
     effectiveK,
-    autoDiscriminant
+    autoDiscriminant,
+    autoDiscriminantScoreMode
   };
 }
 
@@ -2880,7 +2917,8 @@ function buildJobConfig(analysisKind = "chd") {
     classesMode,
     autoKMin,
     effectiveK,
-    autoDiscriminant
+    autoDiscriminant,
+    autoDiscriminantScoreMode
   } = resolveClassesModeConfig();
   const discriminationSimpleProfile = classesMode === "discrimination_simple" ? "ciblee" : "equilibre";
   const simiThresholdValue = Number(document.getElementById("simiThreshold").value);
@@ -2906,6 +2944,7 @@ function buildJobConfig(analysisKind = "chd") {
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
     iramuteq_classes_mode: classesMode,
     iramuteq_discrimination_simple_profile: discriminationSimpleProfile,
+    iramuteq_discrimination_simple_score_mode: autoDiscriminantScoreMode,
     iramuteq_auto_top_n_afc: classesMode === "discrimination_simple" ? null : 20,
     iramuteq_auto_k_min: autoKMin,
     iramuteq_discrimination_simple_vary_mincl: autoDiscriminant.mincl.enabled,
@@ -11821,7 +11860,10 @@ function renderDiscriminationSimpleSummary(container, payload) {
     return;
   }
 
-  const separationAfc = selected.separation_afc
+  const scoreDetails = getAutoDiscriminantScoreModeDetails(payload?.score_mode ?? selected?.score_mode);
+  const scoreLabel = String(payload?.score_label || selected?.score_label || scoreDetails.label).trim() || scoreDetails.label;
+  const separationAfc = selected.score_selection
+    ?? selected.separation_afc
     ?? selected.separation_robuste_afc
     ?? selected.separation_relative_afc
     ?? selected.score_discrimination
@@ -11841,7 +11883,8 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ["Classes terminales phase 1 à reprendre", Number.isFinite(selectedManualK) ? selectedManualK : "N/A"],
     ["Profil morpho", selected.profil_morpho || "N/A"],
     ["Configurations testées", payload?.total_configurations ?? "N/A"],
-    ["Séparation AFC", separationAfc]
+    ["Critère de sélection", scoreLabel],
+    [scoreLabel, separationAfc]
   ];
 
   const grid = document.createElement("div");
@@ -11933,7 +11976,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   const selectionNote = document.createElement("p");
   selectionNote.className = "field-help";
-  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution dont la séparation AFC est la plus élevée.`;
+  selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution dont le critère « ${scoreLabel} » est le plus élevé.`;
   container.appendChild(selectionNote);
 }
 
@@ -11943,10 +11986,16 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
   }
 
   const selectionColumnIndex = headerIndex(parsed.headers, ["selection"]);
-  const separationAfcColumnIndex = headerIndex(parsed.headers, ["separation_afc", "separation_robuste_afc"]);
-  const scoreColumnIndex = separationAfcColumnIndex !== -1
-    ? separationAfcColumnIndex
-    : headerIndex(parsed.headers, ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"]);
+  const scoreModeColumnIndex = headerIndex(parsed.headers, ["score_mode"]);
+  const scoreLabelColumnIndex = headerIndex(parsed.headers, ["score_label"]);
+  const scoreMode = scoreModeColumnIndex === -1
+    ? "s_lexical"
+    : normalizeAutoDiscriminantScoreMode(parsed.rows.find((row) => row?.[scoreModeColumnIndex])?.[scoreModeColumnIndex]);
+  const scoreDetails = getAutoDiscriminantScoreModeDetails(scoreMode);
+  const scoreLabel = scoreLabelColumnIndex === -1
+    ? scoreDetails.label
+    : String(parsed.rows.find((row) => row?.[scoreLabelColumnIndex])?.[scoreLabelColumnIndex] || scoreDetails.label);
+  const scoreColumnIndex = headerIndex(parsed.headers, ["score_selection", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"]);
   const classesColumnIndex = headerIndex(parsed.headers, ["classes_retenues", "k_retenu"]);
 
   const rowsSource = parsed.rows.slice().sort((left, right) => {
@@ -11970,9 +12019,10 @@ function extractDiscriminationSimpleCloneParsed(parsed) {
     return String(left[0] || "").localeCompare(String(right[0] || ""), undefined, { numeric: true });
   });
 
-  const scoreColumnDef = separationAfcColumnIndex !== -1
-    ? { keys: ["separation_afc", "separation_robuste_afc"], label: "séparation AFC" }
-    : { keys: ["separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"], label: "séparation AFC" };
+  const scoreColumnDef = {
+    keys: ["score_selection", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "distance_minimale_afc", "score_discrimination", "s"],
+    label: scoreLabel
+  };
   const columnDefs = [
     { keys: ["configuration_id"], label: "configuration" },
     { keys: ["mincl"], label: "seuil mincl appliqué" },
@@ -12039,6 +12089,13 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
   const minclModes = getDiscriminationSimpleDistinctValues(parsed, ["mincl_mode"]);
   const minDocfreqValues = getDiscriminationSimpleDistinctValues(parsed, ["min_docfreq"], { numeric: true });
   const kMaxValues = getDiscriminationSimpleDistinctValues(parsed, ["k_max_explore", "kmax", "k_iramuteq"], { numeric: true });
+  const scoreModes = getDiscriminationSimpleDistinctValues(parsed, ["score_mode"]);
+  const scoreLabels = getDiscriminationSimpleDistinctValues(parsed, ["score_label"]);
+  const scoreLabel = scoreLabels.length === 1
+    ? scoreLabels[0]
+    : scoreModes.length === 1
+      ? getAutoDiscriminantScoreModeDetails(scoreModes[0]).label
+      : "Score S lexical";
   const context = document.createElement("div");
   context.className = "discrimination-simple-table-context";
 
@@ -12053,7 +12110,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
   const gridNote = minclMode === "auto"
     ? "Le seuil mincl automatique peut changer entre les lignes, car la CHD le recalcule pour chaque configuration."
     : "Une seule valeur signifie que le paramètre est resté fixe.";
-  testedParameters.textContent = `Chaque ligne correspond à une CHD. ${minclDescription} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"}. ${gridNote}`;
+  testedParameters.textContent = `Chaque ligne correspond à une CHD. ${minclDescription} ; min_docfreq = ${minDocfreqValues.join(", ") || "non disponible"} ; classes terminales phase 1 = ${kMaxValues.join(", ") || "non disponible"} ; critère de sélection = ${scoreLabel}. ${gridNote}`;
   context.appendChild(testedParameters);
 
   const fixedSettings = [
@@ -12081,7 +12138,7 @@ function appendDiscriminationSimpleTableContext(container, parsed) {
 
 function getDiscriminationSimpleNumericColumnIndexes(headers) {
   if (!Array.isArray(headers)) return [];
-  const numericHeaders = new Set(["mincl_teste", "seuil_mincl_applique", "min_docfreq_teste", "k_max_teste", "classes_phase_1_testees", "mincl", "segments", "formes", "classes_retenues", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
+  const numericHeaders = new Set(["mincl_teste", "seuil_mincl_applique", "min_docfreq_teste", "k_max_teste", "classes_phase_1_testees", "mincl", "segments", "formes", "classes_retenues", "score_s_lexical", "distance_classes_afc", "distance_directe_des_classes_afc", "score_selection", "separation_afc", "separation_robuste_afc", "separation_relative_afc", "separation_minimale_afc", "distance_minimale_afc", "score_discrimination_afc"]);
   return headers.reduce((acc, header, index) => {
     const normalized = normalizeAsciiKey(header).replace(/\s+/g, "_");
     if (numericHeaders.has(normalized)) acc.push(index);
@@ -14751,7 +14808,7 @@ document.addEventListener("change", (event) => {
     }
     return;
   }
-  if (target.matches("[data-classes-bound-input], [data-auto-discriminant-toggle], [data-auto-discriminant-range-input]")) {
+  if (target.matches("[data-classes-bound-input], [data-auto-discriminant-toggle], [data-auto-discriminant-range-input], [data-auto-discriminant-score-mode]")) {
     const card = target.closest("[data-classes-mode-card]");
     if (card) {
       renderClassesModeCard(card);
@@ -15670,7 +15727,8 @@ async function startAnalysis(analysisKind = "chd") {
       `[info] Démarrage trajectoire lexicale : variable=${suiviVariableName || "auto"}, entretiens=${suiviSelectedUnits.length}, ${coucheLabel}, unité=${suiviLexicalUnitLabel}, prétraitement=${suiviPreprocessingLabel}${suiviFilterVariableName && suiviFilterModality ? `, filtre=${suiviFilterVariableName}=${suiviFilterModality}` : ""}`
     );
   } else {
-    const { autoKMin, autoDiscriminant } = classesModeConfig;
+    const { autoKMin, autoDiscriminant, autoDiscriminantScoreMode } = classesModeConfig;
+    const autoScoreDetails = getAutoDiscriminantScoreModeDetails(autoDiscriminantScoreMode);
     const classesCountLabel = classesMode === "discrimination_simple"
       ? "intervalleClasses"
       : "classes";
@@ -15679,7 +15737,8 @@ async function startAnalysis(analysisKind = "chd") {
       ? [
         describeAutoDiscriminantParameter(autoDiscriminant.mincl, { manual: true }),
         describeAutoDiscriminantParameter(autoDiscriminant.minDocfreq),
-        describeAutoDiscriminantParameter(autoDiscriminant.kMax)
+        describeAutoDiscriminantParameter(autoDiscriminant.kMax),
+        `critère = ${autoScoreDetails.label}`
       ].join(", ")
       : "";
     const autoCount = classesMode === "discrimination_simple"

@@ -87,6 +87,7 @@ lancer_moteur_chd_iramuteq <- function(
   auto_top_n_diffusion = 20L,
   auto_top_n_afc = NULL,
   auto_p_seuil = 0.05,
+  auto_discriminant_score_mode = "s_lexical",
   auto_discriminant_base_config = NULL,
   auto_discriminant_prepare_pipeline_fn = NULL,
   auto_discriminant_log_fn = NULL
@@ -96,6 +97,10 @@ lancer_moteur_chd_iramuteq <- function(
   classif_mode <- match.arg(classif_mode)
   svd_method <- match.arg(svd_method)
   auto_stats_mode <- match.arg(auto_stats_mode)
+  auto_discriminant_score_mode <- tolower(trimws(as.character(auto_discriminant_score_mode %||% "s_lexical")[[1]]))
+  if (!auto_discriminant_score_mode %in% c("s_lexical", "afc_classes_direct")) {
+    auto_discriminant_score_mode <- "s_lexical"
+  }
   auto_k_min_effective <- suppressWarnings(as.integer(auto_k_min[[1]] %||% auto_k_min))
   if (!length(auto_k_min_effective) || is.na(auto_k_min_effective) || !is.finite(auto_k_min_effective)) {
     auto_k_min_effective <- 2L
@@ -161,7 +166,8 @@ lancer_moteur_chd_iramuteq <- function(
           auto_k_min = config_variant$iramuteq_auto_k_min %||% auto_k_min_effective,
           auto_top_n_diffusion = auto_top_n_diffusion,
           auto_top_n_afc = auto_top_n_afc,
-          auto_p_seuil = auto_p_seuil
+          auto_p_seuil = auto_p_seuil,
+          auto_discriminant_score_mode = config_variant$iramuteq_discrimination_simple_score_mode %||% auto_discriminant_score_mode
         )
       },
       log_fn = auto_discriminant_log_fn
@@ -232,7 +238,8 @@ lancer_moteur_chd_iramuteq <- function(
       stats_mode = auto_stats_mode,
       top_n_diffusion = auto_top_n_diffusion,
       top_n_afc = auto_top_n_afc,
-      p_seuil = auto_p_seuil
+      p_seuil = auto_p_seuil,
+      score_mode = auto_discriminant_score_mode
     )
 
     classes <- suppressWarnings(as.integer(auto_selection$classes))

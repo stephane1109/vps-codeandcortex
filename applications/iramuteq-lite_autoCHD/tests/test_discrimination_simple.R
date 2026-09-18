@@ -35,6 +35,28 @@ stopifnot(
   !("S_separation_min" %in% names(score))
 )
 
+# The direct criterion must use the actual AFC class coordinates, without
+# reconstructing lexical centres from the term coordinates.
+class_coords <- matrix(
+  c(
+    0, 0,
+    3, 4,
+    0, 8
+  ),
+  ncol = 2,
+  byrow = TRUE,
+  dimnames = list(c("Classe 1", "Classe 2", "Classe 3"), c("Dim.1", "Dim.2"))
+)
+direct_score <- calculer_score_classes_direct_afc_iramuteq(
+  afc_obj = list(rowcoord = class_coords)
+)
+stopifnot(
+  abs(direct_score$value - 5) < 1e-9,
+  length(direct_score$distances_by_pair) == 3L,
+  normaliser_mode_score_discrimination_simple_iramuteq("afc_classes_direct") == "afc_classes_direct",
+  etiquette_mode_score_discrimination_simple_iramuteq("afc_classes_direct") == "Distance directe des classes AFC"
+)
+
 grid_base_config <- list(
   iramuteq_discrimination_simple_profile = "ciblee",
   morpho_conserver_hors_lexique = FALSE,
@@ -50,6 +72,7 @@ grid_base_config <- list(
   iramuteq_discrimination_simple_vary_k_max = FALSE,
   iramuteq_discrimination_simple_k_max_min = 3L,
   iramuteq_discrimination_simple_k_max_max = 3L,
+  iramuteq_discrimination_simple_score_mode = "afc_classes_direct",
   k_iramuteq = 3L
 )
 
@@ -57,7 +80,8 @@ targeted_grid <- construire_grille_discrimination_simple_iramuteq(grid_base_conf
 stopifnot(
   length(targeted_grid$candidates) == 1L,
   isTRUE(targeted_grid$candidates[[1]]$config$morpho_conserver_hors_lexique),
-  grepl("AUTRE_FORME", targeted_grid$candidates[[1]]$profil_morpho, fixed = TRUE)
+  grepl("AUTRE_FORME", targeted_grid$candidates[[1]]$profil_morpho, fixed = TRUE),
+  targeted_grid$candidates[[1]]$config$iramuteq_discrimination_simple_score_mode == "afc_classes_direct"
 )
 
 default_grid_config <- grid_base_config
@@ -70,10 +94,17 @@ stopifnot(length(default_grid$candidates) == 32L)
 public_metrics <- .preparer_metrics_export_discrimination_simple(data.frame(
   k_retenu = 4L,
   k_chd_retenu = 4L,
-  S = score$S
+  S = score$S,
+  distance_classes_afc = direct_score$value,
+  score_mode = "afc_classes_direct",
+  score_label = "Distance directe des classes AFC",
+  score_selection = direct_score$value
 ))
 stopifnot(
-  abs(public_metrics$separation_afc[[1]] - score$S) < 1e-9,
+  abs(public_metrics$score_s_lexical[[1]] - score$S) < 1e-9,
+  abs(public_metrics$distance_classes_afc[[1]] - direct_score$value) < 1e-9,
+  abs(public_metrics$separation_afc[[1]] - direct_score$value) < 1e-9,
+  public_metrics$score_mode[[1]] == "afc_classes_direct",
   !("separation_minimale_afc" %in% names(public_metrics))
 )
 

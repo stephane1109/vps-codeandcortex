@@ -1186,10 +1186,20 @@ run_batch <- function() {
     "Normal"
   )
   config_chd <- config
+  auto_discriminant_score_mode <- scalar_chr(config$iramuteq_discrimination_simple_score_mode, "s_lexical")
+  if (!auto_discriminant_score_mode %in% c("s_lexical", "afc_classes_direct")) {
+    auto_discriminant_score_mode <- "s_lexical"
+  }
+  auto_discriminant_score_label <- if (identical(auto_discriminant_score_mode, "afc_classes_direct")) {
+    "Distance directe des classes AFC"
+  } else {
+    "Score S lexical"
+  }
   if (identical(classes_mode, "discrimination_simple")) {
     config_chd$iramuteq_classes_mode <- "discrimination_simple_config"
     config_chd$iramuteq_discrimination_simple_profile <- scalar_chr(config$iramuteq_discrimination_simple_profile, "ciblee")
     config_chd$iramuteq_auto_top_n_afc <- NULL
+    config_chd$iramuteq_discrimination_simple_score_mode <- auto_discriminant_score_mode
   }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
   if (identical(classif_mode, "double")) {
@@ -1262,7 +1272,7 @@ run_batch <- function() {
         " | nombre_classes_mode=",
         classes_mode_label,
         if (identical(classes_mode, "discrimination_simple")) {
-          paste0(" | k_min_auto=", auto_k_min)
+          paste0(" | k_min_auto=", auto_k_min, " | critere_selection=", auto_discriminant_score_label)
         } else {
           ""
         },
@@ -1311,6 +1321,7 @@ run_batch <- function() {
       auto_stats_mode = scalar_chr(config_chd$iramuteq_stats_mode, "vectorise"),
       auto_k_min = auto_k_min,
       auto_top_n_afc = if (identical(classes_mode, "discrimination_simple")) NULL else scalar_int(config_chd$iramuteq_auto_top_n_afc, 20L, 2L),
+      auto_discriminant_score_mode = auto_discriminant_score_mode,
       auto_discriminant_base_config = if (identical(engine_classes_mode, "discrimination_simple_config")) config_chd else NULL,
       auto_discriminant_prepare_pipeline_fn = if (identical(engine_classes_mode, "discrimination_simple_config")) {
         function(config_variant) {
@@ -1386,6 +1397,17 @@ run_batch <- function() {
         is.data.frame(res_ira$simple_discriminant_selection$selected_metrics) &&
         nrow(res_ira$simple_discriminant_selection$selected_metrics)) {
       selected_discriminant <- res_ira$simple_discriminant_selection$selected_metrics[1, , drop = FALSE]
+      selected_score_label <- if ("score_label" %in% names(selected_discriminant) &&
+          !is.na(selected_discriminant$score_label[[1]]) && nzchar(selected_discriminant$score_label[[1]])) {
+        as.character(selected_discriminant$score_label[[1]])
+      } else {
+        auto_discriminant_score_label
+      }
+      selected_score_value <- if ("score_selection" %in% names(selected_discriminant)) {
+        suppressWarnings(as.numeric(selected_discriminant$score_selection[[1]]))
+      } else {
+        suppressWarnings(as.numeric(selected_discriminant$S[[1]] %||% NA_real_))
+      }
       log_info(
         paste0(
           "Auto discriminante : configuration retenue ",
@@ -1406,8 +1428,10 @@ run_batch <- function() {
           as.character(selected_discriminant$k_retenu %||% "n/a"),
           ", classes terminales phase 1=",
           as.character(selected_discriminant$k_max_explore %||% selected_discriminant$k_chd_retenu %||% "n/a"),
-          ", separation AFC=",
-          format(round(as.numeric(selected_discriminant$S %||% NA_real_), 4), nsmall = 4, trim = TRUE),
+          ", ",
+          selected_score_label,
+          "=",
+          format(round(selected_score_value, 4), nsmall = 4, trim = TRUE),
           ")."
         ),
         progress = 60
@@ -2058,9 +2082,24 @@ run_batch <- function() {
       NA_character_
     },
     discrimination_simple_score = if (is.list(classes_info$simple_discriminant_selection) && is.data.frame(classes_info$simple_discriminant_selection$selected_metrics)) {
-      suppressWarnings(as.numeric(classes_info$simple_discriminant_selection$selected_metrics$S[[1]]))
+      selected_metrics <- classes_info$simple_discriminant_selection$selected_metrics
+      if ("score_selection" %in% names(selected_metrics)) {
+        suppressWarnings(as.numeric(selected_metrics$score_selection[[1]]))
+      } else {
+        suppressWarnings(as.numeric(selected_metrics$S[[1]]))
+      }
     } else {
       NA_real_
+    },
+    discrimination_simple_score_mode = if (is.list(classes_info$simple_discriminant_selection)) {
+      classes_info$simple_discriminant_selection$score_mode %||% NA_character_
+    } else {
+      NA_character_
+    },
+    discrimination_simple_score_label = if (is.list(classes_info$simple_discriminant_selection)) {
+      classes_info$simple_discriminant_selection$score_label %||% NA_character_
+    } else {
+      NA_character_
     },
     zipf = corpus_stats$zipf,
     output_dir = output_dir

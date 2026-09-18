@@ -1060,6 +1060,7 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
                   config_variant$min_docfreq <- as.integer(min_docfreq)
                   config_variant$k_iramuteq <- as.integer(k_max_candidate)
                   config_variant$iramuteq_classes_mode <- "discrimination_simple_partition"
+                  config_variant$iramuteq_discrimination_simple_score_mode <- config_base$iramuteq_discrimination_simple_score_mode %||% "s_lexical"
                   config_variant$iramuteq_mincl_mode <- if (isTRUE(vary_mincl)) "manuel" else config_base$iramuteq_mincl_mode %||% "auto"
                   config_variant$iramuteq_mincl <- as.integer(mincl_candidate)
 

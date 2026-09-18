@@ -1,11 +1,70 @@
 # Role du fichier: discriminationsimple.R ajoute un mode de discrimination
-# volontairement plus simple. Le choix final repose uniquement sur les mots
-# significatifs de la CHD, leur chi2, et leurs coordonnees x/y sur l'AFC.
+# volontairement plus simple. Le choix final peut reposer soit sur les mots
+# significatifs de la CHD, soit sur les coordonnees AFC reelles des classes.
 
 if (!exists("%||%", mode = "function", inherits = TRUE)) {
   `%||%` <- function(x, y) {
     if (is.null(x) || length(x) == 0) y else x
   }
+}
+
+normaliser_mode_score_discrimination_simple_iramuteq <- function(value,
+                                                                 default = "s_lexical") {
+  raw <- tolower(trimws(as.character(value %||% default)[[1]]))
+  if (raw %in% c("afc_classes_direct", "classes_direct", "direct")) {
+    return("afc_classes_direct")
+  }
+  "s_lexical"
+}
+
+etiquette_mode_score_discrimination_simple_iramuteq <- function(value) {
+  mode <- normaliser_mode_score_discrimination_simple_iramuteq(value)
+  if (identical(mode, "afc_classes_direct")) {
+    return("Distance directe des classes AFC")
+  }
+  "Score S lexical"
+}
+
+# Utilise les positions produites directement par FactoMineR::CA() pour les
+# lignes de la table classes x termes. Aucun centre lexical n'est reconstruit.
+calculer_score_classes_direct_afc_iramuteq <- function(afc_obj) {
+  empty_result <- list(
+    value = 0,
+    classes_coords = NULL,
+    distances_by_pair = numeric(0)
+  )
+
+  coords_classes <- .extraire_coordonnees_xy_auto_chd(afc_obj$rowcoord)
+  if (is.null(coords_classes) || nrow(coords_classes) < 2L) {
+    return(empty_result)
+  }
+
+  good <- is.finite(coords_classes[, "x"]) & is.finite(coords_classes[, "y"])
+  coords_classes <- coords_classes[good, , drop = FALSE]
+  if (nrow(coords_classes) < 2L) {
+    return(empty_result)
+  }
+
+  pair_index <- utils::combn(seq_len(nrow(coords_classes)), 2L)
+  distances_by_pair <- vapply(seq_len(ncol(pair_index)), function(index) {
+    point_a <- coords_classes[pair_index[1L, index], c("x", "y")]
+    point_b <- coords_classes[pair_index[2L, index], c("x", "y")]
+    sqrt(sum((point_a - point_b)^2))
+  }, numeric(1))
+  pair_labels <- vapply(seq_len(ncol(pair_index)), function(index) {
+    paste(
+      rownames(coords_classes)[pair_index[1L, index]],
+      rownames(coords_classes)[pair_index[2L, index]],
+      sep = " / "
+    )
+  }, character(1))
+  names(distances_by_pair) <- pair_labels
+
+  list(
+    value = min(distances_by_pair),
+    classes_coords = coords_classes,
+    distances_by_pair = distances_by_pair
+  )
 }
 
 calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
@@ -153,8 +212,10 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
                                                              top_n_diffusion = 20L,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
-                                                             afc_max_termes = 400L) {
+                                                             afc_max_termes = 400L,
+                                                             score_mode = "s_lexical") {
   stats_mode <- match.arg(stats_mode)
+  score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(score_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
     stop("Auto discriminante : solution en classes invalide.")
   }
@@ -224,6 +285,14 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     top_n = top_n_afc,
     p_seuil = p_seuil
   )
+  direct_class_scores <- calculer_score_classes_direct_afc_iramuteq(afc_obj)
+  score_s_lexical <- suppressWarnings(as.numeric(simple_scores$S))
+  score_classes_direct <- suppressWarnings(as.numeric(direct_class_scores$value))
+  score_selection <- if (identical(score_mode, "afc_classes_direct")) {
+    score_classes_direct
+  } else {
+    score_s_lexical
+  }
 
   metrics <- data.frame(
     partition = paste0("P", partition_obj$requested_k %||% partition_obj$k),
@@ -235,7 +304,11 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     D = .borner_score_auto_chd(d_value),
     L = .borner_score_auto_chd(l_value),
     B = .borner_score_auto_chd(b_value),
-    S = suppressWarnings(as.numeric(simple_scores$S)),
+    S = score_s_lexical,
+    distance_classes_afc = score_classes_direct,
+    score_mode = score_mode,
+    score_label = etiquette_mode_score_discrimination_simple_iramuteq(score_mode),
+    score_selection = score_selection,
     classes_effectifs = .formatter_resume_classes_auto_chd(counts, digits = 0L),
     classes_pourcentages = .formatter_resume_classes_auto_chd(pct, digits = 2L, suffix = "%"),
     stringsAsFactors = FALSE
@@ -251,7 +324,9 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     termes_cibles_par_classe = if (length(simple_scores$termes_cibles_par_classe)) simple_scores$termes_cibles_par_classe else termes_cibles_par_classe,
     simple_dispersions_by_class = simple_scores$dispersions_by_class,
     simple_separations_by_pair = simple_scores$separations_by_pair,
-    simple_poles = simple_scores$poles_by_class
+    simple_poles = simple_scores$poles_by_class,
+    direct_classes_coords = direct_class_scores$classes_coords,
+    direct_classes_distances_by_pair = direct_class_scores$distances_by_pair
   )
 }
 
@@ -266,10 +341,12 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
                                                              top_n_diffusion = 20L,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
-                                                             afc_max_termes = 400L) {
+                                                             afc_max_termes = 400L,
+                                                             score_mode = "s_lexical") {
   mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   stats_mode <- match.arg(stats_mode)
+  score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(score_mode)
 
   partitions <- lister_partitions_chd_iramuteq(
     chd_obj = chd_obj,
@@ -295,7 +372,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
       top_n_diffusion = top_n_diffusion,
       top_n_afc = top_n_afc,
       p_seuil = p_seuil,
-      afc_max_termes = afc_max_termes
+      afc_max_termes = afc_max_termes,
+      score_mode = score_mode
     )
   })
 
@@ -305,7 +383,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
 
   if (nrow(metrics_df) > 1L) {
     b_values <- suppressWarnings(as.numeric(metrics_df$B))
-    s_values <- suppressWarnings(as.numeric(metrics_df$S))
+    s_values <- suppressWarnings(as.numeric(metrics_df$score_selection))
     gains_b <- rep(NA_real_, length(b_values))
     gains_s <- rep(NA_real_, length(s_values))
     gains_b[-1L] <- b_values[-1L] - b_values[-length(b_values)]
@@ -314,7 +392,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     metrics_df$GS <- gains_s
   }
 
-  s_values <- suppressWarnings(as.numeric(metrics_df$S))
+  s_values <- suppressWarnings(as.numeric(metrics_df$score_selection))
   s_scores <- ifelse(is.finite(s_values) & !is.na(s_values), s_values, -Inf)
   if (!any(is.finite(s_scores) & s_scores > -Inf)) {
     stop("Auto discriminante : aucun score discriminant exploitable n'a pu etre calcule.")
@@ -325,11 +403,15 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   k_tie_break <- ifelse(is.finite(k_values) & !is.na(k_values), k_values, Inf)
   etape_tie_break <- ifelse(is.finite(etape_values) & !is.na(etape_values), etape_values, Inf)
 
-  # S est prioritaire. En cas d'egalite, on privilegie une solution plus
+  # Le critere choisi est prioritaire. En cas d'egalite, on privilegie une solution plus
   # parcimonieuse, puis une etape CHD plus courte.
   ordre <- order(-s_scores, k_tie_break, etape_tie_break, na.last = TRUE)
   selected_idx <- ordre[[1]]
-  selection_rule <- "meilleure_separation_afc"
+  selection_rule <- if (identical(score_mode, "afc_classes_direct")) {
+    "meilleure_distance_directe_classes_afc"
+  } else {
+    "meilleur_score_s_lexical"
+  }
 
   metrics_df$selection <- ifelse(seq_len(nrow(metrics_df)) == selected_idx, "oui", "non")
 
@@ -358,8 +440,9 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   list(
     mode = "discrimination_simple",
     mode_label = "Auto discriminante",
-    score_column = "S",
-    score_label = "Separation AFC entre classes",
+    score_column = "score_selection",
+    score_mode = score_mode,
+    score_label = etiquette_mode_score_discrimination_simple_iramuteq(score_mode),
     score_plot_title = "Selection de la configuration aux classes les plus separees",
     selection_rule = selection_rule,
     classes = selected_partition$classes,
@@ -386,6 +469,8 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     selected_simple_dispersions_by_class = selected_evaluation$simple_dispersions_by_class,
     selected_simple_separations_by_pair = selected_evaluation$simple_separations_by_pair,
     selected_simple_poles = selected_evaluation$simple_poles,
+    selected_direct_classes_coords = selected_evaluation$direct_classes_coords,
+    selected_direct_classes_distances_by_pair = selected_evaluation$direct_classes_distances_by_pair,
     partitions = partitions
   )
 }
@@ -435,6 +520,10 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     k_retenu = NA_integer_,
     k_chd_retenu = NA_integer_,
     S = NA_real_,
+    distance_classes_afc = NA_real_,
+    score_mode = normaliser_mode_score_discrimination_simple_iramuteq(candidate$config$iramuteq_discrimination_simple_score_mode),
+    score_label = etiquette_mode_score_discrimination_simple_iramuteq(candidate$config$iramuteq_discrimination_simple_score_mode),
+    score_selection = NA_real_,
     classes_effectifs = NA_character_,
     classes_pourcentages = NA_character_,
     selection = "echec",
@@ -449,6 +538,14 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
   }
 
   selected_metrics <- res_ira$auto_selection$selected_metrics[1, , drop = FALSE]
+  metric_value <- function(name, default = NA) {
+    if (!name %in% names(selected_metrics) || !length(selected_metrics[[name]])) return(default)
+    selected_metrics[[name]][[1]] %||% default
+  }
+  score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(
+    metric_value("score_mode", candidate$config$iramuteq_discrimination_simple_score_mode)
+  )
+  score_selection <- suppressWarnings(as.numeric(metric_value("score_selection", metric_value("S", NA_real_))))
 
   data.frame(
     configuration_id = candidate$id %||% NA_character_,
@@ -466,9 +563,13 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     n_formes = suppressWarnings(as.integer(quanteda::nfeat(pipeline_obj$dfm_obj))),
     k_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_selected %||% selected_metrics$k[[1]])),
     k_chd_retenu = suppressWarnings(as.integer(res_ira$auto_selection$k_chd_selected %||% selected_metrics$etape_chd[[1]] %||% selected_metrics$k[[1]])),
-    S = suppressWarnings(as.numeric(selected_metrics$S[[1]])),
-    classes_effectifs = as.character(selected_metrics$classes_effectifs[[1]] %||% ""),
-    classes_pourcentages = as.character(selected_metrics$classes_pourcentages[[1]] %||% ""),
+    S = suppressWarnings(as.numeric(metric_value("S", NA_real_))),
+    distance_classes_afc = suppressWarnings(as.numeric(metric_value("distance_classes_afc", NA_real_))),
+    score_mode = score_mode,
+    score_label = as.character(metric_value("score_label", etiquette_mode_score_discrimination_simple_iramuteq(score_mode))),
+    score_selection = score_selection,
+    classes_effectifs = as.character(metric_value("classes_effectifs", "")),
+    classes_pourcentages = as.character(metric_value("classes_pourcentages", "")),
     selection = "testee",
     erreur = "",
     stringsAsFactors = FALSE
@@ -489,6 +590,11 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
     stop("Auto discriminante : lancer_discrimination_simple_fn doit etre une fonction.")
   }
 
+  score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(
+    config_base$iramuteq_discrimination_simple_score_mode
+  )
+  score_label <- etiquette_mode_score_discrimination_simple_iramuteq(score_mode)
+
   grid_obj <- construire_grille_discrimination_simple_iramuteq(config_base)
   candidates <- grid_obj$candidates %||% list()
   search_profile <- grid_obj$profile %||% "complet"
@@ -505,7 +611,9 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         tolower(search_profile_label),
         " - recherche sur ",
         total_candidates,
-        " configurations."
+        " configurations ; critere = ",
+        score_label,
+        "."
       ),
       progress = 45
     )
@@ -580,6 +688,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
           candidate$config$iramuteq_svd_method %||% "",
           candidate$config$iramuteq_max_formes %||% "",
           candidate$config$iramuteq_stats_mode %||% "",
+          candidate$config$iramuteq_discrimination_simple_score_mode %||% "s_lexical",
           sep = "::"
         )
         cache_hit <- exists(chd_fingerprint, envir = chd_cache, inherits = FALSE)
@@ -637,13 +746,13 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
 
     if (isTRUE(attempt$ok)) {
       current_row <- attempt$row
-      current_score <- suppressWarnings(as.numeric(current_row$S[[1]]))
+      current_score <- suppressWarnings(as.numeric(current_row$score_selection[[1]]))
 
       if (is.na(best_idx)) {
         best_idx <- i
       } else {
         best_row <- evaluation_rows[[best_idx]]
-        best_score <- suppressWarnings(as.numeric(best_row$S[[1]]))
+        best_score <- suppressWarnings(as.numeric(best_row$score_selection[[1]]))
         current_k <- suppressWarnings(as.integer(current_row$k_retenu[[1]]))
         best_k <- suppressWarnings(as.integer(best_row$k_retenu[[1]]))
         current_etape <- suppressWarnings(as.integer(current_row$k_chd_retenu[[1]]))
@@ -655,7 +764,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         current_etape <- ifelse(is.finite(current_etape), current_etape, Inf)
         best_etape <- ifelse(is.finite(best_etape), best_etape, Inf)
 
-        # S est prioritaire. En cas d'egalite, on prefere une solution avec
+        # Le critere choisi est prioritaire. En cas d'egalite, on prefere une solution avec
         # moins de classes, puis une etape CHD plus courte.
         if (
           current_score > best_score + 1e-12 ||
@@ -697,8 +806,10 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
         best_row$configuration_label[[1]],
         " | classes retenues=",
         best_row$k_retenu[[1]],
-        " | separation AFC=",
-        format(round(as.numeric(best_row$S[[1]]), 4), nsmall = 4, trim = TRUE),
+        " | ",
+        score_label,
+        "=",
+        format(round(as.numeric(best_row$score_selection[[1]]), 4), nsmall = 4, trim = TRUE),
         " | min_docfreq=",
         best_row$min_docfreq[[1]],
         " | mincl=",
@@ -710,6 +821,8 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
 
   list(
     mode = "discrimination_simple",
+    score_mode = score_mode,
+    score_label = score_label,
     search_profile = search_profile,
     search_profile_label = search_profile_label,
     total_configurations = total_candidates,
@@ -729,16 +842,22 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
   )
 }
 
-tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id = NULL, top_n = 12L) {
+tracer_scores_discrimination_simple_iramuteq <- function(metrics_df,
+                                                         selected_id = NULL,
+                                                         top_n = 12L,
+                                                         score_column = "score_selection",
+                                                         score_label = "Score S lexical") {
   if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
     plot.new()
     text(0.5, 0.5, "Aucune configuration Auto discriminante a afficher.", cex = 1.0)
     return(invisible(NULL))
   }
 
+  score_column <- as.character(score_column %||% "score_selection")[[1]]
+  if (!score_column %in% names(metrics_df)) score_column <- "S"
   df <- metrics_df
-  df$S_num <- suppressWarnings(as.numeric(df$S))
-  df <- df[is.finite(df$S_num) & !is.na(df$S_num), , drop = FALSE]
+  df$score_num <- suppressWarnings(as.numeric(df[[score_column]]))
+  df <- df[is.finite(df$score_num) & !is.na(df$score_num), , drop = FALSE]
   if (!nrow(df)) {
     plot.new()
     text(0.5, 0.5, "Les scores Auto discriminante sont indisponibles.", cex = 1.0)
@@ -746,11 +865,11 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
   }
 
   top_n <- .as_int_auto_chd(top_n, default = 12L, min_value = 1L)
-  df <- df[order(df$S_num, decreasing = TRUE), , drop = FALSE]
+  df <- df[order(df$score_num, decreasing = TRUE), , drop = FALSE]
   df <- utils::head(df, top_n)
 
   labels <- as.character(df$configuration_id)
-  values <- df$S_num
+  values <- df$score_num
   cols <- rep("#9cb7dc", length(values))
   if (!is.null(selected_id) && length(selected_id)) {
     idx_selected <- which(labels == as.character(selected_id[[1]]))
@@ -768,7 +887,7 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     border = NA,
     las = 1,
     names.arg = rev(labels),
-    xlab = "Separation AFC entre classes",
+    xlab = score_label,
     main = "Configurations aux classes les plus separees sur l'AFC"
   )
   graphics::grid(col = "#d6c8b8", lty = "dotted")
@@ -797,6 +916,21 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     if (name %in% names(metrics_df)) metrics_df[[name]] else rep(default, nrow(metrics_df))
   }
 
+  score_mode <- as.character(col("score_mode", "s_lexical"))
+  score_mode[is.na(score_mode) | !nzchar(score_mode)] <- "s_lexical"
+  score_mode <- vapply(score_mode, normaliser_mode_score_discrimination_simple_iramuteq, character(1))
+  score_label <- as.character(col("score_label", NA_character_))
+  missing_score_label <- is.na(score_label) | !nzchar(score_label)
+  score_label[missing_score_label] <- vapply(
+    score_mode[missing_score_label],
+    etiquette_mode_score_discrimination_simple_iramuteq,
+    character(1)
+  )
+  score_s_lexical <- suppressWarnings(as.numeric(col("S", NA_real_)))
+  distance_classes_afc <- suppressWarnings(as.numeric(col("distance_classes_afc", NA_real_)))
+  score_selection <- suppressWarnings(as.numeric(col("score_selection", NA_real_)))
+  score_selection[!is.finite(score_selection) | is.na(score_selection)] <- score_s_lexical[!is.finite(score_selection) | is.na(score_selection)]
+
   data.frame(
     configuration_id = col("configuration_id", NA_character_),
     profil_morpho = col("profil_morpho", NA_character_),
@@ -812,7 +946,12 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df, selected_id
     n_formes = suppressWarnings(as.integer(col("n_formes", NA_integer_))),
     classes_retenues = suppressWarnings(as.integer(col("k_retenu", NA_integer_))),
     k_chd_retenu = suppressWarnings(as.integer(col("k_chd_retenu", NA_integer_))),
-    separation_afc = suppressWarnings(as.numeric(col("S", NA_real_))),
+    score_mode = score_mode,
+    score_label = score_label,
+    score_s_lexical = score_s_lexical,
+    distance_classes_afc = distance_classes_afc,
+    score_selection = score_selection,
+    separation_afc = score_selection,
     classes_effectifs = col("classes_effectifs", NA_character_),
     classes_pourcentages = col("classes_pourcentages", NA_character_),
     selection = col("selection", NA_character_),
@@ -858,6 +997,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   manual_replay_config$iramuteq_discrimination_simple_vary_k_max <- NULL
   manual_replay_config$iramuteq_discrimination_simple_k_max_min <- NULL
   manual_replay_config$iramuteq_discrimination_simple_k_max_max <- NULL
+  manual_replay_config$iramuteq_discrimination_simple_score_mode <- NULL
   summary_json <- file.path(output_dir, "discrimination_simple_summary.json")
   metrics_csv <- file.path(output_dir, "discrimination_simple_metrics.csv")
   score_png <- file.path(output_dir, "discrimination_simple_score.png")
@@ -870,6 +1010,8 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
 
   payload <- list(
     mode = "discrimination_simple",
+    score_mode = selection_obj$score_mode %||% "s_lexical",
+    score_label = selection_obj$score_label %||% etiquette_mode_score_discrimination_simple_iramuteq(selection_obj$score_mode),
     search_profile = selection_obj$search_profile %||% "complet",
     search_profile_label = selection_obj$search_profile_label %||% .label_profil_exploration_discrimination_simple(selection_obj$search_profile %||% "complet"),
     total_configurations = selection_obj$total_configurations %||% NA_integer_,
@@ -900,7 +1042,12 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
   jsonlite::write_json(payload, summary_json, auto_unbox = TRUE, pretty = TRUE, null = "null")
 
   grDevices::png(score_png, width = 1800, height = 1200, res = 180)
-  tracer_scores_discrimination_simple_iramuteq(metrics_df, selected_id = selected_df$configuration_id %||% NULL)
+  tracer_scores_discrimination_simple_iramuteq(
+    metrics_df,
+    selected_id = selected_df$configuration_id %||% NULL,
+    score_column = selection_obj$score_column %||% "score_selection",
+    score_label = selection_obj$score_label %||% "Score S lexical"
+  )
   grDevices::dev.off()
 
   list(

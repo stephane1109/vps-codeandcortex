@@ -26,6 +26,15 @@ Par défaut, `min_docfreq` et le nombre de classes terminales de la phase 1 sont
 
 Si les trois paramètres sont cochés avec toutes leurs bornes, la grille compte `6 × 4 × 8 = 192` CHD. L'interface l'indique avant le lancement, car ce calcul peut être long sur un corpus volumineux.
 
+## Critère de sélection
+
+L'utilisateur choisit aussi le critère qui départage les simulations :
+
+- `Score S lexical` : compare les centres construits à partir des mots significatifs et leurs dispersions lexicales.
+- `Distance directe des classes AFC` : compare les positions réelles de `Classe 1`, `Classe 2`, etc. dans `ca$row$coord`, sur les axes 1 et 2 de l'AFC.
+
+Les deux valeurs sont calculées et exportées. Seul le critère choisi dans l'interface sélectionne la configuration finale.
+
 ### Seuil mincl automatique
 
 Lorsque le mode `mincl` est réglé sur `Automatique`, `mincl` ne fait pas partie des paramètres croisés. Pour chaque CHD, le moteur calcule son seuil interne à partir du nombre de segments et des classes disponibles à cette étape : `arrondi(segments / classes)` en classification simple, ou `arrondi(segments / (2 × classes))` en classification double. La valeur affichée, par exemple `90`, est donc un **seuil automatique appliqué**, et non une valeur choisie ou testée par l'utilisateur.
@@ -48,19 +57,38 @@ Le résultat final affiche donc :
 - le nombre de classes finales retenues
 - le nombre de classes terminales de la phase 1 à reprendre en mode Normal
 - les variables qui ont conduit à ce résultat
+- le critère de sélection utilisé
 
 ## Comment la sélection est faite
 
-Pour chaque CHD testée :
+Pour chaque CHD testée, l'application réalise une AFC classes × termes à partir des termes significatifs (`p.value <= 0.05`). Elle calcule ensuite les deux mesures ci-dessous. Le choix fait dans l'interface détermine celle qui retient la CHD.
 
-- l'application calcule les termes caractéristiques avec le `chi2` habituel
-- elle conserve les termes significatifs avec `p.value <= 0.05`
-- elle récupère leurs coordonnées `x, y` sur le plan AFC
-- elle calcule le centre lexical de chaque classe : la moyenne des coordonnées `x, y` de ses mots significatifs
-- elle calcule les distances euclidiennes entre tous les centres de classes
-- elle mesure aussi la dispersion des mots autour du centre de leur classe
+### 1. Distance directe des classes AFC
 
-### 1. Construire un centre lexical par classe
+L'AFC place directement chaque classe dans `ca$row$coord`. Pour chaque classe `i`, les coordonnées utilisées sont donc :
+
+```ini
+x_i = ca$row$coord[i, 1]
+y_i = ca$row$coord[i, 2]
+```
+
+Pour toutes les paires de classes, le mode calcule la distance euclidienne :
+
+```ini
+d(i,j) = sqrt((x_i - x_j)^2 + (y_i - y_j)^2)
+```
+
+Le score direct est la plus petite de ces distances :
+
+```ini
+D_direct = min d(i,j)
+```
+
+Cette méthode ne reconstruit aucun centre lexical : elle n'utilise ni moyenne ni médiane des mots. Une solution est meilleure lorsque même ses deux classes les plus proches restent éloignées sur le plan AFC.
+
+### 2. Score S lexical
+
+#### Construire un centre lexical par classe
 
 Chaque mot significatif (`p.value <= 0.05`) d'une classe possède une position sur le plan AFC. Pour une classe `i`, l'application calcule le centre de ces positions : `C_i = (moyenne des x, moyenne des y)`.
 
@@ -68,7 +96,7 @@ Chaque mot significatif (`p.value <= 0.05`) d'une classe possède une position s
 
 Le point central ne représente donc pas un nouveau mot : c'est le centroïde lexical de la classe sur l'AFC.
 
-### 2. Comparer une paire de classes
+#### Comparer une paire de classes
 
 Pour chaque classe, l'application calcule le centre moyen de ses mots significatifs sur le plan AFC (`x`, `y`), puis compare toutes les paires de classes :
 
@@ -80,7 +108,7 @@ s(i,j) = distance entre les centres i et j / somme de leurs dispersions lexicale
 
 La distance au numérateur est la distance euclidienne entre les deux centres. Chaque dispersion au dénominateur est la médiane des distances entre les mots significatifs de la classe et son centre. Ainsi, deux classes éloignées avec des mots bien regroupés obtiennent une valeur `s(i,j)` élevée.
 
-### 3. Construire le score S
+#### Construire le score S
 
 Pour chaque classe `i`, le mode repère ensuite sa classe concurrente la plus proche :
 
@@ -104,10 +132,10 @@ Les distances entre paires sont nécessaires uniquement pour trouver le voisin l
 
 Plus `S` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
 
-Dans chaque configuration, le mode retient la solution qui maximise `S`. En cas d'égalité, il retient la solution avec le moins de classes, puis celle dont la phase 1 est la plus courte.
+Avec le critère `Score S lexical`, le mode retient la solution qui maximise `S`. Avec le critère `Distance directe des classes AFC`, il retient celle qui maximise `D_direct`. En cas d'égalité, il retient la solution avec le moins de classes, puis celle dont la phase 1 est la plus courte.
 
-Toutes les combinaisons des paramètres cochés sont ensuite comparées selon la même règle : la meilleure séparation AFC est toujours prioritaire.
+Toutes les combinaisons des paramètres cochés sont ensuite comparées selon le critère choisi dans l'interface.
 
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 
-Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC sert ensuite à mesurer la distance entre les centres lexicaux des classes.
+Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC fournit soit les positions directes des classes, soit les coordonnées des mots nécessaires au calcul de `S`.
