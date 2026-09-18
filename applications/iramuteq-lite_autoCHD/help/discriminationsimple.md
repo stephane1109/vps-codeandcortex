@@ -35,6 +35,14 @@ L'utilisateur choisit aussi le critère qui départage les simulations :
 
 Les deux valeurs sont calculées et exportées. Seul le critère choisi dans l'interface sélectionne la configuration finale.
 
+### Quel critère choisir ?
+
+Choisissez `Distance directe des classes AFC` si vous voulez que la sélection automatique suive directement ce que montre le graphique AFC : les points `Classe 1`, `Classe 2`, etc. sont placés par l'AFC, et le mode compare exactement leurs coordonnées `x, y` dans `ca$row$coord`. Il retient la CHD où la paire de classes la plus proche est la plus éloignée. Il n'y a alors ni centre de mots, ni moyenne, ni médiane supplémentaire.
+
+Choisissez `Score S lexical` si vous voulez également tenir compte de la manière dont les mots significatifs sont regroupés autour de chaque classe. Deux classes éloignées mais dont les mots sont très dispersés seront alors moins favorisées qu'avec la distance directe.
+
+Dans les deux cas, la CHD, le `chi2` et l'AFC ne sont pas modifiés. Le choix intervient seulement après chaque CHD testée, pour comparer les résultats obtenus.
+
 ### Seuil mincl automatique
 
 Lorsque le mode `mincl` est réglé sur `Automatique`, `mincl` ne fait pas partie des paramètres croisés. Pour chaque CHD, le moteur calcule son seuil interne à partir du nombre de segments et des classes disponibles à cette étape : `arrondi(segments / classes)` en classification simple, ou `arrondi(segments / (2 × classes))` en classification double. La valeur affichée, par exemple `90`, est donc un **seuil automatique appliqué**, et non une valeur choisie ou testée par l'utilisateur.
