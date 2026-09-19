@@ -281,6 +281,8 @@ const helpSubPanels = Array.from(document.querySelectorAll("[data-help-subpanel]
 const chdConfigSourceCards = Array.from(document.querySelectorAll("[data-chd-config-source]"));
 const simiConfigSourceCards = Array.from(document.querySelectorAll("[data-simi-config-source]"));
 const suiviConfigSourceCards = Array.from(document.querySelectorAll("[data-suivi-config-source]"));
+const afcAxisMarkers = document.getElementById("afcAxisMarkers");
+const afcAxisMarkersCard = document.getElementById("afcAxisMarkersCard");
 
 const resultContainers = {
   chdDendrogramme: document.getElementById("chdDendrogramme"),
@@ -347,6 +349,7 @@ const appState = {
   bootstrapReady: false,
   chdDendrogramFiles: new Map(),
   chdSegmentsByClass: new Map(),
+  discriminationSimpleSummaryPayload: null,
   jsdConcordancierRows: [],
   suiviPresentation: {
     layer: "lexicale_brute",
@@ -9362,6 +9365,11 @@ function getNavigationTargetForAnalysisKind({ isSimiMode = false, isSuiviMode = 
 
 function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
   const diagnosticText = String(message || "").trim() || "Aucun export exploitable n'a ete genere par l'analyse.";
+  appState.discriminationSimpleSummaryPayload = null;
+  clearContainer(afcAxisMarkers);
+  if (afcAxisMarkersCard instanceof HTMLElement) {
+    afcAxisMarkersCard.hidden = true;
+  }
   let containers = [];
 
   if (navigationTarget === "similitudes") {
@@ -11909,7 +11917,6 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   container.appendChild(grid);
   appendDiscriminationConfigurationDetails(container, selected);
-  renderDiscriminationSimpleAxisMarkers(container, payload);
 
   if (Number.isFinite(selectedManualK)) {
     const reproducibilityNote = document.createElement("p");
@@ -11991,18 +11998,17 @@ function formatDiscriminationSimpleAfcCoordinate(value) {
 }
 
 function renderDiscriminationSimpleAxisMarkers(container, payload) {
+  if (!(container instanceof HTMLElement)) return false;
+  clearContainer(container);
+
   const source = Array.isArray(payload?.selected_mots_reperes_axes)
     ? payload.selected_mots_reperes_axes
     : [];
   const terms = source.filter((item) => item && typeof item === "object" && String(item.terme || "").trim());
-  if (!terms.length) return;
+  if (!terms.length) return false;
 
   const section = document.createElement("section");
   section.className = "discrimination-simple-axis-markers";
-
-  const title = document.createElement("h4");
-  title.textContent = "Mots repères pour nommer les axes AFC";
-  section.appendChild(title);
 
   const explanation = document.createElement("p");
   explanation.className = "field-help";
@@ -12034,31 +12040,7 @@ function renderDiscriminationSimpleAxisMarkers(container, payload) {
   );
   section.appendChild(tableContainer);
   container.appendChild(section);
-}
-
-async function appendDiscriminationSimpleAfcTermsReport(container, file) {
-  if (!(container instanceof HTMLElement) || !file) return;
-
-  const section = document.createElement("section");
-  section.className = "discrimination-simple-axis-markers";
-
-  const title = document.createElement("h4");
-  title.textContent = "Coordonnées AFC de tous les mots projetés";
-  section.appendChild(title);
-
-  const explanation = document.createElement("p");
-  explanation.className = "field-help";
-  explanation.textContent = "Ce rapport liste chaque mot effectivement projeté sur le plan AFC de la configuration retenue, avec ses coordonnées x et y. Ces valeurs sont celles produites directement par l’AFC.";
-  section.appendChild(explanation);
-
-  const tableContainer = document.createElement("div");
-  section.appendChild(tableContainer);
-  container.appendChild(section);
-
-  await renderAfcTermsByClass(tableContainer, file, {
-    title: "Coordonnées AFC des mots",
-    emptyMessage: "Aucune coordonnée AFC de mot n'est disponible."
-  });
+  return true;
 }
 
 function extractDiscriminationSimpleCloneParsed(parsed) {
@@ -12275,6 +12257,7 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
 }
 
 async function renderDiscriminationSimpleExports(index) {
+  appState.discriminationSimpleSummaryPayload = null;
   const summaryFile = findFile(index, [(path) => path.endsWith("discrimination_simple_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("discrimination_simple_metrics.csv")]);
   const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Auto discriminante.";
@@ -12288,11 +12271,8 @@ async function renderDiscriminationSimpleExports(index) {
   if (summaryFile) {
     try {
       const payload = JSON.parse(await summaryFile.text());
+      appState.discriminationSimpleSummaryPayload = payload;
       renderDiscriminationSimpleSummary(resultContainers.discriminationSimpleSummary, payload);
-      await appendDiscriminationSimpleAfcTermsReport(
-        resultContainers.discriminationSimpleSummary,
-        findFile(index, [(path) => path.endsWith("afc/stats_termes.csv")])
-      );
     } catch (error) {
       setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume Auto discriminante.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
@@ -13946,6 +13926,11 @@ async function safeRenderExportSection(label, renderCallback) {
 async function renderExports(entries, index) {
   clearObjectUrls();
   appState.chdSegmentsByClass = new Map();
+  appState.discriminationSimpleSummaryPayload = null;
+  clearContainer(afcAxisMarkers);
+  if (afcAxisMarkersCard instanceof HTMLElement) {
+    afcAxisMarkersCard.hidden = true;
+  }
   resetSimiTermsState();
   let preferredChdSubTab = "dendrogramme";
 
@@ -14055,6 +14040,14 @@ async function renderExports(entries, index) {
       findFile(index, [(path) => path.endsWith("afc/afc_termes.png")]),
       "AFC des termes"
     );
+
+    const axisMarkersRendered = renderDiscriminationSimpleAxisMarkers(
+      afcAxisMarkers,
+      appState.discriminationSimpleSummaryPayload
+    );
+    if (afcAxisMarkersCard instanceof HTMLElement) {
+      afcAxisMarkersCard.hidden = !axisMarkersRendered;
+    }
 
     renderImage(
       resultContainers.afcVarsPlot,
@@ -14174,6 +14167,7 @@ function resetResultPanes() {
   appState.exportEntries = [];
   appState.activeAnalysisHistoryId = null;
   appState.chdSegmentsByClass = new Map();
+  appState.discriminationSimpleSummaryPayload = null;
   appState.jsdConcordancierRows = [];
   appState.suiviPresentation = {
     layer: "lexicale_brute",
@@ -14184,6 +14178,10 @@ function resetResultPanes() {
   appState.afcTermsZoom = 1;
   appState.simiZoom = 1;
   resetSimiTermsState();
+  clearContainer(afcAxisMarkers);
+  if (afcAxisMarkersCard instanceof HTMLElement) {
+    afcAxisMarkersCard.hidden = true;
+  }
   updateDownloadResultsState();
   renderAnalysisHistory();
   applySuiviPresentation();

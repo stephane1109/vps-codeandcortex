@@ -1266,16 +1266,6 @@ progress {
 .discrimination-simple-axis-markers {
   display: grid;
   gap: 0.7rem;
-  margin-top: 1.35rem;
-  padding-top: 1.2rem;
-  border-top: 1px solid var(--line);
-}
-
-.discrimination-simple-axis-markers h4 {
-  margin: 0;
-  color: var(--ink);
-  font-family: var(--font-display);
-  font-size: 1.05rem;
 }
 
 .discrimination-simple-axis-markers .field-help {
@@ -1756,6 +1746,7 @@ progress {
   max-width: 12rem;
 }
 
+#afcAxisMarkers .result-table-wrap,
 #afcTermsTable .result-table-wrap,
 #afcVarsTable .result-table-wrap,
 #afcEigTable .result-table-wrap {
@@ -1763,6 +1754,7 @@ progress {
   overflow: auto;
 }
 
+#afcAxisMarkers .result-table,
 #afcTermsTable .result-table,
 #afcVarsTable .result-table,
 #afcEigTable .result-table {
@@ -1772,6 +1764,8 @@ progress {
   font-size: 0.78rem;
 }
 
+#afcAxisMarkers .result-table th,
+#afcAxisMarkers .result-table td,
 #afcTermsTable .result-table th,
 #afcTermsTable .result-table td,
 #afcVarsTable .result-table th,
@@ -1787,6 +1781,8 @@ progress {
   vertical-align: top;
 }
 
+#afcAxisMarkers .result-table th:first-child,
+#afcAxisMarkers .result-table td:first-child,
 #afcTermsTable .result-table th:first-child,
 #afcTermsTable .result-table td:first-child,
 #afcVarsTable .result-table th:first-child,
@@ -1799,6 +1795,7 @@ progress {
   background: var(--surface);
 }
 
+#afcAxisMarkers .result-table th:first-child,
 #afcTermsTable .result-table th:first-child,
 #afcVarsTable .result-table th:first-child,
 #afcEigTable .result-table th:first-child {
@@ -3868,12 +3865,15 @@ code {
     max-width: 9rem;
   }
 
+  #afcAxisMarkers .result-table,
   #afcTermsTable .result-table,
   #afcVarsTable .result-table,
   #afcEigTable .result-table {
     font-size: 0.74rem;
   }
 
+  #afcAxisMarkers .result-table th,
+  #afcAxisMarkers .result-table td,
   #afcTermsTable .result-table th,
   #afcTermsTable .result-table td,
   #afcVarsTable .result-table th,

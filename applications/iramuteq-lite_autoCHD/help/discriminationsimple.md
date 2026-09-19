@@ -67,7 +67,7 @@ Le résultat final affiche donc :
 - les variables qui ont conduit à ce résultat
 - le critère de sélection utilisé
 
-Le rapport Auto discriminante et la table AFC des termes affichent aussi les coordonnées `x` et `y` de tous les mots réellement projetés sur le plan AFC de la configuration retenue. Ces coordonnées sont celles calculées par l'AFC elle-même ; un mot absent du plan ne reçoit pas de valeur artificielle.
+Dans l'onglet AFC, la table des mots projetés affiche les coordonnées `x` et `y` de tous les mots réellement projetés sur le plan AFC de la configuration retenue. Ces coordonnées sont celles calculées par l'AFC elle-même ; un mot absent du plan ne reçoit pas de valeur artificielle. Lorsque le mode Auto discriminante est utilisé, la carte « Mots repères pour nommer les axes AFC » apparaît également dans cet onglet.
 
 ## Comment la sélection est faite
 
