@@ -290,9 +290,9 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
     return(empty_result)
   }
 
-  # Le score S est la separation du voisin le plus proche pour chaque classe,
-  # resumee par sa mediane. Une seule paire tres proche ne peut donc pas
-  # imposer mecanquement une solution a trois classes.
+  # S est la mediane des separations du voisin le plus proche par classe, et
+  # non le minimum global. Une paire compte seulement pour les classes dont
+  # elle est le voisin lexical le plus proche.
   score_separation_afc <- stats::median(valid_nearest_separations)
 
   list(

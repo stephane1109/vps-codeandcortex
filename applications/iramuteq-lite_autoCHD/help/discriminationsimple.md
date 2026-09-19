@@ -97,7 +97,7 @@ d(i,j) = sqrt((x_i - x_j)^2 + (y_i - y_j)^2)
 Le score direct est la plus petite de ces distances :
 
 ```ini
-D_direct = min d(i,j)
+D_direct = min_{i < j} d(i,j)
 ```
 
 Cette méthode ne reconstruit aucun centre lexical : elle n'utilise ni moyenne ni médiane des mots. Une solution est meilleure lorsque même ses deux classes les plus proches restent éloignées sur le plan AFC.
@@ -131,22 +131,24 @@ La distance au numérateur est la distance euclidienne entre les deux centres. C
 Pour chaque classe `i`, le mode repère ensuite sa classe concurrente la plus proche :
 
 ```ini
-s_proche(i) = minimum des s(i,j)
+s_proche(i) = min_{j ≠ i} s(i,j)
 ```
 
 Le score qui choisit la CHD est :
 
 ```ini
-S = médiane des s_proche(i)
+S = médiane_i(s_proche(i))
 ```
 
 ![Voisins lexicaux les plus proches et médiane qui forme le score S](images/auto-discriminante-s-robuste.svg)
 
 Dans l'exemple du schéma, les cinq valeurs sont `2,13 ; 2,13 ; 3,72 ; 4,86 ; 7,27`. La médiane est donc la troisième valeur, `3,72`. Les deux premières valeurs sont identiques parce que les classes 1 et 2 sont mutuellement les plus proches : le même score de paire est alors lu depuis chacune des deux classes.
 
-Il décrit donc la séparation du voisin lexical le plus proche pour une classe typique. Cette médiane évite qu'une seule paire particulièrement proche impose mécaniquement une solution à trois classes.
+`S` n'est donc **pas** la plus faible séparation parmi toutes les paires de classes. Le minimum intervient d'abord séparément pour chaque classe, afin de trouver son voisin lexical le plus proche ; le résultat final est ensuite la médiane de ces valeurs. Une paire n'influence `S` que si elle est le voisin lexical le plus proche d'une ou de deux classes : son influence dépend donc de l'ensemble des voisins les plus proches, et `S` n'est jamais défini comme le minimum global.
 
 Les distances entre paires sont nécessaires uniquement pour trouver le voisin le plus proche de chaque classe. Elles ne sont ni affichées, ni utilisées comme un second score.
+
+À ne pas confondre : `D_direct` est le **minimum global** des distances euclidiennes entre toutes les paires de classes AFC ; `S` est la **médiane des minima par classe** entre centres lexicaux. Ce sont deux critères différents.
 
 Plus `S` est élevé, plus les classes sont lexicalement opposées. Ce n'est ni un pourcentage, ni une `p.value`, ni un nouveau `chi2` : c'est un indicateur relatif servant à choisir la meilleure CHD parmi les configurations testées.
 
