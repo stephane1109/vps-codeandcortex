@@ -164,7 +164,9 @@ Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les m
 
 ## Mots repères pour nommer les axes AFC
 
-Dans le résultat de la configuration retenue, l'application affiche jusqu'à trois mots repères par classe. Ce sont des termes caractéristiques significatifs (`p.value <= 0.05`) présents sur l'AFC.
+Dans le résultat de la configuration retenue, l'application affiche jusqu'à trois mots repères par classe. Ce sont des termes caractéristiques significatifs (`p.value <= 0.05`) présents sur l'AFC finale.
+
+Ces mêmes termes sont ajoutés au graphique AFC final, même s'ils ne font pas partie des 120 termes les plus fréquents normalement affichés. Chaque ligne du tableau correspond donc à une étiquette visible sur ce graphique.
 
 Pour chaque terme, les coordonnées `x` et `y` sont celles du graphique AFC. Le classement utilise `max(|x|, |y|)` : un mot très éloigné de l'origine est plus utile pour lire et nommer un axe. L'interface indique aussi son axe dominant et son pôle `+` ou `-`.
 

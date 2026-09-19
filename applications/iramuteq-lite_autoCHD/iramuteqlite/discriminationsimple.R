@@ -1075,7 +1075,9 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df,
   )
 }
 
-exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
+exporter_discrimination_simple_iramuteq <- function(selection_obj,
+                                                     output_dir,
+                                                     mots_reperes_axes = NULL) {
   if (is.null(selection_obj) || !is.list(selection_obj)) {
     stop("Auto discriminante : objet de selection manquant.")
   }
@@ -1123,6 +1125,12 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
     stop("Auto discriminante : le package jsonlite est requis pour exporter le resume JSON.")
   }
 
+  axis_terms <- if (is.null(mots_reperes_axes)) {
+    selection_obj$selected_result$auto_selection$selected_mots_reperes_axes
+  } else {
+    mots_reperes_axes
+  }
+
   payload <- list(
     mode = "discrimination_simple",
     score_mode = selection_obj$score_mode %||% "afc_classes_direct",
@@ -1146,7 +1154,6 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
       names(selection_obj$selected_result$auto_selection$selected_termes_cibles_par_classe %||% list())
     ),
     selected_mots_reperes_axes = {
-      axis_terms <- selection_obj$selected_result$auto_selection$selected_mots_reperes_axes
       if (is.data.frame(axis_terms) && nrow(axis_terms)) {
         lapply(seq_len(nrow(axis_terms)), function(index) {
           .dataframe_row_to_list_auto_chd(axis_terms[index, , drop = FALSE])

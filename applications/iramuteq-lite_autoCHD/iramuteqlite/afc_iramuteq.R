@@ -166,28 +166,62 @@ ajouter_coordonnees_afc_aux_termes_iramuteq <- function(termes_df,
   list(xlim = xlim_use, ylim = ylim_use)
 }
 
-.selectionner_termes_trace_afc <- function(obj, axes = c(1, 2), top_termes = 120L) {
+.selectionner_termes_trace_afc <- function(obj,
+                                           axes = c(1, 2),
+                                           top_termes = 120L,
+                                           termes_forces = character(0)) {
   if (is.null(obj$colcoord) || is.null(obj$termes_stats)) return(NULL)
 
   cc <- obj$colcoord
   st <- obj$termes_stats
   coords_termes <- .extraire_coordonnees_trace_afc(cc, axes = axes)
+  normaliser_termes <- function(valeurs) {
+    termes <- trimws(as.character(valeurs))
+    Encoding(termes) <- "UTF-8"
+    termes <- tolower(termes)
+    Encoding(termes) <- "UTF-8"
+    termes
+  }
+  noms_coords_norm <- normaliser_termes(rownames(cc))
 
   st <- st[!is.na(st$Terme) & nzchar(st$Terme), , drop = FALSE]
+  st <- st[normaliser_termes(st$Terme) %in% noms_coords_norm, , drop = FALSE]
   st <- st[order(-st$frequency), , drop = FALSE]
+  if (!nrow(st)) return(NULL)
+
+  termes_selectionnes <- st
   if (!is.null(top_termes) && is.finite(top_termes) && nrow(st) > top_termes) {
-    st <- st[seq_len(top_termes), , drop = FALSE]
+    termes_selectionnes <- st[seq_len(top_termes), , drop = FALSE]
   }
 
-  st <- st[st$Terme %in% rownames(cc), , drop = FALSE]
+  # Les mots reperes de l'Auto discriminante doivent toujours etre visibles,
+  # meme s'ils ne font pas partie des termes les plus frequents du graphique.
+  termes_forces <- unique(as.character(termes_forces))
+  termes_forces <- termes_forces[!is.na(termes_forces) & nzchar(termes_forces)]
+  index_force <- unique(match(normaliser_termes(termes_forces), normaliser_termes(st$Terme)))
+  index_force <- index_force[is.finite(index_force) & !is.na(index_force)]
+  if (length(index_force)) {
+    lignes_forcees <- st[index_force, , drop = FALSE]
+    lignes_forcees <- lignes_forcees[
+      !normaliser_termes(lignes_forcees$Terme) %in% normaliser_termes(termes_selectionnes$Terme),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(lignes_forcees)) {
+      termes_selectionnes <- rbind(termes_selectionnes, lignes_forcees)
+    }
+  }
+
+  st <- termes_selectionnes
   if (nrow(st) < 2L) return(NULL)
 
   mots <- st$Terme
+  index_coords <- match(normaliser_termes(mots), noms_coords_norm)
   list(
     stats = st,
     mots = mots,
-    x = coords_termes$x[match(mots, rownames(cc))],
-    y = coords_termes$y[match(mots, rownames(cc))],
+    x = coords_termes$x[index_coords],
+    y = coords_termes$y[index_coords],
     axes = coords_termes$axes
   )
 }
@@ -461,7 +495,11 @@ executer_afc_classes <- function(dfm_obj, groupes, termes_cibles = NULL, max_ter
 }
 
 # Tracé AFC des classes uniquement
-tracer_afc_classes_seules <- function(obj, axes = c(1, 2), cex_labels = 1.0, top_termes = 120L) {
+tracer_afc_classes_seules <- function(obj,
+                                      axes = c(1, 2),
+                                      cex_labels = 1.0,
+                                      top_termes = 120L,
+                                      termes_forces = character(0)) {
   if (is.null(obj$ca) || is.null(obj$rowcoord)) stop("AFC classes : objet incomplet.")
   rc <- obj$rowcoord
   coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
@@ -470,7 +508,12 @@ tracer_afc_classes_seules <- function(obj, axes = c(1, 2), cex_labels = 1.0, top
   axis_info <- coords_classes$axes
   # Même échelle que le graphe classes + termes pour ne pas accentuer visuellement
   # l'éloignement des classes dans le tracé limité aux centroïdes.
-  termes_trace <- .selectionner_termes_trace_afc(obj, axes = axes, top_termes = top_termes)
+  termes_trace <- .selectionner_termes_trace_afc(
+    obj,
+    axes = axes,
+    top_termes = top_termes,
+    termes_forces = termes_forces
+  )
   x_lim <- x_c
   y_lim <- y_c
   if (!is.null(termes_trace)) {
@@ -500,6 +543,7 @@ tracer_afc_classes_termes <- function(
   obj,
   axes = c(1, 2),
   top_termes = 120,
+  termes_forces = character(0),
   taille_sel = c("frequency", "chi2"),
   activer_repel = TRUE,
   cex_min = 0.8,
@@ -516,7 +560,12 @@ tracer_afc_classes_termes <- function(
 
   rc <- obj$rowcoord
   coords_classes <- .extraire_coordonnees_trace_afc(rc, axes = axes)
-  termes_trace <- .selectionner_termes_trace_afc(obj, axes = axes, top_termes = top_termes)
+  termes_trace <- .selectionner_termes_trace_afc(
+    obj,
+    axes = axes,
+    top_termes = top_termes,
+    termes_forces = termes_forces
+  )
   if (is.null(termes_trace)) {
     plot.new()
     text(0.5, 0.5, "AFC : pas assez de termes à tracer.", cex = 1.1)

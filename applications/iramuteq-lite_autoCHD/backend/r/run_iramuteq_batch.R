@@ -1820,6 +1820,32 @@ run_batch <- function() {
       }
     )
 
+    mots_reperes_axes_final <- NULL
+    termes_reperes_axes_final <- character(0)
+    if (identical(classes_mode, "discrimination_simple") &&
+        is.list(res_ira$simple_discriminant_selection) &&
+        !is.null(res_stats_df)) {
+      mots_reperes_axes_final <- tryCatch(
+        extraire_mots_reperes_axes_discrimination_simple_iramuteq(
+          afc_obj = afc_obj,
+          res_stats_df = res_stats_df,
+          top_n = 3L,
+          p_seuil = scalar_num(config$max_p, 0.05)
+        ),
+        error = function(e_reperes) {
+          log_info(paste0("Auto discriminante : mots reperes AFC indisponibles (", e_reperes$message, ")."))
+          NULL
+        }
+      )
+      if (is.data.frame(mots_reperes_axes_final) &&
+          "terme" %in% names(mots_reperes_axes_final)) {
+        termes_reperes_axes_final <- unique(as.character(mots_reperes_axes_final$terme))
+        termes_reperes_axes_final <- termes_reperes_axes_final[
+          !is.na(termes_reperes_axes_final) & nzchar(termes_reperes_axes_final)
+        ]
+      }
+    }
+
     afc_classes_png <- NULL
     afc_termes_png <- NULL
     if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
@@ -1832,7 +1858,13 @@ run_batch <- function() {
       afc_termes_png <- file.path(afc_dir, "afc_termes.png")
       grDevices::png(afc_classes_png, width = 1800, height = 1400, res = 180)
       tryCatch(
-        tracer_afc_classes_seules(afc_obj, axes = c(1, 2), cex_labels = 1.05),
+        tracer_afc_classes_seules(
+          afc_obj,
+          axes = c(1, 2),
+          cex_labels = 1.05,
+          top_termes = top_termes,
+          termes_forces = termes_reperes_axes_final
+        ),
         error = function(e) {
           plot.new()
           text(0.5, 0.5, paste0("AFC classes indisponible : ", e$message), cex = 1.0)
@@ -1846,6 +1878,7 @@ run_batch <- function() {
           afc_obj,
           axes = c(1, 2),
           top_termes = top_termes,
+          termes_forces = termes_reperes_axes_final,
           taille_sel = taille_sel,
           activer_repel = activer_repel
         ),
@@ -1869,6 +1902,20 @@ run_batch <- function() {
     ecrire_csv_6_decimales(afc_obj$rowcoord, file.path(afc_dir, "coords_classes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$colcoord, file.path(afc_dir, "coords_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$termes_stats, file.path(afc_dir, "stats_termes.csv"), row.names = FALSE)
+    if (identical(classes_mode, "discrimination_simple") &&
+        is.list(res_ira$simple_discriminant_selection) &&
+        is.data.frame(mots_reperes_axes_final)) {
+      tryCatch(
+        exporter_discrimination_simple_iramuteq(
+          res_ira$simple_discriminant_selection,
+          output_dir,
+          mots_reperes_axes = mots_reperes_axes_final
+        ),
+        error = function(e_reperes_export) {
+          log_info(paste0("Auto discriminante : synchronisation des mots reperes AFC ignoree (", e_reperes_export$message, ")."))
+        }
+      )
+    }
     if (!is.null(afc_obj$ca$eig)) {
       ecrire_csv_6_decimales(as.data.frame(afc_obj$ca$eig), file.path(afc_dir, "valeurs_propres.csv"), row.names = TRUE)
     }
