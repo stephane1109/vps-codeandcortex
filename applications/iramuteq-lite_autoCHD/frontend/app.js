@@ -11620,9 +11620,11 @@ function renderTable(container, parsed, options = {}) {
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  parsed.headers.forEach((header) => {
+  const headerLabels = Array.isArray(options.headerLabels) ? options.headerLabels : [];
+  parsed.headers.forEach((header, headerIndex) => {
     const th = document.createElement("th");
-    th.textContent = header || " ";
+    const displayHeader = headerLabels[headerIndex] ?? header;
+    th.textContent = displayHeader || " ";
     headRow.appendChild(th);
   });
   thead.appendChild(headRow);
@@ -13113,6 +13115,8 @@ async function renderCombinedTables(container, descriptors, emptyMessage) {
       renderTable(section, parseCsv(text), {
         title: descriptor.title,
         maxRows: descriptor.maxRows || 60,
+        headerLabels: descriptor.headerLabels,
+        cellRenderer: descriptor.cellRenderer,
         emptyMessage
       });
     } catch (error) {
@@ -14078,11 +14082,31 @@ async function renderExports(entries, index) {
       [
         {
           title: "valeurs_propres.csv",
-          file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres.csv")])
+          file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres.csv")]),
+          headerLabels: [
+            "dimension",
+            "valeur propre",
+            "pourcentage de variance",
+            "pourcentage cumulé de variance"
+          ],
+          cellRenderer: ({ cell, columnIndex }) => {
+            if (columnIndex !== 0) return null;
+            return { text: String(cell || "").replace(/^dim\s+/i, "dimension ") };
+          }
         },
         {
           title: "valeurs_propres_vars.csv",
-          file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres_vars.csv")])
+          file: findFile(index, [(path) => path.endsWith("afc/valeurs_propres_vars.csv")]),
+          headerLabels: [
+            "dimension",
+            "valeur propre",
+            "pourcentage de variance",
+            "pourcentage cumulé de variance"
+          ],
+          cellRenderer: ({ cell, columnIndex }) => {
+            if (columnIndex !== 0) return null;
+            return { text: String(cell || "").replace(/^dim\s+/i, "dimension ") };
+          }
         }
       ],
       "Aucune table de valeurs propres disponible."
