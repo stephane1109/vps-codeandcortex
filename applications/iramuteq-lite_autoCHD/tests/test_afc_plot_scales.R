@@ -23,6 +23,17 @@ obj <- list(
   )
 )
 
+coords_enrichies <- ajouter_coordonnees_afc_aux_termes_iramuteq(
+  data.frame(Terme = c("TERME_A", "terme_b", "terme_absent"), stringsAsFactors = FALSE),
+  obj$colcoord
+)
+stopifnot(
+  abs(coords_enrichies$afc_x[[1]] + 1.6) < 1e-12,
+  abs(coords_enrichies$afc_y[[2]] - 1.95) < 1e-12,
+  is.na(coords_enrichies$afc_x[[3]]),
+  is.na(coords_enrichies$afc_y[[3]])
+)
+
 classes_file <- tempfile(fileext = ".pdf")
 terms_file <- tempfile(fileext = ".pdf")
 

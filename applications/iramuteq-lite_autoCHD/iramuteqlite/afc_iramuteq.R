@@ -94,6 +94,64 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
   )
 }
 
+# Ajoute les positions effectivement calculees par l'AFC aux statistiques des
+# termes. Aucun point n'est reconstruit pour les termes absents du plan.
+ajouter_coordonnees_afc_aux_termes_iramuteq <- function(termes_df,
+                                                        coords_termes,
+                                                        colonne_terme = "Terme") {
+  if (is.null(termes_df) || !is.data.frame(termes_df)) {
+    return(termes_df)
+  }
+
+  n_lignes <- nrow(termes_df)
+  x <- rep(NA_real_, n_lignes)
+  y <- rep(NA_real_, n_lignes)
+
+  if (!colonne_terme %in% names(termes_df) || is.null(coords_termes)) {
+    termes_df$afc_x <- x
+    termes_df$afc_y <- y
+    return(termes_df)
+  }
+
+  coords_mat <- .normaliser_coords_trace_afc(coords_termes)
+  if (is.null(coords_mat)) {
+    termes_df$afc_x <- x
+    termes_df$afc_y <- y
+    return(termes_df)
+  }
+
+  noms_coords <- rownames(coords_mat)
+  if (!nrow(coords_mat) || !ncol(coords_mat) ||
+      is.null(noms_coords) || !length(noms_coords)) {
+    termes_df$afc_x <- x
+    termes_df$afc_y <- y
+    return(termes_df)
+  }
+
+  normaliser_termes <- function(valeurs) {
+    tolower(trimws(as.character(valeurs)))
+  }
+  index_coords <- match(
+    normaliser_termes(termes_df[[colonne_terme]]),
+    normaliser_termes(noms_coords)
+  )
+  positions_valides <- !is.na(index_coords)
+
+  if (any(positions_valides)) {
+    x[positions_valides] <- suppressWarnings(as.numeric(coords_mat[index_coords[positions_valides], 1L]))
+    if (ncol(coords_mat) >= 2L) {
+      y[positions_valides] <- suppressWarnings(as.numeric(coords_mat[index_coords[positions_valides], 2L]))
+    } else {
+      # Une AFC a un seul axe : le trace la represente avec y = 0.
+      y[positions_valides] <- 0
+    }
+  }
+
+  termes_df$afc_x <- x
+  termes_df$afc_y <- y
+  termes_df
+}
+
 .calculer_limites_trace_afc <- function(x, y, has_second_axis = TRUE) {
   xlim_use <- calculer_lim_sym(x, 0)
   if (isTRUE(has_second_axis)) {
@@ -390,6 +448,7 @@ executer_afc_classes <- function(dfm_obj, groupes, termes_cibles = NULL, max_ter
   # Harmonisation : noms de classes déjà "Classe X"
   st$Classe_max <- as.character(st$Classe_max)
   # Dans .calculer_stats_colonnes, les classes sont rownames(tab), donc déjà "Classe X"
+  st <- ajouter_coordonnees_afc_aux_termes_iramuteq(st, colcoord)
 
   list(
     table = tab,

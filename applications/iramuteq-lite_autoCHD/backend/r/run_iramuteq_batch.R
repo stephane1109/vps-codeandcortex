@@ -1820,6 +1820,19 @@ run_batch <- function() {
       }
     )
 
+    # Le rapport CHD reprend les coordonnees reelles de chaque mot projete sur
+    # l'AFC. Les termes exclus du plan restent volontairement sans coordonnee.
+    if (!is.null(res_stats_df) &&
+        exists("ajouter_coordonnees_afc_aux_termes_iramuteq", mode = "function", inherits = TRUE)) {
+      res_stats_df <- ajouter_coordonnees_afc_aux_termes_iramuteq(
+        res_stats_df,
+        afc_obj$colcoord,
+        colonne_terme = "Terme"
+      )
+      ecrire_csv_6_decimales(res_stats_df, stats_file, row.names = FALSE)
+      artifacts$stats_par_classe <- relative_to_output(stats_file)
+    }
+
     afc_classes_png <- NULL
     afc_termes_png <- NULL
     if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
@@ -1876,6 +1889,7 @@ run_batch <- function() {
     artifacts$afc <- list(
       afc_classes_png = relative_to_output(afc_classes_png),
       afc_termes_png = relative_to_output(afc_termes_png),
+      coords_termes_csv = relative_to_output(file.path(afc_dir, "coords_termes.csv")),
       stats_termes_csv = relative_to_output(file.path(afc_dir, "stats_termes.csv")),
       valeurs_propres_csv = relative_to_output(file.path(afc_dir, "valeurs_propres.csv"))
     )

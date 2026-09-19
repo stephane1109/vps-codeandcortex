@@ -67,6 +67,8 @@ Le résultat final affiche donc :
 - les variables qui ont conduit à ce résultat
 - le critère de sélection utilisé
 
+Le rapport Auto discriminante et la table AFC des termes affichent aussi les coordonnées `x` et `y` de tous les mots réellement projetés sur le plan AFC de la configuration retenue. Ces coordonnées sont celles calculées par l'AFC elle-même ; un mot absent du plan ne reçoit pas de valeur artificielle.
+
 ## Comment la sélection est faite
 
 Pour chaque CHD testée, l'application calcule les termes caractéristiques avec le `chi2` habituel, puis réalise une AFC classes × termes à partir des termes significatifs (`p.value <= 0.05`). Elle exécute ensuite uniquement le critère choisi dans l'interface.

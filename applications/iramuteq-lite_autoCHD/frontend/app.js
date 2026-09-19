@@ -12036,6 +12036,31 @@ function renderDiscriminationSimpleAxisMarkers(container, payload) {
   container.appendChild(section);
 }
 
+async function appendDiscriminationSimpleAfcTermsReport(container, file) {
+  if (!(container instanceof HTMLElement) || !file) return;
+
+  const section = document.createElement("section");
+  section.className = "discrimination-simple-axis-markers";
+
+  const title = document.createElement("h4");
+  title.textContent = "Coordonnées AFC de tous les mots projetés";
+  section.appendChild(title);
+
+  const explanation = document.createElement("p");
+  explanation.className = "field-help";
+  explanation.textContent = "Ce rapport liste chaque mot effectivement projeté sur le plan AFC de la configuration retenue, avec ses coordonnées x et y. Ces valeurs sont celles produites directement par l’AFC.";
+  section.appendChild(explanation);
+
+  const tableContainer = document.createElement("div");
+  section.appendChild(tableContainer);
+  container.appendChild(section);
+
+  await renderAfcTermsByClass(tableContainer, file, {
+    title: "Coordonnées AFC des mots",
+    emptyMessage: "Aucune coordonnée AFC de mot n'est disponible."
+  });
+}
+
 function extractDiscriminationSimpleCloneParsed(parsed) {
   if (!parsed || !Array.isArray(parsed.headers) || !Array.isArray(parsed.rows)) {
     return { headers: [], rows: [], rowClasses: [] };
@@ -12264,6 +12289,10 @@ async function renderDiscriminationSimpleExports(index) {
     try {
       const payload = JSON.parse(await summaryFile.text());
       renderDiscriminationSimpleSummary(resultContainers.discriminationSimpleSummary, payload);
+      await appendDiscriminationSimpleAfcTermsReport(
+        resultContainers.discriminationSimpleSummary,
+        findFile(index, [(path) => path.endsWith("afc/stats_termes.csv")])
+      );
     } catch (error) {
       setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume Auto discriminante.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
@@ -12740,7 +12769,10 @@ async function renderAfcTermsByClass(container, file, options = {}) {
     const frequencyIndex = headerIndex(parsed.headers, ["frequency"]);
     const chi2Index = headerIndex(parsed.headers, ["chi2"]);
     const pValueIndex = headerIndex(parsed.headers, ["p_value"]);
+    const afcXIndex = headerIndex(parsed.headers, ["afc_x", "afc x"]);
+    const afcYIndex = headerIndex(parsed.headers, ["afc_y", "afc y"]);
     const segmentIndex = headerIndex(parsed.headers, ["segment_texte"]);
+    const hasAfcCoordinates = afcXIndex !== -1 || afcYIndex !== -1;
 
     if (classIndex === -1 || termIndex === -1) {
       renderTable(container, parsed, {
@@ -12777,23 +12809,36 @@ async function renderAfcTermsByClass(container, file, options = {}) {
         rows.sort((left, right) => parseTableNumber(right[chi2Index]) - parseTableNumber(left[chi2Index]));
       }
 
-      const limitedRows = rows.slice(0, 100).map((row) => [
+      const displayedRows = rows.map((row) => [
         termIndex === -1 ? "" : String(row[termIndex] ?? ""),
         frequencyIndex === -1 ? "" : formatAfcFrequencyValue(row[frequencyIndex]),
         chi2Index === -1 ? "" : formatTableNumber(parseTableNumber(row[chi2Index]), 6),
         pValueIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[pValueIndex]), 6),
+        ...(hasAfcCoordinates
+          ? [
+              afcXIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[afcXIndex]), 6),
+              afcYIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[afcYIndex]), 6)
+            ]
+          : []),
         segmentIndex === -1 ? "" : String(row[segmentIndex] ?? "")
       ]);
 
       renderTable(
         section,
         {
-          headers: ["Terme", "frequency", "chi2", "p_value", "Segment_texte"],
-          rows: limitedRows
+          headers: [
+            "Terme",
+            "frequency",
+            "chi2",
+            "p_value",
+            ...(hasAfcCoordinates ? ["AFC x", "AFC y"] : []),
+            "Segment_texte"
+          ],
+          rows: displayedRows
         },
         {
           title: classLabel,
-          maxRows: limitedRows.length,
+          maxRows: displayedRows.length,
           cellRenderer: ({ cell, row, columnIndex, headers }) => {
             const segmentColumnIndex = headerIndex(headers, ["segment_texte"]);
             const termColumnIndex = headerIndex(headers, ["terme"]);
@@ -12850,6 +12895,9 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
   const pScientificIndex = headerIndex(parsed.headers, ["p_scientifique"]);
   const pThresholdIndex = headerIndex(parsed.headers, ["p_seuil_01"]);
   const typeIndex = headerIndex(parsed.headers, ["type", "pos"]);
+  const afcXIndex = headerIndex(parsed.headers, ["afc_x", "afc x"]);
+  const afcYIndex = headerIndex(parsed.headers, ["afc_y", "afc y"]);
+  const hasAfcCoordinates = afcXIndex !== -1 || afcYIndex !== -1;
 
   let rows = parsed.rows.filter((row) => normalizeClassValue(row[classIndex]) === normalizeClassValue(classLabel));
 
@@ -12920,6 +12968,12 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
         Number.isFinite(effTotal) ? String(Math.round(effTotal)) : "",
         formatTableNumber(percentage, 2),
         formatTableNumber(chi2, 3),
+        ...(hasAfcCoordinates
+          ? [
+              afcXIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[afcXIndex]), 6),
+              afcYIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[afcYIndex]), 6)
+            ]
+          : []),
         pDisplayValue,
         pScientificValue,
         pThresholdValue,
@@ -12931,7 +12985,19 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
   });
 
   return {
-    headers: ["num", "forme", "eff. s.t.", "eff. total", "pourcentage", "chi2", "p.value", "p.value (sci.)", "seuil p", "Type"],
+    headers: [
+      "num",
+      "forme",
+      "eff. s.t.",
+      "eff. total",
+      "pourcentage",
+      "chi2",
+      ...(hasAfcCoordinates ? ["AFC x", "AFC y"] : []),
+      "p.value",
+      "p.value (sci.)",
+      "seuil p",
+      "Type"
+    ],
     rows: cloneRows.map((entry) => entry.values),
     rowClasses: cloneRows.map((entry) => (entry.nonSignificant ? "is-chd-non-significant" : "")),
     significantRows: cloneRows.map((entry) => Boolean(entry.significant))
@@ -13054,6 +13120,15 @@ function renderChdStatsByClass(container, parsed, options = {}) {
     tabs.appendChild(button);
     panelsWrap.appendChild(panel);
   });
+
+  const hasAfcCoordinates = headerIndex(parsed.headers, ["afc_x", "afc x"]) !== -1 ||
+    headerIndex(parsed.headers, ["afc_y", "afc y"]) !== -1;
+  if (hasAfcCoordinates) {
+    const coordinatesNote = document.createElement("p");
+    coordinatesNote.className = "field-help";
+    coordinatesNote.textContent = "Les colonnes AFC x et AFC y reprennent les positions réelles des mots sur les axes 1 et 2. Une cellule vide signifie que le mot n’a pas été projeté sur le plan AFC.";
+    container.appendChild(coordinatesNote);
+  }
 
   container.appendChild(tabs);
   container.appendChild(panelsWrap);
