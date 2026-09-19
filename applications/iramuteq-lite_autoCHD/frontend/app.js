@@ -11584,6 +11584,24 @@ function formatJsdDisplayedTerm(term, lexical = false) {
   return lexical ? raw.replaceAll("_", " ") : raw;
 }
 
+function formatAfcEigenvalueCell({ cell, columnIndex }) {
+  if (columnIndex === 0) {
+    return { text: String(cell || "").replace(/^dim\s+/i, "dimension ") };
+  }
+
+  const raw = String(cell ?? "").trim();
+  if (!raw) return { text: "" };
+  const value = Number(raw.replace(",", "."));
+  if (!Number.isFinite(value)) return { text: raw };
+
+  return {
+    text: new Intl.NumberFormat("fr-FR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value)
+  };
+}
+
 function renderTable(container, parsed, options = {}) {
   if (!clearContainer(container)) {
     return;
@@ -14089,10 +14107,7 @@ async function renderExports(entries, index) {
             "pourcentage de variance",
             "pourcentage cumulé de variance"
           ],
-          cellRenderer: ({ cell, columnIndex }) => {
-            if (columnIndex !== 0) return null;
-            return { text: String(cell || "").replace(/^dim\s+/i, "dimension ") };
-          }
+          cellRenderer: formatAfcEigenvalueCell
         },
         {
           title: "valeurs_propres_vars.csv",
@@ -14103,10 +14118,7 @@ async function renderExports(entries, index) {
             "pourcentage de variance",
             "pourcentage cumulé de variance"
           ],
-          cellRenderer: ({ cell, columnIndex }) => {
-            if (columnIndex !== 0) return null;
-            return { text: String(cell || "").replace(/^dim\s+/i, "dimension ") };
-          }
+          cellRenderer: formatAfcEigenvalueCell
         }
       ],
       "Aucune table de valeurs propres disponible."
