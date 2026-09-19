@@ -73,6 +73,100 @@ calculer_score_classes_direct_afc_iramuteq <- function(afc_obj) {
   )
 }
 
+# Retient des termes significatifs qui servent uniquement de reperes de
+# lecture pour les axes AFC. Ils ne modifient ni l'AFC ni la selection CHD.
+extraire_mots_reperes_axes_discrimination_simple_iramuteq <- function(afc_obj,
+                                                                       res_stats_df,
+                                                                       top_n = 3L,
+                                                                       p_seuil = 0.05) {
+  empty_result <- data.frame(
+    classe = character(0),
+    terme = character(0),
+    axe_dominant = character(0),
+    pole = character(0),
+    x = numeric(0),
+    y = numeric(0),
+    amplitude = numeric(0),
+    chi2 = numeric(0),
+    stringsAsFactors = FALSE
+  )
+
+  coords_termes <- .extraire_coordonnees_xy_auto_chd(afc_obj$colcoord)
+  if (is.null(coords_termes) || !nrow(coords_termes)) {
+    return(empty_result)
+  }
+
+  top_n <- .as_int_auto_chd(top_n, default = 3L, min_value = 1L)
+  rows <- .selectionner_lignes_chi2_afc_auto_chd(
+    res_stats_df = res_stats_df,
+    top_n = NULL,
+    p_seuil = p_seuil
+  )
+  if (is.null(rows) || !is.data.frame(rows) || !nrow(rows) ||
+      !"p_num" %in% names(rows)) {
+    return(empty_result)
+  }
+
+  # Unlike the AFC construction fallback, axis labels must remain strictly
+  # based on statistically significant characteristic terms.
+  rows <- rows[
+    is.finite(rows$p_num) & !is.na(rows$p_num) & rows$p_num <= p_seuil &
+      rows$Terme %in% rownames(coords_termes),
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(rows)) {
+    return(empty_result)
+  }
+
+  coord_index <- match(rows$Terme, rownames(coords_termes))
+  rows$x <- coords_termes[coord_index, "x"]
+  rows$y <- coords_termes[coord_index, "y"]
+  rows <- rows[
+    is.finite(rows$x) & is.finite(rows$y) &
+      !duplicated(paste(rows$Classe_num, rows$Terme, sep = "::")),
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(rows)) {
+    return(empty_result)
+  }
+
+  rows$amplitude <- pmax(abs(rows$x), abs(rows$y))
+  rows <- rows[is.finite(rows$amplitude) & rows$amplitude > 0, , drop = FALSE]
+  if (!nrow(rows)) {
+    return(empty_result)
+  }
+  rows$axe_dominant <- ifelse(abs(rows$x) >= abs(rows$y), "Axe 1", "Axe 2")
+  coord_dominante <- ifelse(rows$axe_dominant == "Axe 1", rows$x, rows$y)
+  rows$pole <- ifelse(coord_dominante >= 0, "+", "-")
+
+  classes <- sort(unique(rows$Classe_num))
+  top_rows <- lapply(classes, function(classe_num) {
+    rows_classe <- rows[rows$Classe_num == classe_num, , drop = FALSE]
+    rows_classe <- rows_classe[order(-rows_classe$amplitude, -rows_classe$chi2_num), , drop = FALSE]
+    utils::head(rows_classe, top_n)
+  })
+  top_rows <- top_rows[vapply(top_rows, nrow, integer(1)) > 0L]
+  if (!length(top_rows)) {
+    return(empty_result)
+  }
+
+  result <- do.call(rbind, top_rows)
+  rownames(result) <- NULL
+  data.frame(
+    classe = paste("Classe", result$Classe_num),
+    terme = as.character(result$Terme),
+    axe_dominant = as.character(result$axe_dominant),
+    pole = as.character(result$pole),
+    x = suppressWarnings(as.numeric(result$x)),
+    y = suppressWarnings(as.numeric(result$y)),
+    amplitude = suppressWarnings(as.numeric(result$amplitude)),
+    chi2 = suppressWarnings(as.numeric(result$chi2_num)),
+    stringsAsFactors = FALSE
+  )
+}
+
 calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
                                                           res_stats_df,
                                                           top_n = NULL,
@@ -278,6 +372,12 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     seuil_p = p_seuil,
     rv = NULL
   )
+  mots_reperes_axes <- extraire_mots_reperes_axes_discrimination_simple_iramuteq(
+    afc_obj = afc_obj,
+    res_stats_df = res_stats_df,
+    top_n = 3L,
+    p_seuil = p_seuil
+  )
 
   # The lexical calculation is intentionally run only when the user selects
   # S. Direct AFC selection must remain a pure comparison of row coordinates.
@@ -339,7 +439,8 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     simple_separations_by_pair = if (!is.null(simple_scores)) simple_scores$separations_by_pair else NULL,
     simple_poles = if (!is.null(simple_scores)) simple_scores$poles_by_class else NULL,
     direct_classes_coords = direct_class_scores$classes_coords,
-    direct_classes_distances_by_pair = direct_class_scores$distances_by_pair
+    direct_classes_distances_by_pair = direct_class_scores$distances_by_pair,
+    mots_reperes_axes = mots_reperes_axes
   )
 }
 
@@ -484,6 +585,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
     selected_simple_poles = selected_evaluation$simple_poles,
     selected_direct_classes_coords = selected_evaluation$direct_classes_coords,
     selected_direct_classes_distances_by_pair = selected_evaluation$direct_classes_distances_by_pair,
+    selected_mots_reperes_axes = selected_evaluation$mots_reperes_axes,
     partitions = partitions
   )
 }
@@ -1043,6 +1145,16 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
       }),
       names(selection_obj$selected_result$auto_selection$selected_termes_cibles_par_classe %||% list())
     ),
+    selected_mots_reperes_axes = {
+      axis_terms <- selection_obj$selected_result$auto_selection$selected_mots_reperes_axes
+      if (is.data.frame(axis_terms) && nrow(axis_terms)) {
+        lapply(seq_len(nrow(axis_terms)), function(index) {
+          .dataframe_row_to_list_auto_chd(axis_terms[index, , drop = FALSE])
+        })
+      } else {
+        list()
+      }
+    },
     selected = if (!is.null(selected_public_df) && nrow(selected_public_df)) {
       .dataframe_row_to_list_auto_chd(selected_public_df[1, , drop = FALSE])
     } else {

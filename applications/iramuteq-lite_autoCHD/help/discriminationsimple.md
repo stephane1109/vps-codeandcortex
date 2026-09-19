@@ -147,3 +147,11 @@ Toutes les combinaisons des paramètres cochés sont ensuite comparées selon le
 Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
 
 Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC fournit soit les positions directes des classes, soit les coordonnées des mots nécessaires au calcul de `S`.
+
+## Mots repères pour nommer les axes AFC
+
+Dans le résultat de la configuration retenue, l'application affiche jusqu'à trois mots repères par classe. Ce sont des termes caractéristiques significatifs (`p.value <= 0.05`) présents sur l'AFC.
+
+Pour chaque terme, les coordonnées `x` et `y` sont celles du graphique AFC. Le classement utilise `max(|x|, |y|)` : un mot très éloigné de l'origine est plus utile pour lire et nommer un axe. L'interface indique aussi son axe dominant et son pôle `+` ou `-`.
+
+Une coordonnée AFC n'est pas limitée à `1`. L'application ne recherche donc pas littéralement la valeur `1` : elle retient les mots ayant la plus grande valeur absolue sur l'un des deux axes. Ces mots sont des repères d'interprétation ; ils ne changent ni la CHD, ni les coordonnées AFC, ni la sélection automatique.

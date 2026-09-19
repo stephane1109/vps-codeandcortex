@@ -11909,6 +11909,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
   container.appendChild(grid);
   appendDiscriminationConfigurationDetails(container, selected);
+  renderDiscriminationSimpleAxisMarkers(container, payload);
 
   if (Number.isFinite(selectedManualK)) {
     const reproducibilityNote = document.createElement("p");
@@ -11978,6 +11979,61 @@ function renderDiscriminationSimpleSummary(container, payload) {
   selectionNote.className = "field-help";
   selectionNote.textContent = `Le mode a exécuté ${formatSummaryValue(payload?.total_configurations) === "N/A" ? "plusieurs" : formatSummaryValue(payload?.total_configurations)} CHD ciblées du même corpus, puis a retenu la solution dont le critère « ${scoreLabel} » est le plus élevé.`;
   container.appendChild(selectionNote);
+}
+
+function formatDiscriminationSimpleAfcCoordinate(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "N/A";
+  return new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4
+  }).format(number);
+}
+
+function renderDiscriminationSimpleAxisMarkers(container, payload) {
+  const source = Array.isArray(payload?.selected_mots_reperes_axes)
+    ? payload.selected_mots_reperes_axes
+    : [];
+  const terms = source.filter((item) => item && typeof item === "object" && String(item.terme || "").trim());
+  if (!terms.length) return;
+
+  const section = document.createElement("section");
+  section.className = "discrimination-simple-axis-markers";
+
+  const title = document.createElement("h4");
+  title.textContent = "Mots repères pour nommer les axes AFC";
+  section.appendChild(title);
+
+  const explanation = document.createElement("p");
+  explanation.className = "field-help";
+  explanation.textContent = "Pour chaque classe, jusqu’à trois termes significatifs les plus éloignés de l’origine sont affichés. L’axe dominant indique la coordonnée la plus forte en valeur absolue ; le signe (+ ou -) situe le terme sur l’un des deux pôles de l’axe.";
+  section.appendChild(explanation);
+
+  const tableContainer = document.createElement("div");
+  const rows = terms.map((item) => {
+    const axis = String(item.axe_dominant || "Axe").trim();
+    const pole = String(item.pole || "").trim();
+    return [
+      String(item.classe || "Classe"),
+      String(item.terme || ""),
+      pole ? `${axis} (${pole})` : axis,
+      formatDiscriminationSimpleAfcCoordinate(item.x),
+      formatDiscriminationSimpleAfcCoordinate(item.y)
+    ];
+  });
+  renderTable(
+    tableContainer,
+    {
+      headers: ["classe", "mot significatif", "axe dominant", "x", "y"],
+      rows
+    },
+    {
+      maxRows: rows.length,
+      emptyMessage: "Aucun mot repère AFC disponible."
+    }
+  );
+  section.appendChild(tableContainer);
+  container.appendChild(section);
 }
 
 function extractDiscriminationSimpleCloneParsed(parsed) {

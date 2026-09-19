@@ -1263,6 +1263,25 @@ progress {
   color: var(--ink);
 }
 
+.discrimination-simple-axis-markers {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1.35rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
+.discrimination-simple-axis-markers h4 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.discrimination-simple-axis-markers .field-help {
+  margin: 0;
+}
+
 .zipf-svg {
   display: block;
   width: 100%;

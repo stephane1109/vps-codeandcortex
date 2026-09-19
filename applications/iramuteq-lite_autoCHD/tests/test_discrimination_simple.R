@@ -59,6 +59,18 @@ stopifnot(
   etiquette_mode_score_discrimination_simple_iramuteq("afc_classes_direct") == "Distance directe des classes AFC"
 )
 
+axis_terms <- extraire_mots_reperes_axes_discrimination_simple_iramuteq(
+  afc_obj = list(colcoord = coords),
+  res_stats_df = stats,
+  top_n = 1L
+)
+stopifnot(
+  nrow(axis_terms) == 4L,
+  all(axis_terms$terme %in% c("a1", "b2", "c2", "d2")),
+  all(axis_terms$axe_dominant %in% c("Axe 1", "Axe 2")),
+  all(axis_terms$amplitude > 0)
+)
+
 grid_base_config <- list(
   iramuteq_discrimination_simple_profile = "ciblee",
   morpho_conserver_hors_lexique = FALSE,
