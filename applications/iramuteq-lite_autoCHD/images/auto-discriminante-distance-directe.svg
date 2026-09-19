@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Distance euclidienne entre deux classes sur le plan AFC</title>
+  <desc id="desc">Le schéma montre deux positions de classes provenant de ca$row$coord, leurs écarts horizontal et vertical, et le segment diagonal de la distance euclidienne.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fffdf9"/>
+      <stop offset="1" stop-color="#f1f7f7"/>
+    </linearGradient>
+    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse">
+      <path d="M 54 0 L 0 0 0 54" fill="none" stroke="#dce6e6" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#25333b" flood-opacity=".10"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#344b58"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#238474"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#paper)"/>
+  <rect x="42" y="38" width="1356" height="824" rx="30" fill="#ffffff" stroke="#e3ddd2" stroke-width="2" filter="url(#shadow)"/>
+
+  <text x="96" y="112" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="700">Distance euclidienne entre classes AFC</text>
+  <text x="96" y="151" fill="#62727a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20">Les deux points sont les positions réelles des classes dans ca$row$coord, sur les axes 1 et 2.</text>
+
+  <rect x="88" y="194" width="860" height="518" rx="22" fill="url(#grid)" stroke="#d5e0e1" stroke-width="2"/>
+  <line x1="160" y1="605" x2="888" y2="605" stroke="#475c65" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="460" y1="660" x2="460" y2="252" stroke="#475c65" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="830" y="642" fill="#344b58" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="600">Axe 1 (x)</text>
+  <text x="396" y="268" fill="#344b58" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="600">Axe 2 (y)</text>
+  <text x="469" y="627" fill="#7a898e" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="16">origine</text>
+
+  <line x1="301" y1="505" x2="734" y2="505" stroke="#a8bbc0" stroke-width="2.5" stroke-dasharray="9 9"/>
+  <line x1="734" y1="505" x2="734" y2="333" stroke="#a8bbc0" stroke-width="2.5" stroke-dasharray="9 9"/>
+  <line x1="301" y1="505" x2="734" y2="333" stroke="#238474" stroke-width="5" marker-end="url(#arrow-teal)"/>
+
+  <circle cx="301" cy="505" r="18" fill="#3e7fbe" stroke="#ffffff" stroke-width="6"/>
+  <circle cx="734" cy="333" r="18" fill="#e67a4b" stroke="#ffffff" stroke-width="6"/>
+  <text x="206" y="542" fill="#326ba8" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700">Classe i</text>
+  <text x="206" y="571" fill="#60777e" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18">(xᵢ, yᵢ)</text>
+  <text x="758" y="322" fill="#b55531" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700">Classe j</text>
+  <text x="758" y="351" fill="#60777e" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18">(xⱼ, yⱼ)</text>
+
+  <rect x="430" y="456" width="180" height="46" rx="12" fill="#eef4f4"/>
+  <text x="520" y="487" text-anchor="middle" fill="#46636b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">Δx = xⱼ − xᵢ</text>
+  <rect x="743" y="399" width="180" height="46" rx="12" fill="#eef4f4"/>
+  <text x="833" y="430" text-anchor="middle" fill="#46636b" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">Δy = yⱼ − yᵢ</text>
+  <rect x="439" y="380" width="160" height="55" rx="14" fill="#e3f4ef"/>
+  <text x="519" y="415" text-anchor="middle" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="700">d(i,j)</text>
+
+  <rect x="992" y="194" width="354" height="518" rx="22" fill="#f8f4ed" stroke="#eadcc7" stroke-width="2"/>
+  <text x="1035" y="262" fill="#1d3541" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="700">Calcul direct</text>
+  <line x1="1035" y1="287" x2="1303" y2="287" stroke="#dfd5c7" stroke-width="2"/>
+  <text x="1035" y="340" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">1. Lire les coordonnées</text>
+  <text x="1035" y="371" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">des classes sur l'AFC.</text>
+  <text x="1035" y="431" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">2. Mesurer le segment</text>
+  <text x="1035" y="462" fill="#64747a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">diagonal entre chaque paire.</text>
+  <rect x="1027" y="505" width="282" height="84" rx="16" fill="#e3f4ef"/>
+  <text x="1168" y="554" text-anchor="middle" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700">d(i,j) = √((xᵢ − xⱼ)²</text>
+  <text x="1168" y="583" text-anchor="middle" fill="#176553" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700">+ (yᵢ − yⱼ)²)</text>
+  <text x="1035" y="638" fill="#8b4e36" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">Aucun centre de mots,</text>
+  <text x="1035" y="666" fill="#8b4e36" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700">aucune moyenne, aucune médiane.</text>
+
+  <rect x="88" y="748" width="1258" height="75" rx="18" fill="#edf4f4"/>
+  <circle cx="132" cy="786" r="10" fill="#2f9d89"/>
+  <text x="158" y="781" fill="#33515a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19">Pour une CHD, toutes les paires de classes sont comparées. D_direct est la distance de la paire la plus proche :</text>
+  <text x="158" y="809" fill="#33515a" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="700">D_direct = min d(i,j). Une valeur élevée signifie que même les deux classes les plus proches restent éloignées.</text>
+</svg>

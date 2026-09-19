@@ -69,7 +69,13 @@ Le résultat final affiche donc :
 
 ## Comment la sélection est faite
 
-Pour chaque CHD testée, l'application réalise une AFC classes × termes à partir des termes significatifs (`p.value <= 0.05`). Elle calcule ensuite les deux mesures ci-dessous. Le choix fait dans l'interface détermine celle qui retient la CHD.
+Pour chaque CHD testée, l'application calcule les termes caractéristiques avec le `chi2` habituel, puis réalise une AFC classes × termes à partir des termes significatifs (`p.value <= 0.05`). Elle exécute ensuite uniquement le critère choisi dans l'interface.
+
+Avec le réglage recommandé, le flux est donc simplement :
+
+```ini
+CHD → chi2 des termes significatifs → AFC → ca$row$coord → distance euclidienne entre classes
+```
 
 ### 1. Distance directe des classes AFC
 
@@ -79,6 +85,8 @@ L'AFC place directement chaque classe dans `ca$row$coord`. Pour chaque classe `i
 x_i = ca$row$coord[i, 1]
 y_i = ca$row$coord[i, 2]
 ```
+
+![Distance euclidienne entre les positions de deux classes sur le plan AFC](images/auto-discriminante-distance-directe.svg)
 
 Pour toutes les paires de classes, le mode calcule la distance euclidienne :
 
@@ -93,6 +101,8 @@ D_direct = min d(i,j)
 ```
 
 Cette méthode ne reconstruit aucun centre lexical : elle n'utilise ni moyenne ni médiane des mots. Une solution est meilleure lorsque même ses deux classes les plus proches restent éloignées sur le plan AFC.
+
+Le segment diagonal du schéma est la distance euclidienne. Les pointillés correspondent aux deux écarts qui la composent : la différence horizontale entre les coordonnées `x` et la différence verticale entre les coordonnées `y`.
 
 ### 2. Score S lexical
 
@@ -144,7 +154,7 @@ Avec le critère `Score S lexical`, le mode retient la solution qui maximise `S`
 
 Toutes les combinaisons des paramètres cochés sont ensuite comparées selon le critère choisi dans l'interface.
 
-Il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, ni de pondération ajoutée.
+Avec le critère direct, il n'y a pas de calcul d'angle, de `theta`, de similarité cosinus, de moyenne, de médiane ou de pondération ajoutée.
 
 Le `chi2` existant n'est donc pas modifié : il sert seulement à repérer les mots caractéristiques significatifs. L'AFC fournit soit les positions directes des classes, soit les coordonnées des mots nécessaires au calcul de `S`.
 
