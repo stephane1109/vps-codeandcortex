@@ -2680,13 +2680,13 @@ const AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS = {
 };
 
 const AUTO_DISCRIMINANT_SCORE_MODE_DEFINITIONS = {
-  s_lexical: {
-    label: "Score S lexical",
-    description: "Le score S compare les centres lexicaux construits à partir des mots significatifs et leur dispersion."
-  },
   afc_classes_direct: {
     label: "Distance directe des classes AFC",
-    description: "Cette méthode compare directement les positions réelles de Classe 1, Classe 2, etc. sur les axes 1 et 2 de l'AFC (ca$row$coord), sans moyenne ni médiane de mots."
+    description: "Critère recommandé : il compare directement les positions réelles de Classe 1, Classe 2, etc. sur les axes 1 et 2 de l'AFC (ca$row$coord), sans moyenne ni médiane de mots."
+  },
+  s_lexical: {
+    label: "Score S lexical",
+    description: "Option complémentaire : le score S compare les centres lexicaux construits à partir des mots significatifs et leur dispersion."
   }
 };
 
@@ -2694,7 +2694,7 @@ function normalizeAutoDiscriminantScoreMode(value) {
   const mode = String(value || "").trim();
   return Object.hasOwn(AUTO_DISCRIMINANT_SCORE_MODE_DEFINITIONS, mode)
     ? mode
-    : "s_lexical";
+    : "afc_classes_direct";
 }
 
 function getAutoDiscriminantScoreModeDetails(value) {
@@ -11860,7 +11860,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     return;
   }
 
-  const scoreDetails = getAutoDiscriminantScoreModeDetails(payload?.score_mode ?? selected?.score_mode);
+  const scoreDetails = getAutoDiscriminantScoreModeDetails(payload?.score_mode ?? selected?.score_mode ?? "s_lexical");
   const scoreLabel = String(payload?.score_label || selected?.score_label || scoreDetails.label).trim() || scoreDetails.label;
   const separationAfc = selected.score_selection
     ?? selected.separation_afc

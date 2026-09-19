@@ -33,15 +33,15 @@ L'utilisateur choisit aussi le critère qui départage les simulations :
 - `Score S lexical` : compare les centres construits à partir des mots significatifs et leurs dispersions lexicales.
 - `Distance directe des classes AFC` : compare les positions réelles de `Classe 1`, `Classe 2`, etc. dans `ca$row$coord`, sur les axes 1 et 2 de l'AFC.
 
-Les deux valeurs sont calculées et exportées. Seul le critère choisi dans l'interface sélectionne la configuration finale.
+Seul le critère choisi dans l'interface est calculé et exporté pour chaque simulation. Il sélectionne la configuration finale.
 
 ### Quel critère choisir ?
 
-Choisissez `Distance directe des classes AFC` si vous voulez que la sélection automatique suive directement ce que montre le graphique AFC : les points `Classe 1`, `Classe 2`, etc. sont placés par l'AFC, et le mode compare exactement leurs coordonnées `x, y` dans `ca$row$coord`. Il retient la CHD où la paire de classes la plus proche est la plus éloignée. Il n'y a alors ni centre de mots, ni moyenne, ni médiane supplémentaire.
+`Distance directe des classes AFC` est le critère recommandé et choisi par défaut. Il suit directement ce que montre le graphique AFC : les points `Classe 1`, `Classe 2`, etc. sont placés par l'AFC, et le mode compare exactement leurs coordonnées `x, y` dans `ca$row$coord`. Il retient la CHD où la paire de classes la plus proche est la plus éloignée. Il n'y a alors ni centre de mots, ni moyenne, ni médiane, ni similarité cosinus supplémentaire.
 
-Choisissez `Score S lexical` si vous voulez également tenir compte de la manière dont les mots significatifs sont regroupés autour de chaque classe. Deux classes éloignées mais dont les mots sont très dispersés seront alors moins favorisées qu'avec la distance directe.
+`Score S lexical` reste disponible comme option complémentaire si vous voulez également tenir compte de la manière dont les mots significatifs sont regroupés autour de chaque classe. Deux classes éloignées mais dont les mots sont très dispersés seront alors moins favorisées qu'avec la distance directe.
 
-Dans les deux cas, la CHD, le `chi2` et l'AFC ne sont pas modifiés. Le choix intervient seulement après chaque CHD testée, pour comparer les résultats obtenus.
+Dans les deux cas, la CHD, le `chi2` et l'AFC ne sont pas modifiés. Le score `S` ne déplace pas les points sur le graphique AFC, mais il peut retenir une autre CHD car il ajoute la compacité lexicale comme critère de comparaison. Le choix intervient seulement après chaque CHD testée, pour comparer les résultats obtenus.
 
 ### Seuil mincl automatique
 

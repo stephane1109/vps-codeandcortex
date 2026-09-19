@@ -9,12 +9,18 @@ if (!exists("%||%", mode = "function", inherits = TRUE)) {
 }
 
 normaliser_mode_score_discrimination_simple_iramuteq <- function(value,
-                                                                 default = "s_lexical") {
+                                                                 default = "afc_classes_direct") {
   raw <- tolower(trimws(as.character(value %||% default)[[1]]))
+  if (is.na(raw) || !nzchar(raw)) {
+    raw <- default
+  }
   if (raw %in% c("afc_classes_direct", "classes_direct", "direct")) {
     return("afc_classes_direct")
   }
-  "s_lexical"
+  if (raw %in% c("s_lexical", "s", "lexical")) {
+    return("s_lexical")
+  }
+  default
 }
 
 etiquette_mode_score_discrimination_simple_iramuteq <- function(value) {
@@ -213,7 +219,7 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
                                                              afc_max_termes = 400L,
-                                                             score_mode = "s_lexical") {
+                                                             score_mode = "afc_classes_direct") {
   stats_mode <- match.arg(stats_mode)
   score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(score_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
@@ -242,18 +248,12 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     stats_mode = stats_mode
   )
 
-  h_value <- calculer_homogeneite_auto_chd(dfm_obj, classes)
-  d_value <- calculer_distinction_auto_chd(dfm_obj, classes)
-  diffusion <- calculer_diffusion_auto_chd(
-    dfm_obj = dfm_obj,
-    classes = classes,
-    stats_mode = stats_mode,
-    top_n = top_n_diffusion,
-    p_seuil = p_seuil,
-    res_stats_df = res_stats_df
-  )
-  l_value <- diffusion$value
-  b_value <- .borner_score_auto_chd(mean(c(h_value, d_value, l_value)))
+  # H, D, L and B belong to the former structural layer. They do not take
+  # part in either direct AFC selection or lexical S selection.
+  h_value <- NA_real_
+  d_value <- NA_real_
+  l_value <- NA_real_
+  b_value <- NA_real_
 
   termes_cibles <- .selectionner_termes_caracteristiques_afc_auto_chd(
     res_stats_df = res_stats_df,
@@ -279,14 +279,27 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     rv = NULL
   )
 
-  simple_scores <- calculer_score_discrimination_simple_iramuteq(
-    afc_obj = afc_obj,
-    res_stats_df = res_stats_df,
-    top_n = top_n_afc,
-    p_seuil = p_seuil
-  )
-  direct_class_scores <- calculer_score_classes_direct_afc_iramuteq(afc_obj)
-  score_s_lexical <- suppressWarnings(as.numeric(simple_scores$S))
+  # The lexical calculation is intentionally run only when the user selects
+  # S. Direct AFC selection must remain a pure comparison of row coordinates.
+  simple_scores <- NULL
+  if (identical(score_mode, "s_lexical")) {
+    simple_scores <- calculer_score_discrimination_simple_iramuteq(
+      afc_obj = afc_obj,
+      res_stats_df = res_stats_df,
+      top_n = top_n_afc,
+      p_seuil = p_seuil
+    )
+  }
+  direct_class_scores <- if (identical(score_mode, "afc_classes_direct")) {
+    calculer_score_classes_direct_afc_iramuteq(afc_obj)
+  } else {
+    list(value = NA_real_, classes_coords = NULL, distances_by_pair = numeric(0))
+  }
+  score_s_lexical <- if (is.null(simple_scores)) {
+    NA_real_
+  } else {
+    suppressWarnings(as.numeric(simple_scores$S))
+  }
   score_classes_direct <- suppressWarnings(as.numeric(direct_class_scores$value))
   score_selection <- if (identical(score_mode, "afc_classes_direct")) {
     score_classes_direct
@@ -300,10 +313,10 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     k = as.integer(partition_obj$k),
     n_segments_assignes = as.integer(total_assigned),
     n_segments_non_assignes = as.integer(sum(!ok)),
-    H = .borner_score_auto_chd(h_value),
-    D = .borner_score_auto_chd(d_value),
-    L = .borner_score_auto_chd(l_value),
-    B = .borner_score_auto_chd(b_value),
+    H = h_value,
+    D = d_value,
+    L = l_value,
+    B = b_value,
     S = score_s_lexical,
     distance_classes_afc = score_classes_direct,
     score_mode = score_mode,
@@ -318,13 +331,13 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
     partition = partition_obj,
     metrics = metrics,
     stats = res_stats_df,
-    diffusion_by_class = diffusion$by_class,
+    diffusion_by_class = NULL,
     afc = afc_obj,
-    termes_cibles = unique(as.character(simple_scores$termes_cibles %||% termes_cibles)),
-    termes_cibles_par_classe = if (length(simple_scores$termes_cibles_par_classe)) simple_scores$termes_cibles_par_classe else termes_cibles_par_classe,
-    simple_dispersions_by_class = simple_scores$dispersions_by_class,
-    simple_separations_by_pair = simple_scores$separations_by_pair,
-    simple_poles = simple_scores$poles_by_class,
+    termes_cibles = unique(as.character(if (!is.null(simple_scores) && length(simple_scores$termes_cibles)) simple_scores$termes_cibles else termes_cibles)),
+    termes_cibles_par_classe = if (!is.null(simple_scores) && length(simple_scores$termes_cibles_par_classe)) simple_scores$termes_cibles_par_classe else termes_cibles_par_classe,
+    simple_dispersions_by_class = if (!is.null(simple_scores)) simple_scores$dispersions_by_class else NULL,
+    simple_separations_by_pair = if (!is.null(simple_scores)) simple_scores$separations_by_pair else NULL,
+    simple_poles = if (!is.null(simple_scores)) simple_scores$poles_by_class else NULL,
     direct_classes_coords = direct_class_scores$classes_coords,
     direct_classes_distances_by_pair = direct_class_scores$distances_by_pair
   )
@@ -342,7 +355,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
                                                              afc_max_termes = 400L,
-                                                             score_mode = "s_lexical") {
+                                                             score_mode = "afc_classes_direct") {
   mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   stats_mode <- match.arg(stats_mode)
@@ -688,7 +701,7 @@ selection_configuration_discrimination_simple_iramuteq <- function(config_base,
           candidate$config$iramuteq_svd_method %||% "",
           candidate$config$iramuteq_max_formes %||% "",
           candidate$config$iramuteq_stats_mode %||% "",
-          candidate$config$iramuteq_discrimination_simple_score_mode %||% "s_lexical",
+          candidate$config$iramuteq_discrimination_simple_score_mode %||% "afc_classes_direct",
           sep = "::"
         )
         cache_hit <- exists(chd_fingerprint, envir = chd_cache, inherits = FALSE)
@@ -846,7 +859,7 @@ tracer_scores_discrimination_simple_iramuteq <- function(metrics_df,
                                                          selected_id = NULL,
                                                          top_n = 12L,
                                                          score_column = "score_selection",
-                                                         score_label = "Score S lexical") {
+                                                         score_label = "Distance directe des classes AFC") {
   if (is.null(metrics_df) || !is.data.frame(metrics_df) || !nrow(metrics_df)) {
     plot.new()
     text(0.5, 0.5, "Aucune configuration Auto discriminante a afficher.", cex = 1.0)
@@ -1010,7 +1023,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
 
   payload <- list(
     mode = "discrimination_simple",
-    score_mode = selection_obj$score_mode %||% "s_lexical",
+    score_mode = selection_obj$score_mode %||% "afc_classes_direct",
     score_label = selection_obj$score_label %||% etiquette_mode_score_discrimination_simple_iramuteq(selection_obj$score_mode),
     search_profile = selection_obj$search_profile %||% "complet",
     search_profile_label = selection_obj$search_profile_label %||% .label_profil_exploration_discrimination_simple(selection_obj$search_profile %||% "complet"),
@@ -1046,7 +1059,7 @@ exporter_discrimination_simple_iramuteq <- function(selection_obj, output_dir) {
     metrics_df,
     selected_id = selected_df$configuration_id %||% NULL,
     score_column = selection_obj$score_column %||% "score_selection",
-    score_label = selection_obj$score_label %||% "Score S lexical"
+    score_label = selection_obj$score_label %||% "Distance directe des classes AFC"
   )
   grDevices::dev.off()
 

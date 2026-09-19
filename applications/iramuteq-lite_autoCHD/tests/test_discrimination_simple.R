@@ -53,6 +53,8 @@ direct_score <- calculer_score_classes_direct_afc_iramuteq(
 stopifnot(
   abs(direct_score$value - 5) < 1e-9,
   length(direct_score$distances_by_pair) == 3L,
+  normaliser_mode_score_discrimination_simple_iramuteq(NULL) == "afc_classes_direct",
+  normaliser_mode_score_discrimination_simple_iramuteq(NA_character_) == "afc_classes_direct",
   normaliser_mode_score_discrimination_simple_iramuteq("afc_classes_direct") == "afc_classes_direct",
   etiquette_mode_score_discrimination_simple_iramuteq("afc_classes_direct") == "Distance directe des classes AFC"
 )

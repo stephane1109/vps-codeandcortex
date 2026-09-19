@@ -1186,9 +1186,9 @@ run_batch <- function() {
     "Normal"
   )
   config_chd <- config
-  auto_discriminant_score_mode <- scalar_chr(config$iramuteq_discrimination_simple_score_mode, "s_lexical")
+  auto_discriminant_score_mode <- scalar_chr(config$iramuteq_discrimination_simple_score_mode, "afc_classes_direct")
   if (!auto_discriminant_score_mode %in% c("s_lexical", "afc_classes_direct")) {
-    auto_discriminant_score_mode <- "s_lexical"
+    auto_discriminant_score_mode <- "afc_classes_direct"
   }
   auto_discriminant_score_label <- if (identical(auto_discriminant_score_mode, "afc_classes_direct")) {
     "Distance directe des classes AFC"
