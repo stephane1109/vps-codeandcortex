@@ -1420,36 +1420,6 @@ progress {
   background: #fff;
 }
 
-.afc-plotly-container {
-  width: 100%;
-  min-height: 34rem;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fff;
-  overflow: hidden;
-}
-
-.afc-static-export-details {
-  margin-top: 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-muted);
-  overflow: hidden;
-}
-
-.afc-static-export-details summary {
-  padding: 0.7rem 0.9rem;
-  color: var(--ink-faint);
-  cursor: pointer;
-  font-size: 0.86rem;
-}
-
-.afc-static-export-details .result-image {
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-}
-
 .multimodal-youtube-preview {
   max-width: 820px;
   margin-top: 0.5rem;
