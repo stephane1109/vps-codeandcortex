@@ -3,9 +3,11 @@ import { closeParameterDialogs, createProgressionController } from "./progressio
 const CYTOSCAPE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/+esm";
 const CYTOSCAPE_FCOSE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/+esm";
 const CYTOSCAPE_BUBBLESETS_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape-bubblesets@4.1.0/+esm";
+const PLOTLY_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js";
 
 let simiCytoscapeRuntimePromise = null;
 let activeSimiCytoscape = null;
+let plotlyRuntimePromise = null;
 
 const corpusFileInput = document.getElementById("corpusFile");
 const importCorpusBtn = document.getElementById("importCorpusBtn");
@@ -9675,6 +9677,203 @@ function isAfcPlotContainer(container) {
   return container instanceof HTMLElement && AFC_PLOT_CONTAINER_IDS.has(container.id);
 }
 
+function ensurePlotlyRuntime() {
+  if (window.Plotly) return Promise.resolve(window.Plotly);
+  if (plotlyRuntimePromise) return plotlyRuntimePromise;
+
+  plotlyRuntimePromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector(`script[src="${PLOTLY_SCRIPT_URL}"]`);
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(window.Plotly), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Chargement de Plotly impossible.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = PLOTLY_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => window.Plotly ? resolve(window.Plotly) : reject(new Error("Plotly indisponible."));
+    script.onerror = () => reject(new Error("Chargement de Plotly impossible."));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    plotlyRuntimePromise = null;
+    throw error;
+  });
+
+  return plotlyRuntimePromise;
+}
+
+function findAfcCoordinateIndex(headers, axis) {
+  const normalized = headers.map((header) => normalizeAsciiKey(header).replace(/\s+/g, "_"));
+  const exactCandidates = axis === "x"
+    ? ["afc_x", "x", "dim_1", "dimension_1", "axe_1"]
+    : ["afc_y", "y", "dim_2", "dimension_2", "axe_2"];
+  const exactIndex = exactCandidates.findIndex((candidate) => normalized.includes(candidate));
+  if (exactIndex !== -1) return normalized.indexOf(exactCandidates[exactIndex]);
+
+  return normalized.findIndex((header) => axis === "x"
+    ? /(?:dim|dimension|axe)[_\s-]*1$/.test(header)
+    : /(?:dim|dimension|axe)[_\s-]*2$/.test(header));
+}
+
+function findAfcLabelIndex(headers, candidates = []) {
+  const normalized = headers.map((header) => normalizeAsciiKey(header).replace(/\s+/g, "_"));
+  for (const candidate of candidates) {
+    const index = normalized.indexOf(normalizeAsciiKey(candidate).replace(/\s+/g, "_"));
+    if (index !== -1) return index;
+  }
+  return 0;
+}
+
+function parseAfcCoordinateRows(parsed, options = {}) {
+  if (!parsed?.headers?.length) return [];
+  const xIndex = findAfcCoordinateIndex(parsed.headers, "x");
+  const yIndex = findAfcCoordinateIndex(parsed.headers, "y");
+  if (xIndex === -1 || yIndex === -1) return [];
+
+  const labelIndex = findAfcLabelIndex(parsed.headers, options.labelCandidates || []);
+  const classIndex = options.classCandidates?.length
+    ? findAfcLabelIndex(parsed.headers, options.classCandidates)
+    : -1;
+  const chi2Index = findAfcLabelIndex(parsed.headers, ["chi2"]);
+  const pValueIndex = findAfcLabelIndex(parsed.headers, ["p_value", "p", "pvalue"]);
+  const hasChi2 = parsed.headers.some((header) => normalizeAsciiKey(header) === "chi2");
+  const hasPValue = parsed.headers.some((header) => ["p_value", "p", "pvalue"].includes(normalizeAsciiKey(header)));
+
+  return parsed.rows.map((row) => {
+    const x = parseTableNumber(row[xIndex]);
+    const y = parseTableNumber(row[yIndex]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return {
+      label: String(row[labelIndex] ?? "").trim() || "Terme",
+      classLabel: classIndex === -1 ? "" : String(row[classIndex] ?? "").trim(),
+      x,
+      y,
+      chi2: hasChi2 ? parseTableNumber(row[chi2Index]) : Number.NaN,
+      pValue: hasPValue ? parseTableNumber(row[pValueIndex]) : Number.NaN
+    };
+  }).filter(Boolean);
+}
+
+function buildAfcHoverTemplate(kind) {
+  if (kind === "terms") {
+    return "<b>%{text}</b><br>Classe : %{customdata[0]}<br>x : %{x:.4f}<br>y : %{y:.4f}<br>χ² : %{customdata[1]}<br>p.value : %{customdata[2]}<extra></extra>";
+  }
+  return "<b>%{text}</b><br>x : %{x:.4f}<br>y : %{y:.4f}<extra></extra>";
+}
+
+async function renderInteractiveAfcPlot(container, options = {}) {
+  const { plotFile, coordinateFile, kind = "terms", title = "AFC interactive" } = options;
+  if (!coordinateFile) {
+    renderImage(container, plotFile, title);
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = parseCsv(await coordinateFile.text());
+  } catch (error) {
+    log(`[warning] Lecture des coordonnées AFC impossible : ${error.message}`);
+    renderImage(container, plotFile, title);
+    return;
+  }
+
+  const rows = parseAfcCoordinateRows(parsed, {
+    labelCandidates: kind === "terms" ? ["terme", "feature", "modalite", "modalite_etoilee"] : [],
+    classCandidates: kind === "terms" ? ["classe_max", "classe"] : []
+  });
+  if (!rows.length) {
+    renderImage(container, plotFile, title);
+    return;
+  }
+
+  try {
+    const Plotly = await ensurePlotlyRuntime();
+    clearContainer(container);
+    const plot = document.createElement("div");
+    plot.className = "afc-plotly-container";
+    plot.setAttribute("aria-label", `${title} interactif`);
+    container.appendChild(plot);
+
+    const palette = ["#5b8c85", "#6f86b5", "#d77a57", "#9a78a8", "#c49a4a", "#4c8caa", "#bd6470", "#6b9b63"];
+    const traces = [];
+    if (kind === "terms") {
+      const groups = new Map();
+      rows.forEach((row) => {
+        const key = row.classLabel || "Termes";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+      });
+      [...groups.entries()].forEach(([classLabel, group], index) => {
+        traces.push({
+          type: "scatter",
+          mode: "markers+text",
+          name: classLabel,
+          x: group.map((row) => row.x),
+          y: group.map((row) => row.y),
+          text: group.map((row) => row.label),
+          textposition: "top center",
+          textfont: { size: 11 },
+          marker: { size: 7, color: palette[index % palette.length], opacity: 0.82 },
+          customdata: group.map((row) => [
+            row.classLabel || "",
+            Number.isFinite(row.chi2) ? row.chi2.toFixed(3) : "",
+            Number.isFinite(row.pValue) ? row.pValue.toExponential(3) : ""
+          ]),
+          hovertemplate: buildAfcHoverTemplate("terms")
+        });
+      });
+    } else {
+      traces.push({
+        type: "scatter",
+        mode: "markers+text",
+        name: kind === "classes" ? "Classes" : "Modalités",
+        x: rows.map((row) => row.x),
+        y: rows.map((row) => row.y),
+        text: rows.map((row) => row.label),
+        textposition: "top center",
+        textfont: { size: kind === "classes" ? 13 : 11 },
+        marker: { size: kind === "classes" ? 10 : 7, color: kind === "classes" ? "#202b35" : "#6f86b5" },
+        hovertemplate: buildAfcHoverTemplate(kind)
+      });
+    }
+
+    await Plotly.newPlot(plot, traces, {
+      title: { text: `${title} interactif`, font: { size: 16 } },
+      paper_bgcolor: "#ffffff",
+      plot_bgcolor: "#ffffff",
+      margin: { l: 65, r: 25, t: 55, b: 60 },
+      xaxis: { title: "Axe 1", zeroline: true, zerolinecolor: "#c9cdd1", gridcolor: "#edf0f2" },
+      yaxis: { title: "Axe 2", zeroline: true, zerolinecolor: "#c9cdd1", gridcolor: "#edf0f2" },
+      hovermode: "closest",
+      showlegend: kind === "terms",
+      legend: { orientation: "h", y: -0.16 }
+    }, {
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ["lasso2d", "select2d"],
+      toImageButtonOptions: { format: "png", filename: "afc_interactif", scale: 2 }
+    });
+
+    if (plotFile) {
+      const details = document.createElement("details");
+      details.className = "afc-static-export-details";
+      const summary = document.createElement("summary");
+      summary.textContent = "Afficher le PNG/JPEG original pour l’export";
+      details.appendChild(summary);
+      const staticImage = document.createElement("img");
+      staticImage.className = "result-image afc-plot-image";
+      staticImage.alt = `${title} export statique`;
+      staticImage.src = createObjectUrl(plotFile);
+      details.appendChild(staticImage);
+      container.appendChild(details);
+    }
+  } catch (error) {
+    log(`[warning] AFC interactive indisponible, affichage statique conservé : ${error.message}`);
+    renderImage(container, plotFile, title);
+  }
+}
+
 function renderImage(container, file, altText, emptyMessage = "Aucun fichier image disponible.") {
   if (!clearContainer(container)) {
     return;
@@ -10142,6 +10341,15 @@ function setSimiZoom(nextZoom) {
 }
 
 function applyAfcTermsZoom() {
+  const interactivePlot = resultContainers.afcTermsPlot?.querySelector(".afc-plotly-container");
+  if (interactivePlot instanceof HTMLElement) {
+    const zoom = Math.min(3, Math.max(0.4, Number(appState.afcTermsZoom) || 1));
+    interactivePlot.style.transform = `scale(${zoom})`;
+    interactivePlot.style.transformOrigin = "top left";
+    interactivePlot.style.marginBottom = zoom > 1 ? `${Math.round((zoom - 1) * 320)}px` : "0";
+    return;
+  }
+
   const media = resultContainers.afcTermsPlot?.querySelector(".result-image");
   if (!(media instanceof HTMLElement)) return;
 
@@ -14051,17 +14259,19 @@ async function renderExports(entries, index) {
   });
 
   await safeRenderExportSection("AFC", async () => {
-    renderImage(
-      resultContainers.afcClassesPlot,
-      findFile(index, [(path) => path.endsWith("afc/afc_classes.png")]),
-      "AFC des classes"
-    );
+    await renderInteractiveAfcPlot(resultContainers.afcClassesPlot, {
+      plotFile: findFile(index, [(path) => path.endsWith("afc/afc_classes.png")]),
+      coordinateFile: findFile(index, [(path) => path.endsWith("afc/coords_classes.csv")]),
+      kind: "classes",
+      title: "AFC des classes"
+    });
 
-    renderImage(
-      resultContainers.afcTermsPlot,
-      findFile(index, [(path) => path.endsWith("afc/afc_termes.png")]),
-      "AFC des termes"
-    );
+    await renderInteractiveAfcPlot(resultContainers.afcTermsPlot, {
+      plotFile: findFile(index, [(path) => path.endsWith("afc/afc_termes.png")]),
+      coordinateFile: findFile(index, [(path) => path.endsWith("afc/stats_termes.csv")]),
+      kind: "terms",
+      title: "AFC des termes"
+    });
 
     const axisMarkersRendered = renderDiscriminationSimpleAxisMarkers(
       afcAxisMarkers,
@@ -14071,11 +14281,12 @@ async function renderExports(entries, index) {
       afcAxisMarkersCard.hidden = !axisMarkersRendered;
     }
 
-    renderImage(
-      resultContainers.afcVarsPlot,
-      findFile(index, [(path) => path.endsWith("afc/afc_variables_etoilees.png")]),
-      "AFC des variables etoilees"
-    );
+    await renderInteractiveAfcPlot(resultContainers.afcVarsPlot, {
+      plotFile: findFile(index, [(path) => path.endsWith("afc/afc_variables_etoilees.png")]),
+      coordinateFile: findFile(index, [(path) => path.endsWith("afc/coords_modalites.csv")]),
+      kind: "variables",
+      title: "AFC des variables étoilées"
+    });
 
     await renderAfcTermsByClass(
       resultContainers.afcTermsTable,
