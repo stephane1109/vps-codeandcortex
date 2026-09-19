@@ -12895,9 +12895,6 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
   const pScientificIndex = headerIndex(parsed.headers, ["p_scientifique"]);
   const pThresholdIndex = headerIndex(parsed.headers, ["p_seuil_01"]);
   const typeIndex = headerIndex(parsed.headers, ["type", "pos"]);
-  const afcXIndex = headerIndex(parsed.headers, ["afc_x", "afc x"]);
-  const afcYIndex = headerIndex(parsed.headers, ["afc_y", "afc y"]);
-  const hasAfcCoordinates = afcXIndex !== -1 || afcYIndex !== -1;
 
   let rows = parsed.rows.filter((row) => normalizeClassValue(row[classIndex]) === normalizeClassValue(classLabel));
 
@@ -12968,12 +12965,6 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
         Number.isFinite(effTotal) ? String(Math.round(effTotal)) : "",
         formatTableNumber(percentage, 2),
         formatTableNumber(chi2, 3),
-        ...(hasAfcCoordinates
-          ? [
-              afcXIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[afcXIndex]), 6),
-              afcYIndex === -1 ? "" : formatTableNumber(parseTableNumber(row[afcYIndex]), 6)
-            ]
-          : []),
         pDisplayValue,
         pScientificValue,
         pThresholdValue,
@@ -12992,7 +12983,6 @@ function extractChdStatsCloneParsed(parsed, classLabel, options = {}) {
       "eff. total",
       "pourcentage",
       "chi2",
-      ...(hasAfcCoordinates ? ["AFC x", "AFC y"] : []),
       "p.value",
       "p.value (sci.)",
       "seuil p",
@@ -13120,15 +13110,6 @@ function renderChdStatsByClass(container, parsed, options = {}) {
     tabs.appendChild(button);
     panelsWrap.appendChild(panel);
   });
-
-  const hasAfcCoordinates = headerIndex(parsed.headers, ["afc_x", "afc x"]) !== -1 ||
-    headerIndex(parsed.headers, ["afc_y", "afc y"]) !== -1;
-  if (hasAfcCoordinates) {
-    const coordinatesNote = document.createElement("p");
-    coordinatesNote.className = "field-help";
-    coordinatesNote.textContent = "Les colonnes AFC x et AFC y reprennent les positions réelles des mots sur les axes 1 et 2. Une cellule vide signifie que le mot n’a pas été projeté sur le plan AFC.";
-    container.appendChild(coordinatesNote);
-  }
 
   container.appendChild(tabs);
   container.appendChild(panelsWrap);

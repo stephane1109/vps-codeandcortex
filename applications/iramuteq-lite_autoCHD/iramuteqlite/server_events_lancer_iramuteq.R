@@ -1768,16 +1768,6 @@ register_events_lancer <- function(input, output, session, rv) {
               }
             )
 
-            if (!is.null(rv$res_stats_df) &&
-                exists("ajouter_coordonnees_afc_aux_termes_iramuteq", mode = "function", inherits = TRUE)) {
-              rv$res_stats_df <- ajouter_coordonnees_afc_aux_termes_iramuteq(
-                rv$res_stats_df,
-                obj$colcoord,
-                colonne_terme = "Terme"
-              )
-              ecrire_csv_6_decimales(rv$res_stats_df, stats_file, row.names = FALSE)
-            }
-
             rv$afc_obj <- obj
             ajouter_log(rv, "AFC classes × termes : calcul terminé.")
 

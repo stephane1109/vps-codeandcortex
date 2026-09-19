@@ -117,4 +117,4 @@ L’AFC classes × termes est calculée en 3 étapes :
 
 Le CSV `stats_termes.csv` exporte la table `rv$afc_obj$termes_stats` (jeu complet de stats AFC disponible), sans appliquer la réduction `top_termes`.
 
-Les fichiers `stats_par_classe.csv` et `afc/stats_termes.csv` ajoutent les colonnes `afc_x` et `afc_y` pour chaque mot effectivement projeté sur le plan AFC. Elles correspondent directement aux axes 1 et 2 produits par `FactoMineR::CA()`. Une cellule vide signifie que le mot ne fait pas partie de la table retenue pour l'AFC ; aucune coordonnée n'est alors inventée.
+Le fichier `afc/stats_termes.csv` ajoute les colonnes `afc_x` et `afc_y` pour chaque mot effectivement projeté sur le plan AFC. Elles correspondent directement aux axes 1 et 2 produits par `FactoMineR::CA()`. Une cellule vide signifie que le mot ne fait pas partie de la table retenue pour l'AFC ; aucune coordonnée n'est alors inventée.
