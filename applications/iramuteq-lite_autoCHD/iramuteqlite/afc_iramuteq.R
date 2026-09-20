@@ -186,6 +186,17 @@ ajouter_coordonnees_afc_aux_termes_iramuteq <- function(termes_df,
 
   st <- st[!is.na(st$Terme) & nzchar(st$Terme), , drop = FALSE]
   st <- st[normaliser_termes(st$Terme) %in% noms_coords_norm, , drop = FALSE]
+
+  # L'affichage AFC des termes est toujours limité aux formes significatives.
+  # Le calcul AFC et les fichiers de statistiques restent inchangés ; ce filtre
+  # concerne uniquement les étiquettes dessinées sur le graphique.
+  p_col <- if ("p_value" %in% names(st)) "p_value" else if ("p" %in% names(st)) "p" else NULL
+  if (!is.null(p_col)) {
+    p_values <- suppressWarnings(as.numeric(st[[p_col]]))
+    st <- st[is.finite(p_values) & !is.na(p_values) & p_values <= 0.05, , drop = FALSE]
+  }
+
+  if (!nrow(st)) return(NULL)
   st <- st[order(-st$frequency), , drop = FALSE]
   if (!nrow(st)) return(NULL)
 
@@ -568,7 +579,7 @@ tracer_afc_classes_termes <- function(
   )
   if (is.null(termes_trace)) {
     plot.new()
-    text(0.5, 0.5, "AFC : pas assez de termes à tracer.", cex = 1.1)
+    text(0.5, 0.5, "AFC : aucun terme avec p.value ≤ 0,05 à tracer.", cex = 1.1)
     return(invisible(NULL))
   }
 
