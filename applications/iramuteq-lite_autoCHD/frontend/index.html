@@ -3,7 +3,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IRAMUTEQ Lab</title>
-    <link rel="stylesheet" href="./styles.css?v=20260920-interactive-afc" />
+    <link rel="stylesheet" href="./styles.css?v=20260920-interactive-afc-zoom" />
   </head>
   <body>
     <div class="app-shell">
@@ -1079,6 +1079,8 @@
             <input id="afcInteractiveShowClasses" type="checkbox" checked />
             <span>Afficher les classes</span>
           </label>
+          <button id="afcInteractiveZoomInBtn" class="secondary-button" type="button">Zoom +</button>
+          <button id="afcInteractiveZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
           <button id="afcInteractiveResetBtn" class="secondary-button" type="button">Réinitialiser la vue</button>
         </div>
         <div id="afcInteractiveStatus" class="muted afc-interactive-status"></div>
@@ -1108,6 +1110,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260920-interactive-afc"></script>
+    <script type="module" src="./app.js?v=20260920-interactive-afc-zoom"></script>
   </body>
 </html>

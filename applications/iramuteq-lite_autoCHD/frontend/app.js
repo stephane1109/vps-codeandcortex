@@ -88,6 +88,8 @@ const afcInteractiveDialog = document.getElementById("afcInteractiveDialog");
 const afcInteractiveCloseBtn = document.getElementById("afcInteractiveCloseBtn");
 const afcInteractiveSearch = document.getElementById("afcInteractiveSearch");
 const afcInteractiveShowClasses = document.getElementById("afcInteractiveShowClasses");
+const afcInteractiveZoomInBtn = document.getElementById("afcInteractiveZoomInBtn");
+const afcInteractiveZoomOutBtn = document.getElementById("afcInteractiveZoomOutBtn");
 const afcInteractiveResetBtn = document.getElementById("afcInteractiveResetBtn");
 const afcInteractiveStatus = document.getElementById("afcInteractiveStatus");
 const afcInteractivePlot = document.getElementById("afcInteractivePlot");
@@ -9688,6 +9690,7 @@ const afcInteractiveState = {
   data: null,
   svg: null,
   plotGroup: null,
+  dataGroup: null,
   scale: 1,
   offsetX: 0,
   offsetY: 0,
@@ -9727,10 +9730,12 @@ function showAfcInteractiveTooltip(event, term) {
 }
 
 function updateAfcInteractiveTransform() {
-  if (!(afcInteractiveState.plotGroup instanceof SVGGElement)) return;
-  afcInteractiveState.plotGroup.setAttribute(
+  if (!(afcInteractiveState.dataGroup instanceof SVGGElement)) return;
+  const originX = Number(afcInteractiveState.dataGroup.dataset.originX || 0);
+  const originY = Number(afcInteractiveState.dataGroup.dataset.originY || 0);
+  afcInteractiveState.dataGroup.setAttribute(
     "transform",
-    `translate(${afcInteractiveState.offsetX} ${afcInteractiveState.offsetY}) scale(${afcInteractiveState.scale})`
+    `translate(${afcInteractiveState.offsetX} ${afcInteractiveState.offsetY}) translate(${originX} ${originY}) scale(${afcInteractiveState.scale}) translate(${-originX} ${-originY})`
   );
 }
 
@@ -9741,6 +9746,11 @@ function resetAfcInteractiveView() {
   if (afcInteractiveSearch) afcInteractiveSearch.value = "";
   updateAfcInteractiveTransform();
   updateAfcInteractiveTermVisibility();
+}
+
+function setAfcInteractiveZoom(nextScale) {
+  afcInteractiveState.scale = Math.min(5, Math.max(0.55, Number(nextScale) || 1));
+  updateAfcInteractiveTransform();
 }
 
 function updateAfcInteractiveTermVisibility() {
@@ -9806,6 +9816,11 @@ function renderAfcInteractiveSvg(data) {
   const palette = ["#5b8c85", "#6f86b5", "#d77a57", "#9a78a8", "#c49a4a", "#4c8caa", "#bd6470", "#6b9b63"];
   const classLabels = classes.map((row) => String(row.label || ""));
   const classColors = new Map(classLabels.map((label, index) => [label, palette[index % palette.length]]));
+  const dataGroup = createSvgElement("g", { class: "afc-interactive-data" });
+  dataGroup.dataset.originX = originX;
+  dataGroup.dataset.originY = originY;
+  afcInteractiveState.dataGroup = dataGroup;
+  plotGroup.appendChild(dataGroup);
   const classesGroup = createSvgElement("g", { class: "afc-interactive-classes" });
   classes.forEach((row) => {
     const x = mapX(row.x);
@@ -9815,7 +9830,7 @@ function renderAfcInteractiveSvg(data) {
     label.textContent = row.label || "Classe";
     classesGroup.appendChild(label);
   });
-  plotGroup.appendChild(classesGroup);
+  dataGroup.appendChild(classesGroup);
 
   const termsGroup = createSvgElement("g", { class: "afc-interactive-terms" });
   terms.forEach((term) => {
@@ -9840,13 +9855,12 @@ function renderAfcInteractiveSvg(data) {
     });
     termsGroup.appendChild(node);
   });
-  plotGroup.appendChild(termsGroup);
+  dataGroup.appendChild(termsGroup);
 
   svg.addEventListener("wheel", (event) => {
     event.preventDefault();
     const direction = event.deltaY < 0 ? 1.12 : 0.89;
-    afcInteractiveState.scale = Math.min(5, Math.max(0.55, afcInteractiveState.scale * direction));
-    updateAfcInteractiveTransform();
+    setAfcInteractiveZoom(afcInteractiveState.scale * direction);
   }, { passive: false });
   svg.addEventListener("pointerdown", (event) => {
     afcInteractiveState.drag = { x: event.clientX, y: event.clientY, offsetX: afcInteractiveState.offsetX, offsetY: afcInteractiveState.offsetY };
@@ -15013,6 +15027,12 @@ afcInteractiveShowClasses?.addEventListener("change", () => {
   if (classesGroup instanceof SVGElement) {
     classesGroup.style.display = afcInteractiveShowClasses.checked ? "" : "none";
   }
+});
+afcInteractiveZoomInBtn?.addEventListener("click", () => {
+  setAfcInteractiveZoom(afcInteractiveState.scale * 1.2);
+});
+afcInteractiveZoomOutBtn?.addEventListener("click", () => {
+  setAfcInteractiveZoom(afcInteractiveState.scale * 0.83);
 });
 afcInteractiveResetBtn?.addEventListener("click", resetAfcInteractiveView);
 
