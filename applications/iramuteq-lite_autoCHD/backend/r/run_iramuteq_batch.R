@@ -211,6 +211,7 @@ source(file.path(repo_root, "iramuteqlite", "iramuteq_bars.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "dendrogramme_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_helpers_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_iramuteq.R"), local = TRUE)
+source(file.path(repo_root, "iramuteqlite", "graph_interactif.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "wordcloud_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "concordancier-iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "simi.R"), local = TRUE)
@@ -1902,6 +1903,21 @@ run_batch <- function() {
     ecrire_csv_6_decimales(afc_obj$rowcoord, file.path(afc_dir, "coords_classes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$colcoord, file.path(afc_dir, "coords_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$termes_stats, file.path(afc_dir, "stats_termes.csv"), row.names = FALSE)
+    graph_interactif_file <- file.path(afc_dir, "graph_interactif.json")
+    tryCatch(
+      ecrire_graph_interactif_afc(
+        coords_classes_file = file.path(afc_dir, "coords_classes.csv"),
+        coords_termes_file = file.path(afc_dir, "coords_termes.csv"),
+        stats_termes_file = file.path(afc_dir, "stats_termes.csv"),
+        output_file = graph_interactif_file,
+        seuil_p = 0.05,
+        top_termes = 120L
+      ),
+      error = function(e) {
+        graph_interactif_file <<- NULL
+        log_info(paste0("Graphe AFC interactif indisponible : ", e$message))
+      }
+    )
     if (identical(classes_mode, "discrimination_simple") &&
         is.list(res_ira$simple_discriminant_selection) &&
         is.data.frame(mots_reperes_axes_final)) {
@@ -1923,6 +1939,7 @@ run_batch <- function() {
     artifacts$afc <- list(
       afc_classes_png = relative_to_output(afc_classes_png),
       afc_termes_png = relative_to_output(afc_termes_png),
+      graph_interactif_json = if (!is.null(graph_interactif_file)) relative_to_output(graph_interactif_file) else NULL,
       coords_termes_csv = relative_to_output(file.path(afc_dir, "coords_termes.csv")),
       stats_termes_csv = relative_to_output(file.path(afc_dir, "stats_termes.csv")),
       valeurs_propres_csv = relative_to_output(file.path(afc_dir, "valeurs_propres.csv"))

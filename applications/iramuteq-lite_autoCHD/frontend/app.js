@@ -83,6 +83,14 @@ const applyMultimodalCompareAbDialogBtn = document.getElementById("applyMultimod
 const afcTermsZoomInBtn = document.getElementById("afcTermsZoomInBtn");
 const afcTermsZoomOutBtn = document.getElementById("afcTermsZoomOutBtn");
 const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
+const afcInteractiveOpenBtn = document.getElementById("afcInteractiveOpenBtn");
+const afcInteractiveDialog = document.getElementById("afcInteractiveDialog");
+const afcInteractiveCloseBtn = document.getElementById("afcInteractiveCloseBtn");
+const afcInteractiveSearch = document.getElementById("afcInteractiveSearch");
+const afcInteractiveShowClasses = document.getElementById("afcInteractiveShowClasses");
+const afcInteractiveResetBtn = document.getElementById("afcInteractiveResetBtn");
+const afcInteractiveStatus = document.getElementById("afcInteractiveStatus");
+const afcInteractivePlot = document.getElementById("afcInteractivePlot");
 const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcVarsPlot"]);
 const simiZoomInBtn = document.getElementById("simiZoomInBtn");
 const simiZoomOutBtn = document.getElementById("simiZoomOutBtn");
@@ -428,6 +436,7 @@ const appState = {
     fullscreen: false,
   },
   afcTermsZoom: 1,
+  afcInteractiveDataFile: null,
   simiZoom: 1,
   imagePreviewItems: [],
   imagePreviewIndex: -1,
@@ -9675,6 +9684,203 @@ function isAfcPlotContainer(container) {
   return container instanceof HTMLElement && AFC_PLOT_CONTAINER_IDS.has(container.id);
 }
 
+const afcInteractiveState = {
+  data: null,
+  svg: null,
+  plotGroup: null,
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  drag: null,
+  tooltip: null
+};
+
+function createSvgElement(tagName, attributes = {}) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tagName);
+  Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, String(value)));
+  return element;
+}
+
+function closeAfcInteractiveTooltip() {
+  afcInteractiveState.tooltip?.remove();
+  afcInteractiveState.tooltip = null;
+}
+
+function showAfcInteractiveTooltip(event, term) {
+  closeAfcInteractiveTooltip();
+  const tooltip = document.createElement("div");
+  tooltip.className = "afc-interactive-tooltip";
+  const pValue = Number(term.p_value);
+  const chi2 = Number(term.chi2);
+  tooltip.textContent = [
+    term.label,
+    `Classe : ${term.classe || "non déterminée"}`,
+    `x : ${Number(term.x).toFixed(4)}`,
+    `y : ${Number(term.y).toFixed(4)}`,
+    `χ² : ${Number.isFinite(chi2) ? chi2.toFixed(3) : "indisponible"}`,
+    `p.value : ${Number.isFinite(pValue) ? pValue.toExponential(3) : "indisponible"}`
+  ].join("\n");
+  tooltip.style.left = `${Math.min(window.innerWidth - 330, event.clientX + 14)}px`;
+  tooltip.style.top = `${Math.min(window.innerHeight - 160, event.clientY + 14)}px`;
+  document.body.appendChild(tooltip);
+  afcInteractiveState.tooltip = tooltip;
+}
+
+function updateAfcInteractiveTransform() {
+  if (!(afcInteractiveState.plotGroup instanceof SVGGElement)) return;
+  afcInteractiveState.plotGroup.setAttribute(
+    "transform",
+    `translate(${afcInteractiveState.offsetX} ${afcInteractiveState.offsetY}) scale(${afcInteractiveState.scale})`
+  );
+}
+
+function resetAfcInteractiveView() {
+  afcInteractiveState.scale = 1;
+  afcInteractiveState.offsetX = 0;
+  afcInteractiveState.offsetY = 0;
+  if (afcInteractiveSearch) afcInteractiveSearch.value = "";
+  updateAfcInteractiveTransform();
+  updateAfcInteractiveTermVisibility();
+}
+
+function updateAfcInteractiveTermVisibility() {
+  const query = String(afcInteractiveSearch?.value || "").trim().toLocaleLowerCase();
+  const terms = afcInteractiveState.plotGroup?.querySelectorAll(".afc-interactive-term") || [];
+  terms.forEach((termNode) => {
+    const label = String(termNode.dataset.label || "").toLocaleLowerCase();
+    const matches = !query || label.includes(query);
+    termNode.style.opacity = matches ? "1" : "0.14";
+  });
+}
+
+function renderAfcInteractiveSvg(data) {
+  if (!(afcInteractivePlot instanceof HTMLElement)) return;
+  clearContainer(afcInteractivePlot);
+  closeAfcInteractiveTooltip();
+
+  const classes = Array.isArray(data?.classes) ? data.classes : [];
+  const terms = Array.isArray(data?.termes) ? data.termes : [];
+  if (!classes.length && !terms.length) {
+    afcInteractivePlot.appendChild(createEmptyState("Aucune coordonnée AFC interactive disponible."));
+    return;
+  }
+
+  const width = 1000;
+  const height = 650;
+  const padding = { left: 78, right: 28, top: 32, bottom: 58 };
+  const xValues = [...classes, ...terms].map((row) => Number(row.x)).filter(Number.isFinite);
+  const yValues = [...classes, ...terms].map((row) => Number(row.y)).filter(Number.isFinite);
+  const maxAbs = Math.max(1, ...xValues.map(Math.abs), ...yValues.map(Math.abs)) * 1.12;
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const mapX = (value) => padding.left + ((Number(value) + maxAbs) / (2 * maxAbs)) * innerWidth;
+  const mapY = (value) => padding.top + (1 - ((Number(value) + maxAbs) / (2 * maxAbs))) * innerHeight;
+  const originX = mapX(0);
+  const originY = mapY(0);
+
+  const svg = createSvgElement("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    preserveAspectRatio: "xMidYMid meet"
+  });
+  afcInteractiveState.data = data;
+  afcInteractiveState.svg = svg;
+  afcInteractiveState.scale = 1;
+  afcInteractiveState.offsetX = 0;
+  afcInteractiveState.offsetY = 0;
+  const plotGroup = createSvgElement("g");
+  afcInteractiveState.plotGroup = plotGroup;
+  svg.appendChild(plotGroup);
+
+  plotGroup.appendChild(createSvgElement("rect", { x: 0, y: 0, width, height, fill: "#ffffff" }));
+  plotGroup.appendChild(createSvgElement("line", { x1: padding.left, y1: originY, x2: width - padding.right, y2: originY, stroke: "#c9cdd1" }));
+  plotGroup.appendChild(createSvgElement("line", { x1: originX, y1: padding.top, x2: originX, y2: height - padding.bottom, stroke: "#c9cdd1" }));
+
+  const xAxisLabel = createSvgElement("text", { x: width - padding.right, y: height - 18, "text-anchor": "end", fill: "#4c5963", "font-size": 14 });
+  xAxisLabel.textContent = data?.axes?.x || "Axe 1";
+  plotGroup.appendChild(xAxisLabel);
+  const yAxisLabel = createSvgElement("text", { x: 18, y: padding.top, fill: "#4c5963", "font-size": 14 });
+  yAxisLabel.textContent = data?.axes?.y || "Axe 2";
+  yAxisLabel.setAttribute("transform", `rotate(-90 18 ${padding.top})`);
+  plotGroup.appendChild(yAxisLabel);
+
+  const palette = ["#5b8c85", "#6f86b5", "#d77a57", "#9a78a8", "#c49a4a", "#4c8caa", "#bd6470", "#6b9b63"];
+  const classLabels = classes.map((row) => String(row.label || ""));
+  const classColors = new Map(classLabels.map((label, index) => [label, palette[index % palette.length]]));
+  const classesGroup = createSvgElement("g", { class: "afc-interactive-classes" });
+  classes.forEach((row) => {
+    const x = mapX(row.x);
+    const y = mapY(row.y);
+    classesGroup.appendChild(createSvgElement("circle", { cx: x, cy: y, r: 6, fill: "#202b35" }));
+    const label = createSvgElement("text", { x, y: y - 11, "text-anchor": "middle", fill: "#202b35", "font-size": 14, "font-weight": "700" });
+    label.textContent = row.label || "Classe";
+    classesGroup.appendChild(label);
+  });
+  plotGroup.appendChild(classesGroup);
+
+  const termsGroup = createSvgElement("g", { class: "afc-interactive-terms" });
+  terms.forEach((term) => {
+    const node = createSvgElement("text", {
+      x: mapX(term.x),
+      y: mapY(term.y),
+      "text-anchor": "middle",
+      fill: classColors.get(String(term.classe || "")) || "#5b6570",
+      "font-size": 13,
+      class: "afc-interactive-term"
+    });
+    node.dataset.label = String(term.label || "");
+    node.textContent = String(term.label || "");
+    node.addEventListener("mouseenter", (event) => {
+      node.classList.add("is-highlighted");
+      showAfcInteractiveTooltip(event, term);
+    });
+    node.addEventListener("mousemove", (event) => showAfcInteractiveTooltip(event, term));
+    node.addEventListener("mouseleave", () => {
+      node.classList.remove("is-highlighted");
+      closeAfcInteractiveTooltip();
+    });
+    termsGroup.appendChild(node);
+  });
+  plotGroup.appendChild(termsGroup);
+
+  svg.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const direction = event.deltaY < 0 ? 1.12 : 0.89;
+    afcInteractiveState.scale = Math.min(5, Math.max(0.55, afcInteractiveState.scale * direction));
+    updateAfcInteractiveTransform();
+  }, { passive: false });
+  svg.addEventListener("pointerdown", (event) => {
+    afcInteractiveState.drag = { x: event.clientX, y: event.clientY, offsetX: afcInteractiveState.offsetX, offsetY: afcInteractiveState.offsetY };
+    svg.setPointerCapture(event.pointerId);
+  });
+  svg.addEventListener("pointermove", (event) => {
+    if (!afcInteractiveState.drag) return;
+    afcInteractiveState.offsetX = afcInteractiveState.drag.offsetX + (event.clientX - afcInteractiveState.drag.x);
+    afcInteractiveState.offsetY = afcInteractiveState.drag.offsetY + (event.clientY - afcInteractiveState.drag.y);
+    updateAfcInteractiveTransform();
+  });
+  svg.addEventListener("pointerup", () => { afcInteractiveState.drag = null; });
+  svg.addEventListener("pointercancel", () => { afcInteractiveState.drag = null; });
+  afcInteractivePlot.appendChild(svg);
+  updateAfcInteractiveTermVisibility();
+  if (afcInteractiveStatus) {
+    afcInteractiveStatus.textContent = `${terms.length} terme(s) significatif(s) affiché(s) (p.value ≤ 0,05).`;
+  }
+}
+
+async function openAfcInteractiveExplorer() {
+  const file = appState.afcInteractiveDataFile;
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    renderAfcInteractiveSvg(data);
+    if (typeof afcInteractiveDialog?.showModal === "function") afcInteractiveDialog.showModal();
+    else if (afcInteractiveDialog) afcInteractiveDialog.hidden = false;
+  } catch (error) {
+    log(`[error] Lecture du graphe AFC interactif impossible : ${error.message}`);
+    if (afcInteractiveStatus) afcInteractiveStatus.textContent = "Impossible de charger les données AFC interactives.";
+  }
+}
+
 function renderImage(container, file, altText, emptyMessage = "Aucun fichier image disponible.") {
   if (!clearContainer(container)) {
     return;
@@ -14051,6 +14257,11 @@ async function renderExports(entries, index) {
   });
 
   await safeRenderExportSection("AFC", async () => {
+    appState.afcInteractiveDataFile = findFile(index, [(path) => path.endsWith("afc/graph_interactif.json")]);
+    if (afcInteractiveOpenBtn) {
+      afcInteractiveOpenBtn.disabled = !appState.afcInteractiveDataFile;
+    }
+
     renderImage(
       resultContainers.afcClassesPlot,
       findFile(index, [(path) => path.endsWith("afc/afc_classes.png")]),
@@ -14202,6 +14413,7 @@ function resetResultPanes() {
   appState.exportsFolderName = null;
   appState.exportEntries = [];
   appState.activeAnalysisHistoryId = null;
+  appState.afcInteractiveDataFile = null;
   appState.chdSegmentsByClass = new Map();
   appState.discriminationSimpleSummaryPayload = null;
   appState.jsdConcordancierRows = [];
@@ -14214,6 +14426,7 @@ function resetResultPanes() {
   appState.afcTermsZoom = 1;
   appState.simiZoom = 1;
   resetSimiTermsState();
+  if (afcInteractiveOpenBtn) afcInteractiveOpenBtn.disabled = true;
   clearContainer(afcAxisMarkers);
   if (afcAxisMarkersCard instanceof HTMLElement) {
     afcAxisMarkersCard.hidden = true;
@@ -14783,6 +14996,25 @@ afcTermsZoomOutBtn?.addEventListener("click", () => {
 afcTermsZoomResetBtn?.addEventListener("click", () => {
   setAfcTermsZoom(1);
 });
+
+afcInteractiveOpenBtn?.addEventListener("click", () => {
+  void openAfcInteractiveExplorer();
+});
+
+afcInteractiveCloseBtn?.addEventListener("click", () => {
+  closeAfcInteractiveTooltip();
+  if (typeof afcInteractiveDialog?.close === "function") afcInteractiveDialog.close();
+  else if (afcInteractiveDialog) afcInteractiveDialog.hidden = true;
+});
+
+afcInteractiveSearch?.addEventListener("input", updateAfcInteractiveTermVisibility);
+afcInteractiveShowClasses?.addEventListener("change", () => {
+  const classesGroup = afcInteractiveState.plotGroup?.querySelector(".afc-interactive-classes");
+  if (classesGroup instanceof SVGElement) {
+    classesGroup.style.display = afcInteractiveShowClasses.checked ? "" : "none";
+  }
+});
+afcInteractiveResetBtn?.addEventListener("click", resetAfcInteractiveView);
 
 launchSuiviDialogBtn?.addEventListener("click", () => {
   applyDialogValues(suiviConfigDialogContent);

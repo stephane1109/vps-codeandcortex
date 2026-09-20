@@ -3,7 +3,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IRAMUTEQ Lab</title>
-    <link rel="stylesheet" href="./styles.css?v=20260919-axis-markers" />
+    <link rel="stylesheet" href="./styles.css?v=20260920-interactive-afc" />
   </head>
   <body>
     <div class="app-shell">
@@ -339,6 +339,7 @@
                   <button id="afcTermsZoomInBtn" class="secondary-button" type="button">Zoom +</button>
                   <button id="afcTermsZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
                   <button id="afcTermsZoomResetBtn" class="secondary-button" type="button">Réinitialiser</button>
+                  <button id="afcInteractiveOpenBtn" class="primary-button" type="button" disabled>Explorer l'AFC</button>
                 </div>
                 <div id="afcTermsPlot" class="result-pane"></div>
               </article>
@@ -1061,6 +1062,30 @@
       </div>
     </dialog>
 
+    <dialog id="afcInteractiveDialog" class="dialog-panel afc-interactive-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">AFC interactive</p>
+            <h2>Explorer l'AFC</h2>
+            <p class="muted">Survolez un terme pour afficher ses informations. Faites glisser le graphique pour le déplacer et utilisez la molette pour zoomer.</p>
+          </div>
+          <button id="afcInteractiveCloseBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+        <div class="afc-interactive-toolbar">
+          <label for="afcInteractiveSearch">Rechercher un terme</label>
+          <input id="afcInteractiveSearch" type="search" placeholder="ex. psychiatrie" autocomplete="off" />
+          <label class="check-option" for="afcInteractiveShowClasses">
+            <input id="afcInteractiveShowClasses" type="checkbox" checked />
+            <span>Afficher les classes</span>
+          </label>
+          <button id="afcInteractiveResetBtn" class="secondary-button" type="button">Réinitialiser la vue</button>
+        </div>
+        <div id="afcInteractiveStatus" class="muted afc-interactive-status"></div>
+        <div id="afcInteractivePlot" class="afc-interactive-plot" role="img" aria-label="Graphique AFC interactif"></div>
+      </div>
+    </dialog>
+
     <dialog id="termSegmentsDialog" class="dialog-panel term-segments-dialog">
       <div class="dialog-card">
         <header class="dialog-header">
@@ -1083,6 +1108,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260919-afc-eigenvalues-fr-2digits"></script>
+    <script type="module" src="./app.js?v=20260920-interactive-afc"></script>
   </body>
 </html>

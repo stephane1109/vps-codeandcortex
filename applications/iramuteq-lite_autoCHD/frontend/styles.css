@@ -1420,6 +1420,83 @@ progress {
   background: #fff;
 }
 
+.afc-interactive-dialog {
+  width: min(96vw, 1180px);
+  max-width: 1180px;
+  padding: 0;
+}
+
+.afc-interactive-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.afc-interactive-toolbar label[for="afcInteractiveSearch"] {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.afc-interactive-toolbar input[type="search"] {
+  min-width: 14rem;
+  flex: 1 1 16rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.afc-interactive-status {
+  padding: 0.65rem 1.2rem 0;
+}
+
+.afc-interactive-plot {
+  min-height: min(72vh, 660px);
+  padding: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.afc-interactive-plot svg {
+  display: block;
+  width: 100%;
+  height: min(70vh, 640px);
+  min-height: 34rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.afc-interactive-term {
+  cursor: pointer;
+  transition: font-size 120ms ease, font-weight 120ms ease, opacity 120ms ease;
+}
+
+.afc-interactive-term:hover,
+.afc-interactive-term.is-highlighted {
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.afc-interactive-tooltip {
+  position: fixed;
+  z-index: 20;
+  max-width: 20rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(31, 42, 51, 0.22);
+  border-radius: 9px;
+  background: rgba(31, 42, 51, 0.96);
+  color: #fff;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(31, 42, 51, 0.2);
+}
+
 .multimodal-youtube-preview {
   max-width: 820px;
   margin-top: 0.5rem;
