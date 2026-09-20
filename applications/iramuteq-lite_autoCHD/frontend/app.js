@@ -9881,12 +9881,13 @@ function renderAfcInteractiveSvg(data) {
   }
 }
 
-async function openAfcInteractiveExplorer() {
+async function openAfcInteractiveExplorer(initialZoom = 1) {
   const file = appState.afcInteractiveDataFile;
   if (!file) return;
   try {
     const data = JSON.parse(await file.text());
     renderAfcInteractiveSvg(data);
+    setAfcInteractiveZoom(initialZoom);
     if (typeof afcInteractiveDialog?.showModal === "function") afcInteractiveDialog.showModal();
     else if (afcInteractiveDialog) afcInteractiveDialog.hidden = false;
   } catch (error) {
@@ -15000,15 +15001,27 @@ simiZoomResetBtn?.addEventListener("click", () => {
 });
 
 afcTermsZoomInBtn?.addEventListener("click", () => {
-  setAfcTermsZoom(appState.afcTermsZoom + 0.2);
+  if (appState.afcInteractiveDataFile) {
+    void openAfcInteractiveExplorer(Math.min(5, afcInteractiveState.scale * 1.2));
+  } else {
+    setAfcTermsZoom(appState.afcTermsZoom + 0.2);
+  }
 });
 
 afcTermsZoomOutBtn?.addEventListener("click", () => {
-  setAfcTermsZoom(appState.afcTermsZoom - 0.2);
+  if (appState.afcInteractiveDataFile) {
+    void openAfcInteractiveExplorer(Math.max(0.55, afcInteractiveState.scale * 0.83));
+  } else {
+    setAfcTermsZoom(appState.afcTermsZoom - 0.2);
+  }
 });
 
 afcTermsZoomResetBtn?.addEventListener("click", () => {
-  setAfcTermsZoom(1);
+  if (appState.afcInteractiveDataFile) {
+    void openAfcInteractiveExplorer(1);
+  } else {
+    setAfcTermsZoom(1);
+  }
 });
 
 afcInteractiveOpenBtn?.addEventListener("click", () => {
