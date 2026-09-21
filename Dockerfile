@@ -15,7 +15,7 @@ COPY assets /app/assets
 # #### VARIABLES D'ENVIRONNEMENT IMPORTANTES
 # - REDIS_URL=redis://:motdepasse@redis:6379/0
 # - ne pas utiliser APP_TICKET_DEFAULT_REDIS_URL sur ce dashboard
-# - CAPACITE_SERVEUR=6
+# - CAPACITE_SERVEUR=10
 # - APPLICATIONS_TICKETS_JSON={...}
 
 EXPOSE 8000

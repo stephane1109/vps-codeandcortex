@@ -55,7 +55,7 @@ La ligne `charge x/y` en haut de la page signifie :
 - `x` = charge actuellement consommée ;
 - `y` = capacité totale autorisée du serveur.
 
-Sur cette architecture, la capacité globale par défaut est pilotée par `CAPACITE_SERVEUR`, généralement réglée à `6`.
+Sur cette architecture, la capacité globale par défaut est pilotée par `CAPACITE_SERVEUR`, généralement réglée à `10`.
 
 Chaque application consomme un coût différent :
 

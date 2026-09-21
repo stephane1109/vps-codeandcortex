@@ -12,7 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover - dépend de l'environnement loc
     redis = None
 
 
-CAPACITE_SERVEUR_DEFAUT = 6
+CAPACITE_SERVEUR_DEFAUT = 10
 DUREE_TICKET_DEFAUT = 3600
 MAX_ACTIVE_DEFAUT = 3
 MAX_FILE_ATTENTE_DEFAUT = 20
