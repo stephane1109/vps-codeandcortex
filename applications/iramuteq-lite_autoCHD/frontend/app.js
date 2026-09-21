@@ -308,6 +308,7 @@ const resultContainers = {
   chdWordclouds: document.getElementById("chdWordclouds"),
   afcClassesPlot: document.getElementById("afcClassesPlot"),
   afcTermsPlot: document.getElementById("afcTermsPlot"),
+  afcExtremesPlot: document.getElementById("afcExtremesPlot"),
   afcTermsTable: document.getElementById("afcTermsTable"),
   afcVarsPlot: document.getElementById("afcVarsPlot"),
   afcVarsTable: document.getElementById("afcVarsTable"),
@@ -14333,6 +14334,12 @@ async function renderExports(entries, index) {
       resultContainers.afcTermsPlot,
       findFile(index, [(path) => path.endsWith("afc/afc_termes.png")]),
       "AFC des termes"
+    );
+
+    renderImage(
+      resultContainers.afcExtremesPlot,
+      findFile(index, [(path) => path.endsWith("afc/afc_termes_extremes.png")]),
+      "AFC des termes significatifs les plus extrêmes"
     );
 
     const axisMarkersRendered = renderDiscriminationSimpleAxisMarkers(

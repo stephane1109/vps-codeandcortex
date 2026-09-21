@@ -211,6 +211,7 @@ source(file.path(repo_root, "iramuteqlite", "iramuteq_bars.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "dendrogramme_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_helpers_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_iramuteq.R"), local = TRUE)
+source(file.path(repo_root, "iramuteqlite", "afc_extremes.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "graph_interactif.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "wordcloud_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "concordancier-iramuteq.R"), local = TRUE)
@@ -1849,6 +1850,19 @@ run_batch <- function() {
 
     afc_classes_png <- NULL
     afc_termes_png <- NULL
+    afc_extremes_png <- NULL
+    termes_extremes_afc <- tryCatch(
+      selectionner_termes_extremes_afc(
+        afc_obj = afc_obj,
+        stats_df = afc_obj$termes_stats,
+        top_n = 3L,
+        p_seuil = scalar_num(config$max_p, 0.05)
+      ),
+      error = function(e_extremes) {
+        log_info(paste0("AFC termes extremes indisponible : ", e_extremes$message))
+        data.frame(classe = character(), terme = character(), x = numeric(), y = numeric(), distance_origine = numeric(), chi2 = numeric(), p_value = numeric(), stringsAsFactors = FALSE)
+      }
+    )
     if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
       activer_repel <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
       taille_sel <- scalar_chr(config$afc_taille_mots, "frequency")
@@ -1890,6 +1904,17 @@ run_batch <- function() {
         }
       )
       grDevices::dev.off()
+      afc_extremes_png <- file.path(afc_dir, "afc_termes_extremes.png")
+      grDevices::png(afc_extremes_png, width = 2000, height = 1600, res = 180)
+      tryCatch(
+        tracer_afc_termes_extremes(afc_obj, termes_extremes_afc, axes = c(1, 2)),
+        error = function(e) {
+          plot.new()
+          text(0.5, 0.5, paste0("AFC termes extremes indisponible : ", e$message), cex = 1.0)
+          log_info(paste0("AFC termes extremes : rendu de secours utilise (", e$message, ")."))
+        }
+      )
+      grDevices::dev.off()
       if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
         log_info("AFC classes x termes : calcul terminé.", progress = 78)
       } else {
@@ -1903,6 +1928,7 @@ run_batch <- function() {
     ecrire_csv_6_decimales(afc_obj$rowcoord, file.path(afc_dir, "coords_classes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$colcoord, file.path(afc_dir, "coords_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$termes_stats, file.path(afc_dir, "stats_termes.csv"), row.names = FALSE)
+    ecrire_csv_6_decimales(termes_extremes_afc, file.path(afc_dir, "termes_extremes_afc.csv"), row.names = FALSE)
     graph_interactif_file <- file.path(afc_dir, "graph_interactif.json")
     graph_interactif_leaflet_file <- file.path(afc_dir, "graph_interactif_leaflet.html")
     tryCatch(
@@ -1954,6 +1980,8 @@ run_batch <- function() {
     artifacts$afc <- list(
       afc_classes_png = relative_to_output(afc_classes_png),
       afc_termes_png = relative_to_output(afc_termes_png),
+      afc_termes_extremes_png = if (!is.null(afc_extremes_png)) relative_to_output(afc_extremes_png) else NULL,
+      termes_extremes_afc_csv = relative_to_output(file.path(afc_dir, "termes_extremes_afc.csv")),
       graph_interactif_json = if (!is.null(graph_interactif_file)) relative_to_output(graph_interactif_file) else NULL,
       graph_interactif_leaflet_html = if (!is.null(graph_interactif_leaflet_file)) relative_to_output(graph_interactif_leaflet_file) else NULL,
       coords_termes_csv = relative_to_output(file.path(afc_dir, "coords_termes.csv")),
