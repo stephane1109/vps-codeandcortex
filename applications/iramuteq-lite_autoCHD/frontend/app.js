@@ -84,6 +84,11 @@ const afcTermsZoomInBtn = document.getElementById("afcTermsZoomInBtn");
 const afcTermsZoomOutBtn = document.getElementById("afcTermsZoomOutBtn");
 const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
 const afcInteractiveOpenBtn = document.getElementById("afcInteractiveOpenBtn");
+const afcLeafletOpenBtn = document.getElementById("afcLeafletOpenBtn");
+const afcLeafletDialog = document.getElementById("afcLeafletDialog");
+const afcLeafletCloseBtn = document.getElementById("afcLeafletCloseBtn");
+const afcLeafletFrame = document.getElementById("afcLeafletFrame");
+const afcLeafletStatus = document.getElementById("afcLeafletStatus");
 const afcInteractiveDialog = document.getElementById("afcInteractiveDialog");
 const afcInteractiveCloseBtn = document.getElementById("afcInteractiveCloseBtn");
 const afcInteractiveSearch = document.getElementById("afcInteractiveSearch");
@@ -439,6 +444,7 @@ const appState = {
   },
   afcTermsZoom: 1,
   afcInteractiveDataFile: null,
+  afcLeafletHtmlFile: null,
   simiZoom: 1,
   imagePreviewItems: [],
   imagePreviewIndex: -1,
@@ -9918,6 +9924,20 @@ async function openAfcInteractiveExplorer(initialZoom = 1) {
   }
 }
 
+async function openAfcLeafletExplorer() {
+  const file = appState.afcLeafletHtmlFile;
+  if (!file || !(afcLeafletFrame instanceof HTMLIFrameElement)) return;
+  try {
+    afcLeafletFrame.srcdoc = await file.text();
+    if (afcLeafletStatus) afcLeafletStatus.textContent = "Carte AFC interactive prête.";
+    if (typeof afcLeafletDialog?.showModal === "function") afcLeafletDialog.showModal();
+    else if (afcLeafletDialog) afcLeafletDialog.hidden = false;
+  } catch (error) {
+    log(`[error] Lecture de la carte AFC Leaflet impossible : ${error.message}`);
+    if (afcLeafletStatus) afcLeafletStatus.textContent = "Impossible de charger la carte AFC interactive.";
+  }
+}
+
 function renderImage(container, file, altText, emptyMessage = "Aucun fichier image disponible.") {
   if (!clearContainer(container)) {
     return;
@@ -14295,8 +14315,12 @@ async function renderExports(entries, index) {
 
   await safeRenderExportSection("AFC", async () => {
     appState.afcInteractiveDataFile = findFile(index, [(path) => path.endsWith("afc/graph_interactif.json")]);
+    appState.afcLeafletHtmlFile = findFile(index, [(path) => path.endsWith("afc/graph_interactif_leaflet.html")]);
     if (afcInteractiveOpenBtn) {
       afcInteractiveOpenBtn.disabled = !appState.afcInteractiveDataFile;
+    }
+    if (afcLeafletOpenBtn) {
+      afcLeafletOpenBtn.disabled = !appState.afcLeafletHtmlFile;
     }
 
     renderImage(
@@ -14451,6 +14475,9 @@ function resetResultPanes() {
   appState.exportEntries = [];
   appState.activeAnalysisHistoryId = null;
   appState.afcInteractiveDataFile = null;
+  appState.afcLeafletHtmlFile = null;
+  if (afcInteractiveOpenBtn) afcInteractiveOpenBtn.disabled = true;
+  if (afcLeafletOpenBtn) afcLeafletOpenBtn.disabled = true;
   appState.chdSegmentsByClass = new Map();
   appState.discriminationSimpleSummaryPayload = null;
   appState.jsdConcordancierRows = [];
@@ -15048,6 +15075,16 @@ afcTermsZoomResetBtn?.addEventListener("click", () => {
 
 afcInteractiveOpenBtn?.addEventListener("click", () => {
   void openAfcInteractiveExplorer();
+});
+
+afcLeafletOpenBtn?.addEventListener("click", () => {
+  void openAfcLeafletExplorer();
+});
+
+afcLeafletCloseBtn?.addEventListener("click", () => {
+  if (afcLeafletFrame instanceof HTMLIFrameElement) afcLeafletFrame.srcdoc = "";
+  if (typeof afcLeafletDialog?.close === "function") afcLeafletDialog.close();
+  else if (afcLeafletDialog) afcLeafletDialog.hidden = true;
 });
 
 afcInteractiveCloseBtn?.addEventListener("click", () => {

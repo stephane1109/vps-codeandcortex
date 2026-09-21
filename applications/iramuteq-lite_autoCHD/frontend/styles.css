@@ -1426,6 +1426,21 @@ progress {
   padding: 0;
 }
 
+.afc-leaflet-dialog {
+  width: min(96vw, 1240px);
+  max-width: 1240px;
+  padding: 0;
+}
+
+.afc-leaflet-frame {
+  display: block;
+  width: 100%;
+  height: min(76vh, 720px);
+  min-height: 38rem;
+  border: 0;
+  background: #fff;
+}
+
 .afc-interactive-toolbar {
   display: flex;
   flex-wrap: wrap;

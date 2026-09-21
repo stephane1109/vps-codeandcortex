@@ -195,7 +195,7 @@ if (!dir.exists(file.path(repo_root, "iramuteqlite"))) {
 
 required_packages <- c(
   "jsonlite", "quanteda", "Matrix", "dplyr", "wordcloud", "RColorBrewer",
-  "FactoMineR", "igraph", "proxy", "htmltools", "factoextra"
+  "FactoMineR", "igraph", "proxy", "htmltools", "htmlwidgets", "leaflet", "factoextra"
 )
 missing_packages <- required_packages[!vapply(required_packages, requireNamespace, quietly = TRUE, logical(1))]
 if (length(missing_packages)) {
@@ -1904,6 +1904,7 @@ run_batch <- function() {
     ecrire_csv_6_decimales(afc_obj$colcoord, file.path(afc_dir, "coords_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$termes_stats, file.path(afc_dir, "stats_termes.csv"), row.names = FALSE)
     graph_interactif_file <- file.path(afc_dir, "graph_interactif.json")
+    graph_interactif_leaflet_file <- file.path(afc_dir, "graph_interactif_leaflet.html")
     tryCatch(
       ecrire_graph_interactif_afc(
         coords_classes_file = file.path(afc_dir, "coords_classes.csv"),
@@ -1916,6 +1917,20 @@ run_batch <- function() {
       error = function(e) {
         graph_interactif_file <<- NULL
         log_info(paste0("Graphe AFC interactif indisponible : ", e$message))
+      }
+    )
+    tryCatch(
+      ecrire_graph_interactif_leaflet_afc(
+        coords_classes_file = file.path(afc_dir, "coords_classes.csv"),
+        coords_termes_file = file.path(afc_dir, "coords_termes.csv"),
+        stats_termes_file = file.path(afc_dir, "stats_termes.csv"),
+        output_file = graph_interactif_leaflet_file,
+        seuil_p = 0.05,
+        top_termes = 120L
+      ),
+      error = function(e) {
+        graph_interactif_leaflet_file <<- NULL
+        log_info(paste0("Carte AFC Leaflet indisponible : ", e$message))
       }
     )
     if (identical(classes_mode, "discrimination_simple") &&
@@ -1940,6 +1955,7 @@ run_batch <- function() {
       afc_classes_png = relative_to_output(afc_classes_png),
       afc_termes_png = relative_to_output(afc_termes_png),
       graph_interactif_json = if (!is.null(graph_interactif_file)) relative_to_output(graph_interactif_file) else NULL,
+      graph_interactif_leaflet_html = if (!is.null(graph_interactif_leaflet_file)) relative_to_output(graph_interactif_leaflet_file) else NULL,
       coords_termes_csv = relative_to_output(file.path(afc_dir, "coords_termes.csv")),
       stats_termes_csv = relative_to_output(file.path(afc_dir, "stats_termes.csv")),
       valeurs_propres_csv = relative_to_output(file.path(afc_dir, "valeurs_propres.csv"))

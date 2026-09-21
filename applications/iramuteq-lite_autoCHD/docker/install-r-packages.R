@@ -36,6 +36,7 @@ cran_packages <- c(
   "intergraph",
   "irlba",
   "jsonlite",
+  "leaflet",
   "markdown",
   "Matrix",
   "plotly",

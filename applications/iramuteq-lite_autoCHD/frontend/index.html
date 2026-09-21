@@ -3,7 +3,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IRAMUTEQ Lab</title>
-    <link rel="stylesheet" href="./styles.css?v=20260921-interactive-afc-map-zoom" />
+    <link rel="stylesheet" href="./styles.css?v=20260921-afc-leaflet" />
   </head>
   <body>
     <div class="app-shell">
@@ -340,6 +340,7 @@
                   <button id="afcTermsZoomOutBtn" class="secondary-button" type="button">Zoom -</button>
                   <button id="afcTermsZoomResetBtn" class="secondary-button" type="button">Réinitialiser</button>
                   <button id="afcInteractiveOpenBtn" class="primary-button" type="button" disabled>Explorer l'AFC</button>
+                  <button id="afcLeafletOpenBtn" class="secondary-button" type="button" disabled>Explorer l'AFC (carte)</button>
                 </div>
                 <div id="afcTermsPlot" class="result-pane"></div>
               </article>
@@ -1088,6 +1089,21 @@
       </div>
     </dialog>
 
+    <dialog id="afcLeafletDialog" class="dialog-panel afc-leaflet-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">AFC interactive</p>
+            <h2>Explorer l'AFC (carte)</h2>
+            <p class="muted">Zoomez et déplacez le plan AFC comme une carte. Survolez un terme pour afficher ses coordonnées, son χ² et sa p.value.</p>
+          </div>
+          <button id="afcLeafletCloseBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+        <div id="afcLeafletStatus" class="muted afc-interactive-status"></div>
+        <iframe id="afcLeafletFrame" class="afc-leaflet-frame" title="Carte AFC interactive" loading="lazy"></iframe>
+      </div>
+    </dialog>
+
     <dialog id="termSegmentsDialog" class="dialog-panel term-segments-dialog">
       <div class="dialog-card">
         <header class="dialog-header">
@@ -1110,6 +1126,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260921-interactive-afc-map-zoom"></script>
+    <script type="module" src="./app.js?v=20260921-afc-leaflet"></script>
   </body>
 </html>

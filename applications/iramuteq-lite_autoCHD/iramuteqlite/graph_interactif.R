@@ -113,3 +113,131 @@ ecrire_graph_interactif_afc <- function(
   jsonlite::write_json(payload, output_file, auto_unbox = TRUE, pretty = FALSE, na = "null")
   invisible(output_file)
 }
+
+# Second renderer: a Leaflet map using the AFC plane as an abstract map.
+# It does not alter the CHD/AFC calculations or the official PNG exports.
+ecrire_graph_interactif_leaflet_afc <- function(
+    coords_classes_file,
+    coords_termes_file,
+    stats_termes_file,
+    output_file,
+    seuil_p = 0.05,
+    top_termes = 120L
+) {
+  if (!requireNamespace("leaflet", quietly = TRUE)) {
+    stop("Le package leaflet est requis pour la carte AFC interactive.")
+  }
+  if (!requireNamespace("htmlwidgets", quietly = TRUE)) {
+    stop("Le package htmlwidgets est requis pour la carte AFC interactive.")
+  }
+
+  payload <- construire_donnees_graph_interactif_afc(
+    coords_classes_file = coords_classes_file,
+    coords_termes_file = coords_termes_file,
+    stats_termes_file = stats_termes_file,
+    seuil_p = seuil_p,
+    top_termes = top_termes
+  )
+
+  echapper_html <- function(value) {
+    htmltools::htmlEscape(ifelse(is.na(value), "", as.character(value)))
+  }
+  classes_df <- if (length(payload$classes)) {
+    do.call(rbind, lapply(payload$classes, function(row) {
+      data.frame(label = row$label, x = as.numeric(row$x), y = as.numeric(row$y), stringsAsFactors = FALSE)
+    }))
+  } else data.frame(label = character(), x = numeric(), y = numeric())
+  termes_df <- if (length(payload$termes)) {
+    do.call(rbind, lapply(payload$termes, function(row) {
+      data.frame(
+        label = row$label,
+        classe = row$classe,
+        x = as.numeric(row$x),
+        y = as.numeric(row$y),
+        chi2 = as.numeric(row$chi2),
+        p_value = as.numeric(row$p_value),
+        stringsAsFactors = FALSE
+      )
+    }))
+  } else data.frame(label = character(), classe = character(), x = numeric(), y = numeric(), chi2 = numeric(), p_value = numeric())
+
+  palette <- c("#5b8c85", "#6f86b5", "#d77a57", "#9a78a8", "#c49a4a", "#4c8caa", "#bd6470", "#6b9b63")
+  class_levels <- unique(c(classes_df$label, termes_df$classe))
+  class_colors <- setNames(rep(palette, length.out = length(class_levels)), class_levels)
+  termes_df$couleur <- unname(class_colors[termes_df$classe])
+  termes_df$couleur[is.na(termes_df$couleur)] <- "#5b6570"
+
+  popup_terme <- sprintf(
+    "<strong>%s</strong><br>Classe : %s<br>x : %s<br>y : %s<br>χ² : %s<br>p.value : %s",
+    echapper_html(termes_df$label),
+    echapper_html(termes_df$classe),
+    formatC(termes_df$x, format = "f", digits = 4),
+    formatC(termes_df$y, format = "f", digits = 4),
+    ifelse(is.finite(termes_df$chi2), formatC(termes_df$chi2, format = "f", digits = 3), "indisponible"),
+    ifelse(is.finite(termes_df$p_value), formatC(termes_df$p_value, format = "e", digits = 3), "indisponible")
+  )
+  termes_df$label_html <- sprintf(
+    "<span style=\"color:%s;font-weight:600;text-shadow:0 1px 2px rgba(255,255,255,.85)\">%s</span>",
+    termes_df$couleur,
+    sprintf("%s — %s", echapper_html(termes_df$label), echapper_html(termes_df$classe))
+  )
+
+  carte <- leaflet::leaflet(options = leaflet::leafletOptions(
+    crs = leaflet::leafletCRS(crsClass = "L.CRS.Simple"),
+    minZoom = -4,
+    maxZoom = 10,
+    zoomControl = TRUE,
+    attributionControl = FALSE
+  ))
+  if (nrow(classes_df)) {
+    carte <- carte |>
+      leaflet::addCircleMarkers(
+        data = classes_df,
+        lng = ~x,
+        lat = ~y,
+        radius = 7,
+        color = "#1f2a33",
+        fillColor = "#ffffff",
+        fillOpacity = 1,
+        weight = 2,
+        label = ~label,
+        popup = ~sprintf("<strong>%s</strong><br>x : %.4f<br>y : %.4f", echapper_html(label), x, y),
+        group = "Classes"
+      )
+  }
+  if (nrow(termes_df)) {
+    carte <- carte |>
+      leaflet::addLabelOnlyMarkers(
+        data = termes_df,
+        lng = ~x,
+        lat = ~y,
+        label = ~label_html,
+        popup = popup_terme,
+        labelOptions = leaflet::labelOptions(
+          noHide = TRUE,
+          textOnly = TRUE,
+          direction = "center",
+          style = list(
+            "color" = "#5b6570",
+            "font-size" = "13px",
+            "font-weight" = "600",
+            "text-shadow" = "0 1px 2px rgba(255,255,255,.85)"
+          )
+        ),
+        group = "Termes significatifs"
+      )
+  }
+  carte <- carte |>
+    leaflet::addLayersControl(
+      overlayGroups = c("Classes", "Termes significatifs"),
+      options = leaflet::layersControlOptions(collapsed = FALSE)
+    )
+  if (nrow(termes_df) || nrow(classes_df)) {
+    x_all <- c(classes_df$x, termes_df$x)
+    y_all <- c(classes_df$y, termes_df$y)
+    carte <- carte |> leaflet::fitBounds(min(x_all), min(y_all), max(x_all), max(y_all))
+  }
+  dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
+  htmlwidgets::saveWidget(carte, output_file, selfcontained = TRUE)
+  invisible(output_file)
+}
