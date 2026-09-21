@@ -1184,7 +1184,7 @@ run_batch <- function() {
   )
   classes_mode_label <- switch(
     classes_mode,
-    discrimination_simple = "Auto discriminante",
+    discrimination_simple = "CHD Opposition optimisée",
     "Normal"
   )
   config_chd <- config

@@ -1,4 +1,4 @@
-# Auto discriminante
+# CHD Opposition optimisée
 
 Ce mode cherche **une seule configuration CHD plus discriminante**.
 
@@ -13,8 +13,8 @@ Le mode compare donc plusieurs résultats possibles, mais il ne renvoie **qu'un 
 
 ## Paramètres à croiser
 
-En mode Auto discriminante, l'utilisateur coche les paramètres qu'il veut faire varier. Les paramètres non cochés restent fixes pendant toutes les simulations.
-Cette boîte n'apparaît que lorsque « Auto discriminante » est sélectionné dans « Nombre de classes ».
+Dans le mode CHD Opposition optimisée, l'utilisateur coche les paramètres qu'il veut faire varier. Les paramètres non cochés restent fixes pendant toutes les simulations.
+Cette boîte n'apparaît que lorsque « CHD Opposition optimisée » est sélectionné dans « Nombre de classes ».
 
 - `mincl (manuel)` : de `5` à `10`. Si cette option est cochée, chaque simulation utilise le mode manuel de `mincl` avec la valeur testée. Si elle n'est pas cochée, le mode `mincl` choisi dans les paramètres CHD est conservé.
 - `min_docfreq` : de `2` à `5`. Si cette option n'est pas cochée, la fréquence minimale saisie dans les paramètres généraux reste fixe.
@@ -67,7 +67,7 @@ Le résultat final affiche donc :
 - les variables qui ont conduit à ce résultat
 - le critère de sélection utilisé
 
-Dans l'onglet AFC, la table des mots projetés affiche les coordonnées `x` et `y` de tous les mots réellement projetés sur le plan AFC de la configuration retenue. Ces coordonnées sont celles calculées par l'AFC elle-même ; un mot absent du plan ne reçoit pas de valeur artificielle. Lorsque le mode Auto discriminante est utilisé, la carte « Mots repères pour nommer les axes AFC » apparaît également dans cet onglet.
+Dans l'onglet AFC, la table des mots projetés affiche les coordonnées `x` et `y` de tous les mots réellement projetés sur le plan AFC de la configuration retenue. Ces coordonnées sont celles calculées par l'AFC elle-même ; un mot absent du plan ne reçoit pas de valeur artificielle. Lorsque le mode CHD Opposition optimisée est utilisé, la carte « Mots repères pour nommer les axes AFC » apparaît également dans cet onglet.
 
 ## Comment la sélection est faite
 

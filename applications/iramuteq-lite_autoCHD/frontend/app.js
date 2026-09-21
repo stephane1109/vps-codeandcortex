@@ -2841,7 +2841,7 @@ function renderClassesModeCard(card) {
   ].join(" ; ");
 
   if (modeDescription instanceof HTMLElement) {
-    modeDescription.textContent = `En mode Auto discriminante, l'application simule les combinaisons que vous avez choisies, puis retient celle dont le critère « ${scoreDetails.label} » est le plus élevé.`;
+    modeDescription.textContent = `En mode CHD Opposition optimisée, l'application simule les combinaisons que vous avez choisies, puis retient celle dont le critère « ${scoreDetails.label} » est le plus élevé.`;
   }
   if (autoScoreHelp instanceof HTMLElement) {
     autoScoreHelp.textContent = scoreDetails.description;
@@ -12014,7 +12014,7 @@ function formatSummaryValue(value) {
 }
 
 function getClassesModeLabel(mode) {
-  if (mode === "discrimination_simple") return "Auto discriminante";
+  if (mode === "discrimination_simple") return "CHD Opposition optimisée";
   return "Normal";
 }
 
@@ -12148,7 +12148,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ? payload.manual_replay_config
     : {};
   if (!selected || !Number.isFinite(selectedK)) {
-    container.appendChild(createEmptyState("Aucune configuration Auto discriminante n'a été retenue pour cette analyse."));
+    container.appendChild(createEmptyState("Aucune configuration CHD Opposition optimisée n'a été retenue pour cette analyse."));
     return;
   }
 
@@ -12497,7 +12497,7 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
   clearContainer(container);
 
   if (!parsed || !parsed.headers.length) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau Auto discriminante disponible."));
+    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau CHD Opposition optimisée disponible."));
     return;
   }
 
@@ -12544,7 +12544,7 @@ async function renderDiscriminationSimpleExports(index) {
   appState.discriminationSimpleSummaryPayload = null;
   const summaryFile = findFile(index, [(path) => path.endsWith("discrimination_simple_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("discrimination_simple_metrics.csv")]);
-  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode Auto discriminante.";
+  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode CHD Opposition optimisée.";
 
   if (!summaryFile && !metricsFile) {
     setContainerEmptyState(resultContainers.discriminationSimpleSummary, manualModeMessage);
@@ -12558,15 +12558,15 @@ async function renderDiscriminationSimpleExports(index) {
       appState.discriminationSimpleSummaryPayload = payload;
       renderDiscriminationSimpleSummary(resultContainers.discriminationSimpleSummary, payload);
     } catch (error) {
-      setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume Auto discriminante.");
+      setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume CHD Opposition optimisée.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
     }
   } else {
-    setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Le resume Auto discriminante est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Le resume CHD Opposition optimisée est absent du dossier d'exports.");
   }
 
   if (!metricsFile) {
-    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Le tableau Auto discriminante est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Le tableau CHD Opposition optimisée est absent du dossier d'exports.");
     return { active: true };
   }
 
@@ -12574,10 +12574,10 @@ async function renderDiscriminationSimpleExports(index) {
     const parsed = parseCsv(await metricsFile.text());
     renderDiscriminationSimpleMetrics(resultContainers.discriminationSimpleTable, parsed, {
       title: "discrimination_simple_metrics.csv",
-      emptyMessage: "Le tableau Auto discriminante est vide."
+      emptyMessage: "Le tableau CHD Opposition optimisée est vide."
     });
   } catch (error) {
-    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Impossible de lire les scores Auto discriminante.");
+    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Impossible de lire les scores CHD Opposition optimisée.");
     log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
   }
 
@@ -14507,8 +14507,8 @@ function resetResultPanes() {
   applySuiviPresentation();
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
-    discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode Auto discriminante.",
-    discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode Auto discriminante.",
+    discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode CHD Opposition optimisée.",
+    discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode CHD Opposition optimisée.",
     chdStatsTable: "Chargez un dossier d'exports pour afficher les statistiques CHD.",
     chdConcordancier: "Chargez un dossier d'exports pour afficher le concordancier HTML.",
     chdWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots.",

@@ -40,4 +40,4 @@ stopifnot(!("je" %in% formes_nom_ver))
 # "tue" est un verbe : sa conservation est normale dans ce profil.
 stopifnot("tue" %in% formes_nom_ver)
 
-cat("Test morphosyntaxique Auto discriminante : OK\n")
+cat("Test morphosyntaxique CHD Opposition optimisée : OK\n")
