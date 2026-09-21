@@ -8,13 +8,13 @@
   --ink: #171717;
   --ink-soft: #5f5a53;
   --ink-faint: #8d867d;
-  --accent: #a32121;
-  --accent-soft: rgba(163, 33, 33, 0.08);
-  --accent-line: rgba(163, 33, 33, 0.22);
+  --accent: #217ce7;
+  --accent-soft: rgba(33, 124, 231, 0.08);
+  --accent-line: rgba(33, 124, 231, 0.28);
   --success-accent: #0f9f72;
-  --button-primary: #9f2f2a;
-  --button-primary-hover: #842520;
-  --button-primary-shadow: rgba(159, 47, 42, 0.22);
+  --button-primary: #217ce7;
+  --button-primary-hover: #1b66bd;
+  --button-primary-shadow: rgba(33, 124, 231, 0.24);
   --shadow: 0 10px 30px rgba(19, 18, 16, 0.05);
   --radius: 18px;
   font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
@@ -228,7 +228,7 @@ textarea {
 .sub-nav-link {
   padding: 0.7rem 0.2rem 0.82rem;
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--accent);
   border-radius: 0;
   border-width: 0 0 2px 0;
   border-style: solid;
@@ -239,16 +239,16 @@ textarea {
 
 .nav-link:hover,
 .sub-nav-link:hover {
-  background: rgba(159, 29, 32, 0.07);
-  border-color: rgba(159, 29, 32, 0.5);
-  color: #8d1b1d;
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .nav-link.is-active,
 .sub-nav-link.is-active {
   background: transparent;
-  color: var(--ink);
-  border-color: #9f1d20;
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .workspace {
@@ -518,6 +518,7 @@ textarea {
 
 .suivi-help-note {
   max-width: 64rem;
+  color: var(--accent);
 }
 
 .suivi-help-note p + p {
@@ -790,12 +791,13 @@ textarea {
 
 .secondary-button {
   background: var(--surface);
-  border-color: var(--line);
-  color: var(--ink);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .secondary-button:hover {
-  border-color: var(--line-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .secondary-button--danger {
@@ -822,6 +824,7 @@ textarea {
   margin: 0.55rem 0 0.5rem;
   font-size: 0.72rem;
   line-height: 1.24;
+  color: var(--accent);
 }
 
 .sidebar-note {
@@ -1311,22 +1314,22 @@ progress {
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--accent);
   cursor: pointer;
   font: inherit;
 }
 
 .local-tab-button.is-active {
-  border-color: #9f1d20;
+  border-color: var(--accent);
   background: transparent;
-  color: var(--ink);
+  color: var(--accent);
 }
 
 .local-tab-button:hover,
 .local-tab-button:focus-visible {
-  color: #8d1b1d;
-  background: rgba(159, 29, 32, 0.07);
-  border-color: rgba(159, 29, 32, 0.5);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
 }
 
 .local-tab-button--multimodal {
@@ -3234,12 +3237,12 @@ body.comparison-ab-fullscreen-open {
 .prose-card p {
   margin: 0;
   max-width: 60rem;
-  color: var(--ink-soft);
+  color: var(--accent);
   line-height: 1.7;
 }
 
 .markdown-content {
-  color: var(--ink-soft);
+  color: var(--accent);
   line-height: 1.7;
 }
 
@@ -3249,17 +3252,17 @@ body.comparison-ab-fullscreen-open {
 
 .markdown-content h1,
 .markdown-content h4 {
-  color: var(--ink);
+  color: var(--accent);
   margin: 1.2rem 0 0.6rem;
 }
 
 .markdown-content h2 {
-  color: #9f1d20;
+  color: var(--accent);
   margin: 1.2rem 0 0.6rem;
 }
 
 .markdown-content h3 {
-  color: #2f2a27;
+  color: var(--accent);
   margin: 1.2rem 0 0.6rem;
 }
 
@@ -3290,7 +3293,7 @@ body.comparison-ab-fullscreen-open {
 }
 
 .markdown-content a {
-  color: #9f1d20;
+  color: var(--accent);
 }
 
 .markdown-figure img {
