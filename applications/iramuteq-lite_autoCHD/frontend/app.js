@@ -2812,6 +2812,14 @@ function renderClassesModeCard(card) {
   const modeScope = card.closest(".visually-hidden")
     || card.closest("#chdConfigDialogContent")
     || card.parentElement;
+  modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
+    const containsClassesMode = Boolean(section.querySelector("[data-classes-mode-card]"));
+    if (!containsClassesMode) section.hidden = isDiscriminationSimple;
+  });
+  const classesModeFields = card.parentElement;
+  classesModeFields?.querySelectorAll(":scope > .field:not([data-classes-mode-card])").forEach((field) => {
+    field.hidden = isDiscriminationSimple;
+  });
   modeScope?.querySelectorAll("[data-hide-in-distance-mode]").forEach((field) => {
     field.hidden = isDiscriminationSimple;
   });
@@ -2825,6 +2833,12 @@ function renderClassesModeCard(card) {
   }
 
   if (!isDiscriminationSimple) {
+    modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
+      section.hidden = false;
+    });
+    classesModeFields?.querySelectorAll(":scope > .field:not([data-classes-mode-card])").forEach((field) => {
+      field.hidden = false;
+    });
     if (minDocfreqField) minDocfreqField.hidden = false;
     if (minclModeField) minclModeField.hidden = false;
     if (minclManualField) minclManualField.hidden = false;
