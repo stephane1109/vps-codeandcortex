@@ -12240,7 +12240,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
 
     const replayButton = document.createElement("button");
     replayButton.type = "button";
-    replayButton.className = "secondary-button";
+    replayButton.className = "secondary-button discrimination-replay-button";
     replayButton.textContent = "Reprendre cette configuration en mode Normal";
     replayButton.addEventListener("click", () => {
       const setValue = (id, value) => {
