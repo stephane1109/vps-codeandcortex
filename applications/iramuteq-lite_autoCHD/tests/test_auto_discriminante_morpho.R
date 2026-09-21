@@ -19,7 +19,7 @@ grid <- construire_grille_discrimination_simple_iramuteq(config)
 stopifnot(length(grid$candidates) == 32L)
 stopifnot(all(vapply(
   grid$candidates,
-  function(candidate) identical(candidate$config$morpho_conserver_hors_lexique, FALSE),
+  function(candidate) identical(candidate$config$morpho_conserver_hors_lexique, TRUE),
   logical(1)
 )))
 
