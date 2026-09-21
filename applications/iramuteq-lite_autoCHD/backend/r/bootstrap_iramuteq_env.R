@@ -30,6 +30,9 @@ required_packages <- c(
   "visNetwork"
 )
 
+# Leaflet only powers the optional AFC explorer. Its absence must never block CHD.
+optional_packages <- c("leaflet")
+
 required_min_versions <- c(
   Matrix = "1.5.0"
 )
@@ -179,11 +182,19 @@ installed_versions_before <- setNames(vapply(required_packages, package_installe
 missing_before <- required_packages[vapply(required_packages, package_needs_install, logical(1))]
 outdated_before <- missing_before[nzchar(installed_versions_before[missing_before])]
 install_errors <- character(0)
+optional_install_errors <- character(0)
 
 if (identical(mode, "install") && length(missing_before)) {
   install_error <- install_missing_packages(missing_before, repo = cran_repo, lib = lib_path)
   if (length(install_error)) {
     install_errors <- c(install_errors, install_error)
+  }
+}
+
+if (identical(mode, "install")) {
+  optional_missing <- optional_packages[vapply(optional_packages, package_needs_install, logical(1))]
+  if (length(optional_missing)) {
+    optional_install_errors <- install_missing_packages(optional_missing, repo = cran_repo, lib = lib_path)
   }
 }
 
@@ -219,6 +230,7 @@ payload <- list(
   missing_after = unname(missing_after),
   outdated_after = unname(outdated_after),
   install_errors = unname(install_errors)
+  , optional_install_errors = unname(optional_install_errors)
 )
 
 cat(jsonlite::toJSON(payload, auto_unbox = TRUE, pretty = TRUE, null = "null"))
