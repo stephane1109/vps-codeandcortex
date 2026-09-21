@@ -31,7 +31,16 @@ selectionner_termes_extremes_afc <- function(afc_obj, stats_df, top_n = 3L, p_se
     chi2 = if ("chi2" %in% names(stats_df)) suppressWarnings(as.numeric(stats_df$chi2)) else NA_real_,
     stringsAsFactors = FALSE
   )
-  rows <- rows[is.finite(rows$p_value) & rows$p_value <= p_seuil & nzchar(rows$terme), , drop = FALSE]
+  # Keep only terms positively characteristic of their class. A negative
+  # class contribution is significant but describes the opposite classes and
+  # must not be presented as a marker of this class.
+  rows <- rows[
+    is.finite(rows$p_value) & rows$p_value <= p_seuil &
+      (!is.finite(rows$chi2) | rows$chi2 > 0) &
+      nzchar(rows$terme),
+    ,
+    drop = FALSE
+  ]
   if (!nrow(rows)) return(empty)
   index <- match(tolower(rows$terme), tolower(coords$label))
   rows$x <- coords$x[index]

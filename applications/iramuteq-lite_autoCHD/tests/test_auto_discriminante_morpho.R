@@ -40,4 +40,27 @@ stopifnot(!("je" %in% formes_nom_ver))
 # "tue" est un verbe : sa conservation est normale dans ce profil.
 stopifnot("tue" %in% formes_nom_ver)
 
+source(file.path("iramuteqlite", "afc_extremes.R"))
+coords <- matrix(
+  c(1, 0, -1, 0, 0, 1),
+  nrow = 3,
+  byrow = TRUE,
+  dimnames = list(c("positif", "negatif", "autre"), c("Dim 1", "Dim 2"))
+)
+stats <- data.frame(
+  Terme = c("positif", "negatif", "autre"),
+  Classe = c("1", "1", "2"),
+  p = c(0.01, 0.01, 0.02),
+  chi2 = c(8, -8, 4),
+  stringsAsFactors = FALSE
+)
+extremes <- selectionner_termes_extremes_afc(
+  afc_obj = list(colcoord = coords),
+  stats_df = stats,
+  top_n = 3L,
+  p_seuil = 0.05
+)
+stopifnot(!("negatif" %in% extremes$terme))
+stopifnot(all(is.finite(extremes$x)) & all(is.finite(extremes$y)))
+
 cat("Test morphosyntaxique CHD Opposition optimisée : OK\n")
