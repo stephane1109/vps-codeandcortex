@@ -2815,12 +2815,19 @@ function renderClassesModeCard(card) {
   modeScope?.querySelectorAll("[data-hide-in-distance-mode]").forEach((field) => {
     field.hidden = isDiscriminationSimple;
   });
+  const findModeScopedField = (id) => modeScope?.querySelector(`#${id}, [data-source-id="${id}"]`);
+  const minDocfreqField = findModeScopedField("minFreq")?.closest(".field");
+  const minclModeField = findModeScopedField("minclMode")?.closest(".field");
+  const minclManualField = findModeScopedField("minclManual")?.closest(".field");
   if (autoOptions instanceof HTMLElement) {
     autoOptions.hidden = !isDiscriminationSimple;
     autoOptions.setAttribute("aria-hidden", String(!isDiscriminationSimple));
   }
 
   if (!isDiscriminationSimple) {
+    if (minDocfreqField) minDocfreqField.hidden = false;
+    if (minclModeField) minclModeField.hidden = false;
+    if (minclManualField) minclManualField.hidden = false;
     if (modeDescription instanceof HTMLElement) {
       modeDescription.textContent = "En mode Normal, vous choisissez tous les paramètres de la CHD avant le lancement.";
     }
@@ -2828,6 +2835,9 @@ function renderClassesModeCard(card) {
   }
 
   const settings = getAutoDiscriminantSettings(card);
+  if (minDocfreqField) minDocfreqField.hidden = settings.minDocfreq.enabled;
+  if (minclModeField) minclModeField.hidden = settings.mincl.enabled;
+  if (minclManualField) minclManualField.hidden = settings.mincl.enabled;
   const scoreDetails = getAutoDiscriminantScoreModeDetails(getAutoDiscriminantScoreMode(card));
   Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
     const option = card.querySelector(`[data-auto-discriminant-option="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
