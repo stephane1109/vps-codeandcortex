@@ -18,8 +18,10 @@ selectionner_termes_extremes_afc <- function(afc_obj, stats_df, top_n = 3L, p_se
   empty <- data.frame(classe = character(), terme = character(), x = numeric(), y = numeric(), distance_origine = numeric(), chi2 = numeric(), p_value = numeric(), stringsAsFactors = FALSE)
   if (is.null(coords) || !nrow(coords) || is.null(stats_df) || !is.data.frame(stats_df) || !nrow(stats_df)) return(empty)
   if (!"Terme" %in% names(stats_df)) return(empty)
-  p_col <- if ("p_value" %in% names(stats_df)) "p_value" else if ("p" %in% names(stats_df)) "p" else NULL
-  class_col <- if ("Classe_max" %in% names(stats_df)) "Classe_max" else if ("Classe" %in% names(stats_df)) "Classe" else NULL
+  p_col <- if ("p" %in% names(stats_df)) "p" else if ("p_value" %in% names(stats_df)) "p_value" else NULL
+  # Prefer the class-specific CHD table. Classe_max is only a global fallback
+  # and would incorrectly assign a term to one class before this selection.
+  class_col <- if ("Classe" %in% names(stats_df)) "Classe" else if ("Classe_max" %in% names(stats_df)) "Classe_max" else NULL
   if (is.null(p_col) || is.null(class_col)) return(empty)
 
   rows <- data.frame(

@@ -1854,9 +1854,9 @@ run_batch <- function() {
     termes_extremes_afc <- tryCatch(
       selectionner_termes_extremes_afc(
         afc_obj = afc_obj,
-        stats_df = afc_obj$termes_stats,
+        stats_df = res_stats_df,
         top_n = 3L,
-        p_seuil = scalar_num(config$max_p, 0.05)
+        p_seuil = 0.05
       ),
       error = function(e_extremes) {
         log_info(paste0("AFC termes extremes indisponible : ", e_extremes$message))
