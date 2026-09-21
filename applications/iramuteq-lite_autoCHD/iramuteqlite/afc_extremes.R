@@ -55,22 +55,26 @@ tracer_afc_termes_extremes <- function(afc_obj, termes_df, axes = c(1, 2)) {
   all_y <- c(classes$y, termes_df$y)
   all_x <- all_x[is.finite(all_x)]
   all_y <- all_y[is.finite(all_y)]
-  lim_x <- range(all_x, finite = TRUE)
-  lim_y <- range(all_y, finite = TRUE)
-  marge_x <- max(0.1, diff(lim_x) * 0.12)
-  marge_y <- max(0.1, diff(lim_y) * 0.12)
+  lim <- .calculer_limites_trace_afc(all_x, all_y, has_second_axis = TRUE)
   palette <- c("#5b8c85", "#6f86b5", "#d77a57", "#9a78a8", "#c49a4a", "#4c8caa", "#bd6470", "#6b9b63")
   classes$classe <- classes$label
   color_by_class <- setNames(rep(palette, length.out = nrow(classes)), classes$classe)
-  plot(classes$x, classes$y, type = "n", asp = 1, xlim = lim_x + c(-marge_x, marge_x), ylim = lim_y + c(-marge_y, marge_y), xlab = "Axe 1", ylab = "Axe 2", main = "AFC : trois termes significatifs les plus extrêmes par classe")
+  plot(classes$x, classes$y, type = "n", xlim = lim$xlim, ylim = lim$ylim, xlab = "Axe 1", ylab = "Axe 2", main = "AFC : trois termes significatifs les plus extrêmes par classe")
   abline(h = 0, v = 0, col = "#c9cdd1", lty = 1)
   points(classes$x, classes$y, pch = 21, bg = "#ffffff", col = "#1f2a33", lwd = 1.5, cex = 1.4)
   text(classes$x, classes$y, labels = classes$label, pos = 3, cex = 0.9, font = 2, col = "#1f2a33")
   if (nrow(termes_df)) {
     term_colors <- unname(color_by_class[termes_df$classe])
     term_colors[is.na(term_colors)] <- "#5b6570"
-    points(termes_df$x, termes_df$y, pch = 16, col = term_colors, cex = 1.1)
-    text(termes_df$x, termes_df$y, labels = termes_df$terme, pos = 4, offset = 0.35, cex = 0.85, col = term_colors)
+    labels_pos <- placer_labels_sans_chevauchement_spirale(
+      x = termes_df$x,
+      y = termes_df$y,
+      labels = termes_df$terme,
+      cex_vec = rep(0.85, nrow(termes_df)),
+      max_iter = 300
+    )
+    points(labels_pos$x, labels_pos$y, pch = 16, col = term_colors, cex = 0.7)
+    text(labels_pos$x, labels_pos$y, labels = termes_df$terme, cex = 0.85, col = term_colors)
   }
   legend("topright", legend = c("Classes", "Termes significatifs"), pch = c(21, 16), pt.bg = c("#ffffff", NA), col = c("#1f2a33", "#5b8c85"), bty = "n", cex = 0.85)
 }
