@@ -227,9 +227,32 @@ ecrire_graph_interactif_leaflet_afc <- function(
         group = "Termes significatifs"
       )
   }
+  if (nrow(termes_df) || nrow(classes_df)) {
+    x_all <- c(classes_df$x, termes_df$x)
+    y_all <- c(classes_df$y, termes_df$y)
+    marge_x <- max(0.1, diff(range(x_all, finite = TRUE)) * 0.08)
+    marge_y <- max(0.1, diff(range(y_all, finite = TRUE)) * 0.08)
+    carte <- carte |>
+      leaflet::addPolylines(
+        lng = c(min(x_all) - marge_x, max(x_all) + marge_x),
+        lat = c(0, 0),
+        color = "#c9cdd1",
+        weight = 1,
+        opacity = 0.9,
+        group = "Axes AFC"
+      ) |>
+      leaflet::addPolylines(
+        lng = c(0, 0),
+        lat = c(min(y_all) - marge_y, max(y_all) + marge_y),
+        color = "#c9cdd1",
+        weight = 1,
+        opacity = 0.9,
+        group = "Axes AFC"
+      )
+  }
   carte <- carte |>
     leaflet::addLayersControl(
-      overlayGroups = c("Classes", "Termes significatifs"),
+      overlayGroups = c("Classes", "Termes significatifs", "Axes AFC"),
       options = leaflet::layersControlOptions(collapsed = FALSE)
     )
   if (nrow(termes_df) || nrow(classes_df)) {

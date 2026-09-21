@@ -9929,12 +9929,12 @@ async function openAfcLeafletExplorer() {
   if (!file || !(afcLeafletFrame instanceof HTMLIFrameElement)) return;
   try {
     afcLeafletFrame.srcdoc = await file.text();
-    if (afcLeafletStatus) afcLeafletStatus.textContent = "Carte AFC interactive prête.";
+    if (afcLeafletStatus) afcLeafletStatus.textContent = "Graphique AFC interactif prêt.";
     if (typeof afcLeafletDialog?.showModal === "function") afcLeafletDialog.showModal();
     else if (afcLeafletDialog) afcLeafletDialog.hidden = false;
   } catch (error) {
-    log(`[error] Lecture de la carte AFC Leaflet impossible : ${error.message}`);
-    if (afcLeafletStatus) afcLeafletStatus.textContent = "Impossible de charger la carte AFC interactive.";
+    log(`[error] Lecture du graphique AFC Leaflet impossible : ${error.message}`);
+    if (afcLeafletStatus) afcLeafletStatus.textContent = "Impossible de charger le graphique AFC interactif.";
   }
 }
 
