@@ -251,6 +251,71 @@ ecrire_graph_interactif_leaflet_afc <- function(
       )
   }
   carte <- carte |>
+    htmlwidgets::onRender("function(el, x) {
+      var map = this;
+      var group = map.layerManager.getLayerGroup('Termes significatifs', true);
+      if (!group) return;
+
+      function overlaps(a, b, gap) {
+        return !(a.right + gap < b.left || a.left - gap > b.right ||
+          a.bottom + gap < b.top || a.top - gap > b.bottom);
+      }
+
+      function arrangeLabels() {
+        var labels = [];
+        group.eachLayer(function(layer) {
+          if (layer._icon) labels.push(layer._icon);
+        });
+        labels.forEach(function(icon) {
+          var match = icon.style.transform.match(/translate3d\\([^)]*\\)/);
+          icon.dataset.afcBaseTransform = match ? match[0] : icon.style.transform;
+          icon.style.transform = icon.dataset.afcBaseTransform || '';
+        });
+
+        var placed = [];
+        labels.sort(function(a, b) {
+          return a.getBoundingClientRect().top - b.getBoundingClientRect().top;
+        });
+        labels.forEach(function(icon) {
+          var base = icon.dataset.afcBaseTransform || '';
+          var rect = icon.getBoundingClientRect();
+          var candidates = [[0, 0], [0, -rect.height - 6], [0, rect.height + 6],
+            [rect.width + 8, 0], [-rect.width - 8, 0],
+            [rect.width + 8, -rect.height - 6], [-rect.width - 8, -rect.height - 6]];
+          var chosen = candidates[0];
+          for (var i = 0; i < candidates.length; i += 1) {
+            var dx = candidates[i][0];
+            var dy = candidates[i][1];
+            var candidate = {
+              left: rect.left + dx,
+              right: rect.right + dx,
+              top: rect.top + dy,
+              bottom: rect.bottom + dy
+            };
+            if (!placed.some(function(previous) { return overlaps(candidate, previous, 3); })) {
+              chosen = candidates[i];
+              break;
+            }
+          }
+          icon.style.transform = base + ' translate(' + chosen[0] + 'px,' + chosen[1] + 'px)';
+          var finalRect = icon.getBoundingClientRect();
+          placed.push({left: finalRect.left, right: finalRect.right, top: finalRect.top, bottom: finalRect.bottom});
+        });
+      }
+
+      var scheduled = false;
+      function scheduleArrange() {
+        if (scheduled) return;
+        scheduled = true;
+        window.requestAnimationFrame(function() {
+          scheduled = false;
+          arrangeLabels();
+        });
+      }
+      map.on('zoomend moveend resize', scheduleArrange);
+      scheduleArrange();
+    }")
+  carte <- carte |>
     leaflet::addLayersControl(
       overlayGroups = c("Classes", "Termes significatifs", "Axes AFC"),
       options = leaflet::layersControlOptions(collapsed = FALSE)
