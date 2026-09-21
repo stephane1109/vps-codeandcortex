@@ -2809,6 +2809,12 @@ function renderClassesModeCard(card) {
   }
 
   if (manualKField instanceof HTMLElement) manualKField.hidden = isDiscriminationSimple;
+  const modeScope = card.closest(".visually-hidden")
+    || card.closest("#chdConfigDialogContent")
+    || card.parentElement;
+  modeScope?.querySelectorAll("[data-hide-in-distance-mode]").forEach((field) => {
+    field.hidden = isDiscriminationSimple;
+  });
   if (autoOptions instanceof HTMLElement) {
     autoOptions.hidden = !isDiscriminationSimple;
     autoOptions.setAttribute("aria-hidden", String(!isDiscriminationSimple));
@@ -2841,7 +2847,7 @@ function renderClassesModeCard(card) {
   ].join(" ; ");
 
   if (modeDescription instanceof HTMLElement) {
-    modeDescription.textContent = `En mode CHD Opposition optimisée, l'application simule les combinaisons que vous avez choisies, puis retient celle dont le critère « ${scoreDetails.label} » est le plus élevé.`;
+    modeDescription.textContent = `En mode CHD distance optimisée, l'application simule les combinaisons que vous avez choisies, puis retient celle dont le critère « ${scoreDetails.label} » est le plus élevé.`;
   }
   if (autoScoreHelp instanceof HTMLElement) {
     autoScoreHelp.textContent = scoreDetails.description;

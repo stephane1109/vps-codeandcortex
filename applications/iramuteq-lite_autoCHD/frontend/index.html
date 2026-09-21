@@ -19,7 +19,7 @@
             Pour d'autres scripts/appli, vous pouvez consulter mon site :
             <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
           </p>
-          <p class="brand-copy">Version 0_4beta - modifiée 21-09-2026 - version de travail</p>
+          <p class="brand-copy">Version 0_4beta - modifiée 21-09-2026 - version de dev</p>
         </div>
 
         <nav class="top-nav" aria-label="Navigation principale">
@@ -473,7 +473,7 @@
             </p>
           </div>
 
-          <div class="field">
+          <div class="field" data-hide-in-distance-mode>
             <label for="minFreq">Fréquence minimale des termes (min_docfreq)</label>
             <input id="minFreq" type="number" min="1" value="3" />
           </div>
@@ -600,7 +600,7 @@
             <input id="iramuteqMaxFormes" type="number" min="1" step="100" value="20000" />
           </div>
 
-          <div class="field">
+          <div class="field" data-hide-in-distance-mode>
             <label for="minclMode">Nombre minimum d'UCE par classe terminale (mincl)</label>
             <select id="minclMode">
               <option value="auto">Automatique</option>
@@ -611,7 +611,7 @@
             </p>
           </div>
 
-          <div class="field">
+          <div class="field" data-hide-in-distance-mode>
             <label for="minclManual">mincl (manuel)</label>
             <input id="minclManual" type="number" min="1" value="5" />
             <p class="field-help">
