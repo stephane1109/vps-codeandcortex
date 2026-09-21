@@ -9733,10 +9733,23 @@ function updateAfcInteractiveTransform() {
   if (!(afcInteractiveState.dataGroup instanceof SVGGElement)) return;
   const originX = Number(afcInteractiveState.dataGroup.dataset.originX || 0);
   const originY = Number(afcInteractiveState.dataGroup.dataset.originY || 0);
-  afcInteractiveState.dataGroup.setAttribute(
-    "transform",
-    `translate(${afcInteractiveState.offsetX} ${afcInteractiveState.offsetY}) translate(${originX} ${originY}) scale(${afcInteractiveState.scale}) translate(${-originX} ${-originY})`
-  );
+  const scale = afcInteractiveState.scale;
+  afcInteractiveState.dataGroup.removeAttribute("transform");
+  afcInteractiveState.dataGroup.querySelectorAll("[data-base-x][data-base-y]").forEach((node) => {
+    const baseX = Number(node.dataset.baseX);
+    const baseY = Number(node.dataset.baseY);
+    const x = originX + (baseX - originX) * scale + afcInteractiveState.offsetX;
+    const y = originY + (baseY - originY) * scale + afcInteractiveState.offsetY;
+    if (node.tagName.toLowerCase() === "circle") {
+      node.setAttribute("cx", x);
+      node.setAttribute("cy", y);
+    } else {
+      node.setAttribute("x", x);
+      node.setAttribute("y", y);
+      const baseFontSize = Number(node.dataset.baseFontSize || 13);
+      node.setAttribute("font-size", Math.max(10, Math.min(24, baseFontSize * Math.sqrt(scale))));
+    }
+  });
 }
 
 function resetAfcInteractiveView() {
@@ -9825,8 +9838,14 @@ function renderAfcInteractiveSvg(data) {
   classes.forEach((row) => {
     const x = mapX(row.x);
     const y = mapY(row.y);
-    classesGroup.appendChild(createSvgElement("circle", { cx: x, cy: y, r: 6, fill: "#202b35" }));
+    const point = createSvgElement("circle", { cx: x, cy: y, r: 6, fill: "#202b35" });
+    point.dataset.baseX = x;
+    point.dataset.baseY = y;
+    classesGroup.appendChild(point);
     const label = createSvgElement("text", { x, y: y - 11, "text-anchor": "middle", fill: "#202b35", "font-size": 14, "font-weight": "700" });
+    label.dataset.baseX = x;
+    label.dataset.baseY = y - 11;
+    label.dataset.baseFontSize = 14;
     label.textContent = row.label || "Classe";
     classesGroup.appendChild(label);
   });
@@ -9842,6 +9861,9 @@ function renderAfcInteractiveSvg(data) {
       "font-size": 13,
       class: "afc-interactive-term"
     });
+    node.dataset.baseX = mapX(term.x);
+    node.dataset.baseY = mapY(term.y);
+    node.dataset.baseFontSize = 13;
     node.dataset.label = String(term.label || "");
     node.textContent = String(term.label || "");
     node.addEventListener("mouseenter", (event) => {
