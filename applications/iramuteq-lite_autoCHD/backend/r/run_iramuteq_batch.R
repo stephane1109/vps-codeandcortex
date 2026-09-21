@@ -1907,7 +1907,24 @@ run_batch <- function() {
       afc_extremes_png <- file.path(afc_dir, "afc_termes_extremes.png")
       grDevices::png(afc_extremes_png, width = 2000, height = 1600, res = 180)
       tryCatch(
-        tracer_afc_termes_extremes(afc_obj, termes_extremes_afc, axes = c(1, 2)),
+        {
+          # Reuse the official AFC terms renderer. Only its term list is
+          # narrowed; coordinates, axes, colours and label placement stay identical.
+          afc_extremes_obj <- afc_obj
+          termes_extremes <- unique(as.character(termes_extremes_afc$terme))
+          termes_extremes <- termes_extremes[!is.na(termes_extremes) & nzchar(termes_extremes)]
+          normaliser_termes_extremes <- function(values) tolower(trimws(as.character(values)))
+          keep_extremes <- normaliser_termes_extremes(afc_extremes_obj$termes_stats$Terme) %in% normaliser_termes_extremes(termes_extremes)
+          afc_extremes_obj$termes_stats <- afc_extremes_obj$termes_stats[keep_extremes, , drop = FALSE]
+          tracer_afc_classes_termes(
+            afc_extremes_obj,
+            axes = c(1, 2),
+            top_termes = max(1L, length(termes_extremes)),
+            termes_forces = termes_extremes,
+            taille_sel = taille_sel,
+            activer_repel = activer_repel
+          )
+        },
         error = function(e) {
           plot.new()
           text(0.5, 0.5, paste0("AFC termes extremes indisponible : ", e$message), cex = 1.0)
