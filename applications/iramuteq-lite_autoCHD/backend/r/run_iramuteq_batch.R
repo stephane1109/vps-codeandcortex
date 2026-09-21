@@ -195,7 +195,7 @@ if (!dir.exists(file.path(repo_root, "iramuteqlite"))) {
 
 required_packages <- c(
   "jsonlite", "quanteda", "Matrix", "dplyr", "wordcloud", "RColorBrewer",
-  "FactoMineR", "igraph", "proxy", "htmltools", "htmlwidgets", "leaflet", "factoextra"
+  "FactoMineR", "igraph", "proxy", "htmltools", "htmlwidgets", "factoextra"
 )
 missing_packages <- required_packages[!vapply(required_packages, requireNamespace, quietly = TRUE, logical(1))]
 if (length(missing_packages)) {
