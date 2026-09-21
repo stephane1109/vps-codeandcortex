@@ -449,7 +449,7 @@ textarea {
 .field-help--pvalue-note {
   margin-top: 0.45rem;
   max-width: 58rem;
-  color: #217ce7;
+  color: #217ce7 !important;
   font-weight: 400;
 }
 
