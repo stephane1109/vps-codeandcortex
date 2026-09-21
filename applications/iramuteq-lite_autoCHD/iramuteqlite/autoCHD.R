@@ -999,10 +999,11 @@ construire_grille_discrimination_simple_iramuteq <- function(config_base) {
     remove_stopwords_values <- c(.as_bool_auto_chd(config_base$retirer_stopwords, FALSE))
     remove_punctuation_values <- c(.as_bool_auto_chd(config_base$supprimer_ponctuation, FALSE))
     remove_digits_values <- c(.as_bool_auto_chd(config_base$supprimer_chiffres, FALSE))
-    # Auto discriminante utilise toujours NOM + VER, sans ETRE, avec les
-    # formes hors lexique incluses dans chaque CHD testee.
+    # Auto discriminante utilise toujours NOM + VER, sans ETRE.
+    # Le filtrage est strict : les formes hors lexique (AUTRE_FORME), dont
+    # les categories non selectionnees comme les pronoms, sont exclues.
     morpho_profiles <- list(
-      list(key = "nom_ver", keep_unknown = TRUE, exclude_etre = TRUE)
+      list(key = "nom_ver", keep_unknown = FALSE, exclude_etre = TRUE)
     )
   } else {
     min_docfreq_values <- sort(unique(c(1L, 2L, 3L, .as_int_auto_chd(config_base$min_docfreq, 1L, 1L))))
