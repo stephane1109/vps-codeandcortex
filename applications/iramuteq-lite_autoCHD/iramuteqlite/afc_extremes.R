@@ -1,4 +1,4 @@
-# AFC secondaire : trois termes significatifs les plus éloignés de l'origine
+# AFC secondaire : cinq termes significatifs les plus éloignés de l'origine
 # pour chaque classe. Ce rendu ne modifie ni la CHD ni l'AFC principale.
 
 .extraire_xy_afc_extremes <- function(coords, axes = c(1, 2)) {
@@ -13,7 +13,7 @@
   )
 }
 
-selectionner_termes_extremes_afc <- function(afc_obj, stats_df, top_n = 3L, p_seuil = 0.05) {
+selectionner_termes_extremes_afc <- function(afc_obj, stats_df, top_n = 5L, p_seuil = 0.05) {
   coords <- .extraire_xy_afc_extremes(afc_obj$colcoord)
   empty <- data.frame(classe = character(), terme = character(), x = numeric(), y = numeric(), distance_origine = numeric(), chi2 = numeric(), p_value = numeric(), stringsAsFactors = FALSE)
   if (is.null(coords) || !nrow(coords) || is.null(stats_df) || !is.data.frame(stats_df) || !nrow(stats_df)) return(empty)
@@ -70,7 +70,7 @@ tracer_afc_termes_extremes <- function(afc_obj, termes_df, axes = c(1, 2)) {
   palette <- c("#5b8c85", "#6f86b5", "#d77a57", "#9a78a8", "#c49a4a", "#4c8caa", "#bd6470", "#6b9b63")
   classes$classe <- classes$label
   color_by_class <- setNames(rep(palette, length.out = nrow(classes)), classes$classe)
-  plot(classes$x, classes$y, type = "n", xlim = lim$xlim, ylim = lim$ylim, xlab = "Axe 1", ylab = "Axe 2", main = "AFC : trois termes significatifs les plus extrêmes par classe")
+  plot(classes$x, classes$y, type = "n", xlim = lim$xlim, ylim = lim$ylim, xlab = "Axe 1", ylab = "Axe 2", main = "AFC : cinq termes significatifs les plus extrêmes par classe")
   abline(h = 0, v = 0, col = "#c9cdd1", lty = 1)
   points(classes$x, classes$y, pch = 21, bg = "#ffffff", col = "#1f2a33", lwd = 1.5, cex = 1.4)
   text(classes$x, classes$y, labels = classes$label, pos = 3, cex = 0.9, font = 2, col = "#1f2a33")

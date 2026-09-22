@@ -12349,7 +12349,7 @@ function renderDiscriminationSimpleAxisMarkers(container, payload) {
 
   const explanation = document.createElement("p");
   explanation.className = "field-help";
-  explanation.textContent = "Pour chaque classe, jusqu’à trois termes significatifs les plus éloignés de l’origine sont affichés. L’axe dominant indique la coordonnée la plus forte en valeur absolue ; le signe (+ ou -) situe le terme sur l’un des deux pôles de l’axe.";
+  explanation.textContent = "Pour chaque classe, jusqu’à cinq termes significatifs les plus éloignés de l’origine sont affichés. L’axe dominant indique la coordonnée la plus forte en valeur absolue ; le signe (+ ou -) situe le terme sur l’un des deux pôles de l’axe.";
   section.appendChild(explanation);
 
   const tableContainer = document.createElement("div");

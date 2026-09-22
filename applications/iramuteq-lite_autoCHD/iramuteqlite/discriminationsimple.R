@@ -77,7 +77,7 @@ calculer_score_classes_direct_afc_iramuteq <- function(afc_obj) {
 # lecture pour les axes AFC. Ils ne modifient ni l'AFC ni la selection CHD.
 extraire_mots_reperes_axes_discrimination_simple_iramuteq <- function(afc_obj,
                                                                        res_stats_df,
-                                                                       top_n = 3L,
+                                                                       top_n = 5L,
                                                                        p_seuil = 0.05) {
   empty_result <- data.frame(
     classe = character(0),
@@ -96,7 +96,7 @@ extraire_mots_reperes_axes_discrimination_simple_iramuteq <- function(afc_obj,
     return(empty_result)
   }
 
-  top_n <- .as_int_auto_chd(top_n, default = 3L, min_value = 1L)
+  top_n <- .as_int_auto_chd(top_n, default = 5L, min_value = 1L)
   rows <- .selectionner_lignes_chi2_afc_auto_chd(
     res_stats_df = res_stats_df,
     top_n = NULL,
@@ -375,7 +375,7 @@ evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
   mots_reperes_axes <- extraire_mots_reperes_axes_discrimination_simple_iramuteq(
     afc_obj = afc_obj,
     res_stats_df = res_stats_df,
-    top_n = 3L,
+    top_n = 5L,
     p_seuil = p_seuil
   )
 

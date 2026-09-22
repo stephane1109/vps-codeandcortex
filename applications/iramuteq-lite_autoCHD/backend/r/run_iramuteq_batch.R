@@ -1831,7 +1831,7 @@ run_batch <- function() {
         extraire_mots_reperes_axes_discrimination_simple_iramuteq(
           afc_obj = afc_obj,
           res_stats_df = res_stats_df,
-          top_n = 3L,
+          top_n = 5L,
           p_seuil = scalar_num(config$max_p, 0.05)
         ),
         error = function(e_reperes) {
@@ -1855,7 +1855,7 @@ run_batch <- function() {
       selectionner_termes_extremes_afc(
         afc_obj = afc_obj,
         stats_df = res_stats_df,
-        top_n = 3L,
+        top_n = 5L,
         p_seuil = 0.05
       ),
       error = function(e_extremes) {
