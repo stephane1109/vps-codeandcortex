@@ -2750,6 +2750,26 @@ function findClassesModeControl(scope, id) {
   return scope?.querySelector(`#${id}, [data-source-id="${id}"]`) || null;
 }
 
+function applyChdDistanceDialogLayout(scope, isDistanceMode) {
+  const dialogScope = scope?.closest("#chdConfigDialogContent");
+  if (!dialogScope) return;
+
+  const modeField = findClassesModeControl(dialogScope, "classesMode");
+  const modeCard = modeField?.closest("[data-classes-mode-card]");
+  const modeSection = modeCard?.closest("article.card.section-card");
+  if (!modeSection) return;
+
+  dialogScope.querySelectorAll("article.card.section-card").forEach((section) => {
+    section.hidden = Boolean(isDistanceMode && section !== modeSection);
+  });
+
+  const fieldsGrid = modeCard.parentElement;
+  fieldsGrid?.querySelectorAll(":scope > .field").forEach((field) => {
+    field.hidden = Boolean(isDistanceMode && field !== modeCard);
+  });
+  modeSection.hidden = false;
+}
+
 function readBoundedIntegerInput(input, lowerBound, upperBound, fallback) {
   const rawValue = Number(input?.value);
   const value = Number.isFinite(rawValue)
@@ -2835,6 +2855,7 @@ function renderClassesModeCard(card) {
   const modeScope = card.closest(".visually-hidden")
     || card.closest("#chdConfigDialogContent")
     || card.parentElement;
+  applyChdDistanceDialogLayout(modeScope, isDiscriminationSimple);
   modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
     const containsClassesMode = Boolean(section.querySelector("[data-classes-mode-card]"));
     if (!containsClassesMode) section.hidden = isDiscriminationSimple;
@@ -2917,6 +2938,15 @@ function renderClassesModeCard(card) {
 function renderClassesModeCards(scope = document) {
   scope.querySelectorAll("[data-classes-mode-card]").forEach((card) => renderClassesModeCard(card));
 }
+
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const sourceId = target.dataset.sourceId || target.id;
+  if (sourceId !== "classesMode") return;
+  const scope = target.closest("#chdConfigDialogContent") || document;
+  renderClassesModeCards(scope);
+});
 
 function resolveClassesModeConfig() {
   const classesMode = document.getElementById("classesMode").value;
