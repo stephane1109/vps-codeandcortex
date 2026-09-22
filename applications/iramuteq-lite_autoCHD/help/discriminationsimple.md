@@ -62,7 +62,7 @@ rowcoord <- ca$row$coord   # coordonnées des classes
 colcoord <- ca$col$coord   # coordonnées des mots
 ```
 
-La distance directe compare donc les points des classes dans `ca$row$coord`. Elle ne calcule pas une moyenne des mots affichés et ne modifie pas leurs coordonnées. Les mots et les classes sont deux types de points différents, calculés par la même AFC.
+La distance directe utilise donc directement les points des classes dans `ca$row$coord`. Elle ne recalcule pas la position d'une classe à partir des mots affichés et ne modifie aucune coordonnée. Les mots (`ca$col$coord`) et les classes (`ca$row$coord`) sont deux types de points différents, placés par la même AFC.
 
 ### Seuil mincl automatique
 
@@ -123,9 +123,11 @@ $$
 D_{direct} = \\min_{i < j} d(i,j)
 $$
 
-Cette méthode ne reconstruit aucun centre lexical : elle n'utilise ni moyenne ni médiane des mots. Une solution est meilleure lorsque même ses deux classes les plus proches restent éloignées sur le plan AFC.
+Cette méthode ne reconstruit aucun centre lexical : elle n'utilise ni moyenne ni médiane des mots. Pour une CHD donnée, on calcule donc une distance pour chaque paire de classes : Classe 1–Classe 2, Classe 1–Classe 3, Classe 2–Classe 3, etc. On conserve ensuite la plus petite distance de cette liste. Elle correspond à la paire de classes la moins séparée dans cette CHD.
 
-Le segment diagonal du schéma est la distance euclidienne. Les pointillés correspondent aux deux écarts qui la composent : la différence horizontale entre les coordonnées `x` et la différence verticale entre les coordonnées `y`.
+Le critère `D_direct` compare ensuite cette valeur minimale entre les CHD testées. La CHD retenue est celle dont la paire la moins séparée est malgré tout la plus éloignée. Autrement dit, le mode cherche à éviter qu'une seule paire de classes reste trop proche ; il ne retient pas simplement la paire la plus éloignée.
+
+Le segment diagonal du schéma est la distance euclidienne entre les deux points de classes. Les pointillés correspondent aux deux écarts qui la composent : la différence horizontale entre leurs coordonnées `x` et la différence verticale entre leurs coordonnées `y`.
 
 ### 2. Score S lexical
 
