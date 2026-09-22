@@ -2850,8 +2850,8 @@ function renderClassesModeCard(card) {
 
   const settings = getAutoDiscriminantSettings(card);
   if (minDocfreqField) minDocfreqField.hidden = settings.minDocfreq.enabled;
-  if (minclModeField) minclModeField.hidden = settings.mincl.enabled;
-  if (minclManualField) minclManualField.hidden = settings.mincl.enabled;
+  if (minclModeField) minclModeField.hidden = true;
+  if (minclManualField) minclManualField.hidden = true;
   const scoreDetails = getAutoDiscriminantScoreModeDetails(getAutoDiscriminantScoreMode(card));
   Object.entries(AUTO_DISCRIMINANT_PARAMETER_DEFINITIONS).forEach(([key, definition]) => {
     const option = card.querySelector(`[data-auto-discriminant-option="${key === "minDocfreq" ? "min_docfreq" : key === "kMax" ? "k_max" : key}"]`);
