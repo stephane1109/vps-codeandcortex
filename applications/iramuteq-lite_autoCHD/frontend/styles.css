@@ -3330,6 +3330,27 @@ body.comparison-ab-fullscreen-open {
   color: var(--accent);
 }
 
+.stats-table-search {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.stats-table-search label {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.stats-table-search input {
+  min-width: min(22rem, 100%);
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+
 /* Documentation remains neutral; the blue accent is reserved for controls and parameter help. */
 [data-panel="aide"] .markdown-content,
 [data-panel="aide"] .markdown-content h1,

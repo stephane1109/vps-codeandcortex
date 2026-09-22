@@ -13341,6 +13341,14 @@ function renderChdStatsByClass(container, parsed, options = {}) {
   const tabs = document.createElement("div");
   tabs.className = "local-tabs";
 
+  const searchField = document.createElement("div");
+  searchField.className = "stats-table-search";
+  searchField.innerHTML = `
+    <label for="chdStatsSearch">Rechercher</label>
+    <input id="chdStatsSearch" type="search" placeholder="Rechercher un mot" autocomplete="off" />
+  `;
+  const searchInput = searchField.querySelector("input");
+
   const panelsWrap = document.createElement("div");
   panelsWrap.className = "local-tab-panels";
 
@@ -13428,6 +13436,15 @@ function renderChdStatsByClass(container, parsed, options = {}) {
     panelsWrap.appendChild(panel);
   });
 
+  searchInput?.addEventListener("input", () => {
+    const query = String(searchInput.value || "").trim().toLocaleLowerCase();
+    container.querySelectorAll("table tbody tr").forEach((row) => {
+      const matches = !query || row.textContent.toLocaleLowerCase().includes(query);
+      row.hidden = !matches;
+    });
+  });
+
+  container.appendChild(searchField);
   container.appendChild(tabs);
   container.appendChild(panelsWrap);
 }
