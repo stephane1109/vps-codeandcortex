@@ -553,7 +553,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
 
   list(
     mode = "discrimination_simple",
-    mode_label = "CHD Opposition optimisée",
+    mode_label = "CHD distance optimisée",
     score_column = "score_selection",
     score_mode = score_mode,
     score_label = etiquette_mode_score_discrimination_simple_iramuteq(score_mode),

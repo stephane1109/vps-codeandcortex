@@ -12044,7 +12044,7 @@ function formatSummaryValue(value) {
 }
 
 function getClassesModeLabel(mode) {
-  if (mode === "discrimination_simple") return "CHD Opposition optimisée";
+  if (mode === "discrimination_simple") return "CHD distance optimisée";
   return "Normal";
 }
 
@@ -12178,7 +12178,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
     ? payload.manual_replay_config
     : {};
   if (!selected || !Number.isFinite(selectedK)) {
-    container.appendChild(createEmptyState("Aucune configuration CHD Opposition optimisée n'a été retenue pour cette analyse."));
+    container.appendChild(createEmptyState("Aucune configuration CHD distance optimisée n'a été retenue pour cette analyse."));
     return;
   }
 
@@ -12527,7 +12527,7 @@ function renderDiscriminationSimpleMetrics(container, parsed, options = {}) {
   clearContainer(container);
 
   if (!parsed || !parsed.headers.length) {
-    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau CHD Opposition optimisée disponible."));
+    container.appendChild(createEmptyState(options.emptyMessage || "Aucun tableau CHD distance optimisée disponible."));
     return;
   }
 
@@ -12574,7 +12574,7 @@ async function renderDiscriminationSimpleExports(index) {
   appState.discriminationSimpleSummaryPayload = null;
   const summaryFile = findFile(index, [(path) => path.endsWith("discrimination_simple_summary.json")]);
   const metricsFile = findFile(index, [(path) => path.endsWith("discrimination_simple_metrics.csv")]);
-  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode CHD Opposition optimisée.";
+  const manualModeMessage = "Cette analyse CHD n'a pas utilise le mode CHD distance optimisée.";
 
   if (!summaryFile && !metricsFile) {
     setContainerEmptyState(resultContainers.discriminationSimpleSummary, manualModeMessage);
@@ -12588,15 +12588,15 @@ async function renderDiscriminationSimpleExports(index) {
       appState.discriminationSimpleSummaryPayload = payload;
       renderDiscriminationSimpleSummary(resultContainers.discriminationSimpleSummary, payload);
     } catch (error) {
-      setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume CHD Opposition optimisée.");
+      setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Impossible de lire le resume CHD distance optimisée.");
       log(`[error] Lecture JSON impossible (${summaryFile.name}) : ${error.message}`);
     }
   } else {
-    setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Le resume CHD Opposition optimisée est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.discriminationSimpleSummary, "Le resume CHD distance optimisée est absent du dossier d'exports.");
   }
 
   if (!metricsFile) {
-    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Le tableau CHD Opposition optimisée est absent du dossier d'exports.");
+    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Le tableau CHD distance optimisée est absent du dossier d'exports.");
     return { active: true };
   }
 
@@ -12604,10 +12604,10 @@ async function renderDiscriminationSimpleExports(index) {
     const parsed = parseCsv(await metricsFile.text());
     renderDiscriminationSimpleMetrics(resultContainers.discriminationSimpleTable, parsed, {
       title: "discrimination_simple_metrics.csv",
-      emptyMessage: "Le tableau CHD Opposition optimisée est vide."
+      emptyMessage: "Le tableau CHD distance optimisée est vide."
     });
   } catch (error) {
-    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Impossible de lire les scores CHD Opposition optimisée.");
+    setContainerEmptyState(resultContainers.discriminationSimpleTable, "Impossible de lire les scores CHD distance optimisée.");
     log(`[error] Lecture CSV impossible (${metricsFile.name}) : ${error.message}`);
   }
 
@@ -14537,8 +14537,8 @@ function resetResultPanes() {
   applySuiviPresentation();
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
-    discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode CHD Opposition optimisée.",
-    discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode CHD Opposition optimisée.",
+    discriminationSimpleSummary: "Chargez un dossier d'exports pour afficher le meilleur compromis en mode CHD distance optimisée.",
+    discriminationSimpleTable: "Chargez un dossier d'exports pour afficher les scores du mode CHD distance optimisée.",
     chdStatsTable: "Chargez un dossier d'exports pour afficher les statistiques CHD.",
     chdConcordancier: "Chargez un dossier d'exports pour afficher le concordancier HTML.",
     chdWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots.",
