@@ -43,6 +43,27 @@ Seul le critère choisi dans l'interface est calculé et exporté pour chaque si
 
 Dans les deux cas, la CHD, le `chi2` et l'AFC ne sont pas modifiés. Le score `S` ne déplace pas les points sur le graphique AFC, mais il peut retenir une autre CHD car il ajoute la compacité lexicale comme critère de comparaison. Le choix intervient seulement après chaque CHD testée, pour comparer les résultats obtenus.
 
+### Comment l'AFC calcule la position des classes
+
+L'AFC utilise un tableau **classes × mots** : les lignes sont les classes et les colonnes sont les mots. Chaque cellule contient le nombre d'occurrences d'un mot dans une classe.
+
+Dans le code, ce tableau est regroupé par classe avec `quanteda::dfm_group()`, puis l'AFC est calculée par :
+
+```r
+ca <- FactoMineR::CA(tab, graph = FALSE)
+```
+
+FactoMineR compare le profil lexical de chaque classe au profil moyen du corpus, calcule les écarts selon la distance du chi2, puis réalise une décomposition en valeurs singulières. Les coordonnées AFC des classes sont alors produites dans `ca$row$coord` ; les coordonnées des mots sont produites dans `ca$col$coord`.
+
+Dans l'application :
+
+```r
+rowcoord <- ca$row$coord   # coordonnées des classes
+colcoord <- ca$col$coord   # coordonnées des mots
+```
+
+La distance directe compare donc les points des classes dans `ca$row$coord`. Elle ne calcule pas une moyenne des mots affichés et ne modifie pas leurs coordonnées. Les mots et les classes sont deux types de points différents, calculés par la même AFC.
+
 ### Seuil mincl automatique
 
 Lorsque le mode `mincl` est réglé sur `Automatique`, `mincl` ne fait pas partie des paramètres croisés. Pour chaque CHD, le moteur calcule son seuil interne à partir du nombre de segments et des classes disponibles à cette étape : `arrondi(segments / classes)` en classification simple, ou `arrondi(segments / (2 × classes))` en classification double. La valeur affichée, par exemple `90`, est donc un **seuil automatique appliqué**, et non une valeur choisie ou testée par l'utilisateur.
