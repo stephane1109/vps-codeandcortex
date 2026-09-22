@@ -1022,6 +1022,17 @@ function renderInlineMarkdown(text) {
   return html;
 }
 
+function renderMathBlock(text) {
+  const formula = String(text || "").replace(/\\\\/g, "\\").trim();
+  if (formula.includes("\\sqrt") && formula.startsWith("d(i,j)")) {
+    return "<div class=\"math-formula\" role=\"math\">d(i,j) = <span class=\"math-sqrt\">√<span class=\"math-radicand\">((x<sub>i</sub> - x<sub>j</sub>)<sup>2</sup> + (y<sub>i</sub> - y<sub>j</sub>)<sup>2</sup>)</span></span></div>";
+  }
+  if (formula.includes("\\min") && formula.startsWith("D_")) {
+    return "<div class=\"math-formula\" role=\"math\">D<sub>direct</sub> = min<sub>i &lt; j</sub> d(i,j)</div>";
+  }
+  return `<div class="math-formula" role="math">${escapeHtml(formula)}</div>`;
+}
+
 async function renderMarkdownIntoContainer(container, markdownText, options = {}) {
   if (!container) return;
 
@@ -1041,6 +1052,18 @@ async function renderMarkdownIntoContainer(container, markdownText, options = {}
 
     if (!trimmed) {
       index += 1;
+      continue;
+    }
+
+    if (trimmed === "$$") {
+      const formulaLines = [];
+      index += 1;
+      while (index < lines.length && lines[index].trim() !== "$$") {
+        formulaLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length && lines[index].trim() === "$$") index += 1;
+      blocks.push(renderMathBlock(formulaLines.join(" ")));
       continue;
     }
 

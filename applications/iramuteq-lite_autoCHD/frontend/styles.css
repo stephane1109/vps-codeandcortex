@@ -3297,6 +3297,35 @@ body.comparison-ab-fullscreen-open {
   font-size: 0.92em;
 }
 
+.markdown-content .math-formula {
+  margin: 0.8rem 0;
+  padding: 0.65rem 0.9rem;
+  overflow-x: auto;
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.08rem;
+  color: #1f2937;
+  background: #f7f9fc;
+  border-left: 3px solid #217ce7;
+}
+
+.markdown-content .math-formula sub,
+.markdown-content .math-formula sup {
+  line-height: 0;
+  font-size: 0.72em;
+}
+
+.markdown-content .math-sqrt {
+  display: inline-flex;
+  align-items: flex-start;
+}
+
+.markdown-content .math-radicand {
+  display: inline-block;
+  border-top: 1px solid currentColor;
+  padding: 0.08rem 0.15rem 0 0.2rem;
+}
+
 .markdown-content a {
   color: var(--accent);
 }
