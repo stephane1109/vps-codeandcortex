@@ -113,15 +113,15 @@ y_i = ca$row$coord[i, 2]
 
 Pour toutes les paires de classes, le mode calcule la distance euclidienne :
 
-```ini
-d(i,j) = sqrt((x_i - x_j)^2 + (y_i - y_j)^2)
-```
+$$
+d(i,j) = \\sqrt{(x_i - x_j)^{2} + (y_i - y_j)^{2}}
+$$
 
 Le score direct est la plus petite de ces distances :
 
-```ini
-D_direct = min_{i < j} d(i,j)
-```
+$$
+D_{direct} = \\min_{i < j} d(i,j)
+$$
 
 Cette méthode ne reconstruit aucun centre lexical : elle n'utilise ni moyenne ni médiane des mots. Une solution est meilleure lorsque même ses deux classes les plus proches restent éloignées sur le plan AFC.
 
