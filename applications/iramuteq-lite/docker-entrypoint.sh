@@ -33,6 +33,9 @@ candidate_files = [
     app_root / "webapp" / "ticket_gate.py",
     app_root / "main.py",
     app_root / "webapp" / "main.py",
+    app_root / "app.py",
+    app_root / "streamlit_app.py",
+    app_root / "webapp" / "app.py",
     app_root / "README.md",
     app_root / "Dockerfile",
 ]
@@ -116,7 +119,7 @@ def infer_app_id() -> str:
             r'enforce_streamlit_access\(\s*"(?P<value>[^"]+)"\s*,',
             r'\bAPP_TICKET_ID\b\s*=\s*"?(?P<value>[A-Za-z0-9_\-]+)"?',
         ],
-        file_names=["ticket_gate.py", "webapp/ticket_gate.py", "main.py", "webapp/main.py", "Dockerfile"],
+        file_names=["ticket_gate.py", "webapp/ticket_gate.py", "main.py", "webapp/main.py", "app.py", "streamlit_app.py", "webapp/app.py", "Dockerfile"],
     )
     if value:
         return value
@@ -145,7 +148,7 @@ def infer_label(app_id: str) -> str:
             r'st\.set_page_config\([\s\S]*?page_title\s*=\s*"(?P<label>[^"]+)"',
             r"st\.set_page_config\([\s\S]*?page_title\s*=\s*'(?P<label>[^']+)'",
         ],
-        file_names=["ticket_gate.py", "webapp/ticket_gate.py", "main.py", "webapp/main.py", "Dockerfile"],
+        file_names=["ticket_gate.py", "webapp/ticket_gate.py", "main.py", "webapp/main.py", "app.py", "streamlit_app.py", "webapp/app.py", "Dockerfile"],
     )
     if value:
         return clean_label(value, app_id)

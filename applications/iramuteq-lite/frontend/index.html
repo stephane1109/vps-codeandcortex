@@ -22,7 +22,7 @@
             Pour d'autres scripts/appli, vous pouvez consulter mon site :
             <a href="https://www.codeandcortex.fr" target="_blank" rel="noopener noreferrer">www.codeandcortex.fr</a>
           </p>
-          <p class="brand-copy">Version 0_4beta - modifiée 28-07-2026</p>
+          <p class="brand-copy">Version 0_4beta - modifiée 23-09-2026</p>
         </div>
 
         <nav class="top-nav" aria-label="Navigation principale">
@@ -50,9 +50,14 @@
             <p id="fileInfo" class="muted sidebar-file-info">Aucun fichier sélectionné.</p>
             <p id="downloadResultsStatus" class="muted sidebar-note"></p>
             <section class="sidebar-history-block" aria-labelledby="analysisHistoryTitle">
-              <p id="analysisHistoryTitle" class="sidebar-kicker">Analyses lancées</p>
+              <div class="sidebar-history-heading">
+                <p id="analysisHistoryTitle" class="sidebar-kicker">Mes analyses</p>
+                <button id="purgeAnalysisHistoryBtn" class="analysis-history-purge" type="button" hidden>
+                  Purger mon historique
+                </button>
+              </div>
               <div id="analysisHistory" class="analysis-history">
-                <p class="muted analysis-history-empty">Les analyses lancées s'afficheront ici.</p>
+                <p class="muted analysis-history-empty">Vos analyses apparaîtront ici et resteront disponibles après reconnexion.</p>
               </div>
             </section>
             <div class="status-pill">
@@ -945,6 +950,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=20260917-open-ticket"></script>
   </body>
 </html>

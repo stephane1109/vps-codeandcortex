@@ -14,7 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - depend de l'image Docker
 
 
 """
-Controle d'acces Redis pour IRaMuTeQ Lite.
+Contrôle d'accès Redis pour IRaMuTeQ Lite.
 
 #### VARIABLES D'ENVIRONNEMENT A REGLER DANS COOLIFY
 
@@ -55,11 +55,12 @@ Variables d'environnement a regler dans Coolify si besoin :
   quand aucune analyse n'est en cours.
 
 - APP_TICKET_ENFORCED
-  Mettre 0 pour desactiver temporairement la gestion de file d'attente.
+  Mettre 0 pour désactiver temporairement la gestion de file d'attente.
 """
 
 
 SESSION_COOKIE_NAME = os.getenv("APP_TICKET_SESSION_COOKIE", "iramuteq_ticket_session")
+TICKET_ID_HEADER_NAME = "X-App-Ticket-Id"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -94,10 +95,10 @@ def _config(default_app_id: str = "iramuteq-lite", app_label: str = "IRaMuTeQ Li
 
 def _redis_client():
     if redis is None:
-        return None, "Le paquet Python 'redis' n'est pas installe dans IRaMuTeQ Lite."
+        return None, "Le paquet Python 'redis' n'est pas installé dans IRaMuTeQ Lite."
     redis_url = os.getenv("REDIS_URL", "").strip()
     if not redis_url:
-        return None, "REDIS_URL absent : configure une URL Redis complete avec mot de passe dans Coolify."
+        return None, "REDIS_URL absent : configure une URL Redis complète avec mot de passe dans Coolify."
     try:
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
@@ -156,6 +157,20 @@ def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
 
 def _list_members(client, key: str) -> list[str]:
     return [str(item) for item in client.zrange(key, 0, -1)]
+
+
+def _ticket_data(client, ticket_id: str) -> dict[str, Any]:
+    return client.hgetall(_ticket_key(ticket_id)) or {}
+
+
+def _ticket_data_for_app(client, cfg: dict[str, Any], ticket_id: str | None) -> dict[str, Any]:
+    """Return a ticket only when it belongs to this application instance."""
+    if not ticket_id:
+        return {}
+    data = _ticket_data(client, str(ticket_id))
+    if str(data.get("application_id") or "").strip() != cfg["app_id"]:
+        return {}
+    return data
 
 
 def _cleanup_expired(client, cfg: dict[str, Any]) -> None:
@@ -260,7 +275,7 @@ def _error_snapshot(cfg: dict[str, Any], message: str) -> dict[str, Any]:
 
 def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message: str | None = None) -> dict[str, Any]:
     if client is None:
-        return _disabled_snapshot(cfg, bypass_message or "Controle d'acces desactive.")
+        return _disabled_snapshot(cfg, bypass_message or "Contrôle d'accès désactivé.")
 
     active = _active_count(client, cfg)
     queued = _waiting_count(client, cfg)
@@ -271,7 +286,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
             statut="inconnu",
             active=active,
             queued=queued,
-            message="Aucun ticket associe a cette session.",
+            message="Aucun ticket associé a cette session.",
         )
 
     data = client.hgetall(_ticket_key(ticket_id)) or {}
@@ -289,7 +304,7 @@ def _snapshot(client, cfg: dict[str, Any], ticket_id: str | None, bypass_message
 
 def _public_status(client, cfg: dict[str, Any], bypass_message: str | None = None) -> dict[str, Any]:
     if client is None:
-        return _disabled_snapshot(cfg, bypass_message or "Controle d'acces desactive.")
+        return _disabled_snapshot(cfg, bypass_message or "Contrôle d'accès désactivé.")
 
     _publish_runtime_config(client, cfg)
     _cleanup_expired(client, cfg)
@@ -303,7 +318,7 @@ def _public_status(client, cfg: dict[str, Any], bypass_message: str | None = Non
 
 def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
     if client is None:
-        return _error_snapshot(cfg, "Redis indisponible : impossible de reserver un ticket.")
+        return _error_snapshot(cfg, "Redis indisponible : impossible de réserver un ticket.")
 
     _publish_runtime_config(client, cfg)
     _cleanup_expired(client, cfg)
@@ -363,30 +378,48 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
     return _snapshot(client, cfg, ticket_id)
 
 
-def _refresh_existing_ticket(client, cfg: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+def _refresh_ticket(client, cfg: dict[str, Any], ticket_id: str | None) -> dict[str, Any]:
+    """Refresh a resolved ticket without requiring the browser cookie."""
     if client is None:
         return _error_snapshot(cfg, "Redis indisponible : impossible de verifier le ticket.")
-    if not session_id:
-        return _public_status(client, cfg)
 
     _publish_runtime_config(client, cfg)
     _cleanup_expired(client, cfg)
     _promote_waiting(client, cfg)
 
-    session_key = _session_key(cfg["app_id"], session_id)
-    ticket_id = client.get(session_key)
-    if not ticket_id:
+    data = _ticket_data_for_app(client, cfg, ticket_id)
+    if not data:
         return _public_status(client, cfg)
 
-    if not client.exists(_ticket_key(ticket_id)):
-        client.delete(session_key)
-        return _public_status(client, cfg)
-
-    client.expire(session_key, cfg["ttl_seconds"])
-    client.expire(_ticket_key(ticket_id), cfg["ttl_seconds"])
-    client.hset(_ticket_key(ticket_id), mapping={"updated_at": int(time.time())})
+    owner_session_id = str(data.get("session_id") or "").strip()
+    if owner_session_id:
+        session_key = _session_key(cfg["app_id"], owner_session_id)
+        if str(client.get(session_key) or "") == str(ticket_id):
+            client.expire(session_key, cfg["ttl_seconds"])
+    client.expire(_ticket_key(str(ticket_id)), cfg["ttl_seconds"])
+    client.hset(_ticket_key(str(ticket_id)), mapping={"updated_at": int(time.time())})
     _promote_waiting(client, cfg)
-    return _snapshot(client, cfg, ticket_id)
+    return _snapshot(client, cfg, str(ticket_id))
+
+
+def _release_ticket(client, cfg: dict[str, Any], ticket_id: str | None) -> bool:
+    """Remove exactly one application ticket and its matching session mapping."""
+    data = _ticket_data_for_app(client, cfg, ticket_id)
+    if not data:
+        return False
+
+    normalized_ticket_id = str(ticket_id)
+    client.zrem(_keys(cfg["app_id"])["active"], normalized_ticket_id)
+    client.zrem(_keys(cfg["app_id"])["waiting"], normalized_ticket_id)
+    client.zrem(_global_active_key(), normalized_ticket_id)
+
+    owner_session_id = str(data.get("session_id") or "").strip()
+    if owner_session_id:
+        session_key = _session_key(cfg["app_id"], owner_session_id)
+        if str(client.get(session_key) or "") == normalized_ticket_id:
+            client.delete(session_key)
+    client.delete(_ticket_key(normalized_ticket_id))
+    return True
 
 
 def _session_id_from_request(request: Request) -> str | None:
@@ -394,65 +427,90 @@ def _session_id_from_request(request: Request) -> str | None:
     return value or None
 
 
+def _ticket_id_from_request_header(request: Request) -> str | None:
+    """Read the opaque ticket capability returned to the current web page."""
+    value = str(request.headers.get(TICKET_ID_HEADER_NAME, "")).strip().lower()
+    if len(value) != 32 or any(character not in "0123456789abcdef" for character in value):
+        return None
+    return value
+
+
+def _ticket_for_request(client, cfg: dict[str, Any], request: Request) -> tuple[str | None, str | None]:
+    """Resolve a ticket from its cookie, then from the page recovery header."""
+    session_id = _session_id_from_request(request)
+    if session_id:
+        session_key = _session_key(cfg["app_id"], session_id)
+        ticket_id = client.get(session_key)
+        if ticket_id and _ticket_data_for_app(client, cfg, str(ticket_id)):
+            return str(ticket_id), session_id
+        if ticket_id:
+            client.delete(session_key)
+
+    ticket_id = _ticket_id_from_request_header(request)
+    data = _ticket_data_for_app(client, cfg, ticket_id)
+    if not data:
+        return None, session_id
+
+    ticket_session_id = str(data.get("session_id") or "").strip()
+    return ticket_id, ticket_session_id or session_id
+
+
 def status_for_request(request: Request) -> tuple[dict[str, Any], str | None]:
     cfg = _config()
     if not cfg["enabled"]:
-        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."), None
+        return _disabled_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0."), None
 
     client, message = _redis_client()
-    session_id = _session_id_from_request(request)
     if client is None:
-        return _error_snapshot(cfg, message or "Redis indisponible."), session_id
-    return _refresh_existing_ticket(client, cfg, session_id), session_id
+        return _error_snapshot(cfg, message or "Redis indisponible."), _session_id_from_request(request)
+    ticket_id, session_id = _ticket_for_request(client, cfg, request)
+    return _refresh_ticket(client, cfg, ticket_id), session_id
 
 
 def claim_ticket_for_request(request: Request) -> tuple[dict[str, Any], str]:
     cfg = _config()
-    session_id = _session_id_from_request(request) or uuid.uuid4().hex
     if not cfg["enabled"]:
-        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."), session_id
+        return _disabled_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0."), _session_id_from_request(request) or uuid.uuid4().hex
 
     client, message = _redis_client()
     if client is None:
-        return _error_snapshot(cfg, message or "Redis indisponible."), session_id
+        return _error_snapshot(cfg, message or "Redis indisponible."), _session_id_from_request(request) or uuid.uuid4().hex
+    ticket_id, session_id = _ticket_for_request(client, cfg, request)
+    if ticket_id:
+        return _refresh_ticket(client, cfg, ticket_id), session_id or uuid.uuid4().hex
+    session_id = session_id or uuid.uuid4().hex
     return _claim_or_refresh(client, cfg, session_id), session_id
 
 
 def heartbeat_ticket_for_request(request: Request) -> tuple[dict[str, Any], str | None]:
     cfg = _config()
-    session_id = _session_id_from_request(request)
     if not cfg["enabled"]:
-        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0."), session_id
+        return _disabled_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0."), _session_id_from_request(request)
 
     client, message = _redis_client()
     if client is None:
-        return _error_snapshot(cfg, message or "Redis indisponible."), session_id
-    return _refresh_existing_ticket(client, cfg, session_id), session_id
+        return _error_snapshot(cfg, message or "Redis indisponible."), _session_id_from_request(request)
+    ticket_id, session_id = _ticket_for_request(client, cfg, request)
+    return _refresh_ticket(client, cfg, ticket_id), session_id
 
 
 def release_ticket_for_request(request: Request) -> dict[str, Any]:
     cfg = _config()
-    session_id = _session_id_from_request(request)
     if not cfg["enabled"]:
-        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _disabled_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     if client is None:
         return _error_snapshot(cfg, message or "Redis indisponible.")
 
-    if not session_id:
-        return _public_status(client, cfg)
-
-    session_key = _session_key(cfg["app_id"], session_id)
-    ticket_id = client.get(session_key)
-    if ticket_id:
-        client.zrem(_keys(cfg["app_id"])["active"], ticket_id)
-        client.zrem(_keys(cfg["app_id"])["waiting"], ticket_id)
-        client.zrem(_global_active_key(), ticket_id)
-        client.delete(_ticket_key(ticket_id))
-        client.delete(session_key)
+    ticket_id, _session_id = _ticket_for_request(client, cfg, request)
+    released = _release_ticket(client, cfg, ticket_id)
     _promote_waiting(client, cfg)
-    return _public_status(client, cfg)
+    snapshot = _public_status(client, cfg)
+    snapshot["released"] = released
+    if not released:
+        snapshot["message"] = "Aucun ticket actif n'est associé à cette session."
+    return snapshot
 
 
 def apply_session_cookie_headers(response, session_id: str | None) -> None:
@@ -476,14 +534,14 @@ def clear_session_cookie_headers(response) -> None:
 def require_active_ticket(request: Request) -> dict[str, Any]:
     cfg = _config()
     if not cfg["enabled"]:
-        return _disabled_snapshot(cfg, "Controle d'acces desactive par APP_TICKET_ENFORCED=0.")
+        return _disabled_snapshot(cfg, "Contrôle d'accès désactivé par APP_TICKET_ENFORCED=0.")
 
     client, message = _redis_client()
     if client is None:
         raise PermissionError(message or "Redis indisponible pour verifier le ticket actif.")
 
-    session_id = _session_id_from_request(request)
-    snapshot = _refresh_existing_ticket(client, cfg, session_id)
+    ticket_id, _session_id = _ticket_for_request(client, cfg, request)
+    snapshot = _refresh_ticket(client, cfg, ticket_id)
     if snapshot["statut"] != "actif":
         raise PermissionError(snapshot.get("message") or "Aucun ticket actif pour lancer cette analyse.")
     return snapshot

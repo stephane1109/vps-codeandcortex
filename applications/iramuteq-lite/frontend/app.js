@@ -13,6 +13,7 @@ const downloadResultsBtn = document.getElementById("downloadResultsBtn");
 const fileInfo = document.getElementById("fileInfo");
 const downloadResultsStatus = document.getElementById("downloadResultsStatus");
 const analysisHistory = document.getElementById("analysisHistory");
+const purgeAnalysisHistoryBtn = document.getElementById("purgeAnalysisHistoryBtn");
 const sidebarStatus = document.getElementById("sidebarStatus");
 const sidebarStatusPill = document.querySelector(".status-pill");
 const sidebarStatusDot = document.querySelector(".status-dot");
@@ -321,6 +322,7 @@ const appState = {
   outputDir: null,
   exportEntries: [],
   analysisHistory: [],
+  analysisHistoryPurgeInProgress: false,
   activeAnalysisHistoryId: null,
   corpusText: "",
   afcStarredVariablesChoices: [],
@@ -422,6 +424,7 @@ const appState = {
   termChartExport: null
 };
 
+const TICKET_REFERENCE_STORAGE_KEY = "iramuteq-ticket-reference-v1";
 const DEFAULT_TICKET_IDLE_RELEASE_MS = 900000;
 let latestTicketSnapshot = normalizeTicketSnapshot({});
 let analysisExecutionInProgress = false;
@@ -540,8 +543,52 @@ function normalizeTicketSnapshot(snapshot) {
     waitRefreshMs: Number(snapshot?.wait_refresh_ms || 10000),
     heartbeatMs: Number(snapshot?.heartbeat_ms || 30000),
     idleReleaseMs: Number(snapshot?.idle_release_ms || DEFAULT_TICKET_IDLE_RELEASE_MS),
+    released: typeof snapshot?.released === "boolean" ? snapshot.released : null,
     message: String(snapshot?.message || "")
   };
+}
+
+function normalizeTicketReference(value) {
+  const ticketId = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(ticketId) ? ticketId : "";
+}
+
+function readStoredTicketReference() {
+  try {
+    return normalizeTicketReference(window.sessionStorage.getItem(TICKET_REFERENCE_STORAGE_KEY));
+  } catch (_error) {
+    return "";
+  }
+}
+
+function persistTicketReference(ticketId) {
+  const normalizedTicketId = normalizeTicketReference(ticketId);
+  if (!normalizedTicketId) return;
+  try {
+    window.sessionStorage.setItem(TICKET_REFERENCE_STORAGE_KEY, normalizedTicketId);
+  } catch (_error) {
+    // A ticket can still be recovered from its cookie when session storage is unavailable.
+  }
+}
+
+function clearStoredTicketReference() {
+  try {
+    window.sessionStorage.removeItem(TICKET_REFERENCE_STORAGE_KEY);
+  } catch (_error) {
+    // Ignore private browsing and storage policy errors.
+  }
+}
+
+function getTicketReferenceForRequest() {
+  return normalizeTicketReference(latestTicketSnapshot?.ticket_id) || readStoredTicketReference();
+}
+
+function restorePersistedTicketReference() {
+  const ticketId = readStoredTicketReference();
+  if (!ticketId || latestTicketSnapshot.ticket_id) return;
+  latestTicketSnapshot.ticket_id = ticketId;
+  latestTicketSnapshot.ticketId = ticketId;
+  window.__APP_TICKET_CURRENT_ID__ = ticketId;
 }
 
 function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
@@ -560,16 +607,17 @@ function rememberUserInteraction() {
 }
 
 function rememberTicketSnapshot(snapshot) {
-  const previousTicketId = String(latestTicketSnapshot?.ticket_id || "").trim();
   latestTicketSnapshot = normalizeTicketSnapshot(snapshot);
-  if (!latestTicketSnapshot.ticket_id && analysisExecutionInProgress && previousTicketId) {
-    latestTicketSnapshot.ticket_id = previousTicketId;
-    latestTicketSnapshot.ticketId = previousTicketId;
+  const ticketId = normalizeTicketReference(latestTicketSnapshot.ticket_id);
+  if (ticketId) {
+    latestTicketSnapshot.ticket_id = ticketId;
+    latestTicketSnapshot.ticketId = ticketId;
+    ticketReleasedLocally = false;
+    persistTicketReference(ticketId);
+  } else if (latestTicketSnapshot.enabled) {
+    clearStoredTicketReference();
   }
   window.__APP_TICKET_CURRENT_ID__ = String(latestTicketSnapshot.ticket_id || "").trim();
-  if (["actif", "attente"].includes(latestTicketSnapshot.statut)) {
-    ticketReleasedLocally = false;
-  }
   updateReleaseAccessButton(latestTicketSnapshot);
   scheduleIdleTicketRelease();
   return latestTicketSnapshot;
@@ -592,7 +640,7 @@ async function autoReleaseTicketAfterInactivity() {
   }
 
   const snapshot = await releaseAnalysisTicket({ silent: true });
-  if (snapshot) {
+  if (snapshot && snapshot.released !== false) {
     setSidebarRuntimeStatus("Accès libéré automatiquement après inactivité.", "success");
     await refreshTicketSidebarStatus();
   }
@@ -627,20 +675,22 @@ function releaseTicketOnPageHide() {
   if (!latestTicketSnapshot.enabled || !["actif", "attente"].includes(latestTicketSnapshot.statut)) {
     return;
   }
+  const ticketId = getTicketReferenceForRequest();
   void fetch("/api/tickets/release", {
     method: "POST",
     credentials: "same-origin",
     keepalive: true,
-    headers: latestTicketSnapshot?.ticket_id
-      ? { "X-App-Ticket-Id": String(latestTicketSnapshot.ticket_id) }
+    headers: ticketId
+      ? { "X-App-Ticket-Id": ticketId }
       : undefined
   }).catch(() => {});
 }
 
 async function callTicketApi(path, { method = "GET", body = null } = {}) {
   const headers = body ? { "Content-Type": "application/json" } : {};
-  if (latestTicketSnapshot?.ticket_id) {
-    headers["X-App-Ticket-Id"] = String(latestTicketSnapshot.ticket_id);
+  const ticketId = getTicketReferenceForRequest();
+  if (ticketId) {
+    headers["X-App-Ticket-Id"] = ticketId;
   }
   const response = await fetch(path, {
     method,
@@ -706,34 +756,15 @@ async function refreshTicketSidebarStatus() {
   }
 }
 
-async function claimPageTicketOnOpen() {
+async function initialiseTicketSidebarOnOpen() {
   try {
-    const snapshot = await claimAnalysisTicket();
-    if (!snapshot.enabled) {
-      setSidebarTicketStatus("Application disponible", "idle");
-      return snapshot;
-    }
-    if (snapshot.statut === "actif") {
-      setSidebarTicketStatus("Session réservée sur cette application", "active");
-      return snapshot;
-    }
-    if (snapshot.statut === "attente") {
-      setSidebarTicketStatus(`File d'attente : position ${snapshot.position || "?"}`, "waiting");
-      return snapshot;
-    }
-    if (snapshot.statut === "erreur" || snapshot.statut === "refuse") {
-      setSidebarTicketStatus(
-        snapshot.statut === "refuse" ? "File d'attente pleine" : "Accès serveur indisponible",
-        "error"
-      );
-      return snapshot;
-    }
-    setSidebarTicketStatus("Accès serveur indisponible", "error");
-    return snapshot;
+    // The dashboard represents opened application sessions, not only launched jobs.
+    await claimAnalysisTicket();
   } catch (error) {
-    setSidebarTicketStatus("Statut utilisateur indisponible", "error");
-    return null;
+    setSidebarTicketStatus("Accès serveur indisponible", "error");
+    return rememberTicketSnapshot({ enabled: false, message: error?.message || String(error) });
   }
+  return refreshTicketSidebarStatus();
 }
 
 async function claimAnalysisTicket() {
@@ -746,8 +777,16 @@ async function heartbeatAnalysisTicket() {
 
 async function releaseAnalysisTicket({ silent = false } = {}) {
   try {
-    const snapshot = rememberTicketSnapshot(await callTicketApi("/api/tickets/release", { method: "POST" }));
+    const releasedSnapshot = await callTicketApi("/api/tickets/release", { method: "POST" });
+    if (releasedSnapshot.released === false) {
+      if (!silent) {
+        setSidebarTicketStatus("Aucun ticket réservé n'a été trouvé pour cette session.", "warning");
+      }
+      return releasedSnapshot;
+    }
     ticketReleasedLocally = true;
+    clearStoredTicketReference();
+    const snapshot = rememberTicketSnapshot(releasedSnapshot);
     if (!silent) {
       await refreshTicketSidebarStatus();
     }
@@ -1052,7 +1091,39 @@ function getAnalysisHistoryArchiveBaseName(entry) {
 
 async function activateAnalysisHistoryEntry(entryId) {
   const entry = appState.analysisHistory.find((item) => item.id === entryId);
-  if (!entry || !Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  if (!entry) {
+    log("[error] Réouverture de l'analyse impossible : aucun export mémorisé.");
+    return;
+  }
+
+  if (entry.persisted && entry.analysisId) {
+    try {
+      const response = await fetch(`/api/analyses/${encodeURIComponent(entry.analysisId)}/artifacts`, {
+        credentials: "include",
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const archived = await response.json();
+      Object.assign(entry, archived.analysis || {}, {
+        artifacts: archived.artifacts || [],
+        outputDir: archived.snapshot?.outputDir || entry.outputDir,
+        summary: archived.snapshot?.summary || entry.summary,
+        logs: archived.snapshot?.logs || entry.logs
+      });
+    } catch (error) {
+      log(`[error] Lecture de l'analyse archivée impossible : ${error?.message || String(error)}`);
+      return;
+    }
+  } else if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+    try {
+      const archived = await tauriInvoke("read_analysis_history", { jobId: entry.jobId || entry.id });
+      Object.assign(entry, archived || {});
+    } catch (error) {
+      log(`[error] Lecture de l'analyse archivée impossible : ${error?.message || String(error)}`);
+      return;
+    }
+  }
+  if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
     log("[error] Réouverture de l'analyse impossible : aucun export mémorisé.");
     return;
   }
@@ -1111,6 +1182,11 @@ function getMultimodalHistoryKind(scriptName) {
 }
 
 function renderAnalysisHistory() {
+  if (purgeAnalysisHistoryBtn) {
+    const canPurge = appState.analysisHistory.some((entry) => entry.persisted && entry.completed);
+    purgeAnalysisHistoryBtn.hidden = !canPurge;
+    purgeAnalysisHistoryBtn.disabled = appState.analysisHistoryPurgeInProgress;
+  }
   if (!analysisHistory) return;
 
   analysisHistory.innerHTML = "";
@@ -1123,7 +1199,35 @@ function renderAnalysisHistory() {
     return;
   }
 
+  const corpusGroups = new Map();
   appState.analysisHistory.forEach((entry) => {
+    const corpusName = String(entry.corpusName || "Corpus courant").trim() || "Corpus courant";
+    if (!corpusGroups.has(corpusName)) corpusGroups.set(corpusName, []);
+    corpusGroups.get(corpusName).push(entry);
+  });
+
+  corpusGroups.forEach((entries, corpusName) => {
+    const folder = document.createElement("details");
+    folder.className = "analysis-history-folder";
+    folder.open = true;
+
+    const folderButton = document.createElement("summary");
+    folderButton.className = "analysis-history-folder-summary";
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "analysis-history-folder-icon";
+    folderIcon.setAttribute("aria-hidden", "true");
+    const folderLabel = document.createElement("span");
+    folderLabel.className = "analysis-history-folder-name";
+    folderLabel.textContent = corpusName;
+    const folderCount = document.createElement("span");
+    folderCount.className = "analysis-history-folder-count";
+    folderCount.textContent = String(entries.length);
+    folderButton.append(folderIcon, folderLabel, folderCount);
+
+    const children = document.createElement("div");
+    children.className = "analysis-history-folder-entries";
+
+    entries.forEach((entry) => {
     const item = document.createElement("div");
     item.className = `analysis-history-item${entry.id === appState.activeAnalysisHistoryId ? " is-active" : ""}`;
 
@@ -1139,38 +1243,108 @@ function renderAnalysisHistory() {
     meta.className = "analysis-history-item-meta";
     meta.textContent = entry.corpusName || "Corpus courant";
 
-    mainButton.appendChild(title);
-    mainButton.appendChild(meta);
+    const documentIcon = document.createElement("span");
+    documentIcon.className = "analysis-history-document-icon";
+    const content = document.createElement("span");
+    content.className = "analysis-history-item-content";
+    content.append(title, meta);
+    mainButton.append(documentIcon, content);
     mainButton.addEventListener("click", () => {
       void activateAnalysisHistoryEntry(entry.id);
     });
 
-    const downloadButton = document.createElement("button");
-    downloadButton.type = "button";
-    downloadButton.className = "secondary-button analysis-history-download";
-    downloadButton.textContent = "Télécharger";
-    downloadButton.addEventListener("click", () => {
-      void downloadResultsArchive({
-        outputDir: entry.outputDir,
-        entryCount: Array.isArray(entry.artifacts) ? entry.artifacts.length : 0,
-        archiveBaseName: getAnalysisHistoryArchiveBaseName(entry),
-        pendingButton: downloadButton
-      });
-    });
-
     item.appendChild(mainButton);
-    item.appendChild(downloadButton);
-    analysisHistory.appendChild(item);
+    const actions = document.createElement("div");
+    actions.className = "analysis-history-actions";
+    if (entry.persisted && entry.completed && entry.success) {
+      const downloadButton = document.createElement("button");
+      downloadButton.type = "button";
+      downloadButton.className = "secondary-button analysis-history-download";
+      downloadButton.textContent = "Télécharger";
+      downloadButton.addEventListener("click", () => {
+        const anchor = document.createElement("a");
+        anchor.href = `/api/analyses/${encodeURIComponent(entry.analysisId)}/archive`;
+        anchor.download = `${getAnalysisHistoryArchiveBaseName(entry)}.zip`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      });
+      actions.appendChild(downloadButton);
+    }
+    if (entry.persisted && entry.completed) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "analysis-history-delete";
+      deleteButton.textContent = "Supprimer";
+      deleteButton.addEventListener("click", async (event) => {
+        event.preventDefault();
+        if (!window.confirm("Supprimer définitivement cette analyse et ses exports ?")) return;
+        const response = await fetch(`/api/analyses/${encodeURIComponent(entry.analysisId)}`, {
+          method: "DELETE", credentials: "include"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        appState.analysisHistory = appState.analysisHistory.filter((item) => item.id !== entry.id);
+        renderAnalysisHistory();
+      });
+      actions.appendChild(deleteButton);
+    }
+    if (actions.childElementCount) item.appendChild(actions);
+      children.appendChild(item);
+    });
+    folder.append(folderButton, children);
+    analysisHistory.appendChild(folder);
   });
 }
 
+async function hydrateAnalysisHistory() {
+  try {
+    const response = await fetch("/api/analyses", { credentials: "include", cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const entries = Array.isArray(payload?.analyses) ? payload.analyses : [];
+    appState.analysisHistory = entries.map((entry) => ({
+      ...entry,
+      id: entry.id,
+      analysisId: entry.id,
+      persisted: true,
+      analysisKind: "chd",
+      navigationTarget: "resultats_chd",
+      artifacts: []
+    }));
+    renderAnalysisHistory();
+  } catch (error) {
+    log(`[info] Historique serveur indisponible : ${error?.message || String(error)}`);
+  }
+}
+
+async function purgeAnalysisHistory() {
+  if (appState.analysisHistoryPurgeInProgress) return;
+  const completed = appState.analysisHistory.filter((entry) => entry.persisted && entry.completed);
+  if (!completed.length || !window.confirm("Supprimer définitivement les analyses terminées et leurs exports ?")) return;
+  appState.analysisHistoryPurgeInProgress = true;
+  renderAnalysisHistory();
+  try {
+    const response = await fetch("/api/analyses", { method: "DELETE", credentials: "include" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    appState.analysisHistory = appState.analysisHistory.filter((entry) => !entry.persisted || !entry.completed);
+    setSidebarRuntimeStatus("Historique purgé.", "success");
+  } catch (error) {
+    log(`[error] Purge de l'historique impossible : ${error?.message || String(error)}`);
+  } finally {
+    appState.analysisHistoryPurgeInProgress = false;
+    renderAnalysisHistory();
+  }
+}
+
 function rememberAnalysisHistoryEntry(entry) {
-  if (!entry || !Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  if (!entry || (!entry.persisted && (!Array.isArray(entry.artifacts) || !entry.artifacts.length))) {
     return;
   }
 
   const normalizedEntry = {
     id: entry.id || entry.jobId || `${entry.analysisKind || "chd"}-${Date.now()}`,
+    analysisId: entry.analysisId || null,
+    persisted: Boolean(entry.persisted || entry.analysisId),
     jobId: entry.jobId || null,
     analysisKind: entry.analysisKind || "chd",
     createdAt: entry.createdAt || new Date().toISOString(),
@@ -1178,9 +1352,13 @@ function rememberAnalysisHistoryEntry(entry) {
     folderName: entry.folderName || entry.jobId || "exports",
     outputDir: entry.outputDir || null,
     navigationTarget: entry.navigationTarget || "resultats_chd",
+    status: entry.status || "completed",
+    completed: entry.completed !== false,
+    success: entry.success !== false,
+    expiresAt: entry.expiresAt || "",
     summary: entry.summary || null,
     logs: Array.isArray(entry.logs) ? entry.logs : [],
-    artifacts: entry.artifacts
+    artifacts: Array.isArray(entry.artifacts) ? entry.artifacts : []
   };
 
   appState.analysisHistory = [
@@ -14458,7 +14636,9 @@ async function startAnalysis(analysisKind = "chd") {
 
       try {
         rememberAnalysisHistoryEntry({
-          id: payload.jobId || `${analysisKind}-${Date.now()}`,
+          id: session.analysisId || payload.jobId || `${analysisKind}-${Date.now()}`,
+          analysisId: session.analysisId || null,
+          persisted: Boolean(session.analysisId),
           jobId: payload.jobId || null,
           analysisKind,
           createdAt: new Date().toISOString(),
@@ -14537,6 +14717,7 @@ activateChdSubTab("dendrogramme");
 activateHelpSubTab("help_general");
 resetResultPanes();
 renderResults([]);
+void hydrateAnalysisHistory();
 syncDendrogramSizing();
 renderMorphoPickers(document);
 renderAfcStarredVariablesPickers(document, { resetSelection: true });
@@ -14548,7 +14729,8 @@ renderAnnotationPreview();
 void resetAnnotationEntriesOnStartup();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
-void claimPageTicketOnOpen().then(() => {
+restorePersistedTicketReference();
+void initialiseTicketSidebarOnOpen().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();
   }, 800);
@@ -14561,7 +14743,9 @@ if (releaseAccessBtn) {
     releaseAccessBtn.disabled = true;
     try {
       const snapshot = await releaseAnalysisTicket();
-      if (snapshot) {
+      if (snapshot?.released === false) {
+        setSidebarRuntimeStatus("Aucun accès réservé n'était associé à cette session.", "warning");
+      } else if (snapshot) {
         setSidebarRuntimeStatus("Accès libéré pour cette session.", "success");
       } else {
         setSidebarRuntimeStatus("Liberation a reessayer : le statut va etre reverifie.", "error");
@@ -14570,6 +14754,11 @@ if (releaseAccessBtn) {
       await refreshTicketSidebarStatus();
       updateReleaseAccessButton();
     }
+  });
+}
+if (purgeAnalysisHistoryBtn) {
+  purgeAnalysisHistoryBtn.addEventListener("click", () => {
+    void purgeAnalysisHistory();
   });
 }
 window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
