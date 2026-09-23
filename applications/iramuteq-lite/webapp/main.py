@@ -1,18 +1,67 @@
 from __future__ import annotations
 
 import json
+import shutil
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import runtime
+from . import analysis_history
 from . import ticket_gate
 
 
 app = FastAPI(title="IRaMuTeQ Lite Web", docs_url=None, redoc_url=None)
 _MISSING = object()
+
+
+def analysis_json_response(payload: dict[str, Any], owner_token: str | None = None) -> JSONResponse:
+    response = JSONResponse(payload)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    analysis_history.apply_owner_cookie(response, owner_token)
+    return response
+
+
+def remove_job_directory(job_id: str) -> None:
+    safe_job_id = str(job_id or "").strip()
+    if not safe_job_id or Path(safe_job_id).name != safe_job_id:
+        return
+    shutil.rmtree(runtime.jobs_root() / safe_job_id, ignore_errors=True)
+
+
+def purge_expired_analysis_history() -> None:
+    for record in analysis_history.purge_expired_analyses(runtime.app_data_root()):
+        remove_job_directory(str(record.get("jobId") or ""))
+
+
+def sync_owned_analysis(owner_hash: str, analysis_id: str, *, include_files: bool) -> tuple[dict[str, Any], dict[str, Any]]:
+    purge_expired_analysis_history()
+    record = analysis_history.get_owned_analysis(runtime.app_data_root(), owner_hash, analysis_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Analyse introuvable ou non autorisee.")
+    snapshot = runtime.read_python_analysis_status(record["jobId"])
+    updated = analysis_history.update_analysis_from_snapshot(
+        runtime.app_data_root(), owner_hash=owner_hash, analysis_id=analysis_id, snapshot=snapshot
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Analyse introuvable ou non autorisee.")
+    if include_files and snapshot.get("completed") and snapshot.get("success"):
+        snapshot["files"] = runtime.collect_output_artifacts(str(snapshot.get("outputDir") or "")).get("files", [])
+    return updated, snapshot
+
+
+def owned_output_dir(record: dict[str, Any], snapshot: dict[str, Any]) -> Path:
+    raw = str(snapshot.get("outputDir") or record.get("outputDir") or "").strip()
+    output_dir = Path(raw).resolve()
+    job_root = (runtime.jobs_root() / str(record["jobId"])).resolve()
+    if not raw or job_root not in output_dir.parents or not output_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Le dossier d'exports est introuvable.")
+    return output_dir
 
 
 def ticket_json_response(
@@ -157,6 +206,79 @@ def ticket_release(request: Request) -> JSONResponse:
     return ticket_json_response(snapshot, clear_session=True)
 
 
+@app.get("/api/analyses")
+def list_analyses(request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    purge_expired_analysis_history()
+    return analysis_json_response(
+        {
+            "analyses": analysis_history.list_owned_analyses(runtime.app_data_root(), owner_hash),
+            "retentionDays": analysis_history.retention_days(),
+        },
+        owner_token,
+    )
+
+
+@app.get("/api/analyses/{analysis_id}")
+def read_analysis(analysis_id: str, request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
+    return analysis_json_response({"analysis": record, "snapshot": snapshot}, owner_token)
+
+
+@app.get("/api/analyses/{analysis_id}/artifacts")
+def read_analysis_artifacts(analysis_id: str, request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=True)
+    if not snapshot.get("completed") or not snapshot.get("success"):
+        raise HTTPException(status_code=409, detail="Cette analyse n'est pas encore disponible.")
+    return analysis_json_response(
+        {"analysis": record, "snapshot": snapshot, "artifacts": snapshot.get("files") or []},
+        owner_token,
+    )
+
+
+@app.get("/api/analyses/{analysis_id}/archive")
+def download_analysis_archive(analysis_id: str, request: Request) -> StreamingResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
+    if not snapshot.get("completed") or not snapshot.get("success"):
+        raise HTTPException(status_code=409, detail="Cette analyse n'est pas prête à être téléchargée.")
+    archive = runtime.build_results_archive(owned_output_dir(record, snapshot))
+    response = StreamingResponse(
+        BytesIO(archive),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="iramuteq-{record["jobId"]}-resultats.zip"'},
+    )
+    analysis_history.apply_owner_cookie(response, owner_token)
+    return response
+
+
+@app.delete("/api/analyses/{analysis_id}")
+def delete_analysis(analysis_id: str, request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
+    if not snapshot.get("completed"):
+        raise HTTPException(status_code=409, detail="Cette analyse est encore en cours.")
+    deleted = analysis_history.delete_owned_analysis(runtime.app_data_root(), owner_hash, analysis_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Analyse introuvable.")
+    remove_job_directory(record["jobId"])
+    return analysis_json_response({"deleted": True, "analysisId": analysis_id}, owner_token)
+
+
+@app.delete("/api/analyses")
+def purge_analyses(request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    purge_expired_analysis_history()
+    deleted = analysis_history.delete_completed_owned_analyses(runtime.app_data_root(), owner_hash)
+    for record in deleted:
+        remove_job_directory(str(record.get("jobId") or ""))
+    return analysis_json_response(
+        {"deleted": len(deleted), "analysisIds": [record["id"] for record in deleted]}, owner_token
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
@@ -205,7 +327,31 @@ async def tauri_invoke(command: str, request: Request) -> Any:
                 ticket_gate.require_active_ticket(request)
             except PermissionError as error:
                 raise HTTPException(status_code=423, detail=str(error)) from error
-        return dispatch_tauri_command(command, payload)
+            result = dispatch_tauri_command(command, payload)
+            owner_hash, owner_token = analysis_history.owner_for_request(request)
+            record = analysis_history.create_analysis(
+                runtime.app_data_root(),
+                owner_hash=owner_hash,
+                job_id=str(result.get("jobId") or ""),
+                corpus_name=str(get_payload_arg(payload, "corpusName", "corpus_name")),
+                analysis_kind="chd",
+                navigation_target="resultats_chd",
+            )
+            return analysis_json_response({**result, "analysisId": record["id"]}, owner_token)
+
+        result = dispatch_tauri_command(command, payload)
+        if command == "read_python_analysis_status":
+            job_id = str(get_payload_arg(payload, "jobId", "job_id"))
+            owner_hash, owner_token = analysis_history.owner_for_request(request)
+            record = analysis_history.get_analysis_by_job(runtime.app_data_root(), job_id)
+            if record and record.get("ownerHash") == owner_hash:
+                updated = analysis_history.update_analysis_from_snapshot(
+                    runtime.app_data_root(), owner_hash=owner_hash, analysis_id=record["id"], snapshot=result
+                )
+                if updated:
+                    result["analysisId"] = updated["id"]
+                return analysis_json_response(result, owner_token)
+        return result
     except KeyError as error:
         missing = error.args[0] if error.args else command
         if missing == command:

@@ -918,6 +918,99 @@ textarea {
   white-space: nowrap;
 }
 
+/* The history is presented as a real corpus folder tree, like the Lab build. */
+.analysis-history-folder {
+  overflow: hidden;
+  border: 1px solid rgba(127, 137, 145, 0.24);
+  border-radius: 13px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 248, 249, 0.72));
+  box-shadow: 0 1px 1px rgba(33, 42, 49, 0.05);
+}
+
+.analysis-history-folder-summary {
+  display: grid;
+  grid-template-columns: 0.58rem 1.18rem minmax(0, 1fr) auto;
+  gap: 0.42rem;
+  align-items: center;
+  padding: 0.64rem 0.7rem;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.analysis-history-folder-summary::-webkit-details-marker { display: none; }
+.analysis-history-folder-summary::before {
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  justify-self: center;
+  border-right: 2px solid #87929a;
+  border-bottom: 2px solid #87929a;
+  transform: rotate(-45deg);
+}
+.analysis-history-folder[open] .analysis-history-folder-summary::before {
+  transform: rotate(45deg) translate(-0.08rem, -0.08rem);
+  border-color: var(--accent);
+}
+.analysis-history-folder-icon {
+  position: relative;
+  display: block;
+  width: 1.14rem;
+  height: 0.9rem;
+}
+.analysis-history-folder-icon::before,
+.analysis-history-folder-icon::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  border: 1px solid rgba(160, 111, 16, 0.3);
+  background: linear-gradient(180deg, #f8db7c, #eab54a);
+}
+.analysis-history-folder-icon::before {
+  z-index: 1;
+  top: 0.04rem;
+  left: 0.08rem;
+  width: 0.5rem;
+  height: 0.28rem;
+  border-bottom: 0;
+  border-radius: 0.2rem 0.2rem 0 0;
+}
+.analysis-history-folder-icon::after {
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  height: 0.72rem;
+  border-radius: 0.17rem;
+  box-shadow: 0 0.08rem 0.12rem rgba(113, 78, 16, 0.14);
+}
+.analysis-history-folder-name { min-width: 0; overflow-wrap: anywhere; font-size: 0.82rem; font-weight: 700; }
+.analysis-history-folder-count { color: var(--ink-soft); font-size: 0.7rem; white-space: nowrap; }
+.analysis-history-folder-entries {
+  display: grid;
+  gap: 0.48rem;
+  margin: 0 0.58rem 0.62rem 1.56rem;
+  padding: 0.1rem 0 0.04rem 0.7rem;
+  border-left: 1px solid rgba(127, 137, 145, 0.3);
+}
+.analysis-history-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.62rem 0.68rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+.analysis-history-item::before { content: ""; position: absolute; top: 50%; left: -0.7rem; width: 0.7rem; border-top: 1px solid rgba(127, 137, 145, 0.3); }
+.analysis-history-item-main { display: grid; grid-template-columns: 0.94rem minmax(0, 1fr); gap: 0.54rem; align-items: center; width: 100%; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.analysis-history-document-icon { position: relative; display: block; width: 0.82rem; height: 1.04rem; border: 1px solid #b7c0c7; border-radius: 0.13rem; background: linear-gradient(180deg, #fff, #e9edf0); }
+.analysis-history-document-icon::before { content: ""; position: absolute; top: -1px; right: -1px; border-top: 0.31rem solid #d8e0e5; border-left: 0.31rem solid transparent; }
+.analysis-history-item-content { display: grid; min-width: 0; gap: 0.2rem; }
+.analysis-history-actions { display: grid; gap: 0.38rem; justify-items: end; }
+.analysis-history-delete { padding: 0; border: 0; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.72rem; cursor: pointer; }
+
 .download-results-status {
   margin: 0.75rem 0 0;
   font-size: 0.86rem;

@@ -1094,7 +1094,25 @@ async function activateAnalysisHistoryEntry(entryId) {
     return;
   }
 
-  if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  if (entry.persisted && entry.analysisId) {
+    try {
+      const response = await fetch(`/api/analyses/${encodeURIComponent(entry.analysisId)}/artifacts`, {
+        credentials: "include",
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const archived = await response.json();
+      Object.assign(entry, archived.analysis || {}, {
+        artifacts: archived.artifacts || [],
+        outputDir: archived.snapshot?.outputDir || entry.outputDir,
+        summary: archived.snapshot?.summary || entry.summary,
+        logs: archived.snapshot?.logs || entry.logs
+      });
+    } catch (error) {
+      log(`[error] Lecture de l'analyse archivée impossible : ${error?.message || String(error)}`);
+      return;
+    }
+  } else if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
     try {
       const archived = await tauriInvoke("read_analysis_history", { jobId: entry.jobId || entry.id });
       Object.assign(entry, archived || {});
@@ -1182,29 +1200,25 @@ function renderAnalysisHistory() {
   });
 
   corpusGroups.forEach((entries, corpusName) => {
-    const folder = document.createElement("section");
+    const folder = document.createElement("details");
     folder.className = "analysis-history-folder";
+    folder.open = true;
 
-    const folderButton = document.createElement("button");
-    folderButton.type = "button";
-    folderButton.className = "analysis-history-folder-toggle";
-    folderButton.setAttribute("aria-expanded", "true");
-    folderButton.innerHTML = '<span class="analysis-history-folder-icon" aria-hidden="true">&#128193;</span>';
+    const folderButton = document.createElement("summary");
+    folderButton.className = "analysis-history-folder-summary";
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "analysis-history-folder-icon";
+    folderIcon.setAttribute("aria-hidden", "true");
     const folderLabel = document.createElement("span");
     folderLabel.className = "analysis-history-folder-name";
     folderLabel.textContent = corpusName;
     const folderCount = document.createElement("span");
     folderCount.className = "analysis-history-folder-count";
     folderCount.textContent = String(entries.length);
-    folderButton.append(folderLabel, folderCount);
+    folderButton.append(folderIcon, folderLabel, folderCount);
 
     const children = document.createElement("div");
-    children.className = "analysis-history-folder-children";
-    folderButton.addEventListener("click", () => {
-      const collapsed = children.hidden;
-      children.hidden = !collapsed;
-      folderButton.setAttribute("aria-expanded", String(collapsed));
-    });
+    children.className = "analysis-history-folder-entries";
 
     entries.forEach((entry) => {
     const item = document.createElement("div");
@@ -1222,27 +1236,52 @@ function renderAnalysisHistory() {
     meta.className = "analysis-history-item-meta";
     meta.textContent = entry.corpusName || "Corpus courant";
 
-    mainButton.appendChild(title);
-    mainButton.appendChild(meta);
+    const documentIcon = document.createElement("span");
+    documentIcon.className = "analysis-history-document-icon";
+    const content = document.createElement("span");
+    content.className = "analysis-history-item-content";
+    content.append(title, meta);
+    mainButton.append(documentIcon, content);
     mainButton.addEventListener("click", () => {
       void activateAnalysisHistoryEntry(entry.id);
     });
 
-    const downloadButton = document.createElement("button");
-    downloadButton.type = "button";
-    downloadButton.className = "secondary-button analysis-history-download";
-    downloadButton.textContent = "Télécharger";
-    downloadButton.addEventListener("click", () => {
-      void downloadResultsArchive({
-        outputDir: entry.outputDir,
-        entryCount: Array.isArray(entry.artifacts) ? entry.artifacts.length : 0,
-        archiveBaseName: getAnalysisHistoryArchiveBaseName(entry),
-        pendingButton: downloadButton
-      });
-    });
-
     item.appendChild(mainButton);
-    item.appendChild(downloadButton);
+    const actions = document.createElement("div");
+    actions.className = "analysis-history-actions";
+    if (entry.persisted && entry.completed && entry.success) {
+      const downloadButton = document.createElement("button");
+      downloadButton.type = "button";
+      downloadButton.className = "secondary-button analysis-history-download";
+      downloadButton.textContent = "Télécharger";
+      downloadButton.addEventListener("click", () => {
+        const anchor = document.createElement("a");
+        anchor.href = `/api/analyses/${encodeURIComponent(entry.analysisId)}/archive`;
+        anchor.download = `${getAnalysisHistoryArchiveBaseName(entry)}.zip`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      });
+      actions.appendChild(downloadButton);
+    }
+    if (entry.persisted && entry.completed) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "analysis-history-delete";
+      deleteButton.textContent = "Supprimer";
+      deleteButton.addEventListener("click", async (event) => {
+        event.preventDefault();
+        if (!window.confirm("Supprimer définitivement cette analyse et ses exports ?")) return;
+        const response = await fetch(`/api/analyses/${encodeURIComponent(entry.analysisId)}`, {
+          method: "DELETE", credentials: "include"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        appState.analysisHistory = appState.analysisHistory.filter((item) => item.id !== entry.id);
+        renderAnalysisHistory();
+      });
+      actions.appendChild(deleteButton);
+    }
+    if (actions.childElementCount) item.appendChild(actions);
       children.appendChild(item);
     });
     folder.append(folderButton, children);
@@ -1252,10 +1291,15 @@ function renderAnalysisHistory() {
 
 async function hydrateAnalysisHistory() {
   try {
-    const payload = await tauriInvoke("list_analysis_history");
-    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+    const response = await fetch("/api/analyses", { credentials: "include", cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const entries = Array.isArray(payload?.analyses) ? payload.analyses : [];
     appState.analysisHistory = entries.map((entry) => ({
       ...entry,
+      id: entry.id,
+      analysisId: entry.id,
+      persisted: true,
       analysisKind: "chd",
       navigationTarget: "resultats_chd",
       artifacts: []
@@ -1267,12 +1311,14 @@ async function hydrateAnalysisHistory() {
 }
 
 function rememberAnalysisHistoryEntry(entry) {
-  if (!entry || !Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  if (!entry || (!entry.persisted && (!Array.isArray(entry.artifacts) || !entry.artifacts.length))) {
     return;
   }
 
   const normalizedEntry = {
     id: entry.id || entry.jobId || `${entry.analysisKind || "chd"}-${Date.now()}`,
+    analysisId: entry.analysisId || null,
+    persisted: Boolean(entry.persisted || entry.analysisId),
     jobId: entry.jobId || null,
     analysisKind: entry.analysisKind || "chd",
     createdAt: entry.createdAt || new Date().toISOString(),
@@ -1280,9 +1326,13 @@ function rememberAnalysisHistoryEntry(entry) {
     folderName: entry.folderName || entry.jobId || "exports",
     outputDir: entry.outputDir || null,
     navigationTarget: entry.navigationTarget || "resultats_chd",
+    status: entry.status || "completed",
+    completed: entry.completed !== false,
+    success: entry.success !== false,
+    expiresAt: entry.expiresAt || "",
     summary: entry.summary || null,
     logs: Array.isArray(entry.logs) ? entry.logs : [],
-    artifacts: entry.artifacts
+    artifacts: Array.isArray(entry.artifacts) ? entry.artifacts : []
   };
 
   appState.analysisHistory = [
@@ -14560,7 +14610,9 @@ async function startAnalysis(analysisKind = "chd") {
 
       try {
         rememberAnalysisHistoryEntry({
-          id: payload.jobId || `${analysisKind}-${Date.now()}`,
+          id: session.analysisId || payload.jobId || `${analysisKind}-${Date.now()}`,
+          analysisId: session.analysisId || null,
+          persisted: Boolean(session.analysisId),
           jobId: payload.jobId || null,
           analysisKind,
           createdAt: new Date().toISOString(),
