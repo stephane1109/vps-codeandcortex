@@ -858,6 +858,30 @@ textarea {
   line-height: 1.28;
 }
 
+.sidebar-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.analysis-history-purge {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.analysis-history-purge:hover,
+.analysis-history-purge:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .analysis-history-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

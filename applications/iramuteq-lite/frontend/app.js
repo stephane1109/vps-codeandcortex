@@ -13,6 +13,7 @@ const downloadResultsBtn = document.getElementById("downloadResultsBtn");
 const fileInfo = document.getElementById("fileInfo");
 const downloadResultsStatus = document.getElementById("downloadResultsStatus");
 const analysisHistory = document.getElementById("analysisHistory");
+const purgeAnalysisHistoryBtn = document.getElementById("purgeAnalysisHistoryBtn");
 const sidebarStatus = document.getElementById("sidebarStatus");
 const sidebarStatusPill = document.querySelector(".status-pill");
 const sidebarStatusDot = document.querySelector(".status-dot");
@@ -321,6 +322,7 @@ const appState = {
   outputDir: null,
   exportEntries: [],
   analysisHistory: [],
+  analysisHistoryPurgeInProgress: false,
   activeAnalysisHistoryId: null,
   corpusText: "",
   afcStarredVariablesChoices: [],
@@ -1180,6 +1182,11 @@ function getMultimodalHistoryKind(scriptName) {
 }
 
 function renderAnalysisHistory() {
+  if (purgeAnalysisHistoryBtn) {
+    const canPurge = appState.analysisHistory.some((entry) => entry.persisted && entry.completed);
+    purgeAnalysisHistoryBtn.hidden = !canPurge;
+    purgeAnalysisHistoryBtn.disabled = appState.analysisHistoryPurgeInProgress;
+  }
   if (!analysisHistory) return;
 
   analysisHistory.innerHTML = "";
@@ -1307,6 +1314,25 @@ async function hydrateAnalysisHistory() {
     renderAnalysisHistory();
   } catch (error) {
     log(`[info] Historique serveur indisponible : ${error?.message || String(error)}`);
+  }
+}
+
+async function purgeAnalysisHistory() {
+  if (appState.analysisHistoryPurgeInProgress) return;
+  const completed = appState.analysisHistory.filter((entry) => entry.persisted && entry.completed);
+  if (!completed.length || !window.confirm("Supprimer définitivement les analyses terminées et leurs exports ?")) return;
+  appState.analysisHistoryPurgeInProgress = true;
+  renderAnalysisHistory();
+  try {
+    const response = await fetch("/api/analyses", { method: "DELETE", credentials: "include" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    appState.analysisHistory = appState.analysisHistory.filter((entry) => !entry.persisted || !entry.completed);
+    setSidebarRuntimeStatus("Historique purgé.", "success");
+  } catch (error) {
+    log(`[error] Purge de l'historique impossible : ${error?.message || String(error)}`);
+  } finally {
+    appState.analysisHistoryPurgeInProgress = false;
+    renderAnalysisHistory();
   }
 }
 
@@ -14728,6 +14754,11 @@ if (releaseAccessBtn) {
       await refreshTicketSidebarStatus();
       updateReleaseAccessButton();
     }
+  });
+}
+if (purgeAnalysisHistoryBtn) {
+  purgeAnalysisHistoryBtn.addEventListener("click", () => {
+    void purgeAnalysisHistory();
   });
 }
 window.addEventListener("pointerdown", rememberUserInteraction, { passive: true });
