@@ -1,0 +1,17 @@
+.DS_Store
+.git
+.gitignore
+.github
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Rhistory
+.RData
+.Rproj.user/
+backend/jobs/
+tmp_*
+*.app
+*.dmg
+*.msi
+*.exe
