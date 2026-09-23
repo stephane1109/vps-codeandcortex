@@ -18,6 +18,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_DATA_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "iramuteq-lite-data"
 ANALYSIS_LOCK_FILENAME = "active-analysis.json"
 ANALYSIS_LOCK_STALE_SECONDS = 300
+HISTORY_RETENTION_SECONDS = 30 * 24 * 60 * 60
+HISTORY_METADATA_FILENAME = "history.json"
 TERMINAL_JOB_STATES = {"cancelled", "completed", "done", "error", "failed", "success", "succeeded"}
 TEXT_EXTENSIONS = {
     ".csv",
@@ -93,6 +95,12 @@ def analysis_lock_path() -> Path:
 
 def write_json_file(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def write_json_file_atomic(path: Path, payload: Any) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
 
 
 def try_read_json_file(path: Path) -> Any | None:
@@ -459,7 +467,73 @@ def create_job_inputs(corpus_name: str, corpus_text: str, config: dict[str, Any]
     config_path = job_root / "request-config.json"
     input_path.write_text(str(corpus_text or ""), encoding="utf-8")
     write_json_file(config_path, config)
+    write_json_file_atomic(
+        job_root / HISTORY_METADATA_FILENAME,
+        {
+            "job_id": job_id,
+            "corpus_name": str(corpus_name or "").strip(),
+            "created_at": time.time(),
+            "state": "running",
+        },
+    )
     return job_id, job_root, input_path, config_path
+
+
+def cleanup_analysis_history() -> None:
+    now = time.time()
+    for job_root in jobs_root().iterdir():
+        if not job_root.is_dir():
+            continue
+        metadata = try_read_json_file(job_root / HISTORY_METADATA_FILENAME)
+        if not isinstance(metadata, dict):
+            continue
+        created_at = float(metadata.get("created_at") or 0)
+        state = str(metadata.get("state") or "").lower()
+        if created_at > 0 and now - created_at > HISTORY_RETENTION_SECONDS and state not in {"running", "queued"}:
+            shutil.rmtree(job_root, ignore_errors=True)
+
+
+def list_analysis_history() -> list[dict[str, Any]]:
+    cleanup_analysis_history()
+    entries = []
+    for job_root in jobs_root().iterdir():
+        if not job_root.is_dir():
+            continue
+        metadata = try_read_json_file(job_root / HISTORY_METADATA_FILENAME)
+        if not isinstance(metadata, dict) or metadata.get("state") != "completed":
+            continue
+        entries.append({
+            "id": str(metadata.get("job_id") or job_root.name),
+            "jobId": str(metadata.get("job_id") or job_root.name),
+            "corpusName": str(metadata.get("corpus_name") or "Corpus courant"),
+            "createdAt": metadata.get("created_at"),
+            "completedAt": metadata.get("completed_at"),
+            "outputDir": metadata.get("output_dir"),
+            "summary": metadata.get("summary"),
+            "logs": metadata.get("logs") or [],
+            "artifactCount": int(metadata.get("artifact_count") or 0),
+        })
+    return sorted(entries, key=lambda item: float(item.get("createdAt") or 0), reverse=True)
+
+
+def read_analysis_history(job_id: str) -> dict[str, Any]:
+    cleanup_analysis_history()
+    job_root = jobs_root() / str(job_id or "").strip()
+    metadata = try_read_json_file(job_root / HISTORY_METADATA_FILENAME)
+    if not isinstance(metadata, dict) or metadata.get("state") != "completed":
+        raise FileNotFoundError("Analyse archivée introuvable ou expirée.")
+    output_dir = Path(str(metadata.get("output_dir") or "")).resolve()
+    return {
+        "id": str(metadata.get("job_id") or job_id),
+        "jobId": str(metadata.get("job_id") or job_id),
+        "corpusName": str(metadata.get("corpus_name") or "Corpus courant"),
+        "createdAt": metadata.get("created_at"),
+        "completedAt": metadata.get("completed_at"),
+        "outputDir": str(output_dir),
+        "summary": metadata.get("summary"),
+        "logs": metadata.get("logs") or [],
+        "files": collect_artifact_files(output_dir) if output_dir.is_dir() else [],
+    }
 
 
 def backend_runner_command(subcommand: str, input_path: Path, config_path: Path, job_id: str) -> list[str]:
@@ -696,6 +770,18 @@ def read_python_analysis_status(job_id: str) -> dict[str, Any]:
                 logs = [*logs, message]
 
     clear_analysis_lock(expected_job_id=job_id)
+
+    metadata_path = job_root / HISTORY_METADATA_FILENAME
+    metadata = try_read_json_file(metadata_path) or {"job_id": job_id}
+    metadata.update({
+        "state": "completed" if success else "failed",
+        "completed_at": time.time(),
+        "output_dir": str(Path(output_dir).resolve()) if output_dir else None,
+        "summary": result_payload.get("summary"),
+        "logs": [str(item) for item in result_payload.get("logs") or logs if str(item).strip()],
+        "artifact_count": len(files),
+    })
+    write_json_file_atomic(metadata_path, metadata)
 
     return {
         "jobId": job_id,

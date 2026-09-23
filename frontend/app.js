@@ -1089,7 +1089,21 @@ function getAnalysisHistoryArchiveBaseName(entry) {
 
 async function activateAnalysisHistoryEntry(entryId) {
   const entry = appState.analysisHistory.find((item) => item.id === entryId);
-  if (!entry || !Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+  if (!entry) {
+    log("[error] Réouverture de l'analyse impossible : aucun export mémorisé.");
+    return;
+  }
+
+  if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
+    try {
+      const archived = await tauriInvoke("read_analysis_history", { jobId: entry.jobId || entry.id });
+      Object.assign(entry, archived || {});
+    } catch (error) {
+      log(`[error] Lecture de l'analyse archivée impossible : ${error?.message || String(error)}`);
+      return;
+    }
+  }
+  if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
     log("[error] Réouverture de l'analyse impossible : aucun export mémorisé.");
     return;
   }
@@ -1160,7 +1174,39 @@ function renderAnalysisHistory() {
     return;
   }
 
+  const corpusGroups = new Map();
   appState.analysisHistory.forEach((entry) => {
+    const corpusName = String(entry.corpusName || "Corpus courant").trim() || "Corpus courant";
+    if (!corpusGroups.has(corpusName)) corpusGroups.set(corpusName, []);
+    corpusGroups.get(corpusName).push(entry);
+  });
+
+  corpusGroups.forEach((entries, corpusName) => {
+    const folder = document.createElement("section");
+    folder.className = "analysis-history-folder";
+
+    const folderButton = document.createElement("button");
+    folderButton.type = "button";
+    folderButton.className = "analysis-history-folder-toggle";
+    folderButton.setAttribute("aria-expanded", "true");
+    folderButton.innerHTML = '<span class="analysis-history-folder-icon" aria-hidden="true">&#128193;</span>';
+    const folderLabel = document.createElement("span");
+    folderLabel.className = "analysis-history-folder-name";
+    folderLabel.textContent = corpusName;
+    const folderCount = document.createElement("span");
+    folderCount.className = "analysis-history-folder-count";
+    folderCount.textContent = String(entries.length);
+    folderButton.append(folderLabel, folderCount);
+
+    const children = document.createElement("div");
+    children.className = "analysis-history-folder-children";
+    folderButton.addEventListener("click", () => {
+      const collapsed = children.hidden;
+      children.hidden = !collapsed;
+      folderButton.setAttribute("aria-expanded", String(collapsed));
+    });
+
+    entries.forEach((entry) => {
     const item = document.createElement("div");
     item.className = `analysis-history-item${entry.id === appState.activeAnalysisHistoryId ? " is-active" : ""}`;
 
@@ -1197,8 +1243,27 @@ function renderAnalysisHistory() {
 
     item.appendChild(mainButton);
     item.appendChild(downloadButton);
-    analysisHistory.appendChild(item);
+      children.appendChild(item);
+    });
+    folder.append(folderButton, children);
+    analysisHistory.appendChild(folder);
   });
+}
+
+async function hydrateAnalysisHistory() {
+  try {
+    const payload = await tauriInvoke("list_analysis_history");
+    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+    appState.analysisHistory = entries.map((entry) => ({
+      ...entry,
+      analysisKind: "chd",
+      navigationTarget: "resultats_chd",
+      artifacts: []
+    }));
+    renderAnalysisHistory();
+  } catch (error) {
+    log(`[info] Historique serveur indisponible : ${error?.message || String(error)}`);
+  }
 }
 
 function rememberAnalysisHistoryEntry(entry) {
@@ -14574,6 +14639,7 @@ activateChdSubTab("dendrogramme");
 activateHelpSubTab("help_general");
 resetResultPanes();
 renderResults([]);
+void hydrateAnalysisHistory();
 syncDendrogramSizing();
 renderMorphoPickers(document);
 renderAfcStarredVariablesPickers(document, { resetSelection: true });

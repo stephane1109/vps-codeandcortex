@@ -797,6 +797,61 @@ textarea {
   gap: 0.55rem;
 }
 
+.analysis-history-folder {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.analysis-history-folder-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.4rem 0.45rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.analysis-history-folder-toggle:hover,
+.analysis-history-folder-toggle:focus-visible {
+  background: var(--surface-muted);
+}
+
+.analysis-history-folder-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.analysis-history-folder-name {
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-history-folder-count {
+  min-width: 1.35rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.analysis-history-folder-children {
+  display: grid;
+  gap: 0.45rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid var(--line);
+}
+
 .analysis-history-empty {
   margin: 0;
   font-size: 0.76rem;

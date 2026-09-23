@@ -73,6 +73,10 @@ def dispatch_tauri_command(command: str, payload: dict[str, Any]) -> Any:
         )
     if command == "read_python_analysis_status":
         return runtime.read_python_analysis_status(get_payload_arg(payload, "jobId", "job_id"))
+    if command == "list_analysis_history":
+        return {"entries": runtime.list_analysis_history()}
+    if command == "read_analysis_history":
+        return runtime.read_analysis_history(get_payload_arg(payload, "jobId", "job_id"))
     if command == "preview_simi_terms":
         return runtime.preview_simi_terms(
             get_payload_arg(payload, "corpusName", "corpus_name"),
