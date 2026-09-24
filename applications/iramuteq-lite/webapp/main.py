@@ -206,6 +206,36 @@ def ticket_release(request: Request) -> JSONResponse:
     return ticket_json_response(snapshot, clear_session=True)
 
 
+@app.post("/api/analysis/abandon")
+async def analysis_abandon(request: Request) -> JSONResponse:
+    raw_body = await request.body()
+    payload: dict[str, Any] = {}
+    if raw_body:
+        try:
+            decoded = json.loads(raw_body)
+        except json.JSONDecodeError as error:
+            raise HTTPException(status_code=400, detail=f"JSON invalide: {error}") from error
+        if decoded is not None:
+            if not isinstance(decoded, dict):
+                raise HTTPException(status_code=400, detail="Le corps JSON doit être un objet.")
+            payload = decoded
+    try:
+        ticket_gate.require_active_ticket(request)
+    except PermissionError as error:
+        raise HTTPException(status_code=423, detail=str(error)) from error
+    try:
+        result = runtime.cancel_python_analysis(
+            get_payload_arg(payload, "jobId", "job_id", default=None),
+            get_payload_arg(payload, "reason", default=None),
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    snapshot = ticket_gate.release_ticket_for_request(request)
+    response = JSONResponse({**result, "ticket": snapshot})
+    ticket_gate.clear_session_cookie_headers(response)
+    return response
+
+
 @app.get("/api/analyses")
 def list_analyses(request: Request) -> JSONResponse:
     owner_hash, owner_token = analysis_history.owner_for_request(request)
