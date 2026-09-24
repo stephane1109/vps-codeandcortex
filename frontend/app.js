@@ -14573,6 +14573,7 @@ async function startAnalysis(analysisKind = "chd") {
       config
     });
     activeAnalysisJobId = String(session?.jobId || "").trim();
+    updateStopAnalysisButton();
     log(`[info] Job lancé : ${session.jobId}`);
 
     let payload = null;
