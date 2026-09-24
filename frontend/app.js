@@ -602,7 +602,7 @@ function updateReleaseAccessButton(snapshot = latestTicketSnapshot) {
 
 function updateStopAnalysisButton() {
   if (!stopAnalysisBtn) return;
-  stopAnalysisBtn.disabled = !analysisExecutionInProgress || analysisStopRequested;
+  stopAnalysisBtn.disabled = !analysisExecutionInProgress || !activeAnalysisJobId || analysisStopRequested;
   stopAnalysisBtn.textContent = analysisStopRequested ? "Interruption..." : "Stopper l'analyse";
 }
 
