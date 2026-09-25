@@ -14578,6 +14578,10 @@ async function startAnalysis(analysisKind = "chd") {
 
     let payload = null;
     while (!payload) {
+      if (analysisStopRequested) {
+        progression.close();
+        return;
+      }
       const snapshot = await tauriInvoke("read_python_analysis_status", {
         jobId: session.jobId
       });
@@ -14819,6 +14823,9 @@ if (stopAnalysisBtn) {
     try {
       const result = await abandonActiveAnalysis();
       log(`[info] ${result?.message || "Analyse annulée."}`);
+      analysisExecutionInProgress = false;
+      activeAnalysisJobId = "";
+      progression.close();
       await refreshTicketSidebarStatus();
     } catch (error) {
       analysisStopRequested = false;

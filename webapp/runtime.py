@@ -120,6 +120,13 @@ def process_is_running(pid: Any) -> bool:
         return False
     if numeric_pid <= 0:
         return False
+    # A killed child can briefly remain as a zombie; it is no longer running.
+    try:
+        stat_fields = Path(f"/proc/{numeric_pid}/stat").read_text(encoding="utf-8").split()
+        if len(stat_fields) > 2 and stat_fields[2] == "Z":
+            return False
+    except (OSError, ValueError):
+        pass
     try:
         os.kill(numeric_pid, 0)
     except OSError:
@@ -736,12 +743,16 @@ def terminate_analysis_process(pid: Any, grace_seconds: float = 2.0) -> bool:
                 return True
             time.sleep(0.1)
     if kill_sig is not None and process_is_running(numeric_pid):
-        send(kill_sig)
+        kill_sent = send(kill_sig)
         deadline = time.time() + 1.5
         while time.time() < deadline:
             if not process_is_running(numeric_pid):
                 return True
             time.sleep(0.05)
+        # The signal was delivered; do not turn a slow / zombie reaping into
+        # a 400 response that would leave the browser polling the old job.
+        if kill_sent:
+            return True
     return not process_is_running(numeric_pid)
 
 
