@@ -120,6 +120,13 @@ def process_is_running(pid: Any) -> bool:
         return False
     if numeric_pid <= 0:
         return False
+    if hasattr(os, "waitpid") and hasattr(os, "WNOHANG"):
+        try:
+            waited_pid, _status = os.waitpid(numeric_pid, os.WNOHANG)
+            if waited_pid == numeric_pid:
+                return False
+        except (ChildProcessError, OSError):
+            pass
     # A killed child can briefly remain as a zombie; it is no longer running.
     try:
         stat_fields = Path(f"/proc/{numeric_pid}/stat").read_text(encoding="utf-8").split()
