@@ -14479,8 +14479,6 @@ async function startAnalysis(analysisKind = "chd") {
 
   setSidebarRuntimeStatus("Vérification de l'accès serveur...");
   activateTopTab("analyse");
-  progression.open(progressTitle, progressStartMessage);
-  await waitForNextPaint();
   if (isSimiMode) {
     log(`[info] Démarrage analyse de similitudes : méthode=${document.getElementById("simiMethod").value}`);
   } else if (isSuiviMode) {
@@ -14498,6 +14496,8 @@ async function startAnalysis(analysisKind = "chd") {
   progression.set(4, progressStartMessage);
 
   if (!tauriInvoke) {
+    progression.open(progressTitle, progressStartMessage);
+    await waitForNextPaint();
     const checkpoints = isSimiMode
       ? [
           [18, "Préparation du corpus"],
@@ -14539,6 +14539,9 @@ async function startAnalysis(analysisKind = "chd") {
   let resultsRendered = false;
   try {
     const bootstrap = await ensureDependenciesReady();
+    bootstrapProgression.close();
+    progression.open(progressTitle, progressStartMessage);
+    await waitForNextPaint();
     if (!bootstrap?.success) {
       setSidebarRuntimeStatus("Packages incomplets", "error");
       progression.set(0);
