@@ -697,7 +697,7 @@ infos_dictionnaire <- function(source_dictionnaire) {
 preparer_documents_spacy <- function(textes, ids_docs, config) {
   modele <- scalar_chr(config$spacy_model, "")
   if (!grepl("^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$", modele)) {
-    stop("spaCy : indiquez un modèle valide, par exemple de_core_news_md.")
+    stop("spaCy : indiquez un modèle valide, par exemple en_core_web_sm.")
   }
   python <- Sys.which("python3")
   if (!nzchar(python)) stop("spaCy : exécutable python3 introuvable.")

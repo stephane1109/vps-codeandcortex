@@ -707,9 +707,10 @@
           </div>
 
           <div class="field field--full" id="spacyOptions" hidden>
-            <label for="spacyModel">Modèle linguistique spaCy installé sur le serveur</label>
-            <input id="spacyModel" type="text" value="" placeholder="Exemple : de_core_news_md" autocomplete="off" list="spacyModelSuggestions" />
+            <label for="spacyModel">Modèle linguistique spaCy</label>
+            <input id="spacyModel" type="text" value="en_core_web_sm" placeholder="Exemple : en_core_web_sm" autocomplete="off" list="spacyModelSuggestions" />
             <datalist id="spacyModelSuggestions">
+              <option value="en_core_web_sm">Anglais (installé par défaut)</option>
               <option value="de_core_news_md">Allemand</option>
               <option value="nl_core_news_md">Néerlandais</option>
               <option value="pt_core_news_md">Portugais</option>
@@ -717,7 +718,7 @@
               <option value="el_core_news_md">Grec</option>
             </datalist>
             <p class="field-help">
-              Utilisez de préférence un modèle <code>md</code>, ou <code>sm</code> pour réduire le temps de calcul. Les modèles multilingues <code>xx</code> de spaCy ne fournissent pas le POS et les lemmes nécessaires à la CHD.
+              Le modèle anglais <code>en_core_web_sm</code> est installé par défaut. Les autres modèles doivent être ajoutés au build du serveur. Les modèles multilingues <code>xx</code> de spaCy ne fournissent pas le POS et les lemmes nécessaires à la CHD.
             </p>
           </div>
 

@@ -34,6 +34,7 @@ class GestionSpacyTests(unittest.TestCase):
         self.assertEqual(gestion_spacy.convertir_pos(""), "AUTRE_FORME")
 
     def test_format_nom_modele(self):
+        self.assertIsNotNone(gestion_spacy.MODEL_PATTERN.fullmatch("en_core_web_sm"))
         self.assertIsNotNone(gestion_spacy.MODEL_PATTERN.fullmatch("de_core_news_md"))
         self.assertIsNone(gestion_spacy.MODEL_PATTERN.fullmatch("../../modele"))
 

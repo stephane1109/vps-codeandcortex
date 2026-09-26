@@ -25,7 +25,7 @@ def convertir_pos(pos_spacy: str) -> str:
 def charger_modele(nom_modele: str):
     if not MODEL_PATTERN.fullmatch(nom_modele):
         raise ValueError(
-            "Nom de modèle spaCy invalide. Exemple attendu : de_core_news_md."
+            "Nom de modèle spaCy invalide. Exemple attendu : en_core_web_sm."
         )
 
     try:

@@ -30,10 +30,10 @@ Version expérimentale **web/VPS** dérivée de `iramuteq-lite`, prévue pour Co
 - le conteneur preinstalle par defaut le bootstrap R/CHD pendant le `docker build`
 - les dependances runtime eventuellement reinstallees sont conservees dans `/data/app`
 
-### Modèles spaCy optionnels
+### Modèles spaCy
 
-Pour activer « Votre langue n’est pas proposée ? », définir l’argument de build `IRAMUTEQ_SPACY_MODELS` avec les modèles à installer, séparés par des virgules, par exemple :
+Le modèle anglais `en_core_web_sm` est installé par défaut. Pour ajouter d’autres langues à « Votre langue n’est pas proposée ? », définir l’argument de build `IRAMUTEQ_SPACY_MODELS` avec tous les modèles à installer, séparés par des virgules, par exemple :
 
 ```text
-IRAMUTEQ_SPACY_MODELS=de_core_news_md,nl_core_news_sm
+IRAMUTEQ_SPACY_MODELS=en_core_web_sm,de_core_news_md,nl_core_news_sm
 ```

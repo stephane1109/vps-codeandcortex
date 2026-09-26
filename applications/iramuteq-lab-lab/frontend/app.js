@@ -3037,7 +3037,7 @@ function buildJobConfig(analysisKind = "chd") {
   const dictionarySourceValue = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
   const spacyModelValue = String(document.getElementById("spacyModel")?.value || "").trim();
   if (dictionarySourceValue === "spacy" && !/^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$/.test(spacyModelValue)) {
-    throw new Error("Indiquez un modèle spaCy valide, par exemple de_core_news_md.");
+    throw new Error("Indiquez un modèle spaCy valide, par exemple en_core_web_sm.");
   }
   const expressionAnnotations = appState.expressionAnnotations.map((entry) => ({
     dic_mot: normalizeAnnotationSelectionValue(entry.dic_mot),
@@ -15243,16 +15243,23 @@ document.getElementById("suiviAnalysisLayer")?.addEventListener("change", () => 
   renderSuiviControls(document, { resetSelection: false });
 });
 
-function updateSpacyOptionsVisibility() {
-  const source = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
-  const spacyOptions = document.getElementById("spacyOptions");
-  const useExpressions = document.getElementById("useExpressions");
-  const useAnnotationExpressions = document.getElementById("useAnnotationExpressions");
+function updateSpacyOptionsVisibility(scope = document) {
+  const root = scope?.querySelector ? scope : document;
+  const findField = (id) => root.querySelector(`#${id}, [data-source-id="${id}"]`);
+  const dictionaryField = findField("dictionarySource");
+  const source = String(dictionaryField?.value || "lexique_fr");
+  const spacyOptions = findField("spacyOptions");
+  const spacyModel = findField("spacyModel");
+  const useExpressions = findField("useExpressions");
+  const useAnnotationExpressions = findField("useAnnotationExpressions");
   const isSpacy = source === "spacy";
   const hasBaseExpressions = source === "lexique_fr" || source === "lexique_en";
 
   if (spacyOptions instanceof HTMLElement) {
     spacyOptions.hidden = !isSpacy;
+  }
+  if (isSpacy && spacyModel instanceof HTMLInputElement && !spacyModel.value.trim()) {
+    spacyModel.value = "en_core_web_sm";
   }
   if (useExpressions instanceof HTMLInputElement) {
     useExpressions.disabled = !hasBaseExpressions;
@@ -15280,7 +15287,14 @@ document.getElementById("suiviChronologyOrder")?.addEventListener("change", () =
   renderSuiviControls(document, { resetSelection: false });
 });
 
-document.getElementById("dictionarySource")?.addEventListener("change", updateSpacyOptionsVisibility);
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const sourceId = target.dataset.sourceId || target.id;
+  if (sourceId !== "dictionarySource") return;
+  const scope = target.closest("#chdConfigDialogContent") || document;
+  updateSpacyOptionsVisibility(scope);
+});
 
 [
   "dictionarySource",
