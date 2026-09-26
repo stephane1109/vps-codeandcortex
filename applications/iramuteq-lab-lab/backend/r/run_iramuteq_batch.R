@@ -680,7 +680,8 @@ catalogue_dictionnaires <- function() {
     lexique_fr = list(fichier = "lexique_fr.csv", langue = "fr", libelle = "français", format = "csv2", auxiliaires = c("être", "etre")),
     lexique_en = list(fichier = "lexique_en.txt", langue = "en", libelle = "anglais", format = "tsv", auxiliaires = "be"),
     lexique_sp = list(fichier = "lexique_sp.txt", langue = "es", libelle = "espagnol", format = "tsv", auxiliaires = c("ser", "estar")),
-    lexique_it = list(fichier = "lexique_it.txt", langue = "it", libelle = "italien", format = "tsv", auxiliaires = "essere")
+    lexique_it = list(fichier = "lexique_it.txt", langue = "it", libelle = "italien", format = "tsv", auxiliaires = "essere"),
+    spacy = list(fichier = NA_character_, langue = "xx", libelle = "spaCy", format = "spacy", auxiliaires = character(0))
   )
 }
 
@@ -691,6 +692,84 @@ normaliser_source_dictionnaire <- function(source_dictionnaire) {
 
 infos_dictionnaire <- function(source_dictionnaire) {
   catalogue_dictionnaires()[[normaliser_source_dictionnaire(source_dictionnaire)]]
+}
+
+preparer_documents_spacy <- function(textes, ids_docs, config) {
+  modele <- scalar_chr(config$spacy_model, "")
+  if (!grepl("^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$", modele)) {
+    stop("spaCy : indiquez un modèle valide, par exemple de_core_news_md.")
+  }
+  python <- Sys.which("python3")
+  if (!nzchar(python)) stop("spaCy : exécutable python3 introuvable.")
+  script <- file.path(repo_root, "backend", "gestion_spacy.py")
+  if (!file.exists(script)) stop(paste0("spaCy : module introuvable : ", script))
+
+  input_file <- tempfile("iramuteq-spacy-input-", fileext = ".tsv")
+  docs_file <- tempfile("iramuteq-spacy-docs-", fileext = ".tsv")
+  lexicon_file <- tempfile("iramuteq-spacy-lexicon-", fileext = ".tsv")
+  on.exit(unlink(c(input_file, docs_file, lexicon_file), force = TRUE), add = TRUE)
+  utils::write.table(
+    data.frame(doc_id = ids_docs, text = as.character(textes), stringsAsFactors = FALSE),
+    input_file,
+    sep = "\t",
+    quote = TRUE,
+    row.names = FALSE,
+    fileEncoding = "UTF-8"
+  )
+
+  morpho_selection <- unique(toupper(trimws(as.character(unlist(config$pos_lexique_a_conserver, use.names = FALSE)))))
+  correspondance_pos <- c(NOM = "nom", NOUN = "nom", PROPN = "nom", VER = "ver", VERB = "ver", AUX = "aux", ADJ = "adj", ADV = "adv", ADP = "pre", PRE = "pre", PRON = "pro", PRO = "pro", CCONJ = "con", SCONJ = "con", CON = "con")
+  pos_conserves <- unique(unname(correspondance_pos[intersect(names(correspondance_pos), morpho_selection)]))
+  cache_key <- paste(
+    "spacy",
+    modele,
+    unname(tools::md5sum(input_file)),
+    scalar_bool(config$lexique_utiliser_lemmes, TRUE),
+    scalar_bool(config$retirer_stopwords, FALSE),
+    scalar_bool(config$supprimer_ponctuation, FALSE),
+    scalar_bool(config$supprimer_chiffres, FALSE),
+    scalar_bool(config$filtrage_morpho, FALSE),
+    paste(sort(pos_conserves), collapse = ","),
+    scalar_bool(config$morpho_conserver_hors_lexique, TRUE),
+    sep = "::"
+  )
+  if (exists(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE))
+  }
+
+  args <- c(
+    script,
+    "--input", input_file,
+    "--output-docs", docs_file,
+    "--output-lexicon", lexicon_file,
+    "--model", modele,
+    "--batch-size", as.character(scalar_int(config$spacy_batch_size, 64L, 1L))
+  )
+  if (scalar_bool(config$lexique_utiliser_lemmes, TRUE)) args <- c(args, "--lemmatize")
+  if (scalar_bool(config$retirer_stopwords, FALSE)) args <- c(args, "--remove-stopwords")
+  if (scalar_bool(config$supprimer_ponctuation, FALSE)) args <- c(args, "--remove-punct")
+  if (scalar_bool(config$supprimer_chiffres, FALSE)) args <- c(args, "--remove-numbers")
+  if (scalar_bool(config$filtrage_morpho, FALSE)) {
+    args <- c(args, "--filter-morpho", "--keep-pos", paste(pos_conserves, collapse = ","))
+    if (scalar_bool(config$morpho_conserver_hors_lexique, TRUE) || "AUTRE_FORME" %in% morpho_selection) {
+      args <- c(args, "--keep-unknown")
+    }
+  }
+
+  sortie <- suppressWarnings(system2(python, args = args, stdout = TRUE, stderr = TRUE))
+  statut <- attr(sortie, "status") %||% 0L
+  if (!identical(as.integer(statut), 0L) || !file.exists(docs_file) || !file.exists(lexicon_file)) {
+    stop(paste0("spaCy : échec du prétraitement. ", paste(sortie, collapse = " ")))
+  }
+  docs <- utils::read.delim(docs_file, sep = "\t", quote = "\"", stringsAsFactors = FALSE, encoding = "UTF-8")
+  lexique <- utils::read.delim(lexicon_file, sep = "\t", quote = "\"", stringsAsFactors = FALSE, encoding = "UTF-8")
+  idx <- match(ids_docs, as.character(docs$doc_id))
+  textes_prepares <- as.character(docs$text[idx])
+  textes_prepares[is.na(textes_prepares)] <- ""
+  names(textes_prepares) <- ids_docs
+  resultat <- list(textes = textes_prepares, lexique = lexique, modele = modele)
+  assign(cache_key, resultat, envir = .iramuteq_runtime_cache)
+  resultat
 }
 
 charger_lexique <- function(repo_root, source_dictionnaire = "lexique_fr") {
@@ -877,6 +956,10 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   textes_orig <- as.character(segmented_corpus)
   source_dictionnaire <- normaliser_source_dictionnaire(scalar_chr(config$source_dictionnaire, "lexique_fr"))
   infos_langue <- infos_dictionnaire(source_dictionnaire)
+  utiliser_spacy <- identical(source_dictionnaire, "spacy")
+  if (isTRUE(utiliser_spacy)) {
+    infos_langue$langue <- sub("_.*$", "", scalar_chr(config$spacy_model, "xx"))
+  }
   expressions_actives_df <- NULL
 
   if (scalar_bool(config$expression_utiliser_dictionnaire, FALSE)) {
@@ -903,7 +986,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
       )
     }
 
-    add_expression_actif <- scalar_bool(config$utiliser_add_expression, FALSE)
+    add_expression_actif <- scalar_bool(config$utiliser_add_expression, FALSE) && identical(source_dictionnaire, "lexique_fr")
     expr_session_df <- NULL
     if (isTRUE(add_expression_actif) && !is.null(config$expression_annotations)) {
       expr_session_df <- normaliser_add_expression_df_batch(config$expression_annotations)
@@ -994,8 +1077,17 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   textes_chd <- textes_nettoyes
   names(textes_chd) <- ids_docs
 
+  spacy_pipeline <- NULL
   textes_tok <- textes_chd
-  if (scalar_bool(config$retirer_stopwords, FALSE) && identical(infos_langue$langue, "fr")) {
+  if (isTRUE(utiliser_spacy)) {
+    log_info(paste0("spaCy : lancement du modèle ", scalar_chr(config$spacy_model, ""), "."), progress = 31)
+    spacy_pipeline <- preparer_documents_spacy(textes_chd, ids_docs, config)
+    textes_tok <- spacy_pipeline$textes
+    log_info(
+      paste0("spaCy : prétraitement terminé avec ", spacy_pipeline$modele, " ; ", nrow(spacy_pipeline$lexique), " formes observées."),
+      progress = 32
+    )
+  } else if (scalar_bool(config$retirer_stopwords, FALSE) && identical(infos_langue$langue, "fr")) {
     textes_tok <- gsub(
       pattern = "(?i)\\b(?:[cdjlmnst]|qu)['’`´ʼʹ](?=[[:alpha:]])",
       replacement = "",
@@ -1046,8 +1138,8 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   quanteda::docnames(tok) <- ids_docs
   tok <- quanteda::tokens_tolower(tok)
 
-  lexique_df <- NULL
-  if (scalar_bool(config$lexique_utiliser_lemmes, TRUE) || scalar_bool(config$filtrage_morpho, FALSE)) {
+  lexique_df <- if (isTRUE(utiliser_spacy)) spacy_pipeline$lexique else NULL
+  if (!isTRUE(utiliser_spacy) && (scalar_bool(config$lexique_utiliser_lemmes, TRUE) || scalar_bool(config$filtrage_morpho, FALSE))) {
     lexique_df <- charger_lexique(repo_root, source_dictionnaire)
     log_info(
       paste0("Lexique ", infos_langue$libelle, " chargé : ", nrow(lexique_df), " entrées."),
@@ -1055,7 +1147,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     )
   }
 
-  if (scalar_bool(config$lexique_utiliser_lemmes, TRUE) && !is.null(lexique_df)) {
+  if (!isTRUE(utiliser_spacy) && scalar_bool(config$lexique_utiliser_lemmes, TRUE) && !is.null(lexique_df)) {
     vocabulaire <- quanteda::featnames(quanteda::dfm(tok))
     idx <- match(vocabulaire, lexique_df$c_mot)
     a_remplacer <- !is.na(idx)
@@ -1076,7 +1168,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     }
   }
 
-  if (scalar_bool(config$retirer_stopwords, FALSE)) {
+  if (!isTRUE(utiliser_spacy) && scalar_bool(config$retirer_stopwords, FALSE)) {
     stop_langue <- quanteda::stopwords(infos_langue$langue)
     n_feat_avant_stop <- quanteda::nfeat(quanteda::dfm(tok))
     tok <- quanteda::tokens_remove(tok, pattern = stop_langue, valuetype = "fixed", case_insensitive = TRUE)
@@ -1099,7 +1191,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   quanteda::docnames(dfm_obj) <- ids_docs
 
   source_dict_chd <- source_dictionnaire
-  if (scalar_bool(config$filtrage_morpho, FALSE)) {
+  if (!isTRUE(utiliser_spacy) && scalar_bool(config$filtrage_morpho, FALSE)) {
     morpho_selection <- unique(toupper(trimws(as.character(unlist(config$pos_lexique_a_conserver, use.names = FALSE)))))
     inclure_autre_forme <- scalar_bool(config$morpho_conserver_hors_lexique, TRUE) || ("AUTRE_FORME" %in% morpho_selection)
     if (isTRUE(inclure_autre_forme) && !("AUTRE_FORME" %in% morpho_selection)) {

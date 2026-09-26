@@ -1,6 +1,7 @@
 FROM rocker/r2u:jammy
 
 ARG IRAMUTEQ_BUILD_BOOTSTRAP=0
+ARG IRAMUTEQ_SPACY_MODELS=""
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -170,6 +171,11 @@ COPY docker/requirements-python.txt /tmp/requirements-python.txt
 # - cela augmente inutilement le volume telecharge et decompresse
 # - sur un builder Coolify deja charge, c'est un facteur de plantage supplementaire
 RUN python3 -m pip install --no-cache-dir --prefer-binary --no-compile -r /tmp/requirements-python.txt
+RUN if [ -n "${IRAMUTEQ_SPACY_MODELS}" ]; then \
+      for model in $(printf '%s' "${IRAMUTEQ_SPACY_MODELS}" | tr ',' ' '); do \
+        python3 -m spacy download "$model"; \
+      done; \
+    fi
 
 WORKDIR /app
 

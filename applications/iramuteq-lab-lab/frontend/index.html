@@ -690,8 +690,24 @@
               <option value="lexique_en">Anglais (lexique_en)</option>
               <option value="lexique_sp">Espagnol (lexique_sp)</option>
               <option value="lexique_it">Italien (lexique_it)</option>
+              <option value="spacy">Votre langue n’est pas proposée ? (spaCy)</option>
             </select>
             <p class="field-help">Le choix détermine le lexique, la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.</p>
+          </div>
+
+          <div class="field field--full" id="spacyOptions" hidden>
+            <label for="spacyModel">Modèle linguistique spaCy installé sur le serveur</label>
+            <input id="spacyModel" type="text" value="" placeholder="Exemple : de_core_news_md" autocomplete="off" list="spacyModelSuggestions" />
+            <datalist id="spacyModelSuggestions">
+              <option value="de_core_news_md">Allemand</option>
+              <option value="nl_core_news_md">Néerlandais</option>
+              <option value="pt_core_news_md">Portugais</option>
+              <option value="ca_core_news_md">Catalan</option>
+              <option value="el_core_news_md">Grec</option>
+            </datalist>
+            <p class="field-help">
+              Utilisez de préférence un modèle <code>md</code>, ou <code>sm</code> pour réduire le temps de calcul. Les modèles multilingues <code>xx</code> de spaCy ne fournissent pas le POS et les lemmes nécessaires à la CHD.
+            </p>
           </div>
 
           <div class="field">

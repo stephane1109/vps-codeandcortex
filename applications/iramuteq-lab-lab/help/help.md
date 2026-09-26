@@ -99,6 +99,28 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
 
 ### Filtrage morphosyntaxique
 - **Filtrage morphosyntaxique** (`filtrage_morpho`) : filtre les formes selon la colonne `c_morpho` du lexique sélectionné.
+
+### Votre langue n’est pas proposée ? (spaCy)
+
+Cette option utilise un modèle linguistique spaCy propre à la langue, par exemple `de_core_news_md` pour l’allemand. Le modèle doit être installé sur le serveur et doit fournir à la fois les catégories grammaticales universelles (`POS`) et les lemmes.
+
+Les modèles multilingues spaCy `xx_ent_wiki_sm` et `xx_sent_ud_sm` ne conviennent pas : ils assurent respectivement la reconnaissance d’entités et la segmentation en phrases, mais pas le POS et la lemmatisation nécessaires ici. Un modèle `md` constitue un compromis possible ; pour les corpus volumineux, un modèle `sm` est plus léger et généralement suffisant puisque les vecteurs supplémentaires des modèles `md` et `lg` ne sont pas utilisés par la CHD.
+
+Les catégories spaCy sont converties ainsi :
+
+| spaCy | IRaMuTeQ-Lab |
+|---|---|
+| `NOUN`, `PROPN` | `nom` |
+| `VERB` | `ver` |
+| `AUX` | `aux` |
+| `ADJ` | `adj` |
+| `ADV` | `adv` |
+| `ADP` | `pre` |
+| `PRON` | `pro` |
+| `CCONJ`, `SCONJ` | `con` |
+| catégorie inconnue | `AUTRE_FORME` |
+
+spaCy intervient uniquement pendant le prétraitement lexical. Il ne modifie ni la CHD, ni le calcul du χ², ni l’AFC.
 - **Catégories conservées** (`pos_lexique_a_conserver`) : sélection des étiquettes autorisées (ex: NOM, VER, ADJ, etc...).
 
 ## Aide AFC : calcul, affichage des termes, rôle de `top_termes`

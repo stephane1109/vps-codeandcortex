@@ -3033,6 +3033,11 @@ function buildJobConfig(analysisKind = "chd") {
   const dendrogramSizing = computeDendrogramSizing();
   const globalUseLemmas = document.getElementById("useLemmas").checked;
   const effectiveUseLemmas = globalUseLemmas;
+  const dictionarySourceValue = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
+  const spacyModelValue = String(document.getElementById("spacyModel")?.value || "").trim();
+  if (dictionarySourceValue === "spacy" && !/^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$/.test(spacyModelValue)) {
+    throw new Error("Indiquez un modèle spaCy valide, par exemple de_core_news_md.");
+  }
   const expressionAnnotations = appState.expressionAnnotations.map((entry) => ({
     dic_mot: normalizeAnnotationSelectionValue(entry.dic_mot),
     dic_norm: normalizeAnnotationSelectionValue(entry.dic_norm),
@@ -3069,7 +3074,9 @@ function buildJobConfig(analysisKind = "chd") {
     iramuteq_rst2: Number(document.getElementById("rst2").value) || 14,
     iramuteq_svd_method: document.getElementById("svdMethod").value,
     iramuteq_stats_mode: document.getElementById("statsMode").value,
-    source_dictionnaire: document.getElementById("dictionarySource").value,
+    source_dictionnaire: dictionarySourceValue,
+    spacy_model: spacyModelValue,
+    spacy_batch_size: 64,
     lexique_utiliser_lemmes: effectiveUseLemmas,
     expression_utiliser_dictionnaire: document.getElementById("useExpressions").checked,
     utiliser_add_expression: document.getElementById("useAnnotationExpressions").checked,
@@ -12323,6 +12330,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
       setValue("svdMethod", manualReplayConfig.iramuteq_svd_method);
       setValue("statsMode", manualReplayConfig.iramuteq_stats_mode);
       setValue("dictionarySource", manualReplayConfig.source_dictionnaire);
+      setValue("spacyModel", manualReplayConfig.spacy_model);
       setChecked("useLemmas", manualReplayConfig.lexique_utiliser_lemmes);
       setChecked("removePunctuation", manualReplayConfig.supprimer_ponctuation);
       setChecked("removeDigits", manualReplayConfig.supprimer_chiffres);
@@ -12341,6 +12349,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
       renderClassesModeCards(document);
       renderClassificationModeCards(document);
       renderMorphoPickers(document);
+      updateSpacyOptionsVisibility();
       renderAfcStarredVariablesPickers(document, { resetSelection: false });
       renderSuiviControls(document, { resetSelection: false });
       replayButton.disabled = true;
@@ -15233,6 +15242,27 @@ document.getElementById("suiviAnalysisLayer")?.addEventListener("change", () => 
   renderSuiviControls(document, { resetSelection: false });
 });
 
+function updateSpacyOptionsVisibility() {
+  const source = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
+  const spacyOptions = document.getElementById("spacyOptions");
+  const useExpressions = document.getElementById("useExpressions");
+  const useAnnotationExpressions = document.getElementById("useAnnotationExpressions");
+  const isSpacy = source === "spacy";
+  const hasBaseExpressions = source === "lexique_fr" || source === "lexique_en";
+
+  if (spacyOptions instanceof HTMLElement) {
+    spacyOptions.hidden = !isSpacy;
+  }
+  if (useExpressions instanceof HTMLInputElement) {
+    useExpressions.disabled = !hasBaseExpressions;
+    if (!hasBaseExpressions) useExpressions.checked = false;
+  }
+  if (useAnnotationExpressions instanceof HTMLInputElement) {
+    useAnnotationExpressions.disabled = source !== "lexique_fr";
+    if (source !== "lexique_fr") useAnnotationExpressions.checked = false;
+  }
+}
+
 document.getElementById("suiviEmotionLexicon")?.addEventListener("change", () => {
   renderSuiviControls(document, { resetSelection: false });
 });
@@ -15248,6 +15278,8 @@ suiviFilterModalite?.addEventListener("change", () => {
 document.getElementById("suiviChronologyOrder")?.addEventListener("change", () => {
   renderSuiviControls(document, { resetSelection: false });
 });
+
+document.getElementById("dictionarySource")?.addEventListener("change", updateSpacyOptionsVisibility);
 
 [
   "dictionarySource",
@@ -16671,6 +16703,7 @@ async function startAnalysis(analysisKind = "chd") {
 }
 
 activateTopTab("analyse");
+updateSpacyOptionsVisibility();
 activateChdSubTab("dendrogramme");
 activateHelpSubTab("help_general");
 resetResultPanes();

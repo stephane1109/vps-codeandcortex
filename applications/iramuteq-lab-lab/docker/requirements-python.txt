@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 redis>=5,<6
+spacy>=3.8,<3.9
+spacy-lookups-data>=1.0.5,<2
