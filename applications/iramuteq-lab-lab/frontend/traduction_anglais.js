@@ -145,7 +145,7 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Votre langue n’est pas proposée ? - spaCy": "Is your language unavailable? - spaCy",
   "Le choix détermine le lexique, la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.": "This choice determines the lexicon, lemmatization, morphosyntactic categories and stopword language.",
   "Modèle linguistique spaCy": "spaCy language model",
-  "Exemple : en_core_web_sm": "Example: en_core_web_sm",
+  "Exemple : en_core_web_md": "Example: en_core_web_md",
   "Anglais (installé par défaut)": "English (installed by default)",
   "Allemand": "German",
   "Néerlandais": "Dutch",

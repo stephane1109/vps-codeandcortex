@@ -3037,7 +3037,7 @@ function buildJobConfig(analysisKind = "chd") {
   const dictionarySourceValue = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
   const spacyModelValue = String(document.getElementById("spacyModel")?.value || "").trim();
   if (dictionarySourceValue === "spacy" && !/^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$/.test(spacyModelValue)) {
-    throw new Error("Indiquez un modèle spaCy valide, par exemple en_core_web_sm.");
+    throw new Error("Indiquez un modèle spaCy valide, par exemple en_core_web_md.");
   }
   const expressionAnnotations = appState.expressionAnnotations.map((entry) => ({
     dic_mot: normalizeAnnotationSelectionValue(entry.dic_mot),
@@ -15259,7 +15259,7 @@ function updateSpacyOptionsVisibility(scope = document) {
     spacyOptions.hidden = !isSpacy;
   }
   if (isSpacy && spacyModel instanceof HTMLInputElement && !spacyModel.value.trim()) {
-    spacyModel.value = "en_core_web_sm";
+    spacyModel.value = "en_core_web_md";
   }
   if (useExpressions instanceof HTMLInputElement) {
     useExpressions.disabled = !hasBaseExpressions;
