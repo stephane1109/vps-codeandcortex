@@ -40,6 +40,29 @@ stopifnot(!("je" %in% formes_nom_ver))
 # "tue" est un verbe : sa conservation est normale dans ce profil.
 stopifnot("tue" %in% formes_nom_ver)
 
+lexique_en <- utils::read.delim(
+  file.path("dictionnaires", "lexique_en.txt"),
+  header = FALSE,
+  sep = "\t",
+  quote = "",
+  comment.char = "",
+  col.names = c("c_mot", "c_lemme", "c_morpho"),
+  stringsAsFactors = FALSE
+)
+idx_en <- toupper(trimws(lexique_en$c_morpho)) %in% c("NOM", "VER")
+formes_nom_ver_en <- unique(tolower(trimws(c(
+  lexique_en$c_mot[idx_en],
+  lexique_en$c_lemme[idx_en]
+))))
+formes_nom_ver_en <- formes_nom_ver_en[nzchar(formes_nom_ver_en)]
+
+# Le profil cible doit fonctionner avec les catégories minuscules du lexique anglais.
+stopifnot("protect" %in% formes_nom_ver_en)
+stopifnot("protection" %in% formes_nom_ver_en)
+# Les pronoms et l'auxiliaire "be" ne doivent pas être réintroduits par AUTRE_FORME.
+stopifnot(!("i" %in% formes_nom_ver_en))
+stopifnot(!("be" %in% formes_nom_ver_en))
+
 source(file.path("iramuteqlite", "afc_extremes.R"))
 coords <- matrix(
   c(1, 0, -1, 0, 0, 1),
