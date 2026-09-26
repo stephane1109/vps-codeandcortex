@@ -63,6 +63,26 @@ stopifnot("protection" %in% formes_nom_ver_en)
 stopifnot(!("i" %in% formes_nom_ver_en))
 stopifnot(!("be" %in% formes_nom_ver_en))
 
+lexique_de_lines <- readLines(
+  file.path("dictionnaires", "lexique_de.txt"),
+  encoding = "UTF-8",
+  warn = FALSE
+)
+lexique_de_connection <- textConnection(lexique_de_lines)
+lexique_de <- utils::read.delim(
+  lexique_de_connection,
+  header = FALSE,
+  sep = "\t",
+  quote = "\"",
+  comment.char = "",
+  col.names = c("c_mot", "c_lemme", "c_morpho"),
+  stringsAsFactors = FALSE
+)
+close(lexique_de_connection)
+stopifnot(nrow(lexique_de) == 737L)
+stopifnot(all(toupper(trimws(lexique_de$c_morpho)) == "SW"))
+stopifnot("sein" %in% lexique_de$c_mot)
+
 source(file.path("iramuteqlite", "afc_extremes.R"))
 coords <- matrix(
   c(1, 0, -1, 0, 0, 1),

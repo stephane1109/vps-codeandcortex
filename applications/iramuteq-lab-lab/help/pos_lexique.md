@@ -4,7 +4,9 @@
 
 ### Filtrage morphosyntaxique du lexique sélectionné
 
-Les dictionnaires **lexique_fr**, **lexique_en**, **lexique_sp** et **lexique_it** utilisés ici proviennent d’**IRaMuTeQ**. Le filtrage repose sur leur colonne morphosyntaxique.
+Les dictionnaires **lexique_fr**, **lexique_en**, **lexique_sp**, **lexique_it** et **lexique_de** utilisés ici proviennent d’**IRaMuTeQ**. Le filtrage repose sur leur colonne morphosyntaxique.
+
+> Le fichier **lexique_de** actuellement fourni contient uniquement des mots-outils (`sw`). Il permet leur reconnaissance, mais ne fournit pas encore les catégories `NOM` et `VER` nécessaires à un filtrage morphosyntaxique complet. Pour une analyse grammaticale allemande, utilisez le mode spaCy avec un modèle allemand installé sur le serveur.
 
 > Contrairement au logiciel IRaMuTeQ (où les catégories des formes sont interprétés comme `1 = active` et `2 = supplémentaire`), le filtrage proposé ici est **binaire**.
 

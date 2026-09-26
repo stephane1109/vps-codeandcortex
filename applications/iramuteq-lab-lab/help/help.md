@@ -83,16 +83,17 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
 - **Passage en minuscules** : appliqué automatiquement avant la construction des tokens/termes (option non configurable).
 
 #### Stopwords en mode IRaMuTeQ-lite
-- En mode **IRaMuTeQ-lite**, la source de lemmatisation est forcée sur **Lexique (fr)**.
-- Quand l'option **Retirer les stopwords** est activée, le filtrage se fait avec les stopwords **français de quanteda**.
+- En mode **IRaMuTeQ-lite**, la source de lemmatisation correspond au dictionnaire sélectionné.
+- Quand l'option **Retirer les stopwords** est activée, le filtrage utilise la langue associée au dictionnaire sélectionné.
 
 #### Effet sur le concordancier HTML
 - Quand **Supprimer la ponctuation** est cochée, la ponctuation est bien retirée dans les **données d’analyse**.
 - Le **concordancier HTML** contient la ponctuation dans le texte affiché.
 
 ### Dictionnaire et lemmatisation (calcul IRaMuTeQ-lite)
-- **Source de lemmatisation** : en mode IRaMuTeQ-lite, la source active est **Lexique (fr)**.
-- **Langue et dictionnaire** (`source_dictionnaire`) : sélectionne `lexique_fr`, `lexique_en`, `lexique_sp` ou `lexique_it`. Ce choix pilote la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.
+- **Source de lemmatisation** : en mode IRaMuTeQ-lite, la source active est le dictionnaire choisi dans l'interface.
+- **Langue et dictionnaire** (`source_dictionnaire`) : sélectionne `lexique_fr`, `lexique_en`, `lexique_sp`, `lexique_it` ou `lexique_de`. Ce choix pilote la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.
+- **Limite du dictionnaire allemand** : le fichier `lexique_de` fourni contient actuellement uniquement des mots-outils (`sw`). Il ne catégorise pas encore les noms et les verbes ; utilisez spaCy pour un filtrage morphosyntaxique allemand complet.
 - **Lemmatisation via le lexique sélectionné** (`lexique_utiliser_lemmes`) : remplace les formes par leur lemme (`forme → c_lemme`) avant la DFM.
 - **Dictionnaire d'expressions** (`expression_utiliser_dictionnaire`) : applique les remplacements `dic_mot → dic_norm` en amont du pipeline (avant nettoyage, tokenisation, lemmatisation et filtrage morphosyntaxique).
 - <a href="https://openlexicon.fr/" target="_blank" rel="noopener noreferrer">OpenLexicon</a>
