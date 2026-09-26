@@ -686,11 +686,15 @@
           <div class="field">
             <label for="dictionarySource">Langue et dictionnaire</label>
             <select id="dictionarySource">
-              <option value="lexique_fr">Français (lexique_fr)</option>
-              <option value="lexique_en">Anglais (lexique_en)</option>
-              <option value="lexique_sp">Espagnol (lexique_sp)</option>
-              <option value="lexique_it">Italien (lexique_it)</option>
-              <option value="spacy">Votre langue n’est pas proposée ? (spaCy)</option>
+              <optgroup label="Dictionnaires IRaMuTeQ">
+                <option value="lexique_fr">Français - dico IRaMuTeQ</option>
+                <option value="lexique_en">Anglais - dico IRaMuTeQ</option>
+                <option value="lexique_sp">Espagnol - dico IRaMuTeQ</option>
+                <option value="lexique_it">Italien - dico IRaMuTeQ</option>
+              </optgroup>
+              <optgroup label="Mode multilingue">
+                <option value="spacy">Votre langue n’est pas proposée ? - spaCy</option>
+              </optgroup>
             </select>
             <p class="field-help">Le choix détermine le lexique, la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.</p>
           </div>
