@@ -21,7 +21,7 @@ Version **web/VPS uniquement** de `iramuteq-lite`, prévue pour Coolify sur le V
 ## Coolify
 
 - Repo : `VPS`
-- Base Directory : `/applications/iramuteq-lite`
+- Base Directory : `/applications/iramuteq-lab-lab`
 - Port : `8000`
 - Domaine conseillé : `iramuteqlite.codeandcortex.fr`
 
