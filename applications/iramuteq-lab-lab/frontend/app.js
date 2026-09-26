@@ -1,4 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
+import { initializeEnglishTranslation } from "./traduction_anglais.js";
 
 const CYTOSCAPE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/+esm";
 const CYTOSCAPE_FCOSE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/+esm";
@@ -16702,6 +16703,7 @@ async function startAnalysis(analysisKind = "chd") {
   }
 }
 
+initializeEnglishTranslation();
 activateTopTab("analyse");
 updateSpacyOptionsVisibility();
 activateChdSubTab("dendrogramme");

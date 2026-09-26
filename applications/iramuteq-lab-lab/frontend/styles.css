@@ -292,6 +292,28 @@ textarea {
   padding: 1rem;
 }
 
+.sidebar-language-selector {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-language-selector label {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sidebar-language-selector select {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent-soft) 32%, #fff);
+  font-weight: 650;
+}
+
 .sidebar-card h2,
 .card h3 {
   margin: 0 0 0.85rem;
