@@ -72,7 +72,7 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 	print('vire colonnes vides en entree')#FIXME : il ne doit pas y avoir de colonnes vides en entree !!
 	sdt<-colSums(dtable)
 	if (min(sdt)==0)
-		dtable<-dtable[,-which(sdt==0)]
+		dtable<-dtable[,-which(sdt==0), drop=FALSE]
     print('vire lignes vides en entree')
     sdt<-rowSums(dtable)
 	if (min(sdt)==0) {
@@ -80,16 +80,21 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
         print('&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&')
         print(rowelim)
         print('&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&')
-		dtable<-dtable[-which(sdt==0),]
+		dtable<-dtable[-which(sdt==0),, drop=FALSE]
 	}
 	mere<-1
 	for (i in 1:x) {
+		# Les sous-tableaux très petits apparaissent sur les corpus courts lorsque k
+		# est élevé. Conserver les dimensions matricielles et arrêter au dernier
+		# niveau calculable évite de transformer la CHD en erreur d'indexation.
+		if (!is.matrix(dtable)) {
+			dtable <- as.matrix(dtable)
+		}
+		if (nrow(dtable) < 2 || ncol(dtable) < 2) {
+			warning("CHD arrêtée avant la limite demandée : sous-tableau insuffisant pour une nouvelle division.")
+			break
+		}
 		clnb<-(i*2)
-		listmere[[clnb]]<-mere
-		listmere[[clnb+1]]<-mere
-		list_fille[[mere]] <- c(clnb,clnb+1)
-		listcol[[clnb]]<-vector()
-		listcol[[clnb+1]]<-vector()
 		#extraction du premier facteur de l'afc
 		print('afc')
 		pp('taille dtable dans boucle (col/row)',c(ncol(dtable),nrow(dtable)))
@@ -101,16 +106,16 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 		row.names(coordrow)<-rownames(dtable)
         coordrow <- cbind(coordrow,1:nrow(dtable))
 		print('deb recherche meilleur partition')
-        ordert <- as.matrix(coordrow[order(coordrow[,1]),])
+        ordert <- as.matrix(coordrow[order(coordrow[,1]),, drop=FALSE])
         ordert <- cbind(ordert, 1:nrow(ordert))
-        ordert <- ordert[order(ordert[,2]),]
+        ordert <- ordert[order(ordert[,2]),, drop=FALSE]
 
 		listinter<-vector()
 		listlim<-vector()
-        dtable <- dtable[order(ordert[,3]),]
+        dtable <- dtable[order(ordert[,3]),, drop=FALSE]
         sc <- colSums(dtable)
         TT <- sum(sc)
-        sc1 <- dtable[1,]
+        sc1 <- dtable[1,, drop=TRUE]
         sc2 <- colSums(dtable) - sc1 
         chitable <- rbind(sc1, sc2)
         compte <- 1
@@ -121,10 +126,19 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
         print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
 		pp('max inter phase 1', inert$maxinter/TT)#max(listinter))
 		print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
-        ordert <- ordert[order(ordert[,3]),]
+		if (is.null(inert$rmax) || !length(inert$rmax) || !is.finite(inert$rmax)) {
+			warning("CHD arrêtée avant la limite demandée : aucune coupure supplémentaire exploitable.")
+			break
+		}
+		listmere[[clnb]]<-mere
+		listmere[[clnb+1]]<-mere
+		list_fille[[mere]] <- c(clnb,clnb+1)
+		listcol[[clnb]]<-vector()
+		listcol[[clnb+1]]<-vector()
+        ordert <- ordert[order(ordert[,3]),, drop=FALSE]
 		listclasse<-ifelse(coordrowori<=ordert[(inert$rmax),1],clnb,clnb+1)
-	    dtable <- dtable[order(ordert[,2]),]
-		cl<-listclasse
+	    dtable <- dtable[order(ordert[,2]),, drop=FALSE]
+		cl<-matrix(as.integer(listclasse), ncol=1)
 		pp('TT',TT)
 		#dtable<-cbind(dtable,'cl'= as.vector(cl))
 
@@ -155,9 +169,9 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
     			#pp('nombre iteration',it)
     			vdelta<-vector()
     			#dtable[,'cl']<-cl
-    			t1<-dtable[which(cl[,1]==clnb),]#[,-ncol(dtable)]
-    			t2<-dtable[which(cl[,1]==clnb+1),]#[,-ncol(dtable)]
-    			ncolt<-ncol(t1)
+			t1<-dtable[which(cl[,1]==clnb),, drop=FALSE]#[,-ncol(dtable)]
+			t2<-dtable[which(cl[,1]==clnb+1),, drop=FALSE]#[,-ncol(dtable)]
+			ncolt<-ncol(t1)
     			#pp('ncolt',ncolt)
     
                 if (N1 != 1) {
@@ -247,22 +261,12 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 #		if (!(length(cl[cl==clnb])==1 || length(cl[cl==clnb+1])==1)) {
 			#t1<-dtable[dtable[,'cl']==clnb,][,-ncol(dtable)]
 			#t2<-dtable[dtable[,'cl']==clnb+1,][,-ncol(dtable)]
-		    t1<-dtable[which(cl[,1]==clnb),]#[,-ncol(dtable)]
-			t2<-dtable[which(cl[,1]==clnb+1),]#[,-ncol(dtable)]
-            if (inherits(t1, "numeric")) {
-                sc1 <- as.vector(t1)
-                nrowt1 <- 1
-            } else {
-                sc1 <- colSums(t1)
-                nrowt1 <- nrow(t1)
-            }
-            if  (inherits(t2, "numeric")) {
-                sc2 <- as.vector(t2)
-                nrowt2 <- 1
-            } else {
-                sc2 <- colSums(t2)
-                nrowt2 <- nrow(t2)
-            }
+		    t1<-dtable[which(cl[,1]==clnb),, drop=FALSE]#[,-ncol(dtable)]
+			t2<-dtable[which(cl[,1]==clnb+1),, drop=FALSE]#[,-ncol(dtable)]
+            sc1 <- colSums(t1)
+            nrowt1 <- nrow(t1)
+            sc2 <- colSums(t2)
+            nrowt2 <- nrow(t2)
             chtable<-rbind(sc1,sc2)
 			inter<-chisq.test(chtable)$statistic/TT
 			pp('last inter',inter)
@@ -347,7 +351,7 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 			tailleclasse<-as.matrix(summary(as.factor(as.character(newcol))))
 			print('tailleclasse')
 			print(tailleclasse)
-			tailleclasse<-as.matrix(tailleclasse[!(rownames(tailleclasse)==0),])
+			tailleclasse<-as.matrix(tailleclasse[!(rownames(tailleclasse)==0),, drop=FALSE])
 			plusgrand<-which.max(tailleclasse)
 			#???????????????????????????????????
 			#Si 2 classes ont des effectifs egaux, on prend la premiere de la liste...
@@ -360,7 +364,7 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 			print('construction tableau suivant')
             dout<-cbind(dout,newcol)
 			classe<-as.integer(rownames(tailleclasse)[plusgrand])
-			dtable<-dataori[which(newcol==classe),]
+			dtable<-dataori[which(newcol==classe),, drop=FALSE]
 			row.names(dtable)<-rownames(dataori)[which(newcol==classe)]
             colnames(dtable) <- 1:ncol(dtable)
 			mere<-classe
@@ -376,14 +380,14 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 			if (!is.logical(listcolelim)){
 				print('elimination colonne')
 				#dtable<-dtable[,-listcolelim]
-                dtable<-dtable[,!(colnames(dtable) %in% listcolelim)]
+                dtable<-dtable[,!(colnames(dtable) %in% listcolelim), drop=FALSE]
 			}
 			pp('apres',ncol(dtable))
 			#elimination des colonnes ne contenant que des 0
 			print('vire colonne inf 3 dans boucle')
 			sdt<-colSums(dtable)
-			if (min(sdt)<=3)
-				dtable<-dtable[,-which(sdt<=3)]
+			if (length(sdt) && min(sdt)<=3)
+				dtable<-dtable[,-which(sdt<=3), drop=FALSE]
 	
 			#elimination des lignes ne contenant que des 0
 			print('vire ligne vide dans boucle')
@@ -392,12 +396,12 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 			} else {
 				sdt<-rowSums(dtable)
 			}
-			if (min(sdt)==0) {
+			if (length(sdt) && min(sdt)==0) {
 				rowelim<-as.integer(rownames(dtable)[which(sdt==0)])
 				print('&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&')
 				print(rowelim)
 				print('&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&')
-				dtable<-dtable[-which(sdt==0),]
+				dtable<-dtable[-which(sdt==0),, drop=FALSE]
 			}
 #		}
 	}

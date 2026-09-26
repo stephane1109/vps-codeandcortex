@@ -241,10 +241,13 @@ const DYNAMIC_TRANSLATIONS = [
   [" » est le plus élevé.", "’ criterion."],
   ["Grille prévue : ", "Planned grid: "],
   ["Critère : ", "Criterion: "],
+  ["Distance directe des classes AFC", "Direct AFC class distance"],
+  ["Score S lexical", "Lexical S score"],
   [" configurations CHD seront comparées.", " CHD configurations will be compared."],
   [" configuration CHD sera comparée.", " CHD configuration will be compared."],
   ["classes terminales phase 1", "phase-1 terminal classes"],
   ["mincl manuel", "manual mincl"],
+  [" à ", " to "],
   [" fixe", " fixed"],
   [" CHD sont demandées : le calcul peut être long, surtout pour un corpus volumineux.", " CHD runs are requested: computation may take a long time, especially for a large corpus."],
   ["Retirer ", "Remove "]
