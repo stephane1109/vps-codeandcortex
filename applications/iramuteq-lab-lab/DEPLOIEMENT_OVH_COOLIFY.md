@@ -34,7 +34,7 @@ Application accessible ensuite sur :
 1. Créer une nouvelle `Application`
 2. Connecter le dépôt Git `VPS`
 3. Choisir `Dockerfile`
-4. Définir le `Base Directory` sur `/applications/iramuteq-lab`
+4. Définir le `Base Directory` sur `/applications/iramuteq-lab-lab`
 5. Définir le port exposé sur `8000`
 6. Ajouter un volume persistant monté sur `/data/app`
 
