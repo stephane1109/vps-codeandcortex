@@ -681,7 +681,6 @@ catalogue_dictionnaires <- function() {
     lexique_en = list(fichier = "lexique_en.txt", langue = "en", libelle = "anglais", format = "tsv", auxiliaires = "be"),
     lexique_sp = list(fichier = "lexique_sp.txt", langue = "es", libelle = "espagnol", format = "tsv", auxiliaires = c("ser", "estar")),
     lexique_it = list(fichier = "lexique_it.txt", langue = "it", libelle = "italien", format = "tsv", auxiliaires = "essere"),
-    lexique_de = list(fichier = "lexique_de.txt", langue = "de", libelle = "allemand", format = "tsv", auxiliaires = "sein"),
     spacy = list(fichier = NA_character_, langue = "xx", libelle = "spaCy", format = "spacy", auxiliaires = character(0))
   )
 }

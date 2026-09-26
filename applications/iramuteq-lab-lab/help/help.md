@@ -92,8 +92,7 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
 
 ### Dictionnaire et lemmatisation (calcul IRaMuTeQ-lite)
 - **Source de lemmatisation** : en mode IRaMuTeQ-lite, la source active est le dictionnaire choisi dans l'interface.
-- **Langue et dictionnaire** (`source_dictionnaire`) : sélectionne `lexique_fr`, `lexique_en`, `lexique_sp`, `lexique_it` ou `lexique_de`. Ce choix pilote la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.
-- **Limite du dictionnaire allemand** : le fichier `lexique_de` fourni contient actuellement uniquement des mots-outils (`sw`). Il ne catégorise pas encore les noms et les verbes ; utilisez spaCy pour un filtrage morphosyntaxique allemand complet.
+- **Langue et dictionnaire** (`source_dictionnaire`) : sélectionne `lexique_fr`, `lexique_en`, `lexique_sp` ou `lexique_it`. Ce choix pilote la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.
 - **Lemmatisation via le lexique sélectionné** (`lexique_utiliser_lemmes`) : remplace les formes par leur lemme (`forme → c_lemme`) avant la DFM.
 - **Dictionnaire d'expressions** (`expression_utiliser_dictionnaire`) : applique les remplacements `dic_mot → dic_norm` en amont du pipeline (avant nettoyage, tokenisation, lemmatisation et filtrage morphosyntaxique).
 - <a href="https://openlexicon.fr/" target="_blank" rel="noopener noreferrer">OpenLexicon</a>
