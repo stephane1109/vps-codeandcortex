@@ -1,6 +1,6 @@
-# iramuteq-lite
+# IRaMuTeQ-Lab
 
-Version **web/VPS uniquement** de `iramuteq-lite`, prévue pour Coolify sur le VPS OVH.
+Version expérimentale **web/VPS** dérivée de `iramuteq-lite`, prévue pour Coolify sur le VPS OVH.
 
 ## Ce dossier contient
 
@@ -21,9 +21,9 @@ Version **web/VPS uniquement** de `iramuteq-lite`, prévue pour Coolify sur le V
 ## Coolify
 
 - Repo : `VPS`
-- Base Directory : `/applications/iramuteq-lite`
+- Base Directory : `/applications/iramuteq-lab`
 - Port : `8000`
-- Domaine conseillé : `iramuteqlite.codeandcortex.fr`
+- Domaine : `iramuteqlab.codeandcortex.fr`
 
 ## Note build VPS
 

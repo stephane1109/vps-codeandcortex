@@ -675,25 +675,62 @@ split_segments_double_rst <- function(corpus,
   corp_out
 }
 
-charger_lexique_fr <- function(repo_root) {
-  path <- file.path(repo_root, "dictionnaires", "lexique_fr.csv")
+catalogue_dictionnaires <- function() {
+  list(
+    lexique_fr = list(fichier = "lexique_fr.csv", langue = "fr", libelle = "français", format = "csv2", auxiliaires = c("être", "etre")),
+    lexique_en = list(fichier = "lexique_en.txt", langue = "en", libelle = "anglais", format = "tsv", auxiliaires = "be"),
+    lexique_sp = list(fichier = "lexique_sp.txt", langue = "es", libelle = "espagnol", format = "tsv", auxiliaires = c("ser", "estar")),
+    lexique_it = list(fichier = "lexique_it.txt", langue = "it", libelle = "italien", format = "tsv", auxiliaires = "essere")
+  )
+}
+
+normaliser_source_dictionnaire <- function(source_dictionnaire) {
+  source <- trimws(as.character(source_dictionnaire %||% "lexique_fr")[[1]])
+  if (!source %in% names(catalogue_dictionnaires())) "lexique_fr" else source
+}
+
+infos_dictionnaire <- function(source_dictionnaire) {
+  catalogue_dictionnaires()[[normaliser_source_dictionnaire(source_dictionnaire)]]
+}
+
+charger_lexique <- function(repo_root, source_dictionnaire = "lexique_fr") {
+  source_dictionnaire <- normaliser_source_dictionnaire(source_dictionnaire)
+  infos <- infos_dictionnaire(source_dictionnaire)
+  path <- file.path(repo_root, "dictionnaires", infos$fichier)
   if (!file.exists(path)) {
     stop(paste0("Fichier lexique introuvable: ", path))
   }
 
-  cache_key <- paste0("lexique_fr::", normalizePath(path, winslash = "/", mustWork = TRUE))
+  cache_key <- paste0(source_dictionnaire, "::", normalizePath(path, winslash = "/", mustWork = TRUE))
   if (exists(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE)) {
     return(get(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE))
   }
 
-  lexique <- utils::read.csv2(path, stringsAsFactors = FALSE, encoding = "UTF-8")
+  lexique <- if (identical(infos$format, "csv2")) {
+    utils::read.csv2(path, stringsAsFactors = FALSE, encoding = "UTF-8")
+  } else {
+    utils::read.delim(
+      path,
+      header = FALSE,
+      sep = "\t",
+      quote = "",
+      comment.char = "",
+      col.names = c("c_mot", "c_lemme", "c_morpho"),
+      stringsAsFactors = FALSE
+    )
+  }
   colonnes_requises <- c("c_mot", "c_lemme", "c_morpho")
   if (!all(colonnes_requises %in% names(lexique))) {
-    stop("Le fichier lexique_fr.csv doit contenir les colonnes c_mot, c_lemme et c_morpho.")
+    stop(paste0("Le fichier ", infos$fichier, " doit contenir trois colonnes: mot, lemme et morphologie."))
   }
 
-  lexique$c_mot <- tolower(trimws(as.character(lexique$c_mot)))
-  lexique$c_lemme <- tolower(trimws(as.character(lexique$c_lemme)))
+  lexique$c_mot <- as.character(lexique$c_mot)
+  lexique$c_lemme <- as.character(lexique$c_lemme)
+  Encoding(lexique$c_mot) <- "UTF-8"
+  Encoding(lexique$c_lemme) <- "UTF-8"
+  lexique$c_mot <- sub("^\xef\xbb\xbf", "", lexique$c_mot, useBytes = TRUE)
+  lexique$c_mot <- tolower(trimws(lexique$c_mot))
+  lexique$c_lemme <- tolower(trimws(lexique$c_lemme))
   lexique$c_morpho <- trimws(as.character(lexique$c_morpho))
   lexique <- lexique[nzchar(lexique$c_mot) & nzchar(lexique$c_lemme), c("c_mot", "c_lemme", "c_morpho"), drop = FALSE]
   lexique <- lexique[!duplicated(lexique$c_mot), , drop = FALSE]
@@ -701,11 +738,20 @@ charger_lexique_fr <- function(repo_root) {
   lexique
 }
 
-charger_expression_fr <- function(repo_root) {
-  chemins_candidats <- c(
-    file.path(repo_root, "dictionnaires", "expression_fr.csv"),
-    file.path(repo_root, "dictionnaires", "expressions.csv")
+charger_expressions <- function(repo_root, source_dictionnaire = "lexique_fr") {
+  source_dictionnaire <- normaliser_source_dictionnaire(source_dictionnaire)
+  chemins_candidats <- switch(
+    source_dictionnaire,
+    lexique_fr = c(
+      file.path(repo_root, "dictionnaires", "expression_fr.csv"),
+      file.path(repo_root, "dictionnaires", "expressions.csv")
+    ),
+    lexique_en = file.path(repo_root, "dictionnaires", "expression_en.txt"),
+    character(0)
   )
+  if (!length(chemins_candidats)) {
+    return(data.frame(dic_mot = character(0), dic_norm = character(0), stringsAsFactors = FALSE))
+  }
   path <- chemins_candidats[file.exists(chemins_candidats)][1]
   if (is.na(path) || !nzchar(path)) {
     stop(
@@ -716,15 +762,27 @@ charger_expression_fr <- function(repo_root) {
     )
   }
 
-  cache_key <- paste0("expression_fr::", normalizePath(path, winslash = "/", mustWork = TRUE))
+  cache_key <- paste0("expressions::", source_dictionnaire, "::", normalizePath(path, winslash = "/", mustWork = TRUE))
   if (exists(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE)) {
     return(get(cache_key, envir = .iramuteq_runtime_cache, inherits = FALSE))
   }
 
-  expressions <- utils::read.csv2(path, stringsAsFactors = FALSE, encoding = "UTF-8")
+  expressions <- if (identical(source_dictionnaire, "lexique_fr")) {
+    utils::read.csv2(path, stringsAsFactors = FALSE, encoding = "UTF-8")
+  } else {
+    utils::read.delim(
+      path,
+      header = FALSE,
+      sep = "\t",
+      quote = "",
+      comment.char = "",
+      col.names = c("dic_mot", "dic_norm"),
+      stringsAsFactors = FALSE
+    )
+  }
   colonnes_requises <- c("dic_mot", "dic_norm")
   if (!all(colonnes_requises %in% names(expressions))) {
-    stop("Le fichier expression_fr.csv (ou expressions.csv) doit contenir les colonnes dic_mot et dic_norm.")
+    stop(paste0("Le fichier d'expressions ", basename(path), " doit contenir les colonnes dic_mot et dic_norm."))
   }
 
   expressions$dic_mot <- tolower(trimws(as.character(expressions$dic_mot)))
@@ -817,24 +875,33 @@ appliquer_dictionnaire_expressions <- function(textes, expressions_df) {
 preparer_pipeline_chd <- function(segmented_corpus, config) {
   ids_docs <- as.character(quanteda::docnames(segmented_corpus))
   textes_orig <- as.character(segmented_corpus)
-  source_dictionnaire <- scalar_chr(config$source_dictionnaire, "lexique_fr")
-  if (!nzchar(source_dictionnaire)) source_dictionnaire <- "lexique_fr"
+  source_dictionnaire <- normaliser_source_dictionnaire(scalar_chr(config$source_dictionnaire, "lexique_fr"))
+  infos_langue <- infos_dictionnaire(source_dictionnaire)
   expressions_actives_df <- NULL
 
   if (scalar_bool(config$expression_utiliser_dictionnaire, FALSE)) {
-    expression_fr_df <- charger_expression_fr(repo_root)
-    expression_fr_df$source_expr <- "base"
-    expressions_actives_df <- expression_fr_df
-    log_info(
-      paste0(
-        "Expression (fr) chargé : ",
-        nrow(expression_fr_df),
-        " entrées (source=",
-        attr(expression_fr_df, "source_file") %||% "inconnue",
-        ")."
-      ),
-      progress = 24
-    )
+    expression_base_df <- charger_expressions(repo_root, source_dictionnaire)
+    expression_base_df$source_expr <- "base"
+    expressions_actives_df <- expression_base_df
+    if (nrow(expression_base_df) > 0) {
+      log_info(
+        paste0(
+          "Dictionnaire d'expressions ",
+          infos_langue$libelle,
+          " chargé : ",
+          nrow(expression_base_df),
+          " entrées (source=",
+          attr(expression_base_df, "source_file") %||% "inconnue",
+          ")."
+        ),
+        progress = 24
+      )
+    } else {
+      log_info(
+        paste0("Aucun dictionnaire d'expressions de base n'est fourni pour la langue ", infos_langue$libelle, "."),
+        progress = 24
+      )
+    }
 
     add_expression_actif <- scalar_bool(config$utiliser_add_expression, FALSE)
     expr_session_df <- NULL
@@ -865,10 +932,10 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     if (isTRUE(add_expression_actif) && !is.null(expr_session_df) && nrow(expr_session_df) > 0) {
       log_info(paste0("add_expression_fr.csv chargé : ", nrow(expr_session_df), " entrées utilisateur."), progress = 25)
       expr_session_df$source_expr <- "user"
-      deja_base <- expr_session_df$dic_mot %in% expression_fr_df$dic_mot
+      deja_base <- expr_session_df$dic_mot %in% expression_base_df$dic_mot
       expr_session_ajouts <- expr_session_df[!deja_base, c("dic_mot", "dic_norm", "source_expr"), drop = FALSE]
       expressions_actives_df <- rbind(
-        expression_fr_df[, c("dic_mot", "dic_norm", "source_expr"), drop = FALSE],
+        expression_base_df[, c("dic_mot", "dic_norm", "source_expr"), drop = FALSE],
         expr_session_ajouts
       )
       expressions_actives_df <- expressions_actives_df[!duplicated(expressions_actives_df$dic_mot), , drop = FALSE]
@@ -897,18 +964,20 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
       progress = 27
     )
 
-    remplacements_expr <- appliquer_dictionnaire_expressions(textes_orig, expressions_actives_df)
-    textes_orig <- remplacements_expr$textes
-    log_info(
-      paste0(
-        "Dictionnaire d'expressions appliqué avant analyse : ",
-        remplacements_expr$n_occurrences,
-        " occurrence(s) remplacée(s) via ",
-        remplacements_expr$n_patterns,
-        " entrée(s) du dictionnaire (base + add_expression_fr.csv si activé)."
-      ),
-      progress = 28
-    )
+    if (nrow(expressions_actives_df) > 0) {
+      remplacements_expr <- appliquer_dictionnaire_expressions(textes_orig, expressions_actives_df)
+      textes_orig <- remplacements_expr$textes
+      log_info(
+        paste0(
+          "Dictionnaire d'expressions appliqué avant analyse : ",
+          remplacements_expr$n_occurrences,
+          " occurrence(s) remplacée(s) via ",
+          remplacements_expr$n_patterns,
+          " entrée(s) du dictionnaire."
+        ),
+        progress = 28
+      )
+    }
   } else {
     log_info("Dictionnaire d'expressions désactivé (expression_utiliser_dictionnaire=0).", progress = 24)
   }
@@ -926,7 +995,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   names(textes_chd) <- ids_docs
 
   textes_tok <- textes_chd
-  if (scalar_bool(config$retirer_stopwords, FALSE)) {
+  if (scalar_bool(config$retirer_stopwords, FALSE) && identical(infos_langue$langue, "fr")) {
     textes_tok <- gsub(
       pattern = "(?i)\\b(?:[cdjlmnst]|qu)['’`´ʼʹ](?=[[:alpha:]])",
       replacement = "",
@@ -940,7 +1009,8 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     paste0(
       "Diagnostic du pipeline : dictionnaire=",
       source_dictionnaire,
-      " | langue UI=fr",
+      " | langue=",
+      infos_langue$langue,
       " | filtrage_morpho=",
       ifelse(scalar_bool(config$filtrage_morpho, FALSE), "1", "0"),
       " | inclure_autre_forme=",
@@ -976,19 +1046,22 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   quanteda::docnames(tok) <- ids_docs
   tok <- quanteda::tokens_tolower(tok)
 
-  lexique_fr_df <- NULL
+  lexique_df <- NULL
   if (scalar_bool(config$lexique_utiliser_lemmes, TRUE) || scalar_bool(config$filtrage_morpho, FALSE)) {
-    lexique_fr_df <- charger_lexique_fr(repo_root)
-  log_info(paste0("Lexique (fr) chargé : ", nrow(lexique_fr_df), " entrées."), progress = 34)
+    lexique_df <- charger_lexique(repo_root, source_dictionnaire)
+    log_info(
+      paste0("Lexique ", infos_langue$libelle, " chargé : ", nrow(lexique_df), " entrées."),
+      progress = 34
+    )
   }
 
-  if (scalar_bool(config$lexique_utiliser_lemmes, TRUE) && !is.null(lexique_fr_df)) {
+  if (scalar_bool(config$lexique_utiliser_lemmes, TRUE) && !is.null(lexique_df)) {
     vocabulaire <- quanteda::featnames(quanteda::dfm(tok))
-    idx <- match(vocabulaire, lexique_fr_df$c_mot)
+    idx <- match(vocabulaire, lexique_df$c_mot)
     a_remplacer <- !is.na(idx)
     if (any(a_remplacer)) {
       motifs <- vocabulaire[a_remplacer]
-      remplacements <- lexique_fr_df$c_lemme[idx[a_remplacer]]
+      remplacements <- lexique_df$c_lemme[idx[a_remplacer]]
       tok <- quanteda::tokens_replace(
         tok,
         pattern = motifs,
@@ -996,18 +1069,23 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
         valuetype = "fixed",
         case_insensitive = FALSE
       )
-      log_info(paste0("Lemmatisation lexique_fr appliquée sur ", length(motifs), " formes du vocabulaire."), progress = 34)
+      log_info(
+        paste0("Lemmatisation ", source_dictionnaire, " appliquée sur ", length(motifs), " formes du vocabulaire."),
+        progress = 34
+      )
     }
   }
 
   if (scalar_bool(config$retirer_stopwords, FALSE)) {
-    stop_fr <- quanteda::stopwords("fr")
+    stop_langue <- quanteda::stopwords(infos_langue$langue)
     n_feat_avant_stop <- quanteda::nfeat(quanteda::dfm(tok))
-    tok <- quanteda::tokens_remove(tok, pattern = stop_fr, valuetype = "fixed", case_insensitive = TRUE)
+    tok <- quanteda::tokens_remove(tok, pattern = stop_langue, valuetype = "fixed", case_insensitive = TRUE)
     n_feat_apres_stop <- quanteda::nfeat(quanteda::dfm(tok))
     log_info(
       paste0(
-        "Filtrage des stopwords quanteda(fr) appliqué : ",
+        "Filtrage des stopwords quanteda(",
+        infos_langue$langue,
+        ") appliqué : ",
         n_feat_avant_stop,
         " -> ",
         n_feat_apres_stop,
@@ -1020,8 +1098,8 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
   dfm_obj <- quanteda::dfm(tok)
   quanteda::docnames(dfm_obj) <- ids_docs
 
-  source_dict_chd <- "lexique_fr"
-  if (scalar_bool(config$filtrage_morpho, FALSE) && identical(source_dict_chd, "lexique_fr")) {
+  source_dict_chd <- source_dictionnaire
+  if (scalar_bool(config$filtrage_morpho, FALSE)) {
     morpho_selection <- unique(toupper(trimws(as.character(unlist(config$pos_lexique_a_conserver, use.names = FALSE)))))
     inclure_autre_forme <- scalar_bool(config$morpho_conserver_hors_lexique, TRUE) || ("AUTRE_FORME" %in% morpho_selection)
     if (isTRUE(inclure_autre_forme) && !("AUTRE_FORME" %in% morpho_selection)) {
@@ -1030,7 +1108,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     morpho_selection_lexique <- setdiff(morpho_selection, "AUTRE_FORME")
 
     if (length(morpho_selection_lexique) > 0 || isTRUE(inclure_autre_forme)) {
-      lex <- lexique_fr_df
+      lex <- lexique_df
       lex_morpho <- toupper(trimws(as.character(lex$c_morpho)))
       exclure_etre_verbe <- scalar_bool(config$morpho_exclure_etre_verbe, FALSE)
       categorie_verbe_selectionnee <- any(morpho_selection_lexique %in% c("VER", "VERB", "AUX", "VER_SUP"))
@@ -1042,7 +1120,7 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
       ))
       termes_autorises <- termes_autorises[nzchar(termes_autorises)]
       if (isTRUE(exclure_etre_verbe) && isTRUE(categorie_verbe_selectionnee)) {
-        termes_autorises <- setdiff(termes_autorises, c("être", "etre"))
+        termes_autorises <- setdiff(termes_autorises, infos_langue$auxiliaires)
       }
 
       toutes_formes_lexique <- unique(c(
@@ -1145,7 +1223,10 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     tok = cleaned$tok,
     dfm_obj = cleaned$dfm_obj,
     textes_indexation = textes_indexation,
-    lexique_fr_df = lexique_fr_df,
+    lexique_df = lexique_df,
+    lexique_fr_df = lexique_df,
+    source_dictionnaire = source_dictionnaire,
+    langue = infos_langue$langue,
     expressions_actives_df = expressions_actives_df,
     corpus_stats = list(
       n_tokens = sum(freq_termes),
@@ -1532,7 +1613,15 @@ run_batch <- function() {
         "Terme" %in% names(res_stats_df) &&
         exists("construire_type_lexique_fr", mode = "function", inherits = TRUE)) {
       res_stats_df$Type <- construire_type_lexique_fr(res_stats_df$Terme, lexique_fr_df)
-      log_info(paste0("Lexique (fr) chargé pour typer les termes CHD : ", nrow(lexique_fr_df), " entrées."))
+      log_info(
+        paste0(
+          "Lexique ",
+          infos_dictionnaire(pipeline$source_dictionnaire)$libelle,
+          " utilisé pour typer les termes CHD : ",
+          nrow(lexique_fr_df),
+          " entrées."
+        )
+      )
     }
     if (scalar_bool(config$expression_utiliser_dictionnaire, FALSE) &&
         !is.null(pipeline$expressions_actives_df) &&

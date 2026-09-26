@@ -470,36 +470,72 @@ register_events_lancer <- function(input, output, session, rv) {
 
 
 
-    charger_lexique_fr <- function(app_dir) {
-      chemin_lexique <- file.path(app_dir, "dictionnaires", "lexique_fr.csv")
+    infos_dictionnaire <- function(source_dictionnaire = "lexique_fr") {
+      catalogue <- list(
+        lexique_fr = list(fichier = "lexique_fr.csv", langue = "fr", libelle = "français", format = "csv2", auxiliaires = c("être", "etre")),
+        lexique_en = list(fichier = "lexique_en.txt", langue = "en", libelle = "anglais", format = "tsv", auxiliaires = "be"),
+        lexique_sp = list(fichier = "lexique_sp.txt", langue = "es", libelle = "espagnol", format = "tsv", auxiliaires = c("ser", "estar")),
+        lexique_it = list(fichier = "lexique_it.txt", langue = "it", libelle = "italien", format = "tsv", auxiliaires = "essere")
+      )
+      source <- as.character(source_dictionnaire %||% "lexique_fr")[[1]]
+      if (!source %in% names(catalogue)) source <- "lexique_fr"
+      catalogue[[source]]
+    }
+
+    charger_lexique <- function(app_dir, source_dictionnaire = "lexique_fr") {
+      infos <- infos_dictionnaire(source_dictionnaire)
+      chemin_lexique <- file.path(app_dir, "dictionnaires", infos$fichier)
       if (!file.exists(chemin_lexique)) {
         stop(paste0("Fichier lexique introuvable: ", chemin_lexique))
       }
 
-      lexique <- utils::read.csv2(
-        chemin_lexique,
-        stringsAsFactors = FALSE,
-        encoding = "UTF-8"
-      )
+      lexique <- if (identical(infos$format, "csv2")) {
+        utils::read.csv2(chemin_lexique, stringsAsFactors = FALSE, encoding = "UTF-8")
+      } else {
+        utils::read.delim(
+          chemin_lexique,
+          header = FALSE,
+          sep = "\t",
+          quote = "",
+          comment.char = "",
+          col.names = c("c_mot", "c_lemme", "c_morpho"),
+          stringsAsFactors = FALSE
+        )
+      }
 
       colonnes_requises <- c("c_mot", "c_lemme", "c_morpho")
       if (!all(colonnes_requises %in% names(lexique))) {
-        stop("Le fichier lexique_fr.csv doit contenir les colonnes c_mot, c_lemme et c_morpho.")
+        stop(paste0("Le fichier ", infos$fichier, " doit contenir trois colonnes: mot, lemme et morphologie."))
       }
 
-      lexique$c_mot <- tolower(trimws(as.character(lexique$c_mot)))
-      lexique$c_lemme <- tolower(trimws(as.character(lexique$c_lemme)))
+      lexique$c_mot <- as.character(lexique$c_mot)
+      lexique$c_lemme <- as.character(lexique$c_lemme)
+      Encoding(lexique$c_mot) <- "UTF-8"
+      Encoding(lexique$c_lemme) <- "UTF-8"
+      lexique$c_mot <- sub("^\xef\xbb\xbf", "", lexique$c_mot, useBytes = TRUE)
+      lexique$c_mot <- tolower(trimws(lexique$c_mot))
+      lexique$c_lemme <- tolower(trimws(lexique$c_lemme))
       lexique$c_morpho <- trimws(as.character(lexique$c_morpho))
       lexique <- lexique[nzchar(lexique$c_mot) & nzchar(lexique$c_lemme), c("c_mot", "c_lemme", "c_morpho"), drop = FALSE]
       lexique <- lexique[!duplicated(lexique$c_mot), , drop = FALSE]
       lexique
     }
 
-    charger_expression_fr <- function(app_dir) {
-      chemins_candidats <- c(
-        file.path(app_dir, "dictionnaires", "expression_fr.csv"),
-        file.path(app_dir, "dictionnaires", "expressions.csv")
+    charger_lexique_fr <- function(app_dir) charger_lexique(app_dir, "lexique_fr")
+
+    charger_expressions <- function(app_dir, source_dictionnaire = "lexique_fr") {
+      chemins_candidats <- switch(
+        source_dictionnaire,
+        lexique_fr = c(
+          file.path(app_dir, "dictionnaires", "expression_fr.csv"),
+          file.path(app_dir, "dictionnaires", "expressions.csv")
+        ),
+        lexique_en = file.path(app_dir, "dictionnaires", "expression_en.txt"),
+        character(0)
       )
+      if (!length(chemins_candidats)) {
+        return(data.frame(dic_mot = character(0), dic_norm = character(0), stringsAsFactors = FALSE))
+      }
       chemin_expression <- chemins_candidats[file.exists(chemins_candidats)][1]
       if (is.na(chemin_expression) || !nzchar(chemin_expression)) {
         stop(
@@ -510,15 +546,23 @@ register_events_lancer <- function(input, output, session, rv) {
         )
       }
 
-      expressions <- utils::read.csv2(
-        chemin_expression,
-        stringsAsFactors = FALSE,
-        encoding = "UTF-8"
-      )
+      expressions <- if (identical(source_dictionnaire, "lexique_fr")) {
+        utils::read.csv2(chemin_expression, stringsAsFactors = FALSE, encoding = "UTF-8")
+      } else {
+        utils::read.delim(
+          chemin_expression,
+          header = FALSE,
+          sep = "\t",
+          quote = "",
+          comment.char = "",
+          col.names = c("dic_mot", "dic_norm"),
+          stringsAsFactors = FALSE
+        )
+      }
 
       colonnes_requises <- c("dic_mot", "dic_norm")
       if (!all(colonnes_requises %in% names(expressions))) {
-        stop("Le fichier expression_fr.csv (ou expressions.csv) doit contenir les colonnes dic_mot et dic_norm.")
+        stop(paste0("Le fichier ", basename(chemin_expression), " doit contenir les colonnes dic_mot et dic_norm."))
       }
 
       expressions$dic_mot <- tolower(trimws(as.character(expressions$dic_mot)))
@@ -533,6 +577,8 @@ register_events_lancer <- function(input, output, session, rv) {
       attr(expressions, "source_file") <- chemin_expression
       expressions
     }
+
+    charger_expression_fr <- function(app_dir) charger_expressions(app_dir, "lexique_fr")
 
     appliquer_dictionnaire_expressions <- function(textes, expressions_df) {
       if (is.null(textes) || length(textes) == 0 ||
@@ -697,10 +743,12 @@ register_events_lancer <- function(input, output, session, rv) {
       if (is.null(ids_docs) || length(ids_docs) != length(textes_chr)) {
         ids_docs <- paste0("doc_", seq_along(textes_chr))
       }
+      source_dict_chd <- if (identical(input$source_dictionnaire, "spacy")) "lexique_fr" else input$source_dictionnaire
+      infos_langue <- infos_dictionnaire(source_dict_chd)
 
       textes_tok <- textes_chr
 
-      if (isTRUE(input$retirer_stopwords)) {
+      if (isTRUE(input$retirer_stopwords) && identical(infos_langue$langue, "fr")) {
         textes_tok <- gsub(
           pattern = "(?i)\\b(?:[cdjlmnst]|qu)['’`´ʼʹ](?=[[:alpha:]])",
           replacement = "",
@@ -719,8 +767,8 @@ register_events_lancer <- function(input, output, session, rv) {
 
       if (isTRUE(input$lexique_utiliser_lemmes)) {
         if (is.null(rv$lexique_fr_df) || !is.data.frame(rv$lexique_fr_df) || nrow(rv$lexique_fr_df) == 0) {
-          rv$lexique_fr_df <- charger_lexique_fr(app_dir)
-          ajouter_log(rv, paste0("Lexique (fr) chargé: ", nrow(rv$lexique_fr_df), " entrées."))
+          rv$lexique_fr_df <- charger_lexique(app_dir, source_dict_chd)
+          ajouter_log(rv, paste0("Lexique ", infos_langue$libelle, " chargé: ", nrow(rv$lexique_fr_df), " entrées."))
         }
 
         vocabulaire <- quanteda::featnames(quanteda::dfm(tok))
@@ -737,18 +785,18 @@ register_events_lancer <- function(input, output, session, rv) {
             valuetype = "fixed",
             case_insensitive = FALSE
           )
-          ajouter_log(rv, paste0("Lemmatisation lexique_fr appliquée (forme -> c_lemme) sur ", length(motifs), " formes du vocabulaire."))
+          ajouter_log(rv, paste0("Lemmatisation ", source_dict_chd, " appliquée (forme -> lemme) sur ", length(motifs), " formes du vocabulaire."))
         } else {
-          ajouter_log(rv, "Lemmatisation lexique_fr activée, mais aucune forme du vocabulaire n'a trouvé de lemme.")
+          ajouter_log(rv, paste0("Lemmatisation ", source_dict_chd, " activée, mais aucune forme du vocabulaire n'a trouvé de lemme."))
         }
       }
 
       if (isTRUE(input$retirer_stopwords)) {
-        stop_fr <- quanteda::stopwords("fr")
+        stop_fr <- quanteda::stopwords(infos_langue$langue)
         n_feat_avant_stop <- quanteda::nfeat(quanteda::dfm(tok))
         tok <- quanteda::tokens_remove(tok, pattern = stop_fr, valuetype = "fixed", case_insensitive = TRUE)
         n_feat_apres_stop <- quanteda::nfeat(quanteda::dfm(tok))
-        ajouter_log(rv, paste0("Filtrage stopwords quanteda(fr) appliqué : ", n_feat_avant_stop, " -> ", n_feat_apres_stop, " termes uniques."))
+        ajouter_log(rv, paste0("Filtrage stopwords quanteda(", infos_langue$langue, ") appliqué : ", n_feat_avant_stop, " -> ", n_feat_apres_stop, " termes uniques."))
       }
 
       dfm_obj <- quanteda::dfm(tok)
@@ -787,15 +835,14 @@ register_events_lancer <- function(input, output, session, rv) {
 
       log_presence_expressions(dfm_obj, "avant filtres morpho/min_docfreq")
 
-      source_dict_chd <- if (identical(input$source_dictionnaire, "spacy")) "lexique_fr" else input$source_dictionnaire
       if (isTRUE(input$filtrage_morpho) && identical(input$source_dictionnaire, "spacy")) {
         ajouter_log(rv, "Option spaCy ignorée pour CHD: spaCy est réservé à la détection NER. Bascule automatique sur lexique_fr.")
       }
 
-      if (isTRUE(input$filtrage_morpho) && identical(source_dict_chd, "lexique_fr")) {
+      if (isTRUE(input$filtrage_morpho)) {
         if (is.null(rv$lexique_fr_df) || !is.data.frame(rv$lexique_fr_df) || nrow(rv$lexique_fr_df) == 0) {
-          rv$lexique_fr_df <- charger_lexique_fr(app_dir)
-          ajouter_log(rv, paste0("Lexique (fr) chargé pour filtrage morphosyntaxique: ", nrow(rv$lexique_fr_df), " entrées."))
+          rv$lexique_fr_df <- charger_lexique(app_dir, source_dict_chd)
+          ajouter_log(rv, paste0("Lexique ", infos_langue$libelle, " chargé pour filtrage morphosyntaxique: ", nrow(rv$lexique_fr_df), " entrées."))
         }
 
         morpho_selection <- toupper(trimws(as.character(input$pos_lexique_a_conserver)))
@@ -819,7 +866,7 @@ register_events_lancer <- function(input, output, session, rv) {
           ))
           termes_autorises <- termes_autorises[nzchar(termes_autorises)]
           if (isTRUE(exclure_etre_verbe) && isTRUE(categorie_verbe_selectionnee)) {
-            termes_autorises <- setdiff(termes_autorises, c("être", "etre"))
+            termes_autorises <- setdiff(termes_autorises, infos_langue$auxiliaires)
           }
 
           toutes_formes_lexique <- unique(c(
@@ -885,7 +932,7 @@ register_events_lancer <- function(input, output, session, rv) {
           ajouter_log(
             rv,
             paste0(
-              "Filtrage morphosyntaxique lexique_fr appliqué (c_morpho=",
+              "Filtrage morphosyntaxique ", source_dict_chd, " appliqué (c_morpho=",
               paste(morpho_selection, collapse = ","),
               " | inclure_autre_forme=",
               ifelse(isTRUE(inclure_autre_forme), "1", "0"),
@@ -952,7 +999,12 @@ register_events_lancer <- function(input, output, session, rv) {
       updateRadioButtons(
         session,
         "source_dictionnaire",
-        choices = c("Lexique (fr)" = "lexique_fr"),
+        choices = c(
+          "Français (lexique_fr)" = "lexique_fr",
+          "Anglais (lexique_en)" = "lexique_en",
+          "Espagnol (lexique_sp)" = "lexique_sp",
+          "Italien (lexique_it)" = "lexique_it"
+        ),
         selected = "lexique_fr"
       )
     }, ignoreInit = FALSE)
@@ -1154,8 +1206,13 @@ register_events_lancer <- function(input, output, session, rv) {
       updateRadioButtons(
         session,
         "source_dictionnaire",
-        choices = c("Lexique (fr)" = "lexique_fr"),
-        selected = "lexique_fr"
+        choices = c(
+          "Français (lexique_fr)" = "lexique_fr",
+          "Anglais (lexique_en)" = "lexique_en",
+          "Espagnol (lexique_sp)" = "lexique_sp",
+          "Italien (lexique_it)" = "lexique_it"
+        ),
+        selected = source_dictionnaire
       )
       updateRadioButtons(
         session,
@@ -1278,8 +1335,17 @@ register_events_lancer <- function(input, output, session, rv) {
           textes_orig <- as.character(corpus)
 
           if (isTRUE(input$expression_utiliser_dictionnaire)) {
-            rv$expression_fr_df <- charger_expression_fr(app_dir)
-            ajouter_log(rv, paste0("Expression (fr) chargé: ", nrow(rv$expression_fr_df), " entrées."))
+            rv$expression_fr_df <- charger_expressions(app_dir, source_dictionnaire)
+            ajouter_log(
+              rv,
+              paste0(
+                "Dictionnaire d'expressions ",
+                infos_dictionnaire(source_dictionnaire)$libelle,
+                " chargé: ",
+                nrow(rv$expression_fr_df),
+                " entrées."
+              )
+            )
 
             expr_session_df <- NULL
             add_expression_actif <- isTRUE(rv$utiliser_add_expression)
@@ -1332,9 +1398,9 @@ register_events_lancer <- function(input, output, session, rv) {
                 " entrée(s) du dictionnaire (dic_mot -> dic_norm)."
               )
             )
-            inclure_autre_forme_log <- identical(source_dictionnaire, "lexique_fr") &&
-              (isTRUE(input$morpho_conserver_hors_lexique) || ("AUTRE_FORME" %in% toupper(trimws(as.character(input$pos_lexique_a_conserver)))))
-            if (isTRUE(input$filtrage_morpho) && identical(source_dictionnaire, "lexique_fr") && !isTRUE(inclure_autre_forme_log)) {
+            inclure_autre_forme_log <- isTRUE(input$morpho_conserver_hors_lexique) ||
+              ("AUTRE_FORME" %in% toupper(trimws(as.character(input$pos_lexique_a_conserver))))
+            if (isTRUE(input$filtrage_morpho) && !isTRUE(inclure_autre_forme_log)) {
               ajouter_log(rv, "Note: formes normalisées hors lexique (ex. gerald_darmanin) seront exclues si AUTRE_FORME n'est pas activé dans le filtrage morphosyntaxique.")
             }
           } else {
@@ -1391,11 +1457,11 @@ register_events_lancer <- function(input, output, session, rv) {
             rv,
             paste0(
               "Diagnostic pipeline: dictionnaire=", source_dictionnaire,
-              " | langue UI=fr",
+              " | langue=", infos_dictionnaire(source_dictionnaire)$langue,
               " | filtrage_morpho=", ifelse(isTRUE(input$filtrage_morpho), "1", "0"),
               " | inclure_autre_forme=", ifelse(
-                identical(source_dictionnaire, "lexique_fr") &&
-                  (isTRUE(input$morpho_conserver_hors_lexique) || ("AUTRE_FORME" %in% toupper(trimws(as.character(input$pos_lexique_a_conserver))))) ,
+                isTRUE(input$morpho_conserver_hors_lexique) ||
+                  ("AUTRE_FORME" %in% toupper(trimws(as.character(input$pos_lexique_a_conserver)))),
                 "1",
                 "0"
               ),
@@ -1680,12 +1746,11 @@ register_events_lancer <- function(input, output, session, rv) {
           )
           res_stats_df <- res_stats_df[ord_stats, , drop = FALSE]
 
-          if (identical(source_dictionnaire, "lexique_fr") &&
-              "Terme" %in% names(res_stats_df) &&
+          if ("Terme" %in% names(res_stats_df) &&
               exists("construire_type_lexique_fr", mode = "function", inherits = TRUE)) {
             if (is.null(rv$lexique_fr_df) || !is.data.frame(rv$lexique_fr_df) || nrow(rv$lexique_fr_df) == 0) {
-              rv$lexique_fr_df <- charger_lexique_fr(app_dir)
-              ajouter_log(rv, paste0("Lexique (fr) chargé pour typer les termes CHD: ", nrow(rv$lexique_fr_df), " entrées."))
+              rv$lexique_fr_df <- charger_lexique(app_dir, source_dictionnaire)
+              ajouter_log(rv, paste0("Lexique ", infos_dictionnaire(source_dictionnaire)$libelle, " chargé pour typer les termes CHD: ", nrow(rv$lexique_fr_df), " entrées."))
             }
             res_stats_df$Type <- construire_type_lexique_fr(res_stats_df$Terme, rv$lexique_fr_df)
           }

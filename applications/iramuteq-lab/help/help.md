@@ -6,7 +6,7 @@
 
 
 ## IRaMuTeQ
-IRaMuTeQ, développé par Pierre Ratinaud, est un logiciel libre devenu une référence pour l’analyse textuelle en sciences humaines et sociales. Il met en œuvre la méthode de Reinert (CHD), l’AFC, ainsi que l’analyse de similitudes de Vergès, et propose de nombreux traitements complémentaires pour explorer la structure lexicale d’un corpus. Un atout est son dictionnaire de lemmes, plus précis et performant que beaucoup d’alternatives, ce qui améliore la stabilité des classes. Le dictionnaire utilisé dans ce script est celui de **IRaMuTeQ - lexique_fr** (uniquement fr) ainsi que le dictionnaire des expressions.
+IRaMuTeQ, développé par Pierre Ratinaud, est un logiciel libre devenu une référence pour l’analyse textuelle en sciences humaines et sociales. Il met en œuvre la méthode de Reinert (CHD), l’AFC, ainsi que l’analyse de similitudes de Vergès, et propose de nombreux traitements complémentaires pour explorer la structure lexicale d’un corpus. IRaMuTeQ-Lab propose les lexiques IRaMuTeQ français, anglais, espagnol et italien. Un dictionnaire d’expressions de base est également disponible en français et en anglais.
 
 - <a href="https://pratinaud.gitpages.huma-num.fr/iramuteq-website/" target="_blank" rel="noopener noreferrer">IRaMuTeQ</a>
 
@@ -92,12 +92,13 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
 
 ### Dictionnaire et lemmatisation (calcul IRaMuTeQ-lite)
 - **Source de lemmatisation** : en mode IRaMuTeQ-lite, la source active est **Lexique (fr)**.
-- **Lemmatisation via lexique_fr** (`lexique_utiliser_lemmes`) : remplace les formes par leur lemme (`forme → c_lemme`) avant la DFM.
+- **Langue et dictionnaire** (`source_dictionnaire`) : sélectionne `lexique_fr`, `lexique_en`, `lexique_sp` ou `lexique_it`. Ce choix pilote la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.
+- **Lemmatisation via le lexique sélectionné** (`lexique_utiliser_lemmes`) : remplace les formes par leur lemme (`forme → c_lemme`) avant la DFM.
 - **Dictionnaire d'expressions** (`expression_utiliser_dictionnaire`) : applique les remplacements `dic_mot → dic_norm` en amont du pipeline (avant nettoyage, tokenisation, lemmatisation et filtrage morphosyntaxique).
 - <a href="https://openlexicon.fr/" target="_blank" rel="noopener noreferrer">OpenLexicon</a>
 
 ### Filtrage morphosyntaxique
-- **Filtrage morphosyntaxique** (`filtrage_morpho`) : filtre les formes selon la colonne `c_morpho` du lexique_fr.
+- **Filtrage morphosyntaxique** (`filtrage_morpho`) : filtre les formes selon la colonne `c_morpho` du lexique sélectionné.
 - **Catégories conservées** (`pos_lexique_a_conserver`) : sélection des étiquettes autorisées (ex: NOM, VER, ADJ, etc...).
 
 ## Aide AFC : calcul, affichage des termes, rôle de `top_termes`

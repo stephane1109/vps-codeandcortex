@@ -2,9 +2,9 @@
 
 - Documentation OpenLexicon : <a href="https://openlexicon.fr/" target="_blank" rel="noopener noreferrer">OpenLexicon</a>
 
-### Filtrage morphosyntaxique spécifique lexique_fr
+### Filtrage morphosyntaxique du lexique sélectionné
 
-Le dictionnaire **lexique_fr** utilisé ici est celui d’**IRaMuTeQ**, et il semble lui-même issu d’**OpenLexicon**.
+Les dictionnaires **lexique_fr**, **lexique_en**, **lexique_sp** et **lexique_it** utilisés ici proviennent d’**IRaMuTeQ**. Le filtrage repose sur leur colonne morphosyntaxique.
 
 > Contrairement au logiciel IRaMuTeQ (où les catégories des formes sont interprétés comme `1 = active` et `2 = supplémentaire`), le filtrage proposé ici est **binaire**.
 
