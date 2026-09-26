@@ -1,9 +1,11 @@
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "backend" / "gestion_spacy.py"
+sys.path.insert(0, str(MODULE_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("gestion_spacy", MODULE_PATH)
 gestion_spacy = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

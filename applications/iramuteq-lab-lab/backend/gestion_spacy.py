@@ -8,25 +8,18 @@ import csv
 import re
 from pathlib import Path
 
+from pos_spacy_conversion import (
+    POS_SPACY_VERS_IRAMUTEQ,
+    convertir_pos_spacy,
+)
 
-POS_IRAMUTEQ = {
-    "NOUN": "nom",
-    "PROPN": "nom",
-    "VERB": "ver",
-    "AUX": "aux",
-    "ADJ": "adj",
-    "ADV": "adv",
-    "ADP": "pre",
-    "PRON": "pro",
-    "CCONJ": "con",
-    "SCONJ": "con",
-}
+POS_IRAMUTEQ = POS_SPACY_VERS_IRAMUTEQ
 
 MODEL_PATTERN = re.compile(r"^[a-z]{2,3}_[a-z0-9_]+_(?:sm|md|lg|trf)$")
 
 
 def convertir_pos(pos_spacy: str) -> str:
-    return POS_IRAMUTEQ.get((pos_spacy or "").upper(), "AUTRE_FORME")
+    return convertir_pos_spacy(pos_spacy)
 
 
 def charger_modele(nom_modele: str):
