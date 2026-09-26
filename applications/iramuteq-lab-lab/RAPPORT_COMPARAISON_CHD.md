@@ -42,7 +42,7 @@ selectionne.
 
 ## Tests reproductibles
 
-Corpus utilise : corpustest/psychiatrie-darmanin-clean.txt.
+Corpus utilisé : ../../corpus_test/psychiatrie-darmanin-clean.txt.
 
 Caracteristiques obtenues apres pretraitement dans les tests : 23 textes,
 630 segments et 3 125 formes. Le fichier importe porte la somme MD5
