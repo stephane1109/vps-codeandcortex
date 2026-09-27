@@ -2763,7 +2763,9 @@ function applyChdDistanceDialogLayout(scope, isDistanceMode) {
   dialogScope.querySelectorAll("article.card.section-card").forEach((section) => {
     const keepForDistanceMode = section === modeSection || section.hasAttribute("data-distance-language-card");
     section.hidden = Boolean(isDistanceMode && !keepForDistanceMode);
-    section.style.order = section.hasAttribute("data-distance-language-card") ? "-1" : "";
+    section.style.order = section === modeSection
+      ? "-2"
+      : section.hasAttribute("data-distance-language-card") ? "-1" : "";
   });
 
   const fieldsGrid = modeCard.parentElement;
@@ -2863,7 +2865,7 @@ function renderClassesModeCard(card) {
     const containsClassesMode = Boolean(section.querySelector("[data-classes-mode-card]"));
     const isLanguageCard = section.hasAttribute("data-distance-language-card");
     if (!containsClassesMode) section.hidden = isDiscriminationSimple && !isLanguageCard;
-    section.style.order = isLanguageCard ? "-1" : "";
+    section.style.order = containsClassesMode ? "-2" : isLanguageCard ? "-1" : "";
     if (isLanguageCard) {
       section.querySelectorAll(":scope .field").forEach((field) => {
         if (!field.hasAttribute("data-distance-language-field")) {
@@ -2891,7 +2893,10 @@ function renderClassesModeCard(card) {
   if (!isDiscriminationSimple) {
     modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
       section.hidden = false;
-      section.style.order = section.hasAttribute("data-distance-language-card") ? "-1" : "";
+      const containsClassesMode = Boolean(section.querySelector("[data-classes-mode-card]"));
+      section.style.order = containsClassesMode
+        ? "-2"
+        : section.hasAttribute("data-distance-language-card") ? "-1" : "";
     });
     classesModeFields?.querySelectorAll(":scope > .field:not([data-classes-mode-card])").forEach((field) => {
       field.hidden = false;
