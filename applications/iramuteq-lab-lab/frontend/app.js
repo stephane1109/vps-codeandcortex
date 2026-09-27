@@ -2763,7 +2763,7 @@ function applyChdDistanceDialogLayout(scope, isDistanceMode) {
   dialogScope.querySelectorAll("article.card.section-card").forEach((section) => {
     const keepForDistanceMode = section === modeSection || section.hasAttribute("data-distance-language-card");
     section.hidden = Boolean(isDistanceMode && !keepForDistanceMode);
-    section.style.order = isDistanceMode && section.hasAttribute("data-distance-language-card") ? "-1" : "";
+    section.style.order = section.hasAttribute("data-distance-language-card") ? "-1" : "";
   });
 
   const fieldsGrid = modeCard.parentElement;
@@ -2863,7 +2863,7 @@ function renderClassesModeCard(card) {
     const containsClassesMode = Boolean(section.querySelector("[data-classes-mode-card]"));
     const isLanguageCard = section.hasAttribute("data-distance-language-card");
     if (!containsClassesMode) section.hidden = isDiscriminationSimple && !isLanguageCard;
-    section.style.order = isDiscriminationSimple && isLanguageCard ? "-1" : "";
+    section.style.order = isLanguageCard ? "-1" : "";
     if (isLanguageCard) {
       section.querySelectorAll(":scope .field").forEach((field) => {
         if (!field.hasAttribute("data-distance-language-field")) {
@@ -2891,7 +2891,7 @@ function renderClassesModeCard(card) {
   if (!isDiscriminationSimple) {
     modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
       section.hidden = false;
-      section.style.order = "";
+      section.style.order = section.hasAttribute("data-distance-language-card") ? "-1" : "";
     });
     classesModeFields?.querySelectorAll(":scope > .field:not([data-classes-mode-card])").forEach((field) => {
       field.hidden = false;
@@ -2961,6 +2961,9 @@ document.addEventListener("change", (event) => {
   if (sourceId !== "classesMode") return;
   const scope = target.closest("#chdConfigDialogContent") || document;
   renderClassesModeCards(scope);
+  if (scope instanceof HTMLElement && target.value === "discrimination_simple") {
+    scope.scrollTop = 0;
+  }
 });
 
 function resolveClassesModeConfig() {
@@ -14083,6 +14086,7 @@ function openChdConfigDialog() {
     renderAfcStarredVariablesPickers(chdConfigDialogContent);
     renderClassesModeCards(chdConfigDialogContent);
     renderClassificationModeCards(chdConfigDialogContent);
+    chdConfigDialogContent.scrollTop = 0;
 
     if (typeof chdConfigDialog.showModal === "function") {
       chdConfigDialog.showModal();
