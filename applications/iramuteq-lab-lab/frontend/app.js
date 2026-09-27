@@ -3146,7 +3146,10 @@ function createVirtualFileFromArtifact(artifact, folderName) {
   return file;
 }
 
-async function ensureDependenciesReady() {
+async function ensureDependenciesReady({
+  progressionController = bootstrapProgression,
+  closeProgressionOnComplete = true
+} = {}) {
   if (appState.bootstrapPromise) {
     return appState.bootstrapPromise;
   }
@@ -3158,16 +3161,16 @@ async function ensureDependenciesReady() {
   }
 
   appState.bootstrapPromise = (async () => {
-    bootstrapProgression.open(
+    progressionController.open(
       "Vérification de l'environnement",
       "Vérification des dépendances R et Python nécessaires au lancement."
     );
-    bootstrapProgression.set(8, "Analyse des dépendances...");
+    progressionController.set(8, "Analyse des dépendances...");
     setSidebarRuntimeStatus("Verification des dependances");
     log("[info] Vérification des dépendances R et Python nécessaires au lancement.");
 
     try {
-      bootstrapProgression.set(42, "Controle des dependances de l'image et installation si necessaire...");
+      progressionController.set(42, "Controle des dependances de l'image et installation si necessaire...");
       const payload = await tauriInvoke("bootstrap_dependencies");
       if (payload.success) {
         appState.bootstrapReady = true;
@@ -3186,7 +3189,7 @@ async function ensureDependenciesReady() {
           log(`[info] Python détecté : ${payload.python}`);
         }
         void refreshTicketSidebarStatus();
-        bootstrapProgression.set(100, "Environnement prêt.");
+        progressionController.set(100, "Environnement prêt.");
       } else {
         appState.bootstrapReady = false;
         appState.bootstrapPromise = null;
@@ -3211,17 +3214,21 @@ async function ensureDependenciesReady() {
         if (payload.python) {
           log(`[info] Python utilisé : ${payload.python}`);
         }
-        bootstrapProgression.set(100, "Certaines dépendances restent manquantes.");
+        progressionController.set(100, "Certaines dépendances restent manquantes.");
       }
-      setTimeout(() => bootstrapProgression.close(), 320);
+      if (closeProgressionOnComplete) {
+        setTimeout(() => progressionController.close(), 320);
+      }
       return payload;
     } catch (error) {
       appState.bootstrapReady = false;
       appState.bootstrapPromise = null;
       setSidebarRuntimeStatus("Packages incomplets (voir logs)", "error");
       log(`[error] Bootstrap impossible : ${error?.message || String(error)}`);
-      bootstrapProgression.set(100, "Échec du bootstrap de démarrage.");
-      setTimeout(() => bootstrapProgression.close(), 400);
+      progressionController.set(100, "Échec du bootstrap de démarrage.");
+      if (closeProgressionOnComplete) {
+        setTimeout(() => progressionController.close(), 400);
+      }
       return { success: false, message: error?.message || String(error) };
     }
   })();
@@ -16415,7 +16422,11 @@ async function startAnalysis(analysisKind = "chd") {
   let analysisTicket = null;
   let resultsRendered = false;
   try {
-    const bootstrap = await ensureDependenciesReady();
+    bootstrapProgression.close();
+    const bootstrap = await ensureDependenciesReady({
+      progressionController: progression,
+      closeProgressionOnComplete: false
+    });
     if (!bootstrap?.success) {
       setSidebarRuntimeStatus("Packages incomplets", "error");
       progression.set(0);
@@ -16423,6 +16434,8 @@ async function startAnalysis(analysisKind = "chd") {
       progression.close();
       return;
     }
+    progression.open(progressTitle, progressStartMessage);
+    progression.set(10, "Dépendances prêtes. Réservation de l'accès serveur...");
 
     const config = buildJobConfig(analysisKind);
     let streamedLogCount = 0;
