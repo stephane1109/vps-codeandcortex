@@ -2761,7 +2761,9 @@ function applyChdDistanceDialogLayout(scope, isDistanceMode) {
   if (!modeSection) return;
 
   dialogScope.querySelectorAll("article.card.section-card").forEach((section) => {
-    section.hidden = Boolean(isDistanceMode && section !== modeSection);
+    const keepForDistanceMode = section === modeSection || section.hasAttribute("data-distance-language-card");
+    section.hidden = Boolean(isDistanceMode && !keepForDistanceMode);
+    section.style.order = isDistanceMode && section.hasAttribute("data-distance-language-card") ? "-1" : "";
   });
 
   const fieldsGrid = modeCard.parentElement;
@@ -2859,7 +2861,16 @@ function renderClassesModeCard(card) {
   applyChdDistanceDialogLayout(modeScope, isDiscriminationSimple);
   modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
     const containsClassesMode = Boolean(section.querySelector("[data-classes-mode-card]"));
-    if (!containsClassesMode) section.hidden = isDiscriminationSimple;
+    const isLanguageCard = section.hasAttribute("data-distance-language-card");
+    if (!containsClassesMode) section.hidden = isDiscriminationSimple && !isLanguageCard;
+    section.style.order = isDiscriminationSimple && isLanguageCard ? "-1" : "";
+    if (isLanguageCard) {
+      section.querySelectorAll(":scope .field").forEach((field) => {
+        if (!field.hasAttribute("data-distance-language-field")) {
+          field.hidden = isDiscriminationSimple;
+        }
+      });
+    }
   });
   const classesModeFields = card.parentElement;
   classesModeFields?.querySelectorAll(":scope > .field:not([data-classes-mode-card])").forEach((field) => {
@@ -2880,6 +2891,7 @@ function renderClassesModeCard(card) {
   if (!isDiscriminationSimple) {
     modeScope?.querySelectorAll("article.card.section-card").forEach((section) => {
       section.hidden = false;
+      section.style.order = "";
     });
     classesModeFields?.querySelectorAll(":scope > .field:not([data-classes-mode-card])").forEach((field) => {
       field.hidden = false;
@@ -2890,6 +2902,7 @@ function renderClassesModeCard(card) {
     if (modeDescription instanceof HTMLElement) {
       modeDescription.textContent = "En mode Normal, vous choisissez tous les paramètres de la CHD avant le lancement.";
     }
+    updateSpacyOptionsVisibility(modeScope || document);
     return;
   }
 
@@ -2934,6 +2947,7 @@ function renderClassesModeCard(card) {
       ? `${targetedChdCount} CHD sont demandées : le calcul peut être long, surtout pour un corpus volumineux.`
       : "";
   }
+  updateSpacyOptionsVisibility(modeScope || document);
 }
 
 function renderClassesModeCards(scope = document) {
