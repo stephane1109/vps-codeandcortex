@@ -718,8 +718,7 @@ preparer_documents_spacy <- function(textes, ids_docs, config) {
   )
 
   morpho_selection <- unique(toupper(trimws(as.character(unlist(config$pos_lexique_a_conserver, use.names = FALSE)))))
-  correspondance_pos <- c(NOM = "nom", NOUN = "nom", PROPN = "nom", VER = "ver", VERB = "ver", AUX = "aux", ADJ = "adj", ADV = "adv", ADP = "pre", PRE = "pre", PRON = "pro", PRO = "pro", CCONJ = "con", SCONJ = "con", CON = "con")
-  pos_conserves <- unique(unname(correspondance_pos[intersect(names(correspondance_pos), morpho_selection)]))
+  pos_conserves <- morpho_selection[nzchar(morpho_selection) & morpho_selection != "AUTRE_FORME"]
   cache_key <- paste(
     "spacy",
     modele,

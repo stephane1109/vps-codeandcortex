@@ -33,6 +33,16 @@ class GestionSpacyTests(unittest.TestCase):
         self.assertEqual(gestion_spacy.convertir_pos("DET"), "AUTRE_FORME")
         self.assertEqual(gestion_spacy.convertir_pos(""), "AUTRE_FORME")
 
+    def test_selection_pos_spacy_native(self):
+        selection = gestion_spacy.normaliser_selection_pos_spacy(
+            ["NOUN", "PROPN", "DET", "VERB"]
+        )
+        self.assertEqual(selection, {"NOUN", "PROPN", "DET", "VERB"})
+
+    def test_ancienne_selection_iramuteq_reste_compatible(self):
+        selection = gestion_spacy.normaliser_selection_pos_spacy(["NOM", "VER"])
+        self.assertEqual(selection, {"NOUN", "PROPN", "VERB"})
+
     def test_format_nom_modele(self):
         self.assertIsNotNone(gestion_spacy.MODEL_PATTERN.fullmatch("en_core_web_md"))
         self.assertIsNotNone(gestion_spacy.MODEL_PATTERN.fullmatch("de_core_news_md"))

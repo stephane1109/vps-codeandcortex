@@ -1,5 +1,10 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
 import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20260926-fix1";
+import {
+  DEFAULT_SPACY_POS_SELECTION,
+  SPACY_POS_CATEGORIES,
+  normalizeSpacyPosSelection
+} from "./gestion_pos_spacy.js?v=20260927-pos1";
 
 const CYTOSCAPE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/+esm";
 const CYTOSCAPE_FCOSE_ESM_URL = "https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/+esm";
@@ -465,7 +470,7 @@ let ticketReleasedLocally = false;
 let activeAnalysisJobId = "";
 let analysisStopRequested = false;
 
-const MORPHO_CATEGORIES = [
+const IRAMUTEQ_MORPHO_CATEGORIES = [
   "ADJ",
   "ADJ_DEM",
   "ADJ_IND",
@@ -493,7 +498,7 @@ const MORPHO_CATEGORIES = [
   "AUTRE_FORME"
 ];
 
-const ANNOTATION_MORPHO_CATEGORIES = MORPHO_CATEGORIES.filter(
+const ANNOTATION_MORPHO_CATEGORIES = IRAMUTEQ_MORPHO_CATEGORIES.filter(
   (category) => category !== "AUTRE_FORME"
 );
 
@@ -2285,7 +2290,10 @@ function buildSuiviMorphoSummaryText() {
     return "Inactif.";
   }
 
-  const categories = splitCsvValues(document.getElementById("posKeep")?.value || "");
+  const dictionarySelection = resolveDictionarySelection(document);
+  const categories = splitCsvValues(
+    document.getElementById(dictionarySelection.isSpacy ? "posKeepSpacy" : "posKeep")?.value || ""
+  );
   const excludeEtre = Boolean(document.getElementById("excludeEtre")?.checked);
   const keepUnknownForms = Boolean(document.getElementById("keepUnknownForms")?.checked);
   const parts = ["Actif"];
@@ -2616,24 +2624,49 @@ function renderSimiTermsPickers(scope = document, options = {}) {
   scope.querySelectorAll("[data-simi-config-card]").forEach((card) => renderSimiTermsPicker(card, options));
 }
 
+function getMorphoPickerSettings(card) {
+  const scope = card?.closest("#chdConfigDialogContent") || document;
+  const isSpacy = resolveDictionarySelection(scope).isSpacy;
+  const inputType = isSpacy ? "spacy" : "iramuteq";
+  const hiddenInput = card?.querySelector(`[data-morpho-selected-input="${inputType}"]`) || null;
+  const categories = isSpacy ? SPACY_POS_CATEGORIES : IRAMUTEQ_MORPHO_CATEGORIES;
+  return { categories, hiddenInput, isSpacy };
+}
+
 function renderMorphoPicker(card) {
   if (!card) return;
-  const hiddenInput = card.querySelector("[data-morpho-selected-input]");
+  const { categories, hiddenInput, isSpacy } = getMorphoPickerSettings(card);
   const select = card.querySelector("[data-morpho-available-select]");
   const list = card.querySelector("[data-morpho-selected-list]");
+  const label = card.querySelector("[data-morpho-picker-label]");
+  const help = card.querySelector("[data-morpho-picker-help]");
   if (!hiddenInput || !select || !list) return;
 
   const selected = splitCsvValues(hiddenInput.value).map((value) => value.toUpperCase());
-  const uniqueSelected = [...new Set(selected)].filter((value) => MORPHO_CATEGORIES.includes(value));
+  const uniqueSelected = isSpacy
+    ? normalizeSpacyPosSelection(selected)
+    : [...new Set(selected)].filter((value) => categories.includes(value));
+  if (isSpacy && !uniqueSelected.length) uniqueSelected.push(...DEFAULT_SPACY_POS_SELECTION);
   hiddenInput.value = uniqueSelected.join(", ");
+
+  if (label instanceof HTMLElement) {
+    label.textContent = isSpacy
+      ? "Catégories POS spaCy à conserver"
+      : "Catégories c_morpho à conserver";
+  }
+  if (help instanceof HTMLElement) {
+    help.textContent = isSpacy
+      ? "Catégories universelles lues directement dans token.pos_ par le modèle spaCy."
+      : "Utilisé si le filtrage morphosyntaxique est actif.";
+  }
 
   select.innerHTML = "";
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = "Choisir une catégorie";
+  placeholder.textContent = isSpacy ? "Choisir un POS spaCy" : "Choisir une catégorie";
   select.appendChild(placeholder);
 
-  MORPHO_CATEGORIES.filter((category) => !uniqueSelected.includes(category)).forEach((category) => {
+  categories.filter((category) => !uniqueSelected.includes(category)).forEach((category) => {
     const option = document.createElement("option");
     option.value = category;
     option.textContent = category;
@@ -3081,6 +3114,7 @@ function buildJobConfig(analysisKind = "chd") {
   const dictionarySelection = resolveDictionarySelection(document);
   const dictionarySourceValue = dictionarySelection.sourceDictionary;
   const spacyModelValue = dictionarySelection.spacyModel;
+  const morphoPosInput = document.getElementById(dictionarySelection.isSpacy ? "posKeepSpacy" : "posKeep");
   if (dictionarySourceValue === "spacy" && !/^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$/.test(spacyModelValue)) {
     throw new Error("Indiquez un modèle spaCy valide, par exemple en_core_web_md.");
   }
@@ -3134,7 +3168,7 @@ function buildJobConfig(analysisKind = "chd") {
     remplacer_tirets_espaces: document.getElementById("replaceHyphen").checked,
     retirer_stopwords: document.getElementById("removeStopwords").checked,
     filtrage_morpho: document.getElementById("morphoFilter").checked,
-    pos_lexique_a_conserver: splitCsvValues(document.getElementById("posKeep").value),
+    pos_lexique_a_conserver: splitCsvValues(morphoPosInput?.value || ""),
     morpho_exclure_etre_verbe: document.getElementById("excludeEtre").checked,
     morpho_conserver_hors_lexique: document.getElementById("keepUnknownForms").checked,
     afc_reduire_chevauchement: document.getElementById("reduceOverlap").checked,
@@ -12391,7 +12425,8 @@ function renderDiscriminationSimpleSummary(container, payload) {
       setChecked("replaceHyphen", manualReplayConfig.remplacer_tirets_espaces);
       setChecked("removeStopwords", manualReplayConfig.retirer_stopwords);
       setChecked("morphoFilter", manualReplayConfig.filtrage_morpho);
-      setValue("posKeep", Array.isArray(manualReplayConfig.pos_lexique_a_conserver)
+      const replayPosField = manualReplayConfig.source_dictionnaire === "spacy" ? "posKeepSpacy" : "posKeep";
+      setValue(replayPosField, Array.isArray(manualReplayConfig.pos_lexique_a_conserver)
         ? manualReplayConfig.pos_lexique_a_conserver.join(", ")
         : manualReplayConfig.pos_lexique_a_conserver);
       setChecked("excludeEtre", manualReplayConfig.morpho_exclure_etre_verbe);
@@ -15353,6 +15388,7 @@ document.addEventListener("change", (event) => {
   if (sourceId !== "dictionarySource") return;
   const scope = target.closest("#chdConfigDialogContent") || document;
   updateSpacyOptionsVisibility(scope);
+  renderMorphoPickers(scope);
 });
 
 [
@@ -15360,6 +15396,7 @@ document.addEventListener("change", (event) => {
   "useLemmas",
   "morphoFilter",
   "posKeep",
+  "posKeepSpacy",
   "excludeEtre",
   "keepUnknownForms"
 ].forEach((id) => {
@@ -15438,7 +15475,7 @@ document.addEventListener("click", (event) => {
   const card = addButton.closest("[data-chd-morpho-card]");
   if (!card) return;
 
-  const hiddenInput = card.querySelector("[data-morpho-selected-input]");
+  const { hiddenInput } = getMorphoPickerSettings(card);
   const select = card.querySelector("[data-morpho-available-select]");
   if (!hiddenInput || !select || !select.value) return;
 
@@ -15447,17 +15484,6 @@ document.addEventListener("click", (event) => {
     hiddenInput.value = [...selected, select.value].join(", ");
   }
   renderMorphoPicker(card);
-});
-
-document.addEventListener("change", (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  if (!target.matches("[data-morpho-available-select]")) return;
-
-  const card = target.closest("[data-chd-morpho-card]");
-  if (card) {
-    renderMorphoPicker(card);
-  }
 });
 
 document.addEventListener("click", (event) => {

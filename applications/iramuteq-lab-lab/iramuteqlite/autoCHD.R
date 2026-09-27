@@ -931,6 +931,14 @@ calculer_equilibre_classes_auto_chd <- function(classes) {
     nom_ver = c("NOM", "VER"),
     nom_adj_ver = c("NOM", "ADJ", "VER")
   )
+  if (identical(as.character(config_base$source_dictionnaire %||% "")[[1]], "spacy")) {
+    profile_pos <- switch(
+      profile_key,
+      nom = c("NOUN", "PROPN"),
+      nom_ver = c("NOUN", "PROPN", "VERB"),
+      nom_adj_ver = c("NOUN", "PROPN", "ADJ", "VERB")
+    )
+  }
 
   config_variant$filtrage_morpho <- TRUE
   config_variant$pos_lexique_a_conserver <- profile_pos

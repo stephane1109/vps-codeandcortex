@@ -9,8 +9,10 @@ import re
 from pathlib import Path
 
 from pos_spacy_conversion import (
+    POS_SPACY_UNIVERSELS,
     POS_SPACY_VERS_IRAMUTEQ,
     convertir_pos_spacy,
+    normaliser_selection_pos_spacy,
 )
 
 POS_IRAMUTEQ = POS_SPACY_VERS_IRAMUTEQ
@@ -80,9 +82,7 @@ def main() -> None:
     args = parse_args()
     nlp = charger_modele(args.model)
     documents = lire_documents(args.input)
-    pos_conserves = {
-        value.strip().lower() for value in args.keep_pos.split(",") if value.strip()
-    }
+    pos_conserves = normaliser_selection_pos_spacy(args.keep_pos.split(","))
     lexique: dict[str, tuple[str, str]] = {}
 
     args.output_docs.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +99,7 @@ def main() -> None:
             for token in doc:
                 if token.is_space:
                     continue
+                pos_spacy = (token.pos_ or "").strip().upper()
                 pos_iramuteq = convertir_pos(token.pos_)
                 if args.remove_punct and token.is_punct:
                     continue
@@ -107,8 +108,8 @@ def main() -> None:
                 if args.remove_stopwords and token.is_stop:
                     continue
                 if args.filter_morpho:
-                    connu = pos_iramuteq != "AUTRE_FORME"
-                    if connu and pos_iramuteq not in pos_conserves:
+                    connu = pos_spacy in POS_SPACY_UNIVERSELS
+                    if connu and pos_spacy not in pos_conserves:
                         continue
                     if not connu and not args.keep_unknown:
                         continue

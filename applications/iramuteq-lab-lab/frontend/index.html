@@ -806,8 +806,9 @@
           </div>
 
           <div class="field field--full" data-chd-morpho-card>
-            <label for="posKeep">Catégories c_morpho à conserver</label>
-            <input id="posKeep" type="hidden" value="NOM, VER, ADJ" data-morpho-selected-input />
+            <label for="posKeepAvailable" data-morpho-picker-label>Catégories c_morpho à conserver</label>
+            <input id="posKeep" type="hidden" value="NOM, VER, ADJ" data-morpho-selected-input="iramuteq" />
+            <input id="posKeepSpacy" type="hidden" value="NOUN, PROPN, VERB, ADJ" data-morpho-selected-input="spacy" />
             <div class="chip-picker">
               <div class="chip-picker-controls">
                 <select id="posKeepAvailable" data-morpho-available-select>
@@ -817,7 +818,7 @@
               </div>
               <div class="chip-picker-list" data-morpho-selected-list></div>
             </div>
-            <p class="field-help">Utilisé si le filtrage morphosyntaxique est actif.</p>
+            <p class="field-help" data-morpho-picker-help>Utilisé si le filtrage morphosyntaxique est actif.</p>
           </div>
 
           <div class="field">
@@ -1154,6 +1155,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260926-interface-language-fix1"></script>
+    <script type="module" src="./app.js?v=20260927-spacy-pos1"></script>
   </body>
 </html>
