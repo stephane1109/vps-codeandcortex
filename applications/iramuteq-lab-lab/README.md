@@ -32,8 +32,14 @@ Version expérimentale **web/VPS** dérivée de `iramuteq-lite`, prévue pour Co
 
 ### Modèles spaCy
 
-Le modèle anglais `en_core_web_md` est installé par défaut. Pour ajouter d’autres langues à « Votre langue n’est pas proposée ? », définir l’argument de build `IRAMUTEQ_SPACY_MODELS` avec tous les modèles à installer, séparés par des virgules, par exemple :
+Les modèles anglais `en_core_web_md` et allemand `de_core_news_md` sont installés par défaut. Pour ajouter d’autres langues, définir l’argument de build `IRAMUTEQ_SPACY_MODELS` avec tous les modèles à installer, séparés par des virgules, par exemple :
 
 ```text
 IRAMUTEQ_SPACY_MODELS=en_core_web_md,de_core_news_md,nl_core_news_sm
+```
+
+Les modèles sont téléchargés pendant le `docker build` par `python3 -m spacy download` et stockés dans le répertoire `site-packages` du Python système à l'intérieur de l'image Docker. Ils ne sont pas enregistrés dans les dossiers de corpus ou d'exports. Pour afficher leur emplacement exact dans un conteneur en cours d'exécution :
+
+```bash
+python3 -c "import en_core_web_md, de_core_news_md; print(en_core_web_md.__path__); print(de_core_news_md.__path__)"
 ```

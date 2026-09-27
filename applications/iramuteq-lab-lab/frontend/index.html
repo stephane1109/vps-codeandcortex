@@ -700,7 +700,9 @@
                 <option value="lexique_it">Italien - dico IRaMuTeQ</option>
               </optgroup>
               <optgroup label="Mode multilingue">
-                <option value="spacy">Votre langue n’est pas proposée ? - spaCy</option>
+                <option value="spacy_en">Anglais (en) - spaCy</option>
+                <option value="spacy_de">Allemand (de) - spaCy</option>
+                <option value="spacy">Autre langue - modèle spaCy personnalisé</option>
               </optgroup>
             </select>
             <p class="field-help">Le choix détermine le lexique, la lemmatisation, les catégories morphosyntaxiques et la langue des stopwords.</p>
@@ -711,14 +713,14 @@
             <input id="spacyModel" type="text" value="en_core_web_md" placeholder="Exemple : en_core_web_md" autocomplete="off" list="spacyModelSuggestions" />
             <datalist id="spacyModelSuggestions">
               <option value="en_core_web_md">Anglais (installé par défaut)</option>
-              <option value="de_core_news_md">Allemand</option>
+              <option value="de_core_news_md">Allemand (installé par défaut)</option>
               <option value="nl_core_news_md">Néerlandais</option>
               <option value="pt_core_news_md">Portugais</option>
               <option value="ca_core_news_md">Catalan</option>
               <option value="el_core_news_md">Grec</option>
             </datalist>
             <p class="field-help">
-              Le modèle anglais <code>en_core_web_md</code> est installé par défaut. Les autres modèles doivent être ajoutés au build du serveur. Les modèles multilingues <code>xx</code> de spaCy ne fournissent pas le POS et les lemmes nécessaires à la CHD.
+              Les modèles anglais <code>en_core_web_md</code> et allemand <code>de_core_news_md</code> sont installés par défaut. Les autres modèles doivent être ajoutés au build du serveur. Les modèles multilingues <code>xx</code> de spaCy ne fournissent pas le POS et les lemmes nécessaires à la CHD.
             </p>
           </div>
 

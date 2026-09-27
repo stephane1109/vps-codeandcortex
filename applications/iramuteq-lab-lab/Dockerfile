@@ -1,7 +1,7 @@
 FROM rocker/r2u:jammy
 
 ARG IRAMUTEQ_BUILD_BOOTSTRAP=0
-ARG IRAMUTEQ_SPACY_MODELS="en_core_web_md"
+ARG IRAMUTEQ_SPACY_MODELS="en_core_web_md,de_core_news_md"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \

@@ -2996,6 +2996,28 @@ function buildAnalysesConfig(analysisKind = "chd") {
   }
 }
 
+const SPACY_MODEL_BY_DICTIONARY_SOURCE = Object.freeze({
+  spacy_en: "en_core_web_md",
+  spacy_de: "de_core_news_md"
+});
+
+function resolveDictionarySelection(scope = document) {
+  const root = scope?.querySelector ? scope : document;
+  const findField = (id) => root.querySelector(`#${id}, [data-source-id="${id}"]`);
+  const selectedSource = String(findField("dictionarySource")?.value || "lexique_fr").trim() || "lexique_fr";
+  const presetModel = SPACY_MODEL_BY_DICTIONARY_SOURCE[selectedSource] || "";
+  const customModel = String(findField("spacyModel")?.value || "").trim();
+  const isSpacy = selectedSource === "spacy" || Boolean(presetModel);
+
+  return {
+    selectedSource,
+    sourceDictionary: isSpacy ? "spacy" : selectedSource,
+    spacyModel: presetModel || customModel,
+    presetModel,
+    isSpacy
+  };
+}
+
 function computeDendrogramSizing() {
   const paneWidth = Math.round(resultContainers.chdDendrogramme?.getBoundingClientRect().width || 0);
   const viewportWidth = Math.round(window.innerWidth || 0);
@@ -3034,8 +3056,9 @@ function buildJobConfig(analysisKind = "chd") {
   const dendrogramSizing = computeDendrogramSizing();
   const globalUseLemmas = document.getElementById("useLemmas").checked;
   const effectiveUseLemmas = globalUseLemmas;
-  const dictionarySourceValue = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
-  const spacyModelValue = String(document.getElementById("spacyModel")?.value || "").trim();
+  const dictionarySelection = resolveDictionarySelection(document);
+  const dictionarySourceValue = dictionarySelection.sourceDictionary;
+  const spacyModelValue = dictionarySelection.spacyModel;
   if (dictionarySourceValue === "spacy" && !/^[a-z]{2,3}_[a-z0-9_]+_(sm|md|lg|trf)$/.test(spacyModelValue)) {
     throw new Error("Indiquez un modèle spaCy valide, par exemple en_core_web_md.");
   }
@@ -15253,20 +15276,26 @@ document.getElementById("suiviAnalysisLayer")?.addEventListener("change", () => 
 function updateSpacyOptionsVisibility(scope = document) {
   const root = scope?.querySelector ? scope : document;
   const findField = (id) => root.querySelector(`#${id}, [data-source-id="${id}"]`);
-  const dictionaryField = findField("dictionarySource");
-  const source = String(dictionaryField?.value || "lexique_fr");
+  const dictionarySelection = resolveDictionarySelection(root);
+  const source = dictionarySelection.selectedSource;
   const spacyOptions = findField("spacyOptions");
   const spacyModel = findField("spacyModel");
   const useExpressions = findField("useExpressions");
   const useAnnotationExpressions = findField("useAnnotationExpressions");
-  const isSpacy = source === "spacy";
+  const isSpacy = dictionarySelection.isSpacy;
   const hasBaseExpressions = source === "lexique_fr" || source === "lexique_en";
 
   if (spacyOptions instanceof HTMLElement) {
     spacyOptions.hidden = !isSpacy;
   }
-  if (isSpacy && spacyModel instanceof HTMLInputElement && !spacyModel.value.trim()) {
-    spacyModel.value = "en_core_web_md";
+  if (isSpacy && spacyModel instanceof HTMLInputElement) {
+    if (dictionarySelection.presetModel) {
+      spacyModel.value = dictionarySelection.presetModel;
+      spacyModel.readOnly = true;
+    } else {
+      spacyModel.readOnly = false;
+      if (!spacyModel.value.trim()) spacyModel.value = "en_core_web_md";
+    }
   }
   if (useExpressions instanceof HTMLInputElement) {
     useExpressions.disabled = !hasBaseExpressions;
