@@ -447,22 +447,10 @@
     </div>
 
     <section class="visually-hidden" aria-hidden="true">
+      <input id="analysisType" type="hidden" value="iramuteq" />
+
       <article class="card section-card" data-chd-config-source>
-        <div class="section-head">
-          <div>
-            <p class="card-kicker">CHD</p>
-            <h3>Paramètres CHD</h3>
-          </div>
-        </div>
-
         <div class="fields-grid">
-          <div class="field" data-hide-in-distance-mode>
-            <label for="analysisType">Méthode Iramuteq-lite</label>
-            <select id="analysisType">
-              <option value="iramuteq">IRaMuTeQ-lite</option>
-            </select>
-          </div>
-
           <div class="field">
             <label for="segmentSize">segment_size</label>
             <input id="segmentSize" type="number" min="5" value="40" />
