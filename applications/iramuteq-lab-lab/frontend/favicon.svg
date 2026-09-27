@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="IRAMUTEQ Lab">
+  <rect width="64" height="64" rx="14" fill="#217ce7"/>
+  <path d="M18 15v34M18 23h13M31 23v11M31 34h12M31 34v12M43 34v-8M43 34v10"
+        fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="18" cy="15" r="4" fill="#fff"/>
+  <circle cx="18" cy="49" r="4" fill="#fff"/>
+  <circle cx="43" cy="26" r="4" fill="#fff"/>
+  <circle cx="43" cy="44" r="4" fill="#fff"/>
+</svg>
