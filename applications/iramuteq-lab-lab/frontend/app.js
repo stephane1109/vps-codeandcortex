@@ -3053,7 +3053,9 @@ function buildAnalysesConfig(analysisKind = "chd") {
 
 const SPACY_MODEL_BY_DICTIONARY_SOURCE = Object.freeze({
   spacy_en: "en_core_web_md",
-  spacy_de: "de_core_news_md"
+  spacy_de: "de_core_news_md",
+  spacy_pt: "pt_core_news_md",
+  spacy_ca: "ca_core_news_md"
 });
 
 function resolveDictionarySelection(scope = document) {
