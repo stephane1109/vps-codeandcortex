@@ -11,7 +11,6 @@
   --accent: #217ce7;
   --accent-soft: rgba(33, 124, 231, 0.08);
   --accent-line: rgba(33, 124, 231, 0.28);
-  --success-accent: #0f9f72;
   --button-primary: #217ce7;
   --button-primary-hover: #1b66bd;
   --button-primary-shadow: rgba(33, 124, 231, 0.24);
@@ -3176,7 +3175,7 @@ body.comparison-ab-fullscreen-open {
 }
 
 .result-table td.is-chd-significant-cell {
-  color: var(--success-accent);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -3188,7 +3187,7 @@ body.comparison-ab-fullscreen-open {
 
 .result-table td.is-chd-significant-cell .cell-button,
 .result-table .cell-button.is-chd-significant-cell {
-  color: var(--success-accent);
+  color: var(--accent);
   font-weight: 700;
 }
 
