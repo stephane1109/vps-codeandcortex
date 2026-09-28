@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IRAMUTEQ Lab</title>
     <link rel="icon" href="./favicon.svg?v=20260927-square" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260926-interface-language-fix1" />
+    <link rel="stylesheet" href="./styles.css?v=20260928-specificites1" />
   </head>
   <body>
     <div class="app-shell">
@@ -30,6 +30,7 @@
           <button class="nav-link" data-tab-target="resultats_chd" type="button">CHD</button>
           <button class="nav-link" data-tab-target="afc" type="button">AFC</button>
           <button class="nav-link" data-tab-target="similitudes" type="button">Similitudes</button>
+          <button class="nav-link" data-tab-target="specificites" type="button">Spécificités</button>
           <button class="nav-link" data-tab-target="aide" type="button">Aide</button>
         </nav>
       </header>
@@ -400,6 +401,33 @@
                   <span id="simiZoomValue" class="toolbar-meta">100%</span>
                 </div>
                 <div id="simiGraph" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="specificites" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Lexicométrie</p>
+                <h2>Spécificités par modalité</h2>
+              </div>
+            </div>
+            <div class="section-stack">
+              <article class="card section-card">
+                <h3>Configuration</h3>
+                <div id="specificitiesSummary" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Terme sélectionné par modalité</h3>
+                <div id="specificitiesTermTable" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Graphique des spécificités</h3>
+                <div id="specificitiesPlot" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Exports</h3>
+                <p class="section-copy">L’archive contient les scores et effectifs de toutes les formes conservées, les fréquences relatives, la configuration et le graphique.</p>
               </article>
             </div>
           </section>
@@ -1158,7 +1186,53 @@
       </div>
     </dialog>
 
+    <dialog id="specificitiesDialog" class="dialog-panel specificities-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Analyse lexicométrique</p>
+            <h2 id="specificitiesDialogTitle">Spécificités par modalité</h2>
+            <p id="specificitiesDialogMeta" class="muted"></p>
+          </div>
+          <button id="closeSpecificitiesBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+
+        <div class="form-grid specificities-form-grid">
+          <label>
+            Modalités à comparer
+            <select id="specificitiesVariable"></select>
+          </label>
+          <label>
+            Indice
+            <select id="specificitiesIndex">
+              <option value="hypergeo">Loi hypergéométrique (Lafon, recommandée)</option>
+              <option value="chi2">χ² signé</option>
+            </select>
+          </label>
+          <label>
+            Effectif minimum des formes
+            <input id="specificitiesMinFrequency" type="number" min="1" step="1" value="10" />
+          </label>
+        </div>
+
+        <aside class="specificities-help" aria-label="Aide sur le calcul des spécificités">
+          <h3>Comment lire ce calcul ?</h3>
+          <p>Le mot cliqué est significatif dans la CHD, mais ce nouveau calcul ne réutilise pas son χ². Il compare sa fréquence entre les modalités choisies.</p>
+          <p>Pour chaque modalité : <code>f</code> est l’effectif du mot dans la modalité, <code>F</code> son effectif dans le corpus, <code>t</code> le nombre de mots de la modalité et <code>T</code> le nombre de mots du corpus.</p>
+          <p>Avec la loi hypergéométrique, un score positif indique une surreprésentation, un score négatif une sous-représentation et une valeur proche de zéro une fréquence proche de celle attendue. Plus la valeur absolue est grande, plus la spécificité est forte.</p>
+          <p>L’effectif minimum filtre les autres formes du tableau complet exporté. Le terme cliqué reste toujours analysé. Ce réglage ne modifie ni la CHD, ni son χ², ni l’AFC.</p>
+        </aside>
+
+        <p id="specificitiesDialogStatus" class="muted"></p>
+        <footer class="dialog-footer">
+          <div class="dialog-footer-actions">
+            <button id="runSpecificitiesBtn" class="primary-button" type="button">Calculer les spécificités</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260927-spacy-pos1"></script>
+    <script type="module" src="./app.js?v=20260928-specificites1"></script>
   </body>
 </html>

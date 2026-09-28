@@ -221,6 +221,7 @@ source(file.path(repo_root, "iramuteqlite", "simi_igraph.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "stats_chd.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "ui_chd_stats_mode_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "export_configuration_chd.R"), local = TRUE)
+source(file.path(repo_root, "iramuteqlite", "calcul_specificites.R"), local = TRUE)
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 input_path <- normalizePath(scalar_chr(args$input), winslash = "/", mustWork = TRUE)
 config_path <- normalizePath(scalar_chr(args$config), winslash = "/", mustWork = TRUE)
@@ -1646,6 +1647,16 @@ run_batch <- function() {
 
     if (quanteda::ndoc(dfm_ok) < 2) stop("Apres classification, il reste moins de 2 segments classes (hors NA).")
     if (quanteda::nfeat(dfm_ok) < 2) stop("Apres classification, le DFM classe est trop pauvre (moins de 2 termes).")
+
+    specificites_source <- exporter_source_specificites(
+      dfm_obj = dfm_ok,
+      corpus_obj = filtered_corpus_ok,
+      classes = classes_ok,
+      output_dir = output_dir,
+      config = config
+    )
+    artifacts$variables_specificites <- relative_to_output(specificites_source$options)
+    log_info("Données lexicales compactes préparées pour les analyses de spécificités par modalité.")
 
     if (scalar_bool(config$expression_utiliser_dictionnaire, FALSE)) {
       expression_df_log <- pipeline$expressions_actives_df

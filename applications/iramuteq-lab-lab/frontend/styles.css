@@ -1160,6 +1160,40 @@ textarea {
   word-break: break-word;
 }
 
+.specificities-dialog .dialog-card {
+  width: min(920px, calc(100vw - 2rem));
+  max-height: min(900px, calc(100vh - 2rem));
+  overflow: auto;
+}
+
+.specificities-form-grid {
+  margin-top: 1rem;
+}
+
+.specificities-help {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid color-mix(in srgb, #217ce7 32%, white);
+  border-radius: 16px;
+  background: color-mix(in srgb, #217ce7 7%, white);
+  color: #181d26;
+}
+
+.specificities-help h3 {
+  margin: 0 0 0.65rem;
+  color: #181d26;
+}
+
+.specificities-help p {
+  margin: 0.42rem 0;
+  line-height: 1.55;
+}
+
+#specificitiesDialogStatus.is-error {
+  color: #b42318;
+  font-weight: 650;
+}
+
 .analysis-history-download {
   padding: 0.52rem 0.78rem;
   font-size: 0.76rem;

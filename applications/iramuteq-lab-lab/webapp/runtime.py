@@ -710,6 +710,8 @@ def collect_artifact_files(output_dir: Path) -> list[dict[str, str]]:
             continue
 
         relative_path = path.relative_to(root).as_posix()
+        if ".internal" in Path(relative_path).parts:
+            continue
         mime_type = mime_type_for_path(path)
         if is_text_path(path):
             data = path.read_text(encoding="utf-8", errors="replace")
@@ -733,7 +735,11 @@ def count_artifact_files(output_dir: Path) -> int:
     root = output_dir.resolve()
     if not root.is_dir():
         return 0
-    return sum(1 for path in root.rglob("*") if path.is_file())
+    return sum(
+        1
+        for path in root.rglob("*")
+        if path.is_file() and ".internal" not in path.relative_to(root).parts
+    )
 
 
 def resolve_help_path(relative_path: str) -> Path:
@@ -1155,6 +1161,163 @@ def run_chd_action(output_dir: str, action: str, term: str, class_label: str | N
     return payload
 
 
+def _specificities_source_path(output_dir: str) -> Path:
+    output_path = Path(str(output_dir or "").strip()).expanduser().resolve()
+    if not output_path.is_dir():
+        raise FileNotFoundError("Le dossier d'exports de la CHD est introuvable.")
+    source_path = output_path / ".internal" / "source_specificites.rds"
+    if not source_path.is_file():
+        raise FileNotFoundError(
+            "Cette analyse ne contient pas les données nécessaires aux spécificités. Relancez la CHD avec cette version."
+        )
+    return source_path
+
+
+def _run_specificities_r(arguments: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            resolve_rscript(),
+            "--vanilla",
+            str(PROJECT_ROOT / "backend" / "r" / "run_specificites.R"),
+            *arguments,
+        ],
+        cwd=PROJECT_ROOT,
+        env=build_command_env(),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def describe_specificities(output_dir: str) -> dict[str, Any]:
+    source_path = _specificities_source_path(output_dir)
+    process = _run_specificities_r(["--mode", "describe", "--source", str(source_path)])
+    payload = try_parse_json(process.stdout)
+    if payload is None or process.returncode != 0 or not payload.get("success"):
+        message = str((payload or {}).get("message") or "").strip()
+        raise RuntimeError(message or process_failure_message(process, "Lecture des modalités impossible."))
+    return payload
+
+
+def run_specificities_analysis(
+    parent_output_dir: str,
+    *,
+    term: str,
+    variable: str,
+    index: str = "hypergeo",
+    min_frequency: int = 10,
+) -> dict[str, Any]:
+    source_path = _specificities_source_path(parent_output_dir)
+    safe_term = str(term or "").strip()
+    safe_variable = str(variable or "").strip()
+    safe_index = str(index or "hypergeo").strip().lower()
+    if not safe_term:
+        raise ValueError("Le terme sélectionné est vide.")
+    if not safe_variable:
+        raise ValueError("Sélectionnez une variable ou les classes CHD.")
+    if safe_index not in {"hypergeo", "chi2"}:
+        raise ValueError("Indice de spécificité non reconnu.")
+    try:
+        safe_min_frequency = max(1, int(min_frequency))
+    except (TypeError, ValueError):
+        safe_min_frequency = 10
+
+    job_id = next_job_id("spec")
+    job_root = ensure_directory(jobs_root() / job_id)
+    export_dir = ensure_directory(job_root / "exports")
+    status_file = job_root / "status.json"
+    results_file = job_root / "results.json"
+    stdout_log = job_root / "stdout.log"
+    stderr_log = job_root / "stderr.log"
+    started_at = int(time.time())
+    write_json_file(
+        status_file,
+        {
+            "job_id": job_id,
+            "state": "running",
+            "progress": 20,
+            "message": "Calcul des spécificités par modalité.",
+            "logs": [f"Analyse des spécificités de « {safe_term} »."],
+            "created_at": started_at,
+            "updated_at": started_at,
+        },
+    )
+
+    process = _run_specificities_r(
+        [
+            "--mode", "calculate",
+            "--source", str(source_path),
+            "--output-dir", str(export_dir),
+            "--term", safe_term,
+            "--variable", safe_variable,
+            "--index", safe_index,
+            "--min-frequency", str(safe_min_frequency),
+        ]
+    )
+    stdout_log.write_text(process.stdout, encoding="utf-8")
+    stderr_log.write_text(process.stderr, encoding="utf-8")
+    payload = try_parse_json(process.stdout)
+    if payload is None or process.returncode != 0 or not payload.get("success"):
+        message = str((payload or {}).get("message") or "").strip()
+        message = message or process_failure_message(process, "Le calcul des spécificités a échoué.")
+        logs = [f"[error] {message}"]
+        write_json_file(
+            status_file,
+            {
+                "job_id": job_id,
+                "state": "failed",
+                "progress": 100,
+                "message": message,
+                "logs": logs,
+                "created_at": started_at,
+                "updated_at": int(time.time()),
+            },
+        )
+        write_json_file(results_file, {"success": False, "job_id": job_id, "message": message, "logs": logs})
+        raise RuntimeError(message)
+
+    summary = payload.get("summary") or {}
+    logs = [
+        f"Spécificités calculées pour « {safe_term} ».",
+        f"Variable : {summary.get('variable_label') or safe_variable}.",
+        f"Indice : {summary.get('index_label') or safe_index}.",
+    ]
+    result_payload = {
+        "success": True,
+        "job_id": job_id,
+        "output_dir": str(export_dir),
+        "summary": summary,
+        "logs": logs,
+        "status_file": str(status_file),
+        "stdout_log": str(stdout_log),
+        "stderr_log": str(stderr_log),
+    }
+    write_json_file(results_file, result_payload)
+    write_json_file(
+        status_file,
+        {
+            "job_id": job_id,
+            "state": "completed",
+            "progress": 100,
+            "message": "Analyse des spécificités terminée.",
+            "logs": logs,
+            "summary": summary,
+            "created_at": started_at,
+            "updated_at": int(time.time()),
+        },
+    )
+    return {
+        "success": True,
+        "jobId": job_id,
+        "outputDir": str(export_dir),
+        "summary": summary,
+        "logs": logs,
+        "files": collect_artifact_files(export_dir),
+        "artifactCount": count_artifact_files(export_dir),
+    }
+
+
 def classify_archive_entry(path: str) -> str:
     normalized = str(path or "").replace("\\", "/")
     if normalized.endswith((".png", ".jpg", ".jpeg")):
@@ -1197,6 +1360,8 @@ def build_results_archive(output_dir: Path) -> bytes:
             if not path.is_file():
                 continue
             relative_path = path.relative_to(output_dir).as_posix()
+            if ".internal" in Path(relative_path).parts:
+                continue
             archive_path = f"{root_prefix}/{relative_path}"
             archive.write(path, archive_path)
             archive_paths.append(archive_path)
