@@ -220,6 +220,7 @@ source(file.path(repo_root, "iramuteqlite", "simi_graph.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "simi_igraph.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "stats_chd.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "ui_chd_stats_mode_iramuteq.R"), local = TRUE)
+source(file.path(repo_root, "iramuteqlite", "export_configuration_chd.R"), local = TRUE)
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 input_path <- normalizePath(scalar_chr(args$input), winslash = "/", mustWork = TRUE)
 config_path <- normalizePath(scalar_chr(args$config), winslash = "/", mustWork = TRUE)
@@ -1343,7 +1344,8 @@ run_batch <- function() {
   write_status(state = "running", progress = 3, message = "Initialisation du runner batch.")
   log_info(paste0("output_dir = ", output_dir), progress = 4)
   log_info("Import du corpus.", progress = 8)
-  log_info(paste0("MD5 fichier = ", unname(tools::md5sum(input_path))), progress = 9)
+  corpus_md5 <- unname(tools::md5sum(input_path))
+  log_info(paste0("MD5 fichier = ", corpus_md5), progress = 9)
   corpus_importe <- import_corpus_iramuteq(input_path)
   log_info(paste0("Nombre de documents importés : ", quanteda::ndoc(corpus_importe)), progress = 10)
 
@@ -2364,6 +2366,21 @@ run_batch <- function() {
       graph_png = relative_to_output(simi_png)
     )
     log_info("Graphe de similitudes généré.", progress = 86)
+  }
+
+  if (isTRUE(run_chd) && is.list(classes_info)) {
+    configuration_chd_path <- exporter_configuration_chd_iramuteq(
+      config_requested = config,
+      classes_mode = classes_mode,
+      classes_mode_label = classes_mode_label,
+      classes_info = classes_info,
+      classes = classes_ok,
+      input_path = input_path,
+      corpus_md5 = corpus_md5,
+      output_dir = output_dir
+    )
+    artifacts$configuration_chd <- relative_to_output(configuration_chd_path)
+    log_info("Configuration CHD exportée dans configuration_chd.json.", progress = 94)
   }
 
   summary <- list(
