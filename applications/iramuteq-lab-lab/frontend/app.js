@@ -14599,7 +14599,12 @@ async function renderSpecificitiesExports(index) {
   }
 
   if (tableFile) {
-    renderTable(resultContainers.specificitiesTermTable, parseCsv(await tableFile.text()), {
+    const displayedTable = omitParsedColumns(parseCsv(await tableFile.text()), [
+      "tokens_modalite",
+      "tokens_corpus",
+      "frequence_relative_pour_mille"
+    ]);
+    renderTable(resultContainers.specificitiesTermTable, displayedTable, {
       title: "specificites_terme_modalites.csv",
       maxRows: 500,
       emptyMessage: "Aucun résultat de spécificité disponible."
