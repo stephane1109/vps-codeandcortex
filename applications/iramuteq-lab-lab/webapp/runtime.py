@@ -1255,7 +1255,6 @@ def run_specificities_analysis(
     term: str,
     variable: str,
     index: str = "hypergeo",
-    min_frequency: int = 10,
 ) -> dict[str, Any]:
     source_path = _specificities_source_path(parent_output_dir)
     safe_term = str(term or "").strip()
@@ -1267,11 +1266,6 @@ def run_specificities_analysis(
         raise ValueError("Sélectionnez une variable ou les classes CHD.")
     if safe_index not in {"hypergeo", "chi2"}:
         raise ValueError("Indice de spécificité non reconnu.")
-    try:
-        safe_min_frequency = max(1, int(min_frequency))
-    except (TypeError, ValueError):
-        safe_min_frequency = 10
-
     job_id = next_job_id("spec")
     job_root = ensure_directory(jobs_root() / job_id)
     export_dir = ensure_directory(job_root / "exports")
@@ -1301,7 +1295,6 @@ def run_specificities_analysis(
             "--term", safe_term,
             "--variable", safe_variable,
             "--index", safe_index,
-            "--min-frequency", str(safe_min_frequency),
         ]
     )
     stdout_log.write_text(process.stdout, encoding="utf-8")

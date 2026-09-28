@@ -1215,17 +1215,12 @@
               <option value="chi2">χ² signé</option>
             </select>
           </label>
-          <label>
-            Effectif minimum des formes
-            <input id="specificitiesMinFrequency" type="number" min="1" step="1" value="10" />
-          </label>
         </div>
 
         <aside class="specificities-help" aria-label="Aide sur le calcul des spécificités">
           <h3>Comment lire ce calcul ?</h3>
           <p>Avec « Classes CHD » et « χ² signé », le score est recalculé sur le même tableau lexical et doit retrouver le χ² de la CHD, à l’arrondi près. Avec une autre variable ou l’indice de Lafon, le calcul répond à une autre comparaison.</p>
           <p>Avec la loi hypergéométrique, un score positif indique une surreprésentation et un score négatif une sous-représentation.</p>
-          <p>L’effectif minimum filtre seulement les autres formes exportées. Le terme cliqué et les totaux de référence restent calculés sur la matrice lexicale complète ; modifier ce seuil ne change donc pas le score du terme sélectionné.</p>
         </aside>
 
         <p id="specificitiesDialogStatus" class="muted"></p>
@@ -1238,6 +1233,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20260928-specificites3"></script>
+    <script type="module" src="./app.js?v=20260928-specificites4"></script>
   </body>
 </html>

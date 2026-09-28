@@ -192,16 +192,13 @@ ecrire_csv_utf8_specificites <- function(data, path, row.names = FALSE) {
   utils::write.csv(normalized, connection, row.names = row.names, fileEncoding = "")
 }
 
-ecrire_resultats_specificites <- function(source, term, variable, index, min_frequency, output_dir) {
+ecrire_resultats_specificites <- function(source, term, variable, index, output_dir) {
   table_complete <- table_lexicale_par_modalite(source, variable)
   if (!term %in% rownames(table_complete)) {
     stop(paste0("La forme « ", term, " » n'est pas disponible dans la matrice lexicale de cette CHD."))
   }
   reference_col_totals <- Matrix::colSums(table_complete)
-  totals <- Matrix::rowSums(table_complete)
-  keep <- totals >= min_frequency | rownames(table_complete) == term
-  table <- table_complete[keep, , drop = FALSE]
-  if (!nrow(table)) stop("Aucune forme ne dépasse l'effectif minimum demandé.")
+  table <- table_complete[term, , drop = FALSE]
 
   calculated <- if (identical(index, "chi2")) {
     calculer_scores_chi2_specificites(table, reference_col_totals = reference_col_totals)
@@ -215,10 +212,9 @@ ecrire_resultats_specificites <- function(source, term, variable, index, min_fre
   col_totals <- as.numeric(reference_col_totals)
   names(col_totals) <- colnames(counts)
   corpus_total <- sum(col_totals)
-  term_index <- match(term, rownames(counts))
+  term_index <- 1L
   observed <- counts[term_index, ]
   expected <- row_totals[[term_index]] * col_totals / corpus_total
-  relative <- ifelse(col_totals > 0, observed / col_totals * 1000, 0)
   selected_scores <- scores[term_index, ]
   selected_log_p <- log_p[term_index, ]
 
@@ -228,9 +224,6 @@ ecrire_resultats_specificites <- function(source, term, variable, index, min_fre
     occurrences_modalite = as.integer(observed),
     occurrences_attendues = round(expected, 4),
     occurrences_totales_terme = as.integer(row_totals[[term_index]]),
-    tokens_modalite = as.integer(col_totals),
-    tokens_corpus = as.integer(corpus_total),
-    frequence_relative_pour_mille = round(relative, 4),
     score_specificite = round(as.numeric(selected_scores), 4),
     p_value = formater_p_scientifique_specificites(selected_log_p),
     interpretation = ifelse(selected_scores > 0, "surreprésenté", ifelse(selected_scores < 0, "sous-représenté", "attendu")),
@@ -239,15 +232,6 @@ ecrire_resultats_specificites <- function(source, term, variable, index, min_fre
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   ecrire_csv_utf8_specificites(result, file.path(output_dir, "specificites_terme_modalites.csv"))
-  ecrire_csv_utf8_specificites(as.data.frame(counts), file.path(output_dir, "effectifs_formes_modalites.csv"), row.names = TRUE)
-  ecrire_csv_utf8_specificites(as.data.frame(round(scores, 4)), file.path(output_dir, "scores_specificites_formes_modalites.csv"), row.names = TRUE)
-  relative_matrix <- sweep(counts, 2, col_totals, "/") * 1000
-  relative_matrix[!is.finite(relative_matrix)] <- 0
-  ecrire_csv_utf8_specificites(
-    as.data.frame(round(relative_matrix, 4)),
-    file.path(output_dir, "frequences_relatives_formes_modalites.csv"),
-    row.names = TRUE
-  )
 
   png_path <- file.path(output_dir, "graphique_specificites.png")
   grDevices::png(png_path, width = 1600, height = max(900, 170 + 110 * nrow(result)), res = 180)
@@ -277,15 +261,13 @@ ecrire_resultats_specificites <- function(source, term, variable, index, min_fre
     variable_label = variable_label,
     index = index,
     index_label = if (identical(index, "chi2")) "χ² signé" else "Loi hypergéométrique (Lafon)",
-    min_frequency = as.integer(min_frequency),
     modalities = colnames(counts),
-    method = "Tableau lexical formes × modalités construit à partir de la matrice complète traitée de la CHD ; le seuil d'effectif limite uniquement les formes exportées."
+    method = "Spécificité du terme sélectionné calculée à partir de la matrice lexicale complète traitée de la CHD."
   )
   jsonlite::write_json(configuration, file.path(output_dir, "configuration_specificites.json"), auto_unbox = TRUE, pretty = TRUE)
   summary <- c(configuration, list(
     best_modality = result$modalite[[which.max(result$score_specificite)]],
     best_score = max(result$score_specificite),
-    n_forms = nrow(counts),
     n_modalities = ncol(counts)
   ))
   jsonlite::write_json(summary, file.path(output_dir, "resume_specificites.json"), auto_unbox = TRUE, pretty = TRUE)

@@ -69,7 +69,6 @@ const specificitiesDialogTitle = document.getElementById("specificitiesDialogTit
 const specificitiesDialogMeta = document.getElementById("specificitiesDialogMeta");
 const specificitiesVariable = document.getElementById("specificitiesVariable");
 const specificitiesIndex = document.getElementById("specificitiesIndex");
-const specificitiesMinFrequency = document.getElementById("specificitiesMinFrequency");
 const specificitiesDialogStatus = document.getElementById("specificitiesDialogStatus");
 const runSpecificitiesBtn = document.getElementById("runSpecificitiesBtn");
 const closeSpecificitiesBtn = document.getElementById("closeSpecificitiesBtn");
@@ -10759,7 +10758,6 @@ async function runSpecificitiesFromDialog() {
   if (!request?.analysisId || !request?.term) return;
   const variable = String(specificitiesVariable?.value || "").trim();
   const index = String(specificitiesIndex?.value || "hypergeo").trim();
-  const minFrequency = Math.max(1, Number.parseInt(specificitiesMinFrequency?.value || "10", 10) || 10);
   if (!variable) {
     setSpecificitiesDialogStatus("Sélectionnez les modalités à comparer.", { isError: true });
     return;
@@ -10776,7 +10774,7 @@ async function runSpecificitiesFromDialog() {
       `/api/analyses/${encodeURIComponent(request.analysisId)}/specificities`,
       {
         method: "POST",
-        body: { term: request.term, variable, index, minFrequency }
+        body: { term: request.term, variable, index }
       }
     );
     const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
@@ -12362,7 +12360,6 @@ function renderAnalysisSummary(summary) {
         ["Terme étudié", summary.term],
         ["Modalités comparées", summary.variable_label],
         ["Indice", summary.index_label],
-        ["Effectif minimum", summary.min_frequency],
         ["Nombre de modalités", summary.n_modalities],
         ["Modalité la plus spécifique", summary.best_modality],
         ["Score maximal", summary.best_score]
@@ -14576,7 +14573,6 @@ async function renderSpecificitiesExports(index) {
       ["Terme", summary.term],
       ["Modalités comparées", summary.variable_label],
       ["Indice", summary.index_label],
-      ["Effectif minimum", summary.min_frequency],
       ["Nombre de modalités", summary.n_modalities],
       ["Modalité la plus spécifique", summary.best_modality],
       ["Score maximal", summary.best_score]

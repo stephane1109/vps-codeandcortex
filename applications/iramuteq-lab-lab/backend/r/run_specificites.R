@@ -54,17 +54,14 @@ tryCatch({
     term <- trimws(as.character(args$term %||% ""))
     variable <- trimws(as.character(args$variable %||% ""))
     index <- trimws(as.character(args$index %||% "hypergeo"))
-    min_frequency <- suppressWarnings(as.integer(args[["min-frequency"]] %||% 10L))
     if (!nzchar(term)) stop("Le terme sélectionné est vide.")
     if (!nzchar(variable)) stop("Sélectionnez une variable ou les classes CHD.")
     if (!index %in% c("hypergeo", "chi2")) stop("Indice de spécificité non reconnu.")
-    if (is.na(min_frequency) || min_frequency < 1L) min_frequency <- 1L
     result <- ecrire_resultats_specificites(
       source = source_data,
       term = term,
       variable = variable,
       index = index,
-      min_frequency = min_frequency,
       output_dir = output_dir
     )
     emit(list(success = TRUE, summary = result$summary, result = result$result))

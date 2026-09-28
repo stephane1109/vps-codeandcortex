@@ -76,15 +76,11 @@ result <- ecrire_resultats_specificites(
   term = "soin",
   variable = "__classes_chd__",
   index = "hypergeo",
-  min_frequency = 1L,
   output_dir = output_dir
 )
 
 expected_files <- c(
   "specificites_terme_modalites.csv",
-  "effectifs_formes_modalites.csv",
-  "scores_specificites_formes_modalites.csv",
-  "frequences_relatives_formes_modalites.csv",
   "graphique_specificites.png",
   "configuration_specificites.json",
   "resume_specificites.json"
@@ -92,24 +88,16 @@ expected_files <- c(
 stopifnot(all(file.exists(file.path(output_dir, expected_files))))
 stopifnot(identical(result$summary$term, "soin"))
 stopifnot(identical(result$summary$best_modality, "Classe 1"))
-
-high_threshold_dir <- file.path(output_dir, "high-threshold")
-high_threshold_result <- ecrire_resultats_specificites(
-  source = source_data,
-  term = "soin",
-  variable = "__classes_chd__",
-  index = "hypergeo",
-  min_frequency = 99L,
-  output_dir = high_threshold_dir
-)
-stopifnot(identical(high_threshold_result$summary$term, "soin"))
-stopifnot(identical(high_threshold_result$summary$n_forms, 1L))
-stopifnot(isTRUE(all.equal(
-  result$result$score_specificite,
-  high_threshold_result$result$score_specificite,
-  tolerance = 1e-12
-)))
-stopifnot(identical(result$result$tokens_corpus, high_threshold_result$result$tokens_corpus))
+stopifnot(!any(c(
+  "tokens_modalite",
+  "tokens_corpus",
+  "frequence_relative_pour_mille"
+) %in% names(result$result)))
+stopifnot(!any(file.exists(file.path(output_dir, c(
+  "effectifs_formes_modalites.csv",
+  "scores_specificites_formes_modalites.csv",
+  "frequences_relatives_formes_modalites.csv"
+)))))
 
 chi2_full <- calculer_scores_chi2_specificites(lexical_table)$scores["soin", ]
 chi2_filtered <- calculer_scores_chi2_specificites(
