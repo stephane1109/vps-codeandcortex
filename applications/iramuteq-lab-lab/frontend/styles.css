@@ -70,6 +70,22 @@ textarea {
   max-width: 70rem;
 }
 
+.brand-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.brand-logo {
+  display: block;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 9px;
+  object-fit: cover;
+  box-shadow: 0 3px 10px rgba(33, 124, 231, 0.18);
+}
+
 .eyebrow,
 .section-kicker,
 .sidebar-kicker,
