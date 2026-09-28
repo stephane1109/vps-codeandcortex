@@ -101,11 +101,22 @@ table_lexicale_par_modalite <- function(source, variable) {
   methods::as(table, "dgCMatrix")
 }
 
-calculer_scores_hypergeometriques <- function(table) {
+resoudre_totaux_reference_specificites <- function(counts, reference_col_totals = NULL) {
+  observed_col_totals <- colSums(counts)
+  reference <- suppressWarnings(as.numeric(reference_col_totals))
+  valid_reference <- length(reference) == ncol(counts) &&
+    all(is.finite(reference)) &&
+    all(reference >= observed_col_totals)
+  if (!valid_reference) reference <- observed_col_totals
+  names(reference) <- colnames(counts)
+  reference
+}
+
+calculer_scores_hypergeometriques <- function(table, reference_col_totals = NULL) {
   counts <- as.matrix(table)
   row_totals <- rowSums(counts)
-  col_totals <- colSums(counts)
-  corpus_total <- sum(counts)
+  col_totals <- resoudre_totaux_reference_specificites(counts, reference_col_totals)
+  corpus_total <- sum(col_totals)
   scores <- matrix(0, nrow(counts), ncol(counts), dimnames = dimnames(counts))
   log_p <- matrix(0, nrow(counts), ncol(counts), dimnames = dimnames(counts))
 
@@ -133,11 +144,11 @@ calculer_scores_hypergeometriques <- function(table) {
   list(scores = scores, log_p = log_p)
 }
 
-calculer_scores_chi2_specificites <- function(table) {
+calculer_scores_chi2_specificites <- function(table, reference_col_totals = NULL) {
   counts <- as.matrix(table)
   row_totals <- rowSums(counts)
-  col_totals <- colSums(counts)
-  corpus_total <- sum(counts)
+  col_totals <- resoudre_totaux_reference_specificites(counts, reference_col_totals)
+  corpus_total <- sum(col_totals)
   scores <- matrix(0, nrow(counts), ncol(counts), dimnames = dimnames(counts))
   log_p <- matrix(0, nrow(counts), ncol(counts), dimnames = dimnames(counts))
 
@@ -182,26 +193,28 @@ ecrire_csv_utf8_specificites <- function(data, path, row.names = FALSE) {
 }
 
 ecrire_resultats_specificites <- function(source, term, variable, index, min_frequency, output_dir) {
-  table <- table_lexicale_par_modalite(source, variable)
-  if (!term %in% rownames(table)) {
+  table_complete <- table_lexicale_par_modalite(source, variable)
+  if (!term %in% rownames(table_complete)) {
     stop(paste0("La forme « ", term, " » n'est pas disponible dans la matrice lexicale de cette CHD."))
   }
-  totals <- Matrix::rowSums(table)
-  keep <- totals >= min_frequency | rownames(table) == term
-  table <- table[keep, , drop = FALSE]
+  reference_col_totals <- Matrix::colSums(table_complete)
+  totals <- Matrix::rowSums(table_complete)
+  keep <- totals >= min_frequency | rownames(table_complete) == term
+  table <- table_complete[keep, , drop = FALSE]
   if (!nrow(table)) stop("Aucune forme ne dépasse l'effectif minimum demandé.")
 
   calculated <- if (identical(index, "chi2")) {
-    calculer_scores_chi2_specificites(table)
+    calculer_scores_chi2_specificites(table, reference_col_totals = reference_col_totals)
   } else {
-    calculer_scores_hypergeometriques(table)
+    calculer_scores_hypergeometriques(table, reference_col_totals = reference_col_totals)
   }
   counts <- as.matrix(table)
   scores <- calculated$scores
   log_p <- calculated$log_p
   row_totals <- rowSums(counts)
-  col_totals <- colSums(counts)
-  corpus_total <- sum(counts)
+  col_totals <- as.numeric(reference_col_totals)
+  names(col_totals) <- colnames(counts)
+  corpus_total <- sum(col_totals)
   term_index <- match(term, rownames(counts))
   observed <- counts[term_index, ]
   expected <- row_totals[[term_index]] * col_totals / corpus_total
@@ -266,7 +279,7 @@ ecrire_resultats_specificites <- function(source, term, variable, index, min_fre
     index_label = if (identical(index, "chi2")) "χ² signé" else "Loi hypergéométrique (Lafon)",
     min_frequency = as.integer(min_frequency),
     modalities = colnames(counts),
-    method = "Tableau lexical formes × modalités construit à partir de la matrice traitée de la CHD."
+    method = "Tableau lexical formes × modalités construit à partir de la matrice complète traitée de la CHD ; le seuil d'effectif limite uniquement les formes exportées."
   )
   jsonlite::write_json(configuration, file.path(output_dir, "configuration_specificites.json"), auto_unbox = TRUE, pretty = TRUE)
   summary <- c(configuration, list(

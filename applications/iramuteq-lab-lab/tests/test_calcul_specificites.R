@@ -104,5 +104,18 @@ high_threshold_result <- ecrire_resultats_specificites(
 )
 stopifnot(identical(high_threshold_result$summary$term, "soin"))
 stopifnot(identical(high_threshold_result$summary$n_forms, 1L))
+stopifnot(isTRUE(all.equal(
+  result$result$score_specificite,
+  high_threshold_result$result$score_specificite,
+  tolerance = 1e-12
+)))
+stopifnot(identical(result$result$tokens_corpus, high_threshold_result$result$tokens_corpus))
+
+chi2_full <- calculer_scores_chi2_specificites(lexical_table)$scores["soin", ]
+chi2_filtered <- calculer_scores_chi2_specificites(
+  lexical_table["soin", , drop = FALSE],
+  reference_col_totals = Matrix::colSums(lexical_table)
+)$scores["soin", ]
+stopifnot(isTRUE(all.equal(chi2_full, chi2_filtered, tolerance = 1e-12)))
 
 cat("test_calcul_specificites: OK\n")
