@@ -712,7 +712,8 @@ tracer_afc_classes_termes <- function(
     }
     # On cherche des tokens commençant par * dans les 400 premiers caractères
     head <- substr(tx, 1, 400)
-    mods <- unlist(regmatches(head, gregexpr("\\*[A-Za-z0-9_\\-]+", head, perl = TRUE)), use.names = FALSE)
+    champs <- unlist(strsplit(trimws(head), "[[:space:]]+", perl = TRUE), use.names = FALSE)
+    mods <- champs[grepl("^\\*[^*[:space:]]+$", champs, perl = TRUE)]
     mods <- unique(mods)
     mods <- mods[!is.na(mods) & nzchar(mods)]
     if (length(variables_sel) > 0 && length(mods) > 0) {
@@ -776,7 +777,7 @@ calculer_table_classes_modalites <- function(corpus_aligne, groupes, max_modalit
         # compacte de type "*var_valeur" pour rester proche de la syntaxe IRaMuTeQ.
         if (isTRUE(grepl("^\\*", cn))) {
           val_norm <- gsub("\\s+", "_", v, perl = TRUE)
-          val_norm <- gsub("[^[:alnum:]_\\-]", "_", val_norm, perl = TRUE)
+          val_norm <- gsub("[^\\p{L}\\p{M}\\p{N}_-]", "_", val_norm, perl = TRUE)
           val_norm <- gsub("_+", "_", val_norm, perl = TRUE)
           val_norm <- gsub("^_+|_+$", "", val_norm, perl = TRUE)
           if (nzchar(val_norm)) {

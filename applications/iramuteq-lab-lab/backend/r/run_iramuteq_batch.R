@@ -210,6 +210,7 @@ source(file.path(repo_root, "iramuteqlite", "chd_engine_iramuteq.R"), local = TR
 source(file.path(repo_root, "iramuteqlite", "iramuteq_bars.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "dendrogramme_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_helpers_iramuteq.R"), local = TRUE)
+source(file.path(repo_root, "iramuteqlite", "variables_etoilees.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_iramuteq.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "afc_extremes.R"), local = TRUE)
 source(file.path(repo_root, "iramuteqlite", "graph_interactif.R"), local = TRUE)
@@ -400,8 +401,7 @@ import_corpus_iramuteq <- function(chemin_fichier) {
     bornes <- c(idx, length(lignes) + 1L)
     for (i in seq_along(idx)) {
       entete <- as.character(lignes[idx[[i]]])
-      tokens_entete <- unlist(regmatches(entete, gregexpr("\\*[[:alnum:]_\\-]+", entete, perl = TRUE)), use.names = FALSE)
-      tokens_entete <- unique(tokens_entete[grepl("^\\*[[:alnum:]_\\-]+$", tokens_entete)])
+      tokens_entete <- extraire_tokens_entete_iramuteq(entete)
       debut <- idx[[i]] + 1L
       fin <- bornes[[i + 1L]] - 1L
       contenu <- if (debut <= fin) lignes[debut:fin] else character(0)

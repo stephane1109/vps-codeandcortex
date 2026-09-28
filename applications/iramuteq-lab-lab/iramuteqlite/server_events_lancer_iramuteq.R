@@ -9,6 +9,16 @@ register_events_lancer <- function(input, output, session, rv) {
     if (is.null(app_dir) || !nzchar(app_dir)) app_dir <- getwd()
     env_modules <- environment()
 
+    if (!exists("extraire_tokens_entete_iramuteq", mode = "function", inherits = TRUE)) {
+      variables_etoilees_path <- file.path(app_dir, "iramuteqlite", "variables_etoilees.R")
+      if (!file.exists(variables_etoilees_path)) {
+        variables_etoilees_path <- file.path(app_dir, "variables_etoilees.R")
+      }
+      if (file.exists(variables_etoilees_path)) {
+        sys.source(variables_etoilees_path, envir = env_modules)
+      }
+    }
+
     if (!exists("ajouter_log", mode = "function", inherits = TRUE)) {
       ajouter_log <- function(rv, message) {
         if (is.null(rv)) return(invisible(NULL))
@@ -62,8 +72,7 @@ register_events_lancer <- function(input, output, session, rv) {
           bornes <- c(idx, length(lignes) + 1L)
           for (i in seq_along(idx)) {
             entete <- as.character(lignes[idx[[i]]])
-            tokens_entete <- unlist(regmatches(entete, gregexpr("\\*[[:alnum:]_\\-]+", entete, perl = TRUE)), use.names = FALSE)
-            tokens_entete <- unique(tokens_entete[grepl("^\\*[[:alnum:]_\\-]+$", tokens_entete)])
+            tokens_entete <- extraire_tokens_entete_iramuteq(entete)
 
             debut <- idx[[i]] + 1L
             fin <- bornes[[i + 1L]] - 1L

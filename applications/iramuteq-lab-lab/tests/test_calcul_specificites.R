@@ -1,7 +1,28 @@
 args_all <- commandArgs(trailingOnly = FALSE)
 file_arg <- sub("^--file=", "", grep("^--file=", args_all, value = TRUE)[[1]])
 app_dir <- normalizePath(file.path(dirname(file_arg), ".."), winslash = "/", mustWork = TRUE)
+source(file.path(app_dir, "iramuteqlite", "variables_etoilees.R"), local = TRUE)
 source(file.path(app_dir, "iramuteqlite", "calcul_specificites.R"), local = TRUE)
+
+contient_valeur_utf8 <- function(valeurs, attendue) {
+  attendue_raw <- charToRaw(attendue)
+  any(vapply(
+    as.character(valeurs),
+    function(valeur) identical(charToRaw(valeur), attendue_raw),
+    logical(1)
+  ))
+}
+
+corpus_test_path <- normalizePath(
+  file.path(app_dir, "..", "..", "corpus_test", "psychiatrie-darmanin-fr.txt"),
+  winslash = "/",
+  mustWork = TRUE
+)
+corpus_headers <- readLines(corpus_test_path, encoding = "UTF-8", warn = FALSE)
+corpus_headers <- corpus_headers[grepl("^\\*\\*\\*\\*", corpus_headers)]
+liberation_header <- corpus_headers[grepl("source_Lib", corpus_headers, fixed = TRUE)][[1L]]
+liberation_tokens <- extraire_tokens_entete_iramuteq(liberation_header)
+stopifnot(contient_valeur_utf8(liberation_tokens, "*source_Libération"))
 
 dfm <- Matrix::Matrix(
   c(
@@ -25,15 +46,21 @@ source_data <- list(
   classes = c(1L, 1L, 2L, 2L, 3L, 3L),
   docvars = data.frame(
     `*annee` = c("2024", "2024", "2025", "2025", "2026", "2026"),
+    `*source` = c("Libération", "Libération", "Le Monde", "Le Monde", "La Croix", "La Croix"),
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
 )
 
 variables <- variables_specificites_disponibles(source_data)
-stopifnot(length(variables) == 2L)
+stopifnot(length(variables) == 3L)
 stopifnot(identical(variables[[1L]]$id, "__classes_chd__"))
 stopifnot(identical(variables[[2L]]$id, "*annee"))
+source_option <- variables[vapply(variables, function(option) identical(option$id, "*source"), logical(1))][[1L]]
+stopifnot(contient_valeur_utf8(unlist(source_option$modalities, use.names = FALSE), "Libération"))
+
+source_table <- table_lexicale_par_modalite(source_data, "*source")
+stopifnot(contient_valeur_utf8(colnames(source_table), "Libération"))
 
 lexical_table <- table_lexicale_par_modalite(source_data, "__classes_chd__")
 stopifnot(identical(dim(lexical_table), c(3L, 3L)))
