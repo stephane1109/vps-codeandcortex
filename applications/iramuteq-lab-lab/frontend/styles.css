@@ -1514,6 +1514,22 @@ progress {
   background: #fff;
 }
 
+#specificitiesPlot {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(0.35rem, 1vw, 0.75rem);
+}
+
+#specificitiesPlot .result-image {
+  width: min(100%, 960px);
+  max-height: min(68vh, 680px);
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto;
+  cursor: zoom-in;
+}
+
 .afc-interactive-dialog {
   width: min(96vw, 1180px);
   max-width: 1180px;
