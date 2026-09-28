@@ -20,6 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_DATA_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "iramuteq-lite-data"
 ANALYSIS_LOCK_FILENAME = "active-analysis.json"
 ANALYSIS_LOCK_STALE_SECONDS = 300
+ANALYSIS_HEARTBEAT_FILENAME = "heartbeat.json"
+ANALYSIS_HEARTBEAT_MAX_AGE_SECONDS = 15
+ANALYSIS_REMOTE_START_GRACE_SECONDS = 30
 TERMINAL_JOB_STATES = {"cancelled", "completed", "done", "error", "failed", "success", "succeeded"}
 JSON_READ_ATTEMPTS = 4
 JSON_READ_RETRY_SECONDS = 0.05
@@ -72,6 +75,30 @@ def job_root_for_id(job_id: str) -> Path:
     except ValueError as error:  # pragma: no cover - protected by the pattern above
         raise PermissionError("Le job demandé est en dehors du répertoire autorisé.") from error
     return candidate
+
+
+def analysis_heartbeat_path(job_id: str) -> Path:
+    return job_root_for_id(job_id) / ANALYSIS_HEARTBEAT_FILENAME
+
+
+def analysis_heartbeat_is_fresh(job_id: str) -> bool:
+    heartbeat_path = analysis_heartbeat_path(job_id)
+    payload = try_read_json_file(heartbeat_path) if heartbeat_path.exists() else None
+    try:
+        updated_at = float((payload or {}).get("updated_at") or heartbeat_path.stat().st_mtime)
+    except (OSError, TypeError, ValueError):
+        return False
+    return time.time() - updated_at <= ANALYSIS_HEARTBEAT_MAX_AGE_SECONDS
+
+
+def clear_analysis_heartbeat(job_id: str | None) -> None:
+    normalized_job_id = str(job_id or "").strip()
+    if not normalized_job_id:
+        return
+    try:
+        analysis_heartbeat_path(normalized_job_id).unlink()
+    except FileNotFoundError:
+        return
 
 
 def remove_job_directory(job_id: str) -> None:
@@ -247,6 +274,7 @@ def terminate_analysis_process(pid: Any, grace_seconds: float = 2.0) -> bool:
 def clear_analysis_lock(expected_job_id: str | None = None) -> None:
     lock_path = analysis_lock_path()
     if not lock_path.exists():
+        clear_analysis_heartbeat(expected_job_id)
         return
 
     if expected_job_id:
@@ -258,7 +286,8 @@ def clear_analysis_lock(expected_job_id: str | None = None) -> None:
     try:
         lock_path.unlink()
     except FileNotFoundError:
-        return
+        pass
+    clear_analysis_heartbeat(expected_job_id)
 
 
 def mark_interrupted_analysis(job_id: str, message: str) -> None:
@@ -310,9 +339,24 @@ def recover_interrupted_analysis(job_id: str) -> bool:
     created_at = int(payload.get("created_at") or time.time())
     instance_id = str(payload.get("instance_id") or "").strip()
     pid = payload.get("pid")
+    job_root = jobs_root() / job_id
+    results_file = job_root / "results.json"
+    status_file = job_root / "status.json"
+    if results_file.exists():
+        return False
+    status_payload = try_read_json_file(status_file) if status_file.exists() else None
+    if isinstance(status_payload, dict):
+        state = str(status_payload.get("state") or "").strip().lower()
+        if state in TERMINAL_JOB_STATES:
+            return False
+
     message = ""
     if instance_id and instance_id != APP_INSTANCE_ID:
-        message = "Analyse interrompue par un redéploiement de l'application. Relancez-la."
+        if analysis_heartbeat_is_fresh(job_id):
+            return False
+        if time.time() - created_at <= ANALYSIS_REMOTE_START_GRACE_SECONDS:
+            return False
+        message = "Analyse interrompue après l'arrêt de l'instance de calcul. Relancez-la."
     elif pid and not analysis_process_is_running(pid) and time.time() - created_at > 5:
         message = "Le processus d'analyse s'est arrêté avant la fin du calcul. Relancez l'analyse."
 
@@ -370,6 +414,11 @@ def current_analysis_lock() -> dict[str, Any] | None:
             if state in TERMINAL_JOB_STATES:
                 clear_analysis_lock(expected_job_id=job_id)
                 return None
+
+    lock_instance_id = str(payload.get("instance_id") or "").strip()
+    if lock_instance_id and lock_instance_id != APP_INSTANCE_ID:
+        if (job_id and analysis_heartbeat_is_fresh(job_id)) or time.time() - created_at <= ANALYSIS_REMOTE_START_GRACE_SECONDS:
+            return payload
 
     if analysis_process_is_running(payload.get("pid")):
         return payload

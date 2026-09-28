@@ -6,6 +6,7 @@ import site
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 import importlib.util
@@ -17,6 +18,7 @@ from typing import Any
 
 JSON_READ_ATTEMPTS = 4
 JSON_READ_RETRY_SECONDS = 0.05
+JOB_HEARTBEAT_INTERVAL_SECONDS = 2.0
 
 
 def utc_now() -> str:
@@ -137,6 +139,33 @@ def initialize_status(paths: JobPaths, payload: dict[str, Any]) -> None:
     )
 
 
+def start_job_heartbeat(paths: JobPaths) -> tuple[threading.Event, threading.Thread]:
+    """Publish a cross-container liveness signal while the R process is running."""
+    stop_event = threading.Event()
+    heartbeat_path = paths.job_root / "heartbeat.json"
+
+    def publish() -> None:
+        while True:
+            write_json(
+                heartbeat_path,
+                {
+                    "job_id": paths.job_root.name,
+                    "runner_pid": os.getpid(),
+                    "updated_at": time.time(),
+                },
+            )
+            if stop_event.wait(JOB_HEARTBEAT_INTERVAL_SECONDS):
+                return
+
+    thread = threading.Thread(
+        target=publish,
+        name=f"iramuteq-heartbeat-{paths.job_root.name}",
+        daemon=True,
+    )
+    thread.start()
+    return stop_event, thread
+
+
 def finalize_failure(paths: JobPaths, message: str, returncode: int | None = None) -> dict[str, Any]:
     status = read_json(paths.status_file) if paths.status_file.exists() else {}
     status.update(
@@ -254,15 +283,20 @@ def run_job(
         str(paths.results_file),
     ]
 
-    process = subprocess.run(
-        command,
-        cwd=str(paths.repo_root),
-        env=env,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    heartbeat_stop, heartbeat_thread = start_job_heartbeat(paths)
+    try:
+        process = subprocess.run(
+            command,
+            cwd=str(paths.repo_root),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    finally:
+        heartbeat_stop.set()
+        heartbeat_thread.join(timeout=JOB_HEARTBEAT_INTERVAL_SECONDS + 1.0)
     paths.stdout_log.write_text(process.stdout, encoding="utf-8")
     paths.stderr_log.write_text(process.stderr, encoding="utf-8")
 
