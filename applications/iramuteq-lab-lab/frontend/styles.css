@@ -3468,18 +3468,22 @@ body.comparison-ab-fullscreen-open {
   color: var(--ink);
 }
 
-/* Documentation remains neutral; the blue accent is reserved for controls and parameter help. */
+/* Keep help copy neutral while using the Lab accent to structure its headings. */
 [data-panel="aide"] .markdown-content,
-[data-panel="aide"] .markdown-content h1,
-[data-panel="aide"] .markdown-content h2,
-[data-panel="aide"] .markdown-content h3,
-[data-panel="aide"] .markdown-content h4,
 [data-panel="aide"] .markdown-content p,
 [data-panel="aide"] .markdown-content li,
 [data-panel="aide"] .markdown-content blockquote,
 [data-panel="aide"] .markdown-content code,
 [data-panel="aide"] .markdown-content a {
   color: #000000 !important;
+}
+
+[data-panel="aide"] .page-heading h2,
+[data-panel="aide"] .markdown-content h1,
+[data-panel="aide"] .markdown-content h2,
+[data-panel="aide"] .markdown-content h3,
+[data-panel="aide"] .markdown-content h4 {
+  color: var(--accent) !important;
 }
 
 .markdown-figure img {
