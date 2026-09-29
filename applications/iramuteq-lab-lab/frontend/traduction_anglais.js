@@ -16,7 +16,7 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Terme sélectionné par modalité": "Selected term by modality",
   "Graphique des spécificités": "Specificity chart",
   "Exports": "Exports",
-  "L’archive contient les scores et effectifs de toutes les formes conservées, les fréquences relatives, la configuration et le graphique.": "The archive contains scores and counts for all retained forms, relative frequencies, configuration and chart.",
+  "L’archive contient le tableau du terme sélectionné, la configuration du calcul et le graphique.": "The archive contains the selected term table, calculation configuration and chart.",
   "Analyse lexicométrique": "Textometric analysis",
   "Modalités à comparer": "Modalities to compare",
   "Indice": "Index",

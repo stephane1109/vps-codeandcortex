@@ -153,3 +153,12 @@ Chaque CHD génère un fichier `configuration_chd.json` contenant :
 - la configuration permettant de reproduire l’analyse en mode Normal ;
 - les classes obtenues et leurs effectifs ;
 - les versions de R et d’IRAMUTEQ Lab.
+
+### Analyser un terme du tableau CHD
+
+Deux accès sont disponibles dans les tableaux statistiques par classe :
+
+- **Clic direct sur un terme significatif** : ouvre le test de spécificité. L’utilisateur choisit les modalités à comparer et l’indice, loi hypergéométrique de Lafon ou χ² signé. Le résultat est ajouté à l’arborescence des analyses.
+- **Clic droit sur un terme** : ouvre un menu proposant le **χ² par classe**, les **segments de texte dans la classe sélectionnée** ou les **segments de texte dans toutes les classes**. Le graphique du χ² peut être exporté en PNG et les segments affichés peuvent être exportés comme sous-corpus.
+
+Un clic direct sur un terme non significatif affiche simplement ses segments dans la classe sélectionnée.
