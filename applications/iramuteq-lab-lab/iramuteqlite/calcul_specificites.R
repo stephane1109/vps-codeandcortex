@@ -247,7 +247,7 @@ ecrire_resultats_specificites <- function(source, term, variable, index, output_
     las = 1,
     col = colors,
     border = NA,
-    xlab = if (identical(index, "chi2")) "χ² signé" else "Score de spécificité (Lafon)",
+    xlab = if (identical(index, "chi2")) "χ²" else "Score de spécificité (Lafon)",
     main = paste0("Spécificités de « ", term, " » par modalité")
   )
   graphics::abline(v = 0, col = "#444444", lwd = 1)
@@ -260,7 +260,7 @@ ecrire_resultats_specificites <- function(source, term, variable, index, output_
     variable = variable,
     variable_label = variable_label,
     index = index,
-    index_label = if (identical(index, "chi2")) "χ² signé" else "Loi hypergéométrique (Lafon)",
+    index_label = if (identical(index, "chi2")) "χ²" else "Loi hypergéométrique (Lafon)",
     modalities = colnames(counts),
     method = "Spécificité du terme sélectionné calculée à partir de la matrice lexicale complète traitée de la CHD."
   )

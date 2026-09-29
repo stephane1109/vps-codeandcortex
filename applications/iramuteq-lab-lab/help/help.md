@@ -158,7 +158,7 @@ Chaque CHD génère un fichier `configuration_chd.json` contenant :
 
 Deux accès sont disponibles dans les tableaux statistiques par classe :
 
-- **Clic direct sur un terme significatif** : ouvre le test de spécificité. L’utilisateur choisit les modalités à comparer et l’indice, loi hypergéométrique de Lafon ou χ² signé. Le résultat est ajouté à l’arborescence des analyses.
+- **Clic direct sur un terme significatif** : ouvre le test de spécificité. L’utilisateur choisit les modalités à comparer et l’indice, loi hypergéométrique de Lafon ou χ². Le résultat est ajouté à l’arborescence des analyses.
 - **Clic droit sur un terme** : ouvre un menu proposant le **χ² par classe**, les **segments de texte dans la classe sélectionnée** ou les **segments de texte dans toutes les classes**. Le graphique du χ² peut être exporté en PNG et les segments affichés peuvent être exportés comme sous-corpus.
 
 Un clic direct sur un terme non significatif affiche simplement ses segments dans la classe sélectionnée.
