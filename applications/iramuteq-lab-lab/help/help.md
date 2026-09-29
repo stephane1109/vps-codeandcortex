@@ -142,7 +142,7 @@ Le CSV `stats_termes.csv` exporte la table `rv$afc_obj$termes_stats` (jeu comple
 
 Le fichier `afc/stats_termes.csv` ajoute les colonnes `afc_x` et `afc_y` pour chaque mot effectivement projeté sur le plan AFC. Elles correspondent directement aux axes 1 et 2 produits par `FactoMineR::CA()`. Une cellule vide signifie que le mot ne fait pas partie de la table retenue pour l'AFC ; aucune coordonnée n'est alors inventée.
 
-### Rapport de reproductibilité
+## Rapport de reproductibilité
 
 Chaque CHD génère un fichier `configuration_chd.json` contenant :
 
@@ -154,7 +154,7 @@ Chaque CHD génère un fichier `configuration_chd.json` contenant :
 - les classes obtenues et leurs effectifs ;
 - les versions de R et d’IRAMUTEQ Lab.
 
-### Analyser un terme du tableau CHD
+## Analyser un terme du tableau CHD
 
 Deux accès sont disponibles dans les tableaux statistiques par classe :
 
