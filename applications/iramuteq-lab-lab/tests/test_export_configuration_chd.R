@@ -50,6 +50,7 @@ stopifnot(identical(payload$resultat$nombre_classes, 3L))
 stopifnot(identical(payload$configuration_effective$min_docfreq, 2L))
 stopifnot(identical(payload$configuration_reproduction_mode_normal$iramuteq_classes_mode, "manuel"))
 stopifnot(identical(payload$configuration_reproduction_mode_normal$k_iramuteq, 7L))
+stopifnot(identical(payload$environnement$version_iramuteq_lab, "0_6beta"))
 
 normal_dir <- file.path(output_dir, "normal")
 normal_config <- list(

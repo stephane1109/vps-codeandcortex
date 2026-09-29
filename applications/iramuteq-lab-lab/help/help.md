@@ -141,3 +141,15 @@ L’AFC classes × termes est calculée en 3 étapes :
 Le CSV `stats_termes.csv` exporte la table `rv$afc_obj$termes_stats` (jeu complet de stats AFC disponible), sans appliquer la réduction `top_termes`.
 
 Le fichier `afc/stats_termes.csv` ajoute les colonnes `afc_x` et `afc_y` pour chaque mot effectivement projeté sur le plan AFC. Elles correspondent directement aux axes 1 et 2 produits par `FactoMineR::CA()`. Une cellule vide signifie que le mot ne fait pas partie de la table retenue pour l'AFC ; aucune coordonnée n'est alors inventée.
+
+### Rapport de reproductibilité
+
+Chaque CHD génère un fichier `configuration_chd.json` contenant :
+
+- le nom et le hash MD5 du corpus ;
+- la date de génération ;
+- le mode CHD ;
+- les paramètres demandés et réellement appliqués ;
+- la configuration permettant de reproduire l’analyse en mode Normal ;
+- les classes obtenues et leurs effectifs ;
+- les versions de R et d’IRAMUTEQ Lab.

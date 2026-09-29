@@ -102,7 +102,7 @@ exporter_configuration_chd_iramuteq <- function(config_requested,
     configuration_reproduction_mode_normal = config_reproduction,
     environnement = list(
       version_r = R.version.string,
-      version_iramuteq_lab = "0_5beta"
+      version_iramuteq_lab = "0_6beta"
     )
   )
 
