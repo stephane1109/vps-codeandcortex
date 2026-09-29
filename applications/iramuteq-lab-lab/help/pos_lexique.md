@@ -45,3 +45,32 @@ Noms des catégories de Lexique_fr
 - **PRO_POS** : pronom possessif
 - **PRO_REL** : pronom relatif
 - **ONO** : onomatopée
+
+### Catégories POS spaCy
+
+Lorsque la langue sélectionnée utilise spaCy, le filtrage morphosyntaxique repose sur les catégories POS universelles attribuées à chaque mot par le modèle de langue.
+
+- Sans filtrage morphosyntaxique, toutes les catégories sont conservées.
+- Avec le filtrage activé, seules les catégories POS cochées sont conservées.
+- La sélection proposée par défaut est `NOUN`, `PROPN`, `VERB` et `ADJ`.
+- La lemmatisation est indépendante du filtrage : elle remplace, si elle est activée, la forme du mot par son lemme spaCy.
+
+- `NOUN` : nom commun, exporté comme `nom`.
+- `PROPN` : nom propre, exporté comme `nom`.
+- `VERB` : verbe, exporté comme `ver`.
+- `AUX` : auxiliaire, exporté comme `aux`.
+- `ADJ` : adjectif, exporté comme `adj`.
+- `ADV` : adverbe, exporté comme `adv`.
+- `ADP` : préposition ou postposition, exportée comme `pre`.
+- `PRON` : pronom, exporté comme `pro`.
+- `CCONJ` : conjonction de coordination, exportée comme `con`.
+- `SCONJ` : conjonction de subordination, exportée comme `con`.
+- `DET` : déterminant, exporté comme `AUTRE_FORME`.
+- `INTJ` : interjection, exportée comme `AUTRE_FORME`.
+- `NUM` : nombre, exporté comme `AUTRE_FORME`.
+- `PART` : particule, exportée comme `AUTRE_FORME`.
+- `PUNCT` : ponctuation, exportée comme `AUTRE_FORME`.
+- `SYM` : symbole, exporté comme `AUTRE_FORME`.
+- `X` : catégorie indéterminée, exportée comme `AUTRE_FORME`.
+
+`AUTRE_FORME` ne signifie pas nécessairement que spaCy n’a pas reconnu le mot. Cette valeur indique aussi qu’aucune correspondance IRaMuTeQ Lab spécifique n’est actuellement définie pour la catégorie POS spaCy concernée.
