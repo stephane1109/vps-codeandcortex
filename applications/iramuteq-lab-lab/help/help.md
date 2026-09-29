@@ -146,7 +146,7 @@ Le fichier `afc/stats_termes.csv` ajoute les colonnes `afc_x` et `afc_y` pour ch
 
 Chaque CHD génère un fichier `configuration_chd.json` contenant :
 
-- le nom et le hash MD5 du corpus ;
+- le nom du corpus et son empreinte numérique MD5, qui permet de vérifier qu’il s’agit exactement du même fichier ;
 - la date de génération ;
 - le mode CHD ;
 - les paramètres demandés et réellement appliqués ;
