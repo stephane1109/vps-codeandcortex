@@ -343,11 +343,11 @@ h1 {
 }
 
 .carte-application.carte-experimentale {
-    border-color: rgba(190, 113, 34, 0.44);
+    border-color: rgba(33, 124, 231, 0.38);
     background:
-        radial-gradient(circle at 84% 4%, rgba(255, 255, 255, 0.84), transparent 32%),
-        linear-gradient(145deg, rgba(255, 249, 229, 0.99), rgba(248, 229, 185, 0.99));
-    box-shadow: 0 12px 26px rgba(157, 100, 29, 0.12);
+        radial-gradient(circle at 84% 4%, rgba(255, 255, 255, 0.88), transparent 34%),
+        linear-gradient(145deg, rgba(239, 247, 255, 0.99), rgba(207, 230, 255, 0.99));
+    box-shadow: 0 12px 26px rgba(33, 124, 231, 0.14);
 }
 
 .carte-application:hover {
@@ -357,8 +357,8 @@ h1 {
 }
 
 .carte-application.carte-experimentale:hover {
-    border-color: #b6671f;
-    box-shadow: 0 16px 30px rgba(157, 100, 29, 0.18);
+    border-color: #217ce7;
+    box-shadow: 0 16px 30px rgba(33, 124, 231, 0.22);
 }
 
 .carte-application.en-construction {
@@ -499,7 +499,7 @@ h1 {
 }
 
 .carte-application.carte-experimentale .icone {
-    color: #b6671f;
+    color: #217ce7;
 }
 
 .carte-application.libre .meta-application,
@@ -524,16 +524,16 @@ h1 {
 
 .carte-application.carte-experimentale .meta-application,
 .carte-application.carte-experimentale .description-application {
-    color: #5d451f;
+    color: #23486f;
 }
 
 .etiquette-experimentale {
     justify-self: center;
     padding: 0.22rem 0.48rem;
-    border: 1px solid rgba(173, 100, 23, 0.28);
+    border: 1px solid rgba(33, 124, 231, 0.28);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.48);
-    color: #8c4c13;
+    background: rgba(255, 255, 255, 0.56);
+    color: #185fae;
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.05em;
