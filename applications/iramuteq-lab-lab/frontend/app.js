@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20260929-specificites5";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-specificites6";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -1192,7 +1192,7 @@ function updateDownloadResultsState() {
 }
 
 function getAnalysisKindLabel(analysisKind) {
-  if (analysisKind === "specificites") return "Spécificités";
+  if (analysisKind === "specificites") return "Calcul de spécificités";
   if (analysisKind === "suivi") return "Trajectoire lexicale";
   if (analysisKind === "simi") return "Similitudes";
   if (analysisKind === "multimodal_audio") return "Multimodal · Audio";
@@ -10719,7 +10719,7 @@ async function openSpecificitiesDialog(classLabel, term) {
   const normalizedTerm = String(term || "").trim();
   const normalizedClass = normalizeClassValue(classLabel);
   appState.specificitiesRequest = { analysisId, term: normalizedTerm, classLabel: normalizedClass };
-  if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = `Spécificités de « ${normalizedTerm} »`;
+  if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = `Calcul de spécificités de « ${normalizedTerm} »`;
   if (specificitiesDialogMeta) {
     specificitiesDialogMeta.textContent = `Terme significatif de la classe ${normalizedClass}. Choisissez les modalités à comparer.`;
   }
@@ -14607,7 +14607,7 @@ async function renderSpecificitiesExports(index) {
     });
   }
   renderImage(resultContainers.specificitiesPlot, plotFile, "Graphique des spécificités par modalité");
-  makeResultImagePreviewable(resultContainers.specificitiesPlot, "Spécificités", "Lexicométrie");
+  makeResultImagePreviewable(resultContainers.specificitiesPlot, "Calcul de spécificités", "Lexicométrie");
   return true;
 }
 
@@ -14827,7 +14827,7 @@ async function renderExports(entries, index) {
     await renderSimilitudeGraphs(resultContainers.simiGraph, similitudePngFile, similitudeJsonFile, similitudeHtmlFile);
   });
 
-  await safeRenderExportSection("Spécificités", async () => {
+  await safeRenderExportSection("Calcul de spécificités", async () => {
     await renderSpecificitiesExports(index);
   });
 
