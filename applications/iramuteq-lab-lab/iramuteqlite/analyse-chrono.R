@@ -272,6 +272,8 @@ tracer_evolution_chrono <- function(percentages, periods, comparisons, classes, 
   on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
   graphics::par(mfrow = c(panel_rows, 1L), mar = c(7, 5, 4, 2) + 0.1)
   colors <- grDevices::hcl.colors(max(3L, length(comparisons)), "Dark 3")[seq_along(comparisons)]
+  finite_percentages <- percentages$pourcentage[is.finite(percentages$pourcentage)]
+  common_upper <- max(5, if (length(finite_percentages)) max(finite_percentages) * 1.2 else 5)
 
   for (class_label in classes) {
     values <- matrix(NA_real_, nrow = length(periods), ncol = length(comparisons))
@@ -287,17 +289,30 @@ tracer_evolution_chrono <- function(percentages, periods, comparisons, classes, 
         if (nrow(row)) values[i, j] <- row$pourcentage[[1L]]
       }
     }
-    upper <- max(5, max(values, na.rm = TRUE) * 1.15)
-    graphics::matplot(
-      seq_along(periods), values,
-      type = "o", lty = 1, lwd = 2.2, pch = 16,
-      col = colors, xaxt = "n", ylim = c(0, upper),
-      xlab = "Période", ylab = "% des UCE classées", main = class_label
+    values[!is.finite(values)] <- 0
+    graphics::barplot(
+      t(values),
+      beside = TRUE,
+      col = colors,
+      border = NA,
+      names.arg = periods,
+      las = 2,
+      ylim = c(0, common_upper),
+      space = c(0.15, 0.9),
+      xlab = "Période",
+      ylab = "% des UCE classées",
+      main = class_label
     )
-    graphics::axis(1, at = seq_along(periods), labels = periods, las = 2, cex.axis = 0.85)
-    graphics::grid(col = "#e6edf5")
     if (identical(class_label, classes[[1L]])) {
-      graphics::legend("topright", legend = comparisons, col = colors, lty = 1, pch = 16, cex = 0.78, bty = "n")
+      graphics::legend(
+        "topright",
+        legend = comparisons,
+        fill = colors,
+        border = NA,
+        ncol = min(3L, length(comparisons)),
+        cex = 0.75,
+        bty = "n"
+      )
     }
   }
   grDevices::dev.off()
