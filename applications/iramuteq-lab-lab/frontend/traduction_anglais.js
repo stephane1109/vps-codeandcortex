@@ -5,7 +5,7 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Tentative de reproduction de la CHD du (vrai !)": "Attempt to reproduce the CHD of the original",
   "logiciel IRaMuTeQ (IRaMuTeQ - Pierre Ratinaud - LERASS)": "IRaMuTeQ software (IRaMuTeQ - Pierre Ratinaud - LERASS)",
   "Pour d'autres scripts/appli, vous pouvez consulter mon site :": "For other scripts and applications, visit my website:",
-  "Version 0_6beta - modifiée 28-09-2026 - (ajout des dictionnaires et test spécificité)": "Version 0_6beta - modified 28-09-2026 - (dictionaries and specificity testing added)",
+  "Version 0_7beta - modifiée 01-10-2026 - (ajout du test « Analyse chrono croisée »)": "Version 0_7beta - modified 01-10-2026 - (‘Cross-chronological analysis’ test added)",
   "Langue de l'interface": "Interface language",
   "Analyse": "Analysis",
   "Similitudes": "Similarity",

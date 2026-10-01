@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-chronologie1";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-chronologie2";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
