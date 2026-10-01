@@ -73,10 +73,15 @@ decrire_analyse_chrono <- function(source) {
   variables <- variables_chrono_disponibles(source)
   suggested <- vapply(variables, function(variable) isTRUE(variable$suggested_time), logical(1))
   list(
-    available = length(variables) >= 2L,
+    available = length(variables) >= 1L,
+    iramuteq_available = length(variables) >= 1L,
+    crossed_available = length(variables) >= 2L,
     variables = variables,
     suggested_time_variable = if (any(suggested)) variables[[which(suggested)[[1L]]]]$id else NULL,
-    note = "Sélectionnez une variable temporelle et une autre variable étoilée pour comparer les classes CHD."
+    note = paste(
+      "La vue chronologique IRaMuTeQ utilise une variable étoilée.",
+      "L'analyse chronologique croisée en utilise deux."
+    )
   )
 }
 
@@ -340,7 +345,232 @@ tracer_residus_chrono <- function(residuals, periods, comparisons, classes, path
   on.exit(NULL, add = FALSE)
 }
 
-ecrire_resultats_chrono <- function(source, time_variable, comparison_variable, output_dir) {
+calculer_vue_chronologique_iramuteq <- function(source, time_variable) {
+  data <- preparer_donnees_chrono_simple(source, time_variable)
+  periods <- ordonner_modalites_chrono(data$periode)
+  class_ids <- suppressWarnings(as.integer(sub("^Classe\\s+", "", unique(data$classe))))
+  classes <- paste0("Classe ", sort(unique(class_ids[is.finite(class_ids)])))
+  contingency <- table(
+    factor(data$periode, levels = periods),
+    factor(data$classe, levels = classes)
+  )
+  contingency <- contingency[rowSums(contingency) > 0, colSums(contingency) > 0, drop = FALSE]
+  if (nrow(contingency) < 2L || ncol(contingency) < 2L) {
+    stop("La variable et la CHD doivent comporter au moins deux modalités et deux classes renseignées.")
+  }
+
+  periods <- rownames(contingency)
+  classes <- colnames(contingency)
+  total <- sum(contingency)
+  row_totals <- rowSums(contingency)
+  class_totals <- colSums(contingency)
+  proportions <- prop.table(contingency, margin = 1L) * 100
+  long_proportions <- list()
+  long_chi2 <- list()
+
+  for (i in seq_along(periods)) {
+    for (j in seq_along(classes)) {
+      observed <- as.numeric(contingency[i, j])
+      table_2x2 <- matrix(c(
+        observed,
+        row_totals[[i]] - observed,
+        class_totals[[j]] - observed,
+        total - row_totals[[i]] - class_totals[[j]] + observed
+      ), nrow = 2L, byrow = TRUE)
+      test <- suppressWarnings(stats::chisq.test(table_2x2, correct = FALSE))
+      expected <- as.numeric(test$expected[1L, 1L])
+      chi2_value <- as.numeric(test$statistic)
+      if (!is.finite(chi2_value)) chi2_value <- 0
+      if (observed < expected) chi2_value <- -chi2_value
+
+      long_proportions[[length(long_proportions) + 1L]] <- data.frame(
+        periode = periods[[i]],
+        classe = classes[[j]],
+        effectif_uce = as.integer(observed),
+        total_uce_periode = as.integer(row_totals[[i]]),
+        pourcentage = round(as.numeric(proportions[i, j]), 2),
+        stringsAsFactors = FALSE
+      )
+      long_chi2[[length(long_chi2) + 1L]] <- data.frame(
+        periode = periods[[i]],
+        classe = classes[[j]],
+        observe = as.integer(observed),
+        attendu = round(expected, 4),
+        chi2 = round(chi2_value, 4),
+        p_value = as.numeric(test$p.value),
+        interpretation = if (
+          chi2_value > 0
+        ) "surreprésentée" else if (
+          chi2_value < 0
+        ) "sous-représentée" else "proche de l'attendu",
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+
+  global_test <- suppressWarnings(stats::chisq.test(contingency, correct = FALSE))
+  denominator <- min(nrow(contingency) - 1L, ncol(contingency) - 1L)
+  cramer_v <- if (total > 0 && denominator > 0) {
+    sqrt(as.numeric(global_test$statistic) / (total * denominator))
+  } else {
+    NA_real_
+  }
+  global <- data.frame(
+    variable = nom_variable_chrono(time_variable),
+    chi2 = round(as.numeric(global_test$statistic), 4),
+    ddl = as.integer(global_test$parameter),
+    p_value = as.numeric(global_test$p.value),
+    cramer_v = round(cramer_v, 4),
+    n_uce = as.integer(total),
+    effectifs_attendus_inferieurs_5 = sum(global_test$expected < 5),
+    stringsAsFactors = FALSE
+  )
+
+  list(
+    data = data,
+    contingency = contingency,
+    proportions = do.call(rbind, long_proportions),
+    chi2 = do.call(rbind, long_chi2),
+    global = global,
+    periods = periods,
+    classes = classes
+  )
+}
+
+preparer_donnees_chrono_simple <- function(source, time_variable) {
+  docvars <- source$docvars
+  classes <- suppressWarnings(as.integer(source$classes))
+  if (is.null(docvars) || !is.data.frame(docvars) || !time_variable %in% names(docvars)) {
+    stop("La variable chronologique sélectionnée n'est pas disponible.")
+  }
+  if (length(classes) != nrow(docvars)) {
+    stop("Les classes CHD et la variable chronologique ne sont pas alignées.")
+  }
+  periode <- normaliser_modalite_chrono(docvars[[time_variable]])
+  keep <- !is.na(periode) & !is.na(classes) & classes > 0L
+  if (sum(keep) < 2L) stop("Pas assez d'UCE classées possèdent la variable sélectionnée.")
+
+  document_id <- NULL
+  for (candidate in c("segment_source", "doc_id")) {
+    if (candidate %in% names(docvars)) {
+      document_id <- normaliser_modalite_chrono(docvars[[candidate]])
+      break
+    }
+  }
+  if (is.null(document_id)) document_id <- paste0("UCE_", seq_len(nrow(docvars)))
+  data.frame(
+    periode = periode[keep],
+    classe = paste0("Classe ", classes[keep]),
+    document_id = document_id[keep],
+    stringsAsFactors = FALSE
+  )
+}
+
+tracer_proportions_iramuteq <- function(view, path) {
+  matrix_values <- t(prop.table(view$contingency, margin = 1L) * 100)
+  colors <- grDevices::hcl.colors(max(3L, nrow(matrix_values)), "Dark 3")[seq_len(nrow(matrix_values))]
+  grDevices::png(path, width = 1800, height = 1050, res = 170)
+  old_par <- graphics::par(no.readonly = TRUE)
+  on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
+  graphics::par(mar = c(8, 6, 4, 2) + 0.1)
+  graphics::barplot(
+    matrix_values,
+    col = colors,
+    border = NA,
+    names.arg = view$periods,
+    las = 2,
+    ylab = "% des UCE classées",
+    main = "Vue chronologique IRaMuTeQ - Proportions"
+  )
+  graphics::legend("topright", legend = view$classes, fill = colors, bty = "n", cex = 0.85)
+  grDevices::dev.off()
+  on.exit(NULL, add = FALSE)
+}
+
+tracer_chi2_iramuteq <- function(view, path) {
+  values <- matrix(
+    view$chi2$chi2,
+    nrow = length(view$periods),
+    ncol = length(view$classes),
+    byrow = TRUE,
+    dimnames = list(view$periods, view$classes)
+  )
+  palette <- grDevices::colorRampPalette(c("#e05a47", "#ffffff", "#217ce7"))(201)
+  limit <- max(3.84, max(abs(values), na.rm = TRUE))
+  grDevices::png(path, width = 1800, height = max(950, 150 + 125 * length(view$classes)), res = 170)
+  old_par <- graphics::par(no.readonly = TRUE)
+  on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
+  graphics::par(mar = c(8, 10, 4, 2) + 0.1)
+  graphics::plot(
+    NA,
+    xlim = c(0, length(view$periods)), ylim = c(0, length(view$classes)),
+    xaxs = "i", yaxs = "i", xaxt = "n", yaxt = "n",
+    xlab = "Modalité chronologique", ylab = "",
+    main = "Vue chronologique IRaMuTeQ - χ²"
+  )
+  graphics::axis(1, at = seq_along(view$periods) - 0.5, labels = view$periods, las = 2, cex.axis = 0.85)
+  graphics::axis(2, at = seq_along(view$classes) - 0.5, labels = view$classes, las = 2, cex.axis = 0.85)
+  for (i in seq_along(view$periods)) {
+    for (j in seq_along(view$classes)) {
+      value <- values[i, j]
+      index <- round((max(-limit, min(limit, value)) + limit) / (2 * limit) * 200) + 1L
+      graphics::rect(i - 1, j - 1, i, j, col = palette[[index]], border = "#d9e1ea")
+      graphics::text(i - 0.5, j - 0.5, sprintf("%.2f", value), cex = 0.78)
+    }
+  }
+  grDevices::dev.off()
+  on.exit(NULL, add = FALSE)
+}
+
+ecrire_resultats_chrono_iramuteq <- function(source, time_variable, output_dir) {
+  available <- vapply(variables_chrono_disponibles(source), `[[`, character(1), "id")
+  if (!time_variable %in% available) {
+    stop("La variable sélectionnée doit comporter au moins deux modalités.")
+  }
+  view <- calculer_vue_chronologique_iramuteq(source, time_variable)
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  ecrire_csv_utf8_chrono(view$proportions, file.path(output_dir, "vue_chronologique_proportions.csv"))
+  ecrire_csv_utf8_chrono(view$chi2, file.path(output_dir, "vue_chronologique_chi2.csv"))
+  ecrire_csv_utf8_chrono(view$global, file.path(output_dir, "vue_chronologique_test_global.csv"))
+  tracer_proportions_iramuteq(view, file.path(output_dir, "vue_chronologique_proportions.png"))
+  tracer_chi2_iramuteq(view, file.path(output_dir, "vue_chronologique_chi2.png"))
+
+  configuration <- list(
+    analysis_mode = "iramuteq",
+    analysis_mode_label = "Vue chronologique IRaMuTeQ",
+    time_variable = time_variable,
+    time_variable_label = nom_variable_chrono(time_variable),
+    comparison_variable = NULL,
+    comparison_variable_label = NULL,
+    periods = view$periods,
+    classes = view$classes,
+    unit = "UCE classées",
+    normalization = "Pourcentage des classes calculé dans chaque modalité de la variable sélectionnée.",
+    method = paste(
+      "Reproduction fonctionnelle de la Chronological view d'IRaMuTeQ :",
+      "proportions par modalité et χ² 2 × 2 entre chaque modalité et chaque classe."
+    )
+  )
+  jsonlite::write_json(
+    configuration, file.path(output_dir, "configuration_chronologie.json"),
+    auto_unbox = TRUE, pretty = TRUE, null = "null"
+  )
+  summary <- c(configuration, list(
+    n_periods = length(view$periods),
+    n_comparison_modalities = 0L,
+    n_classes = length(view$classes),
+    n_uce = nrow(view$data),
+    n_documents = length(unique(view$data$document_id)),
+    n_chi2_tests = nrow(view$chi2)
+  ))
+  jsonlite::write_json(
+    summary, file.path(output_dir, "resume_chronologie.json"),
+    auto_unbox = TRUE, pretty = TRUE, null = "null"
+  )
+  list(summary = summary, proportions = view$proportions, chi2 = view$chi2, global = view$global)
+}
+
+ecrire_resultats_chrono_croisee <- function(source, time_variable, comparison_variable, output_dir) {
   available <- vapply(variables_chrono_disponibles(source), `[[`, character(1), "id")
   if (!time_variable %in% available || !comparison_variable %in% available) {
     stop("Les deux variables sélectionnées doivent comporter au moins deux modalités.")
@@ -372,6 +602,8 @@ ecrire_resultats_chrono <- function(source, time_variable, comparison_variable, 
   )
 
   configuration <- list(
+    analysis_mode = "crossed",
+    analysis_mode_label = "Analyse chronologique croisée",
     time_variable = time_variable,
     time_variable_label = nom_variable_chrono(time_variable),
     comparison_variable = comparison_variable,
@@ -400,4 +632,19 @@ ecrire_resultats_chrono <- function(source, time_variable, comparison_variable, 
     auto_unbox = TRUE, pretty = TRUE, null = "null"
   )
   list(summary = summary, percentages = percentages_export, tests = tests$tests, residuals = tests$residuals)
+}
+
+ecrire_resultats_chrono <- function(
+  source,
+  time_variable,
+  comparison_variable = NULL,
+  output_dir,
+  analysis_mode = "crossed"
+) {
+  mode <- trimws(tolower(as.character(analysis_mode %||% "crossed")))
+  if (identical(mode, "iramuteq")) {
+    return(ecrire_resultats_chrono_iramuteq(source, time_variable, output_dir))
+  }
+  if (!identical(mode, "crossed")) stop("Mode d'analyse chronologique non reconnu.")
+  ecrire_resultats_chrono_croisee(source, time_variable, comparison_variable, output_dir)
 }

@@ -501,6 +501,7 @@ async def create_chronology_analysis(analysis_id: str, request: Request) -> JSON
     try:
         result = runtime.run_chronology_analysis(
             owned_output_dir(parent_record, parent_snapshot),
+            analysis_mode=str(payload.get("analysisMode") or "crossed"),
             time_variable=str(payload.get("timeVariable") or ""),
             comparison_variable=str(payload.get("comparisonVariable") or ""),
         )

@@ -16,8 +16,17 @@ source_data <- list(
 
 description <- decrire_analyse_chrono(source_data)
 stopifnot(isTRUE(description$available))
+stopifnot(isTRUE(description$iramuteq_available))
+stopifnot(isTRUE(description$crossed_available))
 stopifnot(identical(description$suggested_time_variable, "*annee"))
 stopifnot(length(description$variables) == 2L)
+
+single_variable_source <- source_data
+single_variable_source$docvars$`*quotidien` <- NULL
+single_variable_description <- decrire_analyse_chrono(single_variable_source)
+stopifnot(isTRUE(single_variable_description$available))
+stopifnot(isTRUE(single_variable_description$iramuteq_available))
+stopifnot(identical(single_variable_description$crossed_available, FALSE))
 
 output_dir <- tempfile("analyse-chrono-test-")
 dir.create(output_dir, recursive = TRUE)
@@ -48,6 +57,39 @@ stopifnot(identical(result$summary$n_chi2_tests, 2L))
 percentages <- utils::read.csv(file.path(output_dir, "chronologie_croisee_pourcentages.csv"), check.names = FALSE)
 totals <- stats::aggregate(pourcentage ~ periode + modalite_comparaison, percentages, sum)
 stopifnot(all(abs(totals$pourcentage - 100) < 0.01))
+
+single_output_dir <- tempfile("vue-chronologique-test-")
+dir.create(single_output_dir, recursive = TRUE)
+on.exit(unlink(single_output_dir, recursive = TRUE, force = TRUE), add = TRUE)
+single_result <- ecrire_resultats_chrono(
+  source_data,
+  time_variable = "*annee",
+  output_dir = single_output_dir,
+  analysis_mode = "iramuteq"
+)
+single_expected_files <- c(
+  "vue_chronologique_proportions.csv",
+  "vue_chronologique_chi2.csv",
+  "vue_chronologique_test_global.csv",
+  "vue_chronologique_proportions.png",
+  "vue_chronologique_chi2.png",
+  "configuration_chronologie.json",
+  "resume_chronologie.json"
+)
+stopifnot(all(file.exists(file.path(single_output_dir, single_expected_files))))
+stopifnot(identical(single_result$summary$analysis_mode, "iramuteq"))
+stopifnot(identical(single_result$summary$n_periods, 3L))
+stopifnot(identical(single_result$summary$n_classes, 2L))
+
+single_proportions <- utils::read.csv(
+  file.path(single_output_dir, "vue_chronologique_proportions.csv"),
+  check.names = FALSE
+)
+single_totals <- stats::aggregate(pourcentage ~ periode, single_proportions, sum)
+stopifnot(all(abs(single_totals$pourcentage - 100) < 0.01))
+single_chi2 <- utils::read.csv(file.path(single_output_dir, "vue_chronologique_chi2.csv"), check.names = FALSE)
+stopifnot(nrow(single_chi2) == 6L)
+stopifnot(all(c("observe", "attendu", "chi2", "p_value") %in% names(single_chi2)))
 
 same_variable_error <- tryCatch({
   preparer_donnees_chrono(source_data, "*annee", "*annee")

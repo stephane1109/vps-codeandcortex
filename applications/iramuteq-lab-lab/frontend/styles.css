@@ -1197,6 +1197,10 @@ textarea {
   margin: 1.4rem 1.75rem 0;
 }
 
+.chronology-mode-field {
+  grid-column: 1 / -1;
+}
+
 .specificities-help {
   margin: 1.25rem 1.75rem 0;
   padding: 1.25rem 1.4rem;

@@ -446,7 +446,7 @@
             <div class="page-heading">
               <div>
                 <p class="section-kicker">Classes et variables étoilées</p>
-                <h2>Analyse chronologique croisée</h2>
+                <h2 id="chronologyResultsTitle">Analyse chronologique croisée</h2>
               </div>
             </div>
             <div class="section-stack">
@@ -455,25 +455,25 @@
                 <div id="chronologySummary" class="result-pane"></div>
               </article>
               <article class="card">
-                <h3>Évolution des classes</h3>
-                <p class="section-copy">Pourcentage de chaque classe dans chaque couple période × modalité de comparaison.</p>
+                <h3 id="chronologyPrimaryPlotTitle">Évolution des classes</h3>
+                <p id="chronologyPrimaryPlotCopy" class="section-copy">Pourcentage de chaque classe dans chaque couple période × modalité de comparaison.</p>
                 <div id="chronologyEvolutionPlot" class="result-pane"></div>
               </article>
               <article class="card">
-                <h3>Écarts aux effectifs attendus</h3>
-                <p class="section-copy">Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.</p>
+                <h3 id="chronologySecondaryPlotTitle">Écarts aux effectifs attendus</h3>
+                <p id="chronologySecondaryPlotCopy" class="section-copy">Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.</p>
                 <div id="chronologyResidualsPlot" class="result-pane"></div>
               </article>
               <article class="card">
-                <h3>Effectifs et pourcentages</h3>
+                <h3 id="chronologyPrimaryTableTitle">Effectifs et pourcentages</h3>
                 <div id="chronologyPercentagesTable" class="result-pane"></div>
               </article>
               <article class="card">
-                <h3>Tests χ² chronologiques</h3>
+                <h3 id="chronologyChi2TableTitle">Tests χ² chronologiques</h3>
                 <div id="chronologyChi2Table" class="result-pane"></div>
               </article>
               <article class="card">
-                <h3>Détail des écarts</h3>
+                <h3 id="chronologyDetailTableTitle">Détail des écarts</h3>
                 <div id="chronologyResidualsTable" class="result-pane"></div>
               </article>
             </div>
@@ -1287,18 +1287,25 @@
         <header class="dialog-header">
           <div>
             <p class="dialog-kicker">Analyse complémentaire de la CHD</p>
-            <h2>Analyse chronologique croisée</h2>
-            <p class="muted">Croisez les classes de la CHD avec une variable temporelle et une seconde variable étoilée.</p>
+            <h2>Analyses chronologiques</h2>
+            <p class="muted">Choisissez la vue IRaMuTeQ à une variable ou l’analyse croisée à deux variables étoilées.</p>
           </div>
           <button id="closeChronologyBtn" class="secondary-button" type="button">Fermer</button>
         </header>
 
         <div class="form-grid chronology-form-grid">
+          <label class="chronology-mode-field">
+            Mode chronologique
+            <select id="chronologyMode">
+              <option value="crossed">Analyse chronologique croisée (2 variables)</option>
+              <option value="iramuteq">Vue chronologique IRaMuTeQ (1 variable)</option>
+            </select>
+          </label>
           <label>
             Variable temporelle
             <select id="chronologyTimeVariable"></select>
           </label>
-          <label>
+          <label id="chronologyComparisonField">
             Variable de comparaison
             <select id="chronologyComparisonVariable"></select>
           </label>
@@ -1306,8 +1313,7 @@
 
         <aside class="specificities-help" aria-label="Aide sur l'analyse chronologique croisée">
           <h3>Principe</h3>
-          <p>La CHD n’est pas recalculée. L’application mesure la répartition de ses classes dans chaque période et dans chaque modalité de comparaison.</p>
-          <p>Les pourcentages sont calculés séparément dans chaque couple période × modalité afin de limiter l’effet des différences de volume.</p>
+          <p id="chronologyModeHelp">La CHD n’est pas recalculée. L’analyse croisée mesure la répartition de ses classes dans chaque couple période × modalité de comparaison.</p>
         </aside>
 
         <p id="chronologyDialogStatus" class="muted"></p>
@@ -1320,6 +1326,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261001-chronologie2"></script>
+    <script type="module" src="./app.js?v=20261001-chronologie3"></script>
   </body>
 </html>

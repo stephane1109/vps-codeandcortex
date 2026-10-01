@@ -37,15 +37,19 @@ tryCatch({
     emit(c(list(success = TRUE), decrire_analyse_chrono(source_data)))
   } else if (identical(mode, "calculate")) {
     output_dir <- normalizePath(as.character(args[["output-dir"]] %||% ""), winslash = "/", mustWork = FALSE)
+    analysis_mode <- trimws(tolower(as.character(args[["analysis-mode"]] %||% "crossed")))
     time_variable <- trimws(as.character(args[["time-variable"]] %||% ""))
     comparison_variable <- trimws(as.character(args[["comparison-variable"]] %||% ""))
     if (!nzchar(time_variable)) stop("Sélectionnez une variable temporelle.")
-    if (!nzchar(comparison_variable)) stop("Sélectionnez une variable de comparaison.")
+    if (identical(analysis_mode, "crossed") && !nzchar(comparison_variable)) {
+      stop("Sélectionnez une variable de comparaison.")
+    }
     result <- ecrire_resultats_chrono(
       source = source_data,
       time_variable = time_variable,
       comparison_variable = comparison_variable,
-      output_dir = output_dir
+      output_dir = output_dir,
+      analysis_mode = analysis_mode
     )
     emit(list(success = TRUE, summary = result$summary))
   } else {

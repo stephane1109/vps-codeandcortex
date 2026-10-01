@@ -1403,18 +1403,27 @@ def describe_chronology(output_dir: str) -> dict[str, Any]:
 def run_chronology_analysis(
     parent_output_dir: str,
     *,
+    analysis_mode: str,
     time_variable: str,
     comparison_variable: str,
 ) -> dict[str, Any]:
     source_path = _chronology_source_path(parent_output_dir)
+    safe_analysis_mode = str(analysis_mode or "crossed").strip().lower()
     safe_time_variable = str(time_variable or "").strip()
     safe_comparison_variable = str(comparison_variable or "").strip()
+    if safe_analysis_mode not in {"crossed", "iramuteq"}:
+        raise ValueError("Mode d'analyse chronologique non reconnu.")
     if not safe_time_variable:
         raise ValueError("Sélectionnez une variable temporelle.")
-    if not safe_comparison_variable:
+    if safe_analysis_mode == "crossed" and not safe_comparison_variable:
         raise ValueError("Sélectionnez une variable de comparaison.")
-    if safe_time_variable == safe_comparison_variable:
+    if safe_analysis_mode == "crossed" and safe_time_variable == safe_comparison_variable:
         raise ValueError("Les deux variables sélectionnées doivent être différentes.")
+    analysis_label = (
+        "Vue chronologique IRaMuTeQ"
+        if safe_analysis_mode == "iramuteq"
+        else "Analyse chronologique croisée"
+    )
 
     job_id = next_job_id("chrono")
     job_root = ensure_directory(jobs_root() / job_id)
@@ -1430,8 +1439,14 @@ def run_chronology_analysis(
             "job_id": job_id,
             "state": "running",
             "progress": 20,
-            "message": "Calcul de l'analyse chronologique croisée.",
-            "logs": ["Croisement des classes CHD avec les deux variables étoilées sélectionnées."],
+            "message": f"Calcul : {analysis_label}.",
+            "logs": [
+                (
+                    "Lecture des classes CHD selon la variable étoilée sélectionnée."
+                    if safe_analysis_mode == "iramuteq"
+                    else "Croisement des classes CHD avec les deux variables étoilées sélectionnées."
+                )
+            ],
             "created_at": started_at,
             "updated_at": started_at,
         },
@@ -1442,6 +1457,7 @@ def run_chronology_analysis(
             "--mode", "calculate",
             "--source", str(source_path),
             "--output-dir", str(export_dir),
+            "--analysis-mode", safe_analysis_mode,
             "--time-variable", safe_time_variable,
             "--comparison-variable", safe_comparison_variable,
         ]
@@ -1470,11 +1486,15 @@ def run_chronology_analysis(
 
     summary = payload.get("summary") or {}
     logs = [
-        "Analyse chronologique croisée terminée.",
+        f"{summary.get('analysis_mode_label') or 'Analyse chronologique'} terminée.",
         f"Variable temporelle : {summary.get('time_variable_label') or safe_time_variable}.",
-        f"Variable de comparaison : {summary.get('comparison_variable_label') or safe_comparison_variable}.",
         f"UCE analysées : {summary.get('n_uce') or 0}.",
     ]
+    if safe_analysis_mode == "crossed":
+        logs.insert(
+            2,
+            f"Variable de comparaison : {summary.get('comparison_variable_label') or safe_comparison_variable}.",
+        )
     result_payload = {
         "success": True,
         "job_id": job_id,
@@ -1492,7 +1512,7 @@ def run_chronology_analysis(
             "job_id": job_id,
             "state": "completed",
             "progress": 100,
-            "message": "Analyse chronologique croisée terminée.",
+            "message": f"{analysis_label} terminée.",
             "logs": logs,
             "summary": summary,
             "created_at": started_at,

@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-chronologie2";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-chronologie3";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -74,8 +74,11 @@ const runSpecificitiesBtn = document.getElementById("runSpecificitiesBtn");
 const closeSpecificitiesBtn = document.getElementById("closeSpecificitiesBtn");
 const openChronologyDialogBtn = document.getElementById("openChronologyDialogBtn");
 const chronologyDialog = document.getElementById("chronologyDialog");
+const chronologyMode = document.getElementById("chronologyMode");
 const chronologyTimeVariable = document.getElementById("chronologyTimeVariable");
 const chronologyComparisonVariable = document.getElementById("chronologyComparisonVariable");
+const chronologyComparisonField = document.getElementById("chronologyComparisonField");
+const chronologyModeHelp = document.getElementById("chronologyModeHelp");
 const chronologyDialogStatus = document.getElementById("chronologyDialogStatus");
 const runChronologyBtn = document.getElementById("runChronologyBtn");
 const closeChronologyBtn = document.getElementById("closeChronologyBtn");
@@ -399,6 +402,7 @@ const appState = {
   specificitiesRequest: null,
   chronologyRequest: null,
   chronologyVariables: [],
+  chronologyAvailability: { crossed: false, iramuteq: false },
   discriminationSimpleSummaryPayload: null,
   jsdConcordancierRows: [],
   suiviPresentation: {
@@ -1209,7 +1213,7 @@ function updateDownloadResultsState() {
 
 function getAnalysisKindLabel(analysisKind) {
   if (analysisKind === "specificites") return "Calcul de spécificités";
-  if (analysisKind === "chrono") return "Analyse chronologique croisée";
+  if (analysisKind === "chrono") return "Analyse chronologique";
   if (analysisKind === "suivi") return "Trajectoire lexicale";
   if (analysisKind === "simi") return "Similitudes";
   if (analysisKind === "multimodal_audio") return "Multimodal · Audio";
@@ -1244,11 +1248,12 @@ function getAnalysisHistoryLabel(entry) {
     return [kindLabel, detail, dateLabel].filter(Boolean).join(" · ");
   }
   if (entry?.analysisKind === "chrono") {
+    const modeLabel = String(entry?.summary?.analysis_mode_label || kindLabel).trim();
     const timeVariable = String(entry?.summary?.time_variable_label || "").trim();
     const comparisonVariable = String(entry?.summary?.comparison_variable_label || "").trim();
     const detail = [timeVariable, comparisonVariable].filter(Boolean).join(" × ");
     const dateLabel = formatAnalysisDateTime(entry?.createdAt);
-    return [kindLabel, detail, dateLabel].filter(Boolean).join(" · ");
+    return [modeLabel, detail, dateLabel].filter(Boolean).join(" · ");
   }
   const dateLabel = formatAnalysisDateTime(entry?.createdAt);
   return dateLabel ? `${kindLabel} · ${dateLabel}` : kindLabel;
@@ -10832,6 +10837,7 @@ async function runSpecificitiesFromDialog() {
 function closeChronologyDialog() {
   appState.chronologyRequest = null;
   appState.chronologyVariables = [];
+  appState.chronologyAvailability = { crossed: false, iramuteq: false };
   if (chronologyDialog?.open) chronologyDialog.close();
 }
 
@@ -10850,7 +10856,15 @@ function chronologyVariableOptionLabel(variable) {
 
 function refreshChronologyComparisonOptions() {
   if (!chronologyComparisonVariable) return;
+  const mode = String(chronologyMode?.value || "crossed").trim();
   const selectedTime = String(chronologyTimeVariable?.value || "").trim();
+  const isIramuteqView = mode === "iramuteq";
+  if (chronologyComparisonField) chronologyComparisonField.hidden = isIramuteqView;
+  if (chronologyModeHelp) {
+    chronologyModeHelp.textContent = isIramuteqView
+      ? "La vue IRaMuTeQ utilise une seule variable étoilée et présente les proportions ainsi que le χ² de chaque modalité par classe."
+      : "La CHD n’est pas recalculée. L’analyse croisée mesure la répartition de ses classes dans chaque couple période × modalité de comparaison.";
+  }
   const previousValue = String(chronologyComparisonVariable.value || "").trim();
   chronologyComparisonVariable.innerHTML = "";
   const candidates = appState.chronologyVariables.filter((variable) => String(variable?.id || "") !== selectedTime);
@@ -10863,7 +10877,11 @@ function refreshChronologyComparisonOptions() {
   if (candidates.some((variable) => String(variable?.id || "") === previousValue)) {
     chronologyComparisonVariable.value = previousValue;
   }
-  if (runChronologyBtn) runChronologyBtn.disabled = !selectedTime || !candidates.length;
+  if (runChronologyBtn) {
+    runChronologyBtn.disabled = isIramuteqView
+      ? !selectedTime || !appState.chronologyAvailability.iramuteq
+      : !selectedTime || !candidates.length || !appState.chronologyAvailability.crossed;
+  }
 }
 
 async function openChronologyDialog() {
@@ -10892,10 +10910,21 @@ async function openChronologyDialog() {
       `/api/analyses/${encodeURIComponent(analysisId)}/chronology/options`
     );
     const variables = Array.isArray(payload?.variables) ? payload.variables : [];
-    if (!payload?.available || variables.length < 2) {
-      throw new Error("Deux variables étoilées comportant au moins deux modalités sont nécessaires.");
+    if (!payload?.available || variables.length < 1) {
+      throw new Error("Une variable étoilée comportant au moins deux modalités est nécessaire.");
     }
     appState.chronologyVariables = variables;
+    appState.chronologyAvailability = {
+      crossed: Boolean(payload?.crossed_available),
+      iramuteq: Boolean(payload?.iramuteq_available)
+    };
+    if (chronologyMode) {
+      const crossedOption = chronologyMode.querySelector('option[value="crossed"]');
+      const iramuteqOption = chronologyMode.querySelector('option[value="iramuteq"]');
+      if (crossedOption) crossedOption.disabled = !appState.chronologyAvailability.crossed;
+      if (iramuteqOption) iramuteqOption.disabled = !appState.chronologyAvailability.iramuteq;
+      chronologyMode.value = appState.chronologyAvailability.crossed ? "crossed" : "iramuteq";
+    }
     variables.forEach((variable) => {
       const option = document.createElement("option");
       option.value = String(variable?.id || "");
@@ -10917,9 +10946,14 @@ async function openChronologyDialog() {
 async function runChronologyFromDialog() {
   const request = appState.chronologyRequest;
   if (!request?.analysisId) return;
+  const analysisMode = String(chronologyMode?.value || "crossed").trim();
   const timeVariable = String(chronologyTimeVariable?.value || "").trim();
   const comparisonVariable = String(chronologyComparisonVariable?.value || "").trim();
-  if (!timeVariable || !comparisonVariable || timeVariable === comparisonVariable) {
+  if (!timeVariable) {
+    setChronologyDialogStatus("Sélectionnez une variable chronologique.", { isError: true });
+    return;
+  }
+  if (analysisMode === "crossed" && (!comparisonVariable || timeVariable === comparisonVariable)) {
     setChronologyDialogStatus("Sélectionnez deux variables différentes.", { isError: true });
     return;
   }
@@ -10928,14 +10962,18 @@ async function runChronologyFromDialog() {
     runChronologyBtn.disabled = true;
     runChronologyBtn.textContent = "Calcul en cours...";
   }
-  setChronologyDialogStatus("Croisement des classes, calcul des pourcentages et des tests χ²...");
+  setChronologyDialogStatus(
+    analysisMode === "iramuteq"
+      ? "Calcul de la vue chronologique IRaMuTeQ : proportions et χ²..."
+      : "Croisement des classes, calcul des pourcentages et des tests χ²..."
+  );
 
   try {
     const payload = await callAnalysisHistoryApi(
       `/api/analyses/${encodeURIComponent(request.analysisId)}/chronology`,
       {
         method: "POST",
-        body: { timeVariable, comparisonVariable }
+        body: { analysisMode, timeVariable, comparisonVariable }
       }
     );
     const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
@@ -10953,8 +10991,9 @@ async function runChronologyFromDialog() {
     renderAnalysisSteps(entry.logs);
     renderAnalysisSummary(entry.summary || null);
     closeChronologyDialog();
-    setSidebarRuntimeStatus("Analyse chronologique croisée terminée.", "success");
-    log("[info] Analyse chronologique croisée ajoutée à l'arborescence.");
+    const completedLabel = String(payload?.summary?.analysis_mode_label || "Analyse chronologique");
+    setSidebarRuntimeStatus(`${completedLabel} terminée.`, "success");
+    log(`[info] ${completedLabel} ajoutée à l'arborescence.`);
   } catch (error) {
     setChronologyDialogStatus(error?.message || String(error), { isError: true });
     log(`[error] Analyse chronologique impossible : ${error?.message || String(error)}`);
@@ -14774,11 +14813,21 @@ async function renderSpecificitiesExports(index) {
 
 async function renderChronologyExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("resume_chronologie.json")]);
-  const percentagesFile = findFile(index, [(path) => path.endsWith("chronologie_croisee_pourcentages.csv")]);
-  const chi2File = findFile(index, [(path) => path.endsWith("chronologie_croisee_chi2.csv")]);
-  const residualsFile = findFile(index, [(path) => path.endsWith("chronologie_croisee_residus.csv")]);
-  const evolutionPlot = findFile(index, [(path) => path.endsWith("chronologie_croisee_evolution.png")]);
-  const residualsPlot = findFile(index, [(path) => path.endsWith("chronologie_croisee_residus.png")]);
+  let summary = null;
+  if (summaryFile) {
+    summary = JSON.parse(await summaryFile.text());
+  }
+  const isIramuteqView = String(summary?.analysis_mode || "crossed") === "iramuteq";
+  const percentagesName = isIramuteqView ? "vue_chronologique_proportions.csv" : "chronologie_croisee_pourcentages.csv";
+  const chi2Name = isIramuteqView ? "vue_chronologique_chi2.csv" : "chronologie_croisee_chi2.csv";
+  const detailName = isIramuteqView ? "vue_chronologique_test_global.csv" : "chronologie_croisee_residus.csv";
+  const primaryPlotName = isIramuteqView ? "vue_chronologique_proportions.png" : "chronologie_croisee_evolution.png";
+  const secondaryPlotName = isIramuteqView ? "vue_chronologique_chi2.png" : "chronologie_croisee_residus.png";
+  const percentagesFile = findFile(index, [(path) => path.endsWith(percentagesName)]);
+  const chi2File = findFile(index, [(path) => path.endsWith(chi2Name)]);
+  const residualsFile = findFile(index, [(path) => path.endsWith(detailName)]);
+  const evolutionPlot = findFile(index, [(path) => path.endsWith(primaryPlotName)]);
+  const residualsPlot = findFile(index, [(path) => path.endsWith(secondaryPlotName)]);
 
   if (!summaryFile && !percentagesFile && !evolutionPlot) {
     setContainerEmptyState(resultContainers.chronologySummary, "Ouvrez une analyse chronologique depuis l'arborescence.");
@@ -14790,18 +14839,20 @@ async function renderChronologyExports(index) {
     return false;
   }
 
-  if (summaryFile) {
-    const summary = JSON.parse(await summaryFile.text());
+  if (summary) {
     clearContainer(resultContainers.chronologySummary);
     const metrics = [
+      ["Mode", summary.analysis_mode_label],
       ["Variable temporelle", summary.time_variable_label],
-      ["Variable de comparaison", summary.comparison_variable_label],
       ["Périodes", summary.n_periods],
-      ["Modalités comparées", summary.n_comparison_modalities],
       ["Classes CHD", summary.n_classes],
       ["UCE analysées", summary.n_uce],
       ["Textes représentés", summary.n_documents]
     ];
+    if (!isIramuteqView) {
+      metrics.splice(2, 0, ["Variable de comparaison", summary.comparison_variable_label]);
+      metrics.splice(4, 0, ["Modalités comparées", summary.n_comparison_modalities]);
+    }
     const grid = document.createElement("div");
     grid.className = "summary-grid";
     metrics.forEach(([label, value]) => {
@@ -14819,23 +14870,59 @@ async function renderChronologyExports(index) {
     resultContainers.chronologySummary.appendChild(grid);
   }
 
-  renderImage(resultContainers.chronologyEvolutionPlot, evolutionPlot, "Évolution chronologique croisée des classes");
-  renderImage(resultContainers.chronologyResidualsPlot, residualsPlot, "Résidus chronologiques standardisés");
-  makeResultImagePreviewable(resultContainers.chronologyEvolutionPlot, "Évolution des classes", "Analyse chronologique croisée");
-  makeResultImagePreviewable(resultContainers.chronologyResidualsPlot, "Écarts aux effectifs attendus", "Analyse chronologique croisée");
+  const labels = isIramuteqView
+    ? {
+        page: "Vue chronologique IRaMuTeQ",
+        primaryPlot: "Proportions par modalité",
+        primaryCopy: "Répartition des classes dans chaque modalité de la variable sélectionnée.",
+        secondaryPlot: "χ² par classe et modalité",
+        secondaryCopy: "Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.",
+        primaryTable: "Effectifs et proportions",
+        chi2Table: "χ² par classe et modalité",
+        detailTable: "Test χ² global"
+      }
+    : {
+        page: "Analyse chronologique croisée",
+        primaryPlot: "Évolution des classes",
+        primaryCopy: "Pourcentage de chaque classe dans chaque couple période × modalité de comparaison.",
+        secondaryPlot: "Écarts aux effectifs attendus",
+        secondaryCopy: "Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.",
+        primaryTable: "Effectifs et pourcentages",
+        chi2Table: "Tests χ² chronologiques",
+        detailTable: "Détail des écarts"
+      };
+  const dynamicLabels = {
+    chronologyResultsTitle: labels.page,
+    chronologyPrimaryPlotTitle: labels.primaryPlot,
+    chronologyPrimaryPlotCopy: labels.primaryCopy,
+    chronologySecondaryPlotTitle: labels.secondaryPlot,
+    chronologySecondaryPlotCopy: labels.secondaryCopy,
+    chronologyPrimaryTableTitle: labels.primaryTable,
+    chronologyChi2TableTitle: labels.chi2Table,
+    chronologyDetailTableTitle: labels.detailTable
+  };
+  Object.entries(dynamicLabels).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  });
+
+  renderImage(resultContainers.chronologyEvolutionPlot, evolutionPlot, labels.primaryPlot);
+  renderImage(resultContainers.chronologyResidualsPlot, residualsPlot, labels.secondaryPlot);
+  makeResultImagePreviewable(resultContainers.chronologyEvolutionPlot, labels.primaryPlot, labels.page);
+  makeResultImagePreviewable(resultContainers.chronologyResidualsPlot, labels.secondaryPlot, labels.page);
 
   await renderCsvFromFile(resultContainers.chronologyPercentagesTable, percentagesFile, {
-    title: "chronologie_croisee_pourcentages.csv",
+    title: percentagesName,
     maxRows: 1000,
     emptyMessage: "Aucun pourcentage chronologique disponible."
   });
   await renderCsvFromFile(resultContainers.chronologyChi2Table, chi2File, {
-    title: "chronologie_croisee_chi2.csv",
+    title: chi2Name,
     maxRows: 500,
     emptyMessage: "Aucun test χ² chronologique calculable."
   });
   await renderCsvFromFile(resultContainers.chronologyResidualsTable, residualsFile, {
-    title: "chronologie_croisee_residus.csv",
+    title: detailName,
     maxRows: 1000,
     emptyMessage: "Aucun résidu chronologique calculable."
   });
@@ -15689,6 +15776,10 @@ closeChronologyBtn?.addEventListener("click", () => {
 });
 
 chronologyTimeVariable?.addEventListener("change", () => {
+  refreshChronologyComparisonOptions();
+});
+
+chronologyMode?.addEventListener("change", () => {
   refreshChronologyComparisonOptions();
 });
 
