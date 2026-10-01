@@ -261,12 +261,11 @@ calculer_tests_chrono <- function(data, periods, classes, comparisons) {
 }
 
 tracer_evolution_chrono <- function(percentages, periods, comparisons, classes, path) {
-  panels_per_row <- min(2L, max(1L, length(classes)))
-  panel_rows <- ceiling(length(classes) / panels_per_row)
+  panel_rows <- max(1L, length(classes))
   grDevices::png(path, width = 1800, height = max(950, 620 * panel_rows), res = 170)
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
-  graphics::par(mfrow = c(panel_rows, panels_per_row), mar = c(7, 5, 4, 2) + 0.1)
+  graphics::par(mfrow = c(panel_rows, 1L), mar = c(7, 5, 4, 2) + 0.1)
   colors <- grDevices::hcl.colors(max(3L, length(comparisons)), "Dark 3")[seq_along(comparisons)]
 
   for (class_label in classes) {
