@@ -1175,18 +1175,25 @@ textarea {
   word-break: break-word;
 }
 
-.specificities-dialog .dialog-card {
+.specificities-dialog .dialog-card,
+.chronology-dialog .dialog-card {
   width: min(1080px, calc(100vw - 3rem));
   max-height: min(900px, calc(100vh - 2rem));
   overflow: auto;
 }
 
 .specificities-dialog .dialog-header,
-.specificities-dialog .dialog-footer {
+.specificities-dialog .dialog-footer,
+.chronology-dialog .dialog-header,
+.chronology-dialog .dialog-footer {
   padding-inline: 1.75rem;
 }
 
 .specificities-form-grid {
+  margin: 1.4rem 1.75rem 0;
+}
+
+.chronology-form-grid {
   margin: 1.4rem 1.75rem 0;
 }
 
@@ -1209,28 +1216,35 @@ textarea {
   line-height: 1.55;
 }
 
-#specificitiesDialogStatus.is-error {
+#specificitiesDialogStatus.is-error,
+#chronologyDialogStatus.is-error {
   color: #b42318;
   font-weight: 650;
 }
 
-#specificitiesDialogStatus {
+#specificitiesDialogStatus,
+#chronologyDialogStatus {
   margin: 1rem 1.75rem 0;
 }
 
 @media (max-width: 700px) {
-  .specificities-dialog .dialog-card {
+  .specificities-dialog .dialog-card,
+  .chronology-dialog .dialog-card {
     width: calc(100vw - 1rem);
   }
 
   .specificities-dialog .dialog-header,
-  .specificities-dialog .dialog-footer {
+  .specificities-dialog .dialog-footer,
+  .chronology-dialog .dialog-header,
+  .chronology-dialog .dialog-footer {
     padding-inline: 1rem;
   }
 
   .specificities-form-grid,
+  .chronology-form-grid,
   .specificities-help,
-  #specificitiesDialogStatus {
+  #specificitiesDialogStatus,
+  #chronologyDialogStatus {
     margin-inline: 1rem;
   }
 }

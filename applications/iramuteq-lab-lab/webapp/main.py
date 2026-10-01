@@ -465,6 +465,73 @@ async def create_specificities_analysis(analysis_id: str, request: Request) -> J
     return analysis_json_response({**result, "analysis": updated, "analysisId": updated["id"]}, owner_token)
 
 
+@app.get("/api/analyses/{analysis_id}/chronology/options")
+def chronology_options(analysis_id: str, request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
+    if str(record.get("analysisKind") or "") != "chd":
+        raise HTTPException(status_code=409, detail="Sélectionnez une CHD dans l'arborescence.")
+    if not snapshot.get("completed") or not snapshot.get("success"):
+        raise HTTPException(status_code=409, detail="La CHD doit être terminée avant ce calcul.")
+    try:
+        payload = runtime.describe_chronology(owned_output_dir(record, snapshot))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return analysis_json_response(payload, owner_token)
+
+
+@app.post("/api/analyses/{analysis_id}/chronology")
+async def create_chronology_analysis(analysis_id: str, request: Request) -> JSONResponse:
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    parent_record, parent_snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
+    if str(parent_record.get("analysisKind") or "") != "chd":
+        raise HTTPException(status_code=409, detail="Sélectionnez une CHD dans l'arborescence.")
+    if not parent_snapshot.get("completed") or not parent_snapshot.get("success"):
+        raise HTTPException(status_code=409, detail="La CHD doit être terminée avant ce calcul.")
+
+    try:
+        payload = await request.json()
+    except (json.JSONDecodeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail="Le paramétrage chronologique est invalide.") from error
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Le paramétrage chronologique doit être un objet JSON.")
+
+    try:
+        result = runtime.run_chronology_analysis(
+            owned_output_dir(parent_record, parent_snapshot),
+            time_variable=str(payload.get("timeVariable") or ""),
+            comparison_variable=str(payload.get("comparisonVariable") or ""),
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    try:
+        record = analysis_history.create_analysis(
+            runtime.app_data_root(),
+            owner_hash=owner_hash,
+            job_id=str(result.get("jobId") or ""),
+            corpus_name=str(parent_record.get("corpusName") or "corpus.txt"),
+            analysis_kind="chrono",
+            navigation_target="chronologie_croisee",
+        )
+        snapshot = runtime.read_python_analysis_status(str(result.get("jobId") or ""), include_files=False)
+        updated = analysis_history.update_analysis_from_snapshot(
+            runtime.app_data_root(),
+            owner_hash=owner_hash,
+            analysis_id=record["id"],
+            snapshot=snapshot,
+        ) or record
+    except Exception:
+        runtime.remove_job_directory(str(result.get("jobId") or ""))
+        raise
+
+    return analysis_json_response({**result, "analysis": updated, "analysisId": updated["id"]}, owner_token)
+
+
 @app.get("/api/local-file")
 def local_file(path: str) -> FileResponse:
     try:

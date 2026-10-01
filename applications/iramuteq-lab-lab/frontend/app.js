@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-specificites6";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-chronologie1";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -72,6 +72,13 @@ const specificitiesIndex = document.getElementById("specificitiesIndex");
 const specificitiesDialogStatus = document.getElementById("specificitiesDialogStatus");
 const runSpecificitiesBtn = document.getElementById("runSpecificitiesBtn");
 const closeSpecificitiesBtn = document.getElementById("closeSpecificitiesBtn");
+const openChronologyDialogBtn = document.getElementById("openChronologyDialogBtn");
+const chronologyDialog = document.getElementById("chronologyDialog");
+const chronologyTimeVariable = document.getElementById("chronologyTimeVariable");
+const chronologyComparisonVariable = document.getElementById("chronologyComparisonVariable");
+const chronologyDialogStatus = document.getElementById("chronologyDialogStatus");
+const runChronologyBtn = document.getElementById("runChronologyBtn");
+const closeChronologyBtn = document.getElementById("closeChronologyBtn");
 const logs = document.getElementById("logs");
 const corpusPreview = document.getElementById("corpusPreview");
 const analysisSteps = document.getElementById("analysisSteps");
@@ -133,6 +140,7 @@ const annotationSaveStatus = document.getElementById("annotationSaveStatus");
 const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpDiscriminationSimpleMarkdownContent = document.getElementById("helpDiscriminationSimpleMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
+const helpChronologyMarkdownContent = document.getElementById("helpChronologyMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
 const helpMultimodaleMarkdownContent = document.getElementById("helpMultimodaleMarkdownContent");
@@ -352,7 +360,13 @@ const resultContainers = {
   simiGraph: document.getElementById("simiGraph"),
   specificitiesSummary: document.getElementById("specificitiesSummary"),
   specificitiesTermTable: document.getElementById("specificitiesTermTable"),
-  specificitiesPlot: document.getElementById("specificitiesPlot")
+  specificitiesPlot: document.getElementById("specificitiesPlot"),
+  chronologySummary: document.getElementById("chronologySummary"),
+  chronologyEvolutionPlot: document.getElementById("chronologyEvolutionPlot"),
+  chronologyResidualsPlot: document.getElementById("chronologyResidualsPlot"),
+  chronologyPercentagesTable: document.getElementById("chronologyPercentagesTable"),
+  chronologyChi2Table: document.getElementById("chronologyChi2Table"),
+  chronologyResidualsTable: document.getElementById("chronologyResidualsTable")
 };
 
 const RUNNING_ANALYSIS_STORAGE_KEY = "iramuteq-lite-running-analysis";
@@ -383,6 +397,8 @@ const appState = {
   chdDendrogramFiles: new Map(),
   chdSegmentsByClass: new Map(),
   specificitiesRequest: null,
+  chronologyRequest: null,
+  chronologyVariables: [],
   discriminationSimpleSummaryPayload: null,
   jsdConcordancierRows: [],
   suiviPresentation: {
@@ -1193,6 +1209,7 @@ function updateDownloadResultsState() {
 
 function getAnalysisKindLabel(analysisKind) {
   if (analysisKind === "specificites") return "Calcul de spécificités";
+  if (analysisKind === "chrono") return "Analyse chronologique croisée";
   if (analysisKind === "suivi") return "Trajectoire lexicale";
   if (analysisKind === "simi") return "Similitudes";
   if (analysisKind === "multimodal_audio") return "Multimodal · Audio";
@@ -1223,6 +1240,13 @@ function getAnalysisHistoryLabel(entry) {
     const term = String(entry?.summary?.term || "").trim();
     const variable = String(entry?.summary?.variable_label || "").trim();
     const detail = [term ? `« ${term} »` : "", variable].filter(Boolean).join(" · ");
+    const dateLabel = formatAnalysisDateTime(entry?.createdAt);
+    return [kindLabel, detail, dateLabel].filter(Boolean).join(" · ");
+  }
+  if (entry?.analysisKind === "chrono") {
+    const timeVariable = String(entry?.summary?.time_variable_label || "").trim();
+    const comparisonVariable = String(entry?.summary?.comparison_variable_label || "").trim();
+    const detail = [timeVariable, comparisonVariable].filter(Boolean).join(" × ");
     const dateLabel = formatAnalysisDateTime(entry?.createdAt);
     return [kindLabel, detail, dateLabel].filter(Boolean).join(" · ");
   }
@@ -10805,6 +10829,143 @@ async function runSpecificitiesFromDialog() {
   }
 }
 
+function closeChronologyDialog() {
+  appState.chronologyRequest = null;
+  appState.chronologyVariables = [];
+  if (chronologyDialog?.open) chronologyDialog.close();
+}
+
+function setChronologyDialogStatus(message, { isError = false } = {}) {
+  if (!chronologyDialogStatus) return;
+  chronologyDialogStatus.textContent = String(message || "");
+  chronologyDialogStatus.classList.toggle("is-error", Boolean(isError));
+}
+
+function chronologyVariableOptionLabel(variable) {
+  const modalities = Array.isArray(variable?.modalities) ? variable.modalities : [];
+  const sample = modalities.slice(0, 3).join(", ");
+  const suffix = modalities.length > 3 ? ", …" : "";
+  return `${variable?.label || variable?.id} (${modalities.length} modalités${sample ? ` : ${sample}${suffix}` : ""})`;
+}
+
+function refreshChronologyComparisonOptions() {
+  if (!chronologyComparisonVariable) return;
+  const selectedTime = String(chronologyTimeVariable?.value || "").trim();
+  const previousValue = String(chronologyComparisonVariable.value || "").trim();
+  chronologyComparisonVariable.innerHTML = "";
+  const candidates = appState.chronologyVariables.filter((variable) => String(variable?.id || "") !== selectedTime);
+  candidates.forEach((variable) => {
+    const option = document.createElement("option");
+    option.value = String(variable?.id || "");
+    option.textContent = chronologyVariableOptionLabel(variable);
+    chronologyComparisonVariable.appendChild(option);
+  });
+  if (candidates.some((variable) => String(variable?.id || "") === previousValue)) {
+    chronologyComparisonVariable.value = previousValue;
+  }
+  if (runChronologyBtn) runChronologyBtn.disabled = !selectedTime || !candidates.length;
+}
+
+async function openChronologyDialog() {
+  const analysisId = String(appState.activeAnalysisHistoryId || "").trim();
+  const entry = appState.analysisHistory.find((item) => String(item.id) === analysisId);
+  if (!analysisId || !entry?.persisted || entry.analysisKind !== "chd") {
+    log("[error] Sélectionnez d'abord une CHD terminée dans l'arborescence.");
+    setSidebarRuntimeStatus("Sélectionnez une CHD terminée avant l'analyse chronologique.", "warning");
+    return;
+  }
+
+  appState.chronologyRequest = { analysisId };
+  appState.chronologyVariables = [];
+  if (chronologyTimeVariable) chronologyTimeVariable.innerHTML = "";
+  if (chronologyComparisonVariable) chronologyComparisonVariable.innerHTML = "";
+  if (runChronologyBtn) runChronologyBtn.disabled = true;
+  setChronologyDialogStatus("Lecture des variables étoilées disponibles...");
+
+  if (chronologyDialog && !chronologyDialog.open) {
+    if (typeof chronologyDialog.showModal === "function") chronologyDialog.showModal();
+    else chronologyDialog.show();
+  }
+
+  try {
+    const payload = await callAnalysisHistoryApi(
+      `/api/analyses/${encodeURIComponent(analysisId)}/chronology/options`
+    );
+    const variables = Array.isArray(payload?.variables) ? payload.variables : [];
+    if (!payload?.available || variables.length < 2) {
+      throw new Error("Deux variables étoilées comportant au moins deux modalités sont nécessaires.");
+    }
+    appState.chronologyVariables = variables;
+    variables.forEach((variable) => {
+      const option = document.createElement("option");
+      option.value = String(variable?.id || "");
+      option.textContent = chronologyVariableOptionLabel(variable);
+      chronologyTimeVariable?.appendChild(option);
+    });
+    const suggested = String(payload?.suggested_time_variable || "").trim();
+    if (suggested && variables.some((variable) => String(variable?.id || "") === suggested)) {
+      chronologyTimeVariable.value = suggested;
+    }
+    refreshChronologyComparisonOptions();
+    setChronologyDialogStatus("Prêt. La CHD existante ne sera pas recalculée.");
+  } catch (error) {
+    setChronologyDialogStatus(error?.message || String(error), { isError: true });
+    log(`[error] Analyse chronologique indisponible : ${error?.message || String(error)}`);
+  }
+}
+
+async function runChronologyFromDialog() {
+  const request = appState.chronologyRequest;
+  if (!request?.analysisId) return;
+  const timeVariable = String(chronologyTimeVariable?.value || "").trim();
+  const comparisonVariable = String(chronologyComparisonVariable?.value || "").trim();
+  if (!timeVariable || !comparisonVariable || timeVariable === comparisonVariable) {
+    setChronologyDialogStatus("Sélectionnez deux variables différentes.", { isError: true });
+    return;
+  }
+
+  if (runChronologyBtn) {
+    runChronologyBtn.disabled = true;
+    runChronologyBtn.textContent = "Calcul en cours...";
+  }
+  setChronologyDialogStatus("Croisement des classes, calcul des pourcentages et des tests χ²...");
+
+  try {
+    const payload = await callAnalysisHistoryApi(
+      `/api/analyses/${encodeURIComponent(request.analysisId)}/chronology`,
+      {
+        method: "POST",
+        body: { timeVariable, comparisonVariable }
+      }
+    );
+    const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
+    if (!entry) throw new Error("L'analyse calculée n'a pas pu être ajoutée à l'historique.");
+    entry.outputDir = String(payload?.outputDir || "").trim() || null;
+    entry.artifacts = Array.isArray(payload?.files) ? payload.files : [];
+    entry.summary = payload?.summary || entry.summary;
+    entry.logs = Array.isArray(payload?.logs) ? payload.logs : entry.logs;
+    rememberAnalysisHistoryEntry(entry);
+    appState.outputDir = entry.outputDir;
+    const virtualFiles = entry.artifacts.map((artifact) =>
+      createVirtualFileFromArtifact(artifact, entry.folderName || entry.jobId || entry.id)
+    );
+    await handleExportsFolderSelection(virtualFiles, "chronologie_croisee");
+    renderAnalysisSteps(entry.logs);
+    renderAnalysisSummary(entry.summary || null);
+    closeChronologyDialog();
+    setSidebarRuntimeStatus("Analyse chronologique croisée terminée.", "success");
+    log("[info] Analyse chronologique croisée ajoutée à l'arborescence.");
+  } catch (error) {
+    setChronologyDialogStatus(error?.message || String(error), { isError: true });
+    log(`[error] Analyse chronologique impossible : ${error?.message || String(error)}`);
+  } finally {
+    if (runChronologyBtn) {
+      runChronologyBtn.disabled = false;
+      runChronologyBtn.textContent = "Lancer l’analyse chronologique";
+    }
+  }
+}
+
 async function saveCurrentSubcorpus() {
   const exportState = appState.termSegmentsExport;
   const content = buildSubcorpusContent(exportState?.segments || []);
@@ -14611,6 +14772,76 @@ async function renderSpecificitiesExports(index) {
   return true;
 }
 
+async function renderChronologyExports(index) {
+  const summaryFile = findFile(index, [(path) => path.endsWith("resume_chronologie.json")]);
+  const percentagesFile = findFile(index, [(path) => path.endsWith("chronologie_croisee_pourcentages.csv")]);
+  const chi2File = findFile(index, [(path) => path.endsWith("chronologie_croisee_chi2.csv")]);
+  const residualsFile = findFile(index, [(path) => path.endsWith("chronologie_croisee_residus.csv")]);
+  const evolutionPlot = findFile(index, [(path) => path.endsWith("chronologie_croisee_evolution.png")]);
+  const residualsPlot = findFile(index, [(path) => path.endsWith("chronologie_croisee_residus.png")]);
+
+  if (!summaryFile && !percentagesFile && !evolutionPlot) {
+    setContainerEmptyState(resultContainers.chronologySummary, "Ouvrez une analyse chronologique depuis l'arborescence.");
+    setContainerEmptyState(resultContainers.chronologyEvolutionPlot, "Aucun graphique d'évolution chargé.");
+    setContainerEmptyState(resultContainers.chronologyResidualsPlot, "Aucune carte des écarts chargée.");
+    setContainerEmptyState(resultContainers.chronologyPercentagesTable, "Aucun tableau chronologique chargé.");
+    setContainerEmptyState(resultContainers.chronologyChi2Table, "Aucun test χ² chronologique chargé.");
+    setContainerEmptyState(resultContainers.chronologyResidualsTable, "Aucun tableau des écarts chargé.");
+    return false;
+  }
+
+  if (summaryFile) {
+    const summary = JSON.parse(await summaryFile.text());
+    clearContainer(resultContainers.chronologySummary);
+    const metrics = [
+      ["Variable temporelle", summary.time_variable_label],
+      ["Variable de comparaison", summary.comparison_variable_label],
+      ["Périodes", summary.n_periods],
+      ["Modalités comparées", summary.n_comparison_modalities],
+      ["Classes CHD", summary.n_classes],
+      ["UCE analysées", summary.n_uce],
+      ["Textes représentés", summary.n_documents]
+    ];
+    const grid = document.createElement("div");
+    grid.className = "summary-grid";
+    metrics.forEach(([label, value]) => {
+      const card = document.createElement("article");
+      card.className = "summary-card";
+      const title = document.createElement("p");
+      title.className = "summary-label";
+      title.textContent = label;
+      const body = document.createElement("strong");
+      body.className = "summary-value";
+      body.textContent = formatSummaryValue(value);
+      card.append(title, body);
+      grid.appendChild(card);
+    });
+    resultContainers.chronologySummary.appendChild(grid);
+  }
+
+  renderImage(resultContainers.chronologyEvolutionPlot, evolutionPlot, "Évolution chronologique croisée des classes");
+  renderImage(resultContainers.chronologyResidualsPlot, residualsPlot, "Résidus chronologiques standardisés");
+  makeResultImagePreviewable(resultContainers.chronologyEvolutionPlot, "Évolution des classes", "Analyse chronologique croisée");
+  makeResultImagePreviewable(resultContainers.chronologyResidualsPlot, "Écarts aux effectifs attendus", "Analyse chronologique croisée");
+
+  await renderCsvFromFile(resultContainers.chronologyPercentagesTable, percentagesFile, {
+    title: "chronologie_croisee_pourcentages.csv",
+    maxRows: 1000,
+    emptyMessage: "Aucun pourcentage chronologique disponible."
+  });
+  await renderCsvFromFile(resultContainers.chronologyChi2Table, chi2File, {
+    title: "chronologie_croisee_chi2.csv",
+    maxRows: 500,
+    emptyMessage: "Aucun test χ² chronologique calculable."
+  });
+  await renderCsvFromFile(resultContainers.chronologyResidualsTable, residualsFile, {
+    title: "chronologie_croisee_residus.csv",
+    maxRows: 1000,
+    emptyMessage: "Aucun résidu chronologique calculable."
+  });
+  return true;
+}
+
 async function renderExports(entries, index) {
   clearObjectUrls();
   appState.chdSegmentsByClass = new Map();
@@ -14831,6 +15062,10 @@ async function renderExports(entries, index) {
     await renderSpecificitiesExports(index);
   });
 
+  await safeRenderExportSection("Analyse chronologique croisée", async () => {
+    await renderChronologyExports(index);
+  });
+
   try {
     appState.exportEntries = entries;
     renderResults(entries.map((entry) => entry.relativePath));
@@ -14927,6 +15162,12 @@ function resetResultPanes() {
     specificitiesSummary: "Ouvrez une analyse de spécificités depuis l'arborescence.",
     specificitiesTermTable: "Aucun tableau de spécificités chargé.",
     specificitiesPlot: "Aucun graphique de spécificités chargé.",
+    chronologySummary: "Ouvrez une analyse chronologique depuis l'arborescence.",
+    chronologyEvolutionPlot: "Aucun graphique d'évolution chronologique chargé.",
+    chronologyResidualsPlot: "Aucune carte des écarts chronologiques chargée.",
+    chronologyPercentagesTable: "Aucun tableau chronologique chargé.",
+    chronologyChi2Table: "Aucun test χ² chronologique chargé.",
+    chronologyResidualsTable: "Aucun tableau des écarts chronologiques chargé.",
     suiviMeta: "Chargez un dossier d'exports pour afficher le cadre de la trajectoire lexicale.",
     suiviIndicatorsTable: "Chargez un dossier d'exports pour afficher les indicateurs par entretien.",
     suiviEntropyPlot: "Chargez un dossier d'exports pour afficher la courbe de l'entropie lexicale.",
@@ -15437,6 +15678,22 @@ closeSpecificitiesBtn?.addEventListener("click", () => {
 
 runSpecificitiesBtn?.addEventListener("click", () => {
   void runSpecificitiesFromDialog();
+});
+
+openChronologyDialogBtn?.addEventListener("click", () => {
+  void openChronologyDialog();
+});
+
+closeChronologyBtn?.addEventListener("click", () => {
+  closeChronologyDialog();
+});
+
+chronologyTimeVariable?.addEventListener("change", () => {
+  refreshChronologyComparisonOptions();
+});
+
+runChronologyBtn?.addEventListener("click", () => {
+  void runChronologyFromDialog();
 });
 
 termSegmentsDialog?.addEventListener("close", () => {
@@ -17049,6 +17306,7 @@ void loadPersistentAnalysisHistory();
 void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpDiscriminationSimpleMarkdownContent, "discriminationsimple.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
+void loadHelpMarkdown(helpChronologyMarkdownContent, "aide-chrono.md");
 void initialiseTicketSidebarOnOpen().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();

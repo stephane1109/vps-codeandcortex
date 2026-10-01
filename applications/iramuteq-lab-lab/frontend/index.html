@@ -37,6 +37,7 @@
           <button class="nav-link" data-tab-target="afc" type="button">AFC</button>
           <button class="nav-link" data-tab-target="similitudes" type="button">Similitudes</button>
           <button class="nav-link" data-tab-target="specificites" type="button">Calcul de spécificités</button>
+          <button class="nav-link" data-tab-target="chronologie_croisee" type="button">Analyse chronologique croisée</button>
           <button class="nav-link" data-tab-target="aide" type="button">Aide</button>
         </nav>
       </header>
@@ -208,6 +209,9 @@
                 <p class="section-kicker">CHD</p>
                 <h2>Résultats CHD</h2>
               </div>
+              <button id="openChronologyDialogBtn" class="primary-button" type="button">
+                Analyse chronologique croisée
+              </button>
             </div>
 
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
@@ -438,6 +442,43 @@
             </div>
           </section>
 
+          <section class="panel" data-panel="chronologie_croisee" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Classes et variables étoilées</p>
+                <h2>Analyse chronologique croisée</h2>
+              </div>
+            </div>
+            <div class="section-stack">
+              <article class="card section-card">
+                <h3>Configuration</h3>
+                <div id="chronologySummary" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Évolution des classes</h3>
+                <p class="section-copy">Pourcentage de chaque classe dans chaque couple période × modalité de comparaison.</p>
+                <div id="chronologyEvolutionPlot" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Écarts aux effectifs attendus</h3>
+                <p class="section-copy">Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.</p>
+                <div id="chronologyResidualsPlot" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Effectifs et pourcentages</h3>
+                <div id="chronologyPercentagesTable" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Tests χ² chronologiques</h3>
+                <div id="chronologyChi2Table" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Détail des écarts</h3>
+                <div id="chronologyResidualsTable" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
           <section class="panel" data-panel="aide" hidden>
             <div class="page-heading">
               <div>
@@ -450,6 +491,7 @@
               <button class="local-tab-button is-active" data-help-subtab-target="help_general" type="button">Aide</button>
               <button class="local-tab-button" data-help-subtab-target="help_discrimination_simple" type="button">CHD distance optimisée</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
+              <button class="local-tab-button" data-help-subtab-target="help_chronologie" type="button">Aide A-Chronologique</button>
             </div>
 
             <section class="local-tab-panel is-active" data-help-subpanel="help_general">
@@ -472,6 +514,14 @@
               <article class="card prose-card">
                 <div id="helpMorphoMarkdownContent" class="markdown-content">
                   Chargement de <code>help/pos_lexique.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_chronologie" hidden>
+              <article class="card prose-card">
+                <div id="helpChronologyMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/aide-chrono.md</code>...
                 </div>
               </article>
             </section>
@@ -1232,7 +1282,44 @@
       </div>
     </dialog>
 
+    <dialog id="chronologyDialog" class="dialog-panel chronology-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Analyse complémentaire de la CHD</p>
+            <h2>Analyse chronologique croisée</h2>
+            <p class="muted">Croisez les classes de la CHD avec une variable temporelle et une seconde variable étoilée.</p>
+          </div>
+          <button id="closeChronologyBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+
+        <div class="form-grid chronology-form-grid">
+          <label>
+            Variable temporelle
+            <select id="chronologyTimeVariable"></select>
+          </label>
+          <label>
+            Variable de comparaison
+            <select id="chronologyComparisonVariable"></select>
+          </label>
+        </div>
+
+        <aside class="specificities-help" aria-label="Aide sur l'analyse chronologique croisée">
+          <h3>Principe</h3>
+          <p>La CHD n’est pas recalculée. L’application mesure la répartition de ses classes dans chaque période et dans chaque modalité de comparaison.</p>
+          <p>Les pourcentages sont calculés séparément dans chaque couple période × modalité afin de limiter l’effet des différences de volume.</p>
+        </aside>
+
+        <p id="chronologyDialogStatus" class="muted"></p>
+        <footer class="dialog-footer">
+          <div class="dialog-footer-actions">
+            <button id="runChronologyBtn" class="primary-button" type="button">Lancer l’analyse chronologique</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261001-specificites7"></script>
+    <script type="module" src="./app.js?v=20261001-chronologie1"></script>
   </body>
 </html>
