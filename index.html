@@ -724,10 +724,34 @@
                 }
             }
 
+            function trackApplicationSelection(card) {
+                if (typeof window.gtag !== "function") return;
+
+                const appId = String(card.dataset.appId || "").trim();
+                const applicationName = String(card.querySelector(".titre-application")?.textContent || appId).trim();
+                const linkUrl = card.href || "";
+                let linkDomain = "";
+
+                try {
+                    linkDomain = new URL(linkUrl, window.location.href).hostname;
+                } catch (error) {
+                    linkDomain = "";
+                }
+
+                window.gtag("event", "select_content", {
+                    content_type: "application",
+                    content_id: appId,
+                    application_name: applicationName,
+                    link_url: linkUrl,
+                    link_domain: linkDomain,
+                });
+            }
+
             cards.forEach((card) => {
                 card.addEventListener("click", () => {
                     const appId = card.dataset.appId;
                     if (!appId) return;
+                    trackApplicationSelection(card);
                     setLocalTicket(appId);
                     decorateCard(card, buildLocalPayload());
                     window.setTimeout(refreshDashboard, 1200);
