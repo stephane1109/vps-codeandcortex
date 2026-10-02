@@ -9,7 +9,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r /app/requirements.txt
 
-COPY dashboard_api.py gestion_tickets.py index.html style.css aide.md /app/
+COPY dashboard_api.py gestion_tickets.py index.html style.css traduction_anglais.js aide.md /app/
 COPY assets /app/assets
 
 # #### VARIABLES D'ENVIRONNEMENT IMPORTANTES
