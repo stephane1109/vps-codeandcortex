@@ -106,4 +106,20 @@ chi2_filtered <- calculer_scores_chi2_specificites(
 )$scores["soin", ]
 stopifnot(isTRUE(all.equal(chi2_full, chi2_filtered, tolerance = 1e-12)))
 
+source_export_dir <- tempfile("source-specificites-test-")
+dir.create(source_export_dir, recursive = TRUE)
+on.exit(unlink(source_export_dir, recursive = TRUE, force = TRUE), add = TRUE)
+corpus_export <- quanteda::corpus(c("Premier segment", "Second segment"))
+quanteda::docvars(corpus_export, "Classes") <- c(1L, 2L)
+dfm_export <- quanteda::dfm(quanteda::tokens(corpus_export))
+source_export <- exporter_source_specificites(
+  dfm_obj = dfm_export,
+  corpus_obj = corpus_export,
+  classes = c(1L, 2L),
+  output_dir = source_export_dir
+)
+saved_source <- readRDS(source_export$source)
+stopifnot(identical(saved_source$segments, c("Premier segment", "Second segment")))
+stopifnot(identical(saved_source$segment_ids, c("text1", "text2")))
+
 cat("test_calcul_specificites: OK\n")

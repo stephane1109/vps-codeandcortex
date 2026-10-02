@@ -5,6 +5,8 @@ source(file.path(app_dir, "iramuteqlite", "analyse-chrono.R"), local = TRUE)
 
 source_data <- list(
   classes = c(1L, 1L, 2L, 2L, 1L, 2L, 1L, 2L, 2L, 2L, 1L, 1L),
+  segment_ids = paste0("uce_", seq_len(12)),
+  segments = paste("Segment chronologique", seq_len(12)),
   docvars = data.frame(
     `*annee` = rep(c("2022", "2023", "2024"), each = 4),
     `*quotidien` = rep(c("Libération", "Le Monde"), 6),
@@ -43,6 +45,7 @@ expected_files <- c(
   "chronologie_croisee_pourcentages.csv",
   "chronologie_croisee_chi2.csv",
   "chronologie_croisee_residus.csv",
+  "chronologie_croisee_segments.csv",
   "chronologie_croisee_evolution.png",
   "chronologie_croisee_residus.png",
   "configuration_chronologie.json",
@@ -53,6 +56,7 @@ stopifnot(identical(result$summary$n_periods, 3L))
 stopifnot(identical(result$summary$n_comparison_modalities, 2L))
 stopifnot(identical(result$summary$n_classes, 2L))
 stopifnot(identical(result$summary$n_chi2_tests, 2L))
+stopifnot(identical(result$summary$n_segments_exported, 12L))
 
 percentages <- utils::read.csv(file.path(output_dir, "chronologie_croisee_pourcentages.csv"), check.names = FALSE)
 totals <- stats::aggregate(pourcentage ~ periode + modalite_comparaison, percentages, sum)

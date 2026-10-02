@@ -5,7 +5,7 @@
     <title>IRAMUTEQ Lab</title>
     <link rel="icon" href="./logo_iramuteqlab.png?v=20260928-logo" type="image/png" />
     <link rel="apple-touch-icon" href="./logo_iramuteqlab.png?v=20260928-logo" />
-    <link rel="stylesheet" href="./styles.css?v=20260929-help-headings" />
+    <link rel="stylesheet" href="./styles.css?v=20261002-chronology-segments" />
   </head>
   <body>
     <div class="app-shell">
@@ -464,9 +464,14 @@
                 <p id="chronologySecondaryPlotCopy" class="section-copy">Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.</p>
                 <div id="chronologyResidualsPlot" class="result-pane"></div>
               </article>
-              <article class="card">
+              <article id="chronologyPrimaryTableCard" class="card">
                 <h3 id="chronologyPrimaryTableTitle">Effectifs et pourcentages</h3>
                 <div id="chronologyPercentagesTable" class="result-pane"></div>
+              </article>
+              <article id="chronologySegmentsCard" class="card" hidden>
+                <h3>Segments de texte</h3>
+                <p class="section-copy">Filtrez les UCE selon la période, la modalité de comparaison ou la classe CHD.</p>
+                <div id="chronologySegmentsTable" class="result-pane"></div>
               </article>
               <article class="card">
                 <h3 id="chronologyChi2TableTitle">Tests χ² chronologiques</h3>
@@ -1326,6 +1331,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261001-chronologie3"></script>
+    <script type="module" src="./app.js?v=20261002-chronologie4"></script>
   </body>
 </html>

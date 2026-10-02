@@ -43,11 +43,13 @@ exporter_source_specificites <- function(dfm_obj, corpus_obj, classes, output_di
   matrix_docs_termes <- methods::as(dfm_obj, "dgCMatrix")
   docvars <- as.data.frame(quanteda::docvars(corpus_obj), stringsAsFactors = FALSE)
   source <- list(
-    version = 1L,
+    version = 2L,
     created_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
     dfm = matrix_docs_termes,
     docvars = docvars,
     classes = as.integer(classes),
+    segment_ids = as.character(quanteda::docnames(corpus_obj)),
+    segments = unname(enc2utf8(as.character(corpus_obj))),
     preprocessing = list(
       lexique = config$lexique_fichier %||% config$lexique_langue %||% NA_character_,
       lemmes = config$lexique_utiliser_lemmes %||% NA,

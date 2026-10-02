@@ -126,12 +126,18 @@ preparer_donnees_chrono <- function(source, time_variable, comparison_variable) 
     }
   }
   if (is.null(document_id)) document_id <- paste0("UCE_", seq_len(nrow(docvars)))
+  segment_ids <- as.character(source$segment_ids %||% paste0("UCE_", seq_len(nrow(docvars))))
+  if (length(segment_ids) != nrow(docvars)) segment_ids <- paste0("UCE_", seq_len(nrow(docvars)))
+  segments <- as.character(source$segments %||% rep(NA_character_, nrow(docvars)))
+  if (length(segments) != nrow(docvars)) segments <- rep(NA_character_, nrow(docvars))
 
   data.frame(
+    segment_id = segment_ids[keep],
     periode = periode[keep],
     modalite_comparaison = comparaison[keep],
     classe = paste0("Classe ", classes[keep]),
     document_id = document_id[keep],
+    segment = enc2utf8(segments[keep]),
     stringsAsFactors = FALSE
   )
 }
@@ -606,6 +612,15 @@ ecrire_resultats_chrono_croisee <- function(source, time_variable, comparison_va
   ecrire_csv_utf8_chrono(percentages_export, file.path(output_dir, "chronologie_croisee_pourcentages.csv"))
   ecrire_csv_utf8_chrono(tests$tests, file.path(output_dir, "chronologie_croisee_chi2.csv"))
   ecrire_csv_utf8_chrono(tests$residuals, file.path(output_dir, "chronologie_croisee_residus.csv"))
+  segments_export <- data[c(
+    "segment_id", "periode", "modalite_comparaison", "classe", "document_id", "segment"
+  )]
+  segments_export <- segments_export[
+    !is.na(segments_export$segment) & nzchar(trimws(segments_export$segment)),
+    ,
+    drop = FALSE
+  ]
+  ecrire_csv_utf8_chrono(segments_export, file.path(output_dir, "chronologie_croisee_segments.csv"))
 
   tracer_evolution_chrono(
     tables$percentages, tables$periods, tables$comparisons, tables$classes,
@@ -640,6 +655,7 @@ ecrire_resultats_chrono_croisee <- function(source, time_variable, comparison_va
     n_classes = length(tables$classes),
     n_uce = nrow(data),
     n_documents = length(unique(data$document_id)),
+    n_segments_exported = nrow(segments_export),
     n_chi2_tests = nrow(tests$tests)
   ))
   jsonlite::write_json(

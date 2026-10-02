@@ -84,6 +84,8 @@ Lorsque plusieurs effectifs attendus sont inférieurs à `5`, le résultat du χ
 
 L’analyse produit les effectifs, les pourcentages, les tests χ², les résidus, deux graphiques, la configuration utilisée et un résumé reproductible au format JSON.
 
+Dans le mode croisé, l’interface remplace le tableau agrégé des effectifs et pourcentages par un explorateur des segments de texte. Les UCE peuvent être filtrées par période, modalité de comparaison, classe CHD, mot ou expression. Le tableau agrégé reste disponible dans l’archive exportée.
+
 ## Références IRaMuTeQ
 
 - [Menu officiel « Chronological view » : Chi2 et Proportion](https://gitlab.huma-num.fr/pratinaud/iramuteq/-/blob/master/ProfList.py#L317-320)

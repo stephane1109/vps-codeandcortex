@@ -3486,6 +3486,37 @@ body.comparison-ab-fullscreen-open {
   color: var(--ink);
 }
 
+.chronology-segment-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(10rem, 1fr)) minmax(16rem, 2fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.chronology-segment-filters label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.chronology-segment-filters select,
+.chronology-segment-filters input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+@media (max-width: 900px) {
+  .chronology-segment-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Keep help copy neutral while using the Lab accent to structure its headings. */
 [data-panel="aide"] .markdown-content,
 [data-panel="aide"] .markdown-content p,

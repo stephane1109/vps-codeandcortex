@@ -30,6 +30,8 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Écarts aux effectifs attendus": "Differences from expected counts",
   "Le bleu indique une surreprésentation de la classe ; le rouge une sous-représentation.": "Blue indicates class over-representation; red indicates under-representation.",
   "Effectifs et pourcentages": "Counts and percentages",
+  "Segments de texte": "Text segments",
+  "Filtrez les UCE selon la période, la modalité de comparaison ou la classe CHD.": "Filter text segments by period, comparison modality or CHD class.",
   "Tests χ² chronologiques": "Chronological chi-square tests",
   "Détail des écarts": "Difference details",
   "Mode": "Mode",

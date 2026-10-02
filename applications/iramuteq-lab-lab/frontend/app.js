@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261001-chronologie3";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261002-chronologie4";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -368,6 +368,7 @@ const resultContainers = {
   chronologyEvolutionPlot: document.getElementById("chronologyEvolutionPlot"),
   chronologyResidualsPlot: document.getElementById("chronologyResidualsPlot"),
   chronologyPercentagesTable: document.getElementById("chronologyPercentagesTable"),
+  chronologySegmentsTable: document.getElementById("chronologySegmentsTable"),
   chronologyChi2Table: document.getElementById("chronologyChi2Table"),
   chronologyResidualsTable: document.getElementById("chronologyResidualsTable")
 };
@@ -14811,6 +14812,86 @@ async function renderSpecificitiesExports(index) {
   return true;
 }
 
+function renderChronologySegmentsTable(container, parsed) {
+  if (!clearContainer(container)) return;
+  if (!parsed?.headers?.length || !parsed?.rows?.length) {
+    setContainerEmptyState(
+      container,
+      "Aucun segment associé n’est disponible. Relancez la CHD avec la version actuelle pour créer cet export."
+    );
+    return;
+  }
+
+  const headerIndexes = new Map(
+    parsed.headers.map((header, index) => [String(header || "").trim().toLocaleLowerCase(), index])
+  );
+  const periodIndex = headerIndexes.get("periode");
+  const comparisonIndex = headerIndexes.get("modalite_comparaison");
+  const classIndex = headerIndexes.get("classe");
+  const controls = document.createElement("div");
+  controls.className = "chronology-segment-filters";
+  const tableContainer = document.createElement("div");
+  const status = document.createElement("p");
+  status.className = "muted";
+
+  const createSelect = (labelText, columnIndex) => {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const select = document.createElement("select");
+    const allOption = document.createElement("option");
+    allOption.value = "";
+    allOption.textContent = "Toutes";
+    select.appendChild(allOption);
+    if (Number.isInteger(columnIndex)) {
+      const values = [...new Set(parsed.rows.map((row) => String(row[columnIndex] || "").trim()).filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right, "fr", { numeric: true }));
+      values.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      });
+    }
+    label.appendChild(select);
+    controls.appendChild(label);
+    return select;
+  };
+
+  const periodSelect = createSelect("Période", periodIndex);
+  const comparisonSelect = createSelect("Modalité", comparisonIndex);
+  const classSelect = createSelect("Classe", classIndex);
+  const searchLabel = document.createElement("label");
+  searchLabel.textContent = "Rechercher";
+  const searchInput = document.createElement("input");
+  searchInput.type = "search";
+  searchInput.placeholder = "Mot ou expression dans les segments";
+  searchInput.autocomplete = "off";
+  searchLabel.appendChild(searchInput);
+  controls.appendChild(searchLabel);
+
+  const applyFilters = () => {
+    const query = String(searchInput.value || "").trim().toLocaleLowerCase();
+    const rows = parsed.rows.filter((row) => {
+      if (periodSelect.value && String(row[periodIndex] || "") !== periodSelect.value) return false;
+      if (comparisonSelect.value && String(row[comparisonIndex] || "") !== comparisonSelect.value) return false;
+      if (classSelect.value && String(row[classIndex] || "") !== classSelect.value) return false;
+      return !query || row.some((cell) => String(cell || "").toLocaleLowerCase().includes(query));
+    });
+    status.textContent = `${rows.length} segment(s) correspondant aux filtres. Jusqu’à 300 lignes sont affichées.`;
+    renderTable(tableContainer, { headers: parsed.headers, rows }, {
+      maxRows: 300,
+      emptyMessage: "Aucun segment ne correspond aux filtres sélectionnés."
+    });
+  };
+
+  [periodSelect, comparisonSelect, classSelect].forEach((select) => {
+    select.addEventListener("change", applyFilters);
+  });
+  searchInput.addEventListener("input", applyFilters);
+  container.append(controls, status, tableContainer);
+  applyFilters();
+}
+
 async function renderChronologyExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("resume_chronologie.json")]);
   let summary = null;
@@ -14826,6 +14907,7 @@ async function renderChronologyExports(index) {
   const percentagesFile = findFile(index, [(path) => path.endsWith(percentagesName)]);
   const chi2File = findFile(index, [(path) => path.endsWith(chi2Name)]);
   const residualsFile = findFile(index, [(path) => path.endsWith(detailName)]);
+  const segmentsFile = findFile(index, [(path) => path.endsWith("chronologie_croisee_segments.csv")]);
   const evolutionPlot = findFile(index, [(path) => path.endsWith(primaryPlotName)]);
   const residualsPlot = findFile(index, [(path) => path.endsWith(secondaryPlotName)]);
 
@@ -14834,6 +14916,7 @@ async function renderChronologyExports(index) {
     setContainerEmptyState(resultContainers.chronologyEvolutionPlot, "Aucun graphique d'évolution chargé.");
     setContainerEmptyState(resultContainers.chronologyResidualsPlot, "Aucune carte des écarts chargée.");
     setContainerEmptyState(resultContainers.chronologyPercentagesTable, "Aucun tableau chronologique chargé.");
+    setContainerEmptyState(resultContainers.chronologySegmentsTable, "Aucun segment chronologique chargé.");
     setContainerEmptyState(resultContainers.chronologyChi2Table, "Aucun test χ² chronologique chargé.");
     setContainerEmptyState(resultContainers.chronologyResidualsTable, "Aucun tableau des écarts chargé.");
     return false;
@@ -14905,17 +14988,30 @@ async function renderChronologyExports(index) {
     const element = document.getElementById(id);
     if (element) element.textContent = value;
   });
+  const primaryTableCard = document.getElementById("chronologyPrimaryTableCard");
+  const segmentsCard = document.getElementById("chronologySegmentsCard");
+  if (primaryTableCard) primaryTableCard.hidden = !isIramuteqView;
+  if (segmentsCard) segmentsCard.hidden = isIramuteqView;
 
   renderImage(resultContainers.chronologyEvolutionPlot, evolutionPlot, labels.primaryPlot);
   renderImage(resultContainers.chronologyResidualsPlot, residualsPlot, labels.secondaryPlot);
   makeResultImagePreviewable(resultContainers.chronologyEvolutionPlot, labels.primaryPlot, labels.page);
   makeResultImagePreviewable(resultContainers.chronologyResidualsPlot, labels.secondaryPlot, labels.page);
 
-  await renderCsvFromFile(resultContainers.chronologyPercentagesTable, percentagesFile, {
-    title: percentagesName,
-    maxRows: 1000,
-    emptyMessage: "Aucun pourcentage chronologique disponible."
-  });
+  if (isIramuteqView) {
+    await renderCsvFromFile(resultContainers.chronologyPercentagesTable, percentagesFile, {
+      title: percentagesName,
+      maxRows: 1000,
+      emptyMessage: "Aucun pourcentage chronologique disponible."
+    });
+  } else if (segmentsFile) {
+    renderChronologySegmentsTable(resultContainers.chronologySegmentsTable, parseCsv(await segmentsFile.text()));
+  } else {
+    setContainerEmptyState(
+      resultContainers.chronologySegmentsTable,
+      "Aucun segment associé n’est disponible. Relancez la CHD avec la version actuelle pour créer cet export."
+    );
+  }
   await renderCsvFromFile(resultContainers.chronologyChi2Table, chi2File, {
     title: chi2Name,
     maxRows: 500,
@@ -15253,6 +15349,7 @@ function resetResultPanes() {
     chronologyEvolutionPlot: "Aucun graphique d'évolution chronologique chargé.",
     chronologyResidualsPlot: "Aucune carte des écarts chronologiques chargée.",
     chronologyPercentagesTable: "Aucun tableau chronologique chargé.",
+    chronologySegmentsTable: "Aucun segment chronologique chargé.",
     chronologyChi2Table: "Aucun test χ² chronologique chargé.",
     chronologyResidualsTable: "Aucun tableau des écarts chronologiques chargé.",
     suiviMeta: "Chargez un dossier d'exports pour afficher le cadre de la trajectoire lexicale.",
