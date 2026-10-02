@@ -73,7 +73,8 @@ h1 {
     color: var(--couleur-secondaire);
 }
 
-.lien-site {
+.lien-site,
+.lien-support {
     color: var(--couleur-principale);
     text-decoration: none;
     font-size: 13px;
@@ -85,9 +86,14 @@ h1 {
     transition: all 0.25s ease;
 }
 
-.lien-site:hover {
+.lien-site:hover,
+.lien-support:hover {
     border-color: var(--couleur-accent);
     color: var(--couleur-accent);
+}
+
+.lien-support {
+    gap: 7px;
 }
 
 .actions-entete {
@@ -99,6 +105,7 @@ h1 {
 }
 
 .lien-aide,
+.lien-support,
 .lien-site {
     display: inline-flex;
     align-items: center;
