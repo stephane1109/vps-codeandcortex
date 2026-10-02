@@ -104,6 +104,31 @@ h1 {
     justify-content: flex-end;
 }
 
+.selecteur-langue {
+    display: grid;
+    gap: 4px;
+    color: var(--couleur-secondaire);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.selecteur-langue select {
+    min-height: 37px;
+    padding: 8px 30px 8px 10px;
+    border: 1px solid var(--couleur-bordure);
+    border-radius: 0;
+    background: #ffffff;
+    color: var(--couleur-principale);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: pointer;
+}
+
 .lien-aide,
 .lien-support,
 .lien-site {
@@ -631,8 +656,14 @@ h1 {
         min-height: 170px;
     }
 
-    .lien-site {
+    .selecteur-langue,
+    .lien-site,
+    .lien-support {
         width: 100%;
+    }
+
+    .selecteur-langue select,
+    .lien-site {
         text-align: center;
     }
 

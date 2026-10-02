@@ -32,7 +32,7 @@
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=20261002-support">
+    <link rel="stylesheet" href="style.css?v=20261002-home-en">
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-HRHJCYTP4N"></script>
     <script>
@@ -62,6 +62,13 @@
             </div>
 
             <div class="actions-entete">
+                <label class="selecteur-langue" for="home-language">
+                    <span>Langue</span>
+                    <select id="home-language" aria-label="Langue de l'interface">
+                        <option value="fr" selected>Français</option>
+                        <option value="en">English</option>
+                    </select>
+                </label>
                 <a href="/aide.md" class="lien-aide" target="_blank" rel="noopener noreferrer">
                     Aide d'utilisation
                 </a>
@@ -426,6 +433,7 @@
 
     </main>
 
+    <script src="traduction_anglais.js?v=20261002-home-en"></script>
     <script>
         (function () {
             const body = document.body;
@@ -440,6 +448,14 @@
             const globalActive = document.getElementById("global-active");
             const globalQueue = document.getElementById("global-queue");
             const globalServer = document.getElementById("global-server");
+
+            function translate(value) {
+                return window.homeI18n ? window.homeI18n.translate(value) : String(value || "");
+            }
+
+            function interfaceLanguage() {
+                return window.homeI18n ? window.homeI18n.getLanguage() : "fr";
+            }
 
             function safeParseJson(value) {
                 try {
@@ -598,13 +614,14 @@
 
                 const stateClass = badgeClassFromState(payload.state, payload.queued || 0);
                 dot.className = "pastille-etat " + stateClass;
-                label.textContent = payload.stateLabel || labelFromState(payload.state, payload.queued || 0);
+                label.textContent = translate(payload.stateLabel || labelFromState(payload.state, payload.queued || 0));
                 const hasQuota = Number.isFinite(payload.maxActive);
-                meta.textContent = payload.metaText || (
+                const metaText = payload.metaText || (
                     hasQuota
                         ? `${payload.active || 0} / ${payload.maxActive} actif · ${payload.queued || 0} attente`
                         : "Synchronisation en attente"
                 );
+                meta.textContent = translate(metaText);
 
                 card.classList.remove("libre", "occupee", "attente", "indisponible");
                 card.classList.add(stateClass);
@@ -626,9 +643,11 @@
             function decorateGlobal(payload) {
                 if (!payload) return;
 
-                globalActive.textContent = `${payload.activeUsers || 0} · charge ${payload.activeLoad || 0}/${payload.maxLoad || 0}`;
+                globalActive.textContent = interfaceLanguage() === "en"
+                    ? `${payload.activeUsers || 0} · load ${payload.activeLoad || 0}/${payload.maxLoad || 0}`
+                    : `${payload.activeUsers || 0} · charge ${payload.activeLoad || 0}/${payload.maxLoad || 0}`;
                 globalQueue.textContent = `${payload.totalQueued || 0}`;
-                globalServer.textContent = payload.serverLabel || "Disponible";
+                globalServer.textContent = translate(payload.serverLabel || "Disponible");
             }
 
             function applyDashboard(payload) {
@@ -647,7 +666,7 @@
                 if (note) {
                     if (payload.global && payload.global.serverState === "degraded") {
                         note.hidden = false;
-                        note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et met a jour la pastille d'une application que vous venez d'ouvrir.";
+                        note.textContent = translate(payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier etat connu et met a jour la pastille d'une application que vous venez d'ouvrir.");
                     } else {
                         note.hidden = true;
                         note.textContent = "";
@@ -656,7 +675,7 @@
             }
 
             function markDashboardUnavailable(message) {
-                globalServer.textContent = "Synchronisation indisponible";
+                globalServer.textContent = translate("Synchronisation indisponible");
                 cards.forEach((card) => {
                     const appId = card.dataset.appId;
                     if (appId && getLocalTicket(appId)) {
@@ -671,7 +690,7 @@
                 });
                 if (note) {
                     note.hidden = false;
-                    note.textContent = message || "API dashboard indisponible pour le moment.";
+                    note.textContent = translate(message || "API dashboard indisponible pour le moment.");
                 }
             }
 
@@ -739,6 +758,11 @@
             });
 
             window.addEventListener("focus", () => {
+                refreshDashboard();
+            });
+
+            window.addEventListener("home-language-change", () => {
+                applyLocalFallbackStates();
                 refreshDashboard();
             });
 
