@@ -92,10 +92,6 @@
                 <span class="valeur" id="global-queue">Synchronisation en attente</span>
             </div>
 
-            <div class="indicateur">
-                <span class="label">Serveur de calcul</span>
-                <span class="valeur" id="global-server">Synchronisation en attente</span>
-            </div>
         </section>
 
         <section class="aide-rapide" aria-label="Informations du tableau de bord">
@@ -446,7 +442,6 @@
             const note = document.getElementById("dashboard-note");
             const globalActive = document.getElementById("global-active");
             const globalQueue = document.getElementById("global-queue");
-            const globalServer = document.getElementById("global-server");
 
             function translate(value) {
                 return window.homeI18n ? window.homeI18n.translate(value) : String(value || "");
@@ -646,7 +641,6 @@
                     ? `${payload.activeUsers || 0} · load ${payload.activeLoad || 0}/${payload.maxLoad || 0}`
                     : `${payload.activeUsers || 0} · charge ${payload.activeLoad || 0}/${payload.maxLoad || 0}`;
                 globalQueue.textContent = `${payload.totalQueued || 0}`;
-                globalServer.textContent = translate(payload.serverLabel || "Disponible");
             }
 
             function applyDashboard(payload) {
@@ -674,7 +668,6 @@
             }
 
             function markDashboardUnavailable(message) {
-                globalServer.textContent = translate("Synchronisation indisponible");
                 cards.forEach((card) => {
                     const appId = card.dataset.appId;
                     if (appId && getLocalTicket(appId)) {
