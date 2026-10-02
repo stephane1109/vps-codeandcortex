@@ -18,6 +18,7 @@ from gestion_tickets import (
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
 STYLE_FILE = ROOT / "style.css"
+TRANSLATION_FILE = ROOT / "traduction_anglais.js"
 AIDE_FILE = ROOT / "aide.md"
 SOCIAL_PREVIEW_FILE = ROOT / "assets" / "social-preview.png"
 FAVICON_FILE = ROOT / "assets" / "favicon.ico"
@@ -28,6 +29,7 @@ STATIC_FILES = {
     "/": (INDEX_FILE, "text/html; charset=utf-8"),
     "/index.html": (INDEX_FILE, "text/html; charset=utf-8"),
     "/style.css": (STYLE_FILE, "text/css; charset=utf-8"),
+    "/traduction_anglais.js": (TRANSLATION_FILE, "text/javascript; charset=utf-8"),
     "/aide.md": (AIDE_FILE, "text/markdown; charset=utf-8"),
     "/assets/social-preview.png": (SOCIAL_PREVIEW_FILE, "image/png"),
     "/favicon.ico": (FAVICON_FILE, "image/x-icon"),
