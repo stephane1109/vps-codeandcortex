@@ -41,7 +41,6 @@
         "Comparer deux textes à partir de la divergence de Jensen-Shannon.": "Compare two texts using Jensen-Shannon divergence.",
         "Pour tester les discours algorithmiques des IA génératives.": "Test the algorithmic discourse of generative AI systems.",
         "Petit mais costaud !!! Basé sur le moteur IRAMUTEQ : CHD, AFC, LDA...": "Small but powerful! Based on the IRAMUTEQ engine: CHD, CA, LDA and more.",
-        "Version expérimentale": "Experimental version",
         "Version de base d’IRaMuTeQ Lite avec des développements expérimentaux en cours.": "Base IRaMuTeQ Lite version with ongoing experimental developments.",
         "Analyse Discriminante Linéaire (LDA)": "Linear Discriminant Analysis (LDA)",
         "Test de modélisation thématique LDA.": "LDA topic-modelling test.",
@@ -88,7 +87,7 @@
     const staticSelector = [
         ".sur-titre", "h1", ".description", ".lien-aide", ".selecteur-langue > span",
         ".etat-serveur .label", ".etat-serveur .valeur", ".aide-rapide-titre", ".aide-regle", ".famille-titre",
-        ".titre-application", ".description-application", ".etiquette-experimentale",
+        ".titre-application", ".description-application",
         ".carte-application:not([data-app-id]) .statut",
         ".carte-application:not([data-app-id]) .meta-application", ".version-home"
     ].join(",");

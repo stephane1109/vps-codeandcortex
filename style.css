@@ -553,20 +553,6 @@ h1 {
     color: #23486f;
 }
 
-.etiquette-experimentale {
-    justify-self: center;
-    padding: 0.22rem 0.48rem;
-    border: 1px solid rgba(33, 124, 231, 0.28);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.56);
-    color: #185fae;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    line-height: 1.1;
-    text-transform: uppercase;
-}
-
 .pied {
     margin-top: 24px;
     font-size: 12px;
