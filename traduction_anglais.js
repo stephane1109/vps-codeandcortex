@@ -4,7 +4,7 @@
     const translations = Object.freeze({
         "Serveur VPS": "VPS server",
         "Appli stats Code & Cortex": "Code & Cortex Stats Apps",
-        "Applications d’analyse textuelle, statistique hébergées sur le serveur Code & Cortex. Vous pouvez me contacter via la messagerie de mon blog, le serveur n'a pas de mail.": "Textual and statistical analysis applications hosted on the Code & Cortex server. You can contact me through my blog messaging system; the server has no email service.",
+        "Applications d’analyse textuelle, statistique hébergées sur le serveur Code & Cortex. Vous pouvez me contacter via la messagerie de mon blog, le serveur n'a pas de mail, ou via le support (Google Group). N'hésitez pas à faire remonter vos problèmes et/ou demandes d'amélioration.": "Textual and statistical analysis applications hosted on the Code & Cortex server. You can contact me through my blog messaging system or the support group (Google Group), as the server has no email service. Please report any problems or requests for improvements.",
         "Langue": "Language",
         "Aide d'utilisation": "User guide",
         "Sessions actives": "Active sessions",
