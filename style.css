@@ -68,8 +68,8 @@ h1 {
 .description {
     margin: 18px 0 0 0;
     max-width: 620px;
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: 12.5px;
+    line-height: 1.4;
     color: var(--couleur-secondaire);
 }
 
