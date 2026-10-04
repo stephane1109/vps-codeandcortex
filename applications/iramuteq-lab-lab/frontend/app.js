@@ -14462,6 +14462,13 @@ function populateConfigDialog(dialogContent, sourceCards, suffix = "__dialog") {
   });
 }
 
+function resetChdConfigDialogScroll() {
+  chdConfigDialog.scrollTop = 0;
+  chdConfigDialogContent.scrollTop = 0;
+  const dialogCard = chdConfigDialog.querySelector(".dialog-card");
+  if (dialogCard) dialogCard.scrollTop = 0;
+}
+
 function openChdConfigDialog() {
   if (!chdConfigDialog || !chdConfigDialogContent) {
     log("[error] Boîte de dialogue CHD introuvable dans l'interface.");
@@ -14474,7 +14481,6 @@ function openChdConfigDialog() {
     renderAfcStarredVariablesPickers(chdConfigDialogContent);
     renderClassesModeCards(chdConfigDialogContent);
     renderClassificationModeCards(chdConfigDialogContent);
-    chdConfigDialogContent.scrollTop = 0;
 
     if (typeof chdConfigDialog.showModal === "function") {
       chdConfigDialog.showModal();
@@ -14483,6 +14489,12 @@ function openChdConfigDialog() {
     } else {
       chdConfigDialog.setAttribute("open", "");
     }
+
+    resetChdConfigDialogScroll();
+    window.requestAnimationFrame(() => {
+      resetChdConfigDialogScroll();
+      window.requestAnimationFrame(resetChdConfigDialogScroll);
+    });
   } catch (error) {
     log(`[error] Ouverture de la boîte CHD impossible : ${error?.message || String(error)}`);
   }
