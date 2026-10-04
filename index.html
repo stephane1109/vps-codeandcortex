@@ -734,6 +734,15 @@
                     link_url: linkUrl,
                     link_domain: linkDomain,
                 });
+
+                window.gtag("event", "click", {
+                    link_id: appId,
+                    link_text: applicationName,
+                    link_url: linkUrl,
+                    link_domain: linkDomain,
+                    outbound: true,
+                    transport_type: "beacon",
+                });
             }
 
             cards.forEach((card) => {
