@@ -1176,7 +1176,8 @@ textarea {
 }
 
 .specificities-dialog .dialog-card,
-.chronology-dialog .dialog-card {
+.chronology-dialog .dialog-card,
+.distance-labbe-dialog .dialog-card {
   width: min(1080px, calc(100vw - 3rem));
   max-height: min(900px, calc(100vh - 2rem));
   overflow: auto;
@@ -1185,7 +1186,9 @@ textarea {
 .specificities-dialog .dialog-header,
 .specificities-dialog .dialog-footer,
 .chronology-dialog .dialog-header,
-.chronology-dialog .dialog-footer {
+.chronology-dialog .dialog-footer,
+.distance-labbe-dialog .dialog-header,
+.distance-labbe-dialog .dialog-footer {
   padding-inline: 1.75rem;
 }
 
@@ -1194,6 +1197,10 @@ textarea {
 }
 
 .chronology-form-grid {
+  margin: 1.4rem 1.75rem 0;
+}
+
+.distance-labbe-form-grid {
   margin: 1.4rem 1.75rem 0;
 }
 
@@ -1221,34 +1228,41 @@ textarea {
 }
 
 #specificitiesDialogStatus.is-error,
-#chronologyDialogStatus.is-error {
+#chronologyDialogStatus.is-error,
+#distanceLabbeDialogStatus.is-error {
   color: #b42318;
   font-weight: 650;
 }
 
 #specificitiesDialogStatus,
-#chronologyDialogStatus {
+#chronologyDialogStatus,
+#distanceLabbeDialogStatus {
   margin: 1rem 1.75rem 0;
 }
 
 @media (max-width: 700px) {
   .specificities-dialog .dialog-card,
-  .chronology-dialog .dialog-card {
+  .chronology-dialog .dialog-card,
+  .distance-labbe-dialog .dialog-card {
     width: calc(100vw - 1rem);
   }
 
   .specificities-dialog .dialog-header,
   .specificities-dialog .dialog-footer,
   .chronology-dialog .dialog-header,
-  .chronology-dialog .dialog-footer {
+  .chronology-dialog .dialog-footer,
+  .distance-labbe-dialog .dialog-header,
+  .distance-labbe-dialog .dialog-footer {
     padding-inline: 1rem;
   }
 
   .specificities-form-grid,
   .chronology-form-grid,
+  .distance-labbe-form-grid,
   .specificities-help,
   #specificitiesDialogStatus,
-  #chronologyDialogStatus {
+  #chronologyDialogStatus,
+  #distanceLabbeDialogStatus {
     margin-inline: 1rem;
   }
 }

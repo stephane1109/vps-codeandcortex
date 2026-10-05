@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261002-chronologie4";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -82,6 +82,14 @@ const chronologyModeHelp = document.getElementById("chronologyModeHelp");
 const chronologyDialogStatus = document.getElementById("chronologyDialogStatus");
 const runChronologyBtn = document.getElementById("runChronologyBtn");
 const closeChronologyBtn = document.getElementById("closeChronologyBtn");
+const openDistanceLabbeDialogBtn = document.getElementById("openDistanceLabbeDialogBtn");
+const openDistanceLabbeResultsDialogBtn = document.getElementById("openDistanceLabbeResultsDialogBtn");
+const distanceLabbeDialog = document.getElementById("distanceLabbeDialog");
+const distanceLabbeVariable = document.getElementById("distanceLabbeVariable");
+const distanceLabbeMinEffectif = document.getElementById("distanceLabbeMinEffectif");
+const distanceLabbeDialogStatus = document.getElementById("distanceLabbeDialogStatus");
+const runDistanceLabbeBtn = document.getElementById("runDistanceLabbeBtn");
+const closeDistanceLabbeBtn = document.getElementById("closeDistanceLabbeBtn");
 const logs = document.getElementById("logs");
 const corpusPreview = document.getElementById("corpusPreview");
 const analysisSteps = document.getElementById("analysisSteps");
@@ -144,6 +152,7 @@ const helpMarkdownContent = document.getElementById("helpMarkdownContent");
 const helpDiscriminationSimpleMarkdownContent = document.getElementById("helpDiscriminationSimpleMarkdownContent");
 const helpMorphoMarkdownContent = document.getElementById("helpMorphoMarkdownContent");
 const helpChronologyMarkdownContent = document.getElementById("helpChronologyMarkdownContent");
+const helpDistanceLabbeMarkdownContent = document.getElementById("helpDistanceLabbeMarkdownContent");
 const helpJsdMarkdownContent = document.getElementById("helpJsdMarkdownContent");
 const helpSuiviMarkdownContent = document.getElementById("helpSuiviMarkdownContent");
 const helpMultimodaleMarkdownContent = document.getElementById("helpMultimodaleMarkdownContent");
@@ -370,7 +379,12 @@ const resultContainers = {
   chronologyPercentagesTable: document.getElementById("chronologyPercentagesTable"),
   chronologySegmentsTable: document.getElementById("chronologySegmentsTable"),
   chronologyChi2Table: document.getElementById("chronologyChi2Table"),
-  chronologyResidualsTable: document.getElementById("chronologyResidualsTable")
+  chronologyResidualsTable: document.getElementById("chronologyResidualsTable"),
+  labbeSummary: document.getElementById("labbeSummary"),
+  labbeDendrogram: document.getElementById("labbeDendrogram"),
+  labbeHeatmap: document.getElementById("labbeHeatmap"),
+  labbePairsTable: document.getElementById("labbePairsTable"),
+  labbeMatrixTable: document.getElementById("labbeMatrixTable")
 };
 
 const RUNNING_ANALYSIS_STORAGE_KEY = "iramuteq-lite-running-analysis";
@@ -404,6 +418,7 @@ const appState = {
   chronologyRequest: null,
   chronologyVariables: [],
   chronologyAvailability: { crossed: false, iramuteq: false },
+  distanceLabbeRequest: null,
   discriminationSimpleSummaryPayload: null,
   jsdConcordancierRows: [],
   suiviPresentation: {
@@ -1215,6 +1230,7 @@ function updateDownloadResultsState() {
 function getAnalysisKindLabel(analysisKind) {
   if (analysisKind === "specificites") return "Calcul de spécificités";
   if (analysisKind === "chrono") return "Analyse chronologique";
+  if (analysisKind === "labbe") return "Distance intertextuelle";
   if (analysisKind === "suivi") return "Trajectoire lexicale";
   if (analysisKind === "simi") return "Similitudes";
   if (analysisKind === "multimodal_audio") return "Multimodal · Audio";
@@ -1255,6 +1271,13 @@ function getAnalysisHistoryLabel(entry) {
     const detail = [timeVariable, comparisonVariable].filter(Boolean).join(" × ");
     const dateLabel = formatAnalysisDateTime(entry?.createdAt);
     return [modeLabel, detail, dateLabel].filter(Boolean).join(" · ");
+  }
+  if (entry?.analysisKind === "labbe") {
+    const variable = String(entry?.summary?.variable_label || "").trim();
+    const count = Number(entry?.summary?.n_textes) || 0;
+    const detail = [variable, count ? `${count} textes` : ""].filter(Boolean).join(" · ");
+    const dateLabel = formatAnalysisDateTime(entry?.createdAt);
+    return [kindLabel, detail, dateLabel].filter(Boolean).join(" · ");
   }
   const dateLabel = formatAnalysisDateTime(entry?.createdAt);
   return dateLabel ? `${kindLabel} · ${dateLabel}` : kindLabel;
@@ -11006,6 +11029,128 @@ async function runChronologyFromDialog() {
   }
 }
 
+function closeDistanceLabbeDialog() {
+  appState.distanceLabbeRequest = null;
+  if (distanceLabbeDialog?.open) distanceLabbeDialog.close();
+}
+
+function setDistanceLabbeDialogStatus(message, { isError = false } = {}) {
+  if (!distanceLabbeDialogStatus) return;
+  distanceLabbeDialogStatus.textContent = String(message || "");
+  distanceLabbeDialogStatus.classList.toggle("is-error", Boolean(isError));
+}
+
+function distanceLabbeVariableOptionLabel(variable) {
+  const modalities = Array.isArray(variable?.modalities) ? variable.modalities : [];
+  const sample = modalities.slice(0, 3).join(", ");
+  const suffix = modalities.length > 3 ? ", …" : "";
+  return `${variable?.label || variable?.id} (${modalities.length} textes${sample ? ` : ${sample}${suffix}` : ""})`;
+}
+
+function findDistanceLabbeSourceAnalysis() {
+  const activeId = String(appState.activeAnalysisHistoryId || "").trim();
+  const active = appState.analysisHistory.find((item) => String(item.id) === activeId);
+  if (active?.persisted && active.analysisKind === "chd" && active.completed && active.success) return active;
+  const corpusName = String(active?.corpusName || appState.corpusFileName || "").trim();
+  return appState.analysisHistory.find((item) => (
+    item?.persisted && item.analysisKind === "chd" && item.completed && item.success &&
+    (!corpusName || String(item.corpusName || "") === corpusName)
+  )) || null;
+}
+
+async function openDistanceLabbeDialog() {
+  const entry = findDistanceLabbeSourceAnalysis();
+  const analysisId = String(entry?.id || "").trim();
+  if (!analysisId) {
+    log("[error] Sélectionnez d'abord une CHD terminée dans l'arborescence.");
+    setSidebarRuntimeStatus("Sélectionnez une CHD terminée avant la distance intertextuelle.", "warning");
+    return;
+  }
+
+  appState.distanceLabbeRequest = { analysisId };
+  if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
+  if (distanceLabbeMinEffectif) distanceLabbeMinEffectif.value = "1";
+  if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
+  setDistanceLabbeDialogStatus("Lecture des textes et modalités disponibles...");
+  if (distanceLabbeDialog && !distanceLabbeDialog.open) {
+    if (typeof distanceLabbeDialog.showModal === "function") distanceLabbeDialog.showModal();
+    else distanceLabbeDialog.show();
+  }
+
+  try {
+    const payload = await callAnalysisHistoryApi(
+      `/api/analyses/${encodeURIComponent(analysisId)}/distance-labbe/options`
+    );
+    const variables = Array.isArray(payload?.variables) ? payload.variables : [];
+    if (!payload?.available || !variables.length) {
+      throw new Error("Au moins deux classes ou deux modalités sont nécessaires.");
+    }
+    variables.forEach((variable) => {
+      const option = document.createElement("option");
+      option.value = String(variable?.id || "");
+      option.textContent = distanceLabbeVariableOptionLabel(variable);
+      distanceLabbeVariable?.appendChild(option);
+    });
+    if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = false;
+    setDistanceLabbeDialogStatus("Prêt. La matrice lexicale finale de la CHD sera réutilisée.");
+  } catch (error) {
+    setDistanceLabbeDialogStatus(error?.message || String(error), { isError: true });
+    log(`[error] Distance intertextuelle indisponible : ${error?.message || String(error)}`);
+  }
+}
+
+async function runDistanceLabbeFromDialog() {
+  const request = appState.distanceLabbeRequest;
+  if (!request?.analysisId) return;
+  const variable = String(distanceLabbeVariable?.value || "").trim();
+  const minEffectif = Number.parseInt(String(distanceLabbeMinEffectif?.value || "1"), 10);
+  if (!variable) {
+    setDistanceLabbeDialogStatus("Sélectionnez les textes ou modalités à comparer.", { isError: true });
+    return;
+  }
+  if (!Number.isInteger(minEffectif) || minEffectif < 1) {
+    setDistanceLabbeDialogStatus("La fréquence minimale doit être un entier supérieur ou égal à 1.", { isError: true });
+    return;
+  }
+
+  if (runDistanceLabbeBtn) {
+    runDistanceLabbeBtn.disabled = true;
+    runDistanceLabbeBtn.textContent = "Calcul en cours...";
+  }
+  setDistanceLabbeDialogStatus("Réduction des longueurs et calcul des distances par paire...");
+  try {
+    const payload = await callAnalysisHistoryApi(
+      `/api/analyses/${encodeURIComponent(request.analysisId)}/distance-labbe`,
+      { method: "POST", body: { variable, minEffectif } }
+    );
+    const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
+    if (!entry) throw new Error("Le calcul n'a pas pu être ajouté à l'historique.");
+    entry.outputDir = String(payload?.outputDir || "").trim() || null;
+    entry.artifacts = Array.isArray(payload?.files) ? payload.files : [];
+    entry.summary = payload?.summary || entry.summary;
+    entry.logs = Array.isArray(payload?.logs) ? payload.logs : entry.logs;
+    rememberAnalysisHistoryEntry(entry);
+    appState.outputDir = entry.outputDir;
+    const virtualFiles = entry.artifacts.map((artifact) =>
+      createVirtualFileFromArtifact(artifact, entry.folderName || entry.jobId || entry.id)
+    );
+    await handleExportsFolderSelection(virtualFiles, "distance_intertextuelle");
+    renderAnalysisSteps(entry.logs);
+    renderAnalysisSummary(entry.summary || null);
+    closeDistanceLabbeDialog();
+    setSidebarRuntimeStatus("Distance intertextuelle terminée.", "success");
+    log("[info] Distance intertextuelle ajoutée à l'arborescence.");
+  } catch (error) {
+    setDistanceLabbeDialogStatus(error?.message || String(error), { isError: true });
+    log(`[error] Distance intertextuelle impossible : ${error?.message || String(error)}`);
+  } finally {
+    if (runDistanceLabbeBtn) {
+      runDistanceLabbeBtn.disabled = false;
+      runDistanceLabbeBtn.textContent = "Calculer les distances";
+    }
+  }
+}
+
 async function saveCurrentSubcorpus() {
   const exportState = appState.termSegmentsExport;
   const content = buildSubcorpusContent(exportState?.segments || []);
@@ -15037,6 +15182,88 @@ async function renderChronologyExports(index) {
   return true;
 }
 
+async function renderDistanceLabbeExports(index) {
+  const summaryFile = findFile(index, [(path) => path.endsWith("resume_distance_labbe.json")]);
+  const pairsFile = findFile(index, [(path) => path.endsWith("distance_labbe_paires.csv")]);
+  const matrixFile = findFile(index, [(path) => path.endsWith("distance_labbe_matrice.csv")]);
+  const dendrogramFile = findFile(index, [(path) => path.endsWith("distance_labbe_dendrogramme.png")]);
+  const heatmapFile = findFile(index, [(path) => path.endsWith("distance_labbe_carte.png")]);
+  const warningsContainer = document.getElementById("labbeWarnings");
+
+  if (!summaryFile && !pairsFile && !dendrogramFile) {
+    setContainerEmptyState(resultContainers.labbeSummary, "Ouvrez une distance intertextuelle depuis l'arborescence.");
+    setContainerEmptyState(resultContainers.labbeDendrogram, "Aucun dendrogramme chargé.");
+    setContainerEmptyState(resultContainers.labbeHeatmap, "Aucune carte des distances chargée.");
+    setContainerEmptyState(resultContainers.labbePairsTable, "Aucune comparaison chargée.");
+    setContainerEmptyState(resultContainers.labbeMatrixTable, "Aucune matrice chargée.");
+    if (warningsContainer) warningsContainer.hidden = true;
+    return false;
+  }
+
+  let summary = null;
+  if (summaryFile) summary = JSON.parse(await summaryFile.text());
+  if (summary) {
+    clearContainer(resultContainers.labbeSummary);
+    const formatDistance = (value) => Number.isFinite(Number(value))
+      ? Number(value).toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 4 })
+      : "—";
+    const metrics = [
+      ["Textes comparés", summary.n_textes],
+      ["Variable", summary.variable_label],
+      ["Formes retenues", summary.n_formes],
+      ["Fréquence minimale", summary.min_effectif],
+      ["Distance minimale", formatDistance(summary.distance_min)],
+      ["Distance maximale", formatDistance(summary.distance_max)],
+      ["Paire la plus proche", summary.paire_plus_proche],
+      ["Paire la plus éloignée", summary.paire_plus_eloignee]
+    ];
+    const grid = document.createElement("div");
+    grid.className = "summary-grid";
+    metrics.forEach(([label, value]) => {
+      const card = document.createElement("article");
+      card.className = "summary-card";
+      const title = document.createElement("p");
+      title.className = "summary-label";
+      title.textContent = label;
+      const body = document.createElement("strong");
+      body.className = "summary-value";
+      body.textContent = formatSummaryValue(value);
+      card.append(title, body);
+      grid.appendChild(card);
+    });
+    resultContainers.labbeSummary.appendChild(grid);
+
+    const warnings = Array.isArray(summary.warnings)
+      ? summary.warnings.filter(Boolean)
+      : (summary.warnings ? [summary.warnings] : []);
+    if (warningsContainer) {
+      warningsContainer.innerHTML = "";
+      warnings.forEach((warning) => {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = warning;
+        warningsContainer.appendChild(paragraph);
+      });
+      warningsContainer.hidden = warnings.length === 0;
+    }
+  }
+
+  renderImage(resultContainers.labbeDendrogram, dendrogramFile, "Dendrogramme des distances intertextuelles");
+  renderImage(resultContainers.labbeHeatmap, heatmapFile, "Carte des distances intertextuelles");
+  makeResultImagePreviewable(resultContainers.labbeDendrogram, "Dendrogramme des distances", "Distance intertextuelle");
+  makeResultImagePreviewable(resultContainers.labbeHeatmap, "Carte des distances", "Distance intertextuelle");
+  await renderCsvFromFile(resultContainers.labbePairsTable, pairsFile, {
+    title: "distance_labbe_paires.csv",
+    maxRows: 2000,
+    emptyMessage: "Aucune comparaison par paire disponible."
+  });
+  await renderCsvFromFile(resultContainers.labbeMatrixTable, matrixFile, {
+    title: "distance_labbe_matrice.csv",
+    maxRows: 500,
+    emptyMessage: "Aucune matrice de distances disponible."
+  });
+  return true;
+}
+
 async function renderExports(entries, index) {
   clearObjectUrls();
   appState.chdSegmentsByClass = new Map();
@@ -15261,6 +15488,10 @@ async function renderExports(entries, index) {
     await renderChronologyExports(index);
   });
 
+  await safeRenderExportSection("Distance intertextuelle", async () => {
+    await renderDistanceLabbeExports(index);
+  });
+
   try {
     appState.exportEntries = entries;
     renderResults(entries.map((entry) => entry.relativePath));
@@ -15364,6 +15595,11 @@ function resetResultPanes() {
     chronologySegmentsTable: "Aucun segment chronologique chargé.",
     chronologyChi2Table: "Aucun test χ² chronologique chargé.",
     chronologyResidualsTable: "Aucun tableau des écarts chronologiques chargé.",
+    labbeSummary: "Ouvrez une distance intertextuelle depuis l'arborescence.",
+    labbeDendrogram: "Aucun dendrogramme de distances chargé.",
+    labbeHeatmap: "Aucune carte des distances chargée.",
+    labbePairsTable: "Aucune comparaison par paire chargée.",
+    labbeMatrixTable: "Aucune matrice de distances chargée.",
     suiviMeta: "Chargez un dossier d'exports pour afficher le cadre de la trajectoire lexicale.",
     suiviIndicatorsTable: "Chargez un dossier d'exports pour afficher les indicateurs par entretien.",
     suiviEntropyPlot: "Chargez un dossier d'exports pour afficher la courbe de l'entropie lexicale.",
@@ -15894,6 +16130,22 @@ chronologyMode?.addEventListener("change", () => {
 
 runChronologyBtn?.addEventListener("click", () => {
   void runChronologyFromDialog();
+});
+
+openDistanceLabbeDialogBtn?.addEventListener("click", () => {
+  void openDistanceLabbeDialog();
+});
+
+openDistanceLabbeResultsDialogBtn?.addEventListener("click", () => {
+  void openDistanceLabbeDialog();
+});
+
+closeDistanceLabbeBtn?.addEventListener("click", () => {
+  closeDistanceLabbeDialog();
+});
+
+runDistanceLabbeBtn?.addEventListener("click", () => {
+  void runDistanceLabbeFromDialog();
 });
 
 termSegmentsDialog?.addEventListener("close", () => {
@@ -17507,6 +17759,7 @@ void loadHelpMarkdown(helpMarkdownContent, "help.md");
 void loadHelpMarkdown(helpDiscriminationSimpleMarkdownContent, "discriminationsimple.md");
 void loadHelpMarkdown(helpMorphoMarkdownContent, "pos_lexique.md");
 void loadHelpMarkdown(helpChronologyMarkdownContent, "aide-chrono.md");
+void loadHelpMarkdown(helpDistanceLabbeMarkdownContent, "aide-distance-labbe.md");
 void initialiseTicketSidebarOnOpen().then(() => {
   window.setTimeout(() => {
     void refreshTicketSidebarStatus();

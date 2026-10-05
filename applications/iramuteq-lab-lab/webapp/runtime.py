@@ -1530,6 +1530,156 @@ def run_chronology_analysis(
     }
 
 
+def _labbe_source_path(output_dir: str) -> Path:
+    output_path = Path(str(output_dir or "").strip()).expanduser().resolve()
+    if not output_path.is_dir():
+        raise FileNotFoundError("Le dossier d'exports de la CHD est introuvable.")
+    source_path = output_path / ".internal" / "source_specificites.rds"
+    if not source_path.is_file():
+        raise FileNotFoundError(
+            "Cette analyse ne contient pas la matrice nécessaire à la distance intertextuelle. "
+            "Relancez la CHD avec cette version."
+        )
+    return source_path
+
+
+def _run_distance_labbe_r(arguments: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            resolve_rscript(),
+            "--vanilla",
+            str(PROJECT_ROOT / "backend" / "r" / "run_distance_labbe.R"),
+            *arguments,
+        ],
+        cwd=PROJECT_ROOT,
+        env=build_command_env(),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def describe_distance_labbe(output_dir: str) -> dict[str, Any]:
+    source_path = _labbe_source_path(output_dir)
+    process = _run_distance_labbe_r(["--mode", "describe", "--source", str(source_path)])
+    payload = try_parse_json(process.stdout)
+    if payload is None or process.returncode != 0 or not payload.get("success"):
+        message = str((payload or {}).get("message") or "").strip()
+        raise RuntimeError(message or process_failure_message(process, "Lecture des textes à comparer impossible."))
+    return payload
+
+
+def run_distance_labbe_analysis(
+    parent_output_dir: str,
+    *,
+    variable: str,
+    min_effectif: int = 1,
+) -> dict[str, Any]:
+    source_path = _labbe_source_path(parent_output_dir)
+    safe_variable = str(variable or "").strip()
+    try:
+        safe_min_effectif = int(min_effectif)
+    except (TypeError, ValueError) as error:
+        raise ValueError("La fréquence minimale doit être un entier.") from error
+    if not safe_variable:
+        raise ValueError("Sélectionnez les textes ou modalités à comparer.")
+    if safe_min_effectif < 1:
+        raise ValueError("La fréquence minimale doit être supérieure ou égale à 1.")
+
+    job_id = next_job_id("labbe")
+    job_root = ensure_directory(jobs_root() / job_id)
+    export_dir = ensure_directory(job_root / "exports")
+    status_file = job_root / "status.json"
+    results_file = job_root / "results.json"
+    stdout_log = job_root / "stdout.log"
+    stderr_log = job_root / "stderr.log"
+    started_at = int(time.time())
+    write_json_file(
+        status_file,
+        {
+            "job_id": job_id,
+            "state": "running",
+            "progress": 20,
+            "message": "Calcul des distances intertextuelles de Labbé.",
+            "logs": ["Agrégation de la matrice lexicale selon les modalités sélectionnées."],
+            "created_at": started_at,
+            "updated_at": started_at,
+        },
+    )
+
+    process = _run_distance_labbe_r(
+        [
+            "--mode", "calculate",
+            "--source", str(source_path),
+            "--output-dir", str(export_dir),
+            "--variable", safe_variable,
+            "--min-effectif", str(safe_min_effectif),
+        ]
+    )
+    stdout_log.write_text(process.stdout, encoding="utf-8")
+    stderr_log.write_text(process.stderr, encoding="utf-8")
+    payload = try_parse_json(process.stdout)
+    if payload is None or process.returncode != 0 or not payload.get("success"):
+        message = str((payload or {}).get("message") or "").strip()
+        message = message or process_failure_message(process, "Le calcul des distances intertextuelles a échoué.")
+        logs = [f"[error] {message}"]
+        write_json_file(
+            status_file,
+            {
+                "job_id": job_id,
+                "state": "failed",
+                "progress": 100,
+                "message": message,
+                "logs": logs,
+                "created_at": started_at,
+                "updated_at": int(time.time()),
+            },
+        )
+        write_json_file(results_file, {"success": False, "job_id": job_id, "message": message, "logs": logs})
+        raise RuntimeError(message)
+
+    summary = payload.get("summary") or {}
+    logs = [
+        "Distance intertextuelle de Labbé calculée.",
+        f"Variable : {summary.get('variable_label') or safe_variable}.",
+        f"Textes ou modalités comparés : {summary.get('n_textes') or 0}.",
+    ]
+    result_payload = {
+        "success": True,
+        "job_id": job_id,
+        "output_dir": str(export_dir),
+        "summary": summary,
+        "logs": logs,
+        "status_file": str(status_file),
+        "stdout_log": str(stdout_log),
+        "stderr_log": str(stderr_log),
+    }
+    write_json_file(results_file, result_payload)
+    write_json_file(
+        status_file,
+        {
+            "job_id": job_id,
+            "state": "completed",
+            "progress": 100,
+            "message": "Distance intertextuelle terminée.",
+            "logs": logs,
+            "summary": summary,
+            "created_at": started_at,
+            "updated_at": int(time.time()),
+        },
+    )
+    return {
+        "success": True,
+        "jobId": job_id,
+        "outputDir": str(export_dir),
+        "summary": summary,
+        "logs": logs,
+        "files": collect_artifact_files(export_dir),
+        "artifactCount": count_artifact_files(export_dir),
+    }
+
+
 def classify_archive_entry(path: str) -> str:
     normalized = str(path or "").replace("\\", "/")
     if normalized.endswith((".png", ".jpg", ".jpeg")):

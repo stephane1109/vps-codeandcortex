@@ -38,6 +38,7 @@
           <button class="nav-link" data-tab-target="similitudes" type="button">Similitudes</button>
           <button class="nav-link" data-tab-target="specificites" type="button">Calcul de spécificités</button>
           <button class="nav-link" data-tab-target="chronologie_croisee" type="button">Analyse chronologique</button>
+          <button class="nav-link" data-tab-target="distance_intertextuelle" type="button">Distance intertextuelle</button>
           <button class="nav-link" data-tab-target="aide" type="button">Aide</button>
         </nav>
       </header>
@@ -209,9 +210,10 @@
                 <p class="section-kicker">CHD</p>
                 <h2>Résultats CHD</h2>
               </div>
-              <button id="openChronologyDialogBtn" class="primary-button" type="button">
-                Analyse chronologique
-              </button>
+              <div class="toolbar">
+                <button id="openDistanceLabbeDialogBtn" class="secondary-button" type="button">Distance intertextuelle</button>
+                <button id="openChronologyDialogBtn" class="primary-button" type="button">Analyse chronologique</button>
+              </div>
             </div>
 
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
@@ -484,6 +486,39 @@
             </div>
           </section>
 
+          <section class="panel" data-panel="distance_intertextuelle" hidden>
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">Lexicométrie</p>
+                <h2>Distance intertextuelle</h2>
+              </div>
+              <button id="openDistanceLabbeResultsDialogBtn" class="primary-button" type="button">Nouveau calcul</button>
+            </div>
+            <div class="section-stack">
+              <article class="card section-card">
+                <h3>Configuration</h3>
+                <div id="labbeSummary" class="result-pane"></div>
+                <div id="labbeWarnings" class="field-help field-help--alert" hidden></div>
+              </article>
+              <article class="card">
+                <h3>Dendrogramme des distances</h3>
+                <div id="labbeDendrogram" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Carte des distances</h3>
+                <div id="labbeHeatmap" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Comparaisons par paire</h3>
+                <div id="labbePairsTable" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Matrice complète</h3>
+                <div id="labbeMatrixTable" class="result-pane"></div>
+              </article>
+            </div>
+          </section>
+
           <section class="panel" data-panel="aide" hidden>
             <div class="page-heading">
               <div>
@@ -497,6 +532,7 @@
               <button class="local-tab-button" data-help-subtab-target="help_discrimination_simple" type="button">CHD distance optimisée</button>
               <button class="local-tab-button" data-help-subtab-target="help_morpho" type="button">Aide morpho</button>
               <button class="local-tab-button" data-help-subtab-target="help_chronologie" type="button">Aide A-Chronologique</button>
+              <button class="local-tab-button" data-help-subtab-target="help_distance_labbe" type="button">Aide Distance intertextuelle</button>
             </div>
 
             <section class="local-tab-panel is-active" data-help-subpanel="help_general">
@@ -527,6 +563,14 @@
               <article class="card prose-card">
                 <div id="helpChronologyMarkdownContent" class="markdown-content">
                   Chargement de <code>help/aide-chrono.md</code>...
+                </div>
+              </article>
+            </section>
+
+            <section class="local-tab-panel" data-help-subpanel="help_distance_labbe" hidden>
+              <article class="card prose-card">
+                <div id="helpDistanceLabbeMarkdownContent" class="markdown-content">
+                  Chargement de <code>help/aide-distance-labbe.md</code>...
                 </div>
               </article>
             </section>
@@ -1330,7 +1374,44 @@
       </div>
     </dialog>
 
+    <dialog id="distanceLabbeDialog" class="dialog-panel distance-labbe-dialog">
+      <div class="dialog-card">
+        <header class="dialog-header">
+          <div>
+            <p class="dialog-kicker">Analyse complémentaire de la CHD</p>
+            <h2>Distance intertextuelle de Labbé</h2>
+            <p class="muted">Comparez les profils lexicaux des classes CHD ou des modalités d’une variable étoilée.</p>
+          </div>
+          <button id="closeDistanceLabbeBtn" class="secondary-button" type="button">Fermer</button>
+        </header>
+
+        <div class="form-grid distance-labbe-form-grid">
+          <label>
+            Textes ou modalités à comparer
+            <select id="distanceLabbeVariable"></select>
+          </label>
+          <label>
+            Fréquence minimale des formes
+            <input id="distanceLabbeMinEffectif" type="number" min="1" step="1" value="1" />
+          </label>
+        </div>
+
+        <aside class="specificities-help" aria-label="Aide sur la distance intertextuelle">
+          <h3>Principe</h3>
+          <p>Chaque modalité devient un texte agrégé. Le texte le plus long est ramené à la taille du plus court, puis les écarts absolus de fréquence sont normalisés. Une distance proche de 0 indique des profils lexicaux proches ; une valeur plus élevée indique des profils plus différents.</p>
+          <p>La CHD n’est pas recalculée : le mode réutilise sa matrice lexicale finale.</p>
+        </aside>
+
+        <p id="distanceLabbeDialogStatus" class="muted"></p>
+        <footer class="dialog-footer">
+          <div class="dialog-footer-actions">
+            <button id="runDistanceLabbeBtn" class="primary-button" type="button">Calculer les distances</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261004-chd-scrolltop"></script>
+    <script type="module" src="./app.js?v=20261005-distance-labbe"></script>
   </body>
 </html>
