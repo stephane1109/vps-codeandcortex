@@ -26,7 +26,7 @@ for (stats_df in list(stats_vectorise, stats_classique)) {
   stopifnot(ligne$p_log < log(.Machine$double.xmin))
 }
 
-batch_expressions <- parse(file = file.path("backend", "r", "run_iramuteq_batch.R"))
+batch_expressions <- parse(file = file.path("backend", "r", "pipeline_utilitaires.R"))
 charger_formateur_batch <- function(name) {
   for (expression in batch_expressions) {
     if (
