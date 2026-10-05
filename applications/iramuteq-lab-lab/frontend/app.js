@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe-fix1";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -85,6 +85,7 @@ const closeChronologyBtn = document.getElementById("closeChronologyBtn");
 const openDistanceLabbeDialogBtn = document.getElementById("openDistanceLabbeDialogBtn");
 const openDistanceLabbeResultsDialogBtn = document.getElementById("openDistanceLabbeResultsDialogBtn");
 const distanceLabbeDialog = document.getElementById("distanceLabbeDialog");
+const distanceLabbeSource = document.getElementById("distanceLabbeSource");
 const distanceLabbeVariable = document.getElementById("distanceLabbeVariable");
 const distanceLabbeMinEffectif = document.getElementById("distanceLabbeMinEffectif");
 const distanceLabbeDialogStatus = document.getElementById("distanceLabbeDialogStatus");
@@ -11058,28 +11059,35 @@ function findDistanceLabbeSourceAnalysis() {
   )) || null;
 }
 
-async function openDistanceLabbeDialog() {
-  const entry = findDistanceLabbeSourceAnalysis();
-  const analysisId = String(entry?.id || "").trim();
-  if (!analysisId) {
-    log("[error] Sélectionnez d'abord une CHD terminée dans l'arborescence.");
-    setSidebarRuntimeStatus("Sélectionnez une CHD terminée avant la distance intertextuelle.", "warning");
+function availableDistanceLabbeSourceAnalyses() {
+  return appState.analysisHistory.filter((item) => (
+    item?.persisted && item.analysisKind === "chd" && item.completed && item.success
+  ));
+}
+
+function distanceLabbeSourceOptionLabel(entry) {
+  const corpus = String(entry?.corpusName || "Corpus").trim();
+  const date = formatAnalysisDateTime(entry?.createdAt);
+  return date ? `${corpus} — ${date}` : corpus;
+}
+
+async function loadDistanceLabbeOptions(analysisId) {
+  const safeAnalysisId = String(analysisId || "").trim();
+  appState.distanceLabbeRequest = safeAnalysisId ? { analysisId: safeAnalysisId } : null;
+  if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
+  if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
+  if (!safeAnalysisId) {
+    setDistanceLabbeDialogStatus(
+      "Aucune CHD terminée n’est disponible. Lancez d’abord une CHD, puis revenez à cette analyse.",
+      { isError: true }
+    );
     return;
   }
 
-  appState.distanceLabbeRequest = { analysisId };
-  if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
-  if (distanceLabbeMinEffectif) distanceLabbeMinEffectif.value = "1";
-  if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
-  setDistanceLabbeDialogStatus("Lecture des textes et modalités disponibles...");
-  if (distanceLabbeDialog && !distanceLabbeDialog.open) {
-    if (typeof distanceLabbeDialog.showModal === "function") distanceLabbeDialog.showModal();
-    else distanceLabbeDialog.show();
-  }
-
+  setDistanceLabbeDialogStatus("Lecture des classes et modalités disponibles...");
   try {
     const payload = await callAnalysisHistoryApi(
-      `/api/analyses/${encodeURIComponent(analysisId)}/distance-labbe/options`
+      `/api/analyses/${encodeURIComponent(safeAnalysisId)}/distance-labbe/options`
     );
     const variables = Array.isArray(payload?.variables) ? payload.variables : [];
     if (!payload?.available || !variables.length) {
@@ -11097,6 +11105,31 @@ async function openDistanceLabbeDialog() {
     setDistanceLabbeDialogStatus(error?.message || String(error), { isError: true });
     log(`[error] Distance intertextuelle indisponible : ${error?.message || String(error)}`);
   }
+}
+
+async function openDistanceLabbeDialog() {
+  const preferredEntry = findDistanceLabbeSourceAnalysis();
+  const sources = availableDistanceLabbeSourceAnalyses();
+  if (distanceLabbeSource) {
+    distanceLabbeSource.innerHTML = "";
+    sources.forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = String(entry.id || "");
+      option.textContent = distanceLabbeSourceOptionLabel(entry);
+      distanceLabbeSource.appendChild(option);
+    });
+  }
+  if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
+  if (distanceLabbeMinEffectif) distanceLabbeMinEffectif.value = "1";
+  if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
+  if (distanceLabbeDialog && !distanceLabbeDialog.open) {
+    if (typeof distanceLabbeDialog.showModal === "function") distanceLabbeDialog.showModal();
+    else distanceLabbeDialog.show();
+  }
+
+  const selectedId = String(preferredEntry?.id || sources[0]?.id || "").trim();
+  if (distanceLabbeSource && selectedId) distanceLabbeSource.value = selectedId;
+  await loadDistanceLabbeOptions(selectedId);
 }
 
 async function runDistanceLabbeFromDialog() {
@@ -16138,6 +16171,10 @@ openDistanceLabbeDialogBtn?.addEventListener("click", () => {
 
 openDistanceLabbeResultsDialogBtn?.addEventListener("click", () => {
   void openDistanceLabbeDialog();
+});
+
+distanceLabbeSource?.addEventListener("change", () => {
+  void loadDistanceLabbeOptions(distanceLabbeSource.value);
 });
 
 closeDistanceLabbeBtn?.addEventListener("click", () => {
