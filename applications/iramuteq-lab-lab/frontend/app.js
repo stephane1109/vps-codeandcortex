@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe-fix1";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe-standalone";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -82,10 +82,8 @@ const chronologyModeHelp = document.getElementById("chronologyModeHelp");
 const chronologyDialogStatus = document.getElementById("chronologyDialogStatus");
 const runChronologyBtn = document.getElementById("runChronologyBtn");
 const closeChronologyBtn = document.getElementById("closeChronologyBtn");
-const openDistanceLabbeDialogBtn = document.getElementById("openDistanceLabbeDialogBtn");
 const openDistanceLabbeResultsDialogBtn = document.getElementById("openDistanceLabbeResultsDialogBtn");
 const distanceLabbeDialog = document.getElementById("distanceLabbeDialog");
-const distanceLabbeSource = document.getElementById("distanceLabbeSource");
 const distanceLabbeVariable = document.getElementById("distanceLabbeVariable");
 const distanceLabbeMinEffectif = document.getElementById("distanceLabbeMinEffectif");
 const distanceLabbeDialogStatus = document.getElementById("distanceLabbeDialogStatus");
@@ -1316,6 +1314,8 @@ function isPersistentAnalysisHistoryAvailable() {
 
 async function callAnalysisHistoryApi(path, { method = "GET", body = null } = {}) {
   const headers = body === null ? {} : { "Content-Type": "application/json" };
+  const ticketId = String(latestTicketSnapshot?.ticket_id || window.__APP_TICKET_CURRENT_ID__ || "").trim();
+  if (ticketId) headers["X-App-Ticket-Id"] = ticketId;
   const response = await fetch(path, {
     method,
     credentials: "same-origin",
@@ -11048,95 +11048,55 @@ function distanceLabbeVariableOptionLabel(variable) {
   return `${variable?.label || variable?.id} (${modalities.length} textes${sample ? ` : ${sample}${suffix}` : ""})`;
 }
 
-function findDistanceLabbeSourceAnalysis() {
-  const activeId = String(appState.activeAnalysisHistoryId || "").trim();
-  const active = appState.analysisHistory.find((item) => String(item.id) === activeId);
-  if (active?.persisted && active.analysisKind === "chd" && active.completed && active.success) return active;
-  const corpusName = String(active?.corpusName || appState.corpusFileName || "").trim();
-  return appState.analysisHistory.find((item) => (
-    item?.persisted && item.analysisKind === "chd" && item.completed && item.success &&
-    (!corpusName || String(item.corpusName || "") === corpusName)
-  )) || null;
-}
-
-function availableDistanceLabbeSourceAnalyses() {
-  return appState.analysisHistory.filter((item) => (
-    item?.persisted && item.analysisKind === "chd" && item.completed && item.success
-  ));
-}
-
-function distanceLabbeSourceOptionLabel(entry) {
-  const corpus = String(entry?.corpusName || "Corpus").trim();
-  const date = formatAnalysisDateTime(entry?.createdAt);
-  return date ? `${corpus} — ${date}` : corpus;
-}
-
-async function loadDistanceLabbeOptions(analysisId) {
-  const safeAnalysisId = String(analysisId || "").trim();
-  appState.distanceLabbeRequest = safeAnalysisId ? { analysisId: safeAnalysisId } : null;
-  if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
-  if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
-  if (!safeAnalysisId) {
-    setDistanceLabbeDialogStatus(
-      "Aucune CHD terminée n’est disponible. Lancez d’abord une CHD, puis revenez à cette analyse.",
-      { isError: true }
-    );
-    return;
-  }
-
-  setDistanceLabbeDialogStatus("Lecture des classes et modalités disponibles...");
-  try {
-    const payload = await callAnalysisHistoryApi(
-      `/api/analyses/${encodeURIComponent(safeAnalysisId)}/distance-labbe/options`
-    );
-    const variables = Array.isArray(payload?.variables) ? payload.variables : [];
-    if (!payload?.available || !variables.length) {
-      throw new Error("Au moins deux classes ou deux modalités sont nécessaires.");
-    }
-    variables.forEach((variable) => {
-      const option = document.createElement("option");
-      option.value = String(variable?.id || "");
-      option.textContent = distanceLabbeVariableOptionLabel(variable);
-      distanceLabbeVariable?.appendChild(option);
-    });
-    if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = false;
-    setDistanceLabbeDialogStatus("Prêt. La matrice lexicale finale de la CHD sera réutilisée.");
-  } catch (error) {
-    setDistanceLabbeDialogStatus(error?.message || String(error), { isError: true });
-    log(`[error] Distance intertextuelle indisponible : ${error?.message || String(error)}`);
-  }
-}
-
 async function openDistanceLabbeDialog() {
-  const preferredEntry = findDistanceLabbeSourceAnalysis();
-  const sources = availableDistanceLabbeSourceAnalyses();
-  if (distanceLabbeSource) {
-    distanceLabbeSource.innerHTML = "";
-    sources.forEach((entry) => {
-      const option = document.createElement("option");
-      option.value = String(entry.id || "");
-      option.textContent = distanceLabbeSourceOptionLabel(entry);
-      distanceLabbeSource.appendChild(option);
-    });
-  }
   if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
-  if (distanceLabbeMinEffectif) distanceLabbeMinEffectif.value = "1";
+  if (distanceLabbeMinEffectif) distanceLabbeMinEffectif.value = "10";
   if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
   if (distanceLabbeDialog && !distanceLabbeDialog.open) {
     if (typeof distanceLabbeDialog.showModal === "function") distanceLabbeDialog.showModal();
     else distanceLabbeDialog.show();
   }
 
-  const selectedId = String(preferredEntry?.id || sources[0]?.id || "").trim();
-  if (distanceLabbeSource && selectedId) distanceLabbeSource.value = selectedId;
-  await loadDistanceLabbeOptions(selectedId);
+  const corpusName = String(appState.corpusFileName || "").trim();
+  const corpusText = String(appState.corpusText || "");
+  if (!corpusName || !corpusText.trim()) {
+    appState.distanceLabbeRequest = null;
+    setDistanceLabbeDialogStatus("Importez d’abord le corpus à comparer.", { isError: true });
+    return;
+  }
+
+  const variables = appState.afcStarredVariablesChoices
+    .map((name) => {
+      const normalized = normalizeStarredVariableName(name);
+      const modalities = appState.corpusStarredModalitiesByVariable[normalized.toLowerCase()] || [];
+      return { id: `*${normalized}`, label: `*${normalized}`, modalities };
+    })
+    .filter((variable) => variable.modalities.length >= 2);
+  if (!variables.length) {
+    appState.distanceLabbeRequest = null;
+    setDistanceLabbeDialogStatus(
+      "Le corpus doit contenir une variable étoilée comportant au moins deux modalités.",
+      { isError: true }
+    );
+    return;
+  }
+
+  variables.forEach((variable) => {
+    const option = document.createElement("option");
+    option.value = variable.id;
+    option.textContent = distanceLabbeVariableOptionLabel(variable);
+    distanceLabbeVariable?.appendChild(option);
+  });
+  appState.distanceLabbeRequest = { corpusName };
+  if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = false;
+  setDistanceLabbeDialogStatus("Prêt. Chaque modalité de la variable devient un texte à comparer.");
 }
 
 async function runDistanceLabbeFromDialog() {
   const request = appState.distanceLabbeRequest;
-  if (!request?.analysisId) return;
+  if (!request?.corpusName) return;
   const variable = String(distanceLabbeVariable?.value || "").trim();
-  const minEffectif = Number.parseInt(String(distanceLabbeMinEffectif?.value || "1"), 10);
+  const minEffectif = Number.parseInt(String(distanceLabbeMinEffectif?.value || "10"), 10);
   if (!variable) {
     setDistanceLabbeDialogStatus("Sélectionnez les textes ou modalités à comparer.", { isError: true });
     return;
@@ -11153,8 +11113,17 @@ async function runDistanceLabbeFromDialog() {
   setDistanceLabbeDialogStatus("Réduction des longueurs et calcul des distances par paire...");
   try {
     const payload = await callAnalysisHistoryApi(
-      `/api/analyses/${encodeURIComponent(request.analysisId)}/distance-labbe`,
-      { method: "POST", body: { variable, minEffectif } }
+      "/api/distance-labbe",
+      {
+        method: "POST",
+        body: {
+          corpusName: request.corpusName,
+          corpusText: appState.corpusText,
+          config: buildJobConfig("chd"),
+          variable,
+          minEffectif
+        }
+      }
     );
     const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
     if (!entry) throw new Error("Le calcul n'a pas pu être ajouté à l'historique.");
@@ -15224,7 +15193,7 @@ async function renderDistanceLabbeExports(index) {
   const warningsContainer = document.getElementById("labbeWarnings");
 
   if (!summaryFile && !pairsFile && !dendrogramFile) {
-    setContainerEmptyState(resultContainers.labbeSummary, "Ouvrez une distance intertextuelle depuis l'arborescence.");
+    setContainerEmptyState(resultContainers.labbeSummary, "Importez un corpus, puis cliquez sur Nouveau calcul.");
     setContainerEmptyState(resultContainers.labbeDendrogram, "Aucun dendrogramme chargé.");
     setContainerEmptyState(resultContainers.labbeHeatmap, "Aucune carte des distances chargée.");
     setContainerEmptyState(resultContainers.labbePairsTable, "Aucune comparaison chargée.");
@@ -15628,7 +15597,7 @@ function resetResultPanes() {
     chronologySegmentsTable: "Aucun segment chronologique chargé.",
     chronologyChi2Table: "Aucun test χ² chronologique chargé.",
     chronologyResidualsTable: "Aucun tableau des écarts chronologiques chargé.",
-    labbeSummary: "Ouvrez une distance intertextuelle depuis l'arborescence.",
+    labbeSummary: "Importez un corpus, puis cliquez sur Nouveau calcul.",
     labbeDendrogram: "Aucun dendrogramme de distances chargé.",
     labbeHeatmap: "Aucune carte des distances chargée.",
     labbePairsTable: "Aucune comparaison par paire chargée.",
@@ -16165,16 +16134,8 @@ runChronologyBtn?.addEventListener("click", () => {
   void runChronologyFromDialog();
 });
 
-openDistanceLabbeDialogBtn?.addEventListener("click", () => {
-  void openDistanceLabbeDialog();
-});
-
 openDistanceLabbeResultsDialogBtn?.addEventListener("click", () => {
   void openDistanceLabbeDialog();
-});
-
-distanceLabbeSource?.addEventListener("change", () => {
-  void loadDistanceLabbeOptions(distanceLabbeSource.value);
 });
 
 closeDistanceLabbeBtn?.addEventListener("click", () => {

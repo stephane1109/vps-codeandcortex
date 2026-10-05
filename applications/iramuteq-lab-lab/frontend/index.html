@@ -210,10 +210,7 @@
                 <p class="section-kicker">CHD</p>
                 <h2>Résultats CHD</h2>
               </div>
-              <div class="toolbar">
-                <button id="openDistanceLabbeDialogBtn" class="secondary-button" type="button">Distance intertextuelle</button>
-                <button id="openChronologyDialogBtn" class="primary-button" type="button">Analyse chronologique</button>
-              </div>
+              <button id="openChronologyDialogBtn" class="primary-button" type="button">Analyse chronologique</button>
             </div>
 
             <nav class="sub-nav" aria-label="Sous-navigation CHD">
@@ -1378,32 +1375,28 @@
       <div class="dialog-card">
         <header class="dialog-header">
           <div>
-            <p class="dialog-kicker">Analyse complémentaire de la CHD</p>
+            <p class="dialog-kicker">Analyse lexicométrique du corpus</p>
             <h2>Distance intertextuelle de Labbé</h2>
-            <p class="muted">Comparez les profils lexicaux des classes CHD ou des modalités d’une variable étoilée.</p>
+            <p class="muted">Comparez les textes constitués par les modalités d’une variable étoilée.</p>
           </div>
           <button id="closeDistanceLabbeBtn" class="secondary-button" type="button">Fermer</button>
         </header>
 
         <div class="form-grid distance-labbe-form-grid">
           <label>
-            CHD source
-            <select id="distanceLabbeSource"></select>
-          </label>
-          <label>
-            Textes ou modalités à comparer
+            Variable étoilée définissant les textes à comparer
             <select id="distanceLabbeVariable"></select>
           </label>
           <label>
             Fréquence minimale des formes
-            <input id="distanceLabbeMinEffectif" type="number" min="1" step="1" value="1" />
+            <input id="distanceLabbeMinEffectif" type="number" min="1" step="1" value="10" />
           </label>
         </div>
 
         <aside class="specificities-help" aria-label="Aide sur la distance intertextuelle">
           <h3>Principe</h3>
           <p>Chaque modalité devient un texte agrégé. Le texte le plus long est ramené à la taille du plus court, puis les écarts absolus de fréquence sont normalisés. Une distance proche de 0 indique des profils lexicaux proches ; une valeur plus élevée indique des profils plus différents.</p>
-          <p>La CHD n’est pas recalculée : le mode réutilise sa matrice lexicale finale.</p>
+          <p>Ce calcul est indépendant de la CHD. Il construit directement la table lexicale des modalités sélectionnées.</p>
         </aside>
 
         <p id="distanceLabbeDialogStatus" class="muted"></p>
@@ -1416,6 +1409,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261005-distance-labbe-fix1"></script>
+    <script type="module" src="./app.js?v=20261005-distance-labbe-standalone"></script>
   </body>
 </html>

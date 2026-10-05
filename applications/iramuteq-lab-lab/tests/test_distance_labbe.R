@@ -16,9 +16,43 @@ assert_close(compute.labbe(2, 1, proportional_tab), 0)
 disjoint_tab <- cbind(A = c(10, 0), B = c(0, 10))
 assert_close(compute.labbe(1, 2, disjoint_tab), 1)
 
-# Cas limite qui révélait l'asymétrie > 1 / >= 1 du script historique.
-boundary_tab <- cbind(A = c(2, 0, 2), B = c(1, 1, 2))
-assert_close(compute.labbe(1, 2, boundary_tab), compute.labbe(2, 1, boundary_tab))
+# Fonction de référence recopiée du script officiel d'IRaMuTeQ.
+compute_labbe_reference <- function(x, y, tab) {
+  mini.tab <- tab[, c(x, y)]
+  cs <- colSums(mini.tab)
+  N1 <- cs[1]
+  N2 <- cs[2]
+  plus.grand <- ifelse(N1 > N2, 1, 2)
+  plus.petit <- ifelse(N1 > N2, 2, 1)
+  if (plus.grand == 1) {
+    U <- N2 / N1
+    mini.tab[, 1] <- mini.tab[, 1] * U
+    col.plusgrand <- mini.tab[, 1]
+    cs.plus.grand <- sum(col.plusgrand[col.plusgrand >= 1])
+  } else {
+    U <- N1 / N2
+    mini.tab[, 2] <- mini.tab[, 2] * U
+    col.plusgrand <- mini.tab[, 2]
+    cs.plus.grand <- sum(col.plusgrand[col.plusgrand > 1])
+  }
+  commun <- which((mini.tab[, 1] > 0) & (mini.tab[, 2] > 0))
+  deA <- which((mini.tab[, plus.petit] > 0) & (mini.tab[, plus.grand] == 0))
+  deB <- which((mini.tab[, plus.petit] == 0) & (mini.tab[, plus.grand] >= 1))
+  dist.labbe <-
+    sum(abs(mini.tab[commun, plus.petit] - mini.tab[commun, plus.grand])) +
+    sum(abs(mini.tab[deA, plus.petit] - mini.tab[deA, plus.grand])) +
+    sum(abs(mini.tab[deB, plus.petit] - mini.tab[deB, plus.grand]))
+  unname(dist.labbe / (cs[plus.petit] + cs.plus.grand))
+}
+
+reference_tabs <- list(
+  cbind(A = c(2, 0, 2), B = c(1, 1, 2)),
+  cbind(A = c(8, 3, 1, 0), B = c(2, 2, 0, 4)),
+  cbind(A = c(5, 1, 7), B = c(2, 4, 3))
+)
+for (reference_tab in reference_tabs) {
+  assert_close(compute.labbe(1, 2, reference_tab), compute_labbe_reference(1, 2, reference_tab))
+}
 
 matrix_result <- dist.labbe(cbind(A = c(5, 3, 2), B = c(5, 3, 2), C = c(0, 8, 2)))
 stopifnot(isTRUE(all.equal(matrix_result, t(matrix_result))))
@@ -27,5 +61,19 @@ stopifnot(all(matrix_result >= 0 & matrix_result <= 1))
 
 invalid <- try(compute.labbe(1, 2, cbind(A = c(0, 0), B = c(1, 2))), silent = TRUE)
 stopifnot(inherits(invalid, "try-error"))
+
+# L'analyse est autonome : seules les modalités du corpus définissent les textes.
+source_data <- list(
+  dfm = Matrix::Matrix(
+    matrix(c(3, 0, 1, 2, 0, 4), nrow = 3, byrow = TRUE, dimnames = list(NULL, c("alpha", "beta"))),
+    sparse = TRUE
+  ),
+  docvars = data.frame(`*source` = c("A", "A", "B"), check.names = FALSE),
+  classes = c(1L, 2L, 3L)
+)
+available <- variables_labbe_disponibles(source_data)
+stopifnot(identical(vapply(available, function(item) item$id, character(1)), "*source"))
+aggregated <- table_labbe_par_modalite(source_data, "*source", min_effectif = 1L)
+stopifnot(identical(colnames(aggregated), c("A", "B")))
 
 cat("Tests distance de Labbe: OK\n")

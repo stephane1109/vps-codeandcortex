@@ -1,6 +1,6 @@
 # Distance intertextuelle de Labbe.
 #
-# Adaptation testee de l'implementation historique de Pierre Ratinaud
+# Calcul repris de l'implementation de Pierre Ratinaud
 # (IRaMuTeQ, GNU/GPL), d'apres C. Labbe et D. Labbe (2003).
 
 `%||%` <- function(x, y) {
@@ -9,27 +9,17 @@
 
 normaliser_modalite_labbe <- function(x) {
   value <- trimws(enc2utf8(as.character(x)))
-  value[is.na(value) | !nzchar(value)] <- NA_character_
+  missing <- is.na(value) | !nzchar(value) | toupper(value) %in% c("NA", "N/A", "NULL")
+  value[missing] <- NA_character_
   value
 }
 
 nom_variable_labbe <- function(variable) {
-  if (identical(variable, "__classes_chd__")) "Classes CHD" else sub("^\\*", "", variable)
+  sub("^\\*", "", variable)
 }
 
 variables_labbe_disponibles <- function(source) {
   variables <- list()
-  classes <- suppressWarnings(as.integer(source$classes))
-  class_values <- sort(unique(classes[is.finite(classes) & classes > 0L]))
-  if (length(class_values) >= 2L) {
-    variables[[length(variables) + 1L]] <- list(
-      id = "__classes_chd__",
-      label = "Classes CHD",
-      modalities = paste0("Classe ", class_values),
-      n_modalities = length(class_values)
-    )
-  }
-
   docvars <- source$docvars
   if (is.null(docvars) || !is.data.frame(docvars)) return(variables)
   reserved <- c("Classes", "doc_id", "segment_source", "rst_source")
@@ -55,7 +45,7 @@ decrire_distance_labbe <- function(source) {
     variables = variables,
     preprocessing = source$preprocessing %||% list(),
     note = paste(
-      "Le calcul réutilise la matrice lexicale finale de la CHD.",
+      "Le calcul utilise la table lexicale construite directement à partir du corpus.",
       "Chaque modalité sélectionnée est traitée comme un texte à comparer."
     )
   )
@@ -91,20 +81,32 @@ calculer_distance_labbe_paire <- function(x, y, tab, valider = TRUE) {
 
   pair <- cbind(tab[, x], tab[, y])
   totals <- colSums(pair)
-  small_index <- if (totals[[1L]] <= totals[[2L]]) 1L else 2L
-  large_index <- 3L - small_index
-  small <- pair[, small_index]
-  large <- pair[, large_index]
-  coefficient <- totals[[small_index]] / totals[[large_index]]
-  large_reduced <- large * coefficient
+  large_index <- if (totals[[1L]] > totals[[2L]]) 1L else 2L
+  small_index <- if (totals[[1L]] > totals[[2L]]) 2L else 1L
 
-  # Le vocabulaire réduit conserve les formes du petit texte et les formes du
-  # grand texte dont la fréquence ramenée à la petite taille atteint au moins 1.
-  retained <- small > 0 | large_reduced >= 1
-  numerator <- sum(abs(small[retained] - large_reduced[retained]))
-  denominator <- totals[[small_index]] + sum(large_reduced[large_reduced >= 1])
-  distance <- if (denominator > 0) numerator / denominator else NA_real_
-  distance <- min(1, max(0, distance))
+  # Ces deux branches reprennent volontairement les seuils du script officiel.
+  if (large_index == 1L) {
+    coefficient <- totals[[2L]] / totals[[1L]]
+    pair[, 1L] <- pair[, 1L] * coefficient
+    reduced_large <- pair[, 1L]
+    reduced_large_sum <- sum(reduced_large[reduced_large >= 1])
+  } else {
+    coefficient <- totals[[1L]] / totals[[2L]]
+    pair[, 2L] <- pair[, 2L] * coefficient
+    reduced_large <- pair[, 2L]
+    reduced_large_sum <- sum(reduced_large[reduced_large > 1])
+  }
+
+  common <- which((pair[, 1L] > 0) & (pair[, 2L] > 0))
+  from_small <- which((pair[, small_index] > 0) & (pair[, large_index] == 0))
+  from_large <- which((pair[, small_index] == 0) & (pair[, large_index] >= 1))
+  numerator <-
+    sum(abs(pair[common, small_index] - pair[common, large_index])) +
+    sum(abs(pair[from_small, small_index] - pair[from_small, large_index])) +
+    sum(abs(pair[from_large, small_index] - pair[from_large, large_index]))
+  denominator <- totals[[small_index]] + reduced_large_sum
+  distance <- numerator / denominator
+  retained <- unique(c(common, from_small, from_large))
 
   list(
     distance = unname(distance),
@@ -112,7 +114,7 @@ calculer_distance_labbe_paire <- function(x, y, tab, valider = TRUE) {
     taille_1 = unname(totals[[1L]]),
     taille_2 = unname(totals[[2L]]),
     rapport_tailles = unname(min(totals) / max(totals)),
-    formes_retenues = sum(retained)
+    formes_retenues = length(retained)
   )
 }
 
@@ -152,16 +154,10 @@ table_labbe_par_modalite <- function(source, variable, min_effectif = 1L) {
   min_effectif <- suppressWarnings(as.integer(min_effectif))
   if (!is.finite(min_effectif) || min_effectif < 1L) min_effectif <- 1L
   docvars <- source$docvars
-  classes <- suppressWarnings(as.integer(source$classes))
-  groups <- if (identical(variable, "__classes_chd__")) {
-    if (!length(classes)) stop("Les classes CHD sont indisponibles.")
-    ifelse(is.finite(classes) & classes > 0L, paste0("Classe ", classes), NA_character_)
-  } else {
-    if (is.null(docvars) || !is.data.frame(docvars) || !variable %in% names(docvars)) {
-      stop("La variable étoilée demandée n'est pas disponible dans cette CHD.")
-    }
-    normaliser_modalite_labbe(docvars[[variable]])
+  if (is.null(docvars) || !is.data.frame(docvars) || !variable %in% names(docvars)) {
+    stop("La variable étoilée demandée n'est pas disponible dans ce corpus.")
   }
+  groups <- normaliser_modalite_labbe(docvars[[variable]])
 
   dfm <- source$dfm
   if (is.null(dfm) || nrow(dfm) != length(groups)) {
@@ -254,15 +250,6 @@ ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, outp
   tracer_dendrogramme_labbe(matrix_distance, file.path(output_dir, "distance_labbe_dendrogramme.png"))
   tracer_carte_labbe(matrix_distance, file.path(output_dir, "distance_labbe_carte.png"))
 
-  sizes <- colSums(table)
-  warnings <- character(0)
-  small <- names(sizes)[sizes < 1000]
-  if (length(small)) {
-    warnings <- c(warnings, paste0("Interprétation prudente : moins de 1 000 occurrences pour ", paste(small, collapse = ", "), "."))
-  }
-  if (any(pairs$rapport_tailles < 0.1)) {
-    warnings <- c(warnings, "Interprétation prudente : au moins une paire présente un rapport de tailles inférieur à 1:10.")
-  }
   variable_label <- nom_variable_labbe(variable)
   summary <- list(
     variable = variable,
@@ -274,8 +261,8 @@ ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, outp
     distance_max = max(pairs$distance_labbe),
     paire_plus_proche = paste(pairs$texte_1[[which.min(pairs$distance_labbe)]], pairs$texte_2[[which.min(pairs$distance_labbe)]], sep = " / "),
     paire_plus_eloignee = paste(pairs$texte_1[[which.max(pairs$distance_labbe)]], pairs$texte_2[[which.max(pairs$distance_labbe)]], sep = " / "),
-    warnings = unname(warnings),
-    method = "Distance intertextuelle de Labbé sur la matrice lexicale traitée de la CHD."
+    warnings = character(0),
+    method = "Distance intertextuelle de Labbé sur la table lexicale construite à partir du corpus."
   )
   jsonlite::write_json(summary, file.path(output_dir, "resume_distance_labbe.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
   configuration <- list(
@@ -285,7 +272,7 @@ ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, outp
     modalities = colnames(table),
     preprocessing = source$preprocessing %||% list(),
     formula = "somme des écarts absolus après réduction du grand texte, normalisée par les deux longueurs comparables",
-    implementation = "Matrice symétrique ; seuil du vocabulaire réduit appliqué uniformément à fréquence attendue >= 1."
+    implementation = "Calcul compute.labbe du script officiel d'IRaMuTeQ ; matrice complétée symétriquement pour l'affichage."
   )
   jsonlite::write_json(configuration, file.path(output_dir, "configuration_distance_labbe.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
   list(summary = summary, matrix = matrix_distance, pairs = pairs)

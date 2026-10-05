@@ -1,13 +1,10 @@
 # Distance intertextuelle de Labbé
 
-Cette analyse compare le vocabulaire de plusieurs textes ou modalités à partir de la matrice lexicale déjà produite par la CHD. Elle ne modifie ni la CHD, ni les lemmes, ni les catégories morphosyntaxiques retenues.
+Cette analyse compare directement le vocabulaire de plusieurs textes constitués par les modalités d’une variable étoilée. Elle est indépendante de la CHD.
 
 ## Textes comparés
 
-L'utilisateur choisit :
-
-- les classes CHD ;
-- ou une variable étoilée, dont chaque modalité devient un texte agrégé.
+L’utilisateur choisit une variable étoilée du corpus. Chaque modalité de cette variable devient un texte agrégé.
 
 Par exemple, avec `*journal`, toutes les UCE de chaque journal sont regroupées avant la comparaison.
 
@@ -26,11 +23,11 @@ Sous une forme simplifiée, pour le petit texte `A` et le grand texte réduit `B
 D(A,B) = somme |fA - fB'| / (longueur A + longueur retenue de B')
 ```
 
-Le vocabulaire réduit contient toutes les formes présentes dans le petit texte, ainsi que les formes du grand texte dont la fréquence ramenée à la petite taille atteint au moins `1`.
+La constitution du vocabulaire réduit suit les seuils appliqués par la fonction officielle `compute.labbe` d’IRaMuTeQ autour d’une fréquence ramenée à `1`.
 
 Une distance proche de `0` correspond à des profils lexicaux proches. Une distance plus élevée correspond à des profils plus différents.
 
-La fréquence minimale des formes filtre le vocabulaire avant les comparaisons. La valeur `1` conserve toutes les formes présentes dans la matrice finale de la CHD.
+La fréquence minimale des formes filtre le vocabulaire avant les comparaisons. La valeur `1` conserve toutes les formes présentes dans la table lexicale du corpus.
 
 ## Résultats
 
@@ -42,8 +39,4 @@ L'analyse produit :
 - une carte colorée des distances ;
 - la configuration utilisée.
 
-## Précautions
-
-Les petits textes et les textes de tailles très différentes demandent une interprétation prudente. IRAMUTEQ Lab signale les modalités de moins de 1 000 occurrences et les paires dont le rapport de tailles est inférieur à `1:10`, sans empêcher le calcul.
-
-Références : [Cyril Labbé et Dominique Labbé, « La distance intertextuelle », *Corpus*, 2, 2003](https://journals.openedition.org/corpus/31) ; [script GNU/GPL de Pierre Ratinaud fourni avec IRaMuTeQ](https://gitlab.huma-num.fr/pratinaud/iramuteq/-/blob/master/Rscripts/distance-labbe.R). L'implémentation de Lab conserve cette méthode, avec une matrice complète et un traitement symétrique du seuil de fréquence attendue.
+Références : [Cyril Labbé et Dominique Labbé, « La distance intertextuelle », *Corpus*, 2, 2003](https://journals.openedition.org/corpus/31) ; [script GNU/GPL de Pierre Ratinaud fourni avec IRaMuTeQ](https://gitlab.huma-num.fr/pratinaud/iramuteq/-/blob/master/Rscripts/distance-labbe.R). Le calcul de chaque paire reproduit la fonction officielle `compute.labbe`. La matrice est complétée symétriquement pour présenter les distances sous forme de tableau et de graphiques.

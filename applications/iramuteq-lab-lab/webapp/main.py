@@ -533,32 +533,13 @@ async def create_chronology_analysis(analysis_id: str, request: Request) -> JSON
     return analysis_json_response({**result, "analysis": updated, "analysisId": updated["id"]}, owner_token)
 
 
-@app.get("/api/analyses/{analysis_id}/distance-labbe/options")
-def distance_labbe_options(analysis_id: str, request: Request) -> JSONResponse:
-    owner_hash, owner_token = analysis_history.owner_for_request(request)
-    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
-    if str(record.get("analysisKind") or "") != "chd":
-        raise HTTPException(status_code=409, detail="Sélectionnez une CHD dans l'arborescence.")
-    if not snapshot.get("completed") or not snapshot.get("success"):
-        raise HTTPException(status_code=409, detail="La CHD doit être terminée avant ce calcul.")
+@app.post("/api/distance-labbe")
+async def create_distance_labbe_analysis(request: Request) -> JSONResponse:
     try:
-        payload = runtime.describe_distance_labbe(owned_output_dir(record, snapshot))
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except (RuntimeError, ValueError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return analysis_json_response(payload, owner_token)
-
-
-@app.post("/api/analyses/{analysis_id}/distance-labbe")
-async def create_distance_labbe_analysis(analysis_id: str, request: Request) -> JSONResponse:
+        ticket_gate.require_active_ticket(request)
+    except PermissionError as error:
+        raise HTTPException(status_code=423, detail=str(error)) from error
     owner_hash, owner_token = analysis_history.owner_for_request(request)
-    parent_record, parent_snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
-    if str(parent_record.get("analysisKind") or "") != "chd":
-        raise HTTPException(status_code=409, detail="Sélectionnez une CHD dans l'arborescence.")
-    if not parent_snapshot.get("completed") or not parent_snapshot.get("success"):
-        raise HTTPException(status_code=409, detail="La CHD doit être terminée avant ce calcul.")
-
     try:
         payload = await request.json()
     except (json.JSONDecodeError, ValueError) as error:
@@ -568,9 +549,11 @@ async def create_distance_labbe_analysis(analysis_id: str, request: Request) -> 
 
     try:
         result = runtime.run_distance_labbe_analysis(
-            owned_output_dir(parent_record, parent_snapshot),
+            corpus_name=str(payload.get("corpusName") or "corpus.txt"),
+            corpus_text=str(payload.get("corpusText") or ""),
+            config=payload.get("config") if isinstance(payload.get("config"), dict) else {},
             variable=str(payload.get("variable") or ""),
-            min_effectif=payload.get("minEffectif", 1),
+            min_effectif=payload.get("minEffectif", 10),
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -582,7 +565,7 @@ async def create_distance_labbe_analysis(analysis_id: str, request: Request) -> 
             runtime.app_data_root(),
             owner_hash=owner_hash,
             job_id=str(result.get("jobId") or ""),
-            corpus_name=str(parent_record.get("corpusName") or "corpus.txt"),
+            corpus_name=str(payload.get("corpusName") or "corpus.txt"),
             analysis_kind="labbe",
             navigation_target="distance_intertextuelle",
         )
@@ -593,6 +576,7 @@ async def create_distance_labbe_analysis(analysis_id: str, request: Request) -> 
             analysis_id=record["id"],
             snapshot=snapshot,
         ) or record
+        runtime.remove_job_input(str(result.get("jobId") or ""))
     except Exception:
         runtime.remove_job_directory(str(result.get("jobId") or ""))
         raise

@@ -1530,19 +1530,6 @@ def run_chronology_analysis(
     }
 
 
-def _labbe_source_path(output_dir: str) -> Path:
-    output_path = Path(str(output_dir or "").strip()).expanduser().resolve()
-    if not output_path.is_dir():
-        raise FileNotFoundError("Le dossier d'exports de la CHD est introuvable.")
-    source_path = output_path / ".internal" / "source_specificites.rds"
-    if not source_path.is_file():
-        raise FileNotFoundError(
-            "Cette analyse ne contient pas la matrice nécessaire à la distance intertextuelle. "
-            "Relancez la CHD avec cette version."
-        )
-    return source_path
-
-
 def _run_distance_labbe_r(arguments: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -1552,7 +1539,7 @@ def _run_distance_labbe_r(arguments: list[str]) -> subprocess.CompletedProcess[s
             *arguments,
         ],
         cwd=PROJECT_ROOT,
-        env=build_command_env(),
+        env=build_command_env({"IRAMUTEQ_ADD_EXPRESSION_PATH": str(annotation_dictionary_path())}),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -1560,35 +1547,36 @@ def _run_distance_labbe_r(arguments: list[str]) -> subprocess.CompletedProcess[s
     )
 
 
-def describe_distance_labbe(output_dir: str) -> dict[str, Any]:
-    source_path = _labbe_source_path(output_dir)
-    process = _run_distance_labbe_r(["--mode", "describe", "--source", str(source_path)])
-    payload = try_parse_json(process.stdout)
-    if payload is None or process.returncode != 0 or not payload.get("success"):
-        message = str((payload or {}).get("message") or "").strip()
-        raise RuntimeError(message or process_failure_message(process, "Lecture des textes à comparer impossible."))
-    return payload
-
-
 def run_distance_labbe_analysis(
-    parent_output_dir: str,
+    corpus_name: str,
+    corpus_text: str,
+    config: dict[str, Any],
     *,
     variable: str,
-    min_effectif: int = 1,
+    min_effectif: int = 10,
 ) -> dict[str, Any]:
-    source_path = _labbe_source_path(parent_output_dir)
+    safe_corpus_name = safe_input_name(str(corpus_name or "corpus.txt"))
+    safe_corpus_text = str(corpus_text or "")
+    if not safe_corpus_text.strip():
+        raise ValueError("Importez un corpus avant de calculer la distance intertextuelle.")
+    if not isinstance(config, dict):
+        raise ValueError("La configuration lexicale doit être un objet JSON.")
     safe_variable = str(variable or "").strip()
     try:
         safe_min_effectif = int(min_effectif)
     except (TypeError, ValueError) as error:
         raise ValueError("La fréquence minimale doit être un entier.") from error
     if not safe_variable:
-        raise ValueError("Sélectionnez les textes ou modalités à comparer.")
+        raise ValueError("Sélectionnez une variable étoilée comportant au moins deux modalités.")
     if safe_min_effectif < 1:
         raise ValueError("La fréquence minimale doit être supérieure ou égale à 1.")
 
     job_id = next_job_id("labbe")
     job_root = ensure_directory(jobs_root() / job_id)
+    input_path = job_root / f"input-{safe_corpus_name}"
+    config_path = job_root / "request-config.json"
+    input_path.write_text(safe_corpus_text, encoding="utf-8")
+    write_json_file(config_path, config)
     export_dir = ensure_directory(job_root / "exports")
     status_file = job_root / "status.json"
     results_file = job_root / "results.json"
@@ -1610,8 +1598,8 @@ def run_distance_labbe_analysis(
 
     process = _run_distance_labbe_r(
         [
-            "--mode", "calculate",
-            "--source", str(source_path),
+            "--input", str(input_path),
+            "--config", str(config_path),
             "--output-dir", str(export_dir),
             "--variable", safe_variable,
             "--min-effectif", str(safe_min_effectif),
