@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe-standalone";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261005-distance-labbe-tree";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -15194,7 +15194,7 @@ async function renderDistanceLabbeExports(index) {
 
   if (!summaryFile && !pairsFile && !dendrogramFile) {
     setContainerEmptyState(resultContainers.labbeSummary, "Importez un corpus, puis cliquez sur Nouveau calcul.");
-    setContainerEmptyState(resultContainers.labbeDendrogram, "Aucun dendrogramme chargé.");
+    setContainerEmptyState(resultContainers.labbeDendrogram, "Aucun arbre des distances chargé.");
     setContainerEmptyState(resultContainers.labbeHeatmap, "Aucune carte des distances chargée.");
     setContainerEmptyState(resultContainers.labbePairsTable, "Aucune comparaison chargée.");
     setContainerEmptyState(resultContainers.labbeMatrixTable, "Aucune matrice chargée.");
@@ -15249,9 +15249,9 @@ async function renderDistanceLabbeExports(index) {
     }
   }
 
-  renderImage(resultContainers.labbeDendrogram, dendrogramFile, "Dendrogramme des distances intertextuelles");
+  renderImage(resultContainers.labbeDendrogram, dendrogramFile, "Arbre des distances intertextuelles");
   renderImage(resultContainers.labbeHeatmap, heatmapFile, "Carte des distances intertextuelles");
-  makeResultImagePreviewable(resultContainers.labbeDendrogram, "Dendrogramme des distances", "Distance intertextuelle");
+  makeResultImagePreviewable(resultContainers.labbeDendrogram, "Arbre des distances intertextuelles", "Distance intertextuelle");
   makeResultImagePreviewable(resultContainers.labbeHeatmap, "Carte des distances", "Distance intertextuelle");
   await renderCsvFromFile(resultContainers.labbePairsTable, pairsFile, {
     title: "distance_labbe_paires.csv",
@@ -15598,7 +15598,7 @@ function resetResultPanes() {
     chronologyChi2Table: "Aucun test χ² chronologique chargé.",
     chronologyResidualsTable: "Aucun tableau des écarts chronologiques chargé.",
     labbeSummary: "Importez un corpus, puis cliquez sur Nouveau calcul.",
-    labbeDendrogram: "Aucun dendrogramme de distances chargé.",
+    labbeDendrogram: "Aucun arbre des distances chargé.",
     labbeHeatmap: "Aucune carte des distances chargée.",
     labbePairsTable: "Aucune comparaison par paire chargée.",
     labbeMatrixTable: "Aucune matrice de distances chargée.",

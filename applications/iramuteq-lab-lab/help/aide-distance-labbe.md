@@ -35,7 +35,7 @@ L'analyse produit :
 
 - la matrice symétrique complète des distances ;
 - le détail de chaque comparaison par paire ;
-- un dendrogramme Ward.D2 ;
+- un arbre non enraciné des distances, avec jusqu’à quatre groupes visuels issus de Ward.D2 ;
 - une carte colorée des distances ;
 - la configuration utilisée.
 

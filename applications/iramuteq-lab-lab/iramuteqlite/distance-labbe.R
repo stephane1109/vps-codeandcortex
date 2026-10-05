@@ -192,19 +192,102 @@ ecrire_csv_utf8_labbe <- function(data, path, row.names = FALSE) {
 
 tracer_dendrogramme_labbe <- function(distance_matrix, path) {
   clustering <- stats::hclust(stats::as.dist(distance_matrix), method = "ward.D2")
-  grDevices::png(path, width = 1800, height = 1200, res = 180)
+  if (!requireNamespace("ape", quietly = TRUE)) {
+    stop("Le package R ape est nécessaire pour tracer l'arbre des distances.")
+  }
+  tree <- ape::as.phylo(clustering)
+  text_count <- nrow(distance_matrix)
+  group_count <- min(4L, text_count)
+  groups <- stats::cutree(clustering, k = group_count)
+  groups_by_tip <- unname(groups[match(tree$tip.label, names(groups))])
+  colors <- c("#217ce7", "#e58b3a", "#8aa63b", "#95758f")[seq_len(group_count)]
+  tip_colors <- colors[groups_by_tip]
+
+  grDevices::png(path, width = 1800, height = 1800, res = 180)
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
-  graphics::par(mar = c(8, 5, 4, 2))
-  graphics::plot(
-    clustering,
-    main = "Classification des distances intertextuelles",
-    xlab = "Textes ou modalités",
-    sub = "Méthode Ward.D2",
-    ylab = "Distance de Labbé",
-    hang = -1,
-    col = "#217ce7"
+  graphics::par(mar = c(2, 2, 5, 2), xpd = NA)
+
+  # Passage invisible : ape calcule les coordonnées de l'arbre non enraciné.
+  ape::plot.phylo(
+    tree,
+    type = "unrooted",
+    show.tip.label = FALSE,
+    edge.color = grDevices::adjustcolor("#000000", alpha.f = 0),
+    no.margin = FALSE
   )
+
+  plot_environment <- get(".PlotPhyloEnv", envir = asNamespace("ape"))
+  plot_state <- get("last_plot.phylo", envir = plot_environment)
+  tip_x <- plot_state$xx[seq_len(text_count)]
+  tip_y <- plot_state$yy[seq_len(text_count)]
+  x_span <- diff(range(plot_state$xx, finite = TRUE))
+  y_span <- diff(range(plot_state$yy, finite = TRUE))
+  x_limits <- range(plot_state$xx, finite = TRUE) + c(-1, 1) * x_span * 0.28
+  y_limits <- range(plot_state$yy, finite = TRUE) + c(-1, 1) * y_span * 0.22
+
+  graphics::plot.new()
+  graphics::plot.window(xlim = x_limits, ylim = y_limits, asp = 1)
+  theta <- seq(0, 2 * pi, length.out = 240L)
+  for (group_id in seq_len(group_count)) {
+    selected <- which(groups_by_tip == group_id)
+    center_x <- mean(tip_x[selected])
+    center_y <- mean(tip_y[selected])
+    radius_x <- max(diff(range(tip_x[selected])) / 2 + x_span * 0.085, x_span * 0.105)
+    radius_y <- max(diff(range(tip_y[selected])) / 2 + y_span * 0.085, y_span * 0.105)
+    graphics::polygon(
+      center_x + radius_x * cos(theta),
+      center_y + radius_y * sin(theta),
+      border = NA,
+      col = grDevices::adjustcolor(colors[[group_id]], alpha.f = 0.18)
+    )
+  }
+
+  # Les branches et les libellés sont redessinés au-dessus des halos.
+  for (edge_index in seq_len(nrow(tree$edge))) {
+    parent <- tree$edge[edge_index, 1L]
+    child <- tree$edge[edge_index, 2L]
+    graphics::segments(
+      plot_state$xx[[parent]], plot_state$yy[[parent]],
+      plot_state$xx[[child]], plot_state$yy[[child]],
+      col = "#1f252b",
+      lwd = 1.35
+    )
+  }
+  center_x <- mean(range(plot_state$xx, finite = TRUE))
+  label_cex <- max(0.58, min(0.9, 8 / max(text_count, 8)))
+  label_positions <- ifelse(tip_x >= center_x, 4L, 2L)
+  graphics::text(
+    tip_x,
+    tip_y,
+    labels = gsub("_", " ", tree$tip.label, fixed = TRUE),
+    pos = label_positions,
+    offset = 0.45,
+    cex = label_cex,
+    col = tip_colors,
+    font = 1
+  )
+  graphics::title(main = "Arbre des distances intertextuelles de Labbé", cex.main = 1.15)
+  graphics::mtext("Arbre non enraciné ; regroupement visuel Ward.D2", side = 3, line = 0.4, cex = 0.72, col = "#5d6873")
+  graphics::legend(
+    "topleft",
+    legend = paste("Groupe", seq_len(group_count)),
+    fill = grDevices::adjustcolor(colors, alpha.f = 0.38),
+    border = NA,
+    bty = "n",
+    cex = 0.72
+  )
+  scale_length <- suppressWarnings(signif(max(tree$edge.length, na.rm = TRUE) / 4, 2))
+  if (is.finite(scale_length) && scale_length > 0) {
+    ape::add.scale.bar(
+      x = x_limits[[1L]] + diff(x_limits) * 0.05,
+      y = y_limits[[1L]] + diff(y_limits) * 0.04,
+      length = scale_length,
+      lwd = 1.2,
+      lcol = "#1f252b",
+      cex = 0.65
+    )
+  }
   invisible(clustering)
 }
 

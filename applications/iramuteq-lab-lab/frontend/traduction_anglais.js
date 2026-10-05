@@ -24,7 +24,7 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Comparez les textes constitués par les modalités d’une variable étoilée.": "Compare the texts formed by the modalities of a starred variable.",
   "Chaque modalité devient un texte agrégé. Le texte le plus long est ramené à la taille du plus court, puis les écarts absolus de fréquence sont normalisés. Une distance proche de 0 indique des profils lexicaux proches ; une valeur plus élevée indique des profils plus différents.": "Each modality becomes an aggregated text. The longest text is reduced to the size of the shortest, then absolute frequency differences are normalized. A distance close to 0 indicates similar lexical profiles; a higher value indicates more different profiles.",
   "Ce calcul est indépendant de la CHD. Il construit directement la table lexicale des modalités sélectionnées.": "This calculation is independent of CHD. It directly builds the lexical table for the selected modalities.",
-  "Dendrogramme des distances": "Distance dendrogram",
+  "Arbre des distances intertextuelles": "Intertextual distance tree",
   "Carte des distances": "Distance map",
   "Comparaisons par paire": "Pairwise comparisons",
   "Matrice complète": "Full matrix",

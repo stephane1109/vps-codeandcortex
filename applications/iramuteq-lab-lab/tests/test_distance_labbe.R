@@ -59,6 +59,11 @@ stopifnot(isTRUE(all.equal(matrix_result, t(matrix_result))))
 stopifnot(all(diag(matrix_result) == 0))
 stopifnot(all(matrix_result >= 0 & matrix_result <= 1))
 
+tree_path <- tempfile(fileext = ".png")
+tracer_dendrogramme_labbe(matrix_result, tree_path)
+stopifnot(file.exists(tree_path), file.info(tree_path)$size > 0)
+unlink(tree_path)
+
 invalid <- try(compute.labbe(1, 2, cbind(A = c(0, 0), B = c(1, 2))), silent = TRUE)
 stopifnot(inherits(invalid, "try-error"))
 
