@@ -285,15 +285,16 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
 
 tracer_carte_labbe <- function(distance_matrix, path) {
   clustering <- stats::hclust(stats::as.dist(distance_matrix), method = "ward.D2")
+  ordered_matrix <- distance_matrix[clustering$order, clustering$order, drop = FALSE]
   palette <- grDevices::colorRampPalette(c("#f7fbff", "#9ec9f7", "#217ce7", "#0b3972"))(100)
   grDevices::png(path, width = 1800, height = 1500, res = 180)
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
   graphics::par(mar = c(10, 10, 5, 3))
   stats::heatmap(
-    distance_matrix,
-    Rowv = stats::as.dendrogram(clustering),
-    Colv = "Rowv",
+    ordered_matrix,
+    Rowv = NA,
+    Colv = NA,
     symm = TRUE,
     scale = "none",
     col = palette,
