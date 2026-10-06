@@ -13497,7 +13497,7 @@ function createLabbeReadingKey(maxPair = null, matrix = false) {
   if (!matrix) {
     const details = document.createElement("p");
     details.className = "labbe-reading-key-details";
-    details.textContent = "Occurrences : longueur de chaque texte agrégé. Rapport des tailles : taille du plus petit texte divisée par celle du plus grand. Coefficient de réduction : facteur appliqué au texte le plus long avant la comparaison. Formes retenues : nombre de formes lexicales participant effectivement au calcul de la paire.";
+    details.textContent = "Nombre de mots : total des occurrences dans chaque modalité après le prétraitement. Formes comparées : nombre de formes lexicales participant effectivement au calcul de cette paire.";
     key.appendChild(details);
   }
   return key;
@@ -13522,6 +13522,10 @@ async function renderLabbePairsTable(container, file) {
     const text1Index = headerIndex(parsed.headers, ["texte_1"]);
     const text2Index = headerIndex(parsed.headers, ["texte_2"]);
     const distanceIndex = headerIndex(parsed.headers, ["distance_labbe"]);
+    const occurrences1Index = headerIndex(parsed.headers, ["occurrences_texte_1"]);
+    const occurrences2Index = headerIndex(parsed.headers, ["occurrences_texte_2"]);
+    const retainedFormsIndex = headerIndex(parsed.headers, ["formes_retenues"]);
+    const cautionIndex = headerIndex(parsed.headers, ["prudence"]);
     const maxDistance = parsed.rows.reduce((currentMax, row) => {
       const value = parseTableNumber(row[distanceIndex]);
       return Number.isFinite(value) ? Math.max(currentMax, value) : currentMax;
@@ -13530,40 +13534,49 @@ async function renderLabbePairsTable(container, file) {
     const maxPair = maxRow
       ? { text1: String(maxRow[text1Index] || ""), text2: String(maxRow[text2Index] || ""), distance: maxDistance }
       : null;
-    const sortedParsed = {
-      headers: parsed.headers,
-      rows: [...parsed.rows].sort((left, right) => {
-        const leftDistance = parseTableNumber(left[distanceIndex]);
-        const rightDistance = parseTableNumber(right[distanceIndex]);
-        return (Number.isFinite(rightDistance) ? rightDistance : Number.NEGATIVE_INFINITY)
-          - (Number.isFinite(leftDistance) ? leftDistance : Number.NEGATIVE_INFINITY);
-      })
-    };
-    const numericCellRenderer = createFixedNumericCellRenderer({
-      digits: 4,
-      numericColumns: parsed.headers.map((_, index) => index).filter((index) => index >= 2 && index <= 7)
+    const sortedRows = [...parsed.rows].sort((left, right) => {
+      const leftDistance = parseTableNumber(left[distanceIndex]);
+      const rightDistance = parseTableNumber(right[distanceIndex]);
+      return (Number.isFinite(rightDistance) ? rightDistance : Number.NEGATIVE_INFINITY)
+        - (Number.isFinite(leftDistance) ? leftDistance : Number.NEGATIVE_INFINITY);
     });
-
-    renderTable(container, sortedParsed, {
-      title: "Comparaisons par paire",
-      maxRows: 2000,
-      emptyMessage: "Aucune comparaison par paire disponible.",
-      headerLabels: [
+    const displayedIndexes = [
+      text1Index,
+      text2Index,
+      distanceIndex,
+      occurrences1Index,
+      occurrences2Index,
+      retainedFormsIndex,
+      cautionIndex
+    ];
+    const displayedParsed = {
+      headers: [
         "Modalité 1",
         "Modalité 2",
         "Distance de Labbé",
-        "Occurrences texte 1",
-        "Occurrences texte 2",
-        "Rapport des tailles",
-        "Coefficient de réduction",
-        "Formes retenues",
-        "Prudence"
+        "Nombre de mots 1",
+        "Nombre de mots 2",
+        "Formes comparées",
+        "Avertissement"
       ],
-      rowClassName: ({ row }) => parseTableNumber(row[distanceIndex]) === maxDistance
+      rows: sortedRows.map((row) => displayedIndexes.map((index) => index >= 0 ? row[index] : ""))
+    };
+    const displayedDistanceIndex = 2;
+    const displayedTextIndexes = new Set([0, 1]);
+    const numericCellRenderer = createFixedNumericCellRenderer({
+      digits: 4,
+      numericColumns: [2, 3, 4, 5]
+    });
+
+    renderTable(container, displayedParsed, {
+      title: "Comparaisons par paire",
+      maxRows: 2000,
+      emptyMessage: "Aucune comparaison par paire disponible.",
+      rowClassName: ({ row }) => parseTableNumber(row[displayedDistanceIndex]) === maxDistance
         ? "is-labbe-most-distant"
         : "",
       cellRenderer: (payload) => {
-        if (payload.columnIndex === text1Index || payload.columnIndex === text2Index) {
+        if (displayedTextIndexes.has(payload.columnIndex)) {
           return { text: String(payload.cell || "").replaceAll("_", " ") };
         }
         return numericCellRenderer(payload);
@@ -15356,7 +15369,7 @@ async function renderDistanceLabbeExports(index) {
       ["Textes comparés", summary.n_textes],
       ["Variable", summary.variable_label],
       ["Formes retenues", summary.n_formes],
-      ["Fréquence minimale", summary.min_effectif],
+      ["Seuil minimal d’occurrences d’une forme", summary.min_effectif],
       ["Distance minimale", formatDistance(summary.distance_min)],
       ["Distance maximale", formatDistance(summary.distance_max)],
       ["Paire la plus proche", summary.paire_plus_proche],
@@ -15377,6 +15390,11 @@ async function renderDistanceLabbeExports(index) {
       grid.appendChild(card);
     });
     resultContainers.labbeSummary.appendChild(grid);
+
+    const thresholdHelp = document.createElement("p");
+    thresholdHelp.className = "labbe-summary-note";
+    thresholdHelp.textContent = `Seuil lexical : une forme doit apparaître au moins ${summary.min_effectif} fois dans l’ensemble des modalités pour participer au calcul. Ce seuil filtre les mots rares.`;
+    resultContainers.labbeSummary.appendChild(thresholdHelp);
 
     const warnings = Array.isArray(summary.warnings)
       ? summary.warnings.filter(Boolean)

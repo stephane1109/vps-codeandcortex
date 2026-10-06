@@ -5,7 +5,7 @@
     <title>IRAMUTEQ Lab</title>
     <link rel="icon" href="./logo_iramuteqlab.png?v=20260928-logo" type="image/png" />
     <link rel="apple-touch-icon" href="./logo_iramuteqlab.png?v=20260928-logo" />
-    <link rel="stylesheet" href="./styles.css?v=20261006-distance-labbe-highlight" />
+    <link rel="stylesheet" href="./styles.css?v=20261006-distance-labbe-readable" />
   </head>
   <body>
     <div class="app-shell">
@@ -1388,8 +1388,9 @@
             <select id="distanceLabbeVariable"></select>
           </label>
           <label>
-            Fréquence minimale des formes
+            Seuil minimal d’occurrences d’une forme
             <input id="distanceLabbeMinEffectif" type="number" min="1" step="1" value="10" />
+            <span class="field-help">Une forme doit apparaître au moins ce nombre de fois dans l’ensemble des modalités pour participer au calcul.</span>
           </label>
         </div>
 
@@ -1409,6 +1410,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261006-distance-labbe-highlight"></script>
+    <script type="module" src="./app.js?v=20261006-distance-labbe-readable"></script>
   </body>
 </html>

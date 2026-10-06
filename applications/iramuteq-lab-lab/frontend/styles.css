@@ -3240,6 +3240,13 @@ body.comparison-ab-fullscreen-open {
   font-size: 0.84rem;
 }
 
+.labbe-summary-note {
+  margin: 0.8rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .result-table tr.is-labbe-most-distant td {
   background: rgba(33, 124, 231, 0.13);
   color: #145eb5;
