@@ -18,6 +18,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import uvicorn
 from fastapi.responses import HTMLResponse
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
@@ -81,7 +82,13 @@ def main():
                                   driver=Path(os.environ["CHROMEDRIVER"]) if os.getenv("CHROMEDRIVER") else None,
                                   chrome_binary=Path(os.environ["CHROME_BINARY"]) if os.getenv("CHROME_BINARY") else None,
                                   timeout=15)
-        front = scraper.create_driver(args)
+        firefox = os.getenv("SMOKE_FRONT_BROWSER") == "firefox"
+        if firefox:
+            options = webdriver.FirefoxOptions()
+            options.add_argument("-headless")
+            front = webdriver.Firefox(options=options)
+        else:
+            front = scraper.create_driver(args)
         front.set_script_timeout(15)
 
         def browser_request(path, body=None, binary=False):
@@ -104,13 +111,28 @@ def main():
                 front.get(origin)
                 WebDriverWait(front, 10).until(lambda d: d.find_element(By.ID, "start-button").is_displayed())
                 front.save_screenshot(str(artifacts / "desktop.png"))
-                front.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
-                    "width": 390, "height": 1100, "deviceScaleFactor": 1, "mobile": True})
-                assert front.execute_script("return document.documentElement.scrollWidth <= window.innerWidth"), "Débordement mobile"
-                front.save_screenshot(str(artifacts / "mobile.png"))
-                front.execute_cdp_cmd("Emulation.clearDeviceMetricsOverride", {})
-                front.set_window_size(1360, 1150)
+                if not firefox:
+                    front.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+                        "width": 390, "height": 1100, "deviceScaleFactor": 1, "mobile": True})
+                    assert front.execute_script("return document.documentElement.scrollWidth <= window.innerWidth"), "Débordement mobile"
+                    front.save_screenshot(str(artifacts / "mobile.png"))
+                    front.execute_cdp_cmd("Emulation.clearDeviceMetricsOverride", {})
+                    front.set_window_size(1360, 1150)
                 front.find_element(By.ID, "hashtag").send_keys("tourisme")
+                second = front.find_element(By.ID, "second-hashtag")
+                second.send_keys("été")
+                front.find_element(By.ID, "start-button").click()
+                dialog = front.find_element(By.ID, "combination-dialog")
+                assert dialog.is_displayed()
+                assert "#tourisme et #été" in dialog.text
+                assert front.find_element(By.CSS_SELECTOR, 'input[value="AND"]').is_selected()
+                front.find_element(By.CSS_SELECTOR, 'input[value="OR"]').click()
+                assert front.find_element(By.CSS_SELECTOR, 'input[value="OR"]').is_selected()
+                front.save_screenshot(str(artifacts / "combination.png"))
+                front.find_element(By.ID, "cancel-combination").click()
+                assert not dialog.is_displayed()
+                assert json.loads(browser_request("/api/session"))["job"] is None
+                second.clear()
                 limit = front.find_element(By.ID, "limit")
                 limit.clear(); limit.send_keys("1")
                 front.find_element(By.ID, "start-button").click()
@@ -160,19 +182,18 @@ def main():
                 before_move = displayed_pixels()
                 mouse(160, 135)
                 WebDriverWait(front, 10).until(lambda d: displayed_pixels() != before_move)
-                assert front.execute_script("return pointer !== null"), front.execute_script("return {trace:gestureTrace,error:document.getElementById('browser-error').textContent}")
+                assert not front.find_element(By.ID, "continue-button").is_enabled(), front.execute_script("return {trace:gestureTrace,error:document.getElementById('browser-error').textContent}")
                 middle = displayed_pixels()
                 mouse(310, 135)
                 WebDriverWait(front, 10).until(lambda d: displayed_pixels() != middle)
                 mouse(310, 135, "up")
-                WebDriverWait(front, 10).until(lambda d: d.execute_script("return !actionBusy && actionQueue.length === 0"))
-                assert front.execute_script("return pointer === null")
+                WebDriverWait(front, 10).until(lambda d: d.find_element(By.ID, "continue-button").is_enabled())
 
                 # Une perte de focus doit relâcher le bouton côté serveur.
                 mouse(310, 135, "down")
                 front.execute_script("window.dispatchEvent(new Event('blur'))")
                 ActionChains(front).reset_actions()
-                WebDriverWait(front, 10).until(lambda d: d.execute_script("return pointer === null && !actionBusy && actionQueue.length === 0"))
+                WebDriverWait(front, 10).until(lambda d: d.find_element(By.ID, "continue-button").is_enabled())
                 action({"kind": "click", "points": [point(100, 220)]})
                 action({"kind": "text", "text": "été"})
                 front.find_element(By.ID, "continue-button").click()

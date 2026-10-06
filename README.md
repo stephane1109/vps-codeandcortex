@@ -128,3 +128,16 @@ Ces fixtures n'existent que pendant le test et ne sont pas exposées en producti
 Le workflow GitHub `ScrapTikTok / Docker` construit l'image Linux et exécute les tests
 ainsi que ce parcours dans le conteneur. Un résultat vert valide l'application et
 son environnement Linux ; il ne garantit pas l'accès à TikTok depuis une IP donnée.
+
+### Croiser deux hashtags
+
+Dans l’interface, renseigner le deuxième hashtag facultatif puis lancer la collecte.
+Une boîte de dialogue propose **ET** (les deux hashtags dans la description) ou
+**OU** (au moins un des deux). Chaque recherche examine jusqu’à la limite choisie
+par hashtag ; les publications communes sont dédoublonnées par identifiant.
+Le filtre compare des hashtags entiers, sans distinction de casse, en conservant
+les accents. Les textes ne correspondant pas au filtre sont comptabilisés à part.
+L’export TXT indique les hashtags et ET/OU dans son nom. Une recherche inaccessible
+produit un résultat partiel explicite si l’autre a abouti. L’absence de résultat
+ne signifie pas qu’aucune publication TikTok ne contient la combinaison : seuls
+les contenus accessibles et consultés sont filtrés.
