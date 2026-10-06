@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.py[cod]
+exports/
+.chrome-profile/
+.selenium-cache/
+.DS_Store
