@@ -287,20 +287,55 @@ tracer_carte_labbe <- function(distance_matrix, path) {
   clustering <- stats::hclust(stats::as.dist(distance_matrix), method = "ward.D2")
   ordered_matrix <- distance_matrix[clustering$order, clustering$order, drop = FALSE]
   palette <- grDevices::colorRampPalette(c("#f7fbff", "#9ec9f7", "#217ce7", "#0b3972"))(100)
+  value_range <- range(ordered_matrix, finite = TRUE)
+  if (!all(is.finite(value_range)) || diff(value_range) <= 0) value_range <- c(0, 1)
+  text_count <- nrow(ordered_matrix)
+  axis_cex <- max(0.55, min(0.88, 8 / max(text_count, 8)))
+  column_labels <- gsub("_", " ", colnames(ordered_matrix), fixed = TRUE)
+  row_labels <- rev(gsub("_", " ", rownames(ordered_matrix), fixed = TRUE))
+
   grDevices::png(path, width = 1800, height = 1500, res = 180)
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit({ graphics::par(old_par); grDevices::dev.off() }, add = TRUE)
-  graphics::par(mar = c(10, 10, 5, 3))
-  stats::heatmap(
-    ordered_matrix,
-    Rowv = NA,
-    Colv = NA,
-    symm = TRUE,
-    scale = "none",
+
+  graphics::layout(matrix(c(1L, 2L), nrow = 1L), widths = c(5.6, 1))
+  graphics::par(mar = c(11, 11, 5, 2))
+  graphics::image(
+    x = seq_len(text_count),
+    y = seq_len(text_count),
+    z = t(ordered_matrix[text_count:1L, , drop = FALSE]),
     col = palette,
-    margins = c(12, 12),
-    main = "Matrice des distances de Labbé"
+    zlim = value_range,
+    axes = FALSE,
+    xlab = "",
+    ylab = "",
+    useRaster = TRUE
   )
+  graphics::axis(1, at = seq_len(text_count), labels = column_labels, las = 2, cex.axis = axis_cex, tick = FALSE)
+  graphics::axis(2, at = seq_len(text_count), labels = row_labels, las = 2, cex.axis = axis_cex, tick = FALSE)
+  graphics::abline(v = seq(0.5, text_count + 0.5, by = 1), h = seq(0.5, text_count + 0.5, by = 1), col = grDevices::adjustcolor("white", alpha.f = 0.2), lwd = 0.7)
+  graphics::box(col = "#d2d9e3")
+  graphics::title(main = "Matrice des distances de Labbé", cex.main = 1.25)
+
+  key_values <- seq(value_range[[1L]], value_range[[2L]], length.out = 100L)
+  key_matrix <- outer(c(0, 1), key_values, function(x, y) y)
+  graphics::par(mar = c(11, 1, 5, 5))
+  graphics::image(
+    x = c(0, 1),
+    y = key_values,
+    z = key_matrix,
+    col = palette,
+    zlim = value_range,
+    axes = FALSE,
+    xlab = "",
+    ylab = "",
+    useRaster = TRUE
+  )
+  legend_ticks <- pretty(value_range, n = 5)
+  legend_ticks <- legend_ticks[legend_ticks >= value_range[[1L]] & legend_ticks <= value_range[[2L]]]
+  graphics::axis(4, at = legend_ticks, labels = formatC(legend_ticks, format = "f", digits = 3), las = 1, cex.axis = 0.72)
+  graphics::box(col = "#d2d9e3")
+  graphics::mtext("Distance de Labbé", side = 4, line = 3, cex = 0.82)
   invisible(clustering)
 }
 
