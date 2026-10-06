@@ -1,0 +1,153 @@
+"""Parcours réel Chrome + HTTP + interface, avec pages synthétiques hors TikTok.
+
+Exécution : python tests/smoke_browser.py (Chrome/Chromium doit être installé).
+Les fixtures n'existent que dans ce processus de test, jamais dans l'application.
+"""
+import argparse
+import json
+import os
+import socket
+import struct
+import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import uvicorn
+from fastapi.responses import HTMLResponse
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+
+import scraptiktok as scraper
+import webapp as web
+
+
+TAG = """<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
+<button id="ready" style="position:absolute;left:20px;top:20px;width:220px;height:60px"
+onclick="window.ready=true;update()">Autoriser la collecte de test</button>
+<input type="range" id="slider" min="0" max="100" value="0" style="position:absolute;left:20px;top:120px;width:300px;height:30px;margin:0" oninput="update()">
+<input id="word" style="position:absolute;left:20px;top:200px;width:300px;height:40px" oninput="update()">
+<main id="posts" hidden style="position:absolute;top:280px">
+<a href="https://www.tiktok.com/@fixture/video/1234567890">Publication de test</a></main>
+<script>function update(){document.getElementById('posts').hidden = !(window.ready && Number(document.getElementById('slider').value)>70 && document.getElementById('word').value==='été');}</script>
+</body></html>"""
+CAPTION = 'Café & découvertes 🍋\nUne escapade en été #tourisme'
+
+
+def main():
+    artifacts = Path(os.getenv("SMOKE_ARTIFACT_DIR", "/tmp/scraptiktok-smoke"))
+    artifacts.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as folder:
+        manager = web.Manager(data_dir=folder)
+        app = web.create_app(manager)
+
+        @app.get("/fixture/tag")
+        def tag():
+            return HTMLResponse(TAG)
+
+        @app.get("/fixture/post")
+        def post():
+            item = {"id": "1234567890", "desc": CAPTION, "author": {"uniqueId": "fixture"}}
+            return HTMLResponse('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">' + json.dumps({"itemInfo": {"itemStruct": item}}) + '</script>')
+
+        # Notre middleware CSP protège l'app. La fixture utilise des événements
+        # inline pour tester les gestes et reçoit uniquement ici une CSP adaptée.
+        @app.middleware("http")
+        async def fixture_policy(request, call_next):
+            response = await call_next(request)
+            if request.url.path.startswith("/fixture/"):
+                response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+            return response
+
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(128)
+        port = listener.getsockname()[1]
+        origin = f"http://127.0.0.1:{port}"
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        thread = threading.Thread(target=lambda: server.run(sockets=[listener]), daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 10
+        while not server.started:
+            if time.monotonic() > deadline:
+                raise AssertionError("Le serveur de test ne démarre pas")
+            time.sleep(0.05)
+
+        args = argparse.Namespace(headless=True, profile_dir=None,
+                                  driver=Path(os.environ["CHROMEDRIVER"]) if os.getenv("CHROMEDRIVER") else None,
+                                  chrome_binary=Path(os.environ["CHROME_BINARY"]) if os.getenv("CHROME_BINARY") else None,
+                                  timeout=15)
+        front = scraper.create_driver(args)
+        front.set_script_timeout(15)
+
+        def browser_request(path, body=None, binary=False):
+            result = front.execute_async_script("""
+                const [path, body, binary, done] = arguments;
+                fetch(path, body === null ? {} : {method:'POST', headers:{'Content-Type':'application/json','X-ScrapTikTok':'1'},body:JSON.stringify(body)})
+                .then(async r=>done({status:r.status, data: binary ? Array.from(new Uint8Array(await r.arrayBuffer())) : await r.text()}))
+                .catch(e=>done({error:String(e)}));
+            """, path, body, binary)
+            assert "error" not in result, result
+            assert result["status"] < 400, result
+            return bytes(result["data"]) if binary else result["data"]
+
+        def redirected(browser, url):
+            browser.get(origin + ("/fixture/tag" if "/tag/" in url else "/fixture/post"))
+
+        try:
+            with patch.object(scraper, "open_page", side_effect=redirected):
+                front.set_window_size(1360, 1150)
+                front.get(origin)
+                WebDriverWait(front, 10).until(lambda d: d.find_element(By.ID, "start-button").is_displayed())
+                front.save_screenshot(str(artifacts / "desktop.png"))
+                front.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+                    "width": 390, "height": 1100, "deviceScaleFactor": 1, "mobile": True})
+                assert front.execute_script("return document.documentElement.scrollWidth <= window.innerWidth"), "Débordement mobile"
+                front.save_screenshot(str(artifacts / "mobile.png"))
+                front.execute_cdp_cmd("Emulation.clearDeviceMetricsOverride", {})
+                front.set_window_size(1360, 1150)
+                front.find_element(By.ID, "hashtag").send_keys("tourisme")
+                limit = front.find_element(By.ID, "limit")
+                limit.clear(); limit.send_keys("1")
+                front.find_element(By.ID, "start-button").click()
+                WebDriverWait(front, 30).until(lambda d: d.find_element(By.ID, "browser-screen").is_displayed())
+                session = json.loads(browser_request("/api/session"))
+                job_id = session["job"]["id"]
+                frame = browser_request(f"/api/jobs/{job_id}/frame", binary=True)
+                width, height = struct.unpack(">II", frame[16:24])
+
+                def action(body):
+                    browser_request(f"/api/jobs/{job_id}/action", body)
+                    time.sleep(0.6)
+
+                def point(x, y):
+                    return {"x": x / width, "y": y / height}
+
+                action({"kind": "click", "points": [point(100, 50)]})
+                action({"kind": "drag", "points": [point(28, 135), point(80, 135), point(160, 135), point(250, 135), point(310, 135)]})
+                action({"kind": "click", "points": [point(100, 220)]})
+                action({"kind": "text", "text": "été"})
+                front.find_element(By.ID, "continue-button").click()
+                WebDriverWait(front, 35).until(lambda d: d.find_element(By.ID, "status-badge").text == "Terminé")
+                download = front.find_element(By.ID, "download")
+                assert download.is_displayed()
+                content = browser_request(f"/api/jobs/{job_id}/download")
+                assert CAPTION in content, content
+                assert "@fixture" in content
+                assert front.find_element(By.ID, "count-captions").text == "1"
+                assert not front.find_element(By.ID, "browser-panel").is_displayed()
+                front.execute_script("window.scrollTo(0,0)")
+                front.save_screenshot(str(artifacts / "results.png"))
+                print("PASS : interface, mobile, Chrome serveur, capture, clic, glisser, saisie, collecte et téléchargement TXT UTF-8")
+                print(f"Captures : {artifacts}")
+        finally:
+            front.quit()
+            server.should_exit = True
+            thread.join(timeout=30)
+
+
+if __name__ == "__main__":
+    main()

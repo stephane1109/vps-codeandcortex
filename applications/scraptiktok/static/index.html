@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#122522">
+  <title>ScrapTikTok · Votre corpus en un hashtag</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="ScrapTikTok, accueil"><span class="brand-icon">t<span>.</span></span>ScrapTikTok</a>
+      <span class="top-note"><span class="dot"></span>Collecte depuis le serveur</span>
+    </header>
+    <main>
+      <section class="hero">
+        <span class="eyebrow">DE TIKTOK À VOTRE CORPUS</span>
+        <h1>Un hashtag.<br><span>Des textes à explorer.</span></h1>
+        <p>Rassemblez les descriptions des publications TikTok et téléchargez-les dans un fichier texte, prêt à être analysé.</p>
+      </section>
+      <ol class="steps" aria-label="Les étapes de votre collecte">
+        <li><span>1</span>Choisir un hashtag</li><li><span>2</span>Vérifier l’accès à TikTok</li><li><span>3</span>Télécharger les textes</li>
+      </ol>
+      <div class="grid">
+        <section class="card search-card" aria-labelledby="search-title">
+          <div class="section-label">01 / RECHERCHE</div>
+          <h2 id="search-title">Que souhaitez-vous explorer ?</h2>
+          <form id="search-form">
+            <label for="hashtag">Votre hashtag</label>
+            <div class="hashtag-field"><span aria-hidden="true">#</span><input id="hashtag" name="hashtag" placeholder="tourisme" autocomplete="off" maxlength="100" required aria-describedby="hashtag-help"></div>
+            <p class="help" id="hashtag-help">Un seul hashtag, avec ou sans #, sans espace.</p>
+            <div class="limit-header"><label for="limit">Publications à consulter</label><input type="number" id="limit" min="1" max="300" value="50" aria-label="Nombre maximal de publications"></div>
+            <input id="limit-range" type="range" min="1" max="300" value="50" aria-label="Nombre maximal de publications, curseur">
+            <div class="range-labels"><span>1 publication</span><span>300 maximum</span></div>
+            <label class="checkbox"><input type="checkbox" id="include-sources" checked><span>Inclure les auteurs et les liens dans le fichier</span></label>
+            <button class="button primary" id="start-button" type="submit">Lancer la collecte <span aria-hidden="true">↗</span></button>
+            <p class="form-error" id="form-error" role="alert" hidden></p>
+          </form>
+          <div class="scope-note"><strong>Quels textes ?</strong> Les légendes et descriptions, hashtags compris. Les commentaires, l’audio et le texte incrusté dans les vidéos ne sont pas inclus.</div>
+        </section>
+        <section class="card result-card" aria-labelledby="results-title">
+          <div class="section-label">02 / VOTRE FICHIER</div>
+          <div class="result-heading"><h2 id="results-title">Les résultats vous attendent ici</h2><span id="status-badge" class="badge" hidden>En cours</span></div>
+          <div id="empty-state" class="empty-state">
+            <div class="file-illustration" aria-hidden="true"><span>TXT</span><i></i><i></i><i></i><div>↓</div></div>
+            <h3>Du fil TikTok au fichier texte.</h3>
+            <p>Choisissez votre hashtag.<br>Nous nous occupons de rassembler les textes accessibles.</p>
+            <span class="format-tag">.txt · UTF-8 · compatible avec vos outils</span>
+          </div>
+          <div id="job-state" hidden>
+            <p id="status-message" class="status-message" role="status" aria-live="polite"></p>
+            <div class="metrics"><div><strong id="count-captions">0</strong><span>textes collectés</span></div><div><strong id="count-processed">0</strong><span>publications lues</span></div><div><strong id="count-discovered">0</strong><span>liens repérés</span></div></div>
+            <progress id="progress" max="100" value="0" aria-label="Progression de la collecte"></progress>
+            <p class="help" id="progress-detail"></p>
+            <div class="result-actions"><a class="button primary" id="download" hidden>Télécharger le fichier texte <span aria-hidden="true">↓</span></a><button id="stop-button" class="button secondary" type="button">Arrêter la collecte</button></div>
+            <p class="help" id="retention">Les textes déjà obtenus restent téléchargeables si vous arrêtez la collecte.</p>
+            <div id="preview-section" hidden><h3>Aperçu des premiers textes</h3><div id="preview"></div></div>
+          </div>
+        </section>
+      </div>
+      <section id="browser-panel" class="card browser-panel" hidden aria-labelledby="browser-title">
+        <div class="browser-header"><div><span class="section-label">UNE VÉRIFICATION AVANT DE CONTINUER</span><h2 id="browser-title">TikTok vous donne la main</h2><p>Ceci est le navigateur du serveur. Cliquez dans l’image ou faites glisser le curseur du CAPTCHA, comme dans un navigateur habituel.</p></div><button class="button primary" id="continue-button" type="button">Les vidéos sont visibles, continuer →</button></div>
+        <div class="browser-tip">L’image s’actualise environ chaque seconde. Après un geste, attendez la mise à jour. Vous pouvez aussi vous connecter avec le QR code affiché par TikTok.</div>
+        <div id="screen-container" class="screen-container"><p id="screen-loading">Chargement de la fenêtre TikTok…</p><img id="browser-screen" alt="Fenêtre TikTok du serveur, cliquez ou faites glisser pour interagir" draggable="false" tabindex="0" hidden></div>
+        <div class="browser-tools"><form id="typing-form"><label for="remote-text">Écrire dans le champ sélectionné</label><div class="typing-row"><input type="password" id="remote-text" autocomplete="off" placeholder="Cliquez d’abord dans un champ de TikTok" maxlength="2000"><button class="button secondary" type="submit">Saisir</button></div></form><div class="key-buttons"><button data-key="Tab" type="button">Tab ↹</button><button data-key="Enter" type="button">Entrée ↵</button><button data-key="Backspace" type="button">Effacer ⌫</button><button data-key="Escape" type="button">Échap</button><button data-scroll="-600" type="button" aria-label="Défiler vers le haut">↑</button><button data-scroll="600" type="button" aria-label="Défiler vers le bas">↓</button></div></div>
+        <p id="browser-error" class="form-error" role="alert" hidden></p>
+      </section>
+      <aside class="notice"><span aria-hidden="true">ⓘ</span><p>TikTok peut demander une connexion ou un CAPTCHA. Vous pourrez le traiter sur cette page. Le nombre de textes obtenu dépend des publications accessibles ; une collecte complète du hashtag n’est pas garantie.</p></aside>
+    </main>
+    <footer><span>ScrapTikTok <span class="footer-dot">/</span> Code & Cortex</span><span>Vos textes. Votre analyse.</span></footer>
+  </div>
+</body>
+</html>

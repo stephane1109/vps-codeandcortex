@@ -1,0 +1,12 @@
+.venv
+.git
+__pycache__
+**/__pycache__
+*.pyc
+.selenium-cache
+.chrome-profile
+exports
+data
+.env
+.env.*
+.DS_Store

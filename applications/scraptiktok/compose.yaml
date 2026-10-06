@@ -1,0 +1,18 @@
+services:
+  scraptiktok:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PORT:-8501}:8501"
+    shm_size: "1gb"
+    mem_limit: "2g"
+    cpus: 2
+    environment:
+      MAX_CONCURRENT_JOBS: "1"
+      COOKIE_SECURE: "${COOKIE_SECURE:-0}"
+      APP_ACCESS_USER: "${APP_ACCESS_USER:-scraptiktok}"
+      APP_ACCESS_PASSWORD: "${APP_ACCESS_PASSWORD:-}"
+    volumes:
+      - scraptiktok-data:/app/data
+volumes:
+  scraptiktok-data:

@@ -173,6 +173,10 @@ def create_driver(args: argparse.Namespace) -> webdriver.Chrome:
     options.add_argument("--window-size=1440,1000")
     options.add_argument("--lang=fr-FR")
     options.add_argument("--mute-audio")
+    options.add_argument("--force-device-scale-factor=1")
+    options.add_argument("--disable-dev-shm-usage")
+    if os.getenv("CHROME_NO_SANDBOX") == "1":
+        options.add_argument("--no-sandbox")
     if args.headless:
         options.add_argument("--headless=new")
     if args.profile_dir:
@@ -202,19 +206,25 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
         raise
 
 
-def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict) -> list[str]:
+def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
+                  *, interact=manual_step, progress=None, check=None) -> list[str]:
+    check = check or (lambda: None)
+    check()
     open_page(driver, report["hashtag_url"])
     if args.interactive:
-        manual_step("Vérifiez que la page du hashtag et ses vidéos sont visibles (connexion/cookies si nécessaire).")
+        interact("Vérifiez que les vidéos du hashtag sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
     links: dict[str, str] = {}
 
     def scan(browser: webdriver.Chrome) -> bool:
+        check()
         previous = len(links)
         for href in browser.execute_script(DISCOVER_JS):
             identity = canonical_post(href)
             if identity and len(links) < args.limit:
                 links.setdefault(identity[0], identity[1])
         report["discovered_urls"] = list(links.values())
+        if progress:
+            progress(len(links))
         return len(links) > previous
 
     try:
@@ -232,12 +242,13 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         ) from exc
     idle = 0
     for _ in range(args.max_scrolls):
+        check()
         if len(links) >= args.limit:
             report["discovery_stop"] = "limit"
             break
         if driver.execute_script(BLOCKED_JS):
             if args.interactive:
-                manual_step("TikTok affiche une connexion ou une vérification.")
+                interact("TikTok affiche une connexion ou une vérification.")
             else:
                 report["discovery_stop"] = "blocked"
                 break
@@ -259,10 +270,14 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     return list(links.values())
 
 
-def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace) -> dict:
+def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
+              *, interact=manual_step, check=None) -> dict:
+    check = check or (lambda: None)
+    check()
     open_page(driver, url)
 
     def read(browser: webdriver.Chrome) -> dict | bool:
+        check()
         return extract_record(browser.execute_script(PAGE_JS), url) or False
 
     try:
@@ -270,7 +285,7 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace) -> d
     except TimeoutException:
         if not args.interactive:
             raise
-        manual_step("Légende non accessible. Vérifiez la publication, la connexion et un éventuel CAPTCHA.")
+        interact("Légende non accessible. Vérifiez la publication, la connexion et un éventuel CAPTCHA.")
         return WebDriverWait(driver, args.timeout).until(read)
 
 

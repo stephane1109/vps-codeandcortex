@@ -1,0 +1,42 @@
+name: ScrapTikTok / Docker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - applications/scraptiktok/**
+      - .github/workflows/scraptiktok.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Read the exact public commit
+        run: |
+          git init
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+      - name: Build the Linux image
+        run: docker build -t scraptiktok-ci applications/scraptiktok
+      - name: Verify the production startup and healthcheck
+        run: |
+          docker run -d --name scraptiktok-health --shm-size=1g -p 127.0.0.1:18501:8501 scraptiktok-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18501/healthz; then exit 0; fi
+            sleep 2
+          done
+          docker logs scraptiktok-health
+          exit 1
+      - name: Verify tests and browser flow as the application user
+        run: |
+          docker run --rm --shm-size=1g --user root --entrypoint /bin/sh scraptiktok-ci -c \
+            'pip install -r requirements-dev.txt && su -s /bin/sh app -c "python -m unittest discover -s tests -v && xvfb-run -a -s \"-screen 0 1440x1000x24\" python tests/smoke_browser.py"'
+      - name: Production logs
+        if: always()
+        run: docker logs scraptiktok-health || true

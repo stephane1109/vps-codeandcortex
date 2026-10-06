@@ -5,3 +5,7 @@ exports/
 .chrome-profile/
 .selenium-cache/
 .DS_Store
+data/
+.env
+.env.*
+!.env.example

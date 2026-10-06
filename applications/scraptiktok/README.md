@@ -1,148 +1,125 @@
-# scraptiktok
+# ScrapTikTok — interface web et export texte
 
-Script Python/Selenium pour collecter les **légendes/descriptions des publications
-TikTok accessibles dans Chrome à partir d'un hashtag**. Il parcourt la page du
-hashtag puis ouvre chaque publication, sans télécharger les vidéos.
+Saisir un hashtag, collecter les **légendes/descriptions** des publications TikTok,
+puis télécharger un fichier **`.txt` en UTF-8**. L'interface fonctionne sur
+ordinateur et mobile. Le navigateur Selenium s'exécute sur le serveur :
+l'utilisateur n'a rien à installer.
 
-Les « textes » désignent ici la description écrite par l'auteur, hashtags compris.
-Les commentaires, la transcription audio, les sous-titres et le texte incrusté
-dans l'image ne sont pas collectés.
+## Utilisation
 
-## Installation sur macOS
+1. Saisir un hashtag, avec ou sans `#`, et choisir jusqu'à 300 publications.
+2. Cliquer sur **Lancer la collecte**.
+3. Vérifier l'accès à TikTok dans l'image du navigateur serveur affichée sur la
+   page. Cliquer ou faire glisser pour traiter les cookies, la connexion ou un
+   CAPTCHA. Le champ de saisie et les touches sous l'image permettent d'écrire
+   dans un champ TikTok sélectionné ; le QR code de connexion est aussi utilisable.
+4. Cliquer sur **Les vidéos sont visibles, continuer**.
+5. Suivre la progression, consulter l'aperçu et **Télécharger le fichier texte**.
 
-Prérequis : Python **3.10 ou plus récent**, Google Chrome et une connexion Internet.
+Le fichier peut contenir seulement les textes, ou les textes avec leurs auteurs
+et leurs liens, selon la case cochée. Les doublons sont supprimés par identifiant.
+Le bouton **Arrêter** conserve les textes déjà obtenus. Recharger la page permet
+également de retrouver la collecte tant que la session est conservée.
+
+Cette version collecte les descriptions écrites par les auteurs, hashtags compris.
+Elle ne collecte pas les commentaires, les transcriptions audio ou les textes
+incrustés dans les images.
+
+## Déployer sur le VPS / Coolify
+
+Le dossier contient le `Dockerfile`, Chromium, son pilote compatible et un écran
+virtuel Xvfb. Le navigateur serveur se commande depuis l'interface ; aucun accès
+VNC ni terminal utilisateur n'est nécessaire.
+
+- Dépôt : `stephane1109/vps-codeandcortex`, branche `main`.
+- Base directory : `/applications/scraptiktok`.
+- Build pack : **Dockerfile** ; fichier : `/Dockerfile`, relatif à la base directory.
+- Port interne : **8501** ; healthcheck : **`/healthz`**.
+- Affecter un domaine HTTPS ; définir `COOKIE_SECURE=1`.
+- Prévoir 2 Go de RAM / 2 vCPU disponibles pour une collecte simultanée.
+
+Les réglages, variables et diagnostics sont dans
+[DEPLOIEMENT_OVH_COOLIFY.md](DEPLOIEMENT_OVH_COOLIFY.md).
+
+Sans Coolify :
 
 ```bash
-cd "/Users/stephanemeurisse/Documents/OVH - VPS/VPS/applications/scraptiktok"
+cp .env.example .env
+docker compose up -d --build
+```
+
+Le port est lié à `127.0.0.1:8501` ; le guide explique le reverse proxy et le
+tunnel SSH pour accéder à l'interface depuis son ordinateur.
+
+## Lancer l'interface sur le Mac
+
+Python 3.10+ et Chrome sont requis. Depuis ce dossier :
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+python -m uvicorn webapp:app --host 127.0.0.1 --port 8501
 ```
 
-[Selenium Manager](https://www.selenium.dev/documentation/selenium_manager/)
-gère automatiquement le pilote ChromeDriver compatible. Le premier lancement
-peut nécessiter son téléchargement. Pour utiliser un pilote déjà installé,
-ajouter `--driver /chemin/vers/chromedriver`.
-Le cache est local au dossier `.selenium-cache/`. Par défaut, un ancien
-ChromeDriver présent dans le `PATH` est ignoré pour éviter les conflits de version.
-Les variables `SE_CACHE_PATH` et `SE_SKIP_DRIVER_IN_PATH`, si définies par
-l'utilisateur, restent prioritaires.
+Ouvrir `http://localhost:8501`. Le navigateur de collecte s'exécute sans fenêtre
+locale par défaut ; son image apparaît dans l'interface. Docker utilise Chromium
+avec un écran virtuel sur le VPS.
 
-## Première collecte
+## Sessions, fichiers et ressources
+
+- Un navigateur temporaire est dédié à chaque collecte. Aucun profil TikTok partagé.
+- Une session ne peut ni voir les captures ni télécharger les résultats d'une autre.
+- Une collecte simultanée par défaut ; limite réglable avec `MAX_CONCURRENT_JOBS`.
+- Les fichiers texte sont dans `data/`, exclus de Git ; nettoyage après une heure
+  par défaut (`RESULT_TTL_SECONDS`). Captures et saisies ne sont pas enregistrées.
+- Une session abandonnée est arrêtée après 5 minutes sans nouvelles de l'interface
+  (`IDLE_TIMEOUT_SECONDS`). Durée maximale d'une collecte : 30 minutes
+  (`JOB_TIMEOUT_SECONDS`).
+- Après un redémarrage serveur, les anciennes sessions ne sont plus accessibles.
+- Protection HTTP facultative : `APP_ACCESS_USER` et `APP_ACCESS_PASSWORD`.
+- Conserver un worker Uvicorn et une réplique : les sessions sont gérées en mémoire.
+
+## Limites de TikTok
+
+TikTok peut imposer une connexion, un CAPTCHA ou refuser l'IP du VPS. Les gestes
+manuels sont transmis par Selenium ; il n'y a ni résolution automatique de CAPTCHA
+ni garantie de contourner un refus d'accès. Le test de collecte réelle doit donc
+être effectué depuis le réseau du VPS après déploiement.
+
+Les résultats dépendent de ce que la page rend accessible, sans garantie
+d'exhaustivité ou d'ordre chronologique. Le script lit d'abord les données JSON
+intégrées à chaque page en vérifiant l'ID de la publication, puis son texte affiché
+si nécessaire. Ce second mode peut restituer une légende tronquée. Les sélecteurs
+TikTok peuvent changer. Adapter l'usage aux règles d'accès et aux droits sur les textes.
+
+## Script en ligne de commande (facultatif)
+
+L'interface utilise le même moteur que le script d'origine, qui reste disponible :
 
 ```bash
 python scraptiktok.py cuisine --limit 50 --interactive --profile-dir .chrome-profile
-```
-
-1. Chrome s'ouvre sur `https://www.tiktok.com/tag/cuisine`.
-2. Dans cette fenêtre, traiter les cookies, une éventuelle connexion ou un CAPTCHA
-   et vérifier que les publications du hashtag sont visibles.
-3. Revenir au terminal et appuyer sur **Entrée** pour démarrer la collecte.
-4. Les fichiers apparaissent dans `exports/`. `Ctrl+C` conserve les résultats acquis.
-
-Remplacer `cuisine` par le hashtag voulu. Avec le préfixe `#`, utiliser des
-guillemets : `python scraptiktok.py "#tourisme" --interactive`.
-
-Le profil est facultatif. Utiliser un profil **dédié** (pas le profil personnel
-habituel de Chrome), et une seule collecte à la fois pour ce profil. Il conserve
-la session localement ; ne pas le publier. Les profils, exports et environnements
-Python locaux sont exclus de Git.
-
-## Exports
-
-Chaque exécution crée un nom horodaté et sauvegarde les trois formats après chaque
-publication :
-
-- **CSV** : séparateur `;`, encodage UTF-8 avec BOM pour Excel ; une ligne par
-  publication traitée, y compris celles en erreur.
-- **JSON** : textes bruts, métadonnées, liste des URL découvertes et bilan de la collecte.
-- **TXT** : URL et légende, séparées par une ligne vide, uniquement pour les textes obtenus.
-
-Champs : identifiant, URL, auteur, description, hashtags, date de publication
-(si disponible), date de collecte, source et statut. Les dates sont en UTC.
-Les statuts par publication sont `ok`, `empty_caption` (légende vide confirmée
-dans les données de la page) et `error` (échec de lecture). Une erreur ne devient
-jamais une légende vide prétendument réussie.
-
-Les cellules CSV commençant par un caractère de formule sont précédées d'une
-apostrophe pour leur ouverture dans un tableur. JSON et TXT conservent le texte brut.
-
-Le JSON contient `discovery_stop` (`limit`, `max_scrolls`, `no_new_links` ou
-`blocked`) et `run_status`. `completed` signifie que les liens découverts ont été
-traités, **pas** que toutes les publications du hashtag ont été récupérées.
-
-## Options
-
-```bash
 python scraptiktok.py --help
-python scraptiktok.py tourisme --limit 100 --delay 4 --timeout 30 --max-scrolls 50 --interactive
-python scraptiktok.py cuisine --limit 10 --output-dir ./exports/essai
 ```
 
-| Option | Effet | Défaut |
-| --- | --- | --- |
-| `--limit` | Maximum de publications à lire | 50 |
-| `--max-scrolls` | Maximum de défilements sur le hashtag | 30 |
-| `--idle-rounds` | Arrêt après N défilements sans nouveau lien | 3 |
-| `--delay` | Pause entre les pages et les défilements, en secondes | 3 |
-| `--timeout` | Attente maximale par navigation ou lecture, en secondes | 20 |
-| `--interactive` | Pause initiale et intervention manuelle après un échec de lecture | Désactivé |
-| `--headless` | Chrome sans fenêtre | Désactivé |
-| `--profile-dir` | Profil Chrome dédié et persistant | Profil temporaire |
-| `--output-dir` | Dossier des exports | `exports/` à côté du script |
-| `--chrome-binary` | Chemin de Chrome/Chromium | Détection automatique |
-| `--driver` | Chemin de ChromeDriver | Selenium Manager |
+Le script CLI exporte en TXT, CSV et JSON dans `exports/`. L'interface web expose
+uniquement le téléchargement TXT. Selenium Manager télécharge le pilote compatible
+sur Mac ; le conteneur utilise directement les paquets Chromium/ChromeDriver Debian.
 
-Codes de sortie : `0` collecte terminée sur les liens découverts ; `1` échec global ;
-`2` collecte partielle ou arguments invalides ; `130` interruption par Ctrl+C.
-Un JSON de bilan est créé même lorsqu'aucune publication n'est accessible.
-
-## VPS Linux
-
-Installer Python et Chrome/Chromium sur le serveur, puis les mêmes dépendances.
-Exécuter sous un utilisateur ordinaire disposant des droits d'écriture sur les
-exports et le cache Selenium :
+## Vérifications
 
 ```bash
-python scraptiktok.py cuisine --limit 20 --headless --delay 4
-```
-
-`--headless` et `--interactive` sont incompatibles. Si TikTok demande une action
-humaine, utiliser Chrome avec une interface graphique ; le script ne résout pas
-les CAPTCHA automatiquement. La collecte depuis l'IP d'un VPS peut échouer même
-si elle fonctionne sur un ordinateur personnel.
-
-## Limites et dépannage
-
-- TikTok peut ne renvoyer aucun résultat, imposer une connexion ou refuser l'accès.
-  Commencer par une petite collecte avec `--interactive`.
-- Les résultats dépendent de ce que la page rend accessible et ne constituent
-  pas un inventaire exhaustif ou chronologique du hashtag.
-- La description est d'abord lue dans les données JSON intégrées à la page, en
-  cherchant exactement l'ID de la publication. À défaut, le script utilise le
-  texte affiché (`page_dom`), qui peut être tronqué par l'interface. Aucun endpoint
-  privé n'est appelé directement.
-- Les sélecteurs et formats TikTok peuvent changer. Ils sont regroupés dans
-  `DISCOVER_JS`, `PAGE_JS`, `BLOCKED_JS` et `extract_record` dans le script.
-- Le défilement s'arrête après plusieurs attentes sans nouveauté ; augmenter
-  `--timeout` pour une connexion lente. Les doublons sont éliminés par identifiant.
-- Consulter le JSON pour distinguer un blocage, une légende vide et une erreur.
-  Adapter l'usage aux règles d'accès de TikTok et aux droits portant sur les textes.
-
-Les attentes dynamiques utilisent
-[WebDriverWait](https://www.selenium.dev/documentation/webdriver/waits/).
-
-## Vérifications locales
-
-```bash
+python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
+python tests/smoke_browser.py
 ```
 
-Ces tests vérifient l'extraction depuis des données synthétiques, les exports,
-les erreurs et les interruptions. Ils ne prouvent pas l'accès à TikTok depuis
-votre réseau ; vérifier celui-ci avec une petite collecte dans Chrome.
+Le test de navigateur lance l'application, utilise de vrais navigateurs Chrome,
+vérifie le rendu responsive, la capture du navigateur serveur, les gestes humains
+(clic, glisser, saisie), la collecte et le téléchargement TXT avec accents et emoji.
+Il utilise des pages **synthétiques**, sans accès à TikTok ni résolution de CAPTCHA.
+Ces fixtures n'existent que pendant le test et ne sont pas exposées en production.
 
-Lors de la vérification du 6 octobre 2026, le démarrage de Chrome et l'extraction
-sur une page de test locale ont réussi. La page TikTok `#cuisine` a présenté un
-CAPTCHA avant d'afficher ses publications : la collecte réelle de légendes reste
-à valider après intervention manuelle avec `--interactive`.
+Le workflow GitHub `ScrapTikTok / Docker` construit l'image Linux et exécute les tests
+ainsi que ce parcours dans le conteneur. Un résultat vert valide l'application et
+son environnement Linux ; il ne garantit pas l'accès à TikTok depuis une IP donnée.
