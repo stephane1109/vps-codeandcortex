@@ -5,7 +5,7 @@
     <title>IRAMUTEQ Lab</title>
     <link rel="icon" href="./logo_iramuteqlab.png?v=20260928-logo" type="image/png" />
     <link rel="apple-touch-icon" href="./logo_iramuteqlab.png?v=20260928-logo" />
-    <link rel="stylesheet" href="./styles.css?v=20261006-distance-labbe-consistency" />
+    <link rel="stylesheet" href="./styles.css?v=20261006-labbe-lexical-settings" />
   </head>
   <body>
     <div class="app-shell">
@@ -1389,16 +1389,47 @@
             <select id="distanceLabbeVariable"></select>
           </label>
           <label>
-            Seuil minimal d’occurrences d’une forme
+            Dictionnaire
+            <select id="distanceLabbeDictionarySource">
+              <optgroup label="Dictionnaires IRaMuTeQ">
+                <option value="lexique_fr">Français - dico IRaMuTeQ</option>
+                <option value="lexique_en">Anglais - dico IRaMuTeQ</option>
+                <option value="lexique_sp">Espagnol - dico IRaMuTeQ</option>
+                <option value="lexique_it">Italien - dico IRaMuTeQ</option>
+              </optgroup>
+              <optgroup label="Modèles spaCy">
+                <option value="spacy_en">Anglais (en) - spaCy</option>
+                <option value="spacy_de">Allemand (de) - spaCy</option>
+                <option value="spacy_nl">Néerlandais (nl) - spaCy</option>
+                <option value="spacy_pt">Portugais (pt) - spaCy</option>
+                <option value="spacy_ca">Catalan (ca) - spaCy</option>
+              </optgroup>
+            </select>
+          </label>
+          <label>
+            Formes utilisées
+            <select id="distanceLabbeFormType">
+              <option value="both">Actives et supplémentaires</option>
+              <option value="active">Actives</option>
+              <option value="supplementary">Supplémentaires</option>
+            </select>
+            <span class="field-help">Les catégories suivent les propriétés du dictionnaire IRaMuTeQ.</span>
+          </label>
+          <label>
+            Fréquence minimale des formes
             <input id="distanceLabbeMinEffectif" type="number" min="1" step="1" value="10" />
-            <span class="field-help">Une forme doit apparaître au moins ce nombre de fois dans l’ensemble des modalités pour participer au calcul.</span>
+            <span class="field-help">Paramètre officiel de construction de la table lexicale IRaMuTeQ, fixé à 10 par défaut.</span>
+          </label>
+          <label class="check-option distance-labbe-lemma-option" for="distanceLabbeUseLemmas">
+            <input id="distanceLabbeUseLemmas" type="checkbox" checked />
+            <span>Lemmatiser avec le dictionnaire sélectionné</span>
           </label>
         </div>
 
         <aside class="specificities-help" aria-label="Aide sur la distance intertextuelle">
           <h3>Principe</h3>
           <p>Chaque modalité devient un texte agrégé. Le texte le plus long est ramené à la taille du plus court, puis les écarts absolus de fréquence sont normalisés. Une distance proche de 0 indique des profils lexicaux proches ; une valeur plus élevée indique des profils plus différents.</p>
-          <p>Ce calcul est indépendant de la CHD. Il construit directement la table lexicale des modalités sélectionnées.</p>
+          <p>Ce calcul est indépendant de la CHD. Il construit directement la table lexicale des modalités sélectionnées avec les réglages visibles ci-dessus.</p>
         </aside>
 
         <p id="distanceLabbeDialogStatus" class="muted"></p>
@@ -1411,6 +1442,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261006-distance-labbe-consistency"></script>
+    <script type="module" src="./app.js?v=20261006-labbe-lexical-settings"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 import { closeParameterDialogs, createProgressionController } from "./progression.js";
-import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261006-distance-labbe-values";
+import { initializeEnglishTranslation } from "./traduction_anglais.js?v=20261006-labbe-lexical-settings";
 import {
   DEFAULT_SPACY_POS_SELECTION,
   SPACY_POS_CATEGORIES,
@@ -86,6 +86,9 @@ const openDistanceLabbeResultsDialogBtn = document.getElementById("openDistanceL
 const distanceLabbeDialog = document.getElementById("distanceLabbeDialog");
 const distanceLabbeVariable = document.getElementById("distanceLabbeVariable");
 const distanceLabbeMinEffectif = document.getElementById("distanceLabbeMinEffectif");
+const distanceLabbeDictionarySource = document.getElementById("distanceLabbeDictionarySource");
+const distanceLabbeUseLemmas = document.getElementById("distanceLabbeUseLemmas");
+const distanceLabbeFormType = document.getElementById("distanceLabbeFormType");
 const distanceLabbeDialogStatus = document.getElementById("distanceLabbeDialogStatus");
 const runDistanceLabbeBtn = document.getElementById("runDistanceLabbeBtn");
 const closeDistanceLabbeBtn = document.getElementById("closeDistanceLabbeBtn");
@@ -11051,6 +11054,15 @@ function distanceLabbeVariableOptionLabel(variable) {
 async function openDistanceLabbeDialog() {
   if (distanceLabbeVariable) distanceLabbeVariable.innerHTML = "";
   if (distanceLabbeMinEffectif) distanceLabbeMinEffectif.value = "10";
+  if (distanceLabbeDictionarySource) {
+    const globalDictionary = String(document.getElementById("dictionarySource")?.value || "lexique_fr");
+    const hasMatchingOption = Array.from(distanceLabbeDictionarySource.options).some(
+      (option) => option.value === globalDictionary
+    );
+    distanceLabbeDictionarySource.value = hasMatchingOption ? globalDictionary : "lexique_fr";
+  }
+  if (distanceLabbeUseLemmas) distanceLabbeUseLemmas.checked = true;
+  if (distanceLabbeFormType) distanceLabbeFormType.value = "both";
   if (runDistanceLabbeBtn) runDistanceLabbeBtn.disabled = true;
   if (distanceLabbeDialog && !distanceLabbeDialog.open) {
     if (typeof distanceLabbeDialog.showModal === "function") distanceLabbeDialog.showModal();
@@ -11097,6 +11109,8 @@ async function runDistanceLabbeFromDialog() {
   if (!request?.corpusName) return;
   const variable = String(distanceLabbeVariable?.value || "").trim();
   const minEffectif = Number.parseInt(String(distanceLabbeMinEffectif?.value || "10"), 10);
+  const selectedDictionary = String(distanceLabbeDictionarySource?.value || "lexique_fr").trim() || "lexique_fr";
+  const formType = String(distanceLabbeFormType?.value || "both").trim() || "both";
   if (!variable) {
     setDistanceLabbeDialogStatus("Sélectionnez les textes ou modalités à comparer.", { isError: true });
     return;
@@ -11112,6 +11126,25 @@ async function runDistanceLabbeFromDialog() {
   }
   setDistanceLabbeDialogStatus("Réduction des longueurs et calcul des distances par paire...");
   try {
+    const config = buildJobConfig("chd");
+    const presetSpacyModel = SPACY_MODEL_BY_DICTIONARY_SOURCE[selectedDictionary] || "";
+    config.source_dictionnaire = presetSpacyModel ? "spacy" : selectedDictionary;
+    config.spacy_model = presetSpacyModel;
+    config.lexique_utiliser_lemmes = Boolean(distanceLabbeUseLemmas?.checked);
+    config.labbe_type_formes = formType;
+
+    // La distance de Labbé possède son propre paramétrage lexical. Les filtres
+    // de la dernière CHD ne doivent pas modifier silencieusement sa table.
+    config.min_docfreq = 1;
+    config.filtrage_morpho = false;
+    config.pos_lexique_a_conserver = [];
+    config.morpho_exclure_etre_verbe = false;
+    config.morpho_conserver_hors_lexique = true;
+    config.retirer_stopwords = false;
+    config.supprimer_ponctuation = true;
+    config.expression_utiliser_dictionnaire = false;
+    config.utiliser_add_expression = false;
+
     const payload = await callAnalysisHistoryApi(
       "/api/distance-labbe",
       {
@@ -11119,7 +11152,7 @@ async function runDistanceLabbeFromDialog() {
         body: {
           corpusName: request.corpusName,
           corpusText: appState.corpusText,
-          config: buildJobConfig("chd"),
+          config,
           variable,
           minEffectif
         }
@@ -15368,8 +15401,11 @@ async function renderDistanceLabbeExports(index) {
     const metrics = [
       ["Textes comparés", summary.n_textes],
       ["Variable", summary.variable_label],
+      ["Dictionnaire", summary.dictionnaire],
+      ["Lemmatisation", summary.lemmatisation ? "Oui" : "Non"],
+      ["Formes utilisées", summary.type_formes_libelle],
       ["Formes retenues", summary.n_formes],
-      ["Seuil minimal d’occurrences d’une forme", summary.min_effectif],
+      ["Fréquence minimale des formes", summary.min_effectif],
       ["Distance minimale", formatDistance(summary.distance_min)],
       ["Distance maximale", formatDistance(summary.distance_max)],
       ["Paire la plus proche", summary.paire_plus_proche],
@@ -15393,7 +15429,7 @@ async function renderDistanceLabbeExports(index) {
 
     const thresholdHelp = document.createElement("p");
     thresholdHelp.className = "labbe-summary-note";
-    thresholdHelp.textContent = `Seuil lexical : une forme doit apparaître au moins ${summary.min_effectif} fois dans l’ensemble des modalités pour participer au calcul. Ce seuil filtre les mots rares.`;
+    thresholdHelp.textContent = `Fréquence minimale officielle : une forme doit apparaître au moins ${summary.min_effectif} fois dans l’ensemble des modalités pour participer au calcul.`;
     resultContainers.labbeSummary.appendChild(thresholdHelp);
 
     const warnings = Array.isArray(summary.warnings)

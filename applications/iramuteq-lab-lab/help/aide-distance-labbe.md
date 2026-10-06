@@ -8,6 +8,15 @@ L’utilisateur choisit une variable étoilée du corpus. Chaque modalité de ce
 
 Par exemple, avec `*journal`, toutes les UCE de chaque journal sont regroupées avant la comparaison.
 
+Avant le calcul, l’utilisateur choisit explicitement :
+
+- le dictionnaire utilisé ;
+- l’activation ou non de la lemmatisation ;
+- les formes actives et supplémentaires, les formes actives seules ou les formes supplémentaires seules ;
+- la fréquence minimale des formes.
+
+Ces choix correspondent à la préparation de la table lexicale dans IRaMuTeQ. Les réglages de la dernière CHD ne sont pas repris silencieusement.
+
 ## Calcul
 
 Pour comparer deux textes de longueurs différentes :
@@ -29,7 +38,7 @@ Une distance proche de `0` correspond à des profils lexicaux proches. Une dista
 
 La valeur ne mesure ni un pourcentage ni une significativité statistique. Elle résume l'écart lexical entre deux modalités après avoir ramené leurs textes à une longueur comparable. Elle s'interprète surtout relativement aux autres distances calculées dans le même corpus : la plus grande valeur désigne les deux modalités dont les profils lexicaux sont les plus différents.
 
-Le seuil minimal d'occurrences d'une forme filtre le vocabulaire avant les comparaisons. Avec un seuil de `10`, une forme doit apparaître au moins 10 fois au total dans l'ensemble des modalités pour participer au calcul. La valeur `1` conserve toutes les formes présentes dans la table lexicale du corpus.
+La fréquence minimale des formes filtre le vocabulaire avant les comparaisons. Avec une fréquence de `10`, une forme doit apparaître au moins 10 fois au total dans l'ensemble des modalités pour participer au calcul. La valeur `1` conserve toutes les formes présentes dans la table lexicale du corpus. Ce réglage existe dans le module officiel d’IRaMuTeQ sous le nom « Minimum frequency » et vaut `10` par défaut : il intervient lors de la construction de la table lexicale, avant la fonction `compute.labbe`.
 
 ## Résultats
 

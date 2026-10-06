@@ -45,18 +45,39 @@ tryCatch({
   # Le seuil propre à Labbé est appliqué après l'agrégation par modalité.
   # Il ne doit pas être confondu avec min_docfreq, qui reste donc à 1 ici.
   config$min_docfreq <- 1L
+  config$filtrage_morpho <- FALSE
+  config$pos_lexique_a_conserver <- list()
+  config$morpho_exclure_etre_verbe <- FALSE
+  config$morpho_conserver_hors_lexique <- TRUE
+  config$retirer_stopwords <- FALSE
+  config$supprimer_ponctuation <- TRUE
+  config$expression_utiliser_dictionnaire <- FALSE
+  config$utiliser_add_expression <- FALSE
 
   corpus <- import_corpus_iramuteq(input_path)
   if (quanteda::ndoc(corpus) < 2L) stop("Le corpus doit contenir au moins deux textes.")
 
   pipeline <- preparer_pipeline_chd(corpus, config)
+  type_formes <- normaliser_type_formes_labbe(scalar_chr(config$labbe_type_formes, "both"))
+  log_info(
+    paste0(
+      "Table lexicale Labbé : dictionnaire=", pipeline$source_dictionnaire,
+      " | lemmatisation=", ifelse(scalar_bool(config$lexique_utiliser_lemmes, TRUE), "oui", "non"),
+      " | formes=", libelle_type_formes_labbe(type_formes),
+      " | fréquence minimale=", min_effectif, "."
+    )
+  )
   source_data <- list(
     dfm = pipeline$dfm_obj,
+    lexique = pipeline$lexique_df,
     docvars = as.data.frame(quanteda::docvars(pipeline$filtered_corpus), stringsAsFactors = FALSE),
     preprocessing = list(
       source_dictionnaire = pipeline$source_dictionnaire,
+      modele_spacy = if (identical(pipeline$source_dictionnaire, "spacy")) scalar_chr(config$spacy_model, "") else "",
       langue = pipeline$langue,
       lemmatisation = scalar_bool(config$lexique_utiliser_lemmes, TRUE),
+      type_formes = type_formes,
+      type_formes_libelle = libelle_type_formes_labbe(type_formes),
       stopwords = scalar_bool(config$retirer_stopwords, FALSE),
       ponctuation_supprimee = scalar_bool(config$supprimer_ponctuation, FALSE),
       chiffres_supprimes = scalar_bool(config$supprimer_chiffres, FALSE)

@@ -1204,6 +1204,11 @@ textarea {
   margin: 1.4rem 1.75rem 0;
 }
 
+.distance-labbe-lemma-option {
+  align-self: center;
+  min-height: 48px;
+}
+
 .chronology-mode-field {
   grid-column: 1 / -1;
 }

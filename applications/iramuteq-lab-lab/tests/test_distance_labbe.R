@@ -80,5 +80,31 @@ available <- variables_labbe_disponibles(source_data)
 stopifnot(identical(vapply(available, function(item) item$id, character(1)), "*source"))
 aggregated <- table_labbe_par_modalite(source_data, "*source", min_effectif = 1L)
 stopifnot(identical(colnames(aggregated), c("A", "B")))
+frequency_filtered <- table_labbe_par_modalite(source_data, "*source", min_effectif = 5L)
+stopifnot(identical(rownames(frequency_filtered), "beta"))
+
+lexicon_source <- list(
+  dfm = Matrix::Matrix(
+    matrix(c(3, 2, 1, 1, 4, 2), nrow = 2, byrow = TRUE, dimnames = list(NULL, c("chat", "avec", "inconnu"))),
+    sparse = TRUE
+  ),
+  docvars = data.frame(`*source` = c("A", "B"), check.names = FALSE),
+  lexique = data.frame(
+    c_mot = c("chat", "avec"),
+    c_lemme = c("chat", "avec"),
+    c_morpho = c("nom", "pre"),
+    stringsAsFactors = FALSE
+  ),
+  preprocessing = list(lemmatisation = TRUE, type_formes = "active")
+)
+active_table <- table_labbe_par_modalite(lexicon_source, "*source", min_effectif = 1L)
+stopifnot(identical(rownames(active_table), c("chat", "inconnu")))
+supplementary_table <- table_labbe_par_modalite(
+  lexicon_source,
+  "*source",
+  min_effectif = 1L,
+  type_formes = "supplementary"
+)
+stopifnot(identical(rownames(supplementary_table), "avec"))
 
 cat("Tests distance de Labbe: OK\n")
