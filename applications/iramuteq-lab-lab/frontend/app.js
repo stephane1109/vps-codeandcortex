@@ -13470,6 +13470,149 @@ async function renderCsvFromFile(container, file, options = {}) {
   }
 }
 
+function createLabbeReadingKey(maxPair = null, matrix = false) {
+  const key = document.createElement("div");
+  key.className = "labbe-reading-key";
+
+  const explanation = document.createElement("p");
+  explanation.textContent = matrix
+    ? "Chaque ligne et chaque colonne correspondent à une modalité de la variable choisie. Leur intersection donne la distance de Labbé ; la diagonale vaut 0 car elle compare une modalité avec elle-même."
+    : "Chaque ligne compare deux modalités de la variable choisie. La distance de Labbé est comprise entre 0 et 1 : près de 0, les profils lexicaux sont proches ; plus la valeur augmente, plus leurs vocabulaires diffèrent. Elle se lit relativement aux autres distances du même corpus."
+  key.appendChild(explanation);
+
+  if (maxPair) {
+    const highlight = document.createElement("p");
+    highlight.className = "labbe-reading-key-highlight";
+    const swatch = document.createElement("span");
+    swatch.className = "labbe-reading-key-swatch";
+    swatch.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    const text1 = maxPair.text1.replaceAll("_", " ");
+    const text2 = maxPair.text2.replaceAll("_", " ");
+    text.textContent = `Paire la plus distante : ${text1} / ${text2} (distance ${maxPair.distance.toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 4 })}).`;
+    highlight.append(swatch, text);
+    key.appendChild(highlight);
+  }
+
+  if (!matrix) {
+    const details = document.createElement("p");
+    details.className = "labbe-reading-key-details";
+    details.textContent = "Occurrences : longueur de chaque texte agrégé. Rapport des tailles : taille du plus petit texte divisée par celle du plus grand. Coefficient de réduction : facteur appliqué au texte le plus long avant la comparaison. Formes retenues : nombre de formes lexicales participant effectivement au calcul de la paire.";
+    key.appendChild(details);
+  }
+  return key;
+}
+
+function isLabbeMaxPairCell(rowLabel, columnLabel, maxPair) {
+  if (!maxPair) return false;
+  return (
+    (rowLabel === maxPair.text1 && columnLabel === maxPair.text2) ||
+    (rowLabel === maxPair.text2 && columnLabel === maxPair.text1)
+  );
+}
+
+async function renderLabbePairsTable(container, file) {
+  if (!file) {
+    setContainerEmptyState(container, "Aucune comparaison par paire disponible.");
+    return null;
+  }
+
+  try {
+    const parsed = parseCsv(await file.text());
+    const text1Index = headerIndex(parsed.headers, ["texte_1"]);
+    const text2Index = headerIndex(parsed.headers, ["texte_2"]);
+    const distanceIndex = headerIndex(parsed.headers, ["distance_labbe"]);
+    const maxDistance = parsed.rows.reduce((currentMax, row) => {
+      const value = parseTableNumber(row[distanceIndex]);
+      return Number.isFinite(value) ? Math.max(currentMax, value) : currentMax;
+    }, Number.NEGATIVE_INFINITY);
+    const maxRow = parsed.rows.find((row) => parseTableNumber(row[distanceIndex]) === maxDistance) || null;
+    const maxPair = maxRow
+      ? { text1: String(maxRow[text1Index] || ""), text2: String(maxRow[text2Index] || ""), distance: maxDistance }
+      : null;
+    const sortedParsed = {
+      headers: parsed.headers,
+      rows: [...parsed.rows].sort((left, right) => {
+        const leftDistance = parseTableNumber(left[distanceIndex]);
+        const rightDistance = parseTableNumber(right[distanceIndex]);
+        return (Number.isFinite(rightDistance) ? rightDistance : Number.NEGATIVE_INFINITY)
+          - (Number.isFinite(leftDistance) ? leftDistance : Number.NEGATIVE_INFINITY);
+      })
+    };
+    const numericCellRenderer = createFixedNumericCellRenderer({
+      digits: 4,
+      numericColumns: parsed.headers.map((_, index) => index).filter((index) => index >= 2 && index <= 7)
+    });
+
+    renderTable(container, sortedParsed, {
+      title: "Comparaisons par paire",
+      maxRows: 2000,
+      emptyMessage: "Aucune comparaison par paire disponible.",
+      headerLabels: [
+        "Modalité 1",
+        "Modalité 2",
+        "Distance de Labbé",
+        "Occurrences texte 1",
+        "Occurrences texte 2",
+        "Rapport des tailles",
+        "Coefficient de réduction",
+        "Formes retenues",
+        "Prudence"
+      ],
+      rowClassName: ({ row }) => parseTableNumber(row[distanceIndex]) === maxDistance
+        ? "is-labbe-most-distant"
+        : "",
+      cellRenderer: (payload) => {
+        if (payload.columnIndex === text1Index || payload.columnIndex === text2Index) {
+          return { text: String(payload.cell || "").replaceAll("_", " ") };
+        }
+        return numericCellRenderer(payload);
+      }
+    });
+    container.prepend(createLabbeReadingKey(maxPair, false));
+    return maxPair;
+  } catch (error) {
+    setContainerEmptyState(container, "Impossible de lire les comparaisons de Labbé.");
+    log(`[error] Lecture des comparaisons de Labbé impossible (${file.name}): ${error.message}`);
+    return null;
+  }
+}
+
+async function renderLabbeMatrixTable(container, file, maxPair) {
+  if (!file) {
+    setContainerEmptyState(container, "Aucune matrice de distances disponible.");
+    return;
+  }
+
+  try {
+    const parsed = parseCsv(await file.text());
+    const rowLabelIndex = 0;
+    const numericColumns = parsed.headers.map((_, index) => index).filter((index) => index > rowLabelIndex);
+    const numericCellRenderer = createFixedNumericCellRenderer({ digits: 4, numericColumns });
+    renderTable(container, parsed, {
+      title: "Matrice complète des distances",
+      maxRows: 500,
+      emptyMessage: "Aucune matrice de distances disponible.",
+      headerLabels: parsed.headers.map((header, index) => index === rowLabelIndex
+        ? "Modalité"
+        : String(header || "").replaceAll("_", " ")),
+      cellClassName: ({ row, columnIndex, headers }) => {
+        if (columnIndex === rowLabelIndex) return "";
+        const rowLabel = String(row[rowLabelIndex] || "");
+        const columnLabel = String(headers[columnIndex] || "");
+        return isLabbeMaxPairCell(rowLabel, columnLabel, maxPair) ? "is-labbe-most-distant-cell" : "";
+      },
+      cellRenderer: (payload) => payload.columnIndex === rowLabelIndex
+        ? { text: String(payload.cell || "").replaceAll("_", " ") }
+        : numericCellRenderer(payload)
+    });
+    container.prepend(createLabbeReadingKey(maxPair, true));
+  } catch (error) {
+    setContainerEmptyState(container, "Impossible de lire la matrice de Labbé.");
+    log(`[error] Lecture de la matrice de Labbé impossible (${file.name}): ${error.message}`);
+  }
+}
+
 async function renderJsdCsvFromFile(container, file, options = {}) {
   if (!file) {
     setContainerEmptyState(container, options.emptyMessage || "Aucun tableau JSD disponible.");
@@ -15253,16 +15396,8 @@ async function renderDistanceLabbeExports(index) {
   renderImage(resultContainers.labbeHeatmap, heatmapFile, "Carte des distances intertextuelles");
   makeResultImagePreviewable(resultContainers.labbeDendrogram, "Arbre des distances intertextuelles", "Distance intertextuelle");
   makeResultImagePreviewable(resultContainers.labbeHeatmap, "Carte des distances", "Distance intertextuelle");
-  await renderCsvFromFile(resultContainers.labbePairsTable, pairsFile, {
-    title: "distance_labbe_paires.csv",
-    maxRows: 2000,
-    emptyMessage: "Aucune comparaison par paire disponible."
-  });
-  await renderCsvFromFile(resultContainers.labbeMatrixTable, matrixFile, {
-    title: "distance_labbe_matrice.csv",
-    maxRows: 500,
-    emptyMessage: "Aucune matrice de distances disponible."
-  });
+  const maxPair = await renderLabbePairsTable(resultContainers.labbePairsTable, pairsFile);
+  await renderLabbeMatrixTable(resultContainers.labbeMatrixTable, matrixFile, maxPair);
   return true;
 }
 
