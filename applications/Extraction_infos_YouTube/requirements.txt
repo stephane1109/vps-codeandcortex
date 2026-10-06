@@ -1,9 +1,0 @@
-streamlit>=1.36,<2
-streamlit-autorefresh>=1,<2
-pandas
-google-api-python-client
-XlsxWriter
-redis>=5,<6
-scikit-learn
-networkx
-pyvis

@@ -1,25 +1,35 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PIP_NO_CACHE_DIR=1 \
+    PORT=8501 \
+    CHROME_BINARY=/usr/bin/chromium \
+    CHROMEDRIVER=/usr/bin/chromedriver \
+    CHROME_NO_SANDBOX=1 \
+    SCRAPTIKTOK_HEADLESS=0 \
+    SE_AVOID_STATS=true \
+    DATA_DIR=/app/data
+
+# Navigateur et pilote proviennent du même dépôt Debian : versions compatibles.
+# Xvfb fournit l'écran du navigateur sur le VPS, sans bureau ni accès VNC public.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium chromium-driver \
+       xvfb xauth tini fonts-noto-color-emoji fonts-liberation ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
+    && useradd --system --gid app --create-home --home-dir /home/app app
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+RUN mkdir -p /app/data /app/.selenium-cache \
+    && chmod +x /app/docker-entrypoint.sh \
+    && chown -R app:app /app /home/app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-COPY dashboard_api.py gestion_tickets.py index.html style.css aide.md /app/
-COPY dashboard_shared /app/dashboard_shared
-COPY applications /app/applications
-COPY assets /app/assets
-
-# #### VARIABLES D'ENVIRONNEMENT IMPORTANTES
-# - REDIS_URL=redis://:motdepasse@redis:6379/0
-# - ne pas utiliser APP_TICKET_DEFAULT_REDIS_URL sur ce dashboard
-# - CAPACITE_SERVEUR=6
-# - APPLICATIONS_TICKETS_JSON={...}
-
-EXPOSE 8000
-
-CMD ["sh", "-c", "uvicorn dashboard_api:app --host 0.0.0.0 --port ${PORT:-8000}"]
+USER app
+EXPOSE 8501
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.getenv('PORT','8501')+'/healthz',timeout=3).read()"
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker-entrypoint.sh"]

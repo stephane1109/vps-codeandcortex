@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-.DS_Store
-.git/
-.streamlit/secrets.toml
-tmp/
-exports/

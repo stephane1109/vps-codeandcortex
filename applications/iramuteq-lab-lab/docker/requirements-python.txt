@@ -1,3 +1,0 @@
-fastapi
-uvicorn
-redis>=5,<6

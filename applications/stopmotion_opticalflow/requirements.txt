@@ -1,5 +1,0 @@
-streamlit
-streamlit-autorefresh>=1,<2
-opencv-python-headless
-yt-dlp
-redis>=5,<6
