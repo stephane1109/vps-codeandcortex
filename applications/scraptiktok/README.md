@@ -31,8 +31,8 @@ Le dossier contient le `Dockerfile`, Chromium, son pilote compatible et un écra
 virtuel Xvfb. Le navigateur serveur se commande depuis l'interface ; aucun accès
 VNC ni terminal utilisateur n'est nécessaire.
 
-- Dépôt : `stephane1109/vps-codeandcortex`, branche `main`.
-- Base directory : `/applications/scraptiktok`.
+- Dépôt : `stephane1109/vps-codeandcortex`, branche **`deploy-scraptiktok`**.
+- Base directory : **`/`** (l'application est à la racine de cette branche).
 - Build pack : **Dockerfile** ; fichier : `/Dockerfile`, relatif à la base directory.
 - Port interne : **8501** ; healthcheck : **`/healthz`**.
 - Affecter un domaine HTTPS ; définir `COOKIE_SECURE=1`.
@@ -40,6 +40,11 @@ VNC ni terminal utilisateur n'est nécessaire.
 
 Les réglages, variables et diagnostics sont dans
 [DEPLOIEMENT_OVH_COOLIFY.md](DEPLOIEMENT_OVH_COOLIFY.md).
+
+Le code source reste aussi dans `applications/scraptiktok` sur `main`.
+Si vous choisissez volontairement `main` dans Coolify, utilisez alors
+`/applications/scraptiktok` comme Base directory. La branche de déploiement doit
+être mise à jour explicitement lors des prochaines modifications du code source.
 
 Sans Coolify :
 

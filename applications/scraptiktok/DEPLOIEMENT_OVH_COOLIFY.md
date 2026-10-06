@@ -11,13 +11,19 @@ Créer une application depuis le dépôt GitHub existant :
 | Réglage | Valeur |
 | --- | --- |
 | Dépôt | `stephane1109/vps-codeandcortex` |
-| Branche | `main` |
+| Branche | **`deploy-scraptiktok`** |
 | Build pack | Dockerfile |
-| Base directory | `/applications/scraptiktok` |
+| Base directory | **`/`** |
 | Dockerfile | `/Dockerfile` (relatif à la base directory) |
 | Port interne / Ports Exposes | `8501` |
 | Healthcheck HTTP | `/healthz` sur le port `8501` |
 | Domaine | Le sous-domaine HTTPS que vous affectez à cette application |
+
+Comme les autres branches `deploy-…`, `deploy-scraptiktok` contient l'application
+à la racine. Le code source existe également dans `applications/scraptiktok` sur
+`main` ; cette autre branche exige une Base directory `/applications/scraptiktok`.
+Les mises à jour de `main` ne sont pas automatiquement reportées sur la branche
+de déploiement.
 
 Ne pas remplacer la commande de démarrage. Le conteneur lance Chromium avec
 un écran virtuel Xvfb et l'application web. Il n'y a aucun port VNC à ouvrir.
