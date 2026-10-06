@@ -100,6 +100,9 @@ run_batch <- function() {
     discrimination_simple = "CHD Opposition optimisée",
     "Normal"
   )
+  # Les anciens exports peuvent encore contenir "classique". Le moteur utilise
+  # désormais toujours le calcul vectorisé fondé sur les effectifs d'UCE.
+  config$iramuteq_stats_mode <- "vectorise"
   config_chd <- config
   auto_discriminant_score_mode <- scalar_chr(config$iramuteq_discrimination_simple_score_mode, "afc_classes_direct")
   if (!auto_discriminant_score_mode %in% c("s_lexical", "afc_classes_direct")) {
@@ -217,7 +220,7 @@ run_batch <- function() {
         " | max_formes=",
         scalar_int(config$iramuteq_max_formes, 20000L, 1L),
         " | stats_mode=",
-        scalar_chr(config$iramuteq_stats_mode, "vectorise")
+        "vectorise"
       ),
       progress = 53
     )
@@ -233,7 +236,7 @@ run_batch <- function() {
       binariser = TRUE,
       rscripts_dir = file.path(repo_root, "iramuteqlite"),
       max_formes = scalar_int(config_chd$iramuteq_max_formes, 20000L, 1L),
-      auto_stats_mode = scalar_chr(config_chd$iramuteq_stats_mode, "vectorise"),
+      auto_stats_mode = "vectorise",
       auto_k_min = auto_k_min,
       auto_top_n_afc = if (identical(classes_mode, "discrimination_simple")) NULL else scalar_int(config_chd$iramuteq_auto_top_n_afc, 20L, 2L),
       auto_discriminant_score_mode = auto_discriminant_score_mode,
@@ -438,7 +441,7 @@ run_batch <- function() {
       dfm_obj = dfm_ok,
       classes = classes_ok,
       max_p = 1,
-      stats_mode = scalar_chr(config$iramuteq_stats_mode, "vectorise")
+      stats_mode = "vectorise"
     )
     res_stats_df$Classe <- normaliser_id_classe_local(res_stats_df$Classe)
     ord_stats <- with(

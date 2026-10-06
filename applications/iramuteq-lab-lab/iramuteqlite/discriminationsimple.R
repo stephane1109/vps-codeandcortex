@@ -308,13 +308,13 @@ calculer_score_discrimination_simple_iramuteq <- function(afc_obj,
 
 evaluer_partition_discrimination_simple_iramuteq <- function(dfm_obj,
                                                              partition_obj,
-                                                             stats_mode = c("vectorise", "classique"),
+                                                             stats_mode = "vectorise",
                                                              top_n_diffusion = 20L,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
                                                              afc_max_termes = 400L,
                                                              score_mode = "afc_classes_direct") {
-  stats_mode <- match.arg(stats_mode)
+  stats_mode <- "vectorise"
   score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(score_mode)
   if (is.null(partition_obj) || is.null(partition_obj$classes)) {
     stop("Auto discriminante : solution en classes invalide.")
@@ -451,7 +451,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
                                                              mincl = 0,
                                                              mincl_mode = c("auto", "manuel"),
                                                              classif_mode = c("simple", "double"),
-                                                             stats_mode = c("vectorise", "classique"),
+                                                             stats_mode = "vectorise",
                                                              top_n_diffusion = 20L,
                                                              top_n_afc = NULL,
                                                              p_seuil = 0.05,
@@ -459,7 +459,7 @@ selection_discrimination_simple_classes_iramuteq <- function(chd_obj,
                                                              score_mode = "afc_classes_direct") {
   mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
-  stats_mode <- match.arg(stats_mode)
+  stats_mode <- "vectorise"
   score_mode <- normaliser_mode_score_discrimination_simple_iramuteq(score_mode)
 
   partitions <- lister_partitions_chd_iramuteq(

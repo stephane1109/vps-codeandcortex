@@ -71,7 +71,7 @@ En plus du dictionnaire d'expressions d'origine, vous pouvez créer vos propres 
   - `double` : segmentation en deux passes avec **rst1** puis **rst2**.
 - **Méthode SVD (`iramuteq_svd_method`)** : `irlba` (défaut) ou `svdR`.
 - **Nombre maximum de formes analysées (`iramuteq_max_formes`)** : limite le nombre de termes conservés pour la CHD.
-- **Calcul des statistiques CHD (`iramuteq_stats_mode`)** : choix du mode de calcul des stats (vectorisé/classique).
+- **Statistiques CHD** : le χ² est calculé automatiquement en mode vectorisé à partir du nombre d'UCE contenant chaque terme, comme dans les profils d'IRaMuTeQ.
 
 ### Options de nettoyage du texte
 - **Nettoyage caractères (regex)** (`nettoyage_caracteres`) : supprime les caractères non autorisés par la regex interne (ex : @).

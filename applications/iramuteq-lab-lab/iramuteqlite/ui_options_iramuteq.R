@@ -59,12 +59,6 @@ ui_options_iramuteq <- function(defaults = NULL) {
       "Méthode SVD",
       choices = c("irlba" = "irlba", "svdR" = "svdR"),
       selected = valeur_defaut("iramuteq_svd_method", "irlba")
-    ),
-    selectInput(
-      "iramuteq_stats_mode",
-      "Calcul des statistiques CHD",
-      choices = choix_mode_stats_chd_iramuteq(),
-      selected = valeur_defaut("iramuteq_stats_mode", "vectorise")
     )
   )
 }

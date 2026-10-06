@@ -1,20 +1,20 @@
 source(file.path("iramuteqlite", "chd_iramuteq.R"))
 
-matrix_underflow <- matrix(
-  c(1610, 1000, 0, 5000),
-  nrow = 2,
-  byrow = TRUE,
-  dimnames = list(c("segment_1", "segment_2"), c("cible", "autre"))
+matrix_underflow <- rbind(
+  matrix(c(1, 0), nrow = 1610, ncol = 2, byrow = TRUE),
+  matrix(c(0, 1), nrow = 5000, ncol = 2, byrow = TRUE)
 )
+colnames(matrix_underflow) <- c("cible", "autre")
+classes_underflow <- c(rep(1L, 1610), rep(2L, 5000))
 
 stats_vectorise <- construire_stats_classes_iramuteq(
   matrix_underflow,
-  c(1L, 2L),
+  classes_underflow,
   stats_mode = "vectorise"
 )
 stats_classique <- construire_stats_classes_iramuteq(
   matrix_underflow,
-  c(1L, 2L),
+  classes_underflow,
   stats_mode = "classique"
 )
 

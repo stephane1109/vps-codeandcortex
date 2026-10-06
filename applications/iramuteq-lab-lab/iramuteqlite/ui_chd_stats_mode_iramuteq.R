@@ -1,20 +1,7 @@
-# Rôle du fichier: centraliser le mode de calcul des statistiques CHD (UI + normalisation).
-
-choix_mode_stats_chd_iramuteq <- function() {
-  c(
-    "Mode optimisé (vectorisé, recommandé)" = "vectorise",
-    "Mode classique (chisq.test par terme)" = "classique"
-  )
-}
+# Rôle du fichier: assurer la compatibilité avec les anciennes configurations.
 
 normaliser_mode_stats_chd_iramuteq <- function(mode) {
-  mode_chr <- tolower(trimws(as.character(mode)))
-  if (!length(mode_chr) || is.na(mode_chr[[1]]) || !nzchar(mode_chr[[1]])) {
-    return("vectorise")
-  }
-  mode_chr <- mode_chr[[1]]
-  if (!mode_chr %in% c("vectorise", "classique")) {
-    return("vectorise")
-  }
-  mode_chr
+  # Le calcul vectorisé reproduit le même chi2 que chisq.test sans la boucle
+  # terme par terme. L'argument est conservé pour relire les anciens exports.
+  "vectorise"
 }

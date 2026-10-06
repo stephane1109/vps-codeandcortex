@@ -82,7 +82,7 @@ lancer_moteur_chd_iramuteq <- function(
   binariser = FALSE,
   rscripts_dir = NULL,
   max_formes = 20000L,
-  auto_stats_mode = c("vectorise", "classique"),
+  auto_stats_mode = "vectorise",
   auto_k_min = 2L,
   auto_top_n_diffusion = 20L,
   auto_top_n_afc = NULL,
@@ -96,7 +96,7 @@ lancer_moteur_chd_iramuteq <- function(
   mincl_mode <- match.arg(mincl_mode)
   classif_mode <- match.arg(classif_mode)
   svd_method <- match.arg(svd_method)
-  auto_stats_mode <- match.arg(auto_stats_mode)
+  auto_stats_mode <- "vectorise"
   auto_discriminant_score_mode <- tolower(trimws(as.character(auto_discriminant_score_mode %||% "afc_classes_direct")[[1]]))
   if (!auto_discriminant_score_mode %in% c("s_lexical", "afc_classes_direct")) {
     auto_discriminant_score_mode <- "afc_classes_direct"

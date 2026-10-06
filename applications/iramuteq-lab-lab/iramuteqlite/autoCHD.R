@@ -419,11 +419,11 @@ calculer_distinction_auto_chd <- function(dfm_obj, classes) {
 
 calculer_diffusion_auto_chd <- function(dfm_obj,
                                         classes,
-                                        stats_mode = c("vectorise", "classique"),
+                                        stats_mode = "vectorise",
                                         top_n = 20L,
                                         p_seuil = 0.05,
                                         res_stats_df = NULL) {
-  stats_mode <- match.arg(stats_mode)
+  stats_mode <- "vectorise"
   top_n <- suppressWarnings(as.integer(top_n))
   if (!is.finite(top_n) || is.na(top_n) || top_n < 1L) top_n <- 20L
 

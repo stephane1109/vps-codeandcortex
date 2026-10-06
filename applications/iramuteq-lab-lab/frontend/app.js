@@ -3231,7 +3231,7 @@ function buildJobConfig(analysisKind = "chd") {
     iramuteq_rst1: Number(document.getElementById("rst1").value) || 12,
     iramuteq_rst2: Number(document.getElementById("rst2").value) || 14,
     iramuteq_svd_method: document.getElementById("svdMethod").value,
-    iramuteq_stats_mode: document.getElementById("statsMode").value,
+    iramuteq_stats_mode: "vectorise",
     source_dictionnaire: dictionarySourceValue,
     spacy_model: spacyModelValue,
     spacy_batch_size: 64,
@@ -12924,7 +12924,6 @@ function renderDiscriminationSimpleSummary(container, payload) {
       setValue("rst1", manualReplayConfig.iramuteq_rst1);
       setValue("rst2", manualReplayConfig.iramuteq_rst2);
       setValue("svdMethod", manualReplayConfig.iramuteq_svd_method);
-      setValue("statsMode", manualReplayConfig.iramuteq_stats_mode);
       setValue("dictionarySource", manualReplayConfig.source_dictionnaire);
       setValue("spacyModel", manualReplayConfig.spacy_model);
       setChecked("useLemmas", manualReplayConfig.lexique_utiliser_lemmes);
@@ -17453,7 +17452,6 @@ async function startAnalysis(analysisKind = "chd") {
 
   const analysis = document.getElementById("analysisType").value;
   const minFreq = Number(document.getElementById("minFreq").value);
-  const statsMode = document.getElementById("statsMode").value;
   const classesModeConfig = resolveClassesModeConfig();
   const classesMode = classesModeConfig.classesMode;
   const kIramuteq = classesModeConfig.effectiveK;
@@ -17549,7 +17547,7 @@ async function startAnalysis(analysisKind = "chd") {
       ? countAutoDiscriminantConfigurations(autoDiscriminant)
       : 0;
     log(
-      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${classesMode === "discrimination_simple" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}, grille=${autoCount} CHD (${autoParameters})` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}, stats=${statsMode}`
+      `[info] Démarrage analyse : moteur=${analysis}, modeClasses=${classesModeLabel}, ${classesMode === "discrimination_simple" ? `${classesCountLabel}=P${autoKMin}...P${kIramuteq}, grille=${autoCount} CHD (${autoParameters})` : `${classesCountLabel}=${kIramuteq}`}, minFreq=${minFreq}`
     );
   }
   progression.set(4, progressStartMessage);

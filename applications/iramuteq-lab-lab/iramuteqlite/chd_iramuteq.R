@@ -350,15 +350,11 @@ reconstruire_classes_terminales_iramuteq <- function(
 }
 
 # Calcule une table de statistiques par classe dans l'esprit des sorties IRaMuTeQ.
-construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats_mode = c("vectorise", "classique")) {
+construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats_mode = "vectorise") {
   if (is.null(dfm_obj)) stop("Stats IRaMuTeQ-like: dfm_obj manquant.")
   if (is.null(classes)) stop("Stats IRaMuTeQ-like: classes manquantes.")
   
-  if (exists("normaliser_mode_stats_chd_iramuteq", mode = "function", inherits = TRUE)) {
-    stats_mode <- normaliser_mode_stats_chd_iramuteq(stats_mode)
-  } else {
-    stats_mode <- match.arg(stats_mode)
-  }
+  # stats_mode reste dans la signature pour relire les anciennes configurations.
   
   mat <- tryCatch(
     methods::as(dfm_obj, "dgCMatrix"),
@@ -379,19 +375,13 @@ construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats
     mat_bin <- mat
     if (length(mat_bin@x) > 0) mat_bin@x[] <- 1
     col_sums <- Matrix::colSums
-    row_sums <- Matrix::rowSums
   } else {
     mat_bin <- ifelse(mat > 0, 1L, 0L)
     col_sums <- base::colSums
-    row_sums <- base::rowSums
   }
   
   docs_par_terme <- col_sums(mat_bin)
   occ_par_terme <- col_sums(mat)
-  occ_par_doc <- row_sums(mat)
-  
-  occ_par_classe <- tapply(as.numeric(occ_par_doc), classes, sum)
-  occ_totales <- sum(occ_par_terme)
   
   calc_chi_sign_vectorise <- function(a, b, c, d) {
     n <- a + b + c + d
@@ -421,32 +411,6 @@ construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats
     pval[is.na(pval) | is.nan(pval)] <- 1
     
     list(chi2 = chi_sign, p = pval, log_p = log_pval)
-  }
-  
-  calc_chi_sign_classique <- function(a, b, c, d) {
-    chi_mat <- mapply(function(ai, bi, ci, di) {
-      tb <- matrix(c(ai, bi, ci, di), nrow = 2, byrow = TRUE)
-      chi <- suppressWarnings(stats::chisq.test(tb, correct = FALSE))
-      stat <- suppressWarnings(as.numeric(chi$statistic))
-      exp11 <- suppressWarnings(as.numeric(chi$expected[1, 1]))
-      
-      if (!is.finite(stat) || is.na(stat)) stat <- 0
-      if (!is.finite(exp11) || is.na(exp11)) exp11 <- ai
-
-      log_pval <- suppressWarnings(stats::pchisq(stat, df = 1, lower.tail = FALSE, log.p = TRUE))
-      if (is.na(log_pval) || is.nan(log_pval) || log_pval > 0) log_pval <- 0
-      pval <- exp(log_pval)
-      if (is.na(pval) || is.nan(pval)) pval <- 1
-      
-      signe <- ifelse(ai >= exp11, 1, -1)
-      c(chi2 = stat * signe, p = pval, log_p = log_pval)
-    }, a, b, c, d)
-    
-    list(
-      chi2 = as.numeric(chi_mat["chi2", ]),
-      p = as.numeric(chi_mat["p", ]),
-      log_p = as.numeric(chi_mat["log_p", ])
-    )
   }
   
   calc_lr_vectorise <- function(a, b, c, d) {
@@ -494,20 +458,16 @@ construire_stats_classes_iramuteq <- function(dfm_obj, classes, max_p = 1, stats
     docs_terme_hors <- pmax(0, docs_par_terme - docs_terme_cl)
     
     occ_terme_cl <- col_sums(mat[in_cl, , drop = FALSE])
-    occ_terme_hors <- pmax(0, occ_par_terme - occ_terme_cl)
-    occ_classe <- as.numeric(occ_par_classe[as.character(cl)])
-    occ_hors_classe <- pmax(0, occ_totales - occ_classe)
-    
-    n11 <- as.numeric(occ_terme_cl)
-    n12 <- as.numeric(occ_terme_hors)
-    n21 <- as.numeric(pmax(0, occ_classe - occ_terme_cl))
-    n22 <- as.numeric(pmax(0, occ_hors_classe - occ_terme_hors))
-    
-    if (identical(stats_mode, "classique")) {
-      chi_p <- calc_chi_sign_classique(n11, n12, n21, n22)
-    } else {
-      chi_p <- calc_chi_sign_vectorise(n11, n12, n21, n22)
-    }
+    docs_hors_classe <- nrow(mat) - docs_cl
+
+    # IRaMuTeQ construit les profils sur la présence du lemme dans les UCE :
+    # une forme répétée plusieurs fois dans la même UCE ne compte qu'une fois.
+    n11 <- as.numeric(docs_terme_cl)
+    n12 <- as.numeric(docs_terme_hors)
+    n21 <- as.numeric(pmax(0, docs_cl - docs_terme_cl))
+    n22 <- as.numeric(pmax(0, docs_hors_classe - docs_terme_hors))
+
+    chi_p <- calc_chi_sign_vectorise(n11, n12, n21, n22)
     
     freq_cl <- occ_terme_cl
     docprop_cl <- if (docs_cl > 0) docs_terme_cl / docs_cl else rep(0, ncol(mat))
