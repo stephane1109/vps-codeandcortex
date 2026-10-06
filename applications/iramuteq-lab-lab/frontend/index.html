@@ -5,7 +5,7 @@
     <title>IRAMUTEQ Lab</title>
     <link rel="icon" href="./logo_iramuteqlab.png?v=20260928-logo" type="image/png" />
     <link rel="apple-touch-icon" href="./logo_iramuteqlab.png?v=20260928-logo" />
-    <link rel="stylesheet" href="./styles.css?v=20261006-labbe-lexical-settings" />
+    <link rel="stylesheet" href="./styles.css?v=20261006-labbe-source-script" />
   </head>
   <body>
     <div class="app-shell">
@@ -1406,20 +1406,6 @@
               </optgroup>
             </select>
           </label>
-          <label>
-            Formes utilisées
-            <select id="distanceLabbeFormType">
-              <option value="both">Actives et supplémentaires</option>
-              <option value="active">Actives</option>
-              <option value="supplementary">Supplémentaires</option>
-            </select>
-            <span class="field-help">Les catégories suivent les propriétés du dictionnaire IRaMuTeQ.</span>
-          </label>
-          <label>
-            Fréquence minimale des formes
-            <input id="distanceLabbeMinEffectif" type="number" min="1" step="1" value="10" />
-            <span class="field-help">Paramètre officiel de construction de la table lexicale IRaMuTeQ, fixé à 10 par défaut.</span>
-          </label>
           <label class="check-option distance-labbe-lemma-option" for="distanceLabbeUseLemmas">
             <input id="distanceLabbeUseLemmas" type="checkbox" checked />
             <span>Lemmatiser avec le dictionnaire sélectionné</span>
@@ -1442,6 +1428,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261006-labbe-lexical-settings"></script>
+    <script type="module" src="./app.js?v=20261006-labbe-source-script"></script>
   </body>
 </html>

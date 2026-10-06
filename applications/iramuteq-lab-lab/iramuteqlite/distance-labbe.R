@@ -150,64 +150,7 @@ calculer_matrice_distance_labbe <- function(tab) {
 compute.labbe <- function(x, y, tab) calculer_distance_labbe_paire(x, y, tab)$distance
 dist.labbe <- function(tab) calculer_matrice_distance_labbe(tab)$matrice
 
-normaliser_type_formes_labbe <- function(value) {
-  value <- tolower(trimws(as.character(value %||% "both")[[1L]]))
-  if (!value %in% c("both", "active", "supplementary")) "both" else value
-}
-
-libelle_type_formes_labbe <- function(value) {
-  switch(
-    normaliser_type_formes_labbe(value),
-    active = "Actives",
-    supplementary = "Supplémentaires",
-    "Actives et supplémentaires"
-  )
-}
-
-filtrer_dfm_type_formes_labbe <- function(dfm, lexique, type_formes = "both", lemmatisation = TRUE) {
-  type_formes <- normaliser_type_formes_labbe(type_formes)
-  if (identical(type_formes, "both")) return(dfm)
-  if (is.null(lexique) || !is.data.frame(lexique) || !all(c("c_mot", "c_lemme", "c_morpho") %in% names(lexique))) {
-    stop("Le dictionnaire sélectionné ne permet pas de distinguer les formes actives et supplémentaires.")
-  }
-
-  # Valeurs par défaut de configuration/key.cfg dans IRaMuTeQ.
-  categories_actives <- c("adv", "ver", "adj", "nom", "nr", "noun", "propn", "verb")
-  categories <- tolower(trimws(as.character(lexique$c_morpho)))
-  valeurs <- if (isTRUE(lemmatisation)) lexique$c_lemme else lexique$c_mot
-  valeurs <- tolower(trimws(as.character(valeurs)))
-  est_actif <- categories %in% categories_actives
-
-  actifs <- unique(valeurs[nzchar(valeurs) & est_actif])
-  supplementaires <- unique(valeurs[nzchar(valeurs) & !est_actif])
-  features <- if (inherits(dfm, "dfm")) quanteda::featnames(dfm) else colnames(dfm)
-  if (is.null(features) || !length(features)) stop("La table lexicale ne contient aucun nom de forme.")
-  features_normalisees <- tolower(trimws(as.character(features)))
-
-  # Dans IRaMuTeQ, une forme absente du dictionnaire reçoit la catégorie nr,
-  # donc active. Les formes encadrées d'underscores sont supplémentaires.
-  connues <- features_normalisees %in% c(actifs, supplementaires)
-  expressions <- grepl("^_.+_$", features_normalisees)
-  masque_actif <- features_normalisees %in% actifs | (!connues & !expressions)
-  masque_supplementaire <- features_normalisees %in% supplementaires | expressions
-  masque <- if (identical(type_formes, "active")) masque_actif else masque_supplementaire
-
-  if (!any(masque)) stop("Aucune forme ne correspond au type de formes sélectionné.")
-  if (inherits(dfm, "dfm")) {
-    return(quanteda::dfm_select(
-      dfm,
-      pattern = features[masque],
-      selection = "keep",
-      valuetype = "fixed",
-      case_insensitive = FALSE
-    ))
-  }
-  dfm[, masque, drop = FALSE]
-}
-
-table_labbe_par_modalite <- function(source, variable, min_effectif = 1L, type_formes = NULL) {
-  min_effectif <- suppressWarnings(as.integer(min_effectif))
-  if (!is.finite(min_effectif) || min_effectif < 1L) min_effectif <- 1L
+table_labbe_par_modalite <- function(source, variable) {
   docvars <- source$docvars
   if (is.null(docvars) || !is.data.frame(docvars) || !variable %in% names(docvars)) {
     stop("La variable étoilée demandée n'est pas disponible dans ce corpus.")
@@ -218,13 +161,6 @@ table_labbe_par_modalite <- function(source, variable, min_effectif = 1L, type_f
   if (is.null(dfm) || nrow(dfm) != length(groups)) {
     stop("La matrice lexicale et les modalités ne sont pas alignées.")
   }
-  type_formes <- normaliser_type_formes_labbe(type_formes %||% source$preprocessing$type_formes %||% "both")
-  dfm <- filtrer_dfm_type_formes_labbe(
-    dfm,
-    source$lexique,
-    type_formes = type_formes,
-    lemmatisation = isTRUE(source$preprocessing$lemmatisation)
-  )
   keep <- !is.na(groups) & nzchar(groups)
   if (sum(keep) < 2L) stop("Pas assez de segments renseignés pour cette variable.")
   groups <- factor(groups[keep], levels = sort(unique(groups[keep])))
@@ -241,8 +177,8 @@ table_labbe_par_modalite <- function(source, variable, min_effectif = 1L, type_f
   table <- Matrix::t(dfm) %*% indicator
   rownames(table) <- colnames(dfm)
   colnames(table) <- levels(groups)
-  table <- table[Matrix::rowSums(table) >= min_effectif, , drop = FALSE]
-  if (!nrow(table)) stop("Aucune forme ne respecte la fréquence minimale choisie.")
+  table <- table[Matrix::rowSums(table) > 0, , drop = FALSE]
+  if (!nrow(table)) stop("La table lexicale ne contient aucune forme à comparer.")
   valider_table_labbe(table)
 }
 
@@ -446,10 +382,9 @@ tracer_carte_labbe <- function(distance_matrix, path) {
   invisible(clustering)
 }
 
-ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, output_dir) {
+ecrire_resultats_distance_labbe <- function(source, variable, output_dir) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  type_formes <- normaliser_type_formes_labbe(source$preprocessing$type_formes %||% "both")
-  table <- table_labbe_par_modalite(source, variable, min_effectif, type_formes)
+  table <- table_labbe_par_modalite(source, variable)
   calculated <- calculer_matrice_distance_labbe(table)
   matrix_distance <- calculated$matrice
   pairs <- calculated$paires
@@ -459,6 +394,7 @@ ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, outp
 
   ecrire_csv_utf8_labbe(matrix_distance, file.path(output_dir, "distance_labbe_matrice.csv"), row.names = TRUE)
   ecrire_csv_utf8_labbe(pairs, file.path(output_dir, "distance_labbe_paires.csv"))
+  ecrire_csv_utf8_labbe(as.data.frame(as.matrix(table)), file.path(output_dir, "distance_labbe_table_lexicale.csv"), row.names = TRUE)
   text_stats <- data.frame(
     texte_modalite = colnames(table),
     occurrences = as.numeric(colSums(table)),
@@ -482,9 +418,6 @@ ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, outp
     variable_label = variable_label,
     dictionnaire = dictionnaire_affiche,
     lemmatisation = isTRUE(source$preprocessing$lemmatisation),
-    type_formes = type_formes,
-    type_formes_libelle = libelle_type_formes_labbe(type_formes),
-    min_effectif = as.integer(min_effectif),
     n_textes = ncol(table),
     n_formes = nrow(table),
     distance_min = min(pairs$distance_labbe),
@@ -498,9 +431,6 @@ ecrire_resultats_distance_labbe <- function(source, variable, min_effectif, outp
   configuration <- list(
     variable = variable,
     variable_label = variable_label,
-    type_formes = type_formes,
-    type_formes_libelle = libelle_type_formes_labbe(type_formes),
-    min_effectif = as.integer(min_effectif),
     modalities = colnames(table),
     preprocessing = source$preprocessing %||% list(),
     formula = "somme des écarts absolus après réduction du grand texte, normalisée par les deux longueurs comparables",

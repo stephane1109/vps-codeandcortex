@@ -553,7 +553,6 @@ async def create_distance_labbe_analysis(request: Request) -> JSONResponse:
             corpus_text=str(payload.get("corpusText") or ""),
             config=payload.get("config") if isinstance(payload.get("config"), dict) else {},
             variable=str(payload.get("variable") or ""),
-            min_effectif=payload.get("minEffectif", 10),
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error

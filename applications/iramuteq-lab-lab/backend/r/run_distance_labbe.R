@@ -32,7 +32,6 @@ input_path <- normalizePath(scalar_chr(args$input), winslash = "/", mustWork = T
 config_path <- normalizePath(scalar_chr(args$config), winslash = "/", mustWork = TRUE)
 output_dir <- normalizePath(scalar_chr(args[["output-dir"]]), winslash = "/", mustWork = FALSE)
 variable <- trimws(scalar_chr(args$variable))
-min_effectif <- scalar_int(args[["min-effectif"]], 10L, 1L)
 
 emit <- function(payload) {
   cat(jsonlite::toJSON(payload, auto_unbox = TRUE, null = "null", digits = NA))
@@ -42,8 +41,8 @@ tryCatch({
   if (!nzchar(variable)) stop("Sélectionnez une variable étoilée comportant au moins deux modalités.")
   config <- jsonlite::fromJSON(config_path, simplifyVector = FALSE)
 
-  # Le seuil propre à Labbé est appliqué après l'agrégation par modalité.
-  # Il ne doit pas être confondu avec min_docfreq, qui reste donc à 1 ici.
+  # La table transmise à compute.labbe conserve toutes les formes présentes.
+  # min_docfreq reste donc à 1 et aucun filtre CHD n'est repris implicitement.
   config$min_docfreq <- 1L
   config$filtrage_morpho <- FALSE
   config$pos_lexique_a_conserver <- list()
@@ -58,26 +57,21 @@ tryCatch({
   if (quanteda::ndoc(corpus) < 2L) stop("Le corpus doit contenir au moins deux textes.")
 
   pipeline <- preparer_pipeline_chd(corpus, config)
-  type_formes <- normaliser_type_formes_labbe(scalar_chr(config$labbe_type_formes, "both"))
   log_info(
     paste0(
       "Table lexicale Labbé : dictionnaire=", pipeline$source_dictionnaire,
       " | lemmatisation=", ifelse(scalar_bool(config$lexique_utiliser_lemmes, TRUE), "oui", "non"),
-      " | formes=", libelle_type_formes_labbe(type_formes),
-      " | fréquence minimale=", min_effectif, "."
+      " | toutes les formes présentes sont conservées."
     )
   )
   source_data <- list(
     dfm = pipeline$dfm_obj,
-    lexique = pipeline$lexique_df,
     docvars = as.data.frame(quanteda::docvars(pipeline$filtered_corpus), stringsAsFactors = FALSE),
     preprocessing = list(
       source_dictionnaire = pipeline$source_dictionnaire,
       modele_spacy = if (identical(pipeline$source_dictionnaire, "spacy")) scalar_chr(config$spacy_model, "") else "",
       langue = pipeline$langue,
       lemmatisation = scalar_bool(config$lexique_utiliser_lemmes, TRUE),
-      type_formes = type_formes,
-      type_formes_libelle = libelle_type_formes_labbe(type_formes),
       stopwords = scalar_bool(config$retirer_stopwords, FALSE),
       ponctuation_supprimee = scalar_bool(config$supprimer_ponctuation, FALSE),
       chiffres_supprimes = scalar_bool(config$supprimer_chiffres, FALSE)
@@ -89,7 +83,7 @@ tryCatch({
     stop("La variable étoilée sélectionnée est absente du corpus ou comporte moins de deux modalités.")
   }
 
-  result <- ecrire_resultats_distance_labbe(source_data, variable, min_effectif, output_dir)
+  result <- ecrire_resultats_distance_labbe(source_data, variable, output_dir)
   emit(list(success = TRUE, summary = result$summary, logs = job_logs))
 }, error = function(error) {
   emit(list(success = FALSE, message = conditionMessage(error), logs = job_logs))

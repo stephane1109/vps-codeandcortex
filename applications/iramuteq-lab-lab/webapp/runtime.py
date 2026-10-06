@@ -1553,7 +1553,6 @@ def run_distance_labbe_analysis(
     config: dict[str, Any],
     *,
     variable: str,
-    min_effectif: int = 10,
 ) -> dict[str, Any]:
     safe_corpus_name = safe_input_name(str(corpus_name or "corpus.txt"))
     safe_corpus_text = str(corpus_text or "")
@@ -1562,14 +1561,8 @@ def run_distance_labbe_analysis(
     if not isinstance(config, dict):
         raise ValueError("La configuration lexicale doit être un objet JSON.")
     safe_variable = str(variable or "").strip()
-    try:
-        safe_min_effectif = int(min_effectif)
-    except (TypeError, ValueError) as error:
-        raise ValueError("La fréquence minimale doit être un entier.") from error
     if not safe_variable:
         raise ValueError("Sélectionnez une variable étoilée comportant au moins deux modalités.")
-    if safe_min_effectif < 1:
-        raise ValueError("La fréquence minimale doit être supérieure ou égale à 1.")
 
     job_id = next_job_id("labbe")
     job_root = ensure_directory(jobs_root() / job_id)
@@ -1602,7 +1595,6 @@ def run_distance_labbe_analysis(
             "--config", str(config_path),
             "--output-dir", str(export_dir),
             "--variable", safe_variable,
-            "--min-effectif", str(safe_min_effectif),
         ]
     )
     stdout_log.write_text(process.stdout, encoding="utf-8")

@@ -11,11 +11,9 @@ Par exemple, avec `*journal`, toutes les UCE de chaque journal sont regroupées 
 Avant le calcul, l’utilisateur choisit explicitement :
 
 - le dictionnaire utilisé ;
-- l’activation ou non de la lemmatisation ;
-- les formes actives et supplémentaires, les formes actives seules ou les formes supplémentaires seules ;
-- la fréquence minimale des formes.
+- l’activation ou non de la lemmatisation.
 
-Ces choix correspondent à la préparation de la table lexicale dans IRaMuTeQ. Les réglages de la dernière CHD ne sont pas repris silencieusement.
+Toutes les formes présentes après cette préparation sont conservées dans la table transmise au calcul. Aucun seuil de fréquence ni filtre morphosyntaxique de la CHD n’est ajouté. Les réglages de la dernière CHD ne sont pas repris silencieusement.
 
 ## Calcul
 
@@ -32,19 +30,18 @@ Sous une forme simplifiée, pour le petit texte `A` et le grand texte réduit `B
 D(A,B) = somme |fA - fB'| / (longueur A + longueur retenue de B')
 ```
 
-La constitution du vocabulaire réduit suit les seuils appliqués par la fonction officielle `compute.labbe` d’IRaMuTeQ autour d’une fréquence ramenée à `1`.
+La fonction conserve le traitement interne du script fourni : après réduction du texte le plus long, certaines contributions sont retenues autour d’une fréquence ramenée à `1`. Ce traitement appartient à `compute.labbe` et n’est pas un paramètre demandé à l’utilisateur.
 
 Une distance proche de `0` correspond à des profils lexicaux proches. Une distance plus élevée correspond à des profils plus différents.
 
 La valeur ne mesure ni un pourcentage ni une significativité statistique. Elle résume l'écart lexical entre deux modalités après avoir ramené leurs textes à une longueur comparable. Elle s'interprète surtout relativement aux autres distances calculées dans le même corpus : la plus grande valeur désigne les deux modalités dont les profils lexicaux sont les plus différents.
-
-La fréquence minimale des formes filtre le vocabulaire avant les comparaisons. Avec une fréquence de `10`, une forme doit apparaître au moins 10 fois au total dans l'ensemble des modalités pour participer au calcul. La valeur `1` conserve toutes les formes présentes dans la table lexicale du corpus. Ce réglage existe dans le module officiel d’IRaMuTeQ sous le nom « Minimum frequency » et vaut `10` par défaut : il intervient lors de la construction de la table lexicale, avant la fonction `compute.labbe`.
 
 ## Résultats
 
 L'analyse produit :
 
 - la matrice symétrique complète des distances ;
+- la table lexicale exacte fournie à `compute.labbe`, afin de pouvoir contrôler les effectifs ;
 - le détail de chaque comparaison par paire ;
 - un arbre non enraciné regroupant les profils lexicaux avec Ward.D2 ; les valeurs `W` sont des longueurs de branches de ce regroupement et non des distances brutes entre deux modalités ;
 - une carte colorée contenant les distances brutes de Labbé ; pour les matrices jusqu'à 15 modalités, chaque valeur est écrite dans sa case et la paire maximale est encadrée en orange ;
