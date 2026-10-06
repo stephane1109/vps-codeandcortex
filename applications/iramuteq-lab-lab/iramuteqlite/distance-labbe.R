@@ -197,11 +197,6 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
   }
   tree <- ape::as.phylo(clustering)
   text_count <- nrow(distance_matrix)
-  group_count <- min(4L, text_count)
-  groups <- stats::cutree(clustering, k = group_count)
-  groups_by_tip <- unname(groups[match(tree$tip.label, names(groups))])
-  colors <- c("#217ce7", "#e58b3a", "#8aa63b", "#95758f")[seq_len(group_count)]
-  tip_colors <- colors[groups_by_tip]
 
   grDevices::png(path, width = 1800, height = 1800, res = 180)
   old_par <- graphics::par(no.readonly = TRUE)
@@ -228,31 +223,36 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
 
   graphics::plot.new()
   graphics::plot.window(xlim = x_limits, ylim = y_limits, asp = 1)
-  theta <- seq(0, 2 * pi, length.out = 240L)
-  for (group_id in seq_len(group_count)) {
-    selected <- which(groups_by_tip == group_id)
-    center_x <- mean(tip_x[selected])
-    center_y <- mean(tip_y[selected])
-    radius_x <- max(diff(range(tip_x[selected])) / 2 + x_span * 0.085, x_span * 0.105)
-    radius_y <- max(diff(range(tip_y[selected])) / 2 + y_span * 0.085, y_span * 0.105)
-    graphics::polygon(
-      center_x + radius_x * cos(theta),
-      center_y + radius_y * sin(theta),
-      border = NA,
-      col = grDevices::adjustcolor(colors[[group_id]], alpha.f = 0.18)
-    )
-  }
 
-  # Les branches et les libellés sont redessinés au-dessus des halos.
+  # Les branches terminales portent leur longueur Ward.D2 issue de la matrice de Labbé.
   for (edge_index in seq_len(nrow(tree$edge))) {
     parent <- tree$edge[edge_index, 1L]
     child <- tree$edge[edge_index, 2L]
+    parent_x <- plot_state$xx[[parent]]
+    parent_y <- plot_state$yy[[parent]]
+    child_x <- plot_state$xx[[child]]
+    child_y <- plot_state$yy[[child]]
     graphics::segments(
-      plot_state$xx[[parent]], plot_state$yy[[parent]],
-      plot_state$xx[[child]], plot_state$yy[[child]],
+      parent_x, parent_y,
+      child_x, child_y,
       col = "#1f252b",
       lwd = 1.35
     )
+    if (child > text_count) next
+    branch_label <- formatC(tree$edge.length[[edge_index]], format = "f", digits = 3)
+    label_x <- (parent_x + child_x) / 2
+    label_y <- (parent_y + child_y) / 2
+    label_width <- graphics::strwidth(branch_label, cex = 0.58)
+    label_height <- graphics::strheight(branch_label, cex = 0.58)
+    graphics::rect(
+      label_x - label_width * 0.62,
+      label_y - label_height * 0.62,
+      label_x + label_width * 0.62,
+      label_y + label_height * 0.62,
+      border = NA,
+      col = grDevices::adjustcolor("white", alpha.f = 0.9)
+    )
+    graphics::text(label_x, label_y, labels = branch_label, cex = 0.58, col = "#374151")
   }
   center_x <- mean(range(plot_state$xx, finite = TRUE))
   label_cex <- max(0.58, min(0.9, 8 / max(text_count, 8)))
@@ -264,19 +264,11 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
     pos = label_positions,
     offset = 0.45,
     cex = label_cex,
-    col = tip_colors,
+    col = "#217ce7",
     font = 1
   )
   graphics::title(main = "Arbre des distances intertextuelles de Labbé", cex.main = 1.15)
-  graphics::mtext("Arbre non enraciné ; regroupement visuel Ward.D2", side = 3, line = 0.4, cex = 0.72, col = "#5d6873")
-  graphics::legend(
-    "topleft",
-    legend = paste("Groupe", seq_len(group_count)),
-    fill = grDevices::adjustcolor(colors, alpha.f = 0.38),
-    border = NA,
-    bty = "n",
-    cex = 0.72
-  )
+  graphics::mtext("Valeurs affichées : longueurs des branches terminales Ward.D2", side = 3, line = 0.4, cex = 0.72, col = "#5d6873")
   scale_length <- suppressWarnings(signif(max(tree$edge.length, na.rm = TRUE) / 4, 2))
   if (is.finite(scale_length) && scale_length > 0) {
     ape::add.scale.bar(
