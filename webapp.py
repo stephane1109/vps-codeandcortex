@@ -51,7 +51,7 @@ class Point(BaseModel):
 
 
 class BrowserAction(BaseModel):
-    kind: Literal["click", "drag", "text", "key", "scroll"]
+    kind: Literal["click", "drag", "pointer_down", "pointer_move", "pointer_up", "pointer_cancel", "text", "key", "scroll"]
     points: list[Point] = Field(default_factory=list, max_length=80)
     text: str = Field(default="", max_length=2000)
     key: Literal["Enter", "Tab", "Backspace", "Escape", "select_all"] = "Enter"
@@ -60,6 +60,13 @@ class BrowserAction(BaseModel):
 
 class Stopped(Exception):
     pass
+
+
+class LiveAction:
+    def __init__(self, action):
+        self.action = action
+        self.done = threading.Event()
+        self.error = ""
 
 
 def text_export(records: list[dict], include_sources: bool) -> str:
@@ -129,6 +136,15 @@ class Job:
         temp.replace(self.path)
 
 
+def release_pointer(driver):
+    point = getattr(driver, "_scraptiktok_pointer", None)
+    if isinstance(point, dict):
+        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+            "type": "mouseReleased", **point, "button": "left", "buttons": 0, "clickCount": 1})
+        driver._scraptiktok_pointer = None
+    ActionChains(driver).reset_actions()
+
+
 def perform_action(driver, action: BrowserAction):
     """Rejoue les gestes humains reçus ; aucun solveur de CAPTCHA ni JS utilisateur."""
     width, height = driver.execute_script("return [window.innerWidth, window.innerHeight];")
@@ -138,7 +154,24 @@ def perform_action(driver, action: BrowserAction):
         chain.w3c_actions.pointer_action.move_to_location(
             min(width - 1, round(point.x * width)), min(height - 1, round(point.y * height)))
 
-    if action.kind in {"click", "drag"}:
+    if action.kind.startswith("pointer_"):
+        if action.kind == "pointer_cancel":
+            release_pointer(driver)
+            return
+        point = action.points[0]
+        coords = {"x": min(width - 1, round(point.x * width)),
+                  "y": min(height - 1, round(point.y * height))}
+        # Chromium : conserver le bouton et la capture DOM entre deux requêtes.
+        # Des séquences W3C séparées peuvent perdre la capture du curseur natif.
+        event_type = {"pointer_down": "mousePressed", "pointer_move": "mouseMoved",
+                      "pointer_up": "mouseReleased"}[action.kind]
+        driver._scraptiktok_pointer = coords
+        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+            "type": event_type, **coords, "button": "left",
+            "buttons": 0 if action.kind == "pointer_up" else 1, "clickCount": 1})
+        if action.kind == "pointer_up":
+            driver._scraptiktok_pointer = None
+    elif action.kind in {"click", "drag"}:
         if not action.points:
             raise ValueError("Le geste ne contient aucune position.")
         move(action.points[0])
@@ -168,12 +201,16 @@ def wait_for_user(driver, job: Job, message: str):
     previous = job.status
     job.update(status="attention", message=message, action_error="")
     next_frame = 0
+    held_since = None
     try:
         while True:
             job.check()
+            if held_since is not None and time.monotonic() - held_since > 15:
+                release_pointer(driver)
+                held_since = None
             if time.monotonic() >= next_frame:
                 job.update(frame=driver.get_screenshot_as_png())
-                next_frame = time.monotonic() + 0.8
+                next_frame = time.monotonic() + 0.25
             try:
                 command = job.commands.get(timeout=0.15)
             except queue.Empty:
@@ -183,17 +220,37 @@ def wait_for_user(driver, job: Job, message: str):
                     job.update(action_error="TikTok affiche encore une vérification ou une connexion. Terminez-la dans l’image avant de continuer.")
                     continue
                 break
+            live = command if isinstance(command, LiveAction) else None
+            if live:
+                command = live.action
             try:
                 perform_action(driver, command)
+                if command.kind in {"pointer_down", "pointer_move"}:
+                    held_since = time.monotonic()
+                elif command.kind in {"pointer_up", "pointer_cancel"}:
+                    held_since = None
                 job.update(action_error="")
                 next_frame = 0
             except (scraper.WebDriverException, ValueError):
-                job.update(action_error="Ce geste n’a pas abouti. Attendez l’actualisation de l’image et réessayez.")
+                message = "Ce geste n’a pas abouti. Attendez l’actualisation de l’image et réessayez."
+                job.update(action_error=message)
+                if live:
+                    live.error = message
+            finally:
+                if live:
+                    live.done.set()
     finally:
+        try:
+            release_pointer(driver)
+        except scraper.WebDriverException:
+            pass
         job.update(status=previous, frame=b"")
         while not job.commands.empty():
             try:
-                job.commands.get_nowait()
+                pending = job.commands.get_nowait()
+                if isinstance(pending, LiveAction):
+                    pending.error = "L’interaction avec le navigateur est terminée."
+                    pending.done.set()
             except queue.Empty:
                 break
 
@@ -424,9 +481,19 @@ def create_app(manager=None):
 
     @app.post("/api/jobs/{job_id}/action", status_code=202)
     def action(job_id: str, payload: BrowserAction, request: Request):
-        if payload.kind in {"click", "drag"} and not payload.points:
+        if payload.kind in {"click", "drag", "pointer_down", "pointer_move", "pointer_up"} and not payload.points:
             raise HTTPException(422, "Une position est requise.")
-        enqueue(manager.get(owner(request), job_id), payload)
+        job = manager.get(owner(request), job_id)
+        if payload.kind.startswith("pointer_"):
+            command = LiveAction(payload)
+            enqueue(job, command)
+            # Accusé de réception après exécution : le client ne sature pas la file.
+            if not command.done.wait(10):
+                raise HTTPException(504, "Le navigateur ne répond pas. Attendez puis réessayez.")
+            if command.error:
+                raise HTTPException(409, command.error)
+        else:
+            enqueue(job, payload)
         return {"ok": True}
 
     @app.get("/api/jobs/{job_id}/frame")

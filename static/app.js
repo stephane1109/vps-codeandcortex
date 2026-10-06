@@ -1,5 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
+let actionBusy = false;
+const actionQueue = [];
 let job = null, polling = false, frameBusy = false, frameUrl = null, pointer = null, previewSignature = "";
 
 async function api(path, body) {
@@ -38,7 +40,7 @@ function render(current) {
   $("download").setAttribute("download", `tiktok_${current.hashtag}.txt`);
   $("retention").hidden = !current.can_download;
   $("browser-panel").hidden = current.status !== "attention";
-  $("continue-button").disabled = !current.has_frame;
+  $("continue-button").disabled = !current.has_frame || !!pointer || actionBusy || actionQueue.length > 0;
   if (current.status === "attention") {
     errorAt("browser-error", current.action_error);
     if (previous !== "attention") $("browser-panel").scrollIntoView({behavior: "smooth", block: "start"});
@@ -61,20 +63,22 @@ function render(current) {
 }
 
 async function updateFrame() {
-  if (frameBusy || pointer || !job || job.status !== "attention") return;
+  if (frameBusy || !job || job.status !== "attention") return;
   frameBusy = true;
   const id = job.id;
   try {
-    const response = await fetch(`/api/jobs/${id}/frame`, {cache: "no-store"});
+    const response = await fetch(`/api/jobs/${id}/frame`, {cache: "no-store", signal: AbortSignal.timeout(8000)});
+    if (!response.ok) throw new Error("Image indisponible");
     if (response.status !== 200 || job.id !== id || job.status !== "attention") return;
     const blob = await response.blob();
-    if (pointer) return;
+    if (job?.id !== id || job.status !== "attention") return;
     const next = URL.createObjectURL(blob);
     $("browser-screen").src = next;
     $("browser-screen").hidden = false; $("screen-loading").hidden = true;
     if (frameUrl) URL.revokeObjectURL(frameUrl);
     frameUrl = next;
-  } catch (_) { /* La prochaine actualisation réessaiera. */ }
+    $("screen-status").textContent = "Image actualisée · Maintenez le curseur et faites-le glisser lentement.";
+  } catch (_) { $("screen-status").textContent = "Actualisation interrompue. Nouvelle tentative en cours…"; }
   finally { frameBusy = false; }
 }
 
@@ -104,35 +108,76 @@ $("continue-button").addEventListener("click", async () => {
   try { await api(`/api/jobs/${job.id}/continue`, {}); }
   catch (error) { errorAt("browser-error", error.message); }
 });
-async function sendAction(action) {
+function sendAction(action) {
   if (!job || job.status !== "attention") return;
-  try { await api(`/api/jobs/${job.id}/action`, action); }
-  catch (error) { errorAt("browser-error", error.message); }
+  // Une seule requête en vol ; les mouvements intermédiaires sont regroupés.
+  const pending = actionQueue.at(-1);
+  if (action.kind === "pointer_move" && pending?.action.kind === "pointer_move") {
+    pending.action = action;
+  } else {
+    actionQueue.push({id: job.id, action});
+  }
+  $("continue-button").disabled = true;
+  flushActions();
+}
+async function flushActions() {
+  if (actionBusy) return;
+  actionBusy = true;
+  try {
+    while (actionQueue.length) {
+      const next = actionQueue.shift();
+      if (job?.id !== next.id || job.status !== "attention") continue;
+      await api(`/api/jobs/${next.id}/action`, next.action);
+    }
+  } catch (error) {
+    actionQueue.length = 0;
+    pointer = null;
+    errorAt("browser-error", error.message);
+    // Libère le bouton distant même si le geste ou la connexion a été interrompu.
+    if (job?.status === "attention") {
+      try { await api(`/api/jobs/${job.id}/action`, {kind: "pointer_cancel"}); } catch (_) {}
+    }
+  } finally {
+    actionBusy = false;
+    $("continue-button").disabled = !!pointer || !job?.has_frame;
+    updateFrame();
+  }
 }
 function position(event) {
   const rect = $("browser-screen").getBoundingClientRect();
   return {x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))};
 }
+$("browser-screen").addEventListener("dragstart", event => event.preventDefault());
 $("browser-screen").addEventListener("pointerdown", event => {
-  if (event.button !== 0) return;
-  event.preventDefault(); $("browser-screen").focus();
-  pointer = {id: event.pointerId, points: [position(event)]};
-  $("browser-screen").setPointerCapture(event.pointerId);
+  if (event.button !== 0 || pointer || actionBusy || job?.status !== "attention") return;
+  event.preventDefault(); $("browser-screen").focus({preventScroll: true});
+  pointer = {id: event.pointerId};
+  $("screen-container").setPointerCapture(event.pointerId);
+  sendAction({kind: "pointer_down", points: [position(event)]});
 });
-$("browser-screen").addEventListener("pointermove", event => {
+window.addEventListener("pointermove", event => {
   if (!pointer || pointer.id !== event.pointerId) return;
-  const point = position(event), last = pointer.points.at(-1);
-  if (Math.hypot(point.x - last.x, point.y - last.y) > 0.003) pointer.points.push(point);
-  if (pointer.points.length > 70) pointer.points = pointer.points.filter((_, i) => i === 0 || i % 2 === 1);
+  if (!(event.buttons & 1)) { cancelPointer(); return; }
+  event.preventDefault();
+  sendAction({kind: "pointer_move", points: [position(event)]});
 });
-$("browser-screen").addEventListener("pointerup", event => {
+window.addEventListener("pointerup", event => {
   if (!pointer || pointer.id !== event.pointerId) return;
-  pointer.points.push(position(event));
-  const points = pointer.points, start = points[0], end = points.at(-1);
   pointer = null;
-  sendAction({kind: points.length > 3 || Math.hypot(start.x - end.x, start.y - end.y) > 0.007 ? "drag" : "click", points});
+  sendAction({kind: "pointer_up", points: [position(event)]});
+  if ($("screen-container").hasPointerCapture(event.pointerId)) $("screen-container").releasePointerCapture(event.pointerId);
 });
-$("browser-screen").addEventListener("pointercancel", () => pointer = null);
+function cancelPointer() {
+  if (!pointer) return;
+  pointer = null;
+  sendAction({kind: "pointer_cancel"});
+}
+window.addEventListener("pointercancel", cancelPointer);
+$("screen-container").addEventListener("lostpointercapture", event => {
+  if (!(event.buttons & 1)) cancelPointer();
+});
+window.addEventListener("blur", cancelPointer);
+document.addEventListener("visibilitychange", () => { if (document.hidden) cancelPointer(); });
 $("browser-screen").addEventListener("keydown", event => {
   if (["Enter", "Tab", "Backspace", "Escape"].includes(event.key)) {
     event.preventDefault(); sendAction({kind: "key", key: event.key});
@@ -146,3 +191,4 @@ document.querySelectorAll("[data-key]").forEach(button => button.addEventListene
 document.querySelectorAll("[data-scroll]").forEach(button => button.addEventListener("click", () => sendAction({kind: "scroll", delta: Number(button.dataset.scroll)})));
 api("/api/session").then(data => { if (data.job) { $("hashtag").value = data.job.hashtag; render(data.job); } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
+setInterval(updateFrame, 350);

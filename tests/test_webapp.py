@@ -88,6 +88,9 @@ class WebTests(unittest.TestCase):
         job = self.manager.jobs[job_id]
         self.assertEqual(self.client.post(f"/api/jobs/{job_id}/action", headers=HEADERS,
                          json={"kind": "click", "points": [{"x": 2, "y": 0}]}).status_code, 422)
+        for kind in ("pointer_down", "pointer_move", "pointer_up"):
+            self.assertEqual(self.client.post(f"/api/jobs/{job_id}/action", headers=HEADERS,
+                             json={"kind": kind}).status_code, 422)
         job.update(status="collecting")
         self.assertEqual(self.client.post(f"/api/jobs/{job_id}/continue", headers=HEADERS, json={}).status_code, 409)
 
@@ -137,6 +140,24 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(self.job.status, "stopped")
         self.assertIn(RECORD["description"], self.job.path.read_text())
         driver.quit.assert_called_once()
+
+    def test_live_action_acknowledged_after_execution_and_reports_failure(self):
+        for failure in (False, True):
+            driver = Mock()
+            driver.execute_script.return_value = False
+            driver.get_screenshot_as_png.return_value = b"png"
+            command = web.LiveAction(web.BrowserAction(kind="pointer_down", points=[web.Point(x=.2, y=.3)]))
+            self.job.commands.put(command)
+            self.job.commands.put("continue")
+            def perform(*args):
+                self.assertFalse(command.done.is_set())
+                if failure:
+                    raise web.scraper.WebDriverException("unavailable")
+            with patch.object(web, "perform_action", side_effect=perform), patch.object(web, "release_pointer") as release:
+                web.wait_for_user(driver, self.job, "Vérifiez TikTok")
+            self.assertTrue(command.done.is_set())
+            self.assertEqual(bool(command.error), failure)
+            release.assert_called_once_with(driver)
 
     def test_attention_loop_processes_actions_before_continuing(self):
         driver = Mock()

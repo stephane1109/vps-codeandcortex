@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import uvicorn
 from fastapi.responses import HTMLResponse
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 
 import scraptiktok as scraper
@@ -127,7 +128,51 @@ def main():
                     return {"x": x / width, "y": y / height}
 
                 action({"kind": "click", "points": [point(100, 50)]})
-                action({"kind": "drag", "points": [point(28, 135), point(80, 135), point(160, 135), point(250, 135), point(310, 135)]})
+                # Passe par les vrais événements de l'interface, pas directement par l'API.
+                screen = front.find_element(By.ID, "browser-screen")
+                front.execute_script("arguments[0].scrollIntoView({block:'center'})", screen)
+                def mouse(x, y, phase=None):
+                    rect = front.execute_script("return arguments[0].getBoundingClientRect().toJSON()", screen)
+                    chain = ActionChains(front, duration=100)
+                    chain.w3c_actions.pointer_action.move_to_location(
+                        round(rect['x'] + x * rect['width'] / width),
+                        round(rect['y'] + y * rect['height'] / height))
+                    if phase == "down":
+                        chain.w3c_actions.pointer_action.pointer_down()
+                    if phase == "up":
+                        chain.w3c_actions.pointer_action.pointer_up()
+                    chain.perform()
+
+                def displayed_pixels():
+                    return front.execute_script("""
+                        const img=arguments[0], c=document.createElement('canvas');
+                        c.width=img.naturalWidth; c.height=img.naturalHeight;
+                        c.getContext('2d').drawImage(img,0,0); return c.toDataURL();
+                    """, screen)
+
+                front.execute_script("""
+                    window.gestureTrace=[];
+                    for (const name of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture','blur'])
+                      window.addEventListener(name,e=>gestureTrace.push([name,e.target.id, e.clientX,e.clientY,e.buttons]),true);
+                """)
+                mouse(28, 135, "down")
+                time.sleep(1)
+                before_move = displayed_pixels()
+                mouse(160, 135)
+                WebDriverWait(front, 10).until(lambda d: displayed_pixels() != before_move)
+                assert front.execute_script("return pointer !== null"), front.execute_script("return {trace:gestureTrace,error:document.getElementById('browser-error').textContent}")
+                middle = displayed_pixels()
+                mouse(310, 135)
+                WebDriverWait(front, 10).until(lambda d: displayed_pixels() != middle)
+                mouse(310, 135, "up")
+                WebDriverWait(front, 10).until(lambda d: d.execute_script("return !actionBusy && actionQueue.length === 0"))
+                assert front.execute_script("return pointer === null")
+
+                # Une perte de focus doit relâcher le bouton côté serveur.
+                mouse(310, 135, "down")
+                front.execute_script("window.dispatchEvent(new Event('blur'))")
+                ActionChains(front).reset_actions()
+                WebDriverWait(front, 10).until(lambda d: d.execute_script("return pointer === null && !actionBusy && actionQueue.length === 0"))
                 action({"kind": "click", "points": [point(100, 220)]})
                 action({"kind": "text", "text": "été"})
                 front.find_element(By.ID, "continue-button").click()
@@ -141,7 +186,7 @@ def main():
                 assert not front.find_element(By.ID, "browser-panel").is_displayed()
                 front.execute_script("window.scrollTo(0,0)")
                 front.save_screenshot(str(artifacts / "results.png"))
-                print("PASS : interface, mobile, Chrome serveur, capture, clic, glisser, saisie, collecte et téléchargement TXT UTF-8")
+                print("PASS : interface, mobile, Chrome serveur, capture, clic, glisser avec image actualisée avant relâchement, annulation, saisie, collecte et téléchargement TXT UTF-8")
                 print(f"Captures : {artifacts}")
         finally:
             front.quit()
