@@ -723,3 +723,10 @@ footer {
     scroll-behavior:auto!important
   }
 }
+
+#combination-dialog { width:min(560px,calc(100% - 32px)); max-height:85vh; overflow:auto; border:1px solid var(--line); border-radius:22px; padding:28px; color:var(--ink); background:var(--white); }
+#combination-dialog::backdrop { background:rgba(21,45,40,.55); }
+.combination-option { display:flex; align-items:flex-start; gap:12px; padding:16px; margin:12px 0; border:1px solid var(--line); border-radius:12px; cursor:pointer; }
+.combination-option:has(input:checked) { background:var(--light); border-color:var(--teal); }
+.combination-option input { margin-top:6px; accent-color:var(--teal); }
+.combination-option span { font-size:14px; }

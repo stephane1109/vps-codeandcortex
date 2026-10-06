@@ -39,7 +39,7 @@ class WebTests(unittest.TestCase):
 
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
-        for payload in ({"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 301}):
+        for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 301}):
             response = self.client.post("/api/jobs", headers=HEADERS, json=payload)
             self.assertEqual(response.status_code, 422)
         self.assertEqual(len(self.manager.jobs), 0)
@@ -140,6 +140,48 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(self.job.status, "stopped")
         self.assertIn(RECORD["description"], self.job.path.read_text())
         driver.quit.assert_called_once()
+
+    def test_two_hashtags_filter_exact_words_unicode_and_case(self):
+        settings = web.StartRequest(hashtag="#GRÈVE", second_hashtag="#école")
+        self.assertTrue(web.matches_hashtags("#GRÈVE #école", settings))
+        self.assertFalse(web.matches_hashtags("#grève #écolerie", settings))
+        self.assertFalse(web.matches_hashtags("#grève et école", settings))
+        settings.operator = "OR"
+        self.assertTrue(web.matches_hashtags("#ÉCOLE", settings))
+        self.assertFalse(web.matches_hashtags("#gréviste", settings))
+        self.assertEqual(settings.filename, "tiktok_GRÈVE_OU_école.txt")
+
+    def test_two_searches_deduplicate_and_export_only_matching_descriptions(self):
+        urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111, 222, 333)]
+        records = {url: dict(RECORD, id=str(i), url=url, description=caption) for i, url, caption in zip(
+            (111, 222, 333), urls, ("#été #voyage", "#été", "#voyage"))}
+        for operator, expected in (("AND", 1), ("OR", 3)):
+            job = web.Job("test", web.StartRequest(hashtag="été", second_hashtag="voyage", operator=operator), self.job.directory)
+            driver = Mock()
+            with patch.object(web.scraper, "collect_links", side_effect=[urls[:2], urls[1:]]) as discover, \
+                 patch.object(web.scraper, "read_post", side_effect=lambda d, url, *a, **k: records[url]) as read, \
+                 patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: driver)
+            self.assertEqual(discover.call_count, 2)
+            self.assertEqual(read.call_count, 3)
+            self.assertEqual(len(job.records), expected)
+            self.assertEqual(job.filtered, 3 - expected)
+            self.assertEqual(job.processed, 3)
+            self.assertEqual(job.status, "completed")
+            self.assertEqual(job.path.read_text().count("#été #voyage"), 1)
+
+    def test_one_inaccessible_hashtag_preserves_partial_results(self):
+        self.job.settings = web.StartRequest(hashtag="été", second_hashtag="voyage", operator="OR")
+        with patch.object(web.scraper, "collect_links", side_effect=[RuntimeError("blocked"), [RECORD["url"]]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
+            web.execute_job(self.job, driver_factory=lambda args: Mock())
+        self.assertEqual(self.job.status, "partial")
+        self.assertEqual(self.job.search_errors, 1)
+        self.assertEqual(len(self.job.records), 1)
+
+    def test_identical_hashtags_and_blank_second_input(self):
+        self.assertEqual(len(web.StartRequest(hashtag="été", second_hashtag="#ÉTÉ").hashtags), 1)
+        self.assertEqual(web.StartRequest(hashtag="été", second_hashtag="  ").second_hashtag, "")
 
     def test_live_action_acknowledged_after_execution_and_reports_failure(self):
         for failure in (False, True):

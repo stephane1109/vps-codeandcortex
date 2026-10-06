@@ -7,6 +7,8 @@ import hmac
 import logging
 import os
 import queue
+import re
+import unicodedata
 import secrets
 import shutil
 import threading
@@ -33,6 +35,8 @@ COOKIE = "scraptiktok_session"
 
 class StartRequest(BaseModel):
     hashtag: str = Field(min_length=1, max_length=100)
+    second_hashtag: str = Field(default="", max_length=100)
+    operator: Literal["AND", "OR"] = "AND"
     limit: int = Field(default=50, ge=1, le=300)
     include_sources: bool = True
 
@@ -43,6 +47,32 @@ class StartRequest(BaseModel):
             return scraper.normalize_hashtag(value)
         except argparse.ArgumentTypeError as exc:
             raise ValueError(str(exc)) from exc
+
+    @field_validator("second_hashtag")
+    @classmethod
+    def valid_second_hashtag(cls, value):
+        return cls.valid_hashtag(value) if value.strip() else ""
+
+    @property
+    def hashtags(self):
+        return list({tag_key(tag): tag for tag in [self.hashtag, self.second_hashtag] if tag}.values())
+
+    @property
+    def filename(self):
+        joiner = "_ET_" if self.operator == "AND" else "_OU_"
+        return "tiktok_" + joiner.join(self.hashtags) + ".txt"
+
+
+def tag_key(value):
+    return unicodedata.normalize("NFC", value).casefold()
+
+
+def matches_hashtags(description, settings):
+    if not settings.second_hashtag:
+        return True  # Conserver le comportement historique de la recherche simple.
+    present = set(re.findall(r"#(\w+)", tag_key(description)))
+    matches = [tag_key(tag) in present for tag in settings.hashtags]
+    return all(matches) if settings.operator == "AND" else any(matches)
 
 
 class Point(BaseModel):
@@ -98,6 +128,8 @@ class Job:
         self.discovered = 0
         self.processed = 0
         self.errors = 0
+        self.filtered = 0
+        self.search_errors = 0
         self.records = []
         self.frame = b""
         self.action_error = ""
@@ -111,6 +143,9 @@ class Job:
     def snapshot(self):
         with self.lock:
             return {"id": self.id, "hashtag": self.settings.hashtag,
+                    "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
+                    "hashtags": self.settings.hashtags, "filename": self.settings.filename,
+                    "filtered": self.filtered, "search_errors": self.search_errors,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
@@ -263,16 +298,31 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         chrome_binary=Path(os.environ["CHROME_BINARY"]) if os.getenv("CHROME_BINARY") else None,
         driver=Path(os.environ["CHROMEDRIVER"]) if os.getenv("CHROMEDRIVER") else None,
     )
-    report = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(args.hashtag)}"}
     driver = None
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     try:
         job.check()
         driver = driver_factory(args)
-        job.update(status="discovering", message="Recherche des publications du hashtag…")
         interact = lambda message: wait_for_user(driver, job, message)
-        links = scraper.collect_links(driver, args, report, interact=interact,
-                                      progress=lambda count: job.update(discovered=count), check=job.check)
+        unique_links = {}
+        for tag in job.settings.hashtags:
+            args.hashtag = tag
+            job.update(status="discovering", message=f"Recherche des publications de #{tag}…")
+            report = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(tag)}"}
+            try:
+                found = scraper.collect_links(driver, args, report,
+                    interact=lambda message: interact(f"#{tag} : {message}"),
+                    check=job.check)
+                for url in found:
+                    identity = scraper.canonical_post(url)
+                    if identity:
+                        unique_links.setdefault(identity[0], identity[1])
+            except (RuntimeError, scraper.WebDriverException):
+                if len(job.settings.hashtags) == 1:
+                    raise
+                job.update(search_errors=job.search_errors + 1)
+            job.update(discovered=len(unique_links))
+        links = list(unique_links.values())
         job.update(status="collecting", discovered=len(links))
         for index, url in enumerate(links, 1):
             job.pause(args.delay)
@@ -281,17 +331,28 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
                 with job.lock:
                     if record["description"]:
-                        job.records.append(record)
+                        if matches_hashtags(record["description"], job.settings):
+                            job.records.append(record)
+                        else:
+                            job.filtered += 1
             except scraper.WebDriverException:
                 with job.lock:
                     job.errors += 1
             job.update(processed=index)
             job.save()
-        final_status = "partial" if job.errors else "completed"
+        final_status = "partial" if job.errors or job.search_errors else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
             final_message = "Aucun texte récupéré. TikTok peut limiter l’accès ou les publications peuvent être sans légende."
-        elif len(links) < args.limit:
+            if job.settings.second_hashtag and job.processed:
+                final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
+        if job.settings.second_hashtag:
+            final_message += f" {job.filtered} texte(s) écarté(s) par le filtre ET/OU."
+        if job.search_errors:
+            final_message += f" {job.search_errors} recherche(s) de hashtag inaccessible(s) ; les résultats sont incomplets."
+        if not links and job.search_errors:
+            final_status = "failed"
+        elif len(links) < args.limit and not job.settings.second_hashtag:
             final_message += f" La recherche a fourni {len(links)} lien(s), pour un objectif de {args.limit}."
     except Stopped:
         final_status, final_message = "stopped", "Collecte arrêtée. Les textes déjà obtenus restent téléchargeables."
@@ -507,7 +568,7 @@ def create_app(manager=None):
         job = manager.get(owner(request), job_id)
         if not job.path.exists() or not job.records:
             raise HTTPException(409, "Aucun texte n’est encore disponible.")
-        filename = f"tiktok_{job.settings.hashtag}.txt"
+        filename = job.settings.filename
         return Response(job.path.read_bytes(), media_type="text/plain; charset=utf-8",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
 

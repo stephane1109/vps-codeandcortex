@@ -1,6 +1,6 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-let actionBusy = false;
+let actionBusy = false, pendingSearch = null;
 const actionQueue = [];
 let job = null, polling = false, frameBusy = false, frameUrl = null, pointer = null, previewSignature = "";
 
@@ -21,23 +21,23 @@ function render(current) {
   job = current;
   const busy = current.busy;
   $("empty-state").hidden = true; $("job-state").hidden = false;
-  $("results-title").textContent = "#" + current.hashtag;
+  $("results-title").textContent = (current.hashtags || [current.hashtag]).map(tag => "#" + tag).join(current.operator === "OR" ? " OU " : " ET ");
   $("status-message").textContent = current.message;
   $("count-captions").textContent = current.captions;
   $("count-processed").textContent = current.processed;
   $("count-discovered").textContent = current.discovered;
   $("progress").value = current.discovered ? 100 * current.processed / current.discovered : 0;
-  $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Objectif : jusqu’à ${current.limit} publications.`;
+  $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Jusqu’à ${current.limit} publications par hashtag. ${current.filtered || 0} texte(s) écarté(s) par le filtre.`;
   const labels = {starting: "Préparation", discovering: "Recherche", attention: "À vous de jouer", collecting: "Collecte en cours", completed: "Terminé", partial: "Résultats partiels", failed: "Accès interrompu", stopped: "Arrêté"};
   $("status-badge").hidden = false; $("status-badge").textContent = labels[current.status] || "En cours";
   $("status-badge").className = "badge " + current.status;
   $("start-button").disabled = busy;
-  ["hashtag", "limit", "limit-range", "include-sources"].forEach(id => $(id).disabled = busy);
+  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources"].forEach(id => $(id).disabled = busy);
   $("stop-button").hidden = !busy; $("stop-button").disabled = false;
   $("stop-button").textContent = "Arrêter la collecte";
   $("download").hidden = !current.can_download;
   $("download").href = `/api/jobs/${current.id}/download`;
-  $("download").setAttribute("download", `tiktok_${current.hashtag}.txt`);
+  $("download").setAttribute("download", current.filename || `tiktok_${current.hashtag}.txt`);
   $("retention").hidden = !current.can_download;
   $("browser-panel").hidden = current.status !== "attention";
   $("continue-button").disabled = !current.has_frame || !!pointer || actionBusy || actionQueue.length > 0;
@@ -91,13 +91,30 @@ async function poll() {
 }
 $("limit").addEventListener("input", () => $("limit-range").value = $("limit").value);
 $("limit-range").addEventListener("input", () => $("limit").value = $("limit-range").value);
-$("search-form").addEventListener("submit", async event => {
-  event.preventDefault(); errorAt("form-error", "");
+async function startSearch(settings) {
   $("start-button").disabled = true;
-  try {
-    render(await api("/api/jobs", {hashtag: $("hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked}));
-  } catch (error) { errorAt("form-error", error.message); $("start-button").disabled = false; }
+  try { render(await api("/api/jobs", settings)); }
+  catch (error) { errorAt("form-error", error.message); $("start-button").disabled = false; }
+}
+$("search-form").addEventListener("submit", event => {
+  event.preventDefault(); errorAt("form-error", "");
+  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked};
+  if (settings.second_hashtag) {
+    pendingSearch = settings;
+    $("combination-description").textContent = `#${settings.hashtag.replace(/^#/, "")} et #${settings.second_hashtag.replace(/^#/, "")}`;
+    $("combination-dialog").showModal();
+  } else { startSearch(settings); }
 });
+$("combination-form").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!pendingSearch) return;
+  const settings = {...pendingSearch, operator: document.querySelector('input[name="operator"]:checked').value};
+  pendingSearch = null;
+  $("combination-dialog").close();
+  startSearch(settings);
+});
+$("cancel-combination").addEventListener("click", () => $("combination-dialog").close());
+$("combination-dialog").addEventListener("close", () => { pendingSearch = null; });
 $("stop-button").addEventListener("click", async () => {
   $("stop-button").disabled = true; $("stop-button").textContent = "Arrêt en cours…";
   try { await api(`/api/jobs/${job.id}/stop`, {}); }
@@ -189,6 +206,6 @@ $("typing-form").addEventListener("submit", event => {
 });
 document.querySelectorAll("[data-key]").forEach(button => button.addEventListener("click", () => sendAction({kind: "key", key: button.dataset.key})));
 document.querySelectorAll("[data-scroll]").forEach(button => button.addEventListener("click", () => sendAction({kind: "scroll", delta: Number(button.dataset.scroll)})));
-api("/api/session").then(data => { if (data.job) { $("hashtag").value = data.job.hashtag; render(data.job); } }).catch(error => errorAt("form-error", error.message));
+api("/api/session").then(data => { if (data.job) { $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
 setInterval(updateFrame, 350);
