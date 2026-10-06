@@ -197,6 +197,11 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
   }
   tree <- ape::as.phylo(clustering)
   text_count <- nrow(distance_matrix)
+  upper_positions <- which(upper.tri(distance_matrix), arr.ind = TRUE)
+  max_position <- upper_positions[[which.max(distance_matrix[upper.tri(distance_matrix)]), 1L]]
+  max_column <- upper_positions[[which.max(distance_matrix[upper.tri(distance_matrix)]), 2L]]
+  max_names <- c(rownames(distance_matrix)[[max_position]], colnames(distance_matrix)[[max_column]])
+  max_distance <- distance_matrix[max_position, max_column]
 
   grDevices::png(path, width = 1800, height = 1800, res = 180)
   old_par <- graphics::par(no.readonly = TRUE)
@@ -239,7 +244,7 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
       lwd = 1.35
     )
     if (child > text_count) next
-    branch_label <- formatC(tree$edge.length[[edge_index]], format = "f", digits = 3)
+    branch_label <- paste0("W=", formatC(tree$edge.length[[edge_index]], format = "f", digits = 3))
     label_x <- (parent_x + child_x) / 2
     label_y <- (parent_y + child_y) / 2
     label_width <- graphics::strwidth(branch_label, cex = 0.58)
@@ -264,11 +269,24 @@ tracer_dendrogramme_labbe <- function(distance_matrix, path) {
     pos = label_positions,
     offset = 0.45,
     cex = label_cex,
-    col = "#217ce7",
-    font = 1
+    col = ifelse(tree$tip.label %in% max_names, "#d46617", "#217ce7"),
+    font = ifelse(tree$tip.label %in% max_names, 2, 1)
   )
-  graphics::title(main = "Arbre des distances intertextuelles de Labbé", cex.main = 1.15)
-  graphics::mtext("Valeurs affichées : longueurs des branches terminales Ward.D2", side = 3, line = 0.4, cex = 0.72, col = "#5d6873")
+  graphics::title(main = "Arbre de regroupement des profils lexicaux", cex.main = 1.15)
+  graphics::mtext("W = longueur de branche Ward.D2, différente de la distance brute entre deux modalités", side = 3, line = 0.4, cex = 0.72, col = "#5d6873")
+  graphics::mtext(
+    sprintf(
+      "Paire la plus distante dans la matrice : %s / %s = %.4f",
+      gsub("_", " ", max_names[[1L]], fixed = TRUE),
+      gsub("_", " ", max_names[[2L]], fixed = TRUE),
+      max_distance
+    ),
+    side = 1,
+    line = -0.2,
+    cex = 0.72,
+    col = "#d46617",
+    font = 2
+  )
   scale_length <- suppressWarnings(signif(max(tree$edge.length, na.rm = TRUE) / 4, 2))
   if (is.finite(scale_length) && scale_length > 0) {
     ape::add.scale.bar(
@@ -314,8 +332,35 @@ tracer_carte_labbe <- function(distance_matrix, path) {
   graphics::axis(1, at = seq_len(text_count), labels = column_labels, las = 2, cex.axis = axis_cex, tick = FALSE)
   graphics::axis(2, at = seq_len(text_count), labels = row_labels, las = 2, cex.axis = axis_cex, tick = FALSE)
   graphics::abline(v = seq(0.5, text_count + 0.5, by = 1), h = seq(0.5, text_count + 0.5, by = 1), col = grDevices::adjustcolor("white", alpha.f = 0.2), lwd = 0.7)
+  if (text_count <= 15L) {
+    midpoint <- value_range[[1L]] + diff(value_range) * 0.56
+    for (row_index in seq_len(text_count)) {
+      for (column_index in seq_len(text_count)) {
+        value <- ordered_matrix[row_index, column_index]
+        graphics::text(
+          column_index,
+          text_count - row_index + 1L,
+          labels = formatC(value, format = "f", digits = 3),
+          cex = max(0.48, min(0.72, 6.5 / max(text_count, 8))),
+          col = if (value >= midpoint) "white" else "#223044",
+          font = if (row_index == column_index) 1 else 2
+        )
+      }
+    }
+  }
+  max_value <- max(ordered_matrix[upper.tri(ordered_matrix)])
+  max_cells <- which(abs(ordered_matrix - max_value) < .Machine$double.eps^0.5, arr.ind = TRUE)
+  for (cell_index in seq_len(nrow(max_cells))) {
+    row_index <- max_cells[cell_index, 1L]
+    column_index <- max_cells[cell_index, 2L]
+    x <- column_index
+    y <- text_count - row_index + 1L
+    graphics::rect(x - 0.48, y - 0.48, x + 0.48, y + 0.48, border = "white", lwd = 4)
+    graphics::rect(x - 0.46, y - 0.46, x + 0.46, y + 0.46, border = "#d46617", lwd = 2.6)
+  }
   graphics::box(col = "#d2d9e3")
   graphics::title(main = "Matrice des distances de Labbé", cex.main = 1.25)
+  graphics::mtext("Valeurs brutes ; les cases orange indiquent la paire la plus distante", side = 3, line = 0.35, cex = 0.72, col = "#5d6873")
 
   key_values <- seq(value_range[[1L]], value_range[[2L]], length.out = 100L)
   key_matrix <- outer(c(0, 1), key_values, function(x, y) y)

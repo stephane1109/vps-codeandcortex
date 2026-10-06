@@ -37,8 +37,8 @@ L'analyse produit :
 
 - la matrice symétrique complète des distances ;
 - le détail de chaque comparaison par paire ;
-- un arbre non enraciné, sans halos, indiquant la longueur Ward.D2 sur chaque branche qui aboutit à un texte ;
-- une carte colorée des distances ;
+- un arbre non enraciné regroupant les profils lexicaux avec Ward.D2 ; les valeurs `W` sont des longueurs de branches de ce regroupement et non des distances brutes entre deux modalités ;
+- une carte colorée contenant les distances brutes de Labbé ; pour les matrices jusqu'à 15 modalités, chaque valeur est écrite dans sa case et la paire maximale est encadrée en orange ;
 - la configuration utilisée.
 
 Dans le tableau des comparaisons, la paire ayant la distance la plus élevée est affichée en bleu. Dans la matrice complète, les deux cellules symétriques correspondant à cette même paire sont également mises en évidence. Une ligne et une colonne représentent chacune une modalité de la variable étoilée ; leur intersection contient leur distance de Labbé. La diagonale vaut toujours `0`, puisqu'une modalité y est comparée avec elle-même.

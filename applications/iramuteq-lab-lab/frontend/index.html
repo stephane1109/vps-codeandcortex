@@ -5,7 +5,7 @@
     <title>IRAMUTEQ Lab</title>
     <link rel="icon" href="./logo_iramuteqlab.png?v=20260928-logo" type="image/png" />
     <link rel="apple-touch-icon" href="./logo_iramuteqlab.png?v=20260928-logo" />
-    <link rel="stylesheet" href="./styles.css?v=20261006-distance-labbe-readable" />
+    <link rel="stylesheet" href="./styles.css?v=20261006-distance-labbe-consistency" />
   </head>
   <body>
     <div class="app-shell">
@@ -498,7 +498,8 @@
                 <div id="labbeWarnings" class="field-help field-help--alert" hidden></div>
               </article>
               <article class="card">
-                <h3>Arbre des distances intertextuelles</h3>
+                <h3>Arbre de regroupement des profils lexicaux</h3>
+                <p class="labbe-graph-note">Cet arbre utilise Ward.D2 pour regrouper les profils proches. Les valeurs <strong>W</strong> portées par ses branches ne sont pas les distances de Labbé entre deux modalités ; celles-ci figurent dans la matrice ci-dessous.</p>
                 <div id="labbeDendrogram" class="result-pane"></div>
               </article>
               <article class="card">
@@ -1410,6 +1411,6 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261006-distance-labbe-readable"></script>
+    <script type="module" src="./app.js?v=20261006-distance-labbe-consistency"></script>
   </body>
 </html>

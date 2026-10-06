@@ -15410,9 +15410,9 @@ async function renderDistanceLabbeExports(index) {
     }
   }
 
-  renderImage(resultContainers.labbeDendrogram, dendrogramFile, "Arbre des distances intertextuelles");
+  renderImage(resultContainers.labbeDendrogram, dendrogramFile, "Arbre de regroupement des profils lexicaux");
   renderImage(resultContainers.labbeHeatmap, heatmapFile, "Carte des distances intertextuelles");
-  makeResultImagePreviewable(resultContainers.labbeDendrogram, "Arbre des distances intertextuelles", "Distance intertextuelle");
+  makeResultImagePreviewable(resultContainers.labbeDendrogram, "Arbre de regroupement des profils lexicaux", "Distance intertextuelle");
   makeResultImagePreviewable(resultContainers.labbeHeatmap, "Carte des distances", "Distance intertextuelle");
   const maxPair = await renderLabbePairsTable(resultContainers.labbePairsTable, pairsFile);
   await renderLabbeMatrixTable(resultContainers.labbeMatrixTable, matrixFile, maxPair);
