@@ -150,7 +150,9 @@ calculer_matrice_distance_labbe <- function(tab) {
 compute.labbe <- function(x, y, tab) calculer_distance_labbe_paire(x, y, tab)$distance
 dist.labbe <- function(tab) calculer_matrice_distance_labbe(tab)$matrice
 
-table_labbe_par_modalite <- function(source, variable) {
+table_labbe_par_modalite <- function(source, variable, min_effectif = 1L) {
+  min_effectif <- suppressWarnings(as.integer(min_effectif))
+  if (!is.finite(min_effectif) || min_effectif < 1L) min_effectif <- 1L
   docvars <- source$docvars
   if (is.null(docvars) || !is.data.frame(docvars) || !variable %in% names(docvars)) {
     stop("La variable étoilée demandée n'est pas disponible dans ce corpus.")
@@ -177,7 +179,7 @@ table_labbe_par_modalite <- function(source, variable) {
   table <- Matrix::t(dfm) %*% indicator
   rownames(table) <- colnames(dfm)
   colnames(table) <- levels(groups)
-  table <- table[Matrix::rowSums(table) > 0, , drop = FALSE]
+  table <- table[Matrix::rowSums(table) >= min_effectif, , drop = FALSE]
   if (!nrow(table)) stop("La table lexicale ne contient aucune forme à comparer.")
   valider_table_labbe(table)
 }
@@ -382,9 +384,9 @@ tracer_carte_labbe <- function(distance_matrix, path) {
   invisible(clustering)
 }
 
-ecrire_resultats_distance_labbe <- function(source, variable, output_dir) {
+ecrire_resultats_distance_labbe <- function(source, variable, output_dir, min_effectif = 10L) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  table <- table_labbe_par_modalite(source, variable)
+  table <- table_labbe_par_modalite(source, variable, min_effectif)
   calculated <- calculer_matrice_distance_labbe(table)
   matrix_distance <- calculated$matrice
   pairs <- calculated$paires
@@ -418,6 +420,7 @@ ecrire_resultats_distance_labbe <- function(source, variable, output_dir) {
     variable_label = variable_label,
     dictionnaire = dictionnaire_affiche,
     lemmatisation = isTRUE(source$preprocessing$lemmatisation),
+    frequence_minimale_table = as.integer(min_effectif),
     n_textes = ncol(table),
     n_formes = nrow(table),
     distance_min = min(pairs$distance_labbe),
@@ -431,6 +434,7 @@ ecrire_resultats_distance_labbe <- function(source, variable, output_dir) {
   configuration <- list(
     variable = variable,
     variable_label = variable_label,
+    frequence_minimale_table = as.integer(min_effectif),
     modalities = colnames(table),
     preprocessing = source$preprocessing %||% list(),
     formula = "somme des écarts absolus après réduction du grand texte, normalisée par les deux longueurs comparables",

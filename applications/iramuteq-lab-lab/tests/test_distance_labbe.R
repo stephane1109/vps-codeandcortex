@@ -81,5 +81,7 @@ stopifnot(identical(vapply(available, function(item) item$id, character(1)), "*s
 aggregated <- table_labbe_par_modalite(source_data, "*source")
 stopifnot(identical(colnames(aggregated), c("A", "B")))
 stopifnot(identical(rownames(aggregated), c("alpha", "beta")))
+frequency_filtered <- table_labbe_par_modalite(source_data, "*source", min_effectif = 5L)
+stopifnot(identical(rownames(frequency_filtered), "beta"))
 
 cat("Tests distance de Labbe: OK\n")

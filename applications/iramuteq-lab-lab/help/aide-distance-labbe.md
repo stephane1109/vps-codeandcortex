@@ -13,7 +13,7 @@ Avant le calcul, l’utilisateur choisit explicitement :
 - le dictionnaire utilisé ;
 - l’activation ou non de la lemmatisation.
 
-Toutes les formes présentes après cette préparation sont conservées dans la table transmise au calcul. Aucun seuil de fréquence ni filtre morphosyntaxique de la CHD n’est ajouté. Les réglages de la dernière CHD ne sont pas repris silencieusement.
+La table est construite avec le profil d’indexation du corpus IRaMuTeQ : dictionnaire d’expressions, apostrophes et tirets traités comme séparateurs, ponctuation retirée, puis conservation des formes atteignant la fréquence interne de `10`. Cette valeur est fixe pour reproduire le résultat du logiciel et n’est pas présentée comme un paramètre supplémentaire. Aucun filtre morphosyntaxique de la CHD n’est ajouté et les réglages de la dernière CHD ne sont pas repris silencieusement.
 
 ## Calcul
 

@@ -50,8 +50,13 @@ tryCatch({
   config$morpho_conserver_hors_lexique <- TRUE
   config$retirer_stopwords <- FALSE
   config$supprimer_ponctuation <- TRUE
-  config$expression_utiliser_dictionnaire <- FALSE
+  config$expression_utiliser_dictionnaire <- TRUE
   config$utiliser_add_expression <- FALSE
+  config$supprimer_apostrophes <- FALSE
+  config$remplacer_tirets_espaces <- FALSE
+  config$nettoyage_caracteres <- TRUE
+  config$labbe_pretraitement_iramuteq <- TRUE
+  min_effectif_iramuteq <- 10L
 
   corpus <- import_corpus_iramuteq(input_path)
   if (quanteda::ndoc(corpus) < 2L) stop("Le corpus doit contenir au moins deux textes.")
@@ -61,7 +66,7 @@ tryCatch({
     paste0(
       "Table lexicale Labbé : dictionnaire=", pipeline$source_dictionnaire,
       " | lemmatisation=", ifelse(scalar_bool(config$lexique_utiliser_lemmes, TRUE), "oui", "non"),
-      " | toutes les formes présentes sont conservées."
+      " | profil d'indexation du corpus IRaMuTeQ."
     )
   )
   source_data <- list(
@@ -83,7 +88,7 @@ tryCatch({
     stop("La variable étoilée sélectionnée est absente du corpus ou comporte moins de deux modalités.")
   }
 
-  result <- ecrire_resultats_distance_labbe(source_data, variable, output_dir)
+  result <- ecrire_resultats_distance_labbe(source_data, variable, output_dir, min_effectif_iramuteq)
   emit(list(success = TRUE, summary = result$summary, logs = job_logs))
 }, error = function(error) {
   emit(list(success = FALSE, message = conditionMessage(error), logs = job_logs))

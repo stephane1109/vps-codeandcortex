@@ -7,11 +7,22 @@ appliquer_nettoyage_iramuteq <- function(textes,
                                          forcer_minuscules = FALSE,
                                          supprimer_chiffres = FALSE,
                                          supprimer_apostrophes = FALSE,
-                                         remplacer_tirets_espaces = FALSE) {
+                                         remplacer_tirets_espaces = FALSE,
+                                         compatibilite_corpus_iramuteq = FALSE) {
   x <- as.character(textes)
   if (length(x) == 0) return(character(0))
 
   x <- gsub("\u00A0", " ", x, fixed = TRUE)
+
+  if (isTRUE(compatibilite_corpus_iramuteq)) {
+    # Profil par défaut du constructeur de corpus IRaMuTeQ : firstclean,
+    # apos et tiret sont appliqués avant l'indexation lexicale.
+    x <- gsub("[’`´ʼʹ]", "'", x, perl = TRUE)
+    x <- gsub("œ", "oe", x, fixed = TRUE)
+    x <- gsub("Œ", "OE", x, fixed = TRUE)
+    x <- gsub("'", " ", x, fixed = TRUE)
+    x <- gsub("-", " ", x, fixed = TRUE)
+  }
 
   if (isTRUE(supprimer_chiffres)) {
     x <- gsub("[0-9]+", " ", x, perl = TRUE)

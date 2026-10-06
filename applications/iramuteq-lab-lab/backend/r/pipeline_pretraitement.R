@@ -454,7 +454,8 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     forcer_minuscules = TRUE,
     supprimer_chiffres = scalar_bool(config$supprimer_chiffres, FALSE),
     supprimer_apostrophes = scalar_bool(config$supprimer_apostrophes, TRUE),
-    remplacer_tirets_espaces = scalar_bool(config$remplacer_tirets_espaces, FALSE)
+    remplacer_tirets_espaces = scalar_bool(config$remplacer_tirets_espaces, FALSE),
+    compatibilite_corpus_iramuteq = scalar_bool(config$labbe_pretraitement_iramuteq, FALSE)
   )
   textes_chd <- textes_nettoyes
   names(textes_chd) <- ids_docs
