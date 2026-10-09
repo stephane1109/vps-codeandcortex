@@ -54,6 +54,132 @@
       "source": "https://www.huffingtonpost.fr/",
       "statut": "reference_editoriale",
       "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "parismatch",
+      "nom": "Paris Match",
+      "compte": "parismatch",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@parismatch"
+    },
+    {
+      "id": "cquoilinfo",
+      "nom": "C quoi l’info",
+      "compte": "cquoilinfo",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@cquoilinfo"
+    },
+    {
+      "id": "m6info_",
+      "nom": "M6 Info",
+      "compte": "m6info_",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@m6info_"
+    },
+    {
+      "id": "hugodecrypte",
+      "nom": "HugoDécrypte",
+      "compte": "hugodecrypte",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@hugodecrypte"
+    },
+    {
+      "id": "lavoixdunord",
+      "nom": "La Voix du Nord",
+      "compte": "lavoixdunord",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lavoixdunord"
+    },
+    {
+      "id": "bfmtv",
+      "nom": "BFMTV",
+      "compte": "bfmtv",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@bfmtv"
+    },
+    {
+      "id": "tf1info",
+      "nom": "TF1 Info",
+      "compte": "tf1info",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@tf1info"
+    },
+    {
+      "id": "le_progres_",
+      "nom": "Le Progrès",
+      "compte": "le_progres_",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@le_progres_"
+    },
+    {
+      "id": "reporterre_media",
+      "nom": "Reporterre",
+      "compte": "reporterre_media",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@reporterre_media"
+    },
+    {
+      "id": "actufrancereelle",
+      "nom": "Actu France Réelle",
+      "compte": "actufrancereelle",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actufrancereelle"
+    },
+    {
+      "id": "le20hfrancetelevisions",
+      "nom": "Le 20h France Télévisions",
+      "compte": "le20hfrancetelevisions",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@le20hfrancetelevisions"
+    },
+    {
+      "id": "flashinfosoff",
+      "nom": "Flash Infos",
+      "compte": "flashinfosoff",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@flashinfosoff"
+    },
+    {
+      "id": "lereplay2",
+      "nom": "Le Replay",
+      "compte": "lereplay2",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lereplay2"
+    },
+    {
+      "id": "ladepechedumidi",
+      "nom": "La Dépêche du Midi",
+      "compte": "ladepechedumidi",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@ladepechedumidi"
     }
   ]
 }

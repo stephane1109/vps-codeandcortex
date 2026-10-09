@@ -44,7 +44,7 @@ class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
-    medias: list[str] = Field(default_factory=list, max_length=10)
+    medias: list[str] = Field(default_factory=list, max_length=20)
     enrichir: bool = False
     collecter_commentaires: bool = False
     collecter_reponses: bool = False

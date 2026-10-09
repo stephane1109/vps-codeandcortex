@@ -170,8 +170,13 @@ auteurs sont exclues ; les publications communes sont dédoublonnées par ID Tik
 Un ou deux hashtags peuvent filtrer les légendes des comptes, avec le même ET/OU.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient six références éditoriales initiales :
-Le Monde, franceinfo, Le Parisien, 20 Minutes, Brut et Le HuffPost, avec leurs sources.
+L’inventaire `config/comptes_presse.json` contient 20 comptes sélectionnables. Les six
+références éditoriales initiales sont conservées ; les ajouts fournis par l’utilisateur
+sont identifiés comme tels, sans présumer de leur propriété éditoriale ni de leur
+catégorie sociologique. Les catégories non vérifiées restent indéterminées. Les
+identifiants sont conservés exactement, notamment leurs traits de soulignement.
+Une collecte peut sélectionner jusqu’à 20 médias ; les limites par source et les
+traitements séquentiels restent inchangés.
 Dans Streamlit, choisir **Presse et médias** dans **Rechercher par** : les comptes
 s’affichent directement sous forme de cases à cocher, sans liste déroulante cachée.
 La sélection reste conservée lors d’un changement de mode de recherche.
