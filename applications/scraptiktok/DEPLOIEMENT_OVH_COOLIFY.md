@@ -171,12 +171,10 @@ sur `127.0.0.1:8502`, relayé par FastAPI : ne pas exposer le port 8502 dans Coo
 Le reverse proxy doit transmettre les WebSocket, les cookies, Host et Authorization.
 Le contrôle de santé vérifie désormais les deux services.
 
-Le menu **Options vidéo (facultatif)** de l’onglet **Collecte** reste visible dans
-tous les profils. L’onglet **Aide** explique les méthodes de comparaison.
-Le profil standard **`INSTALL_VIDEO=base`** inclut les comparaisons proposées dans
-l’interface ; le profil avancé `1` reste facultatif.
-Sur le profil texte, les cases sont visibles et le bouton d’analyse est désactivé
-avec une explication. Les choix des deux méthodes sont transmis au traitement réel.
+L’interface est consacrée à la collecte textuelle : le menu des options vidéo et
+les boutons de comparaison ont été retirés. L’aide explique la sélection des médias,
+la visite successive des profils et les exports. Les profils de dépendances vidéo
+restent disponibles pour l’API et les traitements par lots.
 
 En local : `python lancer_interface.py --port 8510`, puis ouvrir l’accueil à ce port.
 Le port privé suivant (8511) doit être libre ; `STREAMLIT_PORT` peut le remplacer.

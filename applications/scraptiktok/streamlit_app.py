@@ -7,7 +7,7 @@ from interface.client import appeler_api
 
 st.set_page_config(page_title="ScrapTikTok", page_icon="📝", layout="centered")
 st.title("ScrapTikTok")
-st.caption("Collecter les textes TikTok et comparer les vidéos.")
+st.caption("Collecter les textes des publications TikTok.")
 
 session = st.context.cookies.get("scraptiktok_session", "")
 autorisation = st.context.headers.get("Authorization", "")
@@ -37,8 +37,6 @@ def iso(valeur):
 if "initialise" not in st.session_state:
     try:
         ancienne = api("/api/session")["job"]
-        st.session_state["configuration"] = api("/api/configuration")
-        st.session_state["inventaire"] = api("/api/presse")["medias"]
     except RuntimeError as erreur:
         st.error(str(erreur)); st.stop()
     st.session_state["collecte"] = ancienne
@@ -50,15 +48,26 @@ if "initialise" not in st.session_state:
         "include_sources":ancienne.get("include_sources",True), "enrichir":ancienne.get("enrichir",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",False), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
+    # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
+    for nom in ("hashtag", "second_hashtag"):
+        valeurs[nom + "_comptes"] = ancienne.get(nom, "") if ancienne.get("source_collecte") in {"presse", "comptes"} else ""
+        if ancienne.get("source_collecte") in {"presse", "comptes"}: valeurs[nom] = ""
     for nom in ("date_debut","date_fin"):
         valeurs[nom] = date.fromisoformat(ancienne[nom]) if ancienne.get(nom) else None
     for cle,valeur in valeurs.items(): st.session_state.setdefault(cle,valeur)
     st.session_state["initialise"] = True
 
+# Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
+for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes"):
+    st.session_state[cle] = st.session_state.get(cle, "")
+
 collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
-video_disponible = st.session_state["configuration"]["video_disponible"]
-medias = {m["id"]:m for m in st.session_state["inventaire"]}
+# Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
+try:
+    medias = {m["id"]:m for m in api("/api/presse")["medias"]}
+except RuntimeError as erreur:
+    st.error(str(erreur)); st.stop()
 onglet_collecte, onglet_aide = st.tabs(["Collecte", "Aide"])
 
 with onglet_collecte:
@@ -80,12 +89,16 @@ with onglet_collecte:
             st.session_state.setdefault(cle, identifiant in st.session_state.get("medias", []))
             colonnes_medias[indice % 2].checkbox(media["nom"] + " (@" + media["compte"] + ")",
                 key=cle, disabled=occupe, on_change=memoriser_medias)
-        st.caption("Inventaire de départ ; utilisez « Autres comptes TikTok » pour ajouter un compte à votre recherche.")
+        selection = [m for m in medias if st.session_state.get("media_" + m, False)]
+        st.session_state["medias"] = selection
+        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Les comptes seront visités l’un après l’autre.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
+    cle_hashtag = "hashtag" if source == "hashtags" else "hashtag_comptes"
+    cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
     c1,c2 = st.columns(2)
-    c1.text_input("Hashtag" if source == "hashtags" else "Hashtag facultatif", key="hashtag", placeholder="#actualité", disabled=occupe)
-    c2.text_input("Deuxième hashtag (facultatif)", key="second_hashtag", placeholder="#politique", disabled=occupe)
+    c1.text_input("Hashtag" if source == "hashtags" else "Hashtag facultatif", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
+    c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
     st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
     st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe)
     st.checkbox("Français uniquement", key="french_only", disabled=occupe,
@@ -100,31 +113,19 @@ with onglet_collecte:
         st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
     with st.expander("Exports et commentaires"):
         st.checkbox("Inclure les auteurs et liens dans le TXT", key="include_sources", disabled=occupe)
-        st.checkbox("Créer l’archive enrichie et préparer l’analyse vidéo", key="enrichir", disabled=occupe)
+        st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
         st.checkbox("Collecter les commentaires accessibles", key="collecter_commentaires", disabled=occupe)
         def activer_commentaires():
             if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
         st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, on_change=activer_commentaires)
         st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
-    with st.expander("Options vidéo (facultatif)"):
-        # Le formulaire transmet les choix avec le clic, sans course entre réexécutions.
-        with st.form("comparaison_video", border=False):
-            st.checkbox("Repérer les fichiers identiques (SHA-256)", value=True, key="comparer_sha256", disabled=occupe)
-            st.checkbox("Repérer les séquences communes (pHash + ORB)", value=True, key="comparer_sequences", disabled=occupe)
-            if not video_disponible:
-                st.info("La comparaison vidéo est momentanément indisponible.")
-            elif not collecte.get("archive_prete"):
-                st.caption("Disponible après une collecte avec l’archive enrichie.")
-            if st.form_submit_button("Comparer les vidéos", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
-                options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences")}
-                lancer(f"/api/jobs/{collecte['id']}/video",options)
     if st.button("Lancer la collecte", type="primary", disabled=occupe):
         debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
         if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
         else:
-            valeurs = {k:st.session_state[k] for k in ("hashtag","second_hashtag","operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
-            valeurs.update(source_collecte=source, date_debut=debut, date_fin=fin,
+            valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
+            valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                 comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                 medias=st.session_state.get("medias",[]) if source == "presse" else [])
             lancer("/api/jobs",valeurs)
@@ -151,12 +152,10 @@ with onglet_collecte:
             if actuel["busy"]:
                 st.progress(min(1.0,actuel["processed"]/max(1,actuel["discovered"])))
                 if st.button("Arrêter la collecte"): lancer(f"/api/jobs/{actuel['id']}/stop",{})
-            if actuel["video_statut"] != "non_lance":
-                libelles={"en_cours":"Analyse vidéo en cours…","termine":"Analyse vidéo terminée.","partiel":"Analyse vidéo partielle : voir le journal de l’archive.","interrompu":"Analyse interrompue ; dernière archive conservée.","echec":"Analyse vidéo en échec ; collecte conservée."}
-                st.write(libelles.get(actuel["video_statut"],actuel["video_statut"]))
-                if actuel.get("video_progression"):
-                    st.caption(actuel["video_progression"].get("etape", ""))
-            if actuel["video_busy"] and st.button("Arrêter l’analyse vidéo"): lancer(f"/api/jobs/{actuel['id']}/video/stop",{})
+            if actuel.get("bilan_sources"):
+                with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
+                    for bilan in actuel["bilan_sources"]:
+                        st.write(f"{bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
             liens = st.columns(2)
             if actuel["can_download"]: liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
             if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[1].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
@@ -171,12 +170,9 @@ with onglet_collecte:
 
 with onglet_aide:
     st.subheader("Comment utiliser l’application")
-    st.markdown("1. Choisissez vos hashtags ou vos médias et vos filtres.\n"
-                "2. Lancez la collecte ; validez TikTok dans la fenêtre intégrée si demandé.\n"
-                "3. Téléchargez le TXT. Pour comparer les vidéos, ouvrez **Options vidéo**, choisissez les méthodes et cliquez sur **Comparer les vidéos** après la collecte enrichie.")
-    st.subheader("Les méthodes, simplement")
-    st.markdown("- **SHA-256** : une empreinte du fichier complet. Elle repère les copies strictement identiques ; un réencodage change l’empreinte.\n"
-                "- **pHash** : une empreinte de l’apparence des images. Elle présélectionne les images ressemblantes.\n"
-                "- **ORB** : compare des points visuels caractéristiques et leur disposition pour vérifier les images communes, y compris certains recadrages.\n"
-                "- **Comparaison temporelle** : vérifie que plusieurs images communes se suivent dans le même ordre. pHash, ORB et le temps travaillent ensemble pour détecter un réemploi de séquence.")
-    st.caption("Le TXT contient les légendes. Le ZIP enrichi rassemble les données, les mesures et les résultats vidéo. Les valeurs indéterminées et les scores de confiance sont conservés ; aucun résultat ne garantit une collecte exhaustive.")
+    st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
+                "2. Les hashtags sont facultatifs pour les médias. Ajoutez les filtres souhaités, puis lancez la collecte.\n"
+                "3. Les comptes sont visités successivement dans le même navigateur ; Le Monde apparaît en premier s’il est sélectionné.\n"
+                "4. Validez TikTok dans la fenêtre intégrée si demandé, puis cliquez sur **Continuer**.\n"
+                "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
+    st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")

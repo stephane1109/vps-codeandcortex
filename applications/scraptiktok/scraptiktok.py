@@ -245,8 +245,9 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 "TikTok affiche une connexion ou un CAPTCHA. Relancez avec --interactive, "
                 "terminez la vérification dans Chrome, puis appuyez sur Entrée dans le terminal."
             ) from exc
+        report["discovery_stop"] = "no_accessible_links"
         raise RuntimeError(
-            "Aucune publication accessible pour ce hashtag. La page peut être vide, bloquée, "
+            "Aucune publication accessible pour cette source. La page peut être vide, bloquée, "
             "ou avoir changé. Relancez avec --interactive et vérifiez Chrome."
         ) from exc
     idle = 0

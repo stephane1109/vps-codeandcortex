@@ -46,14 +46,18 @@ def principale():
                 if valide:
                     return HTMLResponse('<a href="https://www.tiktok.com/@fixture/video/1234567890">Publication accessible</a>')
                 return HTMLResponse(TAG.replace("function update(){", "function update(){if(window.ready && Number(document.getElementById('slider').value)>70 && document.getElementById('word').value==='été')document.cookie='fixture_validee=1; path=/';fetch('/fixture/state?ready='+!!window.ready+'&slider='+document.getElementById('slider').value+'&word='+encodeURIComponent(document.getElementById('word').value));"))
+            @app.get('/fixture/profil/{compte}')
+            def page_profil(compte:str):
+                identifiant = {'lemondefr':'1111111111', 'franceinfo':'2222222222'}[compte]
+                return HTMLResponse(f'<main><a href="https://www.tiktok.com/@{compte}/video/{identifiant}">Publication</a></main>')
             observations={}
             @app.get('/fixture/state')
             def observer(ready:str,slider:str,word:str):
                 observations.update(ready=ready,slider=slider,word=word)
                 return {"ok":True}
             @app.get('/fixture/post')
-            def page_publication():
-                publication={'id':'1234567890','desc':CAPTION+' #été','createTime':1700000000,'author':{'uniqueId':'fixture'}}
+            def page_publication(compte:str='fixture', identifiant:str='1234567890'):
+                publication={'id':identifiant,'desc':CAPTION+' #été','createTime':1700000000,'author':{'uniqueId':compte}}
                 return HTMLResponse('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'+json.dumps({'itemInfo':{'itemStruct':publication}})+'</script>')
             @app.middleware('http')
             async def politique_fixture(requete,suivant):
@@ -86,23 +90,23 @@ def principale():
                     resultat=navigateur.execute_async_script('''const [chemin,donnees,binaire,fin]=arguments; fetch(chemin,donnees===null?{}:{method:'POST',headers:{'Content-Type':'application/json','X-ScrapTikTok':'1'},body:JSON.stringify(donnees)}).then(async r=>fin({code:r.status,contenu:binaire?Array.from(new Uint8Array(await r.arrayBuffer())):await r.text()}));''',chemin,donnees,binaire)
                     assert resultat['code']<400,resultat
                     return bytes(resultat['contenu']) if binaire else resultat['contenu']
-                def rediriger(pilote,url): pilote.get(origine+('/fixture/tag' if '/tag/' in url else '/fixture/post'))
-                def faux_traitement(tache,options):
-                    tache.update(video_statut='termine',video_busy=False)
-                with patch.object(moteur,'open_page',side_effect=rediriger),patch.object(web,'executer_video',side_effect=faux_traitement) as video,patch.object(web,'wait_for_user',wraps=web.wait_for_user) as interventions:
+                def rediriger(pilote,url):
+                    if '/tag/' in url: chemin='/fixture/tag'
+                    elif '/video/' in url:
+                        identifiant, _, compte = moteur.canonical_post(url)
+                        chemin=f'/fixture/post?compte={compte}&identifiant={identifiant}'
+                    else: chemin='/fixture/profil/'+url.rsplit('@',1)[1]
+                    pilote.get(origine+chemin)
+                with patch.object(moteur,'open_page',side_effect=rediriger),patch.object(web,'wait_for_user',wraps=web.wait_for_user) as interventions:
                     navigateur.get(origine+'/interface/')
                     attente.until(lambda d:'Lancer la collecte' in d.find_element(By.TAG_NAME,'body').text)
                     assert navigateur.current_url==origine+'/'
                     onglet(1)
-                    attente.until(lambda d:'Les méthodes, simplement' in d.find_element(By.TAG_NAME,'body').text)
-                    assert 'ORB' in navigateur.find_element(By.TAG_NAME,'body').text
+                    attente.until(lambda d:'Comment utiliser l’application' in d.find_element(By.TAG_NAME,'body').text)
+                    assert 'SHA-256' not in navigateur.find_element(By.TAG_NAME,'body').text
                     navigateur.save_screenshot('/tmp/scraptiktok-aide.png')
                     onglet(0)
-                    navigateur.find_element(By.XPATH,"//summary[contains(.,'Options vidéo (facultatif)')]").click()
-                    attente.until(lambda d:'Repérer les fichiers identiques (SHA-256)' in d.find_element(By.TAG_NAME,'body').text)
-                    attente.until(lambda d:'Repérer les séquences communes (pHash + ORB)' in d.find_element(By.TAG_NAME,'body').text and 'Comparer les vidéos' in d.find_element(By.TAG_NAME,'body').text)
-                    assert not bouton('Comparer les vidéos').is_enabled()
-                    onglet(0)
+                    assert 'Options vidéo' not in navigateur.find_element(By.TAG_NAME,'body').text
                     navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Presse et médias']]").click()
                     attente.until(lambda d:'Le Parisien (@leparisien)' in d.find_element(By.TAG_NAME,'body').text)
                     attente.until(lambda d:'20 Minutes (@20minutesfrance)' in d.find_element(By.TAG_NAME,'body').text)
@@ -156,20 +160,38 @@ def principale():
                     assert CAPTION in requete(f'/api/jobs/{identifiant}/download')
                     archive=requete(f'/api/jobs/{identifiant}/archive',binaire=True)
                     with zipfile.ZipFile(io.BytesIO(archive)) as z: assert 'publications.json' in z.namelist()
-                    panneau=navigateur.find_element(By.XPATH,"//details[summary[contains(.,'Options vidéo (facultatif)')]]")
-                    if panneau.get_attribute('open') is None: panneau.find_element(By.TAG_NAME,'summary').click()
-                    case=attente.until(conditions.element_to_be_clickable((By.XPATH,"//label[contains(.,'Repérer les séquences communes (pHash + ORB)')]")))
-                    case.click()
-                    attente.until(lambda d:bouton('Comparer les vidéos').is_enabled())
-                    bouton('Comparer les vidéos').click()
-                    attente.until(lambda d:video.called)
-                    assert video.call_args.args[1].comparer_sha256
-                    assert not video.call_args.args[1].comparer_sequences
-                    attente.until(lambda d:'Analyse vidéo terminée.' in d.find_element(By.TAG_NAME,'body').text)
-                    navigateur.save_screenshot('/tmp/scraptiktok-streamlit-video.png')
+                    # Une seconde collecte parcourt réellement deux profils, dans un seul navigateur.
+                    navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Presse et médias']]").click()
+                    attente.until(lambda d:'Tout cocher' in d.find_element(By.TAG_NAME,'body').text)
+                    bouton('Tout cocher').click()
+                    attente.until(lambda d:'29 média(s) sélectionné(s) sur 29' in d.find_element(By.TAG_NAME,'body').text)
+                    # Ne conserver que deux comptes pour ce parcours borné.
+                    from collecte.presse import charger_inventaire
+                    for media in charger_inventaire():
+                        if media['compte'] in {'lemondefr','franceinfo'}: continue
+                        libelle=media['nom']+' (@'+media['compte']+')'
+                        case=navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)="+json.dumps(libelle,ensure_ascii=False)+"]]")
+                        case.click()
+                        attente.until(lambda d, case=case: not case.find_element(By.TAG_NAME,'input').is_selected())
+                    attente.until(lambda d:'2 média(s) sélectionné(s) sur 29' in d.find_element(By.TAG_NAME,'body').text)
+                    champs=navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')
+                    assert all(champ.get_attribute('value')=='' for champ in champs), 'Les anciens hashtags ne doivent pas filtrer les médias'
+                    # Les profils synthétiques n'ont pas de CAPTCHA : validation initiale immédiate.
+                    with patch.object(web,'wait_for_user'):
+                        bouton('Lancer la collecte').click()
+                        attente.until(lambda d:json.loads(requete('/api/session'))['job']['id']!=identifiant)
+                        etat=json.loads(requete('/api/session'))['job']; identifiant_presse=etat['id']
+                        attente.until(lambda d:not json.loads(requete('/api/session'))['job']['busy'])
+                    etat=json.loads(requete('/api/session'))['job']
+                    assert etat['captions']==2,etat
+                    assert len(etat['bilan_sources'])==2,etat
+                    texte=requete(f'/api/jobs/{identifiant_presse}/download')
+                    assert '@lemondefr' in texte and '@franceinfo' in texte,texte
+                    assert 'Options vidéo' not in navigateur.find_element(By.TAG_NAME,'body').text
+                    navigateur.save_screenshot('/tmp/scraptiktok-presse-resultats.png')
                     navigateur.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':390,'height':1000,'deviceScaleFactor':1,'mobile':True})
                     assert navigateur.execute_script('return document.documentElement.scrollWidth<=innerWidth'),'Débordement mobile'
-                    print('PASS : Streamlit, liste presse, deux hashtags et une seule validation, session privée, options SHA/pHash/ORB, gestes, TXT/ZIP et mobile')
+                    print('PASS : Streamlit, liste presse, deux hashtags et une seule validation, session privée, 29 médias sélectionnables, collecte de deux profils, gestes, TXT/ZIP et mobile')
             except Exception:
                 if navigateur:
                     navigateur.save_screenshot('/tmp/scraptiktok-streamlit-erreur.png')
