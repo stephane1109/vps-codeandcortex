@@ -1,4 +1,4 @@
-# ScrapTikTok — corpus textuels et analyse audiovisuelle facultative
+# ScrapTikTok — interface Streamlit minimaliste
 
 Saisir un hashtag, collecter les **légendes/descriptions** des publications TikTok,
 puis télécharger un fichier **`.txt` en UTF-8**. L'interface fonctionne sur
@@ -64,7 +64,7 @@ Python 3.10+ et Chrome sont requis. Depuis ce dossier :
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m uvicorn webapp:app --host 127.0.0.1 --port 8501
+python lancer_interface.py --port 8501
 ```
 
 Ouvrir `http://localhost:8501`. Le navigateur de collecte s'exécute sans fenêtre
@@ -117,6 +117,7 @@ sur Mac ; le conteneur utilise directement les paquets Chromium/ChromeDriver Deb
 python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 python tests/smoke_browser.py
+python tests/smoke_streamlit.py
 ```
 
 Le test de navigateur lance l'application, utilise de vrais navigateurs Chrome,
@@ -131,9 +132,9 @@ son environnement Linux ; il ne garantit pas l'accès à TikTok depuis une IP do
 
 ### Croiser deux hashtags
 
-Dans l’interface, renseigner le deuxième hashtag facultatif puis lancer la collecte.
-Une boîte de dialogue propose **ET** (les deux hashtags dans la description) ou
-**OU** (au moins un des deux). Chaque recherche examine jusqu’à la limite choisie
+Dans l’interface, renseigner le deuxième hashtag facultatif et choisir **ET**
+(les deux hashtags dans la description) ou **OU** (au moins un des deux), puis
+lancer la collecte. Chaque recherche examine jusqu’à la limite choisie
 par hashtag ; les publications communes sont dédoublonnées par identifiant.
 Le filtre compare des hashtags entiers, sans distinction de casse, en conservant
 les accents. Les textes ne correspondant pas au filtre sont comptabilisés à part.
@@ -162,7 +163,7 @@ L’API conserve les langues par défaut ; envoyer `french_only: true` active le
 
 ## Comptes de presse, engagement et commentaires
 
-Dans **Collecter à partir de**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
+Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
 La limite de publications s’applique à chaque compte. Les recommandations d’autres
 auteurs sont exclues ; les publications communes sont dédoublonnées par ID TikTok.
@@ -201,7 +202,7 @@ Les astérisques sont neutralisés uniquement dans le corps IRaMuTeQ, sans modif
 ## Traitement audiovisuel facultatif
 
 Installer le profil vidéo décrit dans le guide de déploiement, terminer une collecte
-enrichie, puis ouvrir **Analyse audiovisuelle facultative**. La détection de réemploi
+enrichie, puis ouvrir l’onglet **Vidéo · SHA-256 / pHash / ORB**. La détection de réemploi
 s’exécute sans annotation manuelle. OCR, audio, Whisper et embeddings sont des options
 indépendantes ; aucun modèle n’est téléchargé sans activer l’autorisation correspondante.
 Le téléchargement vidéo se fait avec yt-dlp sur les URL publiques validées, sans exporter
@@ -330,3 +331,47 @@ observées et motifs d’exclusion. Sans période, le fonctionnement antérieur 
 
 L’API `/api/jobs` accepte `date_debut` et `date_fin` au format `AAAA-MM-JJ` (ou `null`).
 Une période inversée ou une date invalide est refusée.
+
+
+## Interface Streamlit et méthodes visibles
+
+L’accueil utilise désormais `streamlit_app.py` : deux onglets **Collecte** et
+**Vidéo · SHA-256 / pHash / ORB**, sans les anciennes cartes d’introduction. L’onglet
+vidéo est visible dès l’ouverture, même sans collecte et même si les bibliothèques
+vidéo sont absentes. Un message explique alors pourquoi le lancement est indisponible.
+Les cases **SHA-256 — fichiers strictement identiques** et **pHash + ORB + temps —
+séquences communes ou recadrées** activent réellement les méthodes correspondantes.
+La validation géométrique et temporelle reste associée à pHash : une seule image
+ressemblante n’est pas présentée comme une séquence réemployée.
+
+Une collecte enrichie est requise avant d’analyser ses vidéos. Elle est cochée par
+défaut dans Streamlit ; les commentaires restent facultatifs. Les options OCR, audio,
+Whisper et téléchargement des modèles sont dans l’expandeur audiovisuel. Les embeddings
+ont leur propre case et ne sont jamais assimilés à un réemploi. Désactiver la comparaison
+de séquences laisse la variable de réemploi indéterminée pour les fichiers distincts.
+Les méthodes choisies sont conservées dans les paramètres et les comparaisons JSON.
+SHA-256 reste calculé pour identifier le cache, même quand sa comparaison est désactivée.
+Le décodage des images reste utilisé pour le codage des caractéristiques audiovisuelles.
+
+`lancer_interface.py` démarre FastAPI sur le port public et Streamlit sur un port local
+privé. `interface/passerelle.py` relaie HTTP et WebSocket sous `/interface/`, avec cookie
+privé, contrôle d’origine et protection HTTP optionnelle conservés. Aucun port additionnel
+n’est à exposer. Les téléchargements restent des routes FastAPI privées ; les données
+utilisateur ne sont pas placées dans un cache Streamlit partagé. Une fenêtre intégrée
+réutilise le contrôleur de navigateur testé : elle n’est pas recréée à chaque image.
+Le CAPTCHA reste à traiter par l’utilisateur, dans le navigateur du serveur.
+
+L’entrée `webapp.py`, le moteur CLI et les modules restent utilisables. L’ancienne
+interface est conservée à `/classique`, notamment pour le contrôleur intégré et les
+tests de non-régression. Lancer directement Uvicorn affiche encore cette interface ;
+utiliser **`python lancer_interface.py`** pour l’accueil Streamlit. La commande Docker
+est déjà mise à jour. Le navigateur distant, les dates, ET/OU et le filtre français sont
+conservés ; ET/OU se choisit maintenant directement dans le formulaire Streamlit.
+
+Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
+ne charge pas OpenCV, Whisper ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
+La CI teste les deux profils Docker, l’ancienne fenêtre de contrôle et le nouveau
+parcours Streamlit, avec une source synthétique hors TikTok.
+
+Références d’intégration : [fragments Streamlit](https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment)
+et [contexte de session](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.context).

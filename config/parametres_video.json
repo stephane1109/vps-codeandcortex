@@ -23,5 +23,7 @@
   "conserver_images": true,
   "seuil_coupe": 0.35,
   "espace_libre_min_mo": 512,
-  "debut_videos": 0
+  "debut_videos": 0,
+  "comparer_sha256": true,
+  "comparer_sequences": true
 }

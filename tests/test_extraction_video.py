@@ -50,3 +50,17 @@ class TestsVideo(unittest.TestCase):
         r=comparer_videos(a,b,charger_seuils())
         self.assertTrue(r["semantiquement_similaires"])
         self.assertEqual(r["type"],"indetermine")
+
+    def test_sha_seul_ne_calcule_pas_orb(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d:
+            dossier=Path(d)/"sessions"/("b"*32); (dossier/"videos").mkdir(parents=True)
+            ecrire_video(dossier/"videos/1.mp4")
+            shutil.copyfile(dossier/"videos/1.mp4",dossier/"videos/2.mp4")
+            publications=[{"id":str(i),"author":"media"+str(i),"description":"Texte","engagement":{}} for i in (1,2)]
+            (dossier/"publications.json").write_text(json.dumps(publications))
+            param=charger_parametres(); param.update(comparer_sequences=False,conserver_images=False)
+            with patch("video.lots.extraire_orb",side_effect=AssertionError("ORB désactivé")):
+                resultat=analyser_lot(dossier,param)
+            self.assertEqual(resultat["statut"],"termine",resultat)
+            self.assertEqual(json.loads((dossier/"comparaisons.json").read_text())[0]["type"],"fichier_identique")

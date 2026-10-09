@@ -1,4 +1,5 @@
 "use strict";
+if (new URLSearchParams(location.search).has("controle")) document.body.classList.add("mode-controle");
 const $ = (id) => document.getElementById(id);
 let actionBusy = false, pendingSearch = null;
 const actionQueue = [];

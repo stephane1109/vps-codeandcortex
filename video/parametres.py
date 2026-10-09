@@ -15,7 +15,7 @@ def charger_parametres(chemin=None):
             raise ValueError(f"Paramètre hors limites : {cle} ({bas} à {haut}).")
     for cle in ("debut_videos","images_max","dimension_max","videos_max","paires_max","threads","ocr_images_max"):
         if not isinstance(valeurs[cle],int): raise ValueError(f"Entier requis : {cle}.")
-    for cle in ("ocr","embeddings","audio","transcription","telecharger_modeles","telecharger_videos","conserver_images"):
+    for cle in ("comparer_sha256","comparer_sequences","ocr","embeddings","audio","transcription","telecharger_modeles","telecharger_videos","conserver_images"):
         if not isinstance(valeurs[cle],bool): raise ValueError(f"Booléen requis : {cle}.")
     return valeurs
 

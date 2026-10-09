@@ -158,3 +158,26 @@ Les archives détaillent les échecs de téléchargement, les traitements tronqu
 modalités indéterminées. L’accès yt-dlp est indépendant de la session Selenium ; les
 vidéos nécessitant une connexion peuvent rester indisponibles. Le traitement des textes
 continue de fonctionner sans les dépendances audiovisuelles.
+
+
+## Accueil Streamlit minimaliste
+
+Le conteneur lance maintenant `lancer_interface.py` : le port public reste **8501**,
+le contrôle de santé reste **`/healthz`**, et la branche reste **`deploy-scraptiktok`**.
+Redéployer avec la commande du Dockerfile, sans commande Uvicorn personnalisée.
+La page `/` initialise la session puis ouvre `/interface/`. Streamlit écoute uniquement
+sur `127.0.0.1:8502`, relayé par FastAPI : ne pas exposer le port 8502 dans Coolify.
+Le reverse proxy doit transmettre les WebSocket, les cookies, Host et Authorization.
+Le contrôle de santé vérifie désormais les deux services.
+
+L’onglet **Vidéo · SHA-256 / pHash / ORB** reste visible dans tous les profils.
+L’argument de construction **`INSTALL_VIDEO=1`** reste nécessaire pour exécuter les
+analyses ; une simple variable d’exécution ne remplace pas l’installation des moteurs.
+Sur le profil texte, les cases sont visibles et le bouton d’analyse est désactivé
+avec une explication. Les choix des deux méthodes sont transmis au traitement réel.
+
+En local : `python lancer_interface.py --port 8510`, puis ouvrir l’accueil à ce port.
+Le port privé suivant (8511) doit être libre ; `STREAMLIT_PORT` peut le remplacer.
+Ne pas ouvrir directement le port Streamlit : passer par l’accueil initialise le
+cookie de session et applique la protection d’accès. Conserver un seul processus
+FastAPI et une seule réplique du conteneur.
