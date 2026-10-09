@@ -20,7 +20,7 @@ def principale():
     os.environ.update(UI_STREAMLIT="1", STREAMLIT_PORT=str(port_interne), SCRAPTIKTOK_API_URL=f"http://127.0.0.1:{arguments.port}")
     racine = Path(__file__).resolve().parent
     commande = [sys.executable, "-m", "streamlit", "run", str(racine / "streamlit_app.py"),
-        "--server.address=127.0.0.1", f"--server.port={port_interne}", "--server.baseUrlPath=interface",
+        "--server.address=127.0.0.1", f"--server.port={port_interne}",
         "--server.headless=true", "--browser.gatherUsageStats=false", "--server.fileWatcherType=none",
         "--client.toolbarMode=minimal", "--server.enableCORS=true", "--server.enableXsrfProtection=true"]
     processus = subprocess.Popen(commande, cwd=racine, start_new_session=True)
@@ -28,7 +28,7 @@ def principale():
         for _ in range(100):
             if processus.poll() is not None: raise RuntimeError("Le serveur Streamlit n’a pas démarré.")
             try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port_interne}/interface/_stcore/health", timeout=1): break
+                with urllib.request.urlopen(f"http://127.0.0.1:{port_interne}/_stcore/health", timeout=1): break
             except OSError: time.sleep(.2)
         else: raise RuntimeError("Le serveur Streamlit ne répond pas.")
         import uvicorn

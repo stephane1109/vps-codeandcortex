@@ -49,12 +49,14 @@ ou de source originale ne déduisent pas ce qui n’a pas été observé.
 L’accueil devient une interface Streamlit minimaliste. Le moteur, FastAPI et la
 fenêtre de contrôle historique restent conservés. Un relais privé HTTP/WebSocket
 maintient un seul port public et l’isolation des sessions. Les méthodes SHA-256 et
-pHash/ORB/temps sont visibles dès l’ouverture et leurs choix sont transmis au moteur.
+pHash/ORB/temps sont accessibles dans le menu **Options vidéo (facultatif)**
+de l’onglet Collecte ; leurs choix sont transmis au moteur. L’onglet Aide explique
+les méthodes. L’accueil est servi à la racine, avec redirection des anciens liens.
 Le profil texte affiche les options même sans dépendances vidéo, avec un message
 sur leur indisponibilité. Les dates, ET/OU, le français, les commentaires et exports
 sont repris dans le formulaire Streamlit. Les anciennes fonctions restent testées.
 
-82 tests unitaires/API/Streamlit passent localement, avec contrôle de l’origine du
+86 tests unitaires/API/Streamlit passent localement, avec contrôle de l’origine du
 WebSocket, indépendance des méthodes et absence de calcul ORB quand il est désactivé.
 La CI ajoute un parcours Chrome propre à Streamlit, incluant sa fenêtre de contrôle.
 Les tests de gestes restent synthétiques : ils ne résolvent pas un CAPTCHA TikTok réel.

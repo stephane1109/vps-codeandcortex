@@ -165,12 +165,14 @@ continue de fonctionner sans les dépendances audiovisuelles.
 Le conteneur lance maintenant `lancer_interface.py` : le port public reste **8501**,
 le contrôle de santé reste **`/healthz`**, et la branche reste **`deploy-scraptiktok`**.
 Redéployer avec la commande du Dockerfile, sans commande Uvicorn personnalisée.
-La page `/` initialise la session puis ouvre `/interface/`. Streamlit écoute uniquement
+La page `/` initialise la session et affiche directement Streamlit, sans suffixe dans
+l’adresse. Les anciens liens `/interface/` redirigent vers `/`. Streamlit écoute uniquement
 sur `127.0.0.1:8502`, relayé par FastAPI : ne pas exposer le port 8502 dans Coolify.
 Le reverse proxy doit transmettre les WebSocket, les cookies, Host et Authorization.
 Le contrôle de santé vérifie désormais les deux services.
 
-L’onglet **Vidéo · SHA-256 / pHash / ORB** reste visible dans tous les profils.
+Le menu **Options vidéo (facultatif)** de l’onglet **Collecte** reste visible dans
+tous les profils. L’onglet **Aide** explique les méthodes de comparaison.
 L’argument de construction **`INSTALL_VIDEO=1`** reste nécessaire pour exécuter les
 analyses ; une simple variable d’exécution ne remplace pas l’installation des moteurs.
 Sur le profil texte, les cases sont visibles et le bouton d’analyse est désactivé

@@ -59,7 +59,7 @@ collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
 video_disponible = st.session_state["configuration"]["video_disponible"]
 medias = {m["id"]:m for m in st.session_state["inventaire"]}
-onglet_collecte, onglet_video = st.tabs(["Collecte", "Vidéo · SHA-256 / pHash / ORB"])
+onglet_collecte, onglet_aide = st.tabs(["Collecte", "Aide"])
 
 with onglet_collecte:
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
@@ -102,6 +102,28 @@ with onglet_collecte:
         st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, on_change=activer_commentaires)
         st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
+    with st.expander("Options vidéo (facultatif)"):
+        st.subheader("Comparer les vidéos")
+        st.caption("Ces méthodes s’appliquent aux vidéos des publications collectées, par lots bornés.")
+        sha = st.checkbox("SHA-256 — fichiers strictement identiques", value=True, key="comparer_sha256", disabled=occupe)
+        sequences = st.checkbox("pHash + ORB + temps — séquences communes ou recadrées", value=True, key="comparer_sequences", disabled=occupe)
+        st.caption("pHash présélectionne les images ; ORB vérifie leur géométrie ; l’alignement temporel vérifie la séquence.")
+        embeddings = st.checkbox("Similarité sémantique (embeddings visuels)", key="embeddings", disabled=occupe)
+        st.caption("Une ressemblance sémantique est distinguée d’un réemploi de séquence.")
+        with st.expander("Caractéristiques audiovisuelles"):
+            st.checkbox("Texte incrusté (OCR)", key="ocr", disabled=occupe)
+            st.checkbox("Piste audio et silences", key="audio", disabled=occupe)
+            st.checkbox("Transcription de la parole (Whisper)", key="transcription", disabled=occupe)
+            st.checkbox("Autoriser le téléchargement initial des modèles", key="telecharger_modeles", disabled=occupe)
+            st.caption("Les mesures et variables IRaMuTeQ sont codées automatiquement ; les valeurs inconnues et les confiances sont conservées.")
+        if not video_disponible:
+            st.info("L’analyse vidéo n’est pas activée sur ce serveur. Les options restent visibles ; la collecte textuelle fonctionne normalement.")
+            st.caption("Pour l’administrateur : reconstruire l’image avec l’argument INSTALL_VIDEO=1.")
+        elif not collecte.get("archive_prete"):
+            st.info("Terminez d’abord une collecte avec une archive enrichie, puis lancez l’analyse ici.")
+        if st.button("Analyser les vidéos", type="primary", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
+            options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences","embeddings","ocr","audio","transcription","telecharger_modeles")}
+            lancer(f"/api/jobs/{collecte['id']}/video",options)
     if st.button("Lancer la collecte", type="primary", disabled=occupe):
         debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
         if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
@@ -112,63 +134,55 @@ with onglet_collecte:
                 medias=st.session_state.get("medias",[]) if source == "presse" else [])
             lancer("/api/jobs",valeurs)
 
-with onglet_video:
-    st.subheader("Comparer les vidéos")
-    st.caption("Ces méthodes s’appliquent aux vidéos des publications collectées, par lots bornés.")
-    sha = st.checkbox("SHA-256 — fichiers strictement identiques", value=True, key="comparer_sha256", disabled=occupe)
-    sequences = st.checkbox("pHash + ORB + temps — séquences communes ou recadrées", value=True, key="comparer_sequences", disabled=occupe)
-    st.caption("pHash présélectionne les images ; ORB vérifie leur géométrie ; l’alignement temporel vérifie la séquence.")
-    embeddings = st.checkbox("Similarité sémantique (embeddings visuels)", key="embeddings", disabled=occupe)
-    st.caption("Une ressemblance sémantique est distinguée d’un réemploi de séquence.")
-    with st.expander("Caractéristiques audiovisuelles"):
-        st.checkbox("Texte incrusté (OCR)", key="ocr", disabled=occupe)
-        st.checkbox("Piste audio et silences", key="audio", disabled=occupe)
-        st.checkbox("Transcription de la parole (Whisper)", key="transcription", disabled=occupe)
-        st.checkbox("Autoriser le téléchargement initial des modèles", key="telecharger_modeles", disabled=occupe)
-        st.caption("Les mesures et variables IRaMuTeQ sont codées automatiquement ; les valeurs inconnues et les confiances sont conservées.")
-    if not video_disponible:
-        st.info("L’analyse vidéo n’est pas activée sur ce serveur. Les options restent visibles ; la collecte textuelle fonctionne normalement.")
-        st.caption("Pour l’administrateur : reconstruire l’image avec l’argument INSTALL_VIDEO=1.")
-    elif not collecte.get("archive_prete"):
-        st.info("Terminez d’abord une collecte avec une archive enrichie, puis lancez l’analyse ici.")
-    if st.button("Analyser les vidéos", type="primary", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
-        options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences","embeddings","ocr","audio","transcription","telecharger_modeles")}
-        lancer(f"/api/jobs/{collecte['id']}/video",options)
 
-if collecte:
-    st.divider()
-    st.subheader("Résultats")
-    @st.fragment(run_every="1s")
-    def afficher_resultats():
-        precedent = st.session_state["collecte"]
-        try: actuel = api("/api/jobs/" + precedent["id"])
-        except RuntimeError as erreur:
-            st.warning(str(erreur)); return
-        st.session_state["collecte"] = actuel
-        # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
-        if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
-            st.rerun()
-        st.write(actuel["message"])
-        st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
-        if actuel["date_debut"] or actuel["date_fin"]:
-            st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
-        if actuel["busy"]:
-            st.progress(min(1.0,actuel["processed"]/max(1,actuel["discovered"])))
-            if st.button("Arrêter la collecte"): lancer(f"/api/jobs/{actuel['id']}/stop",{})
-        if actuel["video_statut"] != "non_lance":
-            libelles={"en_cours":"Analyse vidéo en cours…","termine":"Analyse vidéo terminée.","partiel":"Analyse vidéo partielle : voir le journal de l’archive.","interrompu":"Analyse interrompue ; dernière archive conservée.","echec":"Analyse vidéo en échec ; collecte conservée."}
-            st.write(libelles.get(actuel["video_statut"],actuel["video_statut"]))
-            if actuel.get("video_progression"):
-                st.caption(actuel["video_progression"].get("etape", ""))
-        if actuel["video_busy"] and st.button("Arrêter l’analyse vidéo"): lancer(f"/api/jobs/{actuel['id']}/video/stop",{})
-        liens = st.columns(2)
-        if actuel["can_download"]: liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
-        if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[1].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
-    afficher_resultats()
-    if st.session_state["collecte"].get("status") == "attention":
-        st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre.")
-        st.iframe("/classique?controle=1", height=850, alt="Navigateur TikTok du serveur")
-    with st.expander("Aperçu des textes"):
-        for publication in st.session_state["collecte"].get("preview",[]):
-            st.text("@" + publication["author"])
-            st.text(publication["description"])
+with onglet_collecte:
+    if collecte:
+        st.divider()
+        st.subheader("Résultats")
+        @st.fragment(run_every="1s")
+        def afficher_resultats():
+            precedent = st.session_state["collecte"]
+            try: actuel = api("/api/jobs/" + precedent["id"])
+            except RuntimeError as erreur:
+                st.warning(str(erreur)); return
+            st.session_state["collecte"] = actuel
+            # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
+            if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
+                st.rerun()
+            st.write(actuel["message"])
+            st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
+            if actuel["date_debut"] or actuel["date_fin"]:
+                st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
+            if actuel["busy"]:
+                st.progress(min(1.0,actuel["processed"]/max(1,actuel["discovered"])))
+                if st.button("Arrêter la collecte"): lancer(f"/api/jobs/{actuel['id']}/stop",{})
+            if actuel["video_statut"] != "non_lance":
+                libelles={"en_cours":"Analyse vidéo en cours…","termine":"Analyse vidéo terminée.","partiel":"Analyse vidéo partielle : voir le journal de l’archive.","interrompu":"Analyse interrompue ; dernière archive conservée.","echec":"Analyse vidéo en échec ; collecte conservée."}
+                st.write(libelles.get(actuel["video_statut"],actuel["video_statut"]))
+                if actuel.get("video_progression"):
+                    st.caption(actuel["video_progression"].get("etape", ""))
+            if actuel["video_busy"] and st.button("Arrêter l’analyse vidéo"): lancer(f"/api/jobs/{actuel['id']}/video/stop",{})
+            liens = st.columns(2)
+            if actuel["can_download"]: liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
+            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[1].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
+        afficher_resultats()
+        if st.session_state["collecte"].get("status") == "attention":
+            st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre.")
+            st.iframe("/classique?controle=1", height=850, alt="Navigateur TikTok du serveur")
+        with st.expander("Aperçu des textes"):
+            for publication in st.session_state["collecte"].get("preview",[]):
+                st.text("@" + publication["author"])
+                st.text(publication["description"])
+
+with onglet_aide:
+    st.subheader("Comment utiliser l’application")
+    st.markdown("1. Choisissez vos hashtags ou vos médias et vos filtres.\n"
+                "2. Lancez la collecte ; validez TikTok dans la fenêtre intégrée si demandé.\n"
+                "3. Téléchargez le TXT. Pour comparer les vidéos, ouvrez **Options vidéo**, choisissez les méthodes et cliquez sur **Analyser les vidéos** après la collecte enrichie.")
+    st.subheader("Les méthodes, simplement")
+    st.markdown("- **SHA-256** : une empreinte du fichier complet. Elle repère les copies strictement identiques ; un réencodage change l’empreinte.\n"
+                "- **pHash** : une empreinte de l’apparence des images. Elle présélectionne les images ressemblantes.\n"
+                "- **ORB** : compare des points visuels caractéristiques et leur disposition pour vérifier les images communes, y compris certains recadrages.\n"
+                "- **Comparaison temporelle** : vérifie que plusieurs images communes se suivent dans le même ordre. pHash, ORB et le temps travaillent ensemble pour détecter un réemploi de séquence.\n"
+                "- **Embeddings** : détectent une ressemblance de contenu ou de scène. Cela ne prouve pas qu’une même séquence a été réutilisée.")
+    st.caption("Le TXT contient les légendes. Le ZIP enrichi rassemble les données, les mesures et les résultats vidéo. Les valeurs indéterminées et les scores de confiance sont conservés ; aucun résultat ne garantit une collecte exhaustive.")

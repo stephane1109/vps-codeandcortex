@@ -37,7 +37,7 @@ def installer_passerelle(app):
     def adresse():
         return "127.0.0.1:" + str(int(os.getenv("STREAMLIT_PORT", "8502")))
 
-    @app.api_route("/interface/{chemin:path}", methods=["GET", "HEAD", "POST", "DELETE", "OPTIONS"])
+    @app.api_route("/{chemin:path}", methods=["GET", "HEAD", "POST", "DELETE", "OPTIONS"])
     async def relayer_http(request: Request, chemin: str):
         if os.getenv("UI_STREAMLIT", "0") != "1": return Response(status_code=404)
         entetes = {k:v for k,v in request.headers.items() if k.lower() not in EXCLUS}
@@ -50,7 +50,7 @@ def installer_passerelle(app):
         async for morceau in request.stream():
             corps.extend(morceau)
             if len(corps) > 1024**2: return Response("Requête trop volumineuse.", status_code=413)
-        url = "http://" + adresse() + "/interface/" + chemin
+        url = "http://" + adresse() + "/" + chemin
         try:
             async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
                 resultat = await client.request(request.method, url, params=request.query_params, headers=entetes, content=bytes(corps))
@@ -61,7 +61,9 @@ def installer_passerelle(app):
             if cle.lower() not in EXCLUS: reponse.headers.append(cle,valeur)
         return reponse
 
-    @app.websocket("/interface/{chemin:path}")
+    app.state.relayer_streamlit = relayer_http
+
+    @app.websocket("/{chemin:path}")
     async def relayer_websocket(navigateur: WebSocket, chemin: str):
         session = navigateur.cookies.get("scraptiktok_session", "")
         if (os.getenv("UI_STREAMLIT", "0") != "1" or not mot_de_passe_valide(navigateur.headers)
@@ -69,7 +71,7 @@ def installer_passerelle(app):
             await navigateur.close(code=1008); return
         entetes = {k:navigateur.headers[k] for k in ("cookie", "authorization", "user-agent") if k in navigateur.headers}
         protocoles = [p.strip() for p in navigateur.headers.get("sec-websocket-protocol", "").split(",") if p.strip()]
-        url = "ws://" + adresse() + "/interface/" + chemin
+        url = "ws://" + adresse() + "/" + chemin
         if navigateur.url.query: url += "?" + navigateur.url.query
         try:
             async with connect(url, additional_headers=entetes, subprotocols=protocoles, origin="http://" + adresse(), max_size=16*1024**2, open_timeout=10, proxy=None) as serveur:
