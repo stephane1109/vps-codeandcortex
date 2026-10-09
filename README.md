@@ -343,16 +343,19 @@ L’accueil utilise désormais `streamlit_app.py` : deux onglets **Collecte** et
 **Aide**. Les méthodes sont regroupées dans le menu à déplier
 **Options vidéo (facultatif)** de l’onglet Collecte, même sans collecte et même si les
 bibliothèques vidéo sont absentes. L’aide résume SHA-256, pHash, ORB, la comparaison
-temporelle et les embeddings. Un message explique alors pourquoi le lancement est indisponible.
-Les cases **SHA-256 — fichiers strictement identiques** et **pHash + ORB + temps —
-séquences communes ou recadrées** activent réellement les méthodes correspondantes.
+temporelle. Aucun réglage d’installation ou de téléchargement de modèles n’apparaît
+dans le formulaire.
+Les cases **Repérer les fichiers identiques (SHA-256)** et
+**Repérer les séquences communes (pHash + ORB)** activent réellement les méthodes correspondantes.
 La validation géométrique et temporelle reste associée à pHash : une seule image
 ressemblante n’est pas présentée comme une séquence réemployée.
 
 Une collecte enrichie est requise avant d’analyser ses vidéos. Elle est cochée par
-défaut dans Streamlit ; les commentaires restent facultatifs. Les options OCR, audio,
-Whisper et téléchargement des modèles sont dans l’expandeur audiovisuel. Les embeddings
-ont leur propre case et ne sont jamais assimilés à un réemploi. Désactiver la comparaison
+défaut dans Streamlit ; les commentaires restent facultatifs. Le bouton **Comparer les
+vidéos** lance les méthodes choisies. Les fonctions OCR, audio, Whisper et embeddings
+restent disponibles via l’API et le traitement par lots avec le profil avancé ; elles
+ne sont plus exposées dans le formulaire minimaliste. La comparaison sémantique reste
+distincte du réemploi dans les résultats. Désactiver la comparaison
 de séquences laisse la variable de réemploi indéterminée pour les fichiers distincts.
 Les méthodes choisies sont conservées dans les paramètres et les comparaisons JSON.
 SHA-256 reste calculé pour identifier le cache, même quand sa comparaison est désactivée.
@@ -376,7 +379,12 @@ conservés ; ET/OU se choisit maintenant directement dans le formulaire Streamli
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
 ne charge pas OpenCV, Whisper ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
-La CI teste les deux profils Docker, l’ancienne fenêtre de contrôle et le nouveau
+Le déploiement Docker standard installe la comparaison de base (SHA-256/pHash/ORB)
+sans modèle lourd : `INSTALL_VIDEO=base`. Le profil `1` conserve les dépendances
+avancées. La disponibilité est vérifiée à partir des outils réellement installés.
+En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
+drapeau supplémentaire n’est nécessaire.
+La CI teste les trois profils Docker, l’ancienne fenêtre de contrôle et le nouveau
 parcours Streamlit, avec une source synthétique hors TikTok.
 
 Références d’intégration : [fragments Streamlit](https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment)
