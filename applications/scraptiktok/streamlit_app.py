@@ -103,15 +103,17 @@ with onglet_collecte:
         st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
     with st.expander("Options vidéo (facultatif)"):
-        st.checkbox("Repérer les fichiers identiques (SHA-256)", value=True, key="comparer_sha256", disabled=occupe)
-        st.checkbox("Repérer les séquences communes (pHash + ORB)", value=True, key="comparer_sequences", disabled=occupe)
-        if not video_disponible:
-            st.info("La comparaison vidéo est momentanément indisponible.")
-        elif not collecte.get("archive_prete"):
-            st.caption("Disponible après une collecte avec l’archive enrichie.")
-        if st.button("Comparer les vidéos", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
-            options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences")}
-            lancer(f"/api/jobs/{collecte['id']}/video",options)
+        # Le formulaire transmet les choix avec le clic, sans course entre réexécutions.
+        with st.form("comparaison_video", border=False):
+            st.checkbox("Repérer les fichiers identiques (SHA-256)", value=True, key="comparer_sha256", disabled=occupe)
+            st.checkbox("Repérer les séquences communes (pHash + ORB)", value=True, key="comparer_sequences", disabled=occupe)
+            if not video_disponible:
+                st.info("La comparaison vidéo est momentanément indisponible.")
+            elif not collecte.get("archive_prete"):
+                st.caption("Disponible après une collecte avec l’archive enrichie.")
+            if st.form_submit_button("Comparer les vidéos", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
+                options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences")}
+                lancer(f"/api/jobs/{collecte['id']}/video",options)
     if st.button("Lancer la collecte", type="primary", disabled=occupe):
         debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
         if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
