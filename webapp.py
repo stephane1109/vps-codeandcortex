@@ -705,7 +705,7 @@ def create_app(manager=None):
                 accepted = False
             if not accepted:
                 return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ScrapTikTok"'})
-        if request.method == "POST" and not request.url.path.startswith("/interface/"):
+        if request.method == "POST" and not (os.getenv("UI_STREAMLIT", "0") == "1" and request.url.path.startswith("/_stcore/")):
             # Les requêtes de mutation viennent uniquement de notre propre page.
             if request.headers.get("x-scraptiktok") != "1":
                 return JSONResponse({"detail": "Requête non autorisée."}, status_code=403)
@@ -713,7 +713,7 @@ def create_app(manager=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
-        if request.url.path.startswith("/interface/"):
+        if os.getenv("UI_STREAMLIT", "0") == "1" and not request.url.path.startswith(("/api/", "/classique", "/healthz", "/static/app.js", "/static/style.css")):
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'"
             return response
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'"
@@ -730,14 +730,14 @@ def create_app(manager=None):
         if os.getenv("UI_STREAMLIT", "0") == "1":
             import urllib.request
             try:
-                with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/interface/_stcore/health",timeout=2): pass
+                with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/_stcore/health",timeout=2): pass
             except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
         return {"status": "ok"}
 
     @app.get("/")
     @app.get("/classique")
-    def home(request: Request):
-        response = (RedirectResponse("/interface/", status_code=302) if request.url.path == "/" and os.getenv("UI_STREAMLIT", "0") == "1" else FileResponse(scraper.BASE_DIR / "static" / "index.html"))
+    async def home(request: Request):
+        response = (await app.state.relayer_streamlit(request, "") if request.url.path == "/" and os.getenv("UI_STREAMLIT", "0") == "1" else FileResponse(scraper.BASE_DIR / "static" / "index.html"))
         if not request.cookies.get(COOKIE):
             response.set_cookie(COOKIE, secrets.token_hex(32), httponly=True, samesite="strict",
                                 secure=os.getenv("COOKIE_SECURE", "0") == "1", max_age=86400)
@@ -848,9 +848,24 @@ def create_app(manager=None):
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
 
     if os.getenv("UI_STREAMLIT", "0") == "1":
+        @app.get("/interface")
+        @app.get("/interface/")
+        def ancienne_adresse():
+            return RedirectResponse("/", status_code=302)
+
+        # Les deux ressources historiques restent disponibles pour le contrôleur intégré.
+        @app.get("/static/app.js")
+        def script_classique():
+            return FileResponse(scraper.BASE_DIR / "static" / "app.js")
+
+        @app.get("/static/style.css")
+        def style_classique():
+            return FileResponse(scraper.BASE_DIR / "static" / "style.css")
+
         from interface.passerelle import installer_passerelle
         installer_passerelle(app)
-    app.mount("/static", StaticFiles(directory=scraper.BASE_DIR / "static"), name="static")
+    else:
+        app.mount("/static", StaticFiles(directory=scraper.BASE_DIR / "static"), name="static")
     return app
 
 

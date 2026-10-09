@@ -20,6 +20,9 @@ class TestsInterface(unittest.TestCase):
         with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
             page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.exception)
+            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Aide'])
+            self.assertTrue(any(e.label=='Options vidéo (facultatif)' for e in page.tabs[0].expander))
+            self.assertTrue(any('ORB' in m.value and 'SHA-256' in m.value for m in page.tabs[1].markdown))
             self.assertTrue(page.checkbox(key='comparer_sha256').value)
             self.assertTrue(page.checkbox(key='comparer_sequences').value)
             self.assertTrue(any('pas activée' in i.value for i in page.info))

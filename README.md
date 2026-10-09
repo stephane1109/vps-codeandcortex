@@ -340,9 +340,10 @@ Une période inversée ou une date invalide est refusée.
 ## Interface Streamlit et méthodes visibles
 
 L’accueil utilise désormais `streamlit_app.py` : deux onglets **Collecte** et
-**Vidéo · SHA-256 / pHash / ORB**, sans les anciennes cartes d’introduction. L’onglet
-vidéo est visible dès l’ouverture, même sans collecte et même si les bibliothèques
-vidéo sont absentes. Un message explique alors pourquoi le lancement est indisponible.
+**Aide**. Les méthodes sont regroupées dans le menu à déplier
+**Options vidéo (facultatif)** de l’onglet Collecte, même sans collecte et même si les
+bibliothèques vidéo sont absentes. L’aide résume SHA-256, pHash, ORB, la comparaison
+temporelle et les embeddings. Un message explique alors pourquoi le lancement est indisponible.
 Les cases **SHA-256 — fichiers strictement identiques** et **pHash + ORB + temps —
 séquences communes ou recadrées** activent réellement les méthodes correspondantes.
 La validation géométrique et temporelle reste associée à pHash : une seule image
@@ -358,9 +359,10 @@ SHA-256 reste calculé pour identifier le cache, même quand sa comparaison est 
 Le décodage des images reste utilisé pour le codage des caractéristiques audiovisuelles.
 
 `lancer_interface.py` démarre FastAPI sur le port public et Streamlit sur un port local
-privé. `interface/passerelle.py` relaie HTTP et WebSocket sous `/interface/`, avec cookie
+privé. `interface/passerelle.py` relaie HTTP et WebSocket à la racine du domaine, avec cookie
 privé, contrôle d’origine et protection HTTP optionnelle conservés. Aucun port additionnel
-n’est à exposer. Les téléchargements restent des routes FastAPI privées ; les données
+n’est à exposer. L’adresse reste `https://scraptiktok.codeandcortex.fr/` ; les anciens
+liens `/interface/` redirigent vers `/`. Les téléchargements restent des routes FastAPI privées ; les données
 utilisateur ne sont pas placées dans un cache Streamlit partagé. Une fenêtre intégrée
 réutilise le contrôleur de navigateur testé : elle n’est pas recréée à chaque image.
 Le CAPTCHA reste à traiter par l’utilisateur, dans le navigateur du serveur.

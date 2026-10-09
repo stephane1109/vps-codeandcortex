@@ -22,6 +22,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as conditions
 import scraptiktok as moteur
 import webapp as web
 from smoke_browser import TAG, CAPTION
@@ -60,11 +61,14 @@ def principale():
                 if requete.url.path.startswith('/fixture/'):
                     reponse.headers['Content-Security-Policy']="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
                 return reponse
+            # Les pages synthétiques précèdent le relais général de Streamlit.
+            relais=[route for route in app.router.routes if getattr(route, 'path', None)=='/{chemin:path}']
+            app.router.routes[:]=[route for route in app.router.routes if route not in relais]+relais
             serveur=uvicorn.Server(uvicorn.Config(app,log_level='warning'))
             fil=threading.Thread(target=lambda:serveur.run(sockets=[ecoute]),daemon=True); fil.start()
             journal=open(Path(temporaire)/'streamlit.log','w+')
             processus=subprocess.Popen([sys.executable,'-m','streamlit','run','streamlit_app.py','--server.address=127.0.0.1',f'--server.port={port_streamlit}',
-                '--server.baseUrlPath=interface','--server.headless=true','--server.fileWatcherType=none','--browser.gatherUsageStats=false','--client.toolbarMode=minimal'],stdout=journal,stderr=subprocess.STDOUT)
+                '--server.headless=true','--server.fileWatcherType=none','--browser.gatherUsageStats=false','--client.toolbarMode=minimal'],stdout=journal,stderr=subprocess.STDOUT)
             navigateur=None
             try:
                 for _ in range(100):
@@ -86,10 +90,15 @@ def principale():
                 def faux_traitement(tache,options):
                     tache.update(video_statut='termine',video_busy=False)
                 with patch.object(moteur,'open_page',side_effect=rediriger),patch.object(web,'executer_video',side_effect=faux_traitement) as video,patch.object(web,'wait_for_user',wraps=web.wait_for_user) as interventions:
-                    navigateur.get(origine)
+                    navigateur.get(origine+'/interface/')
                     attente.until(lambda d:'Lancer la collecte' in d.find_element(By.TAG_NAME,'body').text)
-                    assert '/interface/' in navigateur.current_url
+                    assert navigateur.current_url==origine+'/'
                     onglet(1)
+                    attente.until(lambda d:'Les méthodes, simplement' in d.find_element(By.TAG_NAME,'body').text)
+                    assert 'ORB' in navigateur.find_element(By.TAG_NAME,'body').text
+                    navigateur.save_screenshot('/tmp/scraptiktok-aide.png')
+                    onglet(0)
+                    navigateur.find_element(By.XPATH,"//summary[contains(.,'Options vidéo (facultatif)')]").click()
                     attente.until(lambda d:'SHA-256 — fichiers strictement identiques' in d.find_element(By.TAG_NAME,'body').text)
                     assert 'pHash + ORB + temps' in navigateur.find_element(By.TAG_NAME,'body').text
                     assert not bouton('Analyser les vidéos').is_enabled()
@@ -147,8 +156,9 @@ def principale():
                     assert CAPTION in requete(f'/api/jobs/{identifiant}/download')
                     archive=requete(f'/api/jobs/{identifiant}/archive',binaire=True)
                     with zipfile.ZipFile(io.BytesIO(archive)) as z: assert 'publications.json' in z.namelist()
-                    onglet(1)
-                    case=navigateur.find_element(By.XPATH,"//label[contains(.,'pHash + ORB + temps')]")
+                    panneau=navigateur.find_element(By.XPATH,"//details[summary[contains(.,'Options vidéo (facultatif)')]]")
+                    if panneau.get_attribute('open') is None: panneau.find_element(By.TAG_NAME,'summary').click()
+                    case=attente.until(conditions.element_to_be_clickable((By.XPATH,"//label[contains(.,'pHash + ORB + temps')]")))
                     case.click()
                     attente.until(lambda d:bouton('Analyser les vidéos').is_enabled())
                     bouton('Analyser les vidéos').click()
