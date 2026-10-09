@@ -24,7 +24,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 from selenium.webdriver.common.action_chains import ActionChains
@@ -227,6 +227,12 @@ class Job:
 
     def snapshot(self):
         with self.lock:
+            progression = None
+            if self.video_busy:
+                try:
+                    etat = json.loads((self.directory / "traitement_video.json").read_text())
+                    progression = {cle:etat.get(cle) for cle in ("etape","videos_analysees","comparaisons")}
+                except (OSError, ValueError): pass
             return {"id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
@@ -238,7 +244,9 @@ class Job:
                     "source_collecte": self.settings.source_collecte, "comptes": self.settings.comptes,
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
-                    "archive_prete": self.archive_prete, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": os.getenv("INSTALL_VIDEO", "0") == "1",
+                    "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
+                    "limite_commentaires":self.settings.limite_commentaires,
+                    "archive_prete": self.archive_prete, "video_progression":progression, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": os.getenv("INSTALL_VIDEO", "0") == "1",
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
@@ -622,6 +630,8 @@ class Manager:
 
 
 class OptionsVideo(BaseModel):
+    comparer_sha256: bool = True
+    comparer_sequences: bool = True
     audio: bool = False
     ocr: bool = False
     transcription: bool = False
@@ -688,7 +698,7 @@ def create_app(manager=None):
                 accepted = False
             if not accepted:
                 return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ScrapTikTok"'})
-        if request.method == "POST":
+        if request.method == "POST" and not request.url.path.startswith("/interface/"):
             # Les requêtes de mutation viennent uniquement de notre propre page.
             if request.headers.get("x-scraptiktok") != "1":
                 return JSONResponse({"detail": "Requête non autorisée."}, status_code=403)
@@ -696,6 +706,9 @@ def create_app(manager=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
+        if request.url.path.startswith("/interface/"):
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'"
+            return response
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'"
         return response
 
@@ -707,11 +720,17 @@ def create_app(manager=None):
 
     @app.get("/healthz")
     def health():
+        if os.getenv("UI_STREAMLIT", "0") == "1":
+            import urllib.request
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/interface/_stcore/health",timeout=2): pass
+            except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
         return {"status": "ok"}
 
     @app.get("/")
+    @app.get("/classique")
     def home(request: Request):
-        response = FileResponse(scraper.BASE_DIR / "static" / "index.html")
+        response = (RedirectResponse("/interface/", status_code=302) if request.url.path == "/" and os.getenv("UI_STREAMLIT", "0") == "1" else FileResponse(scraper.BASE_DIR / "static" / "index.html"))
         if not request.cookies.get(COOKIE):
             response.set_cookie(COOKIE, secrets.token_hex(32), httponly=True, samesite="strict",
                                 secure=os.getenv("COOKIE_SECURE", "0") == "1", max_age=86400)
@@ -750,6 +769,11 @@ def create_app(manager=None):
         if job.busy or job.video_busy or not job.archive_prete:
             raise HTTPException(409, "L’archive enrichie n’est pas encore disponible.")
         return FileResponse(job.directory / "archive.zip", filename=f"scraptiktok_{job.id}.zip", media_type="application/zip")
+
+    @app.get("/api/configuration")
+    def configuration_interface(request: Request):
+        owner(request)
+        return {"video_disponible":os.getenv("INSTALL_VIDEO", "0") == "1"}
 
     @app.get("/api/session")
     def session(request: Request):
@@ -816,6 +840,9 @@ def create_app(manager=None):
         return Response(job.path.read_bytes(), media_type="text/plain; charset=utf-8",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
 
+    if os.getenv("UI_STREAMLIT", "0") == "1":
+        from interface.passerelle import installer_passerelle
+        installer_passerelle(app)
     app.mount("/static", StaticFiles(directory=scraper.BASE_DIR / "static"), name="static")
     return app
 

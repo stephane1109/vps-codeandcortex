@@ -40,7 +40,7 @@ jobs:
       - name: Verify tests and browser flow as the application user
         run: |
           docker run --rm --shm-size=1g --user root --entrypoint /bin/sh scraptiktok-ci -c \
-            'pip install -r requirements-dev.txt && su -s /bin/sh app -c "python -m unittest discover -s tests -v && xvfb-run -a -s \"-screen 0 1440x1000x24\" python tests/smoke_browser.py"'
+            'pip install -r requirements-dev.txt && su -s /bin/sh app -c "python -m unittest discover -s tests -v && xvfb-run -a -s \"-screen 0 1440x1000x24\" python tests/smoke_browser.py && xvfb-run -a python tests/smoke_streamlit.py"'
       - name: Production logs
         if: always()
         run: docker logs scraptiktok-health || true

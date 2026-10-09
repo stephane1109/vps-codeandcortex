@@ -4,11 +4,17 @@ from .comparaison_orb import comparer_orb
 from .comparaison_temporelle import aligner_sequences
 from .embeddings import comparer_embeddings
 
-def comparer_videos(a,b,seuils,verifier=lambda:None):
+def comparer_videos(a,b,seuils,verifier=lambda:None,options=None):
+    options = options or {}
     resultat={"a":a["id"],"b":b["id"],"media_a":a.get("media_id"),"media_b":b.get("media_id"),
               "type":"indetermine","confiance":None,"segments":[],"comparaisons":[],"tronque":False}
-    if a["sha256"]==b["sha256"]:
+    resultat["methodes"] = {"sha256":options.get("comparer_sha256",True), "phash_orb_temporel":options.get("comparer_sequences",True)}
+    resultat["cosinus_semantique"]=comparer_embeddings(a.get("embedding",{}),b.get("embedding",{}))
+    resultat["semantiquement_similaires"]=(resultat["cosinus_semantique"]>=seuils["cosinus_semantique"] if resultat["cosinus_semantique"] is not None else None)
+    if options.get("comparer_sha256",True) and a["sha256"]==b["sha256"]:
         return {**resultat,"type":"fichier_identique","confiance":1.0,"preuve":"sha256"}
+    if not options.get("comparer_sequences",True):
+        return {**resultat,"type":"comparaison_sequences_desactivee"}
     candidats=[]
     for i,ia in enumerate(a["images"]):
         distances=sorted((distance_phash(ia["phash"],ib["phash"]),j) for j,ib in enumerate(b["images"]))

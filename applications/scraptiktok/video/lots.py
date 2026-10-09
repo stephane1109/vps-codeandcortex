@@ -98,7 +98,7 @@ def traiter_lot(dossier, parametres, seuils):
                                 except Exception as erreur: indicateurs["transcription"]={"statut":"indetermine","raison":type(erreur).__name__,"segments":[],"parole":None}
                         except Exception as erreur: indicateurs["audio"]={"statut":"indetermine","raison":type(erreur).__name__,"presence":None}
                     resultat={"sha256":sha,"duree_s":extraction["duree_s"],"pas_s":extraction["pas_s"],"tronque":extraction["tronque"],
-                        "images":[{"temps_s":e["temps_s"],"phash":calculer_phash(e["image"]),"orb":extraire_orb(e["image"])} for e in extraction["images"]],
+                        "images":[{"temps_s":e["temps_s"],"phash":calculer_phash(e["image"]),"orb":extraire_orb(e["image"])} for e in extraction["images"]] if parametres.get("comparer_sequences",True) else [],
                         "indicateurs":indicateurs,"embedding":embedding}
                     del extraction
                     # Les modules activés mais indisponibles sont réessayés au prochain lot.
@@ -119,14 +119,14 @@ def traiter_lot(dossier, parametres, seuils):
                 verifier()
                 if len(comparaisons)>=parametres["paires_max"]: break
                 etat("en_cours","comparaison " + a["id"] + " / " + b["id"])
-                comparaisons.append(comparer_videos(a,b,seuils,verifier))
+                comparaisons.append(comparer_videos(a,b,seuils,verifier,parametres))
                 exporter_json(dossier / "comparaisons.json",comparaisons)
     except TimeoutError as erreur: erreurs.append({"raison":str(erreur),"type":"limite_temps"})
     analyses_ids={a["id"] for a in analyses}
     ids_reemploi={c[k] for c in comparaisons if c["type"] in TYPES_REEMPLOI for k in ("a","b")}
     # Une absence de lien n’est interprétable que si toutes les paires du lot sont examinées.
     complet=(len(analyses)==len(publications) and len(comparaisons)==len(analyses)*(len(analyses)-1)//2 and not erreurs and not any(a.get("tronque") for a in analyses) and not any(c.get("tronque") or c["type"]=="indetermine" for c in comparaisons))
-    codes=[coder_variables(p,mesures.get(p["id"]),True if p["id"] in ids_reemploi else False if complet and len(analyses)>1 else None) for p in publications]
+    codes=[coder_variables(p,mesures.get(p["id"]),True if p["id"] in ids_reemploi else False if complet and len(analyses)>1 and parametres.get("comparer_sequences",True) else None) for p in publications]
     variables={c["publication_id"]:c["variables"] for c in codes}
     groupes=regrouper_videos(comparaisons)
     exporter_json(dossier / "groupes_visuels.json",groupes)
