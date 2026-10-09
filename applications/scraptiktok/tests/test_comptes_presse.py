@@ -6,7 +6,11 @@ from webapp import StartRequest
 class TestsComptes(unittest.TestCase):
     def test_normalisation_et_validation(self):
         self.assertEqual(normaliser_compte("https://www.tiktok.com/@LeMondeFR/"), "lemondefr")
-        for valeur in ("https://evil.test/@media", "../etc", "@", "a/b"):
+        self.assertEqual(normaliser_compte("@.sofino"), ".sofino")
+        self.assertEqual(normaliser_compte("https://www.tiktok.com/@.sofino/"), ".sofino")
+        self.assertEqual(normaliser_compte("@rtl.officiel"), "rtl.officiel")
+        self.assertEqual(normaliser_compte("@streetpress_"), "streetpress_")
+        for valeur in ("https://evil.test/@media", "../etc", "@", "a/b", "@compte.", "..", "a"*25):
             with self.assertRaises(ValueError): normaliser_compte(valeur)
     def test_inventaire_et_sources(self):
         inventaire = charger_inventaire()

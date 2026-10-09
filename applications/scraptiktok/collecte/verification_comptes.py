@@ -10,7 +10,7 @@ def normaliser_compte(valeur):
             raise ValueError("Indiquez un identifiant ou une URL de profil TikTok.")
         valeur = url.path.strip("/")
     valeur = valeur.removeprefix("@")
-    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.]{1,23}", valeur) or valeur.endswith("."):
+    if not re.fullmatch(r"[A-Za-z0-9_.]{2,24}", valeur) or valeur.endswith("."):
         raise ValueError("Identifiant TikTok invalide (2 à 24 lettres, chiffres, points ou tirets bas).")
     return valeur.lower()
 
