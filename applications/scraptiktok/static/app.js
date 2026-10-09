@@ -110,7 +110,7 @@ async function startSearch(settings) {
 }
 $("search-form").addEventListener("submit", event => {
   event.preventDefault(); errorAt("form-error", "");
-  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, french_only: $("french-only").checked, date_debut: $("date-debut").value || null, date_fin: $("date-fin").value || null,
+  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, inclure_metadonnees_txt: $("inclure-metadonnees-txt").checked, french_only: $("french-only").checked, date_debut: $("date-debut").value || null, date_fin: $("date-fin").value || null,
     source_collecte: $("source-collecte").value, comptes: $("comptes").value.split(/[\s,;]+/).filter(Boolean),
     medias: Array.from(document.querySelectorAll('#liste-presse input:checked')).map(e => e.value),
     enrichir: $("enrichir").checked, collecter_commentaires: $("collecter-commentaires").checked,
@@ -251,6 +251,6 @@ api("/api/presse").then(data => {
     label.append(input, texte); $("liste-presse").append(label);
   });
 }).catch(erreur => errorAt("form-error", erreur.message));
-api("/api/session").then(data => { if (data.job) { $("date-debut").value = data.job.date_debut || ""; $("date-fin").value = data.job.date_fin || ""; $("periode-options").open = !!(data.job.date_debut || data.job.date_fin); $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
+api("/api/session").then(data => { if (data.job) { $("date-debut").value = data.job.date_debut || ""; $("date-fin").value = data.job.date_fin || ""; $("periode-options").open = !!(data.job.date_debut || data.job.date_fin); $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; $("inclure-metadonnees-txt").checked = !!data.job.inclure_metadonnees_txt; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
 setInterval(updateFrame, 350);
