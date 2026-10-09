@@ -100,12 +100,12 @@ def principale():
                     onglet(0)
                     navigateur.find_element(By.XPATH,"//summary[contains(.,'Options vidéo (facultatif)')]").click()
                     attente.until(lambda d:'Repérer les fichiers identiques (SHA-256)' in d.find_element(By.TAG_NAME,'body').text)
-                    assert 'Repérer les séquences communes (pHash + ORB)' in navigateur.find_element(By.TAG_NAME,'body').text
+                    attente.until(lambda d:'Repérer les séquences communes (pHash + ORB)' in d.find_element(By.TAG_NAME,'body').text and 'Comparer les vidéos' in d.find_element(By.TAG_NAME,'body').text)
                     assert not bouton('Comparer les vidéos').is_enabled()
                     onglet(0)
                     navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Presse et médias']]").click()
                     attente.until(lambda d:'Le Parisien (@leparisien)' in d.find_element(By.TAG_NAME,'body').text)
-                    assert '20 Minutes (@20minutesfrance)' in navigateur.find_element(By.TAG_NAME,'body').text
+                    attente.until(lambda d:'20 Minutes (@20minutesfrance)' in d.find_element(By.TAG_NAME,'body').text)
                     navigateur.save_screenshot('/tmp/scraptiktok-presse.png')
                     navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Hashtags']]").click()
                     attente.until(lambda d:'Hashtag facultatif' not in d.find_element(By.TAG_NAME,'body').text)
