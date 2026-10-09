@@ -1,6 +1,10 @@
 """Interface web : un navigateur isolé par collecte, piloté uniquement par son worker."""
 from __future__ import annotations
 
+import json
+import signal
+import subprocess
+import sys
 import argparse
 import base64
 import hmac
@@ -22,7 +26,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
@@ -35,7 +39,14 @@ COOKIE = "scraptiktok_session"
 
 
 class StartRequest(BaseModel):
-    hashtag: str = Field(min_length=1, max_length=100)
+    hashtag: str = Field(default="", max_length=100)
+    source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
+    comptes: list[str] = Field(default_factory=list, max_length=10)
+    medias: list[str] = Field(default_factory=list, max_length=10)
+    enrichir: bool = False
+    collecter_commentaires: bool = False
+    collecter_reponses: bool = False
+    limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     operator: Literal["AND", "OR"] = "AND"
     limit: int = Field(default=50, ge=1, le=300)
@@ -45,6 +56,7 @@ class StartRequest(BaseModel):
     @field_validator("hashtag")
     @classmethod
     def valid_hashtag(cls, value):
+        if not value.strip(): return ""
         try:
             return scraper.normalize_hashtag(value)
         except argparse.ArgumentTypeError as exc:
@@ -55,6 +67,43 @@ class StartRequest(BaseModel):
     def valid_second_hashtag(cls, value):
         return cls.valid_hashtag(value) if value.strip() else ""
 
+    @field_validator("comptes")
+    @classmethod
+    def valider_comptes(cls, valeurs):
+        from collecte.verification_comptes import normaliser_compte
+        return list(dict.fromkeys(normaliser_compte(v) for v in valeurs))
+
+    @model_validator(mode="after")
+    def valider_sources(self):
+        if self.source_collecte == "hashtags" and not self.hashtag:
+            raise ValueError("Le premier hashtag est obligatoire.")
+        if self.second_hashtag and not self.hashtag:
+            raise ValueError("Renseignez le premier hashtag avant le deuxième.")
+        if self.source_collecte == "comptes" and not self.comptes:
+            raise ValueError("Renseignez au moins un compte TikTok.")
+        if self.source_collecte == "presse":
+            from collecte.presse import selectionner_medias
+            if not self.medias: raise ValueError("Sélectionnez au moins un média.")
+            selectionner_medias(self.medias)
+        if self.collecter_reponses: self.collecter_commentaires = True
+        return self
+
+    @property
+    def enrichie(self):
+        return self.enrichir or self.source_collecte != "hashtags" or self.collecter_commentaires
+
+    @property
+    def libelle(self):
+        if self.source_collecte == "hashtags":
+            return (" OU " if self.operator == "OR" else " ET ").join("#" + h for h in self.hashtags)
+        return ", ".join("@" + s["compte"] for s in self.sources)
+
+    @property
+    def sources(self):
+        from collecte.presse import selectionner_medias
+        if self.source_collecte == "presse": return selectionner_medias(self.medias)
+        return [{"compte": c, "id": None, "categorie": None} for c in self.comptes]
+
     @property
     def hashtags(self):
         return list({tag_key(tag): tag for tag in [self.hashtag, self.second_hashtag] if tag}.values())
@@ -62,7 +111,7 @@ class StartRequest(BaseModel):
     @property
     def filename(self):
         joiner = "_ET_" if self.operator == "AND" else "_OU_"
-        return "tiktok_" + joiner.join(self.hashtags) + ("_fr" if self.french_only else "") + ".txt"
+        return "tiktok_" + (joiner.join(self.hashtags) if self.source_collecte == "hashtags" else "comptes_" + "_".join(s["compte"] for s in self.sources)[:100]) + ("_fr" if self.french_only else "") + ".txt"
 
 
 def tag_key(value):
@@ -70,7 +119,7 @@ def tag_key(value):
 
 
 def matches_hashtags(description, settings):
-    if not settings.second_hashtag:
+    if not settings.second_hashtag and (settings.source_collecte == "hashtags" or not settings.hashtag):
         return True  # Conserver le comportement historique de la recherche simple.
     present = set(re.findall(r"#(\w+)", tag_key(description)))
     matches = [tag_key(tag) in present for tag in settings.hashtags]
@@ -116,8 +165,13 @@ class Job:
         self.id = uuid.uuid4().hex
         self.owner = owner
         self.settings = settings
-        self.directory = data_dir / self.id
-        self.directory.mkdir(parents=True)
+        self.racine = data_dir
+        if settings.enrichie:
+            from stockage.sessions import creer_dossier_session
+            self.directory = creer_dossier_session(data_dir, self.id)
+        else:
+            self.directory = data_dir / self.id
+        self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "textes.txt"
         self.lock = threading.RLock()
         self.stop = threading.Event()
@@ -138,6 +192,21 @@ class Job:
         self.frame = b""
         self.action_error = ""
         self.thread = None
+        self.publications = []
+        self.commentaires = []
+        self.journal = []
+        self.archive_prete = False
+        self.video_busy = False
+        self.video_statut = "non_lance"
+        self.video_stop = threading.Event()
+        self.video_process = None
+        self.video_thread = None
+        self.video_debut = None
+        self.base = None
+        if settings.enrichie:
+            from stockage.base_donnees import BaseDonnees
+            self.base = BaseDonnees(data_dir / "scraptiktok.sqlite")
+            self.base.creer_session(self.id, owner, scraper.utc_now(), settings.model_dump())
 
     def update(self, **values):
         with self.lock:
@@ -152,6 +221,10 @@ class Job:
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
+                    "source_collecte": self.settings.source_collecte, "comptes": self.settings.comptes,
+                    "medias": self.settings.medias, "libelle": self.settings.libelle,
+                    "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
+                    "archive_prete": self.archive_prete, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": os.getenv("INSTALL_VIDEO", "0") == "1",
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
@@ -311,21 +384,29 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         driver = driver_factory(args)
         interact = lambda message: wait_for_user(driver, job, message)
         unique_links = {}
-        for tag in job.settings.hashtags:
-            args.hashtag = tag
-            job.update(status="discovering", message=f"Recherche des publications de #{tag}…")
-            report = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(tag)}"}
+        sources = ([{"hashtag": h} for h in job.settings.hashtags]
+                   if job.settings.source_collecte == "hashtags" else job.settings.sources)
+        medias_par_compte = {s["compte"]: s for s in job.settings.sources}
+        for source in sources:
+            etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
+            job.update(status="discovering", message=f"Recherche des publications de {etiquette}…")
             try:
-                found = scraper.collect_links(driver, args, report,
-                    interact=lambda message: interact(f"#{tag} : {message}"),
-                    check=job.check)
+                if "hashtag" in source:
+                    rapport = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(source['hashtag'])}"}
+                    found = scraper.collect_links(driver, args, rapport,
+                        interact=lambda message: interact(f"{etiquette} : {message}"), check=job.check)
+                else:
+                    from collecte.comptes import collecter_compte
+                    rapport = {}
+                    found = collecter_compte(driver, args, source["compte"], rapport=rapport,
+                        interact=lambda message: interact(f"{etiquette} : {message}"), check=job.check)
+                job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport})
                 for url in found:
                     identity = scraper.canonical_post(url)
-                    if identity:
-                        unique_links.setdefault(identity[0], identity[1])
+                    if identity: unique_links.setdefault(identity[0], identity[1])
             except (RuntimeError, scraper.WebDriverException):
-                if len(job.settings.hashtags) == 1:
-                    raise
+                job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now()})
+                if len(sources) == 1: raise
                 job.update(search_errors=job.search_errors + 1)
             job.update(discovered=len(unique_links))
         links = list(unique_links.values())
@@ -335,6 +416,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
+                if job.settings.enrichie:
+                    media = medias_par_compte.get(record["author"].lower(), {})
+                    record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
+                    job.publications.append(record)
+                    if job.settings.collecter_commentaires:
+                        from collecte.commentaires import collecter_commentaires
+                        try:
+                            resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
+                                job.settings.collecter_reponses, verifier=job.check, pause=job.pause)
+                            job.commentaires.extend(resultat.pop("commentaires"))
+                            record["collecte_commentaires"] = resultat
+                        except scraper.WebDriverException:
+                            record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
                 if record["description"]:
                     matches = matches_hashtags(record["description"], job.settings)
                     language = (classify_description(record["description"])
@@ -347,12 +441,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         elif language == "unknown":
                             job.language_unknown += 1
                         else:
+                            record["retenue"] = True
                             job.records.append(record)
             except scraper.WebDriverException:
                 with job.lock:
                     job.errors += 1
             job.update(processed=index)
             job.save()
+            if job.base:
+                job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
         final_status = "partial" if job.errors or job.search_errors else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
@@ -389,6 +486,21 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 driver.quit()
             except scraper.WebDriverException:
                 LOG.warning("Fermeture du navigateur impossible pour %s", job.id)
+        if job.base:
+            try:
+                from corpus.construction import construire_exports
+                from corpus.export_zip import exporter_zip
+                job.base.enregistrer(job.id, job.publications, job.commentaires)
+                job.base.terminer_session(job.id, final_status)
+                from stockage.historique import ajouter_evenement
+                for evenement in job.journal: ajouter_evenement(job.base,job.id,evenement)
+                construire_exports(job.directory, job.publications, job.commentaires,
+                    {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(), "evenements": job.journal})
+                exporter_zip(job.directory, job.directory / "archive.zip")
+                job.archive_prete = True
+            except Exception:
+                LOG.exception("Export enrichi impossible")
+                final_message += " L’archive enrichie n’a pas pu être finalisée ; le TXT reste disponible."
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
 
@@ -408,6 +520,8 @@ class Manager:
 
     def start(self, owner, settings):
         with self.lock:
+            if any(j.video_busy for j in self.jobs.values()):
+                raise HTTPException(429, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
             active = [job for job in self.jobs.values() if job.busy]
             if any(job.owner == owner for job in active):
                 raise HTTPException(409, "Une collecte est déjà en cours dans votre session.")
@@ -442,9 +556,19 @@ class Manager:
             for job in list(self.jobs.values()):
                 if job.busy and (now - job.last_seen > self.idle_timeout or now - job.created > self.max_duration):
                     job.stop.set()
-                if not job.busy and job.finished is not None and now - job.finished > self.retention:
+                if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
+                    job.video_stop.set()
+                if not job.busy and not job.video_busy and job.finished is not None and now - job.finished > self.retention:
                     self.jobs.pop(job.id)
                     shutil.rmtree(job.directory, ignore_errors=True)
+                    if job.base: job.base.supprimer_session(job.id)
+            if (self.data_dir / "scraptiktok.sqlite").exists():
+                from stockage.nettoyage import nettoyer_sessions
+                from stockage.base_donnees import BaseDonnees
+                base = BaseDonnees(self.data_dir / "scraptiktok.sqlite")
+                nettoyer_sessions(self.data_dir, base, self.retention, self.jobs)
+                from stockage.cache_video import purger_cache
+                purger_cache(base,self.retention)
             # Retire également les exports orphelins après un redémarrage.
             if self.data_dir.exists():
                 for directory in self.data_dir.iterdir():
@@ -463,10 +587,54 @@ class Manager:
             jobs = list(self.jobs.values())
             for job in jobs:
                 job.stop.set()
+                job.video_stop.set()
         deadline = time.monotonic() + 25
         for job in jobs:
+            if job.video_thread:
+                job.video_thread.join(timeout=5)
             if job.thread:
                 job.thread.join(timeout=max(0, deadline - time.monotonic()))
+
+
+class OptionsVideo(BaseModel):
+    audio: bool = False
+    ocr: bool = False
+    transcription: bool = False
+    embeddings: bool = False
+    telecharger_modeles: bool = False
+
+
+def executer_video(job, options):
+    from video.parametres import charger_parametres
+    from corpus.export_json import exporter_json
+    try:
+        parametres = charger_parametres()
+        parametres.update(options.model_dump(), telecharger_videos=True, audio=options.audio or options.transcription)
+        chemin = job.directory / "parametres_traitement.json"
+        exporter_json(chemin, parametres)
+        with (job.directory / "traitement.log").open("w") as journal:
+            processus = subprocess.Popen([sys.executable, "-m", "video.lots", "--session", str(job.directory), "--parametres", str(chemin)],
+                cwd=scraper.BASE_DIR, stdout=journal, stderr=subprocess.STDOUT, start_new_session=True)
+            job.video_process = processus
+            limite = time.monotonic() + parametres["duree_lot_max_s"] + 60
+            while processus.poll() is None:
+                if job.video_stop.wait(0.5) or time.monotonic() > limite:
+                    os.killpg(processus.pid, signal.SIGTERM)
+                    try: processus.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(processus.pid, signal.SIGKILL); processus.wait()
+                    # Le téléchargement et ffmpeg appartiennent au même groupe.
+                    try: os.killpg(processus.pid, signal.SIGKILL)
+                    except ProcessLookupError: pass
+                    job.update(video_statut="interrompu")
+                    break
+            else:
+                job.update(video_statut="termine" if processus.returncode == 0 else "partiel" if processus.returncode == 2 else "echec")
+    except Exception:
+        LOG.exception("Traitement vidéo interrompu")
+        job.update(video_statut="echec")
+    finally:
+        job.update(video_busy=False, video_process=None, finished=time.monotonic())
 
 
 def create_app(manager=None):
@@ -523,6 +691,40 @@ def create_app(manager=None):
             response.set_cookie(COOKIE, secrets.token_hex(32), httponly=True, samesite="strict",
                                 secure=os.getenv("COOKIE_SECURE", "0") == "1", max_age=86400)
         return response
+
+    @app.post("/api/jobs/{job_id}/video", status_code=202)
+    def lancer_analyse_video(job_id: str, options: OptionsVideo, request: Request):
+        job = manager.get(owner(request), job_id)
+        if os.getenv("INSTALL_VIDEO", "0") != "1":
+            raise HTTPException(409, "Le traitement vidéo n’est pas activé sur ce serveur.")
+        with manager.lock:
+            if any(j.busy or j.video_busy for j in manager.jobs.values()):
+                raise HTTPException(409, "Une collecte ou analyse est déjà en cours.")
+            if not job.archive_prete or not job.publications:
+                raise HTTPException(409, "Effectuez d’abord une collecte enrichie.")
+            job.video_stop.clear()
+            job.update(video_busy=True, video_statut="en_cours", video_debut=time.monotonic())
+            job.video_thread = threading.Thread(target=executer_video, args=(job, options), daemon=True)
+            job.video_thread.start()
+        return job.snapshot()
+
+    @app.post("/api/jobs/{job_id}/video/stop")
+    def arreter_analyse_video(job_id: str, request: Request):
+        manager.get(owner(request), job_id).video_stop.set()
+        return {"ok": True}
+
+    @app.get("/api/presse")
+    def inventaire_presse(request: Request):
+        owner(request)
+        from collecte.presse import charger_inventaire
+        return {"medias": charger_inventaire()}
+
+    @app.get("/api/jobs/{job_id}/archive")
+    def telecharger_archive(job_id: str, request: Request):
+        job = manager.get(owner(request), job_id)
+        if job.busy or job.video_busy or not job.archive_prete:
+            raise HTTPException(409, "L’archive enrichie n’est pas encore disponible.")
+        return FileResponse(job.directory / "archive.zip", filename=f"scraptiktok_{job.id}.zip", media_type="application/zip")
 
     @app.get("/api/session")
     def session(request: Request):

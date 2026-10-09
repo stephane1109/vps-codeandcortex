@@ -19,27 +19,35 @@ function errorAt(id, message) { $(id).textContent = message; $(id).hidden = !mes
 function render(current) {
   const previous = job?.status;
   job = current;
-  const busy = current.busy;
+  const busy = current.busy || current.video_busy;
   $("empty-state").hidden = true; $("job-state").hidden = false;
-  $("results-title").textContent = (current.hashtags || [current.hashtag]).map(tag => "#" + tag).join(current.operator === "OR" ? " OU " : " ET ") + (current.french_only ? " · français" : "");
+  $("results-title").textContent = (current.libelle || (current.hashtags || [current.hashtag]).map(tag => "#" + tag).join(current.operator === "OR" ? " OU " : " ET ")) + (current.french_only ? " · français" : "");
   $("status-message").textContent = current.message;
   $("count-captions").textContent = current.captions;
   $("count-processed").textContent = current.processed;
   $("count-discovered").textContent = current.discovered;
   $("progress").value = current.discovered ? 100 * current.processed / current.discovered : 0;
-  $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Jusqu’à ${current.limit} publications par hashtag. ${current.filtered || 0} texte(s) écarté(s) par le filtre.`;
+  $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Jusqu’à ${current.limit} publications par source. ${current.filtered || 0} texte(s) écarté(s) par le filtre.`;
   if (current.french_only) $("progress-detail").textContent += ` Filtre français : ${current.non_french || 0} texte(s) dans une autre langue, ${current.language_unknown || 0} texte(s) trop court(s) ou incertain(s) écartés.`;
   const labels = {starting: "Préparation", discovering: "Recherche", attention: "À vous de jouer", collecting: "Collecte en cours", completed: "Terminé", partial: "Résultats partiels", failed: "Accès interrompu", stopped: "Arrêté"};
   $("status-badge").hidden = false; $("status-badge").textContent = labels[current.status] || "En cours";
   $("status-badge").className = "badge " + current.status;
   $("start-button").disabled = busy;
-  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources", "french-only"].forEach(id => $(id).disabled = busy);
-  $("stop-button").hidden = !busy; $("stop-button").disabled = false;
+  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources", "french-only", "source-collecte", "comptes", "enrichir", "collecter-commentaires", "collecter-reponses", "limite-commentaires"].forEach(id => $(id).disabled = busy);
+  $("stop-button").hidden = !current.busy; $("stop-button").disabled = false;
   $("stop-button").textContent = "Arrêter la collecte";
   $("download").hidden = !current.can_download;
   $("download").href = `/api/jobs/${current.id}/download`;
   $("download").setAttribute("download", current.filename || `tiktok_${current.hashtag}.txt`);
   $("retention").hidden = !current.can_download;
+  document.querySelectorAll('#liste-presse input').forEach(e => e.disabled = busy);
+  $("download-archive").hidden = !current.archive_prete || busy;
+  $("download-archive").href = `/api/jobs/${current.id}/archive`;
+  $("video-options").hidden = !current.archive_prete || current.busy || !current.video_disponible;
+  $("video-start").disabled = busy;
+  $("video-stop").hidden = !current.video_busy;
+  const etatsVideo = {en_cours: "Analyse audiovisuelle en cours…", termine: "Analyse terminée : les résultats sont dans l’archive.", partiel: "Analyse partielle : consultez le journal de l’archive pour les limites rencontrées.", echec: "L’analyse a échoué. Les exports de collecte restent disponibles.", interrompu: "Analyse interrompue. La dernière archive finalisée reste disponible."};
+  $("video-status").textContent = etatsVideo[current.video_statut] || (current.archive_prete && !current.video_disponible ? "Le traitement audiovisuel peut être activé par l’administrateur du serveur." : "");
   $("browser-panel").hidden = current.status !== "attention";
   $("continue-button").disabled = !current.has_frame || !!pointer || actionBusy || actionQueue.length > 0;
   if (current.status === "attention") {
@@ -84,7 +92,7 @@ async function updateFrame() {
 }
 
 async function poll() {
-  if (polling || !job?.busy) return;
+  if (polling || !(job?.busy || job?.video_busy)) return;
   polling = true;
   try { render(await api(`/api/jobs/${job.id}`)); errorAt("form-error", ""); }
   catch (error) { errorAt("form-error", error.message); }
@@ -99,7 +107,11 @@ async function startSearch(settings) {
 }
 $("search-form").addEventListener("submit", event => {
   event.preventDefault(); errorAt("form-error", "");
-  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, french_only: $("french-only").checked};
+  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, french_only: $("french-only").checked,
+    source_collecte: $("source-collecte").value, comptes: $("comptes").value.split(/[\s,;]+/).filter(Boolean),
+    medias: Array.from(document.querySelectorAll('#liste-presse input:checked')).map(e => e.value),
+    enrichir: $("enrichir").checked, collecter_commentaires: $("collecter-commentaires").checked,
+    collecter_reponses: $("collecter-reponses").checked, limite_commentaires: Number($("limite-commentaires").value)};
   if (settings.second_hashtag) {
     pendingSearch = settings;
     $("combination-description").textContent = `#${settings.hashtag.replace(/^#/, "")} et #${settings.second_hashtag.replace(/^#/, "")}`;
@@ -207,6 +219,32 @@ $("typing-form").addEventListener("submit", event => {
 });
 document.querySelectorAll("[data-key]").forEach(button => button.addEventListener("click", () => sendAction({kind: "key", key: button.dataset.key})));
 document.querySelectorAll("[data-scroll]").forEach(button => button.addEventListener("click", () => sendAction({kind: "scroll", delta: Number(button.dataset.scroll)})));
-api("/api/session").then(data => { if (data.job) { $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
+function actualiserSource() {
+  const source = $("source-collecte").value;
+  $("comptes-section").hidden = source !== "comptes";
+  $("presse-section").hidden = source !== "presse";
+  $("hashtag").required = source === "hashtags";
+  $("hashtag-label").textContent = source === "hashtags" ? "Votre hashtag" : "Filtrer les légendes par hashtag (facultatif)";
+}
+$("source-collecte").addEventListener("change", actualiserSource);
+$("collecter-reponses").addEventListener("change", () => { if ($("collecter-reponses").checked) $("collecter-commentaires").checked = true; });
+$("video-start").addEventListener("click", async () => {
+  $("video-start").disabled = true;
+  try { render(await api(`/api/jobs/${job.id}/video`, {audio: $("video-audio").checked, ocr: $("video-ocr").checked, transcription: $("video-transcription").checked, embeddings: $("video-embeddings").checked, telecharger_modeles: $("video-modeles").checked})); }
+  catch (erreur) { errorAt("form-error", erreur.message); $("video-start").disabled = false; }
+});
+$("video-stop").addEventListener("click", async () => {
+  try { await api(`/api/jobs/${job.id}/video/stop`, {}); } catch (erreur) { errorAt("form-error", erreur.message); }
+});
+api("/api/presse").then(data => {
+  data.medias.forEach(media => {
+    const label = document.createElement("label"); label.className = "checkbox";
+    const input = document.createElement("input"); input.type = "checkbox"; input.value = media.id;
+    input.checked = !!job?.medias?.includes(media.id); input.disabled = !!(job?.busy || job?.video_busy);
+    const texte = document.createElement("span"); texte.textContent = `${media.nom} (@${media.compte})`;
+    label.append(input, texte); $("liste-presse").append(label);
+  });
+}).catch(erreur => errorAt("form-error", erreur.message));
+api("/api/session").then(data => { if (data.job) { $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
 setInterval(updateFrame, 350);

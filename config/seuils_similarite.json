@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "distance_phash": 16,
+  "orb_ratio": 0.75,
+  "orb_inliers_min": 12,
+  "orb_ratio_inliers": 0.5,
+  "orb_couverture_min": 0.08,
+  "ransac_pixels": 4.0,
+  "images_min": 3,
+  "duree_min_s": 2.0,
+  "ecart_max_s": 4.0,
+  "vitesse_min": 0.5,
+  "vitesse_max": 2.0,
+  "couverture_quasi_identique": 0.85,
+  "cosinus_semantique": 0.88,
+  "paires_orb_max": 400
+}

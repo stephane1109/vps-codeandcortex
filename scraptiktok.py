@@ -42,7 +42,8 @@ return {
         .map(id => document.getElementById(id)?.textContent).filter(Boolean),
     description: text ? text.innerText : '',
     canonical: document.querySelector('link[rel="canonical"]')?.href || '',
-    url: location.href
+    url: location.href,
+    engagement: Object.fromEntries(Object.entries({likes:'like-count',partages:'share-count',commentaires:'comment-count',favoris:'collect-count',vues:'video-views'}).map(([nom,selecteur])=>[nom,Array.from(document.querySelectorAll('[data-e2e="'+selecteur+'"]')).find(e=>e.getClientRects().length)?.innerText || null]))
 };
 """
 BLOCKED_JS = """
@@ -129,7 +130,8 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
         record.update(description=snapshot["description"].strip(), source="page_dom")
     record["hashtags"] = list(dict.fromkeys(re.findall(r"#(\w+)", record["description"])))
     record["status"] = "ok" if record["description"] else "empty_caption"
-    return record
+    from collecte.publications import enrichir_publication
+    return enrichir_publication(record, snapshot)
 
 
 def csv_safe(value: object) -> str:
@@ -153,7 +155,7 @@ def save_results(prefix: Path, records: list[dict], report: dict) -> None:
         writer.writeheader()
         for record in records:
             row = dict(record, hashtags=" ".join("#" + tag for tag in record["hashtags"]))
-            writer.writerow({key: csv_safe(value) for key, value in row.items()})
+            writer.writerow({key: csv_safe(row.get(key, "")) for key in FIELDS})
     temp.replace(target)
     target = prefix.with_suffix(".txt")
     temp = target.with_suffix(".txt.tmp")
@@ -220,6 +222,8 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         previous = len(links)
         for href in browser.execute_script(DISCOVER_JS):
             identity = canonical_post(href)
+            if identity and report.get("compte_attendu") and identity[2].lower() != report["compte_attendu"]:
+                continue
             if identity and len(links) < args.limit:
                 links.setdefault(identity[0], identity[1])
         report["discovered_urls"] = list(links.values())

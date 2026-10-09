@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "inconnue": "indetermine",
+  "variables": {
+    "media": "Média éditeur déclaré",
+    "categorie": "Catégorie éditoriale configurée",
+    "format": "Format visuel estimé",
+    "mouvement": "Intensité du mouvement apparent",
+    "plans": "Nombre de coupes sur les images échantillonnées",
+    "personnes": "Présence détectée de silhouettes",
+    "visages": "Présence de visages frontaux détectés",
+    "texte": "Texte détecté par OCR",
+    "audio": "Présence d’une piste audio",
+    "parole": "Parole transcrite automatiquement",
+    "reemploi": "Réemploi de séquence détecté dans le lot"
+  },
+  "exclusions": [
+    "identité des personnes",
+    "âge",
+    "genre",
+    "origine",
+    "émotions",
+    "orientation politique"
+  ]
+}

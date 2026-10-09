@@ -28,22 +28,34 @@
           <div class="section-label">01 / RECHERCHE</div>
           <h2 id="search-title">Que souhaitez-vous explorer ?</h2>
           <form id="search-form">
-            <label for="hashtag">Votre hashtag</label>
+            <label for="source-collecte">Collecter à partir de</label>
+            <select id="source-collecte"><option value="hashtags">Hashtags</option><option value="presse">Comptes de presse</option><option value="comptes">Autres comptes TikTok</option></select>
+            <div id="comptes-section" hidden><label for="comptes">Comptes TikTok</label><input id="comptes" placeholder="@lemondefr, @franceinfo" maxlength="300"><p class="help">Jusqu’à 10 comptes, séparés par des virgules ou des espaces.</p></div>
+            <fieldset id="presse-section" hidden><legend>Médias à consulter</legend><div id="liste-presse"></div><p class="help">Inventaire éditorial initial, à compléter dans la configuration. L’accès et les identifiants sont vérifiés lors de la collecte.</p></fieldset>
+            <label for="hashtag" id="hashtag-label">Votre hashtag</label>
             <div class="hashtag-field"><span aria-hidden="true">#</span><input id="hashtag" name="hashtag" placeholder="tourisme" autocomplete="off" maxlength="100" required aria-describedby="hashtag-help"></div>
             <p class="help" id="hashtag-help">Un seul hashtag, avec ou sans #, sans espace.</p>
             <label for="second-hashtag">Deuxième hashtag <span class="help">(facultatif)</span></label>
             <div class="hashtag-field"><span aria-hidden="true">#</span><input id="second-hashtag" name="second_hashtag" placeholder="manifestation" autocomplete="off" maxlength="100" aria-describedby="combination-help"></div>
             <p class="help" id="combination-help">Avec deux hashtags, une boîte de dialogue vous proposera ET ou OU avant la collecte.</p>
-            <div class="limit-header"><label for="limit">Publications à consulter par hashtag</label><input type="number" id="limit" min="1" max="300" value="50" aria-label="Nombre maximal de publications"></div>
+            <div class="limit-header"><label for="limit">Publications à consulter par source</label><input type="number" id="limit" min="1" max="300" value="50" aria-label="Nombre maximal de publications"></div>
             <input id="limit-range" type="range" min="1" max="300" value="50" aria-label="Nombre maximal de publications, curseur">
-            <div class="range-labels"><span>1 publication</span><span>300 maximum par hashtag</span></div>
+            <div class="range-labels"><span>1 publication</span><span>300 maximum par source</span></div>
             <label class="checkbox"><input type="checkbox" id="french-only" checked aria-describedby="language-help"><span>Français uniquement</span></label>
             <p class="help" id="language-help">Détection automatique sur la description, hors hashtags et liens. Les textes trop courts ou de langue incertaine sont écartés. La détection peut se tromper.</p>
             <label class="checkbox"><input type="checkbox" id="include-sources" checked><span>Inclure les auteurs et les liens dans le fichier</span></label>
+            <details class="options-enrichies"><summary>Engagement, commentaires et corpus enrichi</summary>
+              <label class="checkbox"><input id="enrichir" type="checkbox"><span>Créer l’archive enrichie (JSON, CSV, IRaMuTeQ)</span></label>
+              <p class="help">Automatique pour les comptes : likes, vues, partages, favoris et total de commentaires lorsqu’ils sont accessibles. Les valeurs absentes restent indéterminées.</p>
+              <label class="checkbox"><input id="collecter-commentaires" type="checkbox"><span>Collecter les commentaires accessibles</span></label>
+              <label class="checkbox"><input id="collecter-reponses" type="checkbox"><span>Ouvrir aussi les réponses accessibles</span></label>
+              <label for="limite-commentaires">Maximum de commentaires par publication</label><input type="number" id="limite-commentaires" min="1" max="500" value="50">
+              <p class="help">Les filtres ET/OU et français s’appliquent au corpus des légendes. Les données brutes et les commentaires sont conservés séparément.</p>
+            </details>
             <button class="button primary" id="start-button" type="submit">Lancer la collecte <span aria-hidden="true">↗</span></button>
             <p class="form-error" id="form-error" role="alert" hidden></p>
           </form>
-          <div class="scope-note"><strong>Quels textes ?</strong> Les légendes et descriptions, hashtags compris. Les commentaires, l’audio et le texte incrusté dans les vidéos ne sont pas inclus.</div>
+          <div class="scope-note"><strong>Quels textes ?</strong> Les légendes et descriptions, hashtags compris. Les commentaires et analyses audiovisuelles sont disponibles en option, dans des exports séparés.</div>
         </section>
         <section class="card result-card" aria-labelledby="results-title">
           <div class="section-label">02 / VOTRE FICHIER</div>
@@ -60,6 +72,18 @@
             <progress id="progress" max="100" value="0" aria-label="Progression de la collecte"></progress>
             <p class="help" id="progress-detail"></p>
             <div class="result-actions"><a class="button primary" id="download" hidden>Télécharger le fichier texte <span aria-hidden="true">↓</span></a><button id="stop-button" class="button secondary" type="button">Arrêter la collecte</button></div>
+            <div class="result-actions"><a class="button secondary" id="download-archive" hidden>Télécharger l’archive enrichie ↓</a></div>
+            <details id="video-options" hidden><summary>Analyse audiovisuelle facultative</summary>
+              <p class="help">Télécharge les vidéos publiques accessibles, puis recherche automatiquement les fichiers identiques et les séquences réemployées. Le lot est limité par les ressources du serveur.</p>
+              <label class="checkbox"><input type="checkbox" id="video-ocr"><span>Lire le texte incrusté (OCR)</span></label>
+              <label class="checkbox"><input type="checkbox" id="video-audio"><span>Mesurer la piste audio et les silences</span></label>
+              <label class="checkbox"><input type="checkbox" id="video-transcription"><span>Transcrire la parole (Whisper)</span></label>
+              <label class="checkbox"><input type="checkbox" id="video-embeddings"><span>Comparer aussi les ressemblances sémantiques</span></label>
+              <p class="help">Une ressemblance sémantique ne constitue pas une preuve de réemploi. Les résultats automatiques conservent leurs mesures et leurs incertitudes.</p>
+              <label class="checkbox"><input type="checkbox" id="video-modeles"><span>Autoriser le téléchargement initial des modèles</span></label>
+              <div class="result-actions"><button type="button" class="button secondary" id="video-start">Analyser les vidéos</button><button type="button" class="button secondary" id="video-stop" hidden>Arrêter l’analyse</button></div>
+            </details>
+            <p id="video-status" class="help" role="status"></p>
             <p class="help" id="retention">Les textes déjà obtenus restent téléchargeables si vous arrêtez la collecte.</p>
             <div id="preview-section" hidden><h3>Aperçu des premiers textes</h3><div id="preview"></div></div>
           </div>
