@@ -47,6 +47,7 @@ if "initialise" not in st.session_state:
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True), "enrichir":ancienne.get("enrichir",True),
+        "inclure_metadonnees_txt":ancienne.get("inclure_metadonnees_txt",False),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
@@ -59,8 +60,9 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
+st.session_state.setdefault("inclure_metadonnees_txt", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
-            "operator", "limit", "french_only", "include_sources", "enrichir",
+            "operator", "limit", "french_only", "include_sources", "inclure_metadonnees_txt", "enrichir",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires",
             "date_debut", "date_fin", "comptes"):
     st.session_state[cle] = st.session_state[cle]
@@ -123,6 +125,9 @@ with onglet_collecte:
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         with st.expander("Exports et commentaires"):
+            st.checkbox("Ajouter *date, *profil et *urlvidéo avant chaque post dans le TXT", key="inclure_metadonnees_txt", disabled=occupe,
+                help="Facultatif. Remplace la présentation auteur/lien par un en-tête pour chaque publication. Une date de publication absente reste indéterminée.")
+            st.caption("En-tête sur trois lignes : *date 2026-10-09T12:00:00+00:00 · *profil @compte · *urlvidéo https://www.tiktok.com/@compte/video/…")
             st.checkbox("Inclure les auteurs et liens dans le TXT", key="include_sources", disabled=occupe)
             st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
             def activer_commentaires():
@@ -134,7 +139,7 @@ with onglet_collecte:
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","inclure_metadonnees_txt","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
                 valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])

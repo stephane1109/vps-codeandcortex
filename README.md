@@ -143,6 +143,25 @@ produit un résultat partiel explicite si l’autre a abouti. L’absence de ré
 ne signifie pas qu’aucune publication TikTok ne contient la combinaison : seuls
 les contenus accessibles et consultés sont filtrés.
 
+### En-tête facultatif dans le TXT
+
+Dans « Exports et commentaires », cochez « Ajouter *date, *profil et *urlvidéo
+avant chaque post dans le TXT ». Cette option, désactivée par défaut, remplace
+l’en-tête auteur/lien par trois lignes avant chaque légende :
+
+```text
+*date 2026-10-09T12:00:00+00:00
+*profil @compte
+*urlvidéo https://www.tiktok.com/@compte/video/1234567890
+Texte original de la publication.
+```
+
+La date est celle de publication, en UTC ; si elle manque, le fichier indique
+`*date indéterminée`. L’URL et le texte sont conservés intégralement. Sans cette
+option, les formats existants (texte seul ou auteur/lien) restent disponibles.
+L’API accepte `inclure_metadonnees_txt: true`. Cet en-tête est destiné à la lecture ;
+le corpus normalisé IRaMuTeQ reste disponible séparément dans le ZIP.
+
 ### Filtre français
 
 La case est cochée à l’ouverture de l’interface ; la décocher conserve toutes les

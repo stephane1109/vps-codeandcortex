@@ -53,6 +53,7 @@ class StartRequest(BaseModel):
     operator: Literal["AND", "OR"] = "AND"
     limit: int = Field(default=50, ge=1, le=300)
     include_sources: bool = True
+    inclure_metadonnees_txt: bool = False
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -161,12 +162,24 @@ class LiveAction:
         self.error = ""
 
 
-def text_export(records: list[dict], include_sources: bool) -> str:
+def entete_publication(publication: dict) -> str:
+    """Métadonnées lisibles sur trois lignes ; ne pas inventer une date absente."""
+    def ligne(valeur, defaut="indéterminée"):
+        return " ".join(str(valeur or "").split()) or defaut
+    profil = ligne(publication.get("author"), "indéterminé")
+    if publication.get("author"):
+        profil = "@" + profil.lstrip("@")
+    return (f"*date {ligne(publication.get('created_at'))}\n"
+            f"*profil {profil}\n*urlvidéo {ligne(publication.get('url'))}\n")
+
+
+def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False) -> str:
     blocks = []
     for record in records:
         if not record.get("description"):
             continue
-        prefix = f"@{record['author']}\n{record['url']}\n" if include_sources else ""
+        prefix = (entete_publication(record) if inclure_metadonnees_txt
+                  else f"@{record['author']}\n{record['url']}\n" if include_sources else "")
         blocks.append(prefix + record["description"])
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
@@ -250,6 +263,7 @@ class Job:
                         "diagnostic": entree.get("rapport", {}).get("diagnostic", {})}
                         for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
+                    "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
@@ -282,7 +296,7 @@ class Job:
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
         with self.lock:
-            content = text_export(self.records, self.settings.include_sources)
+            content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt)
         temp = self.path.with_suffix(".tmp")
         temp.write_text(content, encoding="utf-8")
         temp.replace(self.path)

@@ -88,6 +88,7 @@ class TestsInterface(unittest.TestCase):
             raise AssertionError(chemin)
         with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
             page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            self.assertFalse(page.checkbox(key='inclure_metadonnees_txt').value)
             page.radio(key='source').set_value('presse').run()
             page.button(key='tous_medias').click().run()
             for operateur in ('AND', 'OR'):
@@ -95,6 +96,7 @@ class TestsInterface(unittest.TestCase):
                 page.text_input(key='second_hashtag_comptes').set_value('#école')
                 page.radio(key='operator').set_value(operateur)
                 page.checkbox(key='collecter_reponses').check()
+                page.checkbox(key='inclure_metadonnees_txt').check()
                 next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
                 self.assertFalse(page.exception)
                 requete = StartRequest(**envois[-1])
@@ -102,6 +104,7 @@ class TestsInterface(unittest.TestCase):
                 self.assertEqual(requete.operator, operateur)
                 self.assertEqual(len(requete.sources), len(charger_inventaire()))
                 self.assertTrue(envois[-1]['collecter_commentaires'])
+                self.assertTrue(envois[-1]['inclure_metadonnees_txt'])
             nombre_envois = len(envois)
             page.date_input(key='date_debut').set_value('2026-10-01')
             page.date_input(key='date_fin').set_value('2026-10-09')

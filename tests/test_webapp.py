@@ -51,6 +51,20 @@ class WebTests(unittest.TestCase):
         response = self.client.get(f"/api/jobs/{job.id}/download")
         self.assertIn("_fr.txt", response.headers["content-disposition"])
 
+    def test_option_entete_transmise_reprise_et_telechargee(self):
+        response = self.client.post('/api/jobs', headers=HEADERS,
+            json={'hashtag':'été', 'inclure_metadonnees_txt':True, 'include_sources':False})
+        self.assertEqual(response.status_code, 202)
+        reprise = self.client.get('/api/session').json()['job']
+        self.assertTrue(reprise['inclure_metadonnees_txt'])
+        job = self.manager.jobs[reprise['id']]
+        job.records.append(dict(RECORD, created_at='2026-10-09T12:00:00+00:00'))
+        job.save()
+        fichier = self.client.get(f'/api/jobs/{job.id}/download')
+        self.assertEqual(fichier.status_code, 200)
+        self.assertIn('*date 2026-10-09T12:00:00+00:00\n*profil @test\n*urlvidéo '+RECORD['url'], fichier.text)
+        self.assertIn(RECORD['description'], fichier.text)
+
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
         for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 301}):
@@ -168,6 +182,17 @@ class WorkerTests(unittest.TestCase):
 
     def test_plain_text_has_no_sources_when_unchecked(self):
         self.assertEqual(web.text_export([RECORD], False), "Café 🍋\n#été\n")
+
+    def test_entete_facultatif_par_post_sans_modifier_les_legendes(self):
+        date = '2026-10-09T12:00:00+00:00'
+        premiere = dict(RECORD, created_at=date)
+        seconde = dict(RECORD, id='456', author='autre', url='https://www.tiktok.com/@autre/video/456', description='Oui !')
+        attendu = (f"*date {date}\n*profil @test\n*urlvidéo {RECORD['url']}\n{RECORD['description']}\n\n"
+                   f"*date indéterminée\n*profil @autre\n*urlvidéo {seconde['url']}\nOui !\n")
+        for sources in (False, True):
+            self.assertEqual(web.text_export([premiere, seconde], sources, True), attendu)
+        self.assertEqual(web.text_export([premiere], True), f"@test\n{RECORD['url']}\n{RECORD['description']}\n")
+        self.assertEqual(web.text_export([dict(premiere, description='')], True, True), '')
 
     def test_worker_exports_and_quits_browser(self):
         driver = Mock()
