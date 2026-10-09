@@ -25,6 +25,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as conditions
 import scraptiktok as moteur
 import webapp as web
+from collecte.presse import charger_inventaire
 from smoke_browser import TAG, CAPTION
 
 
@@ -46,9 +47,12 @@ def principale():
                 if valide:
                     return HTMLResponse('<a href="https://www.tiktok.com/@fixture/video/1234567890">Publication accessible</a>')
                 return HTMLResponse(TAG.replace("function update(){", "function update(){if(window.ready && Number(document.getElementById('slider').value)>70 && document.getElementById('word').value==='été')document.cookie='fixture_validee=1; path=/';fetch('/fixture/state?ready='+!!window.ready+'&slider='+document.getElementById('slider').value+'&word='+encodeURIComponent(document.getElementById('word').value));"))
+            comptes_presse = {m['compte']:str(2000000000+i) for i,m in enumerate(charger_inventaire())}
+            profils_visites = []
             @app.get('/fixture/profil/{compte}')
             def page_profil(compte:str):
-                identifiant = {'lemondefr':'1111111111', 'franceinfo':'2222222222'}[compte]
+                profils_visites.append(compte)
+                identifiant = comptes_presse[compte]
                 return HTMLResponse(f'<main><a href="https://www.tiktok.com/@{compte}/video/{identifiant}">Publication</a></main>')
             observations={}
             @app.get('/fixture/state')
@@ -160,38 +164,34 @@ def principale():
                     assert CAPTION in requete(f'/api/jobs/{identifiant}/download')
                     archive=requete(f'/api/jobs/{identifiant}/archive',binaire=True)
                     with zipfile.ZipFile(io.BytesIO(archive)) as z: assert 'publications.json' in z.namelist()
-                    # Une seconde collecte parcourt réellement deux profils, dans un seul navigateur.
+                    # Une seconde collecte parcourt les 29 profils cochés, dans un seul navigateur.
                     navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Presse et médias']]").click()
                     attente.until(lambda d:'Tout cocher' in d.find_element(By.TAG_NAME,'body').text)
                     bouton('Tout cocher').click()
                     attente.until(lambda d:'29 média(s) sélectionné(s) sur 29' in d.find_element(By.TAG_NAME,'body').text)
-                    # Ne conserver que deux comptes pour ce parcours borné.
-                    from collecte.presse import charger_inventaire
-                    for media in charger_inventaire():
-                        if media['compte'] in {'lemondefr','franceinfo'}: continue
-                        libelle=media['nom']+' (@'+media['compte']+')'
-                        case=navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)="+json.dumps(libelle,ensure_ascii=False)+"]]")
-                        case.click()
-                        attente.until(lambda d, case=case: not case.find_element(By.TAG_NAME,'input').is_selected())
-                    attente.until(lambda d:'2 média(s) sélectionné(s) sur 29' in d.find_element(By.TAG_NAME,'body').text)
                     champs=navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')
                     assert all(champ.get_attribute('value')=='' for champ in champs), 'Les anciens hashtags ne doivent pas filtrer les médias'
-                    # Les profils synthétiques n'ont pas de CAPTCHA : validation initiale immédiate.
-                    with patch.object(web,'wait_for_user'):
+                    # Les 29 profils accessibles ne doivent pas demander une validation manuelle.
+                    # Seule l’attente entre lectures est accélérée pour ce test local.
+                    with patch.object(web,'wait_for_user',side_effect=AssertionError('Arrêt manuel inattendu')) as attente_presse, patch.object(web.Job,'pause',lambda t,secondes:t.check()):
                         bouton('Lancer la collecte').click()
                         attente.until(lambda d:json.loads(requete('/api/session'))['job']['id']!=identifiant)
                         etat=json.loads(requete('/api/session'))['job']; identifiant_presse=etat['id']
-                        attente.until(lambda d:not json.loads(requete('/api/session'))['job']['busy'])
+                        assert etat['medias']==[m['id'] for m in charger_inventaire()],etat
+                        WebDriverWait(navigateur,90).until(lambda d:not json.loads(requete('/api/session'))['job']['busy'])
+                        attente_presse.assert_not_called()
                     etat=json.loads(requete('/api/session'))['job']
-                    assert etat['captions']==2,etat
-                    assert len(etat['bilan_sources'])==2,etat
+                    assert etat['captions']==29,etat
+                    assert len(etat['bilan_sources'])==29,etat
+                    assert profils_visites==list(comptes_presse),profils_visites
                     texte=requete(f'/api/jobs/{identifiant_presse}/download')
-                    assert '@lemondefr' in texte and '@franceinfo' in texte,texte
+                    assert all('@'+compte in texte for compte in comptes_presse),texte
+                    attente.until(lambda d:'Médias pris en compte par la collecte : 29' in d.find_element(By.TAG_NAME,'body').text)
                     assert 'Options vidéo' not in navigateur.find_element(By.TAG_NAME,'body').text
                     navigateur.save_screenshot('/tmp/scraptiktok-presse-resultats.png')
                     navigateur.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':390,'height':1000,'deviceScaleFactor':1,'mobile':True})
                     assert navigateur.execute_script('return document.documentElement.scrollWidth<=innerWidth'),'Débordement mobile'
-                    print('PASS : Streamlit, liste presse, deux hashtags et une seule validation, session privée, 29 médias sélectionnables, collecte de deux profils, gestes, TXT/ZIP et mobile')
+                    print('PASS : Streamlit, liste presse, deux hashtags et une seule validation, session privée, 29 médias sélectionnables, collecte et export des 29 profils sans arrêt manuel, gestes, TXT/ZIP et mobile')
             except Exception:
                 if navigateur:
                     navigateur.save_screenshot('/tmp/scraptiktok-streamlit-erreur.png')

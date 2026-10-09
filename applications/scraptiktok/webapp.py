@@ -240,7 +240,8 @@ class Job:
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "bilan_sources": [{"source": entree["source"],
                         "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
-                        "message": entree.get("message", "Recherche terminée.")}
+                        "message": entree.get("message", "Recherche terminée."),
+                        "diagnostic": entree.get("rapport", {}).get("diagnostic", {})}
                         for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
@@ -396,6 +397,21 @@ def wait_for_user(driver, job: Job, message: str):
                 break
 
 
+def expliquer_echec_source(rapport, erreur):
+    """Donner la cause observée sans attribuer une panne du navigateur au média."""
+    diagnostic = rapport.get("diagnostic", {})
+    code = diagnostic.get("code")
+    if rapport.get("discovery_stop") == "blocked" or code == "verification_tiktok":
+        return "Vérification TikTok non terminée."
+    if code == "delai_navigation" or isinstance(erreur, scraper.TimeoutException):
+        return "Le chargement de la page a dépassé le délai du navigateur."
+    if code == "erreur_reseau":
+        return "Erreur réseau du navigateur : " + diagnostic.get("erreur_reseau", "indéterminée") + "."
+    if code == "erreur_navigateur" or isinstance(erreur, scraper.WebDriverException):
+        return "Le navigateur n’a pas pu ouvrir ou lire cette page. Voir le diagnostic de la source."
+    return "Aucun lien de publication lisible dans la page reçue de TikTok après vérification."
+
+
 def execute_job(job: Job, driver_factory=scraper.create_driver):
     args = argparse.Namespace(
         hashtag=job.settings.hashtag, limit=job.settings.limit, max_scrolls=40,
@@ -431,19 +447,23 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
+                    # Les profils accessibles s’enchaînent sans arrêt manuel imposé.
+                    # collect_links interrompt toujours sur une vraie vérification TikTok.
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        validation_initiale=not session_validee)
+                        validation_initiale=False)
                 rapport["discovered_urls"] = found
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
                     "message": "Recherche terminée." if found else "Aucune publication accessible dans cette page."})
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity: unique_links.setdefault(identity[0], identity[1])
-            except (RuntimeError, scraper.WebDriverException):
+            except (RuntimeError, scraper.WebDriverException) as erreur:
+                LOG.warning("Source %s : %s", etiquette, type(erreur).__name__)
+                if "diagnostic" not in rapport:
+                    rapport["diagnostic"] = {"exception": type(erreur).__name__}
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
-                    "message": "Vérification TikTok non terminée." if rapport.get("discovery_stop") == "blocked"
-                    else "Page inaccessible ou aucune publication lisible. Vérifiez le profil dans TikTok."})
+                    "message": expliquer_echec_source(rapport, erreur)})
                 if len(sources) == 1: raise
                 job.update(search_errors=job.search_errors + 1)
             job.update(discovered=len(unique_links))

@@ -145,6 +145,12 @@ with onglet_collecte:
             # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
             if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
                 st.rerun()
+            if actuel.get("source_collecte") == "presse":
+                selection_moteur = actuel.get("medias", [])
+                with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
+                    for identifiant in selection_moteur:
+                        media = medias.get(identifiant)
+                        st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             st.write(actuel["message"])
             st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel["date_debut"] or actuel["date_fin"]:
@@ -156,12 +162,16 @@ with onglet_collecte:
                 with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
                     for bilan in actuel["bilan_sources"]:
                         st.write(f"{bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        diagnostic = bilan.get("diagnostic", {})
+                        if diagnostic:
+                            indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
+                            st.caption(" · ".join(indices))
             liens = st.columns(2)
             if actuel["can_download"]: liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
             if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[1].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
         afficher_resultats()
         if st.session_state["collecte"].get("status") == "attention":
-            st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre.")
+            st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
             st.iframe("/classique?controle=1", height=850, alt="Navigateur TikTok du serveur")
         with st.expander("Aperçu des textes"):
             for publication in st.session_state["collecte"].get("preview",[]):
@@ -172,7 +182,7 @@ with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
                 "2. Les hashtags sont facultatifs pour les médias. Ajoutez les filtres souhaités, puis lancez la collecte.\n"
-                "3. Les comptes sont visités successivement dans le même navigateur ; Le Monde apparaît en premier s’il est sélectionné.\n"
+                "3. Tous les médias cochés sont transmis au moteur. Les profils accessibles sont collectés automatiquement.\n"
                 "4. Validez TikTok dans la fenêtre intégrée si demandé, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")

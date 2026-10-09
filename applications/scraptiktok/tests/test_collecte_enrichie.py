@@ -35,6 +35,12 @@ class TestsEnrichis(unittest.TestCase):
             self.assertEqual([b['liens'] for b in bilan],[0,1])
             self.assertIn('Vérification TikTok',bilan[0]['message'])
 
+    def test_echecs_navigation_ne_sont_pas_presentes_comme_medias_vides(self):
+        self.assertIn('délai',web.expliquer_echec_source({},web.scraper.TimeoutException()))
+        self.assertIn('navigateur',web.expliquer_echec_source({},web.scraper.WebDriverException()))
+        rapport={'diagnostic':{'code':'erreur_reseau','erreur_reseau':'net::ERR_NAME_NOT_RESOLVED'}}
+        self.assertIn('ERR_NAME_NOT_RESOLVED',web.expliquer_echec_source(rapport,web.scraper.WebDriverException()))
+
     def test_api_archive_proprietaire_et_video_optionnelle(self):
         with tempfile.TemporaryDirectory() as d:
             def terminer(job): job.update(busy=False,status="completed")
