@@ -23,7 +23,7 @@ de TikTok, ni la précision scientifique des détecteurs sur un corpus réel.
 
 - Étape collecte : 46 tests passaient après ajout des comptes, compteurs et commentaires.
 - Étape analyse : tests synthétiques réels OpenCV (décodage MP4, compression, recadrage,
-  ORB, ordre temporel), batch, export et cloisonnement ajoutés ; 69 tests locaux passent.
+  ORB, ordre temporel), batch, export et cloisonnement ajoutés ; 71 tests locaux passent.
 - Le parcours Chrome initial a été rejoué : mobile, ET/OU, français, capture actualisée
   pendant un glisser, annulation, saisie et TXT. Il est étendu à la sélection presse,
   aux comptes sans hashtag et au téléchargement ZIP enrichi.

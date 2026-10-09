@@ -21,7 +21,11 @@ def convertir_compteur(brut):
             "confiance": 0.7 if suffixe else 1.0, "estime": bool(suffixe)}
 
 def extraire_engagement(element=None, dom=None, date=None):
-    stats = (element or {}).get("statsV2") or (element or {}).get("stats") or {}
+    element = element if isinstance(element,dict) else {}
+    ancien = element.get("stats") if isinstance(element.get("stats"),dict) else {}
+    nouveau = element.get("statsV2") if isinstance(element.get("statsV2"),dict) else {}
+    stats = {**ancien, **{k:v for k,v in nouveau.items() if v is not None}}
+    dom = dom if isinstance(dom,dict) else {}
     resultat = {}
     for nom, cle in CHAMPS.items():
         brut = stats.get(cle)

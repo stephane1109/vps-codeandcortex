@@ -12,3 +12,13 @@ class TestsEngagement(unittest.TestCase):
         self.assertTrue(convertir_compteur("1.2M")["estime"])
         self.assertIsNone(convertir_compteur("1,234")["valeur"])
         self.assertIsNone(convertir_compteur(-1)["valeur"])
+
+    def test_stats_v2_partielles_completes_par_stats(self):
+        r=extraire_engagement({"statsV2":{"diggCount":"0"},"stats":{"playCount":120,"shareCount":5}})
+        self.assertEqual(r["likes"]["valeur"],0)
+        self.assertEqual(r["vues"]["valeur"],120)
+        self.assertEqual(r["partages"]["valeur"],5)
+    def test_schema_inattendu_garde_les_textes(self):
+        from collecte.metadonnees import extraire_metadonnees
+        self.assertIsNone(extraire_engagement({"statsV2":[]})["vues"]["valeur"])
+        self.assertIsNone(extraire_metadonnees({"video":"indisponible"},None)["duree_s"])

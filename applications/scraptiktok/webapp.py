@@ -492,6 +492,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 from corpus.export_zip import exporter_zip
                 job.base.enregistrer(job.id, job.publications, job.commentaires)
                 job.base.terminer_session(job.id, final_status)
+                from stockage.historique import ajouter_evenement
+                for evenement in job.journal: ajouter_evenement(job.base,job.id,evenement)
                 construire_exports(job.directory, job.publications, job.commentaires,
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(), "evenements": job.journal})
                 exporter_zip(job.directory, job.directory / "archive.zip")
