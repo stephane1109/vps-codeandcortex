@@ -18,6 +18,42 @@
       "source": "https://www.radiofrance.com/presse/franceinfo-les-coulisses-de-linfo?page=1",
       "statut": "reference_editoriale",
       "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "leparisien",
+      "nom": "Le Parisien",
+      "compte": "leparisien",
+      "categorie": "presse_regionale",
+      "source": "https://www.leparisien.fr/video/programme/crime-story/podcast-qui-a-vole-le-monet-impression-soleil-levant-22-19-11-2025-EFREGIOUDFA6TCI47A5SLRNSAU.php",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "20minutes",
+      "nom": "20 Minutes",
+      "compte": "20minutesfrance",
+      "categorie": "presse_nationale",
+      "source": "https://www.20minutes.fr/",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "brut",
+      "nom": "Brut",
+      "compte": "brutofficiel",
+      "categorie": "media_numerique",
+      "source": "https://www.brut.media/fr",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "huffpost",
+      "nom": "Le HuffPost",
+      "compte": "lehuffpostfr",
+      "categorie": "media_numerique",
+      "source": "https://www.huffingtonpost.fr/",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
     }
   ]
 }

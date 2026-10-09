@@ -170,8 +170,12 @@ auteurs sont exclues ; les publications communes sont dédoublonnées par ID Tik
 Un ou deux hashtags peuvent filtrer les légendes des comptes, avec le même ET/OU.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient deux références éditoriales initiales,
-Le Monde et franceinfo, avec leurs sources. Il est extensible : `id`, `nom`, `compte`,
+L’inventaire `config/comptes_presse.json` contient six références éditoriales initiales :
+Le Monde, franceinfo, Le Parisien, 20 Minutes, Brut et Le HuffPost, avec leurs sources.
+Dans Streamlit, choisir **Presse et médias** dans **Rechercher par** : les comptes
+s’affichent directement sous forme de cases à cocher, sans liste déroulante cachée.
+La sélection reste conservée lors d’un changement de mode de recherche.
+L’inventaire est extensible : `id`, `nom`, `compte`,
 `categorie`, `source_editoriale`, `statut_verification`. Les catégories sont dans
 `config/categories_medias.json`. Une référence éditoriale n’est pas une garantie de
 vérification actuelle : le rapport distingue l’identifiant observé, sa concordance,
@@ -375,3 +379,18 @@ parcours Streamlit, avec une source synthétique hors TikTok.
 
 Références d’intégration : [fragments Streamlit](https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment)
 et [contexte de session](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.context).
+
+### Une session pour plusieurs sources
+
+Les deux hashtags (ET comme OU) et les comptes sélectionnés utilisent le même
+navigateur et ses cookies pendant toute la collecte. La vérification initiale
+manuelle n’est demandée qu’une fois. La deuxième source accessible est consultée
+automatiquement. Si TikTok affiche réellement une nouvelle connexion ou un CAPTCHA,
+la collecte s’interrompt de nouveau pour permettre l’intervention de l’utilisateur.
+La correction supprime les pauses systématiques ajoutées par l’application ; elle
+ne supprime pas les vérifications décidées par TikTok.
+
+Le parcours Chrome synthétique vérifie deux hashtags, une seule validation,
+la conservation du cookie de test et l’export TXT/ZIP. Les tests unitaires vérifient
+aussi qu’un nouveau blocage visible déclenche bien une intervention et que les
+comptes de presse partagent la même session.

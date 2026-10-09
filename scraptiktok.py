@@ -209,16 +209,21 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
 
 
 def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
-                  *, interact=manual_step, progress=None, check=None) -> list[str]:
+                  *, interact=manual_step, progress=None, check=None, validation_initiale=True) -> list[str]:
     check = check or (lambda: None)
     check()
     open_page(driver, report["hashtag_url"])
-    if args.interactive:
-        interact("Vérifiez que les vidéos du hashtag sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
+    if args.interactive and validation_initiale:
+        interact("Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
     links: dict[str, str] = {}
 
     def scan(browser: webdriver.Chrome) -> bool:
         check()
+        # Une autre source réutilise la session ; seules les vérifications visibles
+        # de TikTok interrompent alors la collecte, même si des liens restent derrière.
+        if args.interactive and browser.execute_script(BLOCKED_JS):
+            interact("TikTok affiche une connexion ou une vérification. Terminez-la pour poursuivre.")
+            check()
         previous = len(links)
         for href in browser.execute_script(DISCOVER_JS):
             identity = canonical_post(href)

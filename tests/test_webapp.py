@@ -191,6 +191,25 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(self.job.search_errors, 1)
         self.assertEqual(len(self.job.records), 1)
 
+    def test_une_validation_partagee_entre_sources(self):
+        for reglages in (web.StartRequest(hashtag='été', second_hashtag='voyage'),
+                        web.StartRequest(source_collecte='presse', medias=['lemonde','franceinfo'])):
+            job = web.Job('test', reglages, self.job.directory)
+            pilote = Mock()
+            validations = []
+            def decouvrir(navigateur, arguments, rapport, **options):
+                self.assertIs(navigateur, pilote)
+                validations.append(options['validation_initiale'])
+                if options['validation_initiale']: options['interact']('Première vérification')
+                return [RECORD['url']]
+            with patch.object(web.scraper, 'collect_links', side_effect=decouvrir), \
+                 patch.object(web, 'wait_for_user') as intervention, \
+                 patch('collecte.verification_comptes.observer_profil', return_value={}), \
+                 patch.object(web.scraper, 'read_post', return_value=RECORD), patch.object(job, 'pause'):
+                web.execute_job(job, driver_factory=lambda args: pilote)
+            self.assertEqual(validations, [True,False])
+            intervention.assert_called_once()
+
     def test_identical_hashtags_and_blank_second_input(self):
         self.assertEqual(len(web.StartRequest(hashtag="été", second_hashtag="#ÉTÉ").hashtags), 1)
         self.assertEqual(web.StartRequest(hashtag="été", second_hashtag="  ").second_hashtag, "")

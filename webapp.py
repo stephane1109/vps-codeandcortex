@@ -409,6 +409,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         sources = ([{"hashtag": h} for h in job.settings.hashtags]
                    if job.settings.source_collecte == "hashtags" else job.settings.sources)
         medias_par_compte = {s["compte"]: s for s in job.settings.sources}
+        session_validee = False
+        def intervenir(message):
+            nonlocal session_validee
+            interact(message)
+            session_validee = True
         for source in sources:
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Recherche des publications de {etiquette}…")
@@ -416,12 +421,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 if "hashtag" in source:
                     rapport = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(source['hashtag'])}"}
                     found = scraper.collect_links(driver, args, rapport,
-                        interact=lambda message: interact(f"{etiquette} : {message}"), check=job.check)
+                        interact=lambda message: intervenir(f"{etiquette} : {message}"), check=job.check,
+                        validation_initiale=not session_validee)
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport,
-                        interact=lambda message: interact(f"{etiquette} : {message}"), check=job.check)
+                        interact=lambda message: intervenir(f"{etiquette} : {message}"), check=job.check,
+                        validation_initiale=not session_validee)
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport})
                 for url in found:
                     identity = scraper.canonical_post(url)
