@@ -5,7 +5,8 @@ import re
 import streamlit as st
 from interface.client import appeler_api
 
-st.set_page_config(page_title="ScrapTikTok", page_icon="📝", layout="centered")
+# Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
+st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="centered")
 st.title("ScrapTikTok")
 st.caption("Collecter les textes des publications TikTok.")
 
