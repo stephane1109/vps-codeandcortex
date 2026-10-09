@@ -32,6 +32,7 @@ from selenium.webdriver.common.keys import Keys
 
 import scraptiktok as scraper
 from language_filter import classify_description
+from video.disponibilite import video_disponible
 from collecte.dates import normaliser_date, evaluer_periode
 
 LOG = logging.getLogger("scraptiktok.web")
@@ -246,7 +247,7 @@ class Job:
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
                     "limite_commentaires":self.settings.limite_commentaires,
-                    "archive_prete": self.archive_prete, "video_progression":progression, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": os.getenv("INSTALL_VIDEO", "0") == "1",
+                    "archive_prete": self.archive_prete, "video_progression":progression, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": video_disponible(),
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
@@ -746,7 +747,7 @@ def create_app(manager=None):
     @app.post("/api/jobs/{job_id}/video", status_code=202)
     def lancer_analyse_video(job_id: str, options: OptionsVideo, request: Request):
         job = manager.get(owner(request), job_id)
-        if os.getenv("INSTALL_VIDEO", "0") != "1":
+        if not video_disponible():
             raise HTTPException(409, "Le traitement vidéo n’est pas activé sur ce serveur.")
         with manager.lock:
             if any(j.busy or j.video_busy for j in manager.jobs.values()):
@@ -780,7 +781,7 @@ def create_app(manager=None):
     @app.get("/api/configuration")
     def configuration_interface(request: Request):
         owner(request)
-        return {"video_disponible":os.getenv("INSTALL_VIDEO", "0") == "1"}
+        return {"video_disponible":video_disponible()}
 
     @app.get("/api/session")
     def session(request: Request):

@@ -1,8 +1,5 @@
 # Couche audiovisuelle facultative. Les modèles sont chargés uniquement sur activation.
-numpy>=1.26,<3
-opencv-python-headless>=4.10,<5
-Pillow>=10,<13
-yt-dlp>=2025.1,<2027
+-r requirements-video-base.txt
 pytesseract>=0.3.13,<0.4
 faster-whisper>=1.1,<2
 open-clip-torch>=2.30,<4

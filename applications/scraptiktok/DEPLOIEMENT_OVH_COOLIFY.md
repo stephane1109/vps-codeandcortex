@@ -117,28 +117,28 @@ un registre de sessions partagé.
 
 ## Activer les modules vidéo (facultatif)
 
-Un redéploiement normal conserve le profil texte : `INSTALL_VIDEO=0` à la construction.
-Les collectes par comptes, l’engagement, les commentaires, SQLite et les exports enrichis
-fonctionnent déjà dans ce profil. Le port, Chromium/Xvfb et la commande restent inchangés.
+Le déploiement standard inclut désormais la comparaison SHA-256, pHash, ORB et
+temporelle : l’argument de construction par défaut est **`INSTALL_VIDEO=base`**.
+Il installe ffmpeg et `requirements-video-base.txt`, sans PyTorch, Whisper ou CLIP.
+Le port, Chromium/Xvfb, le volume et la commande restent inchangés. Un redéploiement
+de la branche à jour installe ces outils ; si Coolify contient une valeur explicite
+`INSTALL_VIDEO=0`, la retirer ou la remplacer par `base` avant de reconstruire.
 
-Pour activer l’analyse audiovisuelle, transmettre **`INSTALL_VIDEO=1` comme argument de
-construction Docker**, puis reconstruire l’image. Une variable ajoutée seulement à
-l’exécution ne suffit pas à installer les bibliothèques. Dans Coolify, la variable doit
-être disponible pendant le build Docker (argument `INSTALL_VIDEO` déclaré dans le Dockerfile).
-Vérifier dans le journal que l’étape conditionnelle installe ffmpeg, Tesseract et
-`requirements-video.txt`. Le bouton d’analyse apparaît après une collecte enrichie.
+Trois profils restent disponibles à la construction :
+- `base` (défaut) : collecte textuelle et comparaison des fichiers/séquences ;
+- `0` : textes uniquement, sans dépendances vidéo ;
+- `1` : profil audiovisuel avancé, avec OCR, Whisper et OpenCLIP, utilisable via l’API
+  et la commande de traitement par lots.
 
-L’image installe PyTorch CPU avant OpenCLIP, sans CUDA. Prévoir une marge de **4 Go RAM
-et 2 vCPU au minimum pour commencer**, plus d’espace disque pour l’image, les poids et
-les vidéos ; mesurer la consommation réelle, notamment pour Whisper/CLIP. Une seule
-analyse s’exécute à la fois. Limiter les premiers essais à quelques vidéos. Si les
-ressources manquent, conserver le profil texte ou désactiver les options lourdes.
+La disponibilité affichée dépend des dépendances réellement présentes. Ajouter une
+variable à l’exécution n’installe aucune bibliothèque. Les options d’administration
+ne sont pas présentées dans l’interface utilisateur.
 
-Avec Compose :
-
-```bash
-INSTALL_VIDEO=1 MEM_LIMIT=4g docker compose up -d --build
-```
+Avec Compose, le profil standard est obtenu par `docker compose up -d --build`.
+Les lots restent bornés, avec une seule analyse à la fois. Pour le profil avancé,
+prévoir au moins 4 Go de RAM et 2 vCPU comme point de départ, puis mesurer la
+consommation ; les modèles et les fichiers demandent également de l’espace disque.
+`INSTALL_VIDEO=1 MEM_LIMIT=4g docker compose up -d --build` conserve ce profil avancé.
 
 Conserver un volume sur `/app/data`. Pour garder les poids entre déploiements, un volume
 supplémentaire sur `/home/app/.cache` peut être monté avec des droits d’écriture pour
@@ -173,8 +173,8 @@ Le contrôle de santé vérifie désormais les deux services.
 
 Le menu **Options vidéo (facultatif)** de l’onglet **Collecte** reste visible dans
 tous les profils. L’onglet **Aide** explique les méthodes de comparaison.
-L’argument de construction **`INSTALL_VIDEO=1`** reste nécessaire pour exécuter les
-analyses ; une simple variable d’exécution ne remplace pas l’installation des moteurs.
+Le profil standard **`INSTALL_VIDEO=base`** inclut les comparaisons proposées dans
+l’interface ; le profil avancé `1` reste facultatif.
 Sur le profil texte, les cases sont visibles et le bouton d’analyse est désactivé
 avec une explication. Les choix des deux méthodes sont transmis au traitement réel.
 

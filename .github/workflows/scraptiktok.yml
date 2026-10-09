@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        video: ["0", "1"]
+        video: ["0", "base", "1"]
     steps:
       - name: Read the exact public commit
         run: |

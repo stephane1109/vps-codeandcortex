@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        INSTALL_VIDEO: "${INSTALL_VIDEO:-0}"
+        INSTALL_VIDEO: "${INSTALL_VIDEO:-base}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${PORT:-8501}:8501"

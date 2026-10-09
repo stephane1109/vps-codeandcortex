@@ -1,0 +1,5 @@
+# Comparaison des fichiers et séquences, sans modèle à télécharger.
+numpy>=1.26,<3
+opencv-python-headless>=4.10,<5
+Pillow>=10,<13
+yt-dlp>=2025.1,<2027

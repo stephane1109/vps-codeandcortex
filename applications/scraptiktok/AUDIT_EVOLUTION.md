@@ -56,7 +56,17 @@ Le profil texte affiche les options même sans dépendances vidéo, avec un mess
 sur leur indisponibilité. Les dates, ET/OU, le français, les commentaires et exports
 sont repris dans le formulaire Streamlit. Les anciennes fonctions restent testées.
 
-86 tests unitaires/API/Streamlit passent localement, avec contrôle de l’origine du
+89 tests unitaires/API/Streamlit passent localement, avec contrôle de l’origine du
 WebSocket, indépendance des méthodes et absence de calcul ORB quand il est désactivé.
 La CI ajoute un parcours Chrome propre à Streamlit, incluant sa fenêtre de contrôle.
 Les tests de gestes restent synthétiques : ils ne résolvent pas un CAPTCHA TikTok réel.
+
+
+L’interface vidéo est réduite aux fichiers identiques et aux séquences communes.
+Les réglages de modèles et d’administration restent hors du formulaire. Le profil
+Docker standard installe les dépendances de comparaison sans les modèles lourds ;
+les profils texte et audiovisuel avancé restent disponibles. La disponibilité est
+contrôlée à partir des modules et de ffmpeg, pas uniquement d’une variable.
+Un test lance le vrai sous-processus via l’API sur quatre MP4 synthétiques : copie
+exacte, séquence recadrée et vidéo différente, avec vérification du ZIP final.
+Il ne garantit pas qu’une vidéo TikTok distante sera téléchargeable depuis le VPS.

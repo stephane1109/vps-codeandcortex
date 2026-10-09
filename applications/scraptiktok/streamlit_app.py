@@ -103,26 +103,14 @@ with onglet_collecte:
         st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
     with st.expander("Options vidéo (facultatif)"):
-        st.subheader("Comparer les vidéos")
-        st.caption("Ces méthodes s’appliquent aux vidéos des publications collectées, par lots bornés.")
-        sha = st.checkbox("SHA-256 — fichiers strictement identiques", value=True, key="comparer_sha256", disabled=occupe)
-        sequences = st.checkbox("pHash + ORB + temps — séquences communes ou recadrées", value=True, key="comparer_sequences", disabled=occupe)
-        st.caption("pHash présélectionne les images ; ORB vérifie leur géométrie ; l’alignement temporel vérifie la séquence.")
-        embeddings = st.checkbox("Similarité sémantique (embeddings visuels)", key="embeddings", disabled=occupe)
-        st.caption("Une ressemblance sémantique est distinguée d’un réemploi de séquence.")
-        with st.expander("Caractéristiques audiovisuelles"):
-            st.checkbox("Texte incrusté (OCR)", key="ocr", disabled=occupe)
-            st.checkbox("Piste audio et silences", key="audio", disabled=occupe)
-            st.checkbox("Transcription de la parole (Whisper)", key="transcription", disabled=occupe)
-            st.checkbox("Autoriser le téléchargement initial des modèles", key="telecharger_modeles", disabled=occupe)
-            st.caption("Les mesures et variables IRaMuTeQ sont codées automatiquement ; les valeurs inconnues et les confiances sont conservées.")
+        st.checkbox("Repérer les fichiers identiques (SHA-256)", value=True, key="comparer_sha256", disabled=occupe)
+        st.checkbox("Repérer les séquences communes (pHash + ORB)", value=True, key="comparer_sequences", disabled=occupe)
         if not video_disponible:
-            st.info("L’analyse vidéo n’est pas activée sur ce serveur. Les options restent visibles ; la collecte textuelle fonctionne normalement.")
-            st.caption("Pour l’administrateur : reconstruire l’image avec l’argument INSTALL_VIDEO=1.")
+            st.info("La comparaison vidéo est momentanément indisponible.")
         elif not collecte.get("archive_prete"):
-            st.info("Terminez d’abord une collecte avec une archive enrichie, puis lancez l’analyse ici.")
-        if st.button("Analyser les vidéos", type="primary", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
-            options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences","embeddings","ocr","audio","transcription","telecharger_modeles")}
+            st.caption("Disponible après une collecte avec l’archive enrichie.")
+        if st.button("Comparer les vidéos", disabled=occupe or not video_disponible or not collecte.get("archive_prete")):
+            options = {k:st.session_state[k] for k in ("comparer_sha256","comparer_sequences")}
             lancer(f"/api/jobs/{collecte['id']}/video",options)
     if st.button("Lancer la collecte", type="primary", disabled=occupe):
         debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
@@ -178,11 +166,10 @@ with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez vos hashtags ou vos médias et vos filtres.\n"
                 "2. Lancez la collecte ; validez TikTok dans la fenêtre intégrée si demandé.\n"
-                "3. Téléchargez le TXT. Pour comparer les vidéos, ouvrez **Options vidéo**, choisissez les méthodes et cliquez sur **Analyser les vidéos** après la collecte enrichie.")
+                "3. Téléchargez le TXT. Pour comparer les vidéos, ouvrez **Options vidéo**, choisissez les méthodes et cliquez sur **Comparer les vidéos** après la collecte enrichie.")
     st.subheader("Les méthodes, simplement")
     st.markdown("- **SHA-256** : une empreinte du fichier complet. Elle repère les copies strictement identiques ; un réencodage change l’empreinte.\n"
                 "- **pHash** : une empreinte de l’apparence des images. Elle présélectionne les images ressemblantes.\n"
                 "- **ORB** : compare des points visuels caractéristiques et leur disposition pour vérifier les images communes, y compris certains recadrages.\n"
-                "- **Comparaison temporelle** : vérifie que plusieurs images communes se suivent dans le même ordre. pHash, ORB et le temps travaillent ensemble pour détecter un réemploi de séquence.\n"
-                "- **Embeddings** : détectent une ressemblance de contenu ou de scène. Cela ne prouve pas qu’une même séquence a été réutilisée.")
+                "- **Comparaison temporelle** : vérifie que plusieurs images communes se suivent dans le même ordre. pHash, ORB et le temps travaillent ensemble pour détecter un réemploi de séquence.")
     st.caption("Le TXT contient les légendes. Le ZIP enrichi rassemble les données, les mesures et les résultats vidéo. Les valeurs indéterminées et les scores de confiance sont conservés ; aucun résultat ne garantit une collecte exhaustive.")

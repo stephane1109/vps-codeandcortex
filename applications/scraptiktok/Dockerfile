@@ -1,5 +1,5 @@
 FROM python:3.11-slim-bookworm
-ARG INSTALL_VIDEO=0
+ARG INSTALL_VIDEO=base
 ENV INSTALL_VIDEO=${INSTALL_VIDEO}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -23,12 +23,19 @@ RUN apt-get update \
     && useradd --system --gid app --create-home --home-dir /home/app app
 
 WORKDIR /app
-COPY requirements.txt requirements-video.txt ./
+COPY requirements.txt requirements-video-base.txt requirements-video.txt ./
 RUN pip install -r requirements.txt
-# Le profil texte ne télécharge aucun moteur ni modèle audiovisuel.
+# Le déploiement standard compare les séquences sans gros modèles.
+# INSTALL_VIDEO=0 conserve un profil limité aux textes.
+RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends ffmpeg \
+      && rm -rf /var/lib/apt/lists/* \
+      && pip install -r requirements-video-base.txt; fi
+# Les fonctions audiovisuelles avancées restent facultatives.
 RUN if [ "$INSTALL_VIDEO" = "1" ]; then \
       apt-get update \
-      && apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
+      && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
       && rm -rf /var/lib/apt/lists/* \
       && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
       && pip install -r requirements-video.txt; fi

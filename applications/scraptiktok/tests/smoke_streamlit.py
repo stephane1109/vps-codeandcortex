@@ -35,7 +35,7 @@ def principale():
         libre=socket.socket(); libre.bind(('127.0.0.1',0)); port_streamlit=libre.getsockname()[1]; libre.close()
         origine=f'http://127.0.0.1:{port}'
         environnement={'UI_STREAMLIT':'1','STREAMLIT_PORT':str(port_streamlit),'SCRAPTIKTOK_API_URL':origine,'INSTALL_VIDEO':'1'}
-        with patch.dict(os.environ,environnement):
+        with patch.dict(os.environ,environnement),patch.object(web,'video_disponible',return_value=True):
             gestionnaire=web.Manager(data_dir=temporaire)
             app=web.create_app(gestionnaire)
             visites_sources=[]
@@ -99,9 +99,9 @@ def principale():
                     navigateur.save_screenshot('/tmp/scraptiktok-aide.png')
                     onglet(0)
                     navigateur.find_element(By.XPATH,"//summary[contains(.,'Options vidéo (facultatif)')]").click()
-                    attente.until(lambda d:'SHA-256 — fichiers strictement identiques' in d.find_element(By.TAG_NAME,'body').text)
-                    assert 'pHash + ORB + temps' in navigateur.find_element(By.TAG_NAME,'body').text
-                    assert not bouton('Analyser les vidéos').is_enabled()
+                    attente.until(lambda d:'Repérer les fichiers identiques (SHA-256)' in d.find_element(By.TAG_NAME,'body').text)
+                    assert 'Repérer les séquences communes (pHash + ORB)' in navigateur.find_element(By.TAG_NAME,'body').text
+                    assert not bouton('Comparer les vidéos').is_enabled()
                     onglet(0)
                     navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Presse et médias']]").click()
                     attente.until(lambda d:'Le Parisien (@leparisien)' in d.find_element(By.TAG_NAME,'body').text)
@@ -158,10 +158,10 @@ def principale():
                     with zipfile.ZipFile(io.BytesIO(archive)) as z: assert 'publications.json' in z.namelist()
                     panneau=navigateur.find_element(By.XPATH,"//details[summary[contains(.,'Options vidéo (facultatif)')]]")
                     if panneau.get_attribute('open') is None: panneau.find_element(By.TAG_NAME,'summary').click()
-                    case=attente.until(conditions.element_to_be_clickable((By.XPATH,"//label[contains(.,'pHash + ORB + temps')]")))
+                    case=attente.until(conditions.element_to_be_clickable((By.XPATH,"//label[contains(.,'Repérer les séquences communes (pHash + ORB)')]")))
                     case.click()
-                    attente.until(lambda d:bouton('Analyser les vidéos').is_enabled())
-                    bouton('Analyser les vidéos').click()
+                    attente.until(lambda d:bouton('Comparer les vidéos').is_enabled())
+                    bouton('Comparer les vidéos').click()
                     attente.until(lambda d:video.called)
                     assert video.call_args.args[1].comparer_sha256
                     assert not video.call_args.args[1].comparer_sequences

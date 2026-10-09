@@ -25,8 +25,11 @@ class TestsInterface(unittest.TestCase):
             self.assertTrue(any('ORB' in m.value and 'SHA-256' in m.value for m in page.tabs[1].markdown))
             self.assertTrue(page.checkbox(key='comparer_sha256').value)
             self.assertTrue(page.checkbox(key='comparer_sequences').value)
-            self.assertTrue(any('pas activée' in i.value for i in page.info))
-            self.assertTrue(next(b for b in page.button if b.label=='Analyser les vidéos').disabled)
+            for cle in ('embeddings','ocr','audio','transcription','telecharger_modeles'):
+                self.assertFalse(any(c.key==cle for c in page.checkbox))
+            self.assertFalse(any('INSTALL_VIDEO' in c.value for c in page.caption))
+            self.assertTrue(any('momentanément indisponible' in i.value for i in page.info))
+            self.assertTrue(next(b for b in page.button if b.label=='Comparer les vidéos').disabled)
             page.radio(key='source').set_value('comptes').run()
             self.assertFalse(page.exception)
             page.text_input(key='comptes').set_value('@lemondefr').run()
