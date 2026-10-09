@@ -9,7 +9,10 @@ class TestsComptes(unittest.TestCase):
         for valeur in ("https://evil.test/@media", "../etc", "@", "a/b"):
             with self.assertRaises(ValueError): normaliser_compte(valeur)
     def test_inventaire_et_sources(self):
-        self.assertGreaterEqual(len(charger_inventaire()), 2)
+        inventaire = charger_inventaire()
+        self.assertGreaterEqual(len(inventaire), 2)
+        requete = StartRequest(source_collecte="presse", medias=[m["id"] for m in inventaire])
+        self.assertEqual(len(requete.sources), len(inventaire))
         self.assertEqual(selectionner_medias(["lemonde"])[0]["compte"], "lemondefr")
         with self.assertRaises(ValueError): selectionner_medias(["inconnu"])
         self.assertTrue(StartRequest(source_collecte="comptes", comptes=["lemondefr"]).enrichie)
