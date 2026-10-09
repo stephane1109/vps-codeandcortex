@@ -17,6 +17,24 @@ class TestsEnrichis(unittest.TestCase):
             self.assertEqual(json.loads((job.directory/"publications.json").read_text())[0]["id"],"123")
             with job.base.connexion() as c:
                 self.assertEqual(c.execute("SELECT COUNT(*) FROM publications").fetchone()[0],1)
+    def test_plusieurs_medias_un_inaccessible_et_un_accessible(self):
+        with tempfile.TemporaryDirectory() as d:
+            job=web.Job("test",web.StartRequest(source_collecte="presse",medias=["lemonde","franceinfo"]),Path(d))
+            record={"id":"123", "url":"https://www.tiktok.com/@franceinfo/video/123", "author":"franceinfo", "description":"Une actualité en France.", "engagement":{}}
+            def decouvrir(navigateur, arguments, compte, rapport, **options):
+                if compte == 'lemondefr':
+                    rapport['discovery_stop']='blocked'
+                    raise RuntimeError('CAPTCHA')
+                return [record['url']]
+            with patch('collecte.comptes.collecter_compte',side_effect=decouvrir) as comptes, patch.object(web.scraper,'read_post',return_value=record), patch.object(job,'pause'):
+                web.execute_job(job,driver_factory=lambda args:Mock())
+            self.assertEqual([c.args[2] for c in comptes.call_args_list],['lemondefr','franceinfo'])
+            self.assertEqual(job.status,'partial')
+            self.assertIn(record['description'],job.path.read_text())
+            bilan=job.snapshot()['bilan_sources']
+            self.assertEqual([b['liens'] for b in bilan],[0,1])
+            self.assertIn('Vérification TikTok',bilan[0]['message'])
+
     def test_api_archive_proprietaire_et_video_optionnelle(self):
         with tempfile.TemporaryDirectory() as d:
             def terminer(job): job.update(busy=False,status="completed")

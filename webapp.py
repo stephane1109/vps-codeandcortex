@@ -238,6 +238,10 @@ class Job:
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "filtered": self.filtered, "search_errors": self.search_errors,
+                    "bilan_sources": [{"source": entree["source"],
+                        "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
+                        "message": entree.get("message", "Recherche terminée.")}
+                        for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
@@ -415,27 +419,31 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             nonlocal session_validee
             interact(message)
             session_validee = True
-        for source in sources:
+        for numero_source, source in enumerate(sources, 1):
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
-            job.update(status="discovering", message=f"Recherche des publications de {etiquette}…")
+            job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
             try:
                 if "hashtag" in source:
                     rapport = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(source['hashtag'])}"}
                     found = scraper.collect_links(driver, args, rapport,
-                        interact=lambda message: intervenir(f"{etiquette} : {message}"), check=job.check,
+                        interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
                         validation_initiale=not session_validee)
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport,
-                        interact=lambda message: intervenir(f"{etiquette} : {message}"), check=job.check,
+                        interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
                         validation_initiale=not session_validee)
-                job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport})
+                rapport["discovered_urls"] = found
+                job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
+                    "message": "Recherche terminée." if found else "Aucune publication accessible dans cette page."})
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity: unique_links.setdefault(identity[0], identity[1])
             except (RuntimeError, scraper.WebDriverException):
-                job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now()})
+                job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
+                    "message": "Vérification TikTok non terminée." if rapport.get("discovery_stop") == "blocked"
+                    else "Page inaccessible ou aucune publication lisible. Vérifiez le profil dans TikTok."})
                 if len(sources) == 1: raise
                 job.update(search_errors=job.search_errors + 1)
             job.update(discovered=len(unique_links))
@@ -491,20 +499,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
             final_message = "Aucun texte récupéré. TikTok peut limiter l’accès ou les publications peuvent être sans légende."
-            if job.settings.second_hashtag and job.processed:
+            if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only:
             if not job.records and (job.non_french or job.language_unknown):
                 final_message = "Aucun texte retenu par le filtre français parmi les descriptions correspondant aux hashtags."
             final_message += f" Filtre français : {job.non_french} texte(s) dans une autre langue, {job.language_unknown} texte(s) trop court(s) ou de langue incertaine écartés."
-        if job.settings.second_hashtag:
-            final_message += f" {job.filtered} texte(s) écarté(s) par le filtre ET/OU."
+        if job.settings.hashtags:
+            final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
         if job.settings.date_debut or job.settings.date_fin:
             if not job.records and (job.hors_periode or job.dates_indeterminees):
                 final_message = "Aucun texte retenu avec la période et les autres filtres choisis."
             final_message += f" Période : {job.hors_periode} publication(s) hors période et {job.dates_indeterminees} publication(s) sans date exploitable écartées."
         if job.search_errors:
-            final_message += f" {job.search_errors} recherche(s) de hashtag inaccessible(s) ; les résultats sont incomplets."
+            final_message += f" {job.search_errors} source(s) inaccessible(s) ; les résultats sont incomplets."
+        if job.errors:
+            final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:
@@ -512,7 +522,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     except Stopped:
         final_status, final_message = "stopped", "Collecte arrêtée. Les textes déjà obtenus restent téléchargeables."
     except RuntimeError:
-        final_message = "Aucune publication accessible. Vérifiez le hashtag et réessayez après avoir terminé la vérification TikTok."
+        final_message = "Aucune publication accessible pour la source choisie. Consultez le détail des sources et vérifiez que les publications sont visibles dans TikTok avant de continuer."
     except Exception:
         LOG.exception("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."

@@ -1,4 +1,4 @@
-"""Formulaire Streamlit, conservation des choix et activation des vraies méthodes."""
+"""Formulaire Streamlit, sélection des médias et conservation des filtres."""
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -11,7 +11,7 @@ from video.parametres import charger_seuils
 from webapp import OptionsVideo, StartRequest
 
 class TestsInterface(unittest.TestCase):
-    def test_formulaire_et_methodes_toujours_visibles(self):
+    def test_formulaire_et_selection_complete_des_medias(self):
         def repondre(chemin,*a,**kw):
             if chemin=='/api/session': return {'job':None}
             if chemin=='/api/configuration': return {'video_disponible':False}
@@ -21,15 +21,9 @@ class TestsInterface(unittest.TestCase):
             page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.exception)
             self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Aide'])
-            self.assertTrue(any(e.label=='Options vidéo (facultatif)' for e in page.tabs[0].expander))
-            self.assertTrue(any('ORB' in m.value and 'SHA-256' in m.value for m in page.tabs[1].markdown))
-            self.assertTrue(page.checkbox(key='comparer_sha256').value)
-            self.assertTrue(page.checkbox(key='comparer_sequences').value)
-            for cle in ('embeddings','ocr','audio','transcription','telecharger_modeles'):
-                self.assertFalse(any(c.key==cle for c in page.checkbox))
-            self.assertFalse(any('INSTALL_VIDEO' in c.value for c in page.caption))
-            self.assertTrue(any('momentanément indisponible' in i.value for i in page.info))
-            self.assertTrue(next(b for b in page.button if b.label=='Comparer les vidéos').disabled)
+            self.assertFalse(any('vidéo' in e.label.lower() for e in page.expander))
+            self.assertFalse(any(c.key in {'comparer_sha256','comparer_sequences'} for c in page.checkbox))
+            self.assertFalse(any(b.label=='Comparer les vidéos' for b in page.button))
             page.radio(key='source').set_value('comptes').run()
             self.assertFalse(page.exception)
             page.text_input(key='comptes').set_value('@lemondefr').run()
@@ -55,6 +49,33 @@ class TestsInterface(unittest.TestCase):
             self.assertFalse(page.exception)
             page.date_input(key='date_debut').set_value('2026-10-01').run()
             self.assertFalse(page.exception)
+    def test_catalogue_actualise_et_envoi_de_tous_les_medias_sans_ancien_hashtag(self):
+        inventaire = charger_inventaire()
+        catalogue = inventaire[:1]
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': catalogue}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
+            page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            page.text_input(key='hashtag').set_value('filtre_ancien').run()
+            catalogue = inventaire
+            page.radio(key='source').set_value('presse').run()
+            self.assertEqual(sum(c.key.startswith('media_') for c in page.checkbox),len(inventaire))
+            self.assertEqual(page.text_input(key='hashtag_comptes').value,'')
+            page.button(key='tous_medias').click().run()
+            next(b for b in page.button if b.label=='Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]['medias'],[m['id'] for m in inventaire])
+            self.assertEqual(envois[-1]['hashtag'],'')
+            self.assertEqual(len(StartRequest(**envois[-1]).sources),len(inventaire))
+            page.radio(key='source').set_value('hashtags').run()
+            self.assertEqual(page.text_input(key='hashtag').value,'filtre_ancien')
+
     def test_sha_et_orb_sont_effectivement_optionnels(self):
         a={'id':'1','sha256':'idem','images':[]}; b={**a,'id':'2'}
         seuils=charger_seuils()

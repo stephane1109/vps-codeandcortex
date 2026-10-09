@@ -180,7 +180,7 @@ traitements séquentiels restent inchangés.
 Dans Streamlit, choisir **Presse et médias** dans **Rechercher par** : les comptes
 s’affichent directement sous forme de cases à cocher, sans liste déroulante cachée.
 Le bouton **Tout cocher** sélectionne tous les médias ; chaque case reste modifiable.
-La sélection reste conservée lors d’un changement de mode de recherche.
+La sélection reste conservée lors d’un changement de mode de recherche. Le compteur indique combien de médias sont sélectionnés. Le catalogue est relu à chaque interaction pour ne pas conserver une ancienne liste en session. Les hashtags de la recherche générale sont séparés des filtres facultatifs de la recherche par comptes.
 L’inventaire est extensible : `id`, `nom`, `compte`,
 `categorie`, `source_editoriale`, `statut_verification`. Les catégories sont dans
 `config/categories_medias.json`. Une référence éditoriale n’est pas une garantie de
@@ -211,8 +211,8 @@ Les astérisques sont neutralisés uniquement dans le corps IRaMuTeQ, sans modif
 
 ## Traitement audiovisuel facultatif
 
-Installer le profil vidéo décrit dans le guide de déploiement, terminer une collecte
-enrichie, puis ouvrir l’onglet **Vidéo · SHA-256 / pHash / ORB**. La détection de réemploi
+Les options vidéo ont été retirées de l’interface. Les modules restent accessibles
+par l’API ou le traitement par lots, avec le profil vidéo décrit dans le guide de déploiement et une collecte enrichie. La détection de réemploi
 s’exécute sans annotation manuelle. OCR, audio, Whisper et embeddings sont des options
 indépendantes ; aucun modèle n’est téléchargé sans activer l’autorisation correspondante.
 Le téléchargement vidéo se fait avec yt-dlp sur les URL publiques validées, sans exporter
@@ -343,29 +343,19 @@ L’API `/api/jobs` accepte `date_debut` et `date_fin` au format `AAAA-MM-JJ` (o
 Une période inversée ou une date invalide est refusée.
 
 
-## Interface Streamlit et méthodes visibles
+## Interface Streamlit de collecte
 
-L’accueil utilise désormais `streamlit_app.py` : deux onglets **Collecte** et
-**Aide**. Les méthodes sont regroupées dans le menu à déplier
-**Options vidéo (facultatif)** de l’onglet Collecte, même sans collecte et même si les
-bibliothèques vidéo sont absentes. L’aide résume SHA-256, pHash, ORB, la comparaison
-temporelle. Aucun réglage d’installation ou de téléchargement de modèles n’apparaît
-dans le formulaire.
-Les cases **Repérer les fichiers identiques (SHA-256)** et
-**Repérer les séquences communes (pHash + ORB)** activent réellement les méthodes correspondantes.
-La validation géométrique et temporelle reste associée à pHash : une seule image
-ressemblante n’est pas présentée comme une séquence réemployée.
+L’accueil utilise `streamlit_app.py` avec deux onglets **Collecte** et **Aide**.
+Les options vidéo, les boutons de comparaison et l’aide audiovisuelle ont été retirés.
+Les exports TXT/ZIP, les commentaires, ET/OU, les dates et le filtre français restent disponibles.
+Les modules audiovisuels restent utilisables via l’API et le traitement par lots.
 
-Une collecte enrichie est requise avant d’analyser ses vidéos. Elle est cochée par
-défaut dans Streamlit ; les commentaires restent facultatifs. Le bouton **Comparer les
-vidéos** lance les méthodes choisies. Les fonctions OCR, audio, Whisper et embeddings
-restent disponibles via l’API et le traitement par lots avec le profil avancé ; elles
-ne sont plus exposées dans le formulaire minimaliste. La comparaison sémantique reste
-distincte du réemploi dans les résultats. Désactiver la comparaison
-de séquences laisse la variable de réemploi indéterminée pour les fichiers distincts.
-Les méthodes choisies sont conservées dans les paramètres et les comparaisons JSON.
-SHA-256 reste calculé pour identifier le cache, même quand sa comparaison est désactivée.
-Le décodage des images reste utilisé pour le codage des caractéristiques audiovisuelles.
+Les comptes sont visités l’un après l’autre : l’affichage du Monde au début ne signifie
+pas que les autres médias sont exclus. Le message indique la source courante et le
+nombre total. **Détail des sources** indique les liens trouvés et les sources
+inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
+publication lisible. Les compteurs de filtres et d’erreurs de lecture expliquent les
+résultats vides sans les assimiler à l’absence de publications du média.
 
 `lancer_interface.py` démarre FastAPI sur le port public et Streamlit sur un port local
 privé. `interface/passerelle.py` relaie HTTP et WebSocket à la racine du domaine, avec cookie
