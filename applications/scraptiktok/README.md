@@ -141,3 +141,20 @@ L’export TXT indique les hashtags et ET/OU dans son nom. Une recherche inacces
 produit un résultat partiel explicite si l’autre a abouti. L’absence de résultat
 ne signifie pas qu’aucune publication TikTok ne contient la combinaison : seuls
 les contenus accessibles et consultés sont filtrés.
+
+### Filtre « Français uniquement »
+
+La case est cochée à l’ouverture de l’interface ; la décocher conserve toutes les
+langues. Elle s’applique après le filtre ET/OU, aux descriptions uniquement.
+La détection s’effectue localement sur le serveur avec
+[langdetect](https://github.com/Mimino666/langdetect), sans envoyer les textes à un
+service externe. Liens, mentions, hashtags et symboles sont exclus du texte utilisé
+pour la détection, mais l’export conserve la description originale intégrale.
+
+Le filtre retient la langue `fr` avec un score de modèle d’au moins 0,9. Ce score
+n’est pas une garantie de justesse. Moins de quatre mots ou quinze lettres, ou un
+score insuffisant, donnent une langue incertaine et excluent le texte. Les textes
+mixtes peuvent être mal classés. Deux compteurs distinguent les autres langues des
+textes trop courts ou incertains. L’export porte le suffixe `_fr.txt`. Une collecte
+sans texte retenu affiche l’explication au lieu de proposer un fichier vide.
+L’API conserve les langues par défaut ; envoyer `french_only: true` active le filtre.

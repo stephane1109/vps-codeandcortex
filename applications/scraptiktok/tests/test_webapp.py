@@ -37,6 +37,18 @@ class WebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202, response.text)
         return response.json()["id"]
 
+    def test_french_filter_settings_persist_and_download_filename(self):
+        response = self.client.post("/api/jobs", headers=HEADERS, json={"hashtag": "été", "french_only": True})
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(response.json()["french_only"])
+        snapshot = self.client.get("/api/session").json()["job"]
+        self.assertTrue(snapshot["french_only"])
+        job = self.manager.jobs[snapshot["id"]]
+        job.records.append(RECORD)
+        job.save()
+        response = self.client.get(f"/api/jobs/{job.id}/download")
+        self.assertIn("_fr.txt", response.headers["content-disposition"])
+
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
         for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 301}):
@@ -182,6 +194,45 @@ class WorkerTests(unittest.TestCase):
     def test_identical_hashtags_and_blank_second_input(self):
         self.assertEqual(len(web.StartRequest(hashtag="été", second_hashtag="#ÉTÉ").hashtags), 1)
         self.assertEqual(web.StartRequest(hashtag="été", second_hashtag="  ").second_hashtag, "")
+
+    def test_language_filter_combines_with_and_or_and_keeps_original_text(self):
+        captions = [
+            "Les manifestants demandent une augmentation des salaires et de meilleures conditions de travail. 🍋 #été #voyage",
+            "Today we are visiting the city and sharing our favorite places with friends. #été #voyage",
+            "#été #voyage 😀",
+            "Nous sommes réunis pour défendre nos droits et améliorer nos conditions de travail. #été",
+        ]
+        urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111,222,333,444)]
+        records = {url: dict(RECORD, url=url, description=text) for url, text in zip(urls, captions)}
+        for operator, expected in (("AND", 1), ("OR", 2)):
+            job = web.Job("test", web.StartRequest(hashtag="été", second_hashtag="voyage", operator=operator, french_only=True), self.job.directory)
+            with patch.object(web.scraper, "collect_links", return_value=urls), \
+                 patch.object(web.scraper, "read_post", side_effect=lambda d, url, *a, **k: records[url]), patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(len(job.records), expected)
+            self.assertEqual((job.non_french, job.language_unknown), (1, 1))
+            self.assertEqual(job.filtered, 2 - expected)
+            self.assertIn(captions[0], job.path.read_text())
+            self.assertNotIn(captions[1], job.path.read_text())
+            self.assertTrue(job.settings.filename.endswith("_fr.txt"))
+
+    def test_disabled_language_filter_does_not_discard_short_text(self):
+        with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"), \
+             patch.object(web, "classify_description") as detect:
+            web.execute_job(self.job, driver_factory=lambda args: Mock())
+        detect.assert_not_called()
+        self.assertEqual(len(self.job.records), 1)
+
+    def test_empty_french_result_explains_filter_and_disables_download(self):
+        self.job.settings.french_only = True
+        with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
+            web.execute_job(self.job, driver_factory=lambda args: Mock())
+        self.assertEqual(self.job.language_unknown, 1)
+        self.assertFalse(self.job.snapshot()["can_download"])
+        self.assertIn("Aucun texte retenu par le filtre français", self.job.message)
+        self.assertEqual(self.job.status, "completed")
 
     def test_live_action_acknowledged_after_execution_and_reports_failure(self):
         for failure in (False, True):

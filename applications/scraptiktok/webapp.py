@@ -27,6 +27,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
 import scraptiktok as scraper
+from language_filter import classify_description
 
 LOG = logging.getLogger("scraptiktok.web")
 TERMINAL = {"completed", "partial", "failed", "stopped"}
@@ -39,6 +40,7 @@ class StartRequest(BaseModel):
     operator: Literal["AND", "OR"] = "AND"
     limit: int = Field(default=50, ge=1, le=300)
     include_sources: bool = True
+    french_only: bool = False
 
     @field_validator("hashtag")
     @classmethod
@@ -60,7 +62,7 @@ class StartRequest(BaseModel):
     @property
     def filename(self):
         joiner = "_ET_" if self.operator == "AND" else "_OU_"
-        return "tiktok_" + joiner.join(self.hashtags) + ".txt"
+        return "tiktok_" + joiner.join(self.hashtags) + ("_fr" if self.french_only else "") + ".txt"
 
 
 def tag_key(value):
@@ -129,6 +131,8 @@ class Job:
         self.processed = 0
         self.errors = 0
         self.filtered = 0
+        self.non_french = 0
+        self.language_unknown = 0
         self.search_errors = 0
         self.records = []
         self.frame = b""
@@ -146,6 +150,8 @@ class Job:
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "filtered": self.filtered, "search_errors": self.search_errors,
+                    "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
+                    "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
@@ -329,12 +335,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
-                with job.lock:
-                    if record["description"]:
-                        if matches_hashtags(record["description"], job.settings):
-                            job.records.append(record)
-                        else:
+                if record["description"]:
+                    matches = matches_hashtags(record["description"], job.settings)
+                    language = (classify_description(record["description"])
+                                if matches and job.settings.french_only else "fr")
+                    with job.lock:
+                        if not matches:
                             job.filtered += 1
+                        elif language == "other":
+                            job.non_french += 1
+                        elif language == "unknown":
+                            job.language_unknown += 1
+                        else:
+                            job.records.append(record)
             except scraper.WebDriverException:
                 with job.lock:
                     job.errors += 1
@@ -346,6 +359,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message = "Aucun texte récupéré. TikTok peut limiter l’accès ou les publications peuvent être sans légende."
             if job.settings.second_hashtag and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
+        if job.settings.french_only:
+            if not job.records and (job.non_french or job.language_unknown):
+                final_message = "Aucun texte retenu par le filtre français parmi les descriptions correspondant aux hashtags."
+            final_message += f" Filtre français : {job.non_french} texte(s) dans une autre langue, {job.language_unknown} texte(s) trop court(s) ou de langue incertaine écartés."
         if job.settings.second_hashtag:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre ET/OU."
         if job.search_errors:

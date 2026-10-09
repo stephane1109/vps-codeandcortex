@@ -37,6 +37,8 @@
             <div class="limit-header"><label for="limit">Publications à consulter par hashtag</label><input type="number" id="limit" min="1" max="300" value="50" aria-label="Nombre maximal de publications"></div>
             <input id="limit-range" type="range" min="1" max="300" value="50" aria-label="Nombre maximal de publications, curseur">
             <div class="range-labels"><span>1 publication</span><span>300 maximum par hashtag</span></div>
+            <label class="checkbox"><input type="checkbox" id="french-only" checked aria-describedby="language-help"><span>Français uniquement</span></label>
+            <p class="help" id="language-help">Détection automatique sur la description, hors hashtags et liens. Les textes trop courts ou de langue incertaine sont écartés. La détection peut se tromper.</p>
             <label class="checkbox"><input type="checkbox" id="include-sources" checked><span>Inclure les auteurs et les liens dans le fichier</span></label>
             <button class="button primary" id="start-button" type="submit">Lancer la collecte <span aria-hidden="true">↗</span></button>
             <p class="form-error" id="form-error" role="alert" hidden></p>
