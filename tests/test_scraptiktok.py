@@ -126,7 +126,56 @@ class CollectionTests(unittest.TestCase):
         driver.get.side_effect = app.TimeoutException()
         with self.assertRaises(app.TimeoutException):
             app.open_page(driver, URL)
-        driver.execute_script.assert_called_once_with("window.stop();")
+        self.assertEqual(driver.execute_script.call_args.args, ("window.stop();",))
+
+    def test_delai_sur_page_cible_deja_visible_ne_fige_pas_le_captcha(self):
+        driver = Mock()
+        driver.get.side_effect = app.TimeoutException()
+        driver.execute_script.return_value = {"url": URL, "etat": "interactive", "contenu": True}
+        app.open_page(driver, URL)
+        self.assertFalse(any(c.args[0] == 'window.stop();' for c in driver.execute_script.call_args_list))
+
+    def test_delai_sur_ancienne_page_ou_autre_domaine_reste_un_echec(self):
+        for url in (URL.replace('1234567890','999'), URL.replace('www.tiktok.com','evil.test')):
+            driver = Mock()
+            driver.get.side_effect = app.TimeoutException()
+            driver.execute_script.return_value = {"url":url,"etat":"complete","contenu":True}
+            with self.assertRaises(app.TimeoutException): app.open_page(driver,URL)
+
+    def test_aucun_lien_montre_la_page_meme_sans_captcha_detecte(self):
+        args=app.parse_args(['test','--limit','1']); args.interactive=True; args.timeout=.01
+        driver=Mock(); visible=[]
+        def script(code):
+            if code==app.BLOCKED_JS: return False
+            if code==app.DISCOVER_JS: return visible
+            return {'url':'https://www.tiktok.com/@test','etat':'complete','liens':0}
+        driver.execute_script.side_effect=script
+        def verifier(message): visible.append(URL)
+        intervention=Mock(side_effect=verifier)
+        report={'hashtag_url':'https://www.tiktok.com/@test','compte_attendu':'test'}
+        resultat=app.collect_links(driver,args,report,interact=intervention,validation_initiale=False)
+        self.assertEqual(resultat,[URL]); intervention.assert_called_once()
+        self.assertIn('Examinez la page',intervention.call_args.args[0])
+
+    def test_page_toujours_vide_une_seule_reprise_et_diagnostic(self):
+        args=app.parse_args(['test']); args.interactive=True; args.timeout=.01
+        driver=Mock(); intervention=Mock()
+        driver.execute_script.side_effect=lambda code: False if code==app.BLOCKED_JS else ([] if code==app.DISCOVER_JS else {'url':'https://www.tiktok.com/@test','etat':'complete','liens':0})
+        report={'hashtag_url':'https://www.tiktok.com/@test'}
+        with self.assertRaisesRegex(RuntimeError,'après vérification'):
+            app.collect_links(driver,args,report,interact=intervention,validation_initiale=False)
+        intervention.assert_called_once()
+        self.assertEqual(report['diagnostic']['code'],'page_sans_liens')
+        self.assertEqual(report['discovery_stop'],'no_accessible_links')
+
+    def test_erreur_reseau_navigation_conservee(self):
+        args=app.parse_args(['test']); driver=Mock()
+        driver.get.side_effect=app.WebDriverException('unknown error: net::ERR_NAME_NOT_RESOLVED')
+        driver.execute_script.return_value=False
+        report={'hashtag_url':'https://www.tiktok.com/@test'}
+        with self.assertRaises(app.WebDriverException): app.collect_links(driver,args,report)
+        self.assertEqual(report['diagnostic']['code'],'erreur_reseau')
+        self.assertEqual(report['diagnostic']['erreur_reseau'],'net::ERR_NAME_NOT_RESOLVED')
 
     def exercise_run(self, effects):
         folder = tempfile.TemporaryDirectory()

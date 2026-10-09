@@ -172,6 +172,8 @@ def create_driver(args: argparse.Namespace) -> webdriver.Chrome:
         os.environ.setdefault("SE_SKIP_DRIVER_IN_PATH", "true")
     os.environ.setdefault("SE_CACHE_PATH", str(BASE_DIR / ".selenium-cache"))
     options = webdriver.ChromeOptions()
+    # Attendre le document, puis les publications explicitement ; pas toutes les vidéos.
+    options.page_load_strategy = "eager"
     options.add_argument("--window-size=1440,1000")
     options.add_argument("--lang=fr-FR")
     options.add_argument("--mute-audio")
@@ -199,11 +201,49 @@ def manual_step(message: str) -> None:
         raise RuntimeError("Le mode interactif nécessite un terminal ouvert.") from exc
 
 
+def meme_page_tiktok(observee: str, attendue: str) -> bool:
+    """Comparer la page cible sans accepter une ancienne page ou un autre domaine."""
+    if not isinstance(observee, str): return False
+    observee, attendue = urlsplit(observee), urlsplit(attendue)
+    return (observee.scheme == attendue.scheme == "https"
+            and observee.hostname in {"www.tiktok.com", "tiktok.com"}
+            and attendue.hostname in {"www.tiktok.com", "tiktok.com"}
+            and observee.path.rstrip("/") == attendue.path.rstrip("/"))
+
+
+def diagnostiquer_page(driver, report, erreur=None, code=None):
+    """Conserver des indices bornés, sans cookies, capture ni contenu privé de la page."""
+    diagnostic = {"code": code or "page_sans_liens"}
+    if erreur is not None:
+        diagnostic["exception"] = type(erreur).__name__
+        reseau = re.search(r"net::ERR_[A-Z_]+", str(erreur))
+        if reseau: diagnostic.update(code="erreur_reseau", erreur_reseau=reseau.group())
+        elif isinstance(erreur, TimeoutException): diagnostic["code"] = "delai_navigation"
+        elif isinstance(erreur, WebDriverException): diagnostic["code"] = "erreur_navigateur"
+    try:
+        page = driver.execute_script("""return {url:location.origin+location.pathname,
+            etat:document.readyState, titre:document.title.slice(0,160),
+            liens:document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]').length};""")
+        if isinstance(page, dict): diagnostic.update(page)
+        if driver.execute_script(BLOCKED_JS) is True: diagnostic["code"] = "verification_tiktok"
+    except WebDriverException: pass
+    report["diagnostic"] = diagnostic
+    return diagnostic
+
+
 def open_page(driver: webdriver.Chrome, url: str) -> None:
     try:
         driver.get(url)
     except TimeoutException:
-        # Une navigation incomplète ne doit pas faire lire la page précédente.
+        # Une ressource lente ne doit pas masquer un CAPTCHA déjà affiché sur la cible.
+        try:
+            page = driver.execute_script("""return {url:location.href, etat:document.readyState,
+                contenu:!!document.body && document.body.innerText.trim().length>0};""")
+            if (isinstance(page, dict) and meme_page_tiktok(page.get("url"), url)
+                    and page.get("etat") in {"interactive", "complete"} and page.get("contenu") is True):
+                return
+        except WebDriverException: pass
+        # Ne jamais lire les publications de la page précédente après une navigation ratée.
         driver.execute_script("window.stop();")
         raise
 
@@ -212,17 +252,24 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                   *, interact=manual_step, progress=None, check=None, validation_initiale=True) -> list[str]:
     check = check or (lambda: None)
     check()
-    open_page(driver, report["hashtag_url"])
+    try:
+        open_page(driver, report["hashtag_url"])
+    except WebDriverException as erreur:
+        diagnostiquer_page(driver, report, erreur)
+        raise
     if args.interactive and validation_initiale:
         interact("Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
     links: dict[str, str] = {}
+    intervention_effectuee = bool(args.interactive and validation_initiale)
 
     def scan(browser: webdriver.Chrome) -> bool:
+        nonlocal intervention_effectuee
         check()
         # Une autre source réutilise la session ; seules les vérifications visibles
         # de TikTok interrompent alors la collecte, même si des liens restent derrière.
         if args.interactive and browser.execute_script(BLOCKED_JS):
             interact("TikTok affiche une connexion ou une vérification. Terminez-la pour poursuivre.")
+            intervention_effectuee = True
             check()
         previous = len(links)
         for href in browser.execute_script(DISCOVER_JS):
@@ -236,20 +283,25 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             progress(len(links))
         return len(links) > previous
 
-    try:
-        WebDriverWait(driver, args.timeout).until(scan)
-    except TimeoutException as exc:
-        if driver.execute_script(BLOCKED_JS):
-            report["discovery_stop"] = "blocked"
-            raise RuntimeError(
-                "TikTok affiche une connexion ou un CAPTCHA. Relancez avec --interactive, "
-                "terminez la vérification dans Chrome, puis appuyez sur Entrée dans le terminal."
-            ) from exc
-        report["discovery_stop"] = "no_accessible_links"
-        raise RuntimeError(
-            "Aucune publication accessible pour cette source. La page peut être vide, bloquée, "
-            "ou avoir changé. Relancez avec --interactive et vérifiez Chrome."
-        ) from exc
+    # Montrer la page réelle si aucun lien n'est trouvé, même si le sélecteur de
+    # CAPTCHA a changé. Une seule reprise évite d'enchaîner des demandes identiques.
+    for tentative in range(2):
+        try:
+            WebDriverWait(driver, args.timeout).until(scan)
+            break
+        except TimeoutException as exc:
+            diagnostic = diagnostiquer_page(driver, report)
+            bloque = diagnostic["code"] == "verification_tiktok"
+            if args.interactive and not intervention_effectuee and tentative == 0:
+                interact("Aucune publication n’a pu être lue sur ce profil. Examinez la page TikTok ci-dessous, "
+                         "terminez une éventuelle vérification, puis cliquez sur Continuer pour réessayer.")
+                intervention_effectuee = True
+                check()
+                continue
+            report["discovery_stop"] = "blocked" if bloque else "no_accessible_links"
+            if bloque:
+                raise RuntimeError("TikTok affiche une connexion ou un CAPTCHA. Terminez la vérification dans le navigateur.") from exc
+            raise RuntimeError("La page TikTok ne fournit aucun lien de publication lisible après vérification.") from exc
     idle = 0
     for _ in range(args.max_scrolls):
         check()

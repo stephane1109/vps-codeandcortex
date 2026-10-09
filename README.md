@@ -350,11 +350,15 @@ Les options vidéo, les boutons de comparaison et l’aide audiovisuelle ont ét
 Les exports TXT/ZIP, les commentaires, ET/OU, les dates et le filtre français restent disponibles.
 Les modules audiovisuels restent utilisables via l’API et le traitement par lots.
 
-Les comptes sont visités l’un après l’autre : l’affichage du Monde au début ne signifie
-pas que les autres médias sont exclus. Le message indique la source courante et le
-nombre total. **Détail des sources** indique les liens trouvés et les sources
+Les comptes sélectionnés sont tous transmis au moteur. Les profils accessibles
+s’enchaînent automatiquement, sans validation manuelle imposée au démarrage. Une
+vérification TikTok réelle demande toujours une intervention. Le panneau **Médias
+pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
+indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. Les compteurs de filtres et d’erreurs de lecture expliquent les
+publication lisible. Une page sans lien ouvre une intervention manuelle, même si aucun CAPTCHA n’est détecté, puis une seule nouvelle lecture est tentée. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+
+Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement au profil ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.
 
 `lancer_interface.py` démarre FastAPI sur le port public et Streamlit sur un port local
