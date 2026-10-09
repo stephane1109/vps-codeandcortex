@@ -1,4 +1,6 @@
 import tempfile
+import csv
+import io
 import time
 import unittest
 from pathlib import Path
@@ -105,6 +107,38 @@ class WebTests(unittest.TestCase):
                              json={"kind": kind}).status_code, 422)
         job.update(status="collecting")
         self.assertEqual(self.client.post(f"/api/jobs/{job_id}/continue", headers=HEADERS, json={}).status_code, 409)
+
+    def test_exports_compteurs_et_commentaires_prives_sans_perdre_zero_ou_inconnues(self):
+        from collecte.engagement import extraire_engagement
+        identifiant = self.start()
+        job = self.manager.jobs[identifiant]
+        publication = dict(RECORD, retenue=True, langue_detection='unknown',
+            engagement=extraire_engagement({'stats': {'diggCount': 0, 'commentCount': 12, 'shareCount': '1.2K'}}))
+        job.records.append(publication)
+        job.commentaires.extend([
+            {'publication_id': '123', 'auteur': 'lecteur', 'texte': 'Très bien !'},
+            {'publication_id': '999', 'auteur': 'autre', 'texte': 'Commentaire hors sélection'},
+        ])
+        r = self.client.get(f'/api/jobs/{identifiant}/engagement.csv')
+        self.assertEqual(r.status_code, 200)
+        ligne = list(csv.DictReader(io.StringIO(r.content.decode('utf-8-sig')), delimiter=';'))[0]
+        self.assertEqual(ligne['likes'], '0')
+        self.assertEqual(ligne['vues'], '')
+        self.assertEqual(ligne['commentaires'], '12')
+        self.assertEqual(ligne['partages'], '1200')
+        self.assertEqual(ligne['partages_brut'], '1.2K')
+        self.assertEqual(ligne['partages_estime'], 'True')
+        self.assertEqual(ligne['langue_detection'], 'unknown')
+        self.assertEqual(ligne['legende'], RECORD['description'])
+        self.assertEqual(job.snapshot()['apercu_engagement'][0]['engagement']['likes']['valeur'], 0)
+        commentaires = self.client.get(f'/api/jobs/{identifiant}/commentaires.txt')
+        self.assertEqual(commentaires.status_code, 200)
+        self.assertIn('Très bien !', commentaires.text)
+        self.assertNotIn('hors sélection', commentaires.text)
+        with TestClient(self.app) as autre:
+            autre.get('/')
+            for fichier in ('engagement.csv', 'commentaires.txt'):
+                self.assertEqual(autre.get(f'/api/jobs/{identifiant}/{fichier}').status_code, 404)
 
     def test_expiration_stops_abandoned_job_and_removes_finished_files(self):
         job_id = self.start()
@@ -227,16 +261,18 @@ class WorkerTests(unittest.TestCase):
         ]
         urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111,222,333,444)]
         records = {url: dict(RECORD, url=url, description=text) for url, text in zip(urls, captions)}
-        for operator, expected in (("AND", 1), ("OR", 2)):
+        for operator, expected in (("AND", 2), ("OR", 3)):
             job = web.Job("test", web.StartRequest(hashtag="été", second_hashtag="voyage", operator=operator, french_only=True), self.job.directory)
             with patch.object(web.scraper, "collect_links", return_value=urls), \
                  patch.object(web.scraper, "read_post", side_effect=lambda d, url, *a, **k: records[url]), patch.object(job, "pause"):
                 web.execute_job(job, driver_factory=lambda args: Mock())
             self.assertEqual(len(job.records), expected)
             self.assertEqual((job.non_french, job.language_unknown), (1, 1))
-            self.assertEqual(job.filtered, 2 - expected)
+            self.assertEqual(job.filtered, 3 - expected)
             self.assertIn(captions[0], job.path.read_text())
             self.assertNotIn(captions[1], job.path.read_text())
+            self.assertIn(captions[2], job.path.read_text())
+            self.assertEqual(next(r for r in job.records if r['description']==captions[2])['langue_detection'], 'unknown')
             self.assertTrue(job.settings.filename.endswith("_fr.txt"))
 
     def test_disabled_language_filter_does_not_discard_short_text(self):
@@ -247,14 +283,15 @@ class WorkerTests(unittest.TestCase):
         detect.assert_not_called()
         self.assertEqual(len(self.job.records), 1)
 
-    def test_empty_french_result_explains_filter_and_disables_download(self):
+    def test_filtre_francais_conserve_les_textes_courts_indetermines(self):
         self.job.settings.french_only = True
         with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
              patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
             web.execute_job(self.job, driver_factory=lambda args: Mock())
         self.assertEqual(self.job.language_unknown, 1)
-        self.assertFalse(self.job.snapshot()["can_download"])
-        self.assertIn("Aucun texte retenu par le filtre français", self.job.message)
+        self.assertTrue(self.job.snapshot()["can_download"])
+        self.assertIn(RECORD['description'], self.job.path.read_text())
+        self.assertIn("langue indéterminée conservés", self.job.message)
         self.assertEqual(self.job.status, "completed")
 
     def test_live_action_acknowledged_after_execution_and_reports_failure(self):

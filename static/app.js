@@ -29,7 +29,7 @@ function render(current) {
   $("count-discovered").textContent = current.discovered;
   $("progress").value = current.discovered ? 100 * current.processed / current.discovered : 0;
   $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Jusqu’à ${current.limit} publications par source. ${current.filtered || 0} texte(s) écarté(s) par le filtre.`;
-  if (current.french_only) $("progress-detail").textContent += ` Filtre français : ${current.non_french || 0} texte(s) dans une autre langue, ${current.language_unknown || 0} texte(s) trop court(s) ou incertain(s) écartés.`;
+  if (current.french_only) $("progress-detail").textContent += ` Filtre français : ${current.non_french || 0} texte(s) identifié(s) dans une autre langue écartés ; ${current.language_unknown || 0} texte(s) de langue indéterminée conservés.`;
   if (current.date_debut || current.date_fin) $("progress-detail").textContent += ` Période UTC : ${current.date_debut || "sans début"} → ${current.date_fin || "sans fin"} (inclus). ${current.hors_periode || 0} hors période, ${current.dates_indeterminees || 0} sans date exploitable.`;
   const labels = {starting: "Préparation", discovering: "Recherche", attention: "À vous de jouer", collecting: "Collecte en cours", completed: "Terminé", partial: "Résultats partiels", failed: "Accès interrompu", stopped: "Arrêté"};
   $("status-badge").hidden = false; $("status-badge").textContent = labels[current.status] || "En cours";

@@ -47,7 +47,7 @@ class TestsDates(unittest.TestCase):
                 self.assertEqual(job.status,'completed')
                 self.assertEqual((job.hors_periode,job.dates_indeterminees),(1,1))
                 self.assertEqual([r['id'] for r in job.records],['1','2'])
-                self.assertEqual(commentaires.call_count,3)
+                self.assertEqual(commentaires.call_count,2)
                 brut=json.loads((job.directory/'publications.json').read_text())
                 self.assertEqual([p['id'] for p in brut],['1','2','5'])
                 self.assertTrue(job.archive_prete)

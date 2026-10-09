@@ -257,6 +257,7 @@ class Job:
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
+                    "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {"inaccessible", "page_differente", "indisponible_ou_vide"} for r in self.records),
                     "limite_commentaires":self.settings.limite_commentaires,
                     "archive_prete": self.archive_prete, "video_progression":progression, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": video_disponible(),
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
@@ -264,6 +265,9 @@ class Job:
                     "processed": self.processed, "captions": len(self.records),
                     "errors": self.errors, "has_frame": bool(self.frame),
                     "action_error": self.action_error, "can_download": bool(self.records),
+                    "apercu_engagement": [{"id": r["id"], "author": r["author"], "url": r["url"],
+                        "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection")}
+                        for r in self.records[:100]],
                     "preview": [{"author": r["author"], "description": r["description"]}
                                 for r in self.records[:5]]}
 
@@ -480,6 +484,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
+                record["retenue"] = False
                 periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
                 if periode in {"hors_periode", "date_indeterminee"}:
                     with job.lock:
@@ -491,15 +496,6 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         media = medias_par_compte.get(record["author"].lower(), {})
                         record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
                         job.publications.append(record)
-                        if job.settings.collecter_commentaires:
-                            from collecte.commentaires import collecter_commentaires
-                            try:
-                                resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
-                                    job.settings.collecter_reponses, verifier=job.check, pause=job.pause)
-                                job.commentaires.extend(resultat.pop("commentaires"))
-                                record["collecte_commentaires"] = resultat
-                            except scraper.WebDriverException:
-                                record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
                     if record["description"]:
                         matches = matches_hashtags(record["description"], job.settings)
                         # Compter sur la même légende et dans la même période que le filtre.
@@ -511,17 +507,29 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             if matches:
                                 job.correspondances_hashtags += 1
                         language = (classify_description(record["description"])
-                                    if matches and job.settings.french_only else "fr")
+                                    if matches and job.settings.french_only else None)
+                        record["langue_detection"] = language
                         with job.lock:
                             if not matches:
                                 job.filtered += 1
                             elif language == "other":
                                 job.non_french += 1
-                            elif language == "unknown":
-                                job.language_unknown += 1
                             else:
+                                if language == "unknown":
+                                    job.language_unknown += 1
                                 record["retenue"] = True
                                 job.records.append(record)
+                        # Les commentaires sont demandés uniquement pour les publications retenues.
+                        if record.get("retenue") and job.settings.collecter_commentaires:
+                            from collecte.commentaires import collecter_commentaires
+                            try:
+                                resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
+                                    job.settings.collecter_reponses, verifier=job.check, pause=job.pause)
+                                with job.lock:
+                                    job.commentaires.extend(resultat.pop("commentaires"))
+                                    record["collecte_commentaires"] = resultat
+                            except scraper.WebDriverException:
+                                record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
                     else:
                         with job.lock:
                             job.legendes_vides += 1
@@ -540,9 +548,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only:
-            if not job.records and (job.non_french or job.language_unknown):
+            if not job.records and job.non_french:
                 final_message = "Aucun texte retenu par le filtre français parmi les descriptions correspondant aux hashtags."
-            final_message += f" Filtre français : {job.non_french} texte(s) dans une autre langue, {job.language_unknown} texte(s) trop court(s) ou de langue incertaine écartés."
+            final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée conservés."
         if job.settings.hashtags:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
             if job.settings.source_collecte != "hashtags":
@@ -832,6 +840,26 @@ def create_app(manager=None):
     def configuration_interface(request: Request):
         owner(request)
         return {"video_disponible":video_disponible()}
+
+    @app.get("/api/jobs/{job_id}/engagement.csv")
+    def telecharger_engagement(job_id: str, request: Request):
+        from corpus.construction import lignes_engagement, COLONNES_ENGAGEMENT
+        from corpus.export_csv import serialiser_csv
+        job = manager.get(owner(request), job_id)
+        with job.lock:
+            contenu = serialiser_csv(lignes_engagement(job.records), COLONNES_ENGAGEMENT)
+        return Response(contenu.encode("utf-8-sig"), media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="engagement.csv"'})
+
+    @app.get("/api/jobs/{job_id}/commentaires.txt")
+    def telecharger_commentaires(job_id: str, request: Request):
+        job = manager.get(owner(request), job_id)
+        with job.lock:
+            retenues = {p["id"]: p for p in job.records}
+            blocs = [f"Publication : {retenues[c['publication_id']]['url']}\n@{c.get('auteur') or 'inconnu'}\n{c['texte']}"
+                for c in job.commentaires if c["publication_id"] in retenues]
+        return Response("\n\n".join(blocs) + ("\n" if blocs else ""), media_type="text/plain",
+            headers={"Content-Disposition": 'attachment; filename="commentaires.txt"'})
 
     @app.get("/api/session")
     def session(request: Request):
