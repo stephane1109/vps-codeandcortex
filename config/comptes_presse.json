@@ -180,6 +180,69 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@ladepechedumidi"
+    },
+    {
+      "id": "rtl_officiel",
+      "nom": "RTL",
+      "compte": "rtl.officiel",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@rtl.officiel"
+    },
+    {
+      "id": "streetpress",
+      "nom": "StreetPress",
+      "compte": "streetpress_",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@streetpress_"
+    },
+    {
+      "id": "lapressedelamanche",
+      "nom": "La Presse de la Manche",
+      "compte": "lapressedelamanche",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lapressedelamanche"
+    },
+    {
+      "id": "clpress",
+      "nom": "CLPRESS",
+      "compte": "clpress",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@clpress"
+    },
+    {
+      "id": "lanouvellerepublique",
+      "nom": "La Nouvelle République",
+      "compte": "lanouvellerepublique",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lanouvellerepublique"
+    },
+    {
+      "id": "sofino",
+      "nom": "Sofino",
+      "compte": ".sofino",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@.sofino"
+    },
+    {
+      "id": "abacapress",
+      "nom": "Abaca Press",
+      "compte": "abacapress",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@abacapress"
     }
   ]
 }
