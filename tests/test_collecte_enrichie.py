@@ -7,6 +7,38 @@ import webapp as web
 from fastapi.testclient import TestClient
 
 class TestsEnrichis(unittest.TestCase):
+    def test_presse_deux_hashtags_et_ou_jusqu_aux_exports(self):
+        descriptions = ['#GRÈVE #école', '#grève', '#école', 'grève et école sans hashtags']
+        comptes = ['lemondefr', 'franceinfo', 'lemondefr', 'franceinfo']
+        publications = [{
+            'id': str(100+i), 'url': f'https://www.tiktok.com/@{compte}/video/{100+i}',
+            'author': compte, 'description': texte, 'engagement': {},
+        } for i, (compte, texte) in enumerate(zip(comptes, descriptions))]
+        for operateur, attendus in [('AND', ['100']), ('OR', ['100', '102', '101'])]:
+            with self.subTest(operateur=operateur), tempfile.TemporaryDirectory() as d:
+                job = web.Job('test', web.StartRequest(source_collecte='presse',
+                    medias=['lemonde', 'franceinfo'], hashtag='grève', second_hashtag='école',
+                    operator=operateur, french_only=False), Path(d))
+                def decouvrir(navigateur, arguments, compte, **options):
+                    return [p['url'] for p in publications if p['author'] == compte]
+                def lire(navigateur, url, *args, **options):
+                    return dict(next(p for p in publications if p['url'] == url))
+                with patch('collecte.comptes.collecter_compte', side_effect=decouvrir) as collecte, patch.object(web.scraper, 'read_post', side_effect=lire), patch.object(job, 'pause'):
+                    web.execute_job(job, driver_factory=lambda args: Mock())
+                self.assertEqual([c.args[2] for c in collecte.call_args_list], ['lemondefr', 'franceinfo'])
+                self.assertEqual([p['id'] for p in job.records], attendus)
+                self.assertEqual(job.processed, 4)
+                self.assertEqual(job.filtered, 4-len(attendus))
+                bilan = job.snapshot()
+                self.assertEqual(bilan['bilan_hashtags'], {'grève': 2, 'école': 2})
+                self.assertEqual(bilan['correspondances_hashtags'], len(attendus))
+                self.assertEqual(job.status, 'completed')
+                self.assertTrue(job.archive_prete)
+                export = json.loads((job.directory/'publications.json').read_text())
+                self.assertEqual([p['id'] for p in export if p['retenue']], attendus)
+                for p in publications:
+                    self.assertEqual(p['url'] in job.path.read_text(), p['id'] in attendus)
+
     def test_compte_export_sqlite_et_commentaires(self):
         with tempfile.TemporaryDirectory() as d:
             job=web.Job("test",web.StartRequest(source_collecte="comptes",comptes=["media"],collecter_commentaires=True),Path(d))
