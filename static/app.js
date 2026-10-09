@@ -21,18 +21,19 @@ function render(current) {
   job = current;
   const busy = current.busy;
   $("empty-state").hidden = true; $("job-state").hidden = false;
-  $("results-title").textContent = (current.hashtags || [current.hashtag]).map(tag => "#" + tag).join(current.operator === "OR" ? " OU " : " ET ");
+  $("results-title").textContent = (current.hashtags || [current.hashtag]).map(tag => "#" + tag).join(current.operator === "OR" ? " OU " : " ET ") + (current.french_only ? " · français" : "");
   $("status-message").textContent = current.message;
   $("count-captions").textContent = current.captions;
   $("count-processed").textContent = current.processed;
   $("count-discovered").textContent = current.discovered;
   $("progress").value = current.discovered ? 100 * current.processed / current.discovered : 0;
   $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Jusqu’à ${current.limit} publications par hashtag. ${current.filtered || 0} texte(s) écarté(s) par le filtre.`;
+  if (current.french_only) $("progress-detail").textContent += ` Filtre français : ${current.non_french || 0} texte(s) dans une autre langue, ${current.language_unknown || 0} texte(s) trop court(s) ou incertain(s) écartés.`;
   const labels = {starting: "Préparation", discovering: "Recherche", attention: "À vous de jouer", collecting: "Collecte en cours", completed: "Terminé", partial: "Résultats partiels", failed: "Accès interrompu", stopped: "Arrêté"};
   $("status-badge").hidden = false; $("status-badge").textContent = labels[current.status] || "En cours";
   $("status-badge").className = "badge " + current.status;
   $("start-button").disabled = busy;
-  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources"].forEach(id => $(id).disabled = busy);
+  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources", "french-only"].forEach(id => $(id).disabled = busy);
   $("stop-button").hidden = !busy; $("stop-button").disabled = false;
   $("stop-button").textContent = "Arrêter la collecte";
   $("download").hidden = !current.can_download;
@@ -98,7 +99,7 @@ async function startSearch(settings) {
 }
 $("search-form").addEventListener("submit", event => {
   event.preventDefault(); errorAt("form-error", "");
-  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked};
+  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, french_only: $("french-only").checked};
   if (settings.second_hashtag) {
     pendingSearch = settings;
     $("combination-description").textContent = `#${settings.hashtag.replace(/^#/, "")} et #${settings.second_hashtag.replace(/^#/, "")}`;
@@ -206,6 +207,6 @@ $("typing-form").addEventListener("submit", event => {
 });
 document.querySelectorAll("[data-key]").forEach(button => button.addEventListener("click", () => sendAction({kind: "key", key: button.dataset.key})));
 document.querySelectorAll("[data-scroll]").forEach(button => button.addEventListener("click", () => sendAction({kind: "scroll", delta: Number(button.dataset.scroll)})));
-api("/api/session").then(data => { if (data.job) { $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
+api("/api/session").then(data => { if (data.job) { $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
 setInterval(updateFrame, 350);

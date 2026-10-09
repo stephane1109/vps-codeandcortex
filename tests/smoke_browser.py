@@ -119,6 +119,11 @@ def main():
                     front.execute_cdp_cmd("Emulation.clearDeviceMetricsOverride", {})
                     front.set_window_size(1360, 1150)
                 front.find_element(By.ID, "hashtag").send_keys("tourisme")
+                language = front.find_element(By.ID, "french-only")
+                assert language.is_selected()
+                language.click()
+                assert not language.is_selected()
+                language.click()
                 second = front.find_element(By.ID, "second-hashtag")
                 second.send_keys("été")
                 front.find_element(By.ID, "start-button").click()
@@ -138,6 +143,8 @@ def main():
                 front.find_element(By.ID, "start-button").click()
                 WebDriverWait(front, 30).until(lambda d: d.find_element(By.ID, "browser-screen").is_displayed())
                 session = json.loads(browser_request("/api/session"))
+                assert session["job"]["french_only"] is True
+                assert session["job"]["filename"].endswith("_fr.txt")
                 job_id = session["job"]["id"]
                 frame = browser_request(f"/api/jobs/{job_id}/frame", binary=True)
                 width, height = struct.unpack(">II", frame[16:24])
@@ -207,7 +214,7 @@ def main():
                 assert not front.find_element(By.ID, "browser-panel").is_displayed()
                 front.execute_script("window.scrollTo(0,0)")
                 front.save_screenshot(str(artifacts / "results.png"))
-                print("PASS : interface, mobile, Chrome serveur, capture, clic, glisser avec image actualisée avant relâchement, annulation, saisie, collecte et téléchargement TXT UTF-8")
+                print("PASS : filtre français activable, interface, mobile, Chrome serveur, capture, clic, glisser avec image actualisée avant relâchement, annulation, saisie, collecte et téléchargement TXT UTF-8")
                 print(f"Captures : {artifacts}")
         finally:
             front.quit()
