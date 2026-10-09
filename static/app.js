@@ -29,11 +29,12 @@ function render(current) {
   $("progress").value = current.discovered ? 100 * current.processed / current.discovered : 0;
   $("progress-detail").textContent = current.errors ? `${current.errors} publication(s) n’ont pas pu être lues.` : `Jusqu’à ${current.limit} publications par source. ${current.filtered || 0} texte(s) écarté(s) par le filtre.`;
   if (current.french_only) $("progress-detail").textContent += ` Filtre français : ${current.non_french || 0} texte(s) dans une autre langue, ${current.language_unknown || 0} texte(s) trop court(s) ou incertain(s) écartés.`;
+  if (current.date_debut || current.date_fin) $("progress-detail").textContent += ` Période UTC : ${current.date_debut || "sans début"} → ${current.date_fin || "sans fin"} (inclus). ${current.hors_periode || 0} hors période, ${current.dates_indeterminees || 0} sans date exploitable.`;
   const labels = {starting: "Préparation", discovering: "Recherche", attention: "À vous de jouer", collecting: "Collecte en cours", completed: "Terminé", partial: "Résultats partiels", failed: "Accès interrompu", stopped: "Arrêté"};
   $("status-badge").hidden = false; $("status-badge").textContent = labels[current.status] || "En cours";
   $("status-badge").className = "badge " + current.status;
   $("start-button").disabled = busy;
-  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources", "french-only", "source-collecte", "comptes", "enrichir", "collecter-commentaires", "collecter-reponses", "limite-commentaires"].forEach(id => $(id).disabled = busy);
+  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources", "french-only", "source-collecte", "comptes", "enrichir", "collecter-commentaires", "collecter-reponses", "limite-commentaires", "date-debut", "date-fin", "effacer-periode"].forEach(id => $(id).disabled = busy);
   $("stop-button").hidden = !current.busy; $("stop-button").disabled = false;
   $("stop-button").textContent = "Arrêter la collecte";
   $("download").hidden = !current.can_download;
@@ -98,6 +99,7 @@ async function poll() {
   catch (error) { errorAt("form-error", error.message); }
   finally { polling = false; }
 }
+$("effacer-periode").addEventListener("click", () => { $("date-debut").value = ""; $("date-fin").value = ""; });
 $("limit").addEventListener("input", () => $("limit-range").value = $("limit").value);
 $("limit-range").addEventListener("input", () => $("limit").value = $("limit-range").value);
 async function startSearch(settings) {
@@ -107,11 +109,14 @@ async function startSearch(settings) {
 }
 $("search-form").addEventListener("submit", event => {
   event.preventDefault(); errorAt("form-error", "");
-  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, french_only: $("french-only").checked,
+  const settings = {hashtag: $("hashtag").value.trim(), second_hashtag: $("second-hashtag").value.trim(), limit: Number($("limit").value), include_sources: $("include-sources").checked, french_only: $("french-only").checked, date_debut: $("date-debut").value || null, date_fin: $("date-fin").value || null,
     source_collecte: $("source-collecte").value, comptes: $("comptes").value.split(/[\s,;]+/).filter(Boolean),
     medias: Array.from(document.querySelectorAll('#liste-presse input:checked')).map(e => e.value),
     enrichir: $("enrichir").checked, collecter_commentaires: $("collecter-commentaires").checked,
     collecter_reponses: $("collecter-reponses").checked, limite_commentaires: Number($("limite-commentaires").value)};
+  if (settings.date_debut && settings.date_fin && settings.date_debut > settings.date_fin) {
+    errorAt("form-error", "La date de début doit précéder ou égaler la date de fin."); return;
+  }
   if (settings.second_hashtag) {
     pendingSearch = settings;
     $("combination-description").textContent = `#${settings.hashtag.replace(/^#/, "")} et #${settings.second_hashtag.replace(/^#/, "")}`;
@@ -245,6 +250,6 @@ api("/api/presse").then(data => {
     label.append(input, texte); $("liste-presse").append(label);
   });
 }).catch(erreur => errorAt("form-error", erreur.message));
-api("/api/session").then(data => { if (data.job) { $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
+api("/api/session").then(data => { if (data.job) { $("date-debut").value = data.job.date_debut || ""; $("date-fin").value = data.job.date_fin || ""; $("periode-options").open = !!(data.job.date_debut || data.job.date_fin); $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; $("include-sources").checked = data.job.include_sources !== false; document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
 setInterval(updateFrame, 350);

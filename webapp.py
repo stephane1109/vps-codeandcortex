@@ -32,6 +32,7 @@ from selenium.webdriver.common.keys import Keys
 
 import scraptiktok as scraper
 from language_filter import classify_description
+from collecte.dates import normaliser_date, evaluer_periode
 
 LOG = logging.getLogger("scraptiktok.web")
 TERMINAL = {"completed", "partial", "failed", "stopped"}
@@ -52,6 +53,13 @@ class StartRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=300)
     include_sources: bool = True
     french_only: bool = False
+    date_debut: str | None = Field(default=None, max_length=10)
+    date_fin: str | None = Field(default=None, max_length=10)
+
+    @field_validator("date_debut", "date_fin")
+    @classmethod
+    def valider_date(cls, valeur):
+        return normaliser_date(valeur)
 
     @field_validator("hashtag")
     @classmethod
@@ -75,6 +83,8 @@ class StartRequest(BaseModel):
 
     @model_validator(mode="after")
     def valider_sources(self):
+        if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
+            raise ValueError("La date de début doit précéder ou égaler la date de fin.")
         if self.source_collecte == "hashtags" and not self.hashtag:
             raise ValueError("Le premier hashtag est obligatoire.")
         if self.second_hashtag and not self.hashtag:
@@ -187,6 +197,8 @@ class Job:
         self.filtered = 0
         self.non_french = 0
         self.language_unknown = 0
+        self.hors_periode = 0
+        self.dates_indeterminees = 0
         self.search_errors = 0
         self.records = []
         self.frame = b""
@@ -221,6 +233,8 @@ class Job:
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
+                    "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
+                    "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
                     "source_collecte": self.settings.source_collecte, "comptes": self.settings.comptes,
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
@@ -416,33 +430,40 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
-                if job.settings.enrichie:
-                    media = medias_par_compte.get(record["author"].lower(), {})
-                    record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
-                    job.publications.append(record)
-                    if job.settings.collecter_commentaires:
-                        from collecte.commentaires import collecter_commentaires
-                        try:
-                            resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
-                                job.settings.collecter_reponses, verifier=job.check, pause=job.pause)
-                            job.commentaires.extend(resultat.pop("commentaires"))
-                            record["collecte_commentaires"] = resultat
-                        except scraper.WebDriverException:
-                            record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
-                if record["description"]:
-                    matches = matches_hashtags(record["description"], job.settings)
-                    language = (classify_description(record["description"])
-                                if matches and job.settings.french_only else "fr")
+                periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
+                if periode in {"hors_periode", "date_indeterminee"}:
                     with job.lock:
-                        if not matches:
-                            job.filtered += 1
-                        elif language == "other":
-                            job.non_french += 1
-                        elif language == "unknown":
-                            job.language_unknown += 1
-                        else:
-                            record["retenue"] = True
-                            job.records.append(record)
+                        if periode == "hors_periode": job.hors_periode += 1
+                        else: job.dates_indeterminees += 1
+                    job.journal.append({"publication_id":record["id"], "created_at":record.get("created_at"), "filtre_date":periode})
+                else:
+                    if job.settings.enrichie:
+                        media = medias_par_compte.get(record["author"].lower(), {})
+                        record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
+                        job.publications.append(record)
+                        if job.settings.collecter_commentaires:
+                            from collecte.commentaires import collecter_commentaires
+                            try:
+                                resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
+                                    job.settings.collecter_reponses, verifier=job.check, pause=job.pause)
+                                job.commentaires.extend(resultat.pop("commentaires"))
+                                record["collecte_commentaires"] = resultat
+                            except scraper.WebDriverException:
+                                record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
+                    if record["description"]:
+                        matches = matches_hashtags(record["description"], job.settings)
+                        language = (classify_description(record["description"])
+                                    if matches and job.settings.french_only else "fr")
+                        with job.lock:
+                            if not matches:
+                                job.filtered += 1
+                            elif language == "other":
+                                job.non_french += 1
+                            elif language == "unknown":
+                                job.language_unknown += 1
+                            else:
+                                record["retenue"] = True
+                                job.records.append(record)
             except scraper.WebDriverException:
                 with job.lock:
                     job.errors += 1
@@ -462,6 +483,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" Filtre français : {job.non_french} texte(s) dans une autre langue, {job.language_unknown} texte(s) trop court(s) ou de langue incertaine écartés."
         if job.settings.second_hashtag:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre ET/OU."
+        if job.settings.date_debut or job.settings.date_fin:
+            if not job.records and (job.hors_periode or job.dates_indeterminees):
+                final_message = "Aucun texte retenu avec la période et les autres filtres choisis."
+            final_message += f" Période : {job.hors_periode} publication(s) hors période et {job.dates_indeterminees} publication(s) sans date exploitable écartées."
         if job.search_errors:
             final_message += f" {job.search_errors} recherche(s) de hashtag inaccessible(s) ; les résultats sont incomplets."
         if not links and job.search_errors:

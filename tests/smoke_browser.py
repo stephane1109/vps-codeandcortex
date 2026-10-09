@@ -52,7 +52,7 @@ def main():
 
         @app.get("/fixture/post")
         def post():
-            item = {"id": "1234567890", "desc": CAPTION, "author": {"uniqueId": "fixture"}}
+            item = {"id": "1234567890", "desc": CAPTION, "createTime":1700000000, "author": {"uniqueId": "fixture"}}
             return HTMLResponse('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">' + json.dumps({"itemInfo": {"itemStruct": item}}) + '</script>')
 
         # Notre middleware CSP protège l'app. La fixture utilise des événements
@@ -119,6 +119,12 @@ def main():
                     front.execute_cdp_cmd("Emulation.clearDeviceMetricsOverride", {})
                     front.set_window_size(1360, 1150)
                 front.find_element(By.ID, "hashtag").send_keys("tourisme")
+                front.find_element(By.CSS_SELECTOR,"#periode-options summary").click()
+                front.execute_script("document.getElementById('date-debut').value='2023-11-15';document.getElementById('date-fin').value='2023-11-14'")
+                front.find_element(By.ID,"start-button").click()
+                assert "date de début" in front.find_element(By.ID,"form-error").text
+                assert json.loads(browser_request("/api/session"))["job"] is None
+                front.execute_script("document.getElementById('date-debut').value='2023-11-14'")
                 language = front.find_element(By.ID, "french-only")
                 assert language.is_selected()
                 language.click()
@@ -215,6 +221,13 @@ def main():
                 front.execute_script("window.scrollTo(0,0)")
                 front.save_screenshot(str(artifacts / "results.png"))
                 print("PASS : filtre français activable, interface, mobile, Chrome serveur, capture, clic, glisser avec image actualisée avant relâchement, annulation, saisie, collecte et téléchargement TXT UTF-8")
+                front.refresh()
+                WebDriverWait(front,10).until(lambda d: d.find_element(By.ID,"date-debut").get_attribute("value")=="2023-11-14")
+                assert front.find_element(By.ID,"date-fin").get_attribute("value")=="2023-11-14"
+                front.find_element(By.ID,"effacer-periode").click()
+                assert front.find_element(By.ID,"date-debut").get_attribute("value")==""
+                assert front.find_element(By.ID,"date-fin").get_attribute("value")==""
+                print("PASS : période inclusive, validation, restauration et effacement des dates")
                 # Vérifie également la nouvelle collecte par compte, sans service externe.
                 Select(front.find_element(By.ID,"source-collecte")).select_by_value("presse")
                 WebDriverWait(front,10).until(lambda d: len(d.find_elements(By.CSS_SELECTOR,"#liste-presse input"))>=2)
