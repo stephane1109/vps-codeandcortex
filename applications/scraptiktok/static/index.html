@@ -41,6 +41,11 @@
             <div class="limit-header"><label for="limit">Publications à consulter par source</label><input type="number" id="limit" min="1" max="300" value="50" aria-label="Nombre maximal de publications"></div>
             <input id="limit-range" type="range" min="1" max="300" value="50" aria-label="Nombre maximal de publications, curseur">
             <div class="range-labels"><span>1 publication</span><span>300 maximum par source</span></div>
+            <details id="periode-options"><summary>Période de publication (facultative)</summary>
+              <div class="periode-champs"><div><label for="date-debut">Du</label><input id="date-debut" name="date_debut" type="date" aria-describedby="periode-help"></div><div><label for="date-fin">Au</label><input id="date-fin" name="date_fin" type="date" aria-describedby="periode-help"></div></div>
+              <p class="help" id="periode-help">Dates incluses, en UTC. Vous pouvez laisser une borne vide. Le filtre s’applique aux publications consultées, sans garantir une recherche historique complète. Avec une période, les publications sans date connue sont écartées.</p>
+              <button class="button secondary" id="effacer-periode" type="button">Effacer la période</button>
+            </details>
             <label class="checkbox"><input type="checkbox" id="french-only" checked aria-describedby="language-help"><span>Français uniquement</span></label>
             <p class="help" id="language-help">Détection automatique sur la description, hors hashtags et liens. Les textes trop courts ou de langue incertaine sont écartés. La détection peut se tromper.</p>
             <label class="checkbox"><input type="checkbox" id="include-sources" checked><span>Inclure les auteurs et les liens dans le fichier</span></label>

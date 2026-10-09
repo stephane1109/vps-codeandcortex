@@ -733,3 +733,5 @@ footer {
 
 /* Extensions facultatives, mêmes couleurs et rythme que les cartes existantes. */
 select, #comptes {width:100%;padding:12px;border:1px solid #ccd6d2;border-radius:10px;background:#fff;color:#122522;font:inherit;margin-bottom:16px} fieldset {border:1px solid #dce4df;border-radius:10px;margin:12px 0;padding:12px} details {margin:18px 0;padding:14px;border:1px solid #dce4df;border-radius:12px} summary {cursor:pointer;font-weight:600} details .checkbox {margin-top:14px} #limite-commentaires {width:100%;padding:10px;border:1px solid #ccd6d2;border-radius:8px}
+
+.periode-champs {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px} .periode-champs input {box-sizing:border-box;min-width:0;width:100%;padding:10px;border:1px solid #ccd6d2;border-radius:8px;background:white;color:#122522;font:inherit} @media(max-width:480px){.periode-champs{grid-template-columns:1fr}}

@@ -311,3 +311,22 @@ journalistiques et ne valident pas l’accès actuel de TikTok depuis votre VPS.
 Références techniques : [OpenCV et homographies](https://docs.opencv.org/4.12.0/d9/d0c/group__calib3d.html),
 [yt-dlp](https://github.com/yt-dlp/yt-dlp), [faster-whisper](https://github.com/SYSTRAN/faster-whisper),
 [OpenCLIP](https://github.com/mlfoundations/open_clip).
+
+
+## Période de publication facultative
+
+Ouvrir **Période de publication**, puis renseigner **Du** et/ou **Au**. Les deux jours
+sont inclus, selon la date UTC de publication. Une seule borne est possible ;
+**Effacer la période** rétablit la collecte sans filtre de date. Le choix est conservé
+au rechargement de la session. Le filtre se combine avec les sources, ET/OU et le français.
+
+La période s’applique aux publications effectivement consultées dans la limite choisie.
+Elle ne constitue pas une recherche historique exhaustive dans TikTok : les publications
+anciennes peuvent ne pas apparaître parmi les liens accessibles. Avec un filtre actif,
+les dates absentes ou illisibles sont écartées et comptées séparément des dates hors période.
+Les publications écartées ne figurent pas dans le TXT, les corpus, les mesures d’engagement,
+les commentaires ni les lots vidéo. Le journal enrichi conserve leurs identifiants, dates
+observées et motifs d’exclusion. Sans période, le fonctionnement antérieur est conservé.
+
+L’API `/api/jobs` accepte `date_debut` et `date_fin` au format `AAAA-MM-JJ` (ou `null`).
+Une période inversée ou une date invalide est refusée.
