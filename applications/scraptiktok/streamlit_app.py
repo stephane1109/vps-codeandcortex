@@ -69,6 +69,11 @@ with onglet_collecte:
         st.caption("Cochez un ou plusieurs comptes. Les hashtags ci-dessous permettent de filtrer leurs publications.")
         def memoriser_medias():
             st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
+        def cocher_tous_les_medias():
+            st.session_state["medias"] = list(medias)
+            for identifiant in medias:
+                st.session_state["media_" + identifiant] = True
+        st.button("Tout cocher", key="tous_medias", on_click=cocher_tous_les_medias, disabled=occupe)
         colonnes_medias = st.columns(2)
         for indice,(identifiant,media) in enumerate(medias.items()):
             cle = "media_" + identifiant

@@ -8,7 +8,7 @@ from streamlit.testing.v1 import AppTest
 from collecte.presse import charger_inventaire
 from video.recherche_similaires import comparer_videos
 from video.parametres import charger_seuils
-from webapp import OptionsVideo
+from webapp import OptionsVideo, StartRequest
 
 class TestsInterface(unittest.TestCase):
     def test_formulaire_et_methodes_toujours_visibles(self):
@@ -40,6 +40,17 @@ class TestsInterface(unittest.TestCase):
             page.radio(key='source').set_value('hashtags').run()
             page.radio(key='source').set_value('presse').run()
             self.assertTrue(page.checkbox(key='media_lemonde').value)
+            page.button(key='tous_medias').click().run()
+            identifiants = [m['id'] for m in charger_inventaire()]
+            self.assertEqual(page.session_state['medias'], identifiants)
+            self.assertTrue(all(page.checkbox(key='media_'+m).value for m in identifiants))
+            self.assertEqual(len(StartRequest(source_collecte='presse',medias=page.session_state['medias']).sources),len(identifiants))
+            page.checkbox(key='media_lemonde').uncheck().run()
+            self.assertEqual(len(page.session_state['medias']),len(identifiants)-1)
+            page.radio(key='source').set_value('hashtags').run()
+            page.radio(key='source').set_value('presse').run()
+            self.assertFalse(page.checkbox(key='media_lemonde').value)
+            self.assertTrue(page.checkbox(key='media_politis_fr').value)
             page.radio(key='source').set_value('hashtags').run()
             self.assertFalse(page.exception)
             page.date_input(key='date_debut').set_value('2026-10-01').run()

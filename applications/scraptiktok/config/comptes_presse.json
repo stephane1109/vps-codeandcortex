@@ -243,6 +243,24 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@abacapress"
+    },
+    {
+      "id": "politis_fr",
+      "nom": "Politis",
+      "compte": "politis_fr",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@politis_fr"
+    },
+    {
+      "id": "france3occitanie",
+      "nom": "France 3 Occitanie",
+      "compte": "france3occitanie",
+      "categorie": "indetermine",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3occitanie"
     }
   ]
 }
