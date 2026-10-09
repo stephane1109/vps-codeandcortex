@@ -196,6 +196,9 @@ class Job:
         self.processed = 0
         self.errors = 0
         self.filtered = 0
+        self.bilan_hashtags = {h: 0 for h in settings.hashtags}
+        self.correspondances_hashtags = 0
+        self.legendes_vides = 0
         self.non_french = 0
         self.language_unknown = 0
         self.hors_periode = 0
@@ -238,6 +241,9 @@ class Job:
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "filtered": self.filtered, "search_errors": self.search_errors,
+                    "bilan_hashtags": dict(self.bilan_hashtags),
+                    "correspondances_hashtags": self.correspondances_hashtags,
+                    "legendes_vides": self.legendes_vides,
                     "bilan_sources": [{"source": entree["source"],
                         "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
                         "message": entree.get("message", "Recherche terminée."),
@@ -496,6 +502,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
                     if record["description"]:
                         matches = matches_hashtags(record["description"], job.settings)
+                        # Compter sur la même légende et dans la même période que le filtre.
+                        presents = set(re.findall(r"#(\w+)", tag_key(record["description"])))
+                        with job.lock:
+                            for hashtag in job.bilan_hashtags:
+                                if tag_key(hashtag) in presents:
+                                    job.bilan_hashtags[hashtag] += 1
+                            if matches:
+                                job.correspondances_hashtags += 1
                         language = (classify_description(record["description"])
                                     if matches and job.settings.french_only else "fr")
                         with job.lock:
@@ -508,6 +522,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             else:
                                 record["retenue"] = True
                                 job.records.append(record)
+                    else:
+                        with job.lock:
+                            job.legendes_vides += 1
             except scraper.WebDriverException:
                 with job.lock:
                     job.errors += 1
@@ -518,7 +535,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         final_status = "partial" if job.errors or job.search_errors else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
-            final_message = "Aucun texte récupéré. TikTok peut limiter l’accès ou les publications peuvent être sans légende."
+            final_message = ("Aucune publication accessible : consultez le détail des sources."
+                             if not links else "Aucune légende exploitable retenue parmi les publications consultées.")
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only:
@@ -527,6 +545,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" Filtre français : {job.non_french} texte(s) dans une autre langue, {job.language_unknown} texte(s) trop court(s) ou de langue incertaine écartés."
         if job.settings.hashtags:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
+            if job.settings.source_collecte != "hashtags":
+                final_message += f" Recherche limitée à {job.settings.limit} publication(s) accessibles par compte, avant filtrage ; l’historique complet n’est pas garanti."
         if job.settings.date_debut or job.settings.date_fin:
             if not job.records and (job.hors_periode or job.dates_indeterminees):
                 final_message = "Aucun texte retenu avec la période et les autres filtres choisis."

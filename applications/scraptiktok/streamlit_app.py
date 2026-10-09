@@ -58,8 +58,11 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
-for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes"):
-    st.session_state[cle] = st.session_state.get(cle, "")
+for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
+            "operator", "limit", "french_only", "include_sources", "enrichir",
+            "collecter_commentaires", "collecter_reponses", "limite_commentaires",
+            "date_debut", "date_fin", "comptes"):
+    st.session_state[cle] = st.session_state[cle]
 
 collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
@@ -96,39 +99,44 @@ with onglet_collecte:
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
     cle_hashtag = "hashtag" if source == "hashtags" else "hashtag_comptes"
     cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
-    c1,c2 = st.columns(2)
-    c1.text_input("Hashtag" if source == "hashtags" else "Hashtag facultatif", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
-    c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
-    st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
-    st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe)
-    st.checkbox("Français uniquement", key="french_only", disabled=occupe,
-        help="Détection sur la légende ; textes trop courts ou de langue incertaine écartés.")
-    with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
-        d1,d2 = st.columns(2)
-        d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
-        d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
-        st.caption("Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
-        def effacer_dates():
-            st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
-        st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
-    with st.expander("Exports et commentaires"):
-        st.checkbox("Inclure les auteurs et liens dans le TXT", key="include_sources", disabled=occupe)
-        st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
-        st.checkbox("Collecter les commentaires accessibles", key="collecter_commentaires", disabled=occupe)
-        def activer_commentaires():
-            if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
-        st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, on_change=activer_commentaires)
-        st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-        st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
-    if st.button("Lancer la collecte", type="primary", disabled=occupe):
-        debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
-        if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
-        else:
-            valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
-            valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
-                comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
-                medias=st.session_state.get("medias",[]) if source == "presse" else [])
-            lancer("/api/jobs",valeurs)
+    # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
+    with st.form("filtres_collecte", border=False, enter_to_submit=False):
+        c1,c2 = st.columns(2)
+        c1.text_input("Hashtag" if source == "hashtags" else "Hashtag facultatif", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
+        c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
+        st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
+        st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
+            help="Maximum de publications à consulter avant les filtres. Ce nombre n’est pas un objectif de résultats retenus.")
+        if source != "hashtags":
+            st.caption("Les hashtags filtrent les légendes des publications consultées sur chaque profil. Les publications plus anciennes que cet échantillon peuvent ne pas être examinées.")
+        st.checkbox("Français uniquement", key="french_only", disabled=occupe,
+            help="Détection sur la légende ; textes trop courts ou de langue incertaine écartés.")
+        with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
+            d1,d2 = st.columns(2)
+            d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
+            d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
+            st.caption("Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
+            def effacer_dates():
+                st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
+            st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
+        with st.expander("Exports et commentaires"):
+            st.checkbox("Inclure les auteurs et liens dans le TXT", key="include_sources", disabled=occupe)
+            st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
+            st.checkbox("Collecter les commentaires accessibles", key="collecter_commentaires", disabled=occupe)
+            def activer_commentaires():
+                if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
+            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
+            st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
+            st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
+        if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=activer_commentaires):
+            debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
+            if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
+            else:
+                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
+                    comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
+                    medias=st.session_state.get("medias",[]) if source == "presse" else [])
+                lancer("/api/jobs",valeurs)
 
 
 with onglet_collecte:
@@ -153,6 +161,17 @@ with onglet_collecte:
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             st.write(actuel["message"])
             st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
+            if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
+                combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
+                st.caption("Filtre appliqué : " + combinaison)
+                if "bilan_hashtags" in actuel:
+                    with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
+                        st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. Un hashtag doit être précédé de # dans la légende.")
+                        for hashtag, nombre in actuel["bilan_hashtags"].items():
+                            st.write(f"#{hashtag} : {nombre} légende(s)")
+                        st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
+                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue · {actuel['language_unknown']} de langue incertaine")
+                        st.write(f"{actuel['legendes_vides']} publication(s) sans légende lisible · {actuel['errors']} erreur(s) de lecture")
             if actuel["date_debut"] or actuel["date_fin"]:
                 st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
             if actuel["busy"]:

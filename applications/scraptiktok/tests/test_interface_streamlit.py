@@ -62,7 +62,8 @@ class TestsInterface(unittest.TestCase):
             raise AssertionError(chemin)
         with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
             page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
-            page.text_input(key='hashtag').set_value('filtre_ancien').run()
+            page.text_input(key='hashtag').set_value('filtre_ancien')
+            next(b for b in page.button if b.label=='Lancer la collecte').click().run()
             catalogue = inventaire
             page.radio(key='source').set_value('presse').run()
             self.assertEqual(sum(c.key.startswith('media_') for c in page.checkbox),len(inventaire))
@@ -75,6 +76,40 @@ class TestsInterface(unittest.TestCase):
             self.assertEqual(len(StartRequest(**envois[-1]).sources),len(inventaire))
             page.radio(key='source').set_value('hashtags').run()
             self.assertEqual(page.text_input(key='hashtag').value,'filtre_ancien')
+
+    def test_presse_transmet_deux_hashtags_et_le_choix_et_ou(self):
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            page.radio(key='source').set_value('presse').run()
+            page.button(key='tous_medias').click().run()
+            for operateur in ('AND', 'OR'):
+                page.text_input(key='hashtag_comptes').set_value('#GRÈVE')
+                page.text_input(key='second_hashtag_comptes').set_value('#école')
+                page.radio(key='operator').set_value(operateur)
+                page.checkbox(key='collecter_reponses').check()
+                next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+                self.assertFalse(page.exception)
+                requete = StartRequest(**envois[-1])
+                self.assertEqual(requete.hashtags, ['GRÈVE', 'école'])
+                self.assertEqual(requete.operator, operateur)
+                self.assertEqual(len(requete.sources), len(charger_inventaire()))
+                self.assertTrue(envois[-1]['collecter_commentaires'])
+            nombre_envois = len(envois)
+            page.date_input(key='date_debut').set_value('2026-10-01')
+            page.date_input(key='date_fin').set_value('2026-10-09')
+            next(b for b in page.button if b.label == 'Effacer la période').click().run()
+            self.assertFalse(page.exception)
+            self.assertIsNone(page.date_input(key='date_debut').value)
+            self.assertIsNone(page.date_input(key='date_fin').value)
+            self.assertEqual(len(envois), nombre_envois)
 
     def test_sha_et_orb_sont_effectivement_optionnels(self):
         a={'id':'1','sha256':'idem','images':[]}; b={**a,'id':'2'}

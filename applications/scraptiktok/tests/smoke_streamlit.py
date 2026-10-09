@@ -171,6 +171,10 @@ def principale():
                     attente.until(lambda d:'29 média(s) sélectionné(s) sur 29' in d.find_element(By.TAG_NAME,'body').text)
                     champs=navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')
                     assert all(champ.get_attribute('value')=='' for champ in champs), 'Les anciens hashtags ne doivent pas filtrer les médias'
+                    assert navigateur.find_element(By.CSS_SELECTOR,'[data-testid="stNumberInput"] input').get_attribute('value')=='1', 'La limite doit être conservée entre deux collectes'
+                    champs[0].send_keys('tourisme', Keys.TAB)
+                    attente.until(lambda d:d.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[0].get_attribute('value')=='tourisme')
+                    navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[1].send_keys('été', Keys.TAB)
                     # Les 29 profils accessibles ne doivent pas demander une validation manuelle.
                     # Seule l’attente entre lectures est accélérée pour ce test local.
                     with patch.object(web,'wait_for_user',side_effect=AssertionError('Arrêt manuel inattendu')) as attente_presse, patch.object(web.Job,'pause',lambda t,secondes:t.check()):
@@ -178,6 +182,7 @@ def principale():
                         attente.until(lambda d:json.loads(requete('/api/session'))['job']['id']!=identifiant)
                         etat=json.loads(requete('/api/session'))['job']; identifiant_presse=etat['id']
                         assert etat['medias']==[m['id'] for m in charger_inventaire()],etat
+                        assert etat['hashtags']==['tourisme','été'] and etat['operator']=='AND',etat
                         WebDriverWait(navigateur,90).until(lambda d:not json.loads(requete('/api/session'))['job']['busy'])
                         attente_presse.assert_not_called()
                     etat=json.loads(requete('/api/session'))['job']
