@@ -1,5 +1,6 @@
 """Parcours Streamlit + FastAPI réel, avec pages TikTok synthétiques locales."""
 import argparse
+import csv
 import io
 import json
 import os
@@ -61,7 +62,8 @@ def principale():
                 return {"ok":True}
             @app.get('/fixture/post')
             def page_publication(compte:str='fixture', identifiant:str='1234567890'):
-                publication={'id':identifiant,'desc':CAPTION+' #été','createTime':1700000000,'author':{'uniqueId':compte}}
+                publication={'id':identifiant,'desc':CAPTION+' #été','createTime':1700000000,'author':{'uniqueId':compte},
+                    'stats':{'diggCount':0,'commentCount':12,'playCount':250,'shareCount':3}}
                 return HTMLResponse('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'+json.dumps({'itemInfo':{'itemStruct':publication}})+'</script>')
             @app.middleware('http')
             async def politique_fixture(requete,suivant):
@@ -151,6 +153,8 @@ def principale():
                     # Utiliser les événements de pointeur dans l’iframe avec l’offset du cadre.
                     navigateur.execute_script("window.traces=[];for(const nom of ['pointerdown','pointermove','pointerup'])window.addEventListener(nom,e=>traces.push([nom,e.target.id,e.clientX,e.clientY]),true)")
                     souris(28,135,'down'); time.sleep(.8); souris(160,135); time.sleep(.8); souris(310,135); time.sleep(.8); souris(310,135,'up')
+                    if float(observations.get('slider',0)) <= 70:
+                        print('TRACE_GESTE', navigateur.execute_script('return {traces, cadre:window.frameElement.getBoundingClientRect().toJSON(), image:document.getElementById("browser-screen").getBoundingClientRect().toJSON()}'), flush=True)
                     assert any(e[0]=='pointerdown' and e[1]=='browser-screen' for e in navigateur.execute_script('return traces')), 'Le geste doit atteindre le navigateur intégré'
                     action({'kind':'click','points':[{'x':100/largeur,'y':220/hauteur}]})
                     action({'kind':'text','text':'été'})
@@ -187,6 +191,9 @@ def principale():
                         attente_presse.assert_not_called()
                     etat=json.loads(requete('/api/session'))['job']
                     assert etat['captions']==29,etat
+                    assert etat['apercu_engagement'][0]['engagement']['likes']['valeur']==0,etat
+                    compteurs=list(csv.DictReader(io.StringIO(requete(f'/api/jobs/{identifiant_presse}/engagement.csv').lstrip('\ufeff')),delimiter=';'))
+                    assert len(compteurs)==29 and all(c['likes']=='0' and c['commentaires']=='12' for c in compteurs),compteurs
                     assert len(etat['bilan_sources'])==29,etat
                     assert profils_visites==list(comptes_presse),profils_visites
                     texte=requete(f'/api/jobs/{identifiant_presse}/download')

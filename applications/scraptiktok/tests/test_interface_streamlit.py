@@ -138,3 +138,30 @@ class TestsInterface(unittest.TestCase):
                 page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
                 self.assertFalse(page.exception)
                 self.assertTrue(any('Vérifiez TikTok' in i.value for i in page.info))
+
+    def test_resultats_affichent_compteurs_et_commentaires(self):
+        import tempfile
+        from webapp import Job
+        from collecte.engagement import extraire_engagement
+        with tempfile.TemporaryDirectory() as d:
+            tache = Job('a'*64, StartRequest(hashtag='test', collecter_commentaires=True), Path(d))
+            tache.records.append({'id':'1', 'author':'media', 'url':'https://www.tiktok.com/@media/video/1',
+                'description':'Oui !', 'langue_detection':'unknown',
+                'engagement':extraire_engagement({'stats':{'diggCount':0,'commentCount':12}})})
+            tache.commentaires.append({'publication_id':'1','texte':'Bravo'})
+            tache.update(busy=False, status='completed')
+            def repondre(chemin,*a,**kw):
+                if chemin=='/api/session': return {'job':tache.snapshot()}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin.startswith('/api/jobs/'): return tache.snapshot()
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                tableau = page.dataframe[0].value
+                self.assertEqual(tableau.iloc[0]['Likes'], '0')
+                self.assertEqual(tableau.iloc[0]['Nombre de commentaires'], '12')
+                self.assertEqual(tableau.iloc[0]['Vues'], 'Indisponible')
+                self.assertEqual(tableau.iloc[0]['Langue'], 'Indéterminée')
+                self.assertTrue(page.checkbox(key='collecter_commentaires').value)
+                self.assertTrue(any('1 texte(s) de commentaires' in m.value for m in page.markdown))

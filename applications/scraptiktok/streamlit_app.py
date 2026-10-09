@@ -47,7 +47,7 @@ if "initialise" not in st.session_state:
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True), "enrichir":ancienne.get("enrichir",True),
-        "collecter_commentaires":ancienne.get("collecter_commentaires",False), "collecter_reponses":ancienne.get("collecter_reponses",False),
+        "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
     for nom in ("hashtag", "second_hashtag"):
@@ -110,8 +110,10 @@ with onglet_collecte:
             help="Maximum de publications à consulter avant les filtres. Ce nombre n’est pas un objectif de résultats retenus.")
         if source != "hashtags":
             st.caption("Les hashtags filtrent les légendes des publications consultées sur chaque profil. Les publications plus anciennes que cet échantillon peuvent ne pas être examinées.")
-        st.checkbox("Français uniquement", key="french_only", disabled=occupe,
-            help="Détection sur la légende ; textes trop courts ou de langue incertaine écartés.")
+        st.checkbox("Filtre français", key="french_only", disabled=occupe,
+            help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
+        st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
+            help="Sur les publications retenues, dans la limite indiquée sous Exports et commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
         with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
             d1,d2 = st.columns(2)
             d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
@@ -123,7 +125,6 @@ with onglet_collecte:
         with st.expander("Exports et commentaires"):
             st.checkbox("Inclure les auteurs et liens dans le TXT", key="include_sources", disabled=occupe)
             st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
-            st.checkbox("Collecter les commentaires accessibles", key="collecter_commentaires", disabled=occupe)
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
@@ -171,7 +172,7 @@ with onglet_collecte:
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
                             st.write(f"#{hashtag} : {nombre} légende(s)")
                         st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
-                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue · {actuel['language_unknown']} de langue incertaine")
+                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue écartés · {actuel['language_unknown']} de langue indéterminée conservés")
                         st.write(f"{actuel['legendes_vides']} publication(s) sans légende lisible · {actuel['errors']} erreur(s) de lecture")
             if actuel["date_debut"] or actuel["date_fin"]:
                 st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
@@ -186,9 +187,32 @@ with onglet_collecte:
                         if diagnostic:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
                             st.caption(" · ".join(indices))
+            if actuel.get("apercu_engagement"):
+                def compteur(mesure):
+                    if mesure.get("valeur") is None: return "Indisponible"
+                    return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
+                lignes = []
+                for publication in actuel["apercu_engagement"]:
+                    ligne = {"Auteur": "@" + publication["author"], "Publication": publication["url"]}
+                    for cle, titre in (("likes", "Likes"), ("vues", "Vues"), ("partages", "Partages"), ("commentaires", "Nombre de commentaires")):
+                        ligne[titre] = compteur(publication.get("engagement", {}).get(cle, {}))
+                    ligne["Langue"] = {"fr": "Français", "unknown": "Indéterminée"}.get(publication.get("langue_detection"), "Non évaluée")
+                    lignes.append(ligne)
+                st.dataframe(lignes, hide_index=True, column_config={"Publication": st.column_config.LinkColumn("Publication", display_text="Ouvrir")})
+                st.caption("Compteurs des publications retenues (100 premières au maximum). ≈ indique une valeur arrondie par TikTok ; indisponible ne signifie pas zéro. Le CSV contient toutes les publications retenues et les mesures brutes.")
+            if actuel.get("collecter_commentaires"):
+                st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
+                if actuel.get("commentaires_indisponibles"):
+                    st.caption(f"Commentaires vides ou inaccessibles pour {actuel['commentaires_indisponibles']} publication(s). La collecte ne garantit pas tous les commentaires annoncés par TikTok.")
+            else:
+                st.caption("La collecte des textes des commentaires n’était pas activée pour cette recherche. Le nombre de commentaires reste inclus dans les compteurs.")
             liens = st.columns(2)
-            if actuel["can_download"]: liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
-            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[1].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
+            if actuel["can_download"]:
+                liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
+                liens[1].link_button("Télécharger les compteurs CSV", f"/api/jobs/{actuel['id']}/engagement.csv")
+            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[0].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
+            if actuel.get("commentaires_collectes"):
+                liens[1].link_button("Télécharger les commentaires TXT", f"/api/jobs/{actuel['id']}/commentaires.txt")
         afficher_resultats()
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")

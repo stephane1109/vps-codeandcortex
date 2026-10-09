@@ -143,7 +143,7 @@ produit un résultat partiel explicite si l’autre a abouti. L’absence de ré
 ne signifie pas qu’aucune publication TikTok ne contient la combinaison : seuls
 les contenus accessibles et consultés sont filtrés.
 
-### Filtre « Français uniquement »
+### Filtre français
 
 La case est cochée à l’ouverture de l’interface ; la décocher conserve toutes les
 langues. Elle s’applique après le filtre ET/OU, aux descriptions uniquement.
@@ -152,13 +152,29 @@ La détection s’effectue localement sur le serveur avec
 service externe. Liens, mentions, hashtags et symboles sont exclus du texte utilisé
 pour la détection, mais l’export conserve la description originale intégrale.
 
-Le filtre retient la langue `fr` avec un score de modèle d’au moins 0,9. Ce score
-n’est pas une garantie de justesse. Moins de quatre mots ou quinze lettres, ou un
-score insuffisant, donnent une langue incertaine et excluent le texte. Les textes
-mixtes peuvent être mal classés. Deux compteurs distinguent les autres langues des
-textes trop courts ou incertains. L’export porte le suffixe `_fr.txt`. Une collecte
+Le filtre exclut une autre langue identifiée avec un score de modèle d’au moins 0,9.
+Ce score n’est pas une garantie de justesse. Moins de quatre mots ou quinze lettres,
+ou un score insuffisant, donnent une langue indéterminée : le texte est conservé
+intégralement, sans être déclaré français. Aucun texte n’est éliminé pour sa longueur.
+Les textes mixtes peuvent être mal classés. Les compteurs distinguent les autres
+langues écartées des langues indéterminées conservées. L’export porte le suffixe `_fr.txt`.
+La langue ne peut être évaluée qu’après lecture de la légende : ce filtre ne constitue
+pas une recherche TikTok limitée à la langue française avant collecte. Une collecte
 sans texte retenu affiche l’explication au lieu de proposer un fichier vide.
 L’API conserve les langues par défaut ; envoyer `french_only: true` active le filtre.
+
+Les résultats affichent les likes, vues, partages et nombres de commentaires observés.
+Le bouton « Télécharger les compteurs CSV » donne toutes les publications retenues,
+leurs légendes, leur statut linguistique et les mesures brutes avec leurs confiances.
+Une valeur indisponible reste vide dans le CSV ; elle n’est jamais remplacée par zéro.
+Le TXT des légendes reste un corpus textuel sans compteurs ajoutés.
+
+« Collecter les textes des commentaires » est visible dans le formulaire et activé
+par défaut pour une nouvelle session Streamlit. Cette collecte facultative concerne
+uniquement les publications retenues ; sa limite se règle dans « Exports et commentaires ».
+Le nombre de commentaires annoncé par TikTok et le nombre de textes effectivement
+accessibles sont distincts. Les textes récupérés ont leur propre téléchargement TXT
+et restent dans les exports enrichis CSV/JSON/IRaMuTeQ.
 
 
 ## Comptes de presse, engagement et commentaires
