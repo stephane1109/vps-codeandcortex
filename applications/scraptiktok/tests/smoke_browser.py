@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 
 import scraptiktok as scraper
 import webapp as web
@@ -215,6 +215,27 @@ def main():
                 front.execute_script("window.scrollTo(0,0)")
                 front.save_screenshot(str(artifacts / "results.png"))
                 print("PASS : filtre français activable, interface, mobile, Chrome serveur, capture, clic, glisser avec image actualisée avant relâchement, annulation, saisie, collecte et téléchargement TXT UTF-8")
+                # Vérifie également la nouvelle collecte par compte, sans service externe.
+                Select(front.find_element(By.ID,"source-collecte")).select_by_value("presse")
+                WebDriverWait(front,10).until(lambda d: len(d.find_elements(By.CSS_SELECTOR,"#liste-presse input"))>=2)
+                assert front.find_element(By.ID,"presse-section").is_displayed()
+                Select(front.find_element(By.ID,"source-collecte")).select_by_value("comptes")
+                front.find_element(By.ID,"comptes").send_keys("@fixture")
+                front.find_element(By.ID,"hashtag").clear()
+                assert not front.find_element(By.ID,"hashtag").get_attribute("required")
+                record={"id":"1234567890","url":"https://www.tiktok.com/@fixture/video/1234567890","author":"fixture","description":CAPTION,"engagement":{}}
+                with patch("collecte.comptes.collecter_compte",return_value=[record["url"]]), patch.object(scraper,"read_post",return_value=record):
+                    front.find_element(By.ID,"start-button").click()
+                    WebDriverWait(front,25).until(lambda d: d.find_element(By.ID,"download-archive").is_displayed())
+                    actuel=json.loads(browser_request("/api/session"))["job"]
+                    assert actuel["source_collecte"]=="comptes"
+                    archive=browser_request(f"/api/jobs/{actuel['id']}/archive",binary=True)
+                    import io,zipfile
+                    with zipfile.ZipFile(io.BytesIO(archive)) as contenu:
+                        assert "publications.json" in contenu.namelist()
+                        assert "corpus_iramuteq.txt" in contenu.namelist()
+                    front.save_screenshot(str(artifacts / "presse.png"))
+                print("PASS : sélection presse/comptes, hashtag facultatif, archive ZIP privée et corpus IRaMuTeQ")
                 print(f"Captures : {artifacts}")
         finally:
             front.quit()

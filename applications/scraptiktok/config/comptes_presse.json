@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "comptes": [
+    {
+      "id": "lemonde",
+      "nom": "Le Monde",
+      "compte": "lemondefr",
+      "categorie": "presse_nationale",
+      "source": "https://www.lemonde.fr/le-monde-et-vous/article/2023/10/29/mille-et-une-manieres-de-profiter-du-monde_6197214_6065879.html",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "franceinfo",
+      "nom": "franceinfo",
+      "compte": "franceinfo",
+      "categorie": "audiovisuel_public",
+      "source": "https://www.radiofrance.com/presse/franceinfo-les-coulisses-de-linfo?page=1",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    }
+  ]
+}

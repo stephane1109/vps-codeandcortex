@@ -1,4 +1,4 @@
-# ScrapTikTok — interface web et export texte
+# ScrapTikTok — corpus textuels et analyse audiovisuelle facultative
 
 Saisir un hashtag, collecter les **légendes/descriptions** des publications TikTok,
 puis télécharger un fichier **`.txt` en UTF-8**. L'interface fonctionne sur
@@ -21,9 +21,9 @@ et leurs liens, selon la case cochée. Les doublons sont supprimés par identifi
 Le bouton **Arrêter** conserve les textes déjà obtenus. Recharger la page permet
 également de retrouver la collecte tant que la session est conservée.
 
-Cette version collecte les descriptions écrites par les auteurs, hashtags compris.
-Elle ne collecte pas les commentaires, les transcriptions audio ou les textes
-incrustés dans les images.
+Le parcours initial collecte les descriptions écrites par les auteurs, hashtags compris.
+Les nouveaux modules sont facultatifs : comptes de presse, engagement, commentaires,
+réponses et analyses audiovisuelles. Les entrées CLI et FastAPI restent les mêmes.
 
 ## Déployer sur le VPS / Coolify
 
@@ -158,3 +158,156 @@ mixtes peuvent être mal classés. Deux compteurs distinguent les autres langues
 textes trop courts ou incertains. L’export porte le suffixe `_fr.txt`. Une collecte
 sans texte retenu affiche l’explication au lieu de proposer un fichier vide.
 L’API conserve les langues par défaut ; envoyer `french_only: true` active le filtre.
+
+
+## Comptes de presse, engagement et commentaires
+
+Dans **Collecter à partir de**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
+Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
+La limite de publications s’applique à chaque compte. Les recommandations d’autres
+auteurs sont exclues ; les publications communes sont dédoublonnées par ID TikTok.
+Un ou deux hashtags peuvent filtrer les légendes des comptes, avec le même ET/OU.
+Le filtre français conserve son fonctionnement et son caractère facultatif.
+
+L’inventaire `config/comptes_presse.json` contient deux références éditoriales initiales,
+Le Monde et franceinfo, avec leurs sources. Il est extensible : `id`, `nom`, `compte`,
+`categorie`, `source_editoriale`, `statut_verification`. Les catégories sont dans
+`config/categories_medias.json`. Une référence éditoriale n’est pas une garantie de
+vérification actuelle : le rapport distingue l’identifiant observé, sa concordance,
+le badge TikTok et la propriété éditoriale, qui reste indéterminée automatiquement.
+
+Ouvrir **Engagement, commentaires et corpus enrichi** pour activer les commentaires
+et les réponses. L’archive est automatique pour une collecte par comptes ; elle peut
+également être activée pour les hashtags. Les compteurs proviennent en priorité du
+JSON de la publication exacte, puis des éléments visibles : likes, vues, partages,
+favoris et total de commentaires. Chaque mesure conserve valeur, texte brut, source,
+confiance, caractère estimé et date d’observation. `1,2 K` vaut une estimation de 1 200 ;
+un compteur absent vaut `null`, jamais zéro. Les scores sont heuristiques, non calibrés.
+
+La collecte des commentaires lit uniquement ce qui est accessible dans la page,
+avec une limite par publication et un nombre de défilements borné. Les réponses
+sont facultatives, les liens parent/enfant conservés lorsqu’ils sont observés. À défaut
+d’ID TikTok, un ID local est signalé comme tel : deux textes identiques du même auteur
+peuvent alors être confondus. Un résultat vide ne prouve pas l’absence de commentaires.
+Les sélecteurs peuvent évoluer avec TikTok ; les statuts partiels restent explicites.
+
+**Télécharger le fichier texte** conserve l’export initial. **Télécharger l’archive
+enrichie** fournit JSON brut, CSV (UTF-8 BOM, séparateur `;`), corpus IRaMuTeQ et journal.
+Les filtres ET/OU et français s’appliquent aux légendes retenues dans TXT/IRaMuTeQ.
+Les publications brutes, mesures et commentaires restent séparés et non filtrés ;
+`retenue` identifie la sélection. Les corpus commentaires et transcriptions sont distincts.
+Les astérisques sont neutralisés uniquement dans le corps IRaMuTeQ, sans modifier le brut.
+
+## Traitement audiovisuel facultatif
+
+Installer le profil vidéo décrit dans le guide de déploiement, terminer une collecte
+enrichie, puis ouvrir **Analyse audiovisuelle facultative**. La détection de réemploi
+s’exécute sans annotation manuelle. OCR, audio, Whisper et embeddings sont des options
+indépendantes ; aucun modèle n’est téléchargé sans activer l’autorisation correspondante.
+Le téléchargement vidéo se fait avec yt-dlp sur les URL publiques validées, sans exporter
+les cookies du navigateur. Une vidéo inaccessible reste indéterminée, même si sa légende
+a été collectée dans une session connectée. Les carrousels photo ne sont pas traités comme
+vidéos et peuvent apparaître comme non analysables.
+
+Les résultats distinguent :
+
+- **Fichier identique** : même SHA-256 du fichier complet.
+- **Réemploi de séquence** : présélection pHash, ORB + homographie RANSAC, puis alignement
+  temporel monotone d’au moins trois images sur deux secondes, à vitesse et lacunes bornées.
+  Deux pHash distincts sont requis pour écarter les images fixes répétées.
+- **Vidéos visuellement quasi identiques** : une séquence validée couvre au moins 85 %
+  des deux durées intégrales et les extractions ne sont pas tronquées.
+- **Similarité sémantique** : cosinus des embeddings CLIP, enregistré séparément. Elle
+  ne crée jamais une arête de réemploi ni un groupe de séquences communes.
+- **Indéterminé** : médias ou indices exploitables insuffisants. « Non détecté » ne
+  signifie pas « absent » ; échantillonnage, recadrage, logos, surimpressions et montage
+  peuvent produire des erreurs. Les seuils doivent être évalués sur le corpus étudié.
+
+Les groupes sont des composantes connexes de réemplois : A partageant un plan avec B
+et B un autre plan avec C ne prouve pas que A et C soient identiques. La circulation
+inter-médias indique la publication la plus ancienne parmi celles observées, jamais
+une origine ou une relation de copie prouvée. Aucun jugement de plagiat n’est produit.
+
+Les caractéristiques sont calculées automatiquement : coupes par histogrammes,
+mouvement Farnebäck, silhouettes HOG, visages frontaux Haar, texte OCR, présence de
+piste audio, silence énergétique, segments Whisper. Un visage frontal est un indice
+visuel ; il ne prouve pas une adresse au spectateur. Aucun âge, genre, identité,
+origine, émotion ou orientation politique n’est inféré. Les formats sont des règles
+observables (`visage_frontal`, `texte_incruste`, `montage_multiplans`, `indetermine`),
+pas une classification validée des genres journalistiques.
+
+`variables_shs.json/csv` conservent mesures, confiances et règles. Les variables
+illustratives sont ajoutées sous la forme `**** *media_... *format_... *reemploi_...`
+aux corpus IRaMuTeQ. Les modalités inconnues valent `indetermine`.
+La nomenclature est documentée dans `config/variables_shs.json`, les règles numériques
+et leurs seuils dans `analyse/codage_automatique.py` et les configurations vidéo.
+
+## Lots, cache et ressources
+
+Par défaut : un traitement audiovisuel à la fois, sans collecte concurrente, CPU sur
+un thread, 20 vidéos, 190 paires, 120 images/vidéo, dimension maximale 384 pixels,
+1 image/seconde, 180 secondes/vidéo, 150 Mo/fichier, 30 minutes/lot. Les vidéos sont
+alternées entre médias pour couvrir plusieurs comptes même dans un petit lot. Les
+comparaisons chargent seulement deux jeux d’empreintes à la fois ; les vidéos décodées
+sont traitées successivement. Les images ORB candidates sont bornées à 400 par paire ;
+la troncature est signalée. Les limites ne permettent pas de conclure à l’absence de
+réemploi sur tout un corpus. OCR examine au plus 12 images, silhouettes/visages 20.
+
+`config/parametres_video.json` définit les ressources et options ;
+`config/seuils_similarite.json` définit les seuils de comparaison. L’interface lance
+un sous-processus interrompable, y compris ses téléchargements et commandes ffmpeg.
+Le serveur arrête un traitement abandonné selon `IDLE_TIMEOUT_SECONDS` : garder la
+page ouverte pendant l’analyse. Le CLI est adapté aux traitements administrateur :
+
+```bash
+python -m video.lots --session data/sessions/IDENTIFIANT
+python -m video.lots --session data/sessions/IDENTIFIANT --parametres mon_lot.json --debut 20
+```
+
+Le JSON de surcharge accepte seulement les bornes prévues. Pour des vidéos déjà
+présentes, déposer `videos/ID_TIKTOK.mp4` ; le téléchargement est désactivé par défaut
+en CLI (`telecharger_videos: true` pour l’autoriser). `--debut` décale la sélection
+alternée par médias. Chaque exécution réécrit les résultats analytiques du lot courant ;
+exporter son archive avant le lot suivant. Les comparaisons portent sur les vidéos du
+lot courant, pas automatiquement entre lots. Augmenter les limites dans leurs bornes
+pour inclure les publications à comparer ensemble. Code de sortie 0 : lot complet ;
+2 : partiel. Un module facultatif indisponible conserve un statut détaillé indéterminé.
+
+Le cache SQLite associe SHA-256, paramètres et version de l’algorithme. Il est borné à
+100 vidéos, purgé avec `RESULT_TTL_SECONDS` par le serveur, et n’enregistre pas un résultat
+avec module activé en échec. `stockage/historique.py` donne accès à l’historique par
+propriétaire depuis Python ; il n’ajoute pas d’accès public à la base. Les résultats
+web restent accessibles seulement durant la session en mémoire ; un redémarrage
+conserve les fichiers du volume, mais ne restaure pas leur accès dans l’interface.
+
+Les sessions enrichies sont dans `data/sessions/<id>/` : `publications.json`,
+`engagement.csv`, `commentaires.csv`, `videos/`, `images/`, `empreintes/`,
+`groupes_visuels.json`, `comparaisons.json`, `variables_shs.csv/json`, corpus,
+`journal.json`, `traitement_video.json` et `archive.zip`. L’archive contient les
+exports et empreintes JSON ; les fichiers vidéo/audio/images, profils, logs et base
+globale sont exclus. Tout `data/` reste hors Git et hors contexte Docker.
+
+## Architecture et validation
+
+`collecte/` gère les sources et observations ; `stockage/` les sessions SQLite ;
+`video/` et `audio/` les traitements différés ; `analyse/` les mesures dérivées ;
+`corpus/` les exports. Aucun import lourd n’est requis pour démarrer FastAPI ou collecter
+les textes. `requirements.txt` reste le profil texte ; `requirements-video.txt` est
+facultatif. Les points d’entrée et fonctions antérieures restent en place.
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m unittest discover -s tests -v
+python tests/smoke_browser.py
+```
+
+Les tests vidéo sont ignorés dans le profil texte et exécutés dans le profil vidéo.
+La CI construit les deux images Linux. Les fixtures contrôlent compression, recadrage,
+images différentes, ordre temporel, images fixes, séparation sémantique/réemploi,
+valeurs indéterminées, exports, isolation des sessions et gestes navigateur existants.
+Voir `AUDIT_EVOLUTION.md`. Ces tests ne mesurent pas la précision sur de vraies vidéos
+journalistiques et ne valident pas l’accès actuel de TikTok depuis votre VPS.
+
+Références techniques : [OpenCV et homographies](https://docs.opencv.org/4.12.0/d9/d0c/group__calib3d.html),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp), [faster-whisper](https://github.com/SYSTRAN/faster-whisper),
+[OpenCLIP](https://github.com/mlfoundations/open_clip).

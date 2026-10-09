@@ -1,4 +1,6 @@
 FROM python:3.11-slim-bookworm
+ARG INSTALL_VIDEO=0
+ENV INSTALL_VIDEO=${INSTALL_VIDEO}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -21,8 +23,15 @@ RUN apt-get update \
     && useradd --system --gid app --create-home --home-dir /home/app app
 
 WORKDIR /app
-COPY requirements.txt .
+COPY requirements.txt requirements-video.txt ./
 RUN pip install -r requirements.txt
+# Le profil texte ne télécharge aucun moteur ni modèle audiovisuel.
+RUN if [ "$INSTALL_VIDEO" = "1" ]; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
+      && rm -rf /var/lib/apt/lists/* \
+      && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+      && pip install -r requirements-video.txt; fi
 COPY . .
 RUN mkdir -p /app/data /app/.selenium-cache \
     && chmod +x /app/docker-entrypoint.sh \

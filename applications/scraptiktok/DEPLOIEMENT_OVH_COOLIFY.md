@@ -113,3 +113,48 @@ Avec un domaine HTTPS, passer `COOKIE_SECURE=1` et conserver les en-têtes
 La limite de navigateurs est gérée dans un seul processus : conserver **un worker
 Uvicorn et une réplique**. Une architecture à plusieurs répliques nécessiterait
 un registre de sessions partagé.
+
+
+## Activer les modules vidéo (facultatif)
+
+Un redéploiement normal conserve le profil texte : `INSTALL_VIDEO=0` à la construction.
+Les collectes par comptes, l’engagement, les commentaires, SQLite et les exports enrichis
+fonctionnent déjà dans ce profil. Le port, Chromium/Xvfb et la commande restent inchangés.
+
+Pour activer l’analyse audiovisuelle, transmettre **`INSTALL_VIDEO=1` comme argument de
+construction Docker**, puis reconstruire l’image. Une variable ajoutée seulement à
+l’exécution ne suffit pas à installer les bibliothèques. Dans Coolify, la variable doit
+être disponible pendant le build Docker (argument `INSTALL_VIDEO` déclaré dans le Dockerfile).
+Vérifier dans le journal que l’étape conditionnelle installe ffmpeg, Tesseract et
+`requirements-video.txt`. Le bouton d’analyse apparaît après une collecte enrichie.
+
+L’image installe PyTorch CPU avant OpenCLIP, sans CUDA. Prévoir une marge de **4 Go RAM
+et 2 vCPU au minimum pour commencer**, plus d’espace disque pour l’image, les poids et
+les vidéos ; mesurer la consommation réelle, notamment pour Whisper/CLIP. Une seule
+analyse s’exécute à la fois. Limiter les premiers essais à quelques vidéos. Si les
+ressources manquent, conserver le profil texte ou désactiver les options lourdes.
+
+Avec Compose :
+
+```bash
+INSTALL_VIDEO=1 MEM_LIMIT=4g docker compose up -d --build
+```
+
+Conserver un volume sur `/app/data`. Pour garder les poids entre déploiements, un volume
+supplémentaire sur `/home/app/.cache` peut être monté avec des droits d’écriture pour
+l’utilisateur `app`. Les modèles sont facultatifs et ne sont pas téléchargés au build.
+Whisper utilise le cache local si le téléchargement n’est pas autorisé. Pour OpenCLIP,
+indiquer un fichier de poids local dans `config/parametres_video.json` lorsque les
+réseaux externes sont interdits ; le nom d’un modèle distant nécessite l’option de
+ téléchargement, même si la bibliothèque possède déjà une copie en cache.
+
+`RESULT_TTL_SECONDS` s’applique également aux sessions enrichies et au cache analysé.
+Pour un corpus de recherche à conserver sept jours, définir `604800` et dimensionner
+le disque en conséquence. Après redémarrage, récupérer les anciens dossiers depuis
+le volume si nécessaire : l’interface ne restaure pas les sessions précédentes.
+La base SQLite n’est jamais exposée par HTTP et reste exclue des archives.
+
+Les archives détaillent les échecs de téléchargement, les traitements tronqués et les
+modalités indéterminées. L’accès yt-dlp est indépendant de la session Selenium ; les
+vidéos nécessitant une connexion peuvent rester indisponibles. Le traitement des textes
+continue de fonctionner sans les dépendances audiovisuelles.

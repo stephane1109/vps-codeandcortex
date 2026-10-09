@@ -14,7 +14,11 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        video: ["0", "1"]
     steps:
       - name: Read the exact public commit
         run: |
@@ -23,7 +27,7 @@ jobs:
           git fetch --depth 1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Build the Linux image
-        run: docker build -t scraptiktok-ci applications/scraptiktok
+        run: docker build --build-arg INSTALL_VIDEO=${{ matrix.video }} -t scraptiktok-ci applications/scraptiktok
       - name: Verify the production startup and healthcheck
         run: |
           docker run -d --name scraptiktok-health --shm-size=1g -p 127.0.0.1:18501:8501 scraptiktok-ci
