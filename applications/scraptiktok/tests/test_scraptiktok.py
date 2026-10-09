@@ -82,6 +82,26 @@ class ExtractionTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_source_suivante_accessible_sans_nouvelle_validation(self):
+        args = app.parse_args(['cuisine', '--limit', '1'])
+        args.interactive = True
+        pilote, intervention = Mock(), Mock()
+        pilote.execute_script.side_effect = lambda script: False if script == app.BLOCKED_JS else [URL]
+        resultat = app.collect_links(pilote, args, {'hashtag_url': 'https://www.tiktok.com/tag/cuisine'},
+                                     interact=intervention, validation_initiale=False)
+        self.assertEqual(resultat, [URL])
+        intervention.assert_not_called()
+
+    def test_verification_reelle_sur_source_suivante(self):
+        args = app.parse_args(['cuisine', '--limit', '1'])
+        args.interactive = True
+        pilote, intervention = Mock(), Mock()
+        pilote.execute_script.side_effect = lambda script: True if script == app.BLOCKED_JS else [URL]
+        resultat = app.collect_links(pilote, args, {'hashtag_url': 'https://www.tiktok.com/tag/cuisine'},
+                                     interact=intervention, validation_initiale=False)
+        self.assertEqual(resultat, [URL])
+        intervention.assert_called_once()
+
     def test_initial_captcha_is_reported_explicitly(self):
         args = app.parse_args(["cuisine"])
         driver = Mock()

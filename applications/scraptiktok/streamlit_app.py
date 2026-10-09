@@ -62,10 +62,20 @@ medias = {m["id"]:m for m in st.session_state["inventaire"]}
 onglet_collecte, onglet_video = st.tabs(["Collecte", "Vidéo · SHA-256 / pHash / ORB"])
 
 with onglet_collecte:
-    source = st.selectbox("Source", ["hashtags","presse","comptes"], key="source",
-        format_func=lambda s:{"hashtags":"Hashtags","presse":"Comptes de presse","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
+    source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
+        format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
-        st.multiselect("Médias", list(medias), key="medias", format_func=lambda m:medias[m]["nom"] + " (@" + medias[m]["compte"] + ")", disabled=occupe)
+        st.write("Choisir les médias à collecter")
+        st.caption("Cochez un ou plusieurs comptes. Les hashtags ci-dessous permettent de filtrer leurs publications.")
+        def memoriser_medias():
+            st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
+        colonnes_medias = st.columns(2)
+        for indice,(identifiant,media) in enumerate(medias.items()):
+            cle = "media_" + identifiant
+            st.session_state.setdefault(cle, identifiant in st.session_state.get("medias", []))
+            colonnes_medias[indice % 2].checkbox(media["nom"] + " (@" + media["compte"] + ")",
+                key=cle, disabled=occupe, on_change=memoriser_medias)
+        st.caption("Inventaire de départ ; utilisez « Autres comptes TikTok » pour ajouter un compte à votre recherche.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
     c1,c2 = st.columns(2)
@@ -98,7 +108,8 @@ with onglet_collecte:
         else:
             valeurs = {k:st.session_state[k] for k in ("hashtag","second_hashtag","operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
             valeurs.update(source_collecte=source, date_debut=debut, date_fin=fin,
-                comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if st.session_state.get("comptes", "").strip() else [], medias=st.session_state.get("medias",[]))
+                comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
+                medias=st.session_state.get("medias",[]) if source == "presse" else [])
             lancer("/api/jobs",valeurs)
 
 with onglet_video:

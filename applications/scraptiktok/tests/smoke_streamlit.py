@@ -16,6 +16,7 @@ import zipfile
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import uvicorn
+from fastapi import Request
 from fastapi.responses import HTMLResponse
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -36,9 +37,14 @@ def principale():
         with patch.dict(os.environ,environnement):
             gestionnaire=web.Manager(data_dir=temporaire)
             app=web.create_app(gestionnaire)
+            visites_sources=[]
             @app.get('/fixture/tag')
-            def page_source():
-                return HTMLResponse(TAG.replace("function update(){", "function update(){fetch('/fixture/state?ready='+!!window.ready+'&slider='+document.getElementById('slider').value+'&word='+encodeURIComponent(document.getElementById('word').value));"))
+            def page_source(request: Request):
+                valide=request.cookies.get('fixture_validee')=='1'
+                visites_sources.append(valide)
+                if valide:
+                    return HTMLResponse('<a href="https://www.tiktok.com/@fixture/video/1234567890">Publication accessible</a>')
+                return HTMLResponse(TAG.replace("function update(){", "function update(){if(window.ready && Number(document.getElementById('slider').value)>70 && document.getElementById('word').value==='été')document.cookie='fixture_validee=1; path=/';fetch('/fixture/state?ready='+!!window.ready+'&slider='+document.getElementById('slider').value+'&word='+encodeURIComponent(document.getElementById('word').value));"))
             observations={}
             @app.get('/fixture/state')
             def observer(ready:str,slider:str,word:str):
@@ -46,7 +52,7 @@ def principale():
                 return {"ok":True}
             @app.get('/fixture/post')
             def page_publication():
-                publication={'id':'1234567890','desc':CAPTION,'createTime':1700000000,'author':{'uniqueId':'fixture'}}
+                publication={'id':'1234567890','desc':CAPTION+' #été','createTime':1700000000,'author':{'uniqueId':'fixture'}}
                 return HTMLResponse('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'+json.dumps({'itemInfo':{'itemStruct':publication}})+'</script>')
             @app.middleware('http')
             async def politique_fixture(requete,suivant):
@@ -79,7 +85,7 @@ def principale():
                 def rediriger(pilote,url): pilote.get(origine+('/fixture/tag' if '/tag/' in url else '/fixture/post'))
                 def faux_traitement(tache,options):
                     tache.update(video_statut='termine',video_busy=False)
-                with patch.object(moteur,'open_page',side_effect=rediriger),patch.object(web,'executer_video',side_effect=faux_traitement) as video:
+                with patch.object(moteur,'open_page',side_effect=rediriger),patch.object(web,'executer_video',side_effect=faux_traitement) as video,patch.object(web,'wait_for_user',wraps=web.wait_for_user) as interventions:
                     navigateur.get(origine)
                     attente.until(lambda d:'Lancer la collecte' in d.find_element(By.TAG_NAME,'body').text)
                     assert '/interface/' in navigateur.current_url
@@ -88,7 +94,14 @@ def principale():
                     assert 'pHash + ORB + temps' in navigateur.find_element(By.TAG_NAME,'body').text
                     assert not bouton('Analyser les vidéos').is_enabled()
                     onglet(0)
+                    navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Presse et médias']]").click()
+                    attente.until(lambda d:'Le Parisien (@leparisien)' in d.find_element(By.TAG_NAME,'body').text)
+                    assert '20 Minutes (@20minutesfrance)' in navigateur.find_element(By.TAG_NAME,'body').text
+                    navigateur.save_screenshot('/tmp/scraptiktok-presse.png')
+                    navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Hashtags']]").click()
+                    attente.until(lambda d:'Hashtag facultatif' not in d.find_element(By.TAG_NAME,'body').text)
                     champ=navigateur.find_element(By.CSS_SELECTOR,'[data-testid="stTextInput"] input'); champ.send_keys('tourisme')
+                    navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[1].send_keys('été')
                     limite=navigateur.find_element(By.CSS_SELECTOR,'[data-testid="stNumberInput"] input')
                     limite.click()
                     modificateur=Keys.COMMAND if sys.platform=='darwin' else Keys.CONTROL
@@ -129,6 +142,8 @@ def principale():
                     navigateur.find_element(By.ID,'continue-button').click()
                     navigateur.switch_to.default_content()
                     attente.until(lambda d:len(d.find_elements(By.LINK_TEXT,'Télécharger le TXT'))>0)
+                    assert visites_sources==[False,True],visites_sources
+                    assert interventions.call_count==1,interventions.call_count
                     assert CAPTION in requete(f'/api/jobs/{identifiant}/download')
                     archive=requete(f'/api/jobs/{identifiant}/archive',binaire=True)
                     with zipfile.ZipFile(io.BytesIO(archive)) as z: assert 'publications.json' in z.namelist()
@@ -144,7 +159,7 @@ def principale():
                     navigateur.save_screenshot('/tmp/scraptiktok-streamlit-video.png')
                     navigateur.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':390,'height':1000,'deviceScaleFactor':1,'mobile':True})
                     assert navigateur.execute_script('return document.documentElement.scrollWidth<=innerWidth'),'Débordement mobile'
-                    print('PASS : Streamlit, session privée, options SHA/pHash/ORB, iframe de contrôle, gestes, collecte, TXT/ZIP, méthode transmise et mobile')
+                    print('PASS : Streamlit, liste presse, deux hashtags et une seule validation, session privée, options SHA/pHash/ORB, gestes, TXT/ZIP et mobile')
             except Exception:
                 if navigateur:
                     navigateur.save_screenshot('/tmp/scraptiktok-streamlit-erreur.png')
