@@ -88,7 +88,9 @@ class TestsInterface(unittest.TestCase):
             raise AssertionError(chemin)
         with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
             page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
-            self.assertFalse(page.checkbox(key='inclure_metadonnees_txt').value)
+            self.assertFalse(page.checkbox(key='txt_date').value)
+            self.assertTrue(page.checkbox(key='txt_profil').value)
+            self.assertTrue(page.checkbox(key='txt_url').value)
             page.radio(key='source').set_value('presse').run()
             page.button(key='tous_medias').click().run()
             for operateur in ('AND', 'OR'):
@@ -96,7 +98,9 @@ class TestsInterface(unittest.TestCase):
                 page.text_input(key='second_hashtag_comptes').set_value('#école')
                 page.radio(key='operator').set_value(operateur)
                 page.checkbox(key='collecter_reponses').check()
-                page.checkbox(key='inclure_metadonnees_txt').check()
+                page.checkbox(key='txt_date').check()
+                page.checkbox(key='txt_profil').uncheck()
+                page.checkbox(key='txt_url').uncheck()
                 next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
                 self.assertFalse(page.exception)
                 requete = StartRequest(**envois[-1])
@@ -104,7 +108,7 @@ class TestsInterface(unittest.TestCase):
                 self.assertEqual(requete.operator, operateur)
                 self.assertEqual(len(requete.sources), len(charger_inventaire()))
                 self.assertTrue(envois[-1]['collecter_commentaires'])
-                self.assertTrue(envois[-1]['inclure_metadonnees_txt'])
+                self.assertEqual(envois[-1]['variables_txt'], ['date'])
             nombre_envois = len(envois)
             page.date_input(key='date_debut').set_value('2026-10-01')
             page.date_input(key='date_fin').set_value('2026-10-09')
@@ -168,3 +172,21 @@ class TestsInterface(unittest.TestCase):
                 self.assertEqual(tableau.iloc[0]['Langue'], 'Indéterminée')
                 self.assertTrue(page.checkbox(key='collecter_commentaires').value)
                 self.assertTrue(any('1 texte(s) de commentaires' in m.value for m in page.markdown))
+
+    def test_reprise_des_variables_independantes(self):
+        import tempfile
+        from webapp import Job
+        for variables in ([], ['url'], ['date','profil'], ['date','profil','url']):
+            with self.subTest(variables=variables), tempfile.TemporaryDirectory() as dossier:
+                tache = Job('a'*64, StartRequest(hashtag='test', variables_txt=variables), Path(dossier))
+                tache.update(busy=False, status='completed')
+                def repondre(chemin,*a,**kw):
+                    if chemin=='/api/session': return {'job':tache.snapshot()}
+                    if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                    if chemin.startswith('/api/jobs/'): return tache.snapshot()
+                    raise AssertionError(chemin)
+                with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
+                    page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                    self.assertFalse(page.exception)
+                    for variable in ('date','profil','url'):
+                        self.assertEqual(page.checkbox(key='txt_'+variable).value, variable in variables)

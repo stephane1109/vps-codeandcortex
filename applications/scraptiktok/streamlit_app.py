@@ -47,9 +47,13 @@ if "initialise" not in st.session_state:
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True), "enrichir":ancienne.get("enrichir",True),
-        "inclure_metadonnees_txt":ancienne.get("inclure_metadonnees_txt",False),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
+    variables = ancienne.get("variables_txt")
+    if variables is None:
+        variables = ["date", "profil", "url"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "url"] if ancienne.get("include_sources", True) else []
+    for variable in ("date", "profil", "url"):
+        valeurs["txt_" + variable] = variable in variables
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
     for nom in ("hashtag", "second_hashtag"):
         valeurs[nom + "_comptes"] = ancienne.get(nom, "") if ancienne.get("source_collecte") in {"presse", "comptes"} else ""
@@ -60,9 +64,10 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
-st.session_state.setdefault("inclure_metadonnees_txt", False)
+for variable in ("date", "profil", "url"):
+    st.session_state.setdefault("txt_" + variable, st.session_state.get("inclure_metadonnees_txt", False) or (variable != "date" and st.session_state.get("include_sources", True)))
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
-            "operator", "limit", "french_only", "include_sources", "inclure_metadonnees_txt", "enrichir",
+            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url", "enrichir",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires",
             "date_debut", "date_fin", "comptes"):
     st.session_state[cle] = st.session_state[cle]
@@ -125,21 +130,23 @@ with onglet_collecte:
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         with st.expander("Exports et commentaires"):
-            st.checkbox("Ajouter *date, *profil et *urlvidéo avant chaque post dans le TXT", key="inclure_metadonnees_txt", disabled=occupe,
-                help="Facultatif. Remplace la présentation auteur/lien par un en-tête pour chaque publication. Une date de publication absente reste indéterminée.")
-            st.caption("En-tête sur trois lignes : *date 2026-10-09T12:00:00+00:00 · *profil @compte · *urlvidéo https://www.tiktok.com/@compte/video/…")
-            st.checkbox("Inclure les auteurs et liens dans le TXT", key="include_sources", disabled=occupe)
+            st.write("Variables à inclure avant chaque post dans le TXT")
+            colonnes_variables = st.columns(3)
+            for colonne, variable, titre in zip(colonnes_variables, ("date", "profil", "url"), ("Date", "Profil", "URL")):
+                colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
+            st.caption("Choisissez une, deux ou trois variables ; aucune pour le texte seul. Une date absente est indiquée comme indéterminée. Les commentaires récupérés sont ajoutés sous leur publication si leur collecte est cochée.")
             st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-            st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires restent dans un corpus séparé.")
+            st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires sont aussi conservés dans des exports séparés.")
         if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=activer_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","inclure_metadonnees_txt","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                valeurs["variables_txt"] = [v for v in ("date", "profil", "url") if st.session_state["txt_" + v]]
                 valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])

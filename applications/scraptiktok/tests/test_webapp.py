@@ -65,6 +65,21 @@ class WebTests(unittest.TestCase):
         self.assertIn('*date 2026-10-09T12:00:00+00:00\n*profil @test\n*urlvidéo '+RECORD['url'], fichier.text)
         self.assertIn(RECORD['description'], fichier.text)
 
+    def test_choix_profil_seul_et_commentaires_dans_le_meme_telechargement(self):
+        response = self.client.post('/api/jobs', headers=HEADERS,
+            json={'hashtag':'été', 'variables_txt':['profil'], 'collecter_commentaires':True,
+                  'inclure_metadonnees_txt':True, 'include_sources':True})
+        self.assertEqual(response.status_code, 202)
+        reprise = self.client.get('/api/session').json()['job']
+        self.assertEqual(reprise['variables_txt'], ['profil'])
+        job = self.manager.jobs[reprise['id']]
+        job.records.append(RECORD)
+        job.commentaires.append({'publication_id':RECORD['id'], 'texte':'Réaction conservée'})
+        job.save()
+        fichier = self.client.get(f'/api/jobs/{job.id}/download')
+        self.assertEqual(fichier.status_code, 200)
+        self.assertEqual(fichier.text, '*profil @test\n'+RECORD['description']+'\n\nCommentaire 1 :\nRéaction conservée\n')
+
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
         for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 301}):
@@ -193,6 +208,43 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(web.text_export([premiere, seconde], sources, True), attendu)
         self.assertEqual(web.text_export([premiere], True), f"@test\n{RECORD['url']}\n{RECORD['description']}\n")
         self.assertEqual(web.text_export([dict(premiere, description='')], True, True), '')
+
+    def test_toutes_les_combinaisons_de_variables_et_commentaires_rattaches(self):
+        from itertools import combinations
+        posts = [dict(RECORD, created_at='2026-10-09T12:00:00+00:00'),
+                 dict(RECORD, id='456', author='autre', url='https://www.tiktok.com/@autre/video/456', description='Deuxième post')]
+        commentaires = [{'publication_id':'456', 'texte':'Réaction au deuxième post'},
+                        {'publication_id':'123', 'texte':'Très bien !'},
+                        {'publication_id':'123', 'texte':'Une réponse', 'est_reponse':True},
+                        {'publication_id':'999', 'texte':'Ne doit pas apparaître'}]
+        for taille in range(4):
+            for variables in combinations(('date', 'profil', 'url'), taille):
+                with self.subTest(variables=variables):
+                    # Une sélection explicite prime aussi sur les anciennes options.
+                    texte = web.text_export(posts, True, True, list(variables), commentaires)
+                    for variable, marqueur in [('date','*date '), ('profil','*profil '), ('url','*urlvidéo ')]:
+                        self.assertEqual(texte.count(marqueur), 2 if variable in variables else 0)
+                    self.assertEqual(RECORD['url'] in texte, 'url' in variables)
+                    self.assertEqual('*profil @test' in texte, 'profil' in variables)
+                    self.assertNotIn('\n@test\n', '\n'+texte)
+                    self.assertIn(RECORD['description'], texte)
+                    self.assertLess(texte.index('Très bien !'), texte.index('Deuxième post'))
+                    self.assertGreater(texte.index('Réaction au deuxième post'), texte.index('Deuxième post'))
+                    self.assertIn('Réponse 2 :\nUne réponse', texte)
+                    self.assertNotIn('Ne doit pas apparaître', texte)
+
+    def test_commentaires_dans_txt_seulement_si_option_cochee(self):
+        self.job.records.append(RECORD)
+        self.job.commentaires.append({'publication_id':RECORD['id'], 'texte':'Un commentaire 🍋'})
+        self.job.settings.variables_txt = ['date']
+        for active in (False, True):
+            self.job.settings.collecter_commentaires = active
+            self.job.save()
+            texte = self.job.path.read_text()
+            self.assertEqual('Un commentaire 🍋' in texte, active)
+            self.assertIn('*date indéterminée', texte)
+            self.assertNotIn('*profil', texte)
+            self.assertNotIn(RECORD['url'], texte)
 
     def test_worker_exports_and_quits_browser(self):
         driver = Mock()
