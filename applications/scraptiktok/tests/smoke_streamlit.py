@@ -192,7 +192,7 @@ def principale():
                     champs[0].send_keys('tourisme', Keys.TAB)
                     attente.until(lambda d:d.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[0].get_attribute('value')=='tourisme')
                     navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[1].send_keys('été', Keys.TAB)
-                    # Une fenêtre initiale pour les comptes, puis les 29 profils s’enchaînent.
+                    # Les comptes accessibles s’enchaînent sans validation initiale artificielle.
                     # Seule l’attente entre lectures est accélérée pour ce test local.
                     with patch.object(web,'wait_for_user',wraps=web.wait_for_user) as attente_presse, patch.object(web.Job,'pause',lambda t,secondes:t.check()):
                         bouton('Lancer la collecte').click()
@@ -200,14 +200,8 @@ def principale():
                         etat=json.loads(requete('/api/session'))['job']; identifiant_presse=etat['id']
                         assert etat['medias']==[m['id'] for m in charger_inventaire()],etat
                         assert etat['hashtags']==['tourisme','été'] and etat['operator']=='AND',etat
-                        attente.until(lambda d:len(d.find_elements(By.CSS_SELECTOR,'iframe'))>0)
-                        navigateur.switch_to.frame(navigateur.find_element(By.CSS_SELECTOR,'iframe'))
-                        attente.until(lambda d:d.find_element(By.ID,'browser-screen').is_displayed())
-                        attente.until(lambda d:d.find_element(By.ID,'continue-button').is_enabled())
-                        navigateur.find_element(By.ID,'continue-button').click()
-                        navigateur.switch_to.default_content()
                         WebDriverWait(navigateur,90).until(lambda d:not json.loads(requete('/api/session'))['job']['busy'])
-                        attente_presse.assert_called_once()
+                        attente_presse.assert_not_called()
                     etat=json.loads(requete('/api/session'))['job']
                     assert etat['captions']==29,etat
                     assert etat['apercu_engagement'][0]['engagement']['likes']['valeur']==0,etat
@@ -223,7 +217,7 @@ def principale():
                     navigateur.save_screenshot('/tmp/scraptiktok-presse-resultats.png')
                     navigateur.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':390,'height':1000,'deviceScaleFactor':1,'mobile':True})
                     assert navigateur.execute_script('return document.documentElement.scrollWidth<=innerWidth'),'Débordement mobile'
-                    print('PASS : Streamlit, hashtags et comptes avec une validation initiale par collecte, session privée, collecte et export des 29 profils, gestes, TXT/ZIP et mobile')
+                    print('PASS : Streamlit, hashtags et comptes sans pause artificielle sur les profils, session privée, collecte et export des 29 profils, gestes, TXT/ZIP et mobile')
             except Exception:
                 if navigateur:
                     navigateur.save_screenshot('/tmp/scraptiktok-streamlit-erreur.png')

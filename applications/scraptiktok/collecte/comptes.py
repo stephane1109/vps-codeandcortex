@@ -18,7 +18,10 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     rapport.update(compte_attendu=compte, mode_decouverte="recherche_ciblee" if hashtags else "profil",
                    recherches=[], exhaustif=False)
     liens = {}
-    validation = options.pop("validation_initiale", True)
+    validation = options.pop("validation_initiale", False)
+    # Une grille vide doit permettre le repli automatique, pas demander une
+    # confirmation « vidéos visibles ». Une vraie vérification reste interactive.
+    options.setdefault("intervention_si_vide", False)
     interaction = options.pop("interact", manual_step)
 
     def intervenir(message):

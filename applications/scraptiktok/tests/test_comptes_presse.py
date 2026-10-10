@@ -55,7 +55,7 @@ class TestsRechercheComptes(unittest.TestCase):
         self.assertEqual(rapport['recherches'][0]['candidats_examines'], 3)
         self.assertFalse(rapport['exhaustif'])
 
-    def test_deux_hashtags_recherches_ciblees_une_validation_et_dedoublonnage(self):
+    def test_deux_hashtags_recherches_ciblees_sans_pause_imposee_et_dedoublonnage(self):
         from unittest.mock import Mock
         from collecte.comptes import collecter_compte
         import scraptiktok as moteur
@@ -71,7 +71,7 @@ class TestsRechercheComptes(unittest.TestCase):
         liens = collecter_compte(pilote, args, 'lemondefr', rapport,
                                 hashtags=['#lyceen', '#manifestation'], interact=intervention)
         self.assertEqual([c.args[0] for c in pilote.get.call_args_list], list(resultats))
-        intervention.assert_called_once()
+        intervention.assert_not_called()
         self.assertEqual(liens, ['https://www.tiktok.com/@lemondefr/video/111', 'https://www.tiktok.com/@lemondefr/video/222'])
 
     def test_autres_auteurs_seulement_ne_declenche_pas_fausse_erreur_acces(self):
@@ -132,6 +132,49 @@ class TestsRechercheComptes(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 collecter_compte(Mock(), self.arguments(), 'lemondefr')
         collecte.assert_called_once()
+
+    def test_brut_sans_hashtag_grille_vide_ou_erreur_repli_sans_pause(self):
+        from unittest.mock import Mock
+        from collecte.comptes import collecter_compte
+        import scraptiktok as moteur
+        lien = 'https://www.tiktok.com/@brutofficiel/video/222'
+        for erreur in (False, True):
+            with self.subTest(erreur_tiktok=erreur):
+                args = self.arguments(); args.limit = 1; args.interactive = True
+                pilote, intervention = Mock(), Mock()
+                def executer(code):
+                    url = pilote.get.call_args.args[0]
+                    if code == moteur.BLOCKED_JS: return False
+                    if code == moteur.DISCOVER_JS: return [lien] if '/search/video' in url else []
+                    if code == moteur.DIAGNOSTIC_JS: return {'erreur_tiktok': erreur, 'liens': 0}
+                    return []
+                pilote.execute_script.side_effect = executer
+                rapport = {}
+                self.assertEqual(collecter_compte(pilote, args, 'brutofficiel', rapport,
+                                                  interact=intervention), [lien])
+                intervention.assert_not_called()
+                visites = [c.args[0] for c in pilote.get.call_args_list]
+                self.assertEqual(visites, ['https://www.tiktok.com/@brutofficiel'] * (2 if erreur else 1)
+                                 + ['https://www.tiktok.com/search/video?q=%40brutofficiel'])
+                self.assertEqual(rapport['repli'], 'recherche_compte')
+
+    def test_verification_reelle_du_profil_reste_interactive(self):
+        from unittest.mock import Mock
+        from collecte.comptes import collecter_compte
+        import scraptiktok as moteur
+        args = self.arguments(); args.limit = 1; args.interactive = True
+        pilote = Mock(); verifie = []
+        lien = 'https://www.tiktok.com/@brutofficiel/video/222'
+        def executer(code):
+            if code == moteur.BLOCKED_JS: return not verifie
+            if code == moteur.DISCOVER_JS: return [lien] if verifie else []
+            return []
+        pilote.execute_script.side_effect = executer
+        intervention = Mock(side_effect=lambda message: verifie.append(True))
+        self.assertEqual(collecter_compte(pilote, args, 'brutofficiel', interact=intervention), [lien])
+        intervention.assert_called_once()
+        self.assertIn('vérification', intervention.call_args.args[0])
+        pilote.get.assert_called_once_with('https://www.tiktok.com/@brutofficiel')
 
     def test_donnees_json_identite_et_type_de_publication(self):
         import json
