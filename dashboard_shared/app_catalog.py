@@ -35,7 +35,7 @@ UI_OVERRIDES: dict[str, dict[str, Any]] = {
     "scraptiktok": {
         "href": "https://scraptiktok.codeandcortex.fr/",
         "familyId": "extraire", "iconClass": "fab fa-tiktok",
-        "description": "Collecter les publications TikTok par hashtags, profils ou médias.",
+        "description": "Collecter les publications TikTok par hashtags, profils ou médias.<br><strong>En cours de dev</strong>",
         "order": 65, "visible": True,
     },
     "europresse-to-iramuteq": {
