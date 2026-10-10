@@ -56,7 +56,7 @@ DIAGNOSTIC_JS = """
 const liens = document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]').length;
 const texte = (document.body?.innerText || '').toLowerCase().replaceAll('’', "'");
 const erreur = liens === 0 && (
-    (texte.includes('something went wrong') && texte.includes('please try again later')) ||
+    (texte.includes('something went wrong') && (texte.includes('please try again later') || texte.includes('something wrong with the server'))) ||
     (texte.includes('une erreur') && (texte.includes('réessaie plus tard') || texte.includes('réessayer plus tard'))) ||
     (texte.includes('problème est survenu avec le serveur') && texte.includes('réessayer'))
 );
@@ -220,7 +220,7 @@ def meme_page_tiktok(observee: str, attendue: str) -> bool:
             and observee.hostname in {"www.tiktok.com", "tiktok.com"}
             and attendue.hostname in {"www.tiktok.com", "tiktok.com"}
             and observee.path.rstrip("/") == attendue.path.rstrip("/")
-            and (attendue.path.rstrip("/") != "/search"
+            and (attendue.path.rstrip("/") not in {"/search", "/search/video"}
                  or parse_qs(observee.query).get("q") == parse_qs(attendue.query).get("q")))
 
 

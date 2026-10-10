@@ -49,7 +49,7 @@ class TestsRechercheComptes(unittest.TestCase):
         pilote.execute_script.side_effect = lambda code: next(pages) if code == moteur.DISCOVER_JS else False
         rapport = {}
         liens = collecter_compte(pilote, self.arguments(), '@LeMondeFR', rapport)
-        pilote.get.assert_called_once_with('https://www.tiktok.com/search?q=%40lemondefr')
+        pilote.get.assert_called_once_with('https://www.tiktok.com/search/video?q=%40lemondefr')
         self.assertEqual(liens, ['https://www.tiktok.com/@lemondefr/video/222',
                                 'https://www.tiktok.com/@lemondefr/video/333'])
         self.assertEqual(rapport['recherches'][0]['candidats_examines'], 3)
@@ -96,7 +96,7 @@ class TestsRechercheComptes(unittest.TestCase):
 
     def test_ancienne_recherche_non_acceptee_apres_delai(self):
         import scraptiktok
-        self.assertFalse(scraptiktok.meme_page_tiktok('https://www.tiktok.com/search?q=%40autre',
-                                                     'https://www.tiktok.com/search?q=%40lemondefr'))
-        self.assertTrue(scraptiktok.meme_page_tiktok('https://www.tiktok.com/search?q=%40lemondefr&lang=fr',
-                                                    'https://www.tiktok.com/search?q=%40lemondefr'))
+        self.assertFalse(scraptiktok.meme_page_tiktok('https://www.tiktok.com/search/video?q=%40autre',
+                                                     'https://www.tiktok.com/search/video?q=%40lemondefr'))
+        self.assertTrue(scraptiktok.meme_page_tiktok('https://www.tiktok.com/search/video?q=%40lemondefr&lang=fr',
+                                                    'https://www.tiktok.com/search/video?q=%40lemondefr'))
