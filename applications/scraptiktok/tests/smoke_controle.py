@@ -25,13 +25,17 @@ def principale():
         gestionnaire = webapp.Manager(data_dir=dossier)
         application = webapp.create_app(gestionnaire)
         panne = {"session": False}
+        cible = {"id": None}
+        appels = []
 
         @application.get('/cadre-test')
         def cadre():
-            return HTMLResponse('<iframe src="/classique?controle=1" width="900" height="850"></iframe>')
+            url = '/controle?collecte='+cible['id'] if cible['id'] else '/classique?controle=1'
+            return HTMLResponse(f'<iframe src="{url}" width="900" height="850"></iframe>')
 
         @application.middleware('http')
         async def simuler_panne(requete, suivant):
+            appels.append((requete.method, requete.url.path))
             if panne['session'] and requete.url.path == '/api/session':
                 return JSONResponse({'detail': 'Session momentanément indisponible.'}, status_code=503)
             return await suivant(requete)
@@ -59,25 +63,32 @@ def principale():
             collecte.update(status='attention', message='Profil en attente de validation',
                 frame=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII='))
             gestionnaire.jobs[collecte.id] = collecte
+            cible['id'] = collecte.id
+            autre = webapp.Job(proprietaire, webapp.StartRequest(hashtag='autre'), Path(dossier))
+            autre.update(busy=False,status='completed')
+            gestionnaire.jobs[autre.id] = autre
+            appels.clear()
             navigateur.get(origine + '/cadre-test')
             navigateur.switch_to.frame(navigateur.find_element(By.TAG_NAME, 'iframe'))
             try:
                 attente.until(lambda d: d.find_element(By.ID, 'browser-screen').is_displayed())
             except Exception:
-                print('ERREUR_CONTROLE:', navigateur.find_element(By.ID, 'form-error').get_attribute('textContent'))
+                print('ERREUR_CONTROLE:', navigateur.find_element(By.ID, 'controle-etat').get_attribute('textContent'))
                 raise
             assert navigateur.find_element(By.ID, 'continue-button').is_enabled()
-            assert not navigateur.find_element(By.ID, 'search-form').is_displayed()
-            for variable in ('date', 'profil', 'url'):
-                champ = navigateur.find_element(By.ID, 'txt-' + variable)
-                assert not champ.is_enabled()
-                assert champ.is_selected() == (variable in ('date', 'url'))
+            assert not navigateur.find_elements(By.ID, 'search-form')
+            assert not navigateur.find_elements(By.ID, 'video-options')
+            assert ('GET', '/api/session') not in appels
+            assert ('GET', '/api/presse') not in appels
+            assert ('POST', '/api/jobs') not in appels
             navigateur.find_element(By.ID, 'continue-button').click()
             attente.until(lambda d: not collecte.commands.empty())
             assert collecte.commands.get_nowait() == 'continue'
-            print('OK : image, bouton Continuer, variables indépendantes et reprise de session')
+            assert autre.commands.empty()
+            print('OK : cadre sans formulaire ni lancement ; Continuer vise la collecte indiquée malgré une collecte plus récente')
 
             gestionnaire.jobs.clear()
+            cible['id'] = None
             navigateur.refresh()
             navigateur.switch_to.frame(navigateur.find_element(By.TAG_NAME, 'iframe'))
             attente.until(lambda d: 'Aucune collecte' in d.find_element(By.ID, 'controle-etat').text)

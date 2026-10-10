@@ -425,12 +425,16 @@ privé, contrôle d’origine et protection HTTP optionnelle conservés. Aucun p
 n’est à exposer. L’adresse reste `https://scraptiktok.codeandcortex.fr/` ; les anciens
 liens `/interface/` redirigent vers `/`. Les téléchargements restent des routes FastAPI privées ; les données
 utilisateur ne sont pas placées dans un cache Streamlit partagé. Une fenêtre intégrée
-réutilise le contrôleur de navigateur testé : elle n’est pas recréée à chaque image.
+charge uniquement `/controle?collecte=<identifiant>` : aucun formulaire de recherche
+ni option vidéo cachés. Ses actions visent la collecte affichée, même si un autre
+onglet ouvre une collecte plus récente. Elle n’est pas recréée à chaque image.
 Le CAPTCHA reste à traiter par l’utilisateur, dans le navigateur du serveur.
 
 L’entrée `webapp.py`, le moteur CLI et les modules restent utilisables. L’ancienne
-interface est conservée à `/classique`, notamment pour le contrôleur intégré et les
-tests de non-régression. Lancer directement Uvicorn affiche encore cette interface ;
+interface est conservée pour l’exécution autonome de FastAPI (`UI_STREAMLIT=0`) et les
+tests de non-régression. En mode Streamlit, `/classique` redirige vers `/` ;
+`/classique?controle=1` redirige vers le contrôleur dédié pour les anciens liens.
+Lancer directement Uvicorn affiche encore cette interface ;
 utiliser **`python lancer_interface.py`** pour l’accueil Streamlit. La commande Docker
 est déjà mise à jour. Le navigateur distant, les dates, ET/OU et le filtre français sont
 conservés ; ET/OU se choisit maintenant directement dans le formulaire Streamlit.
@@ -442,8 +446,9 @@ sans modèle lourd : `INSTALL_VIDEO=base`. Le profil `1` conserve les dépendanc
 avancées. La disponibilité est vérifiée à partir des outils réellement installés.
 En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
 drapeau supplémentaire n’est nécessaire.
-La CI teste les trois profils Docker, l’ancienne fenêtre de contrôle et le nouveau
-parcours Streamlit, avec une source synthétique hors TikTok.
+La CI teste les trois profils Docker, le contrôleur dédié, l’interface historique et le
+parcours Streamlit, avec une source synthétique hors TikTok. L’[audit des interfaces](AUDIT_INTERFACES.md)
+décrit leur séparation et les limites de cette validation.
 
 Références d’intégration : [fragments Streamlit](https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment)
 et [contexte de session](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.context).
