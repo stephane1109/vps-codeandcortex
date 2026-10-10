@@ -82,6 +82,37 @@ class ExtractionTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_erreur_tiktok_recharge_une_fois_puis_recupere_les_liens(self):
+        args = app.parse_args(['test', '--limit', '1']); args.interactive = True; args.timeout = .01
+        pilote, intervention = Mock(), Mock()
+        def executer(code):
+            if code == app.BLOCKED_JS: return False
+            if code == app.DISCOVER_JS: return [URL] if pilote.get.call_count > 1 else []
+            return {'erreur_tiktok': True, 'liens': 0}
+        pilote.execute_script.side_effect = executer
+        rapport = {'hashtag_url': 'https://www.tiktok.com/@test', 'compte_attendu': 'test'}
+        self.assertEqual(app.collect_links(pilote, args, rapport, interact=intervention, validation_initiale=False), [URL])
+        self.assertEqual(pilote.get.call_count, 2)
+        self.assertEqual(rapport['rechargements'], 1)
+        self.assertNotIn('diagnostic', rapport)
+        intervention.assert_not_called()
+
+    def test_erreur_tiktok_persistante_ne_demande_pas_un_captcha_inexistant(self):
+        args = app.parse_args(['test']); args.interactive = True; args.timeout = .01
+        pilote, intervention = Mock(), Mock()
+        pilote.execute_script.side_effect = lambda code: False if code == app.BLOCKED_JS else ([] if code == app.DISCOVER_JS else {'erreur_tiktok': True, 'liens': 0})
+        rapport = {'hashtag_url': 'https://www.tiktok.com/@test'}
+        with self.assertRaisesRegex(RuntimeError, 'erreur de chargement'):
+            app.collect_links(pilote, args, rapport, interact=intervention, validation_initiale=False)
+        self.assertEqual(pilote.get.call_count, 2)
+        self.assertEqual(rapport['discovery_stop'], 'tiktok_error')
+        intervention.assert_not_called()
+
+    def test_captcha_prioritaire_sur_erreur_tiktok(self):
+        pilote = Mock()
+        pilote.execute_script.side_effect = lambda code: True if code == app.BLOCKED_JS else {'erreur_tiktok': True}
+        self.assertEqual(app.diagnostiquer_page(pilote, {})['code'], 'verification_tiktok')
+
     def test_source_suivante_accessible_sans_nouvelle_validation(self):
         args = app.parse_args(['cuisine', '--limit', '1'])
         args.interactive = True

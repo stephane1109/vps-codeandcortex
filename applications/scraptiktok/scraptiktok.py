@@ -52,6 +52,16 @@ return Array.from(document.querySelectorAll(
     '[data-e2e="login-modal"]'
 )).some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
 """
+DIAGNOSTIC_JS = """
+const liens = document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]').length;
+const texte = (document.body?.innerText || '').toLowerCase().replaceAll('’', "'");
+const erreur = liens === 0 && (
+    (texte.includes('something went wrong') && texte.includes('please try again later')) ||
+    (texte.includes('une erreur') && (texte.includes('réessaie plus tard') || texte.includes('réessayer plus tard')))
+);
+return {url:location.origin+location.pathname, etat:document.readyState,
+    titre:document.title.slice(0,160), liens, erreur_tiktok:erreur};
+"""
 
 
 def utc_now() -> str:
@@ -221,10 +231,10 @@ def diagnostiquer_page(driver, report, erreur=None, code=None):
         elif isinstance(erreur, TimeoutException): diagnostic["code"] = "delai_navigation"
         elif isinstance(erreur, WebDriverException): diagnostic["code"] = "erreur_navigateur"
     try:
-        page = driver.execute_script("""return {url:location.origin+location.pathname,
-            etat:document.readyState, titre:document.title.slice(0,160),
-            liens:document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]').length};""")
+        page = driver.execute_script(DIAGNOSTIC_JS)
         if isinstance(page, dict): diagnostic.update(page)
+        if diagnostic.get("erreur_tiktok") is True: diagnostic["code"] = "erreur_tiktok"
+        # Une vraie vérification reste prioritaire : ne jamais la recharger automatiquement.
         if driver.execute_script(BLOCKED_JS) is True: diagnostic["code"] = "verification_tiktok"
     except WebDriverException: pass
     report["diagnostic"] = diagnostic
@@ -283,16 +293,31 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             progress(len(links))
         return len(links) > previous
 
-    # Montrer la page réelle si aucun lien n'est trouvé, même si le sélecteur de
-    # CAPTCHA a changé. Une seule reprise évite d'enchaîner des demandes identiques.
-    for tentative in range(2):
+    # Une erreur affichée par TikTok exige une nouvelle navigation, pas une
+    # deuxième attente sur la même page. Une seule recharge par source est autorisée.
+    recharge_effectuee = False
+    for tentative in range(3):
         try:
             WebDriverWait(driver, args.timeout).until(scan)
             break
         except TimeoutException as exc:
             diagnostic = diagnostiquer_page(driver, report)
             bloque = diagnostic["code"] == "verification_tiktok"
-            if args.interactive and not intervention_effectuee and tentative == 0:
+            if diagnostic["code"] == "erreur_tiktok":
+                if not recharge_effectuee and tentative < 2:
+                    check()
+                    recharge_effectuee = True
+                    report["rechargements"] = 1
+                    report["diagnostic_avant_rechargement"] = report.pop("diagnostic")
+                    try:
+                        open_page(driver, report["hashtag_url"])
+                    except WebDriverException as erreur:
+                        diagnostiquer_page(driver, report, erreur)
+                        raise
+                    continue
+                report["discovery_stop"] = "tiktok_error"
+                raise RuntimeError("TikTok affiche une erreur de chargement des publications, même après rechargement.") from exc
+            if args.interactive and not intervention_effectuee and tentative < 2:
                 interact("Aucune publication n’a pu être lue sur ce profil. Examinez la page TikTok ci-dessous, "
                          "terminez une éventuelle vérification, puis cliquez sur Continuer pour réessayer.")
                 intervention_effectuee = True

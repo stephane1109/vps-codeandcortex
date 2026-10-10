@@ -7,6 +7,22 @@ import webapp as web
 from fastapi.testclient import TestClient
 
 class TestsEnrichis(unittest.TestCase):
+    def test_erreur_tiktok_explicite_dans_resultats_et_journal(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            job = web.Job('test', web.StartRequest(source_collecte='comptes', comptes=['lemondefr']), Path(dossier))
+            def echouer(navigateur, arguments, compte, rapport, **options):
+                rapport.update(diagnostic={'code':'erreur_tiktok'}, rechargements=1, discovery_stop='tiktok_error')
+                raise RuntimeError('Erreur de chargement TikTok')
+            pilote = Mock()
+            with patch('collecte.comptes.collecter_compte', side_effect=echouer):
+                web.execute_job(job, driver_factory=lambda args: pilote)
+            self.assertFalse(job.busy)
+            self.assertEqual(job.status, 'failed')
+            self.assertIn('Something went wrong', job.message)
+            self.assertNotIn('vérification', job.message)
+            self.assertEqual(job.journal[0]['rapport']['rechargements'], 1)
+            pilote.quit.assert_called_once()
+
     def test_presse_deux_hashtags_et_ou_jusqu_aux_exports(self):
         descriptions = ['#GRÈVE #école', '#grève', '#école', 'grève et école sans hashtags']
         comptes = ['lemondefr', 'franceinfo', 'lemondefr', 'franceinfo']

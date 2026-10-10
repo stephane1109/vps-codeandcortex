@@ -443,6 +443,8 @@ def expliquer_echec_source(rapport, erreur):
     code = diagnostic.get("code")
     if rapport.get("discovery_stop") == "blocked" or code == "verification_tiktok":
         return "Vérification TikTok non terminée."
+    if code == "erreur_tiktok":
+        return "TikTok affiche « Something went wrong / Une erreur est survenue » à la place des publications. Le rechargement automatique n’a pas résolu cette erreur ; aucune publication n’a pu être consultée."
     if code == "delai_navigation" or isinstance(erreur, scraper.TimeoutException):
         return "Le chargement de la page a dépassé le délai du navigateur."
     if code == "erreur_reseau":
@@ -601,6 +603,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         final_status, final_message = "stopped", "Collecte arrêtée. Les textes déjà obtenus restent téléchargeables."
     except RuntimeError:
         final_message = "Aucune publication accessible pour la source choisie. Consultez le détail des sources et vérifiez que les publications sont visibles dans TikTok avant de continuer."
+        if len(job.journal) == 1 and job.journal[0].get("rapport", {}).get("diagnostic", {}).get("code") == "erreur_tiktok":
+            final_message = job.journal[0]["source"] + " : " + job.journal[0]["message"]
     except Exception:
         LOG.exception("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
