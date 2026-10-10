@@ -123,7 +123,7 @@ with onglet_collecte:
                 key=cle, disabled=occupe, on_change=memoriser_medias)
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
-        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Les comptes seront visités l’un après l’autre.")
+        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Avec des hashtags, leurs résultats sont collectés une seule fois puis filtrés sur les médias cochés.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
         st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
@@ -141,7 +141,7 @@ with onglet_collecte:
         st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
             help="Maximum de publications à consulter avant les filtres. Ce nombre n’est pas un objectif de résultats retenus.")
         if source != "hashtags":
-            st.caption("Les hashtags filtrent les légendes des publications consultées sur chaque profil. Les publications plus anciennes que cet échantillon peuvent ne pas être examinées.")
+            st.caption("Avec un hashtag, la collecte suit la recherche par hashtag puis conserve uniquement les auteurs sélectionnés. La limite s’applique à chaque hashtag ; les résultats TikTok ne sont pas exhaustifs.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
