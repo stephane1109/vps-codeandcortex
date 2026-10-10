@@ -7,6 +7,21 @@ import webapp as web
 from fastapi.testclient import TestClient
 
 class TestsEnrichis(unittest.TestCase):
+    def test_premier_profil_ouvre_la_verification_une_fois_pour_toute_la_selection(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            job = web.Job('test', web.StartRequest(source_collecte='comptes', comptes=['lemondefr','franceinfo']), Path(dossier))
+            validations = []
+            def decouvrir(navigateur, arguments, compte, rapport, **options):
+                validations.append(options['validation_initiale'])
+                if options['validation_initiale']:
+                    options['interact']('Vérifiez le premier profil.')
+                return []
+            with patch('collecte.comptes.collecter_compte', side_effect=decouvrir), patch.object(web, 'wait_for_user') as verifier:
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(validations, [True, False])
+            verifier.assert_called_once()
+            self.assertFalse(job.busy)
+
     def test_erreur_tiktok_explicite_dans_resultats_et_journal(self):
         with tempfile.TemporaryDirectory() as dossier:
             job = web.Job('test', web.StartRequest(source_collecte='comptes', comptes=['lemondefr']), Path(dossier))

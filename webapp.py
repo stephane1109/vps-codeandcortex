@@ -489,11 +489,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
-                    # Les profils accessibles s’enchaînent sans arrêt manuel imposé.
-                    # collect_links interrompt toujours sur une vraie vérification TikTok.
+                    # Comme pour les hashtags, montrer le premier profil pour permettre
+                    # la connexion et le choix des cookies. Réutiliser ensuite cette session.
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        validation_initiale=False)
+                        validation_initiale=not session_validee)
                 rapport["discovered_urls"] = found
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
                     "message": "Recherche terminée." if found else "Aucune publication accessible dans cette page."})
