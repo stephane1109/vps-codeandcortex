@@ -212,6 +212,14 @@ Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par d
 La limite de publications s’applique à chaque compte. Les recommandations d’autres
 auteurs sont exclues ; les publications communes sont dédoublonnées par ID TikTok.
 Un ou deux hashtags peuvent filtrer les légendes des comptes, avec le même ET/OU.
+La découverte utilise les mêmes pages de hashtags que la recherche générale,
+puis ne retient que les liens dont l’auteur correspond exactement au compte.
+Sans hashtag, elle utilise la recherche TikTok sur `@identifiant`, au lieu de la
+grille du profil. Les résultats sont dédoublonnés avant lecture et les filtres
+ET/OU sont toujours appliqués aux légendes. Cette recherche n’est pas exhaustive :
+elle dépend des résultats servis par TikTok et des bornes de défilement. Un résultat
+vide signifie qu’aucune publication correspondante n’a été trouvée dans cette
+recherche, et ne signifie pas que le compte n’a aucune vidéo.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
 L’inventaire `config/comptes_presse.json` contient 29 comptes sélectionnables. Les six

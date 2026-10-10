@@ -489,14 +489,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
-                    # Comme pour les hashtags, montrer le premier profil pour permettre
+                    # Comme pour les hashtags, montrer la première recherche pour permettre
                     # la connexion et le choix des cookies. Réutiliser ensuite cette session.
-                    found = collecter_compte(driver, args, source["compte"], rapport=rapport,
+                    found = collecter_compte(driver, args, source["compte"], rapport=rapport, hashtags=job.settings.hashtags,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
                         validation_initiale=not session_validee)
                 rapport["discovered_urls"] = found
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
-                    "message": "Recherche terminée." if found else "Aucune publication accessible dans cette page."})
+                    "message": ("Recherche partielle : une recherche TikTok a échoué." if rapport.get("recherches_en_echec") else "Recherche terminée.") if found else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide."})
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity: unique_links.setdefault(identity[0], identity[1])
