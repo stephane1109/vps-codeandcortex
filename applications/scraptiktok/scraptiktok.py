@@ -71,6 +71,24 @@ return Array.from(document.querySelectorAll(
     '[data-e2e="login-modal"]'
 )).some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
 """
+TYPE_INTERVENTION_JS = """
+const visible = selecteur => Array.from(document.querySelectorAll(selecteur))
+    .some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
+if (visible('iframe[src*="captcha"], [id*="captcha"], [class*="captcha-verify"]')) return 'captcha';
+if (visible('[data-e2e="login-modal"]')) return 'connexion';
+return '';
+"""
+
+
+def type_intervention_tiktok(navigateur):
+    """Distinguer la connexion et le CAPTCHA sans lire les champs personnels."""
+    try:
+        resultat = navigateur.execute_script(TYPE_INTERVENTION_JS)
+        return resultat if isinstance(resultat, str) and resultat in {'captcha', 'connexion'} else ''
+    except WebDriverException:
+        return ''
+
+
 DIAGNOSTIC_JS = """
 const liens = document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]').length;
 const texte = (document.body?.innerText || '').toLowerCase().replaceAll('’', "'");

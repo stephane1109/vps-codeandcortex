@@ -3,7 +3,8 @@
 Exécution : .venv/bin/python tests/smoke_controle.py (sans accès à TikTok).
 """
 import argparse
-import base64
+import io
+from PIL import Image
 from pathlib import Path
 import socket
 import sys
@@ -31,7 +32,12 @@ def principale():
         @application.get('/cadre-test')
         def cadre():
             url = '/controle?collecte='+cible['id'] if cible['id'] else '/controle'
-            return HTMLResponse(f'<iframe src="{url}" width="900" height="850"></iframe>')
+            return HTMLResponse(f'<iframe src="{url}" width="2400" height="850"></iframe>')
+
+        @application.get('/verification-test/{nature}')
+        def verification(nature: str):
+            return HTMLResponse('<div data-e2e="login-modal"'+(' hidden' if nature == 'captcha' else '')+'>Connexion de test</div>'
+                                + '<div id="captcha-test"'+(' hidden' if nature != 'captcha' else '')+'>Vérification de test</div>')
 
         @application.middleware('http')
         async def simuler_panne(requete, suivant):
@@ -59,12 +65,17 @@ def principale():
             navigateur = scraptiktok.create_driver(argparse.Namespace(
                 headless=True, profile_dir=None, driver=None, chrome_binary=None, timeout=15))
             attente = WebDriverWait(navigateur, 8)
+            navigateur.set_window_size(2560, 1250)
+            for nature in ('connexion', 'captcha'):
+                navigateur.get(origine + '/verification-test/' + nature)
+                assert scraptiktok.type_intervention_tiktok(navigateur) == nature
             navigateur.get(origine + '/controle')
             proprietaire = navigateur.get_cookie(webapp.COOKIE)['value']
             collecte = webapp.Job(proprietaire, webapp.StartRequest(
                 source_collecte='comptes', comptes=['lemondefr'], variables_txt=['date', 'url']), Path(dossier))
-            collecte.update(status='attention', message='Profil en attente de validation',
-                frame=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII='))
+            capture = io.BytesIO()
+            Image.new('RGB', (1440, 1000), 'white').save(capture, format='PNG')
+            collecte.update(status='attention', type_intervention='connexion', message='Profil en attente de connexion', frame=capture.getvalue())
             gestionnaire.jobs[collecte.id] = collecte
             cible['id'] = collecte.id
             autre = webapp.Job(proprietaire, webapp.StartRequest(hashtag='autre'), Path(dossier))
@@ -79,6 +90,14 @@ def principale():
                 print('ERREUR_CONTROLE:', navigateur.find_element(By.ID, 'controle-etat').get_attribute('textContent'))
                 raise
             assert navigateur.find_element(By.ID, 'continue-button').is_enabled()
+            assert navigateur.find_element(By.ID, 'browser-title').text == 'Connexion TikTok requise'
+            image = navigateur.find_element(By.ID, 'browser-screen')
+            rectangle = navigateur.execute_script('return arguments[0].getBoundingClientRect().toJSON()', image)
+            assert rectangle['height'] <= 480, rectangle
+            assert rectangle['bottom'] <= 850 and rectangle['top'] >= 0, rectangle
+            assert abs(rectangle['width'] / rectangle['height'] - 1.44) < .01, rectangle
+            collecte.update(type_intervention='captcha')
+            attente.until(lambda d: d.find_element(By.ID, 'browser-title').text == 'Vérification CAPTCHA TikTok')
             assert not navigateur.find_elements(By.ID, 'search-form')
             assert not navigateur.find_elements(By.ID, 'video-options')
             assert ('GET', '/api/session') not in appels

@@ -233,6 +233,7 @@ class Job:
         self.records = []
         self.frame = b""
         self.action_error = ""
+        self.type_intervention = ""
         self.thread = None
         self.publications = []
         self.commentaires = []
@@ -291,7 +292,7 @@ class Job:
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
-                    "errors": self.errors, "has_frame": bool(self.frame),
+                    "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
                     "action_error": self.action_error, "can_download": bool(self.records),
                     "apercu_engagement": [{"id": r["id"], "author": r["author"], "url": r["url"],
                         "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection")}
@@ -383,12 +384,16 @@ def wait_for_user(driver, job: Job, message: str):
     job.update(status="attention", message=message, action_error="")
     next_frame = 0
     held_since = None
+    prochaine_detection = 0
     try:
         while True:
             job.check()
             if held_since is not None and time.monotonic() - held_since > 15:
                 release_pointer(driver)
                 held_since = None
+            if time.monotonic() >= prochaine_detection:
+                job.update(type_intervention=scraper.type_intervention_tiktok(driver))
+                prochaine_detection = time.monotonic() + 1
             if time.monotonic() >= next_frame:
                 job.update(frame=driver.get_screenshot_as_png())
                 next_frame = time.monotonic() + 0.25
@@ -398,7 +403,11 @@ def wait_for_user(driver, job: Job, message: str):
                 continue
             if command == "continue":
                 if driver.execute_script(scraper.BLOCKED_JS):
-                    job.update(action_error="TikTok affiche encore une vérification ou une connexion. Terminez-la dans l’image avant de continuer.")
+                    nature = scraper.type_intervention_tiktok(driver)
+                    erreur = ("TikTok demande encore une connexion. Terminez la connexion dans la fenêtre avant de continuer."
+                              if nature == "connexion" else "TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer."
+                              if nature == "captcha" else "TikTok affiche encore une vérification ou une connexion. Terminez-la dans l’image avant de continuer.")
+                    job.update(type_intervention=nature, action_error=erreur)
                     continue
                 break
             live = command if isinstance(command, LiveAction) else None
@@ -425,7 +434,7 @@ def wait_for_user(driver, job: Job, message: str):
             release_pointer(driver)
         except scraper.WebDriverException:
             pass
-        job.update(status=previous, frame=b"")
+        job.update(status=previous, frame=b"", type_intervention="")
         while not job.commands.empty():
             try:
                 pending = job.commands.get_nowait()
