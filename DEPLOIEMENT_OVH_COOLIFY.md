@@ -181,3 +181,22 @@ Le port privé suivant (8511) doit être libre ; `STREAMLIT_PORT` peut le rempla
 Ne pas ouvrir directement le port Streamlit : passer par l’accueil initialise le
 cookie de session et applique la protection d’accès. Conserver un seul processus
 FastAPI et une seule réplique du conteneur.
+
+
+## Accès partagé Redis
+
+Le contrôle d’accès reprend celui d’Europresse vers IRaMuTeQ. Les variables
+`REDIS_URL`, `APP_TICKET_*` et `CAPACITE_SERVEUR` sont lues à l’exécution depuis
+Coolify. Conserver les valeurs configurées, notamment `APP_TICKET_ID=scraptiktok`,
+`APP_TICKET_MAX_ACTIVE=8`, `APP_TICKET_COST=1` et `CAPACITE_SERVEUR=10`.
+Ne pas enregistrer le mot de passe Redis dans Git.
+
+La barre latérale affiche le ticket actif, la file d’attente et la libération/reprise
+de l’accès. Libérer l’accès arrête aussi les traitements de la session ; une
+libération externe ou l’expiration du ticket est détectée par le moteur.
+Le nombre de tickets d’accès et la limite de navigateurs simultanés sont distincts.
+Les exports existants restent accessibles par leurs liens privés jusqu’à expiration.
+
+Le déploiement utilise le Dockerfile Python/Chromium. `NIXPACKS_NODE_VERSION`
+n’est pas lu par cette application ni par son Dockerfile ; il est sans effet avec
+ce mode de construction. Aucune installation de Node.js n’est nécessaire.

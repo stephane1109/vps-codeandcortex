@@ -212,7 +212,12 @@ class TestsInterface(unittest.TestCase):
                     return {'ok': True}
                 if chemin == f'/api/jobs/{tache.id}': return tache.snapshot()
                 raise AssertionError(chemin)
-            with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+            statut = {"enabled": True, "statut": "actif", "active": 1, "max_active": 8,
+                      "heartbeat_ms": 300000, "message": ""}
+            def liberer(*args, **kwargs):
+                statut["statut"] = "released"
+                return True
+            with patch('ticket_gate.keep_ticket_alive', side_effect=lambda *a: dict(statut)), patch('ticket_gate.release_ticket_for_session', side_effect=liberer), patch('streamlit.context' , SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
                 page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
                 self.assertFalse(page.exception)
                 self.assertEqual(page.sidebar.button(key='liberer_acces').label, "Libérer l'accès")
@@ -220,5 +225,5 @@ class TestsInterface(unittest.TestCase):
                 self.assertFalse(page.exception)
                 self.assertEqual(appels, [f'/api/jobs/{tache.id}/stop', f'/api/jobs/{tache.id}/video/stop'])
                 self.assertEqual(page.session_state['collecte']['id'], tache.id)
-                self.assertTrue(page.sidebar.button(key='liberer_acces').disabled)
-                self.assertTrue(any('Accès libéré' in message.value for message in page.sidebar.success))
+                self.assertTrue(any(b.label == "Reprendre l'accès" for b in page.sidebar.button))
+                self.assertTrue(any('Accès libéré' in message.value for message in page.sidebar.info))

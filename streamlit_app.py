@@ -31,6 +31,26 @@ def lancer(chemin, donnees):
     st.rerun()
 
 
+def arreter_avant_liberation():
+    """Arrêter uniquement les traitements appartenant à cette session."""
+    try:
+        tache = api("/api/session")["job"] or {}
+        if tache.get("busy"):
+            api(f"/api/jobs/{tache['id']}/stop", {})
+        if tache.get("video_busy"):
+            api(f"/api/jobs/{tache['id']}/video/stop", {})
+    except RuntimeError as erreur:
+        st.error(str(erreur))
+        return False
+    return True
+
+
+from ticket_gate import enforce_streamlit_access, SESSION_STATE_KEY, identifiant_ticket_session
+# L’interface et l’API utilisent la même identité privée pour vérifier le ticket.
+st.session_state[SESSION_STATE_KEY] = identifiant_ticket_session(session)
+enforce_streamlit_access("scraptiktok", "ScrapTikTok", avant_liberation=arreter_avant_liberation)
+
+
 def iso(valeur):
     return valeur.isoformat() if valeur else None
 
@@ -74,33 +94,6 @@ for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comp
 
 collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
-
-# Même présentation qu’Europresse ; la ressource partagée est ici le navigateur.
-with st.sidebar:
-    st.markdown("### Accès utilisateur")
-    liberation_demandee = st.session_state.get("liberation_demandee") == collecte.get("id") and bool(collecte)
-    if occupe:
-        if liberation_demandee:
-            st.info("Libération en cours… Fermeture des traitements de votre session.")
-        else:
-            st.success("Votre session utilise le navigateur ou un traitement.")
-    elif liberation_demandee:
-        st.success("Accès libéré.")
-    else:
-        st.info("Votre session ne réserve aucun traitement.")
-    if st.button("Libérer l'accès", key="liberer_acces", use_container_width=True,
-                 disabled=not occupe or liberation_demandee):
-        try:
-            if collecte.get("busy"):
-                api(f"/api/jobs/{collecte['id']}/stop", {})
-            if collecte.get("video_busy"):
-                api(f"/api/jobs/{collecte['id']}/video/stop", {})
-        except RuntimeError as erreur:
-            st.error(str(erreur))
-        else:
-            st.session_state["liberation_demandee"] = collecte["id"]
-            st.rerun()
-    st.caption("Arrête les traitements de votre session et rend la place disponible. Les résultats déjà collectés restent téléchargeables.")
 
 # Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
 try:
