@@ -33,6 +33,25 @@ const root = document.querySelector('main') || document;
 return Array.from(root.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]'))
     .map(a => a.href);
 """
+DONNEES_PUBLICATIONS_JS = """
+return ['__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE']
+    .map(id => document.getElementById(id)?.textContent).filter(Boolean);
+"""
+DEFILER_PUBLICATIONS_JS = """
+// TikTok peut placer sa grille dans un conteneur défilant, hors du défilement de window.
+const root = document.querySelector('main') || document;
+const liens = Array.from(root.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]'));
+let cible = liens.filter(e => e.getClientRects().length).pop();
+while (cible && cible !== document.body && cible !== document.documentElement) {
+    const style = getComputedStyle(cible);
+    if (/auto|scroll/.test(style.overflowY) && cible.scrollHeight > cible.clientHeight + 10) {
+        cible.scrollTo(0, cible.scrollHeight);
+        return;
+    }
+    cible = cible.parentElement;
+}
+window.scrollTo(0, document.documentElement.scrollHeight);
+"""
 PAGE_JS = """
 const selectors = ['[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]'];
 const text = selectors.flatMap(s => Array.from(document.querySelectorAll(s)))
@@ -102,6 +121,34 @@ def find_item(payload: object, post_id: str) -> dict | None:
         elif isinstance(item, list):
             stack.extend(item)
     return None
+
+
+def liens_donnees_publications(contenus) -> list[str]:
+    """Lire les publications identifiées dans les données publiques de la page."""
+    if not isinstance(contenus, list):
+        return []
+    liens = {}
+    for contenu in contenus:
+        try:
+            pile = [json.loads(contenu)]
+        except (ValueError, TypeError):
+            continue
+        while pile:
+            element = pile.pop()
+            if isinstance(element, dict):
+                identifiant = str(element.get("id", ""))
+                auteur = element.get("author")
+                auteur = auteur.get("uniqueId") if isinstance(auteur, dict) else auteur
+                if (identifiant.isdecimal() and isinstance(auteur, str)
+                        and re.fullmatch(r"[\w.]+", auteur, flags=re.ASCII)
+                        and isinstance(element.get("desc"), str)
+                        and (element.get("video") or element.get("imagePost"))):
+                    type_post = "photo" if element.get("imagePost") else "video"
+                    liens[identifiant] = f"https://www.tiktok.com/@{auteur}/{type_post}/{identifiant}"
+                pile.extend(element.values())
+            elif isinstance(element, list):
+                pile.extend(element)
+    return list(liens.values())
 
 
 def timestamp_iso(value: object) -> str:
@@ -286,7 +333,11 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             intervention_effectuee = True
             check()
         precedents = len(candidats_vus)
-        for href in browser.execute_script(DISCOVER_JS):
+        candidats = list(browser.execute_script(DISCOVER_JS))
+        # Les grilles de comptes peuvent recevoir les données avant leurs liens HTML.
+        if report.get("compte_attendu"):
+            candidats.extend(liens_donnees_publications(browser.execute_script(DONNEES_PUBLICATIONS_JS)))
+        for href in candidats:
             identity = canonical_post(href)
             if identity:
                 candidats_vus.add(identity[0])
@@ -347,7 +398,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             else:
                 report["discovery_stop"] = "blocked"
                 break
-        driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
+        driver.execute_script(DEFILER_PUBLICATIONS_JS)
         time.sleep(args.delay)
         try:
             WebDriverWait(driver, args.timeout).until(scan)
