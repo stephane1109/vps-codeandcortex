@@ -24,6 +24,7 @@ APPLICATIONS_TICKETS_JSON = "APPLICATIONS_TICKETS_JSON"
 # `applications/`. Aucun alias, aucune faute tolérée, aucune normalisation
 # implicite ne doit transformer le nom d'une application.
 APPLICATIONS_PAR_DEFAUT = {
+    "scraptiktok": {"label": "ScrapTikTok", "max_active": 8, "cout": 1},
     "europresse-to-iramuteq": {
         "label": "Europresse → IRaMuTeQ",
         "max_active": 5,
