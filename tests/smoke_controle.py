@@ -30,7 +30,7 @@ def principale():
 
         @application.get('/cadre-test')
         def cadre():
-            url = '/controle?collecte='+cible['id'] if cible['id'] else '/classique?controle=1'
+            url = '/controle?collecte='+cible['id'] if cible['id'] else '/controle'
             return HTMLResponse(f'<iframe src="{url}" width="900" height="850"></iframe>')
 
         @application.middleware('http')
@@ -40,6 +40,9 @@ def principale():
                 return JSONResponse({'detail': 'Session momentanément indisponible.'}, status_code=503)
             return await suivant(requete)
 
+        # Les fixtures de test précèdent la passerelle générale de Streamlit.
+        relais = [r for r in application.router.routes if getattr(r, 'path', None) == '/{chemin:path}']
+        application.router.routes[:] = [r for r in application.router.routes if r not in relais] + relais
         ecoute = socket.socket()
         ecoute.bind(('127.0.0.1', 0))
         ecoute.listen(128)
@@ -56,7 +59,7 @@ def principale():
             navigateur = scraptiktok.create_driver(argparse.Namespace(
                 headless=True, profile_dir=None, driver=None, chrome_binary=None, timeout=15))
             attente = WebDriverWait(navigateur, 8)
-            navigateur.get(origine + '/classique')
+            navigateur.get(origine + '/controle')
             proprietaire = navigateur.get_cookie(webapp.COOKIE)['value']
             collecte = webapp.Job(proprietaire, webapp.StartRequest(
                 source_collecte='comptes', comptes=['lemondefr'], variables_txt=['date', 'url']), Path(dossier))

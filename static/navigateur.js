@@ -1,5 +1,5 @@
 "use strict";
-// Contrôle du navigateur partagé par les deux présentations ; aucune création de collecte.
+// Contrôle du navigateur intégré dans Streamlit ; aucune création de collecte.
 const $ = id => document.getElementById(id);
 export async function appelerApi(path, body) {
   const response = await fetch(path, body === undefined ? {cache: "no-store"} : {

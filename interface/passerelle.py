@@ -39,7 +39,9 @@ def installer_passerelle(app):
 
     @app.api_route("/{chemin:path}", methods=["GET", "HEAD", "POST", "DELETE", "OPTIONS"])
     async def relayer_http(request: Request, chemin: str):
-        if os.getenv("UI_STREAMLIT", "0") != "1": return Response(status_code=404)
+        # Les anciennes pages ne doivent pas être reprises par le routage de Streamlit.
+        if chemin.rstrip("/") == "classique" or chemin in {"static/index.html", "static/app.js", "static/style.css"}:
+            return Response(status_code=404)
         entetes = {k:v for k,v in request.headers.items() if k.lower() not in EXCLUS}
         entetes["accept-encoding"] = "identity"
         # La passerelle valide l'origine publique, le serveur privé voit son origine locale.
@@ -66,7 +68,7 @@ def installer_passerelle(app):
     @app.websocket("/{chemin:path}")
     async def relayer_websocket(navigateur: WebSocket, chemin: str):
         session = navigateur.cookies.get("scraptiktok_session", "")
-        if (os.getenv("UI_STREAMLIT", "0") != "1" or not mot_de_passe_valide(navigateur.headers)
+        if (not mot_de_passe_valide(navigateur.headers)
                 or not origine_valide(navigateur.headers) or len(session) != 64 or any(c not in "0123456789abcdef" for c in session)):
             await navigateur.close(code=1008); return
         entetes = {k:navigateur.headers[k] for k in ("cookie", "authorization", "user-agent") if k in navigateur.headers}

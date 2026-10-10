@@ -184,8 +184,9 @@ class WebTests(unittest.TestCase):
     def test_optional_access_password_protects_page_and_not_healthcheck(self):
         with patch.dict(web.os.environ, {"APP_ACCESS_PASSWORD": "test-password", "APP_ACCESS_USER": "test"}):
             self.assertEqual(self.client.get("/").status_code, 401)
-            self.assertEqual(self.client.get("/healthz").status_code, 200)
-            self.assertEqual(self.client.get("/", auth=("test", "test-password")).status_code, 200)
+            with patch("urllib.request.urlopen"):
+                self.assertEqual(self.client.get("/healthz").status_code, 200)
+            self.assertEqual(self.client.get("/controle", auth=("test", "test-password")).status_code, 200)
             self.assertEqual(self.client.get("/", headers={"Authorization": "Basic ??"}).status_code, 401)
 
 

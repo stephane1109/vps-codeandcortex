@@ -1,0 +1,171 @@
+/* Présentation du navigateur TikTok intégré à Streamlit. */
+:root {
+  color-scheme:light;
+  --ink:#152d28;
+  --muted:#66756e;
+  --teal:#17634f;
+  --light:#eef4ee;
+  --line:#e0e7df;
+  --paper:#f6f8f3;
+  --white:#fff;
+  --orange:#ed835f;
+  --red:#a63e31;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-synthesis:none
+}
+* {
+  box-sizing:border-box
+}
+body {
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.6
+}
+button,input {font:inherit;-webkit-tap-highlight-color:transparent;outline-offset:4px}
+button {cursor:pointer}
+button:disabled {cursor:wait;opacity:.55}
+[hidden] {display:none!important}
+.button {
+  border:0;
+  border-radius:8px;
+  font-size:12px;
+  font-weight:650;
+  padding:13px 17px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  text-decoration:none;
+  line-height:1.4;
+  transition:background .15s,transform .15s
+}
+.button:active {
+  transform:translateY(1px)
+}
+.primary {
+  background:var(--teal);
+  color:white
+}
+.primary:hover {
+  background:#114a3b
+}
+.secondary {
+  background:#edf2ec;
+  color:var(--ink)
+}
+.secondary:hover {
+  background:#e1e9e0
+}
+.form-error {
+  color:var(--red);
+  background:#fff3ef;
+  border-radius:7px;
+  padding:10px;
+  font-size:12px
+}
+.browser-panel {
+  margin-top:25px;
+  border-color:#c1d3c3
+}
+.browser-header {
+  display:flex;
+  gap:30px;
+  justify-content:space-between;
+  align-items:center
+}
+.browser-header h2 {
+  margin:6px 0 8px
+}
+.browser-header p {
+  font-size:12px;
+  color:var(--muted);
+  max-width:640px;
+  margin:0
+}
+.browser-header .button {
+  flex-shrink:0;
+  max-width:260px
+}
+.browser-tip {
+  font-size:11px;
+  border-left:2px solid #c6dba0;
+  background:#f6f9f0;
+  padding:10px 13px;
+  margin:20px 0 14px;
+  color:#728165
+}
+.screen-container {
+  border:1px solid var(--line);
+  background:#f0f2ee;
+  border-radius:8px;
+  min-height:120px;
+  overflow:hidden;
+  position:relative
+}
+#screen-loading {
+  text-align:center;
+  padding:30px;
+  color:var(--muted);
+  font-size:12px
+}
+#browser-screen {
+  display:block;
+  width:100%;
+  height:auto;
+  touch-action:none;
+  user-select:none;
+  cursor:crosshair
+}
+.browser-tools {
+  display:flex;
+  gap:20px;
+  align-items:flex-end;
+  justify-content:space-between;
+  margin-top:18px
+}
+#typing-form {
+  flex:1
+}
+#typing-form label {
+  font-size:11px;
+  color:var(--muted)
+}
+.typing-row {
+  display:flex;
+  gap:7px;
+  margin-top:7px
+}
+.typing-row input {
+  min-width:0;
+  flex:1;
+  border:1px solid var(--line);
+  border-radius:7px;
+  padding:10px;
+  font-size:12px
+}
+.key-buttons {
+  display:flex;
+  gap:5px;
+  flex-wrap:wrap
+}
+.key-buttons button {
+  border:1px solid var(--line);
+  background:#f8faf5;
+  color:var(--ink);
+  font-size:11px;
+  padding:8px;
+  border-radius:6px
+}
+
+.section-label {font-size:10px;letter-spacing:1.8px;font-weight:750;color:var(--teal)}
+.browser-panel {margin:0;padding:12px}
+.browser-header h2 {font-size:20px;line-height:1.35}
+@media(max-width:900px) {
+  .browser-header,.browser-tools {align-items:stretch;flex-direction:column;gap:14px}
+  .browser-header .button {max-width:none}
+}
+@media(prefers-reduced-motion:reduce) {
+  * {transition:none!important;scroll-behavior:auto!important}
+}
