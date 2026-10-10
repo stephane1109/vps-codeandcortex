@@ -199,7 +199,10 @@ with onglet_collecte:
                         media = medias.get(identifiant)
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
-                st.warning("TikTok demande une connexion à votre compte, pas un CAPTCHA. La fenêtre complète est disponible ci-dessous.")
+                if actuel.get("source_collecte") != "hashtags":
+                    st.info("Une invitation TikTok à se connecter est affichée. Fermez-la si possible, puis cliquez sur Continuer : la collecte des publications publiques ne vous impose pas de connexion.")
+                else:
+                    st.warning("TikTok affiche une fenêtre de connexion. Vous pouvez la fermer si TikTok le permet, puis continuer.")
             elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
                 st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
             else:

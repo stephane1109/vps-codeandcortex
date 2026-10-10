@@ -25,6 +25,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     # Une grille vide doit permettre le repli automatique, pas demander une
     # confirmation « vidéos visibles ». Une vraie vérification reste interactive.
     options.setdefault("intervention_si_vide", False)
+    options["sans_connexion"] = True
     interaction = options.pop("interact", manual_step)
 
     def intervenir(message):

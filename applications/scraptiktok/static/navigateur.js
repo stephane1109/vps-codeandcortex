@@ -22,9 +22,10 @@ export function initialiserNavigateur(afficherErreur) {
     const precedent = job?.status;
     const connexion = collecte.type_intervention === "connexion";
     const captcha = collecte.type_intervention === "captcha";
-    $("browser-title").textContent = connexion ? "Connexion TikTok requise" : captcha ? "Vérification CAPTCHA TikTok" : "Navigateur TikTok";
-    $("browser-description").textContent = connexion ? "TikTok demande une connexion à votre compte. Ce n’est pas un CAPTCHA. Utilisez les options proposées dans la fenêtre ci-dessous." : captcha ? "Terminez la vérification demandée par TikTok dans l’image ci-dessous." : "Intervenez dans le navigateur du serveur si TikTok le demande.";
-    $("continue-button").textContent = connexion ? "Connexion terminée, continuer →" : captcha ? "Vérification terminée, continuer →" : "Continuer →";
+    const sansConnexion = collecte.source_collecte !== "hashtags";
+    $("browser-title").textContent = connexion ? "Fenêtre de connexion TikTok" : captcha ? "Vérification CAPTCHA TikTok" : "Navigateur TikTok";
+    $("browser-description").textContent = connexion ? (sansConnexion ? "Fermez cette invitation si possible, puis continuez. La collecte lit uniquement les publications publiques et ne vous impose pas de connexion." : "Fermez cette fenêtre si TikTok le permet, puis continuez.") : captcha ? "Terminez la vérification demandée par TikTok dans l’image ci-dessous." : "Intervenez dans le navigateur du serveur si TikTok le demande.";
+    $("continue-button").textContent = captcha ? "Vérification terminée, continuer →" : "Continuer →";
     job = collecte;
     $("browser-panel").hidden = collecte.status !== "attention";
     $("continue-button").disabled = !collecte.has_frame || !!pointer || actionBusy || actionQueue.length > 0;

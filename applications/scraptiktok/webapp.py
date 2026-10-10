@@ -402,7 +402,11 @@ def wait_for_user(driver, job: Job, message: str):
             except queue.Empty:
                 continue
             if command == "continue":
-                if driver.execute_script(scraper.BLOCKED_JS):
+                sans_connexion = job.settings.source_collecte != "hashtags"
+                if sans_connexion:
+                    scraper.fermer_invitation_connexion(driver)
+                verification_js = scraper.CAPTCHA_JS if sans_connexion else scraper.BLOCKED_JS
+                if driver.execute_script(verification_js):
                     nature = scraper.type_intervention_tiktok(driver)
                     erreur = ("TikTok demande encore une connexion. Terminez la connexion dans la fenêtre avant de continuer."
                               if nature == "connexion" else "TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer."
@@ -449,6 +453,8 @@ def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
     diagnostic = rapport.get("diagnostic", {})
     code = diagnostic.get("code")
+    if code == "connexion_sans_publications_publiques":
+        return "TikTok n’a fourni aucun lien public lisible et affiche une fenêtre de connexion. La collecte n’impose pas de connexion ; cette source est inaccessible sans compte dans cette session."
     if rapport.get("discovery_stop") == "blocked" or code == "verification_tiktok":
         return "Vérification TikTok non terminée."
     if code == "erreur_tiktok":
@@ -526,7 +532,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.pause(args.delay)
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
-                record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
+                record = scraper.read_post(driver, url, args, interact=interact, check=job.check,
+                    **({"sans_connexion": True} if job.settings.source_collecte != "hashtags" else {}))
                 record["retenue"] = False
                 # Même découverte et lecture que le mode hashtag ; filtrer ensuite
                 # l’auteur effectivement lu, et non une grille de profil différente.

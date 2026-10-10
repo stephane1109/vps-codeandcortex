@@ -221,6 +221,13 @@ est appliqué aux légendes. En l’absence de liens, le profil sert de repli.
 Le moteur lit les liens HTML et les publications identifiées dans les données
 JSON de la page ; il défile dans le conteneur de la grille lorsque nécessaire.
 Cette collecte n’est pas exhaustive et dépend des publications accessibles à TikTok.
+En mode presse/comptes, la collecte fonctionne sans identifiants TikTok : elle
+utilise le bouton de fermeture des invitations à se connecter lorsqu'il est disponible.
+Une invitation n'empêche pas de cliquer sur **Continuer** ni de lire les publications
+publiques déjà fournies par la page. Les vrais CAPTCHA restent interactifs.
+Si TikTok ne fournit aucun lien public, le moteur essaie le parcours de repli,
+puis signale la source inaccessible ; il ne demande pas de connexion pour poursuivre
+le lot. Une légende inaccessible sans compte est comptée parmi les erreurs de lecture.
 Une vérification visible attend une intervention humaine ; aucune résolution
 automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte d’un
 filtre qui ne trouve aucune correspondance.
@@ -410,7 +417,7 @@ Les modules audiovisuels restent utilisables via l’API et le traitement par lo
 
 Les comptes sélectionnés sont tous transmis au moteur. Comme en mode hashtag,
 le navigateur s'affiche au démarrage pour permettre de traiter les cookies,
-la connexion ou un CAPTCHA. Après cette première validation, les comptes accessibles
+de fermer une invitation à se connecter ou de traiter un CAPTCHA. Après cette première validation, les comptes accessibles
 s’enchaînent automatiquement dans le même navigateur. Une
 vérification TikTok réelle demande toujours une intervention. Le panneau **Médias
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
@@ -463,8 +470,9 @@ et [contexte de session](https://docs.streamlit.io/develop/api-reference/caching
 Les deux hashtags (ET comme OU) et les comptes sélectionnés utilisent le même
 navigateur et ses cookies pendant toute la collecte. La vérification initiale
 manuelle n’est demandée qu’une fois. La deuxième source accessible est consultée
-automatiquement. Si TikTok affiche réellement une nouvelle connexion ou un CAPTCHA,
-la collecte s’interrompt de nouveau pour permettre l’intervention de l’utilisateur.
+automatiquement. Si TikTok affiche un CAPTCHA, la collecte s’interrompt de nouveau
+pour permettre l’intervention de l’utilisateur. Le mode presse/comptes ne met pas
+le lot en attente d'une authentification TikTok.
 La correction supprime les pauses systématiques ajoutées par l’application ; elle
 ne supprime pas les vérifications décidées par TikTok.
 
