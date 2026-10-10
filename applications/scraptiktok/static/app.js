@@ -1,6 +1,8 @@
 "use strict";
-if (new URLSearchParams(location.search).has("controle")) document.body.classList.add("mode-controle");
+const modeControle = new URLSearchParams(location.search).has("controle");
+if (modeControle) document.body.classList.add("mode-controle");
 const $ = (id) => document.getElementById(id);
+if (modeControle) $("controle-etat").hidden = false;
 let actionBusy = false, pendingSearch = null;
 const actionQueue = [];
 let job = null, polling = false, frameBusy = false, frameUrl = null, pointer = null, previewSignature = "";
@@ -16,7 +18,14 @@ async function api(path, body) {
   }
   return data;
 }
-function errorAt(id, message) { $(id).textContent = message; $(id).hidden = !message; }
+function errorAt(id, message) {
+  $(id).textContent = message; $(id).hidden = !message;
+  // Le formulaire est masqué dans le cadre : ses erreurs doivent y rester lisibles.
+  if (modeControle && id === "form-error" && message) {
+    $("controle-etat").textContent = "Le navigateur intégré ne peut pas s’afficher : " + message;
+    $("controle-etat").hidden = false;
+  }
+}
 function render(current) {
   const previous = job?.status;
   job = current;
@@ -35,7 +44,7 @@ function render(current) {
   $("status-badge").hidden = false; $("status-badge").textContent = labels[current.status] || "En cours";
   $("status-badge").className = "badge " + current.status;
   $("start-button").disabled = busy;
-  ["hashtag", "second-hashtag", "limit", "limit-range", "include-sources", "french-only", "source-collecte", "comptes", "enrichir", "collecter-commentaires", "collecter-reponses", "limite-commentaires", "date-debut", "date-fin", "effacer-periode"].forEach(id => $(id).disabled = busy);
+  ["hashtag", "second-hashtag", "limit", "limit-range", "txt-date", "txt-profil", "txt-url", "french-only", "source-collecte", "comptes", "enrichir", "collecter-commentaires", "collecter-reponses", "limite-commentaires", "date-debut", "date-fin", "effacer-periode"].forEach(id => $(id).disabled = busy);
   $("stop-button").hidden = !current.busy; $("stop-button").disabled = false;
   $("stop-button").textContent = "Arrêter la collecte";
   $("download").hidden = !current.can_download;
@@ -71,6 +80,10 @@ function render(current) {
     });
   }
   $("preview-section").hidden = !current.preview.length;
+  if (modeControle) {
+    $("controle-etat").textContent = current.status === "attention" ? "" : "Aucune intervention nécessaire pour cette collecte. Vous pouvez revenir aux résultats.";
+    $("controle-etat").hidden = current.status === "attention";
+  }
 }
 
 async function updateFrame() {
@@ -251,6 +264,6 @@ api("/api/presse").then(data => {
     label.append(input, texte); $("liste-presse").append(label);
   });
 }).catch(erreur => errorAt("form-error", erreur.message));
-api("/api/session").then(data => { if (data.job) { $("date-debut").value = data.job.date_debut || ""; $("date-fin").value = data.job.date_fin || ""; $("periode-options").open = !!(data.job.date_debut || data.job.date_fin); $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; const variables = data.job.variables_txt ?? (data.job.inclure_metadonnees_txt ? ["date", "profil", "url"] : data.job.include_sources !== false ? ["profil", "url"] : []); ["date", "profil", "url"].forEach(v => $("txt-" + v).checked = variables.includes(v)); document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } }).catch(error => errorAt("form-error", error.message));
+api("/api/session").then(data => { if (data.job) { $("date-debut").value = data.job.date_debut || ""; $("date-fin").value = data.job.date_fin || ""; $("periode-options").open = !!(data.job.date_debut || data.job.date_fin); $("source-collecte").value = data.job.source_collecte || "hashtags"; $("comptes").value = (data.job.comptes || []).join(", "); $("enrichir").checked = !!data.job.enrichir; actualiserSource(); document.querySelectorAll('#liste-presse input').forEach(e => e.checked = (data.job.medias || []).includes(e.value)); $("hashtag").value = data.job.hashtag; $("second-hashtag").value = data.job.second_hashtag || ""; $("french-only").checked = !!data.job.french_only; const variables = data.job.variables_txt ?? (data.job.inclure_metadonnees_txt ? ["date", "profil", "url"] : data.job.include_sources !== false ? ["profil", "url"] : []); ["date", "profil", "url"].forEach(v => $("txt-" + v).checked = variables.includes(v)); document.querySelector(`input[name="operator"][value="${data.job.operator === "OR" ? "OR" : "AND"}"]`).checked = true; render(data.job); } else if (modeControle) { $("controle-etat").textContent = "Aucune collecte active dans cette session. Revenez à l’accueil pour lancer une recherche."; } }).catch(error => errorAt("form-error", error.message));
 setInterval(poll, 1200);
 setInterval(updateFrame, 350);
