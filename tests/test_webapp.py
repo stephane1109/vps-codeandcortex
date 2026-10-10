@@ -321,8 +321,9 @@ class WorkerTests(unittest.TestCase):
                 web.execute_job(job, driver_factory=lambda args: pilote)
             # Le faux résultat appartient à un autre auteur : les comptes essaient
             # aussi leur repli, toujours sans seconde validation initiale.
-            self.assertEqual(validations, [True,False] if reglages.source_collecte == 'hashtags' else [True,False,False,False])
-            intervention.assert_called_once()
+            self.assertEqual(validations, [True,False] if reglages.source_collecte == 'hashtags' else [False,False,False,False])
+            if reglages.source_collecte == "hashtags": intervention.assert_called_once()
+            else: intervention.assert_not_called()
 
     def test_identical_hashtags_and_blank_second_input(self):
         self.assertEqual(len(web.StartRequest(hashtag="été", second_hashtag="#ÉTÉ").hashtags), 1)

@@ -489,11 +489,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
-                    # Comme pour les hashtags, montrer la première recherche pour permettre
-                    # la connexion et le choix des cookies. Réutiliser ensuite cette session.
+                    # Essayer réellement la grille et le repli avant de demander une action.
+                    # Le moteur ouvre toujours le contrôle si TikTok affiche une vérification.
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport, hashtags=job.settings.hashtags,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        validation_initiale=not session_validee)
+                        validation_initiale=False)
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)

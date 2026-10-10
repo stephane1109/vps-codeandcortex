@@ -309,7 +309,7 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
 
 
 def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
-                  *, interact=manual_step, progress=None, check=None, validation_initiale=True) -> list[str]:
+                  *, interact=manual_step, progress=None, check=None, validation_initiale=True, intervention_si_vide=True) -> list[str]:
     check = check or (lambda: None)
     check()
     try:
@@ -376,7 +376,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                     continue
                 report["discovery_stop"] = "tiktok_error"
                 raise RuntimeError("TikTok affiche une erreur de chargement des publications, même après rechargement.") from exc
-            if args.interactive and not intervention_effectuee and tentative < 2:
+            if args.interactive and intervention_si_vide and not intervention_effectuee and tentative < 2:
                 interact("Aucune publication n’a pu être lue dans cette recherche. Examinez la page TikTok ci-dessous, "
                          "terminez une éventuelle vérification, puis cliquez sur Continuer pour réessayer.")
                 intervention_effectuee = True
