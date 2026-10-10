@@ -687,6 +687,11 @@ class Manager:
         now = time.monotonic()
         with self.lock:
             for job in list(self.jobs.values()):
+                if job.busy or job.video_busy:
+                    from ticket_gate import verifier_session_active
+                    if not verifier_session_active(job.owner):
+                        job.stop.set()
+                        job.video_stop.set()
                 if job.busy and (now - job.last_seen > self.idle_timeout or now - job.created > self.max_duration):
                     job.stop.set()
                 if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
@@ -838,6 +843,7 @@ def create_app(manager=None):
 
     @app.post("/api/jobs/{job_id}/video", status_code=202)
     def lancer_analyse_video(job_id: str, options: OptionsVideo, request: Request):
+        exiger_ticket(request)
         job = manager.get(owner(request), job_id)
         if not video_disponible():
             raise HTTPException(409, "Le traitement vidéo n’est pas activé sur ce serveur.")
@@ -900,8 +906,14 @@ def create_app(manager=None):
         job = manager.latest(owner(request))
         return {"job": job.snapshot() if job else None}
 
+    def exiger_ticket(request):
+        from ticket_gate import verifier_session_active
+        if not verifier_session_active(owner(request)):
+            raise HTTPException(403, "Accès non actif. Reprenez un ticket dans la barre latérale.")
+
     @app.post("/api/jobs", status_code=202)
     def start(payload: StartRequest, request: Request):
+        exiger_ticket(request)
         return manager.start(owner(request), payload).snapshot()
 
     @app.get("/api/jobs/{job_id}")

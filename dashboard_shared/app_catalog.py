@@ -32,6 +32,12 @@ FAMILY_ORDER = {item["id"]: item["order"] for item in FAMILIES}
 # (label/max_active/cost) viennent des applications et/ou des overrides
 # d'environnement lus par le dashboard.
 UI_OVERRIDES: dict[str, dict[str, Any]] = {
+    "scraptiktok": {
+        "href": "https://scraptiktok.codeandcortex.fr/",
+        "familyId": "extraire", "iconClass": "fab fa-tiktok",
+        "description": "Collecter les publications TikTok par hashtags, profils ou médias.",
+        "order": 65, "visible": True,
+    },
     "europresse-to-iramuteq": {
         "href": "https://europresse.codeandcortex.fr",
         "familyId": "extraire",
