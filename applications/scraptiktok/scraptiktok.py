@@ -14,7 +14,7 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit, parse_qs
 
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
@@ -57,7 +57,8 @@ const liens = document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]')
 const texte = (document.body?.innerText || '').toLowerCase().replaceAll('’', "'");
 const erreur = liens === 0 && (
     (texte.includes('something went wrong') && texte.includes('please try again later')) ||
-    (texte.includes('une erreur') && (texte.includes('réessaie plus tard') || texte.includes('réessayer plus tard')))
+    (texte.includes('une erreur') && (texte.includes('réessaie plus tard') || texte.includes('réessayer plus tard'))) ||
+    (texte.includes('problème est survenu avec le serveur') && texte.includes('réessayer'))
 );
 return {url:location.origin+location.pathname, etat:document.readyState,
     titre:document.title.slice(0,160), liens, erreur_tiktok:erreur};
@@ -218,7 +219,9 @@ def meme_page_tiktok(observee: str, attendue: str) -> bool:
     return (observee.scheme == attendue.scheme == "https"
             and observee.hostname in {"www.tiktok.com", "tiktok.com"}
             and attendue.hostname in {"www.tiktok.com", "tiktok.com"}
-            and observee.path.rstrip("/") == attendue.path.rstrip("/"))
+            and observee.path.rstrip("/") == attendue.path.rstrip("/")
+            and (attendue.path.rstrip("/") != "/search"
+                 or parse_qs(observee.query).get("q") == parse_qs(attendue.query).get("q")))
 
 
 def diagnostiquer_page(driver, report, erreur=None, code=None):
@@ -270,6 +273,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     if args.interactive and validation_initiale:
         interact("Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
     links: dict[str, str] = {}
+    candidats_vus: set[str] = set()
     intervention_effectuee = bool(args.interactive and validation_initiale)
 
     def scan(browser: webdriver.Chrome) -> bool:
@@ -281,17 +285,21 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             interact("TikTok affiche une connexion ou une vérification. Terminez-la pour poursuivre.")
             intervention_effectuee = True
             check()
-        previous = len(links)
+        precedents = len(candidats_vus)
         for href in browser.execute_script(DISCOVER_JS):
             identity = canonical_post(href)
+            if identity:
+                candidats_vus.add(identity[0])
             if identity and report.get("compte_attendu") and identity[2].lower() != report["compte_attendu"]:
                 continue
             if identity and len(links) < args.limit:
                 links.setdefault(identity[0], identity[1])
+        report["candidats_examines"] = len(candidats_vus)
         report["discovered_urls"] = list(links.values())
         if progress:
             progress(len(links))
-        return len(links) > previous
+        # Continuer à défiler même si la première page contient d’autres auteurs.
+        return len(candidats_vus) > precedents
 
     # Une erreur affichée par TikTok exige une nouvelle navigation, pas une
     # deuxième attente sur la même page. Une seule recharge par source est autorisée.
@@ -318,7 +326,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 report["discovery_stop"] = "tiktok_error"
                 raise RuntimeError("TikTok affiche une erreur de chargement des publications, même après rechargement.") from exc
             if args.interactive and not intervention_effectuee and tentative < 2:
-                interact("Aucune publication n’a pu être lue sur ce profil. Examinez la page TikTok ci-dessous, "
+                interact("Aucune publication n’a pu être lue dans cette recherche. Examinez la page TikTok ci-dessous, "
                          "terminez une éventuelle vérification, puis cliquez sur Continuer pour réessayer.")
                 intervention_effectuee = True
                 check()
