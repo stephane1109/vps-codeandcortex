@@ -48,9 +48,12 @@
             </details>
             <label class="checkbox"><input type="checkbox" id="french-only" checked aria-describedby="language-help"><span>Filtre français</span></label>
             <p class="help" id="language-help">Détection automatique sur la description, hors hashtags et liens. Les langues identifiées comme étrangères sont écartées ; les textes courts ou de langue indéterminée sont conservés. La détection peut se tromper.</p>
-            <label class="checkbox"><input type="checkbox" id="include-sources" checked><span>Inclure les auteurs et les liens dans le fichier</span></label>
-            <label class="checkbox"><input type="checkbox" id="inclure-metadonnees-txt"><span>Ajouter *date, *profil et *urlvidéo avant chaque post dans le TXT</span></label>
-            <p class="help">Cette option remplace l’en-tête auteur/lien. Une date de publication absente reste indéterminée.</p>
+            <fieldset><legend>Variables à inclure avant chaque post dans le TXT</legend>
+              <label class="checkbox"><input type="checkbox" id="txt-date"><span>Date</span></label>
+              <label class="checkbox"><input type="checkbox" id="txt-profil" checked><span>Profil</span></label>
+              <label class="checkbox"><input type="checkbox" id="txt-url" checked><span>URL</span></label>
+            </fieldset>
+            <p class="help">Choisissez une, deux ou trois variables ; aucune pour le texte seul. Une date absente reste indéterminée. Les commentaires récupérés sont ajoutés sous leur publication si leur collecte est cochée.</p>
             <details class="options-enrichies"><summary>Engagement, commentaires et corpus enrichi</summary>
               <label class="checkbox"><input id="enrichir" type="checkbox"><span>Créer l’archive enrichie (JSON, CSV, IRaMuTeQ)</span></label>
               <p class="help">Automatique pour les comptes : likes, vues, partages, favoris et total de commentaires lorsqu’ils sont accessibles. Les valeurs absentes restent indéterminées.</p>

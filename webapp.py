@@ -54,6 +54,8 @@ class StartRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=300)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
+    # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
+    variables_txt: list[Literal["date", "profil", "url"]] | None = Field(default=None, max_length=3)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -162,25 +164,37 @@ class LiveAction:
         self.error = ""
 
 
-def entete_publication(publication: dict) -> str:
-    """Métadonnées lisibles sur trois lignes ; ne pas inventer une date absente."""
+def entete_publication(publication: dict, variables=None) -> str:
+    """Écrit seulement les variables choisies, dans l’ordre date, profil, URL."""
     def ligne(valeur, defaut="indéterminée"):
         return " ".join(str(valeur or "").split()) or defaut
     profil = ligne(publication.get("author"), "indéterminé")
     if publication.get("author"):
         profil = "@" + profil.lstrip("@")
-    return (f"*date {ligne(publication.get('created_at'))}\n"
-            f"*profil {profil}\n*urlvidéo {ligne(publication.get('url'))}\n")
+    valeurs = {"date": f"*date {ligne(publication.get('created_at'))}\n",
+               "profil": f"*profil {profil}\n", "url": f"*urlvidéo {ligne(publication.get('url'))}\n"}
+    selection = set(variables if variables is not None else valeurs)
+    return "".join(texte for cle, texte in valeurs.items() if cle in selection)
 
 
-def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False) -> str:
+def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
+                variables_txt=None, commentaires=None) -> str:
     blocks = []
+    par_publication = {}
+    for commentaire in commentaires or []:
+        if commentaire.get("texte"):
+            par_publication.setdefault(str(commentaire.get("publication_id")), []).append(commentaire)
     for record in records:
         if not record.get("description"):
             continue
-        prefix = (entete_publication(record) if inclure_metadonnees_txt
+        prefix = (entete_publication(record, variables_txt) if variables_txt is not None
+                  else entete_publication(record) if inclure_metadonnees_txt
                   else f"@{record['author']}\n{record['url']}\n" if include_sources else "")
-        blocks.append(prefix + record["description"])
+        bloc = prefix + record["description"]
+        for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
+            etiquette = "Réponse" if commentaire.get("est_reponse") else "Commentaire"
+            bloc += f"\n\n{etiquette} {numero} :\n{commentaire['texte']}"
+        blocks.append(bloc)
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
@@ -264,6 +278,7 @@ class Job:
                         for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
+                    "variables_txt": self.settings.variables_txt,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
@@ -296,7 +311,8 @@ class Job:
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
         with self.lock:
-            content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt)
+            content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt,
+                                  self.settings.variables_txt, self.commentaires if self.settings.collecter_commentaires else None)
         temp = self.path.with_suffix(".tmp")
         temp.write_text(content, encoding="utf-8")
         temp.replace(self.path)

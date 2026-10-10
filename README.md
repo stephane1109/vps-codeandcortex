@@ -143,24 +143,33 @@ produit un résultat partiel explicite si l’autre a abouti. L’absence de ré
 ne signifie pas qu’aucune publication TikTok ne contient la combinaison : seuls
 les contenus accessibles et consultés sont filtrés.
 
-### En-tête facultatif dans le TXT
+### Variables et commentaires dans le TXT
 
-Dans « Exports et commentaires », cochez « Ajouter *date, *profil et *urlvidéo
-avant chaque post dans le TXT ». Cette option, désactivée par défaut, remplace
-l’en-tête auteur/lien par trois lignes avant chaque légende :
+Dans « Exports et commentaires », trois cases indépendantes permettent de choisir
+**Date**, **Profil** et **URL**. Cochez une, deux ou trois variables ; décochez-les
+toutes pour exporter uniquement le texte. Seules les variables cochées figurent
+avant chaque publication, dans cet ordre. Par exemple, avec Date et Profil :
 
 ```text
 *date 2026-10-09T12:00:00+00:00
 *profil @compte
-*urlvidéo https://www.tiktok.com/@compte/video/1234567890
 Texte original de la publication.
+
+Commentaire 1 :
+Texte d’un commentaire de cette publication.
 ```
 
-La date est celle de publication, en UTC ; si elle manque, le fichier indique
-`*date indéterminée`. L’URL et le texte sont conservés intégralement. Sans cette
-option, les formats existants (texte seul ou auteur/lien) restent disponibles.
-L’API accepte `inclure_metadonnees_txt: true`. Cet en-tête est destiné à la lecture ;
-le corpus normalisé IRaMuTeQ reste disponible séparément dans le ZIP.
+La case URL ajoute `*urlvidéo` suivi de l’URL complète. La date est celle de
+publication en UTC ; si elle manque, le fichier indique `*date indéterminée`.
+Si « Collecter les textes des commentaires » est coché, les commentaires récupérés
+figurent sous leur publication dans **le même TXT**. Les réponses récupérées sont
+également ajoutées si leur option est cochée. Les exports séparés restent disponibles.
+Aucun commentaire d’une publication exclue n’est inséré.
+
+L’API accepte `variables_txt: ["date", "profil", "url"]`, ou toute sous-liste,
+y compris `[]`. Une liste explicite remplace les anciennes options d’en-tête.
+Les requêtes sans ce champ restent compatibles avec `inclure_metadonnees_txt`
+et `include_sources`. Le corpus normalisé IRaMuTeQ reste séparé dans le ZIP.
 
 ### Filtre français
 
@@ -186,7 +195,7 @@ Les résultats affichent les likes, vues, partages et nombres de commentaires ob
 Le bouton « Télécharger les compteurs CSV » donne toutes les publications retenues,
 leurs légendes, leur statut linguistique et les mesures brutes avec leurs confiances.
 Une valeur indisponible reste vide dans le CSV ; elle n’est jamais remplacée par zéro.
-Le TXT des légendes reste un corpus textuel sans compteurs ajoutés.
+Le TXT reste sans compteurs numériques ajoutés ; les commentaires récupérés y figurent si leur collecte est cochée.
 
 « Collecter les textes des commentaires » est visible dans le formulaire et activé
 par défaut pour une nouvelle session Streamlit. Cette collecte facultative concerne
@@ -237,11 +246,13 @@ d’ID TikTok, un ID local est signalé comme tel : deux textes identiques du m�
 peuvent alors être confondus. Un résultat vide ne prouve pas l’absence de commentaires.
 Les sélecteurs peuvent évoluer avec TikTok ; les statuts partiels restent explicites.
 
-**Télécharger le fichier texte** conserve l’export initial. **Télécharger l’archive
+**Télécharger le fichier texte** applique les variables choisies et inclut les
+commentaires récupérés si leur collecte est cochée. **Télécharger l’archive
 enrichie** fournit JSON brut, CSV (UTF-8 BOM, séparateur `;`), corpus IRaMuTeQ et journal.
 Les filtres ET/OU et français s’appliquent aux légendes retenues dans TXT/IRaMuTeQ.
-Les publications brutes, mesures et commentaires restent séparés et non filtrés ;
-`retenue` identifie la sélection. Les corpus commentaires et transcriptions sont distincts.
+Les publications brutes et mesures restent séparées ; `retenue` identifie la sélection.
+Les commentaires sont collectés pour les publications retenues. Leurs exports séparés
+et les corpus de transcriptions restent disponibles.
 Les astérisques sont neutralisés uniquement dans le corps IRaMuTeQ, sans modifier le brut.
 
 ## Traitement audiovisuel facultatif
