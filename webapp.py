@@ -471,7 +471,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         unique_links = {}
         hors_selection = 0
         sources = ([{"hashtag": h} for h in job.settings.hashtags]
-                   if job.settings.hashtags else job.settings.sources)
+                   if job.settings.source_collecte == "hashtags" else job.settings.sources)
         medias_par_compte = {s["compte"]: s for s in job.settings.sources}
         session_validee = False
         def intervenir(message):
@@ -496,6 +496,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
                         validation_initiale=not session_validee)
                 rapport["discovered_urls"] = found
+                if rapport.get("recherches_en_echec"):
+                    job.update(search_errors=job.search_errors + 1)
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
                     "message": ("Recherche partielle : une recherche TikTok a échoué." if rapport.get("recherches_en_echec") else "Recherche terminée.") if found else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide."})
                 for url in found:
@@ -596,7 +598,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.settings.hashtags:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
             if job.settings.source_collecte != "hashtags":
-                final_message += f" Recherche limitée à {job.settings.limit} publication(s) accessibles par hashtag, puis filtrée sur les comptes sélectionnés ; l’historique complet n’est pas garanti."
+                final_message += f" Recherche ciblée sur chaque compte sélectionné, limitée à {job.settings.limit} publication(s) par compte et par recherche ; l’historique complet n’est pas garanti."
         if job.settings.source_collecte != "hashtags":
             final_message += f" {hors_selection} publication(s) écartée(s) car l’auteur ne fait pas partie des comptes sélectionnés."
         if job.settings.date_debut or job.settings.date_fin:
@@ -604,7 +606,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message = "Aucun texte retenu avec la période et les autres filtres choisis."
             final_message += f" Période : {job.hors_periode} publication(s) hors période et {job.dates_indeterminees} publication(s) sans date exploitable écartées."
         if job.search_errors:
-            final_message += f" {job.search_errors} source(s) inaccessible(s) ; les résultats sont incomplets."
+            final_message += f" {job.search_errors} source(s) partiellement ou totalement inaccessible(s) ; les résultats sont incomplets."
         if job.errors:
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if not links and job.search_errors:

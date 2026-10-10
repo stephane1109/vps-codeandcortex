@@ -209,17 +209,21 @@ et restent dans les exports enrichis CSV/JSON/IRaMuTeQ.
 
 Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
-La limite de publications s’applique à chaque compte. Les recommandations d’autres
-auteurs sont exclues ; les publications communes sont dédoublonnées par ID TikTok.
-Un ou deux hashtags peuvent filtrer les légendes des comptes, avec le même ET/OU.
-La découverte utilise les mêmes pages de hashtags que la recherche générale,
-puis ne retient que les liens dont l’auteur correspond exactement au compte.
-Sans hashtag, elle utilise l’onglet **Vidéos** de la recherche TikTok sur `@identifiant`, au lieu de la
-grille du profil. Les résultats sont dédoublonnés avant lecture et les filtres
-ET/OU sont toujours appliqués aux légendes. Cette recherche n’est pas exhaustive :
-elle dépend des résultats servis par TikTok et des bornes de défilement. Un résultat
-vide signifie qu’aucune publication correspondante n’a été trouvée dans cette
-recherche, et ne signifie pas que le compte n’a aucune vidéo.
+La limite s’applique par compte et par recherche. Les recommandations d’autres
+auteurs sont exclues avant cette limite ; les publications sont dédoublonnées par ID.
+Sans hashtag, le moteur visite le profil sélectionné. Si sa grille ne fournit aucun
+lien, il essaie la recherche vidéo sur `@identifiant` dans la même session.
+Avec un ou deux hashtags, chaque compte fait l’objet de recherches ciblées
+`@identifiant #hashtag`, jamais d’une petite sélection mondiale ensuite filtrée.
+Les deux recherches sont effectuées même si la première atteint sa limite.
+L’auteur est contrôlé à la découverte puis à la lecture ; le filtre exact ET/OU
+est appliqué aux légendes. En l’absence de liens, le profil sert de repli.
+Le moteur lit les liens HTML et les publications identifiées dans les données
+JSON de la page ; il défile dans le conteneur de la grille lorsque nécessaire.
+Cette collecte n’est pas exhaustive et dépend des publications accessibles à TikTok.
+Une vérification visible attend une intervention humaine ; aucune résolution
+automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte d’un
+filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
 L’inventaire `config/comptes_presse.json` contient 29 comptes sélectionnables. Les six
