@@ -11,14 +11,17 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     hashtags = list(dict.fromkeys(normalize_hashtag(h) for h in hashtags))
     profil = "https://www.tiktok.com/@" + quote(compte)
     recherche_compte = "https://www.tiktok.com/search/video?q=" + quote("@" + compte)
-    # Deux recherches en ET comme en OU : le filtre exact est appliqué aux légendes.
-    # Ne pas abandonner la seconde recherche quand la première atteint sa limite.
-    recherches = (["https://www.tiktok.com/search/video?q=" + quote("@" + compte + " #" + h)
-                   for h in hashtags] if hashtags else [profil])
-    rapport.update(compte_attendu=compte, mode_decouverte="recherche_ciblee" if hashtags else "profil",
+    # Commencer par les vidéos du compte, même sans hashtag : la grille du profil
+    # n'est plus le point d'entrée obligatoire. Les hashtags restent facultatifs.
+    recherches = [recherche_compte]
+    # Compléter les candidats pour chacun des hashtags ; le filtre ET/OU exact
+    # reste appliqué aux légendes, sans confondre la requête TikTok avec ce filtre.
+    recherches.extend("https://www.tiktok.com/search/video?q=" + quote("@" + compte + " #" + h)
+                      for h in hashtags)
+    rapport.update(compte_attendu=compte, mode_decouverte="recherche_compte",
                    recherches=[], exhaustif=False)
     liens = {}
-    validation = options.pop("validation_initiale", False)
+    validation = options.pop("validation_initiale", True)
     # Une grille vide doit permettre le repli automatique, pas demander une
     # confirmation « vidéos visibles ». Une vraie vérification reste interactive.
     options.setdefault("intervention_si_vide", False)
@@ -53,11 +56,10 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     for url in recherches:
         erreur = rechercher(url)
         if erreur: erreurs.append(erreur)
-    # Une grille inaccessible dispose d'un second parcours public, dans la même session.
-    # Une recherche ciblée sans résultat est complétée par les publications du profil.
+    # Une recherche sans résultat est complétée par le profil, dans la même session.
     if not liens:
-        rapport["repli"] = "profil" if hashtags else "recherche_compte"
-        erreur = rechercher(profil if hashtags else recherche_compte)
+        rapport["repli"] = "profil"
+        erreur = rechercher(profil)
         if erreur: erreurs.append(erreur)
     rapport["recherches_en_echec"] = len(erreurs)
     rapport["discovered_urls"] = list(liens.values())

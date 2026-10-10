@@ -211,9 +211,9 @@ Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
 La limite s’applique par compte et par recherche. Les recommandations d’autres
 auteurs sont exclues avant cette limite ; les publications sont dédoublonnées par ID.
-Sans hashtag, le moteur visite le profil sélectionné. Si sa grille ne fournit aucun
-lien, il essaie la recherche vidéo sur `@identifiant` dans la même session.
-Avec un ou deux hashtags, chaque compte fait l’objet de recherches ciblées
+Avec ou sans hashtag, le moteur commence par la recherche vidéo sur `@identifiant`.
+La grille du profil n'est utilisée qu'en repli si les recherches ne donnent aucun lien.
+Avec un ou deux hashtags, chaque compte fait également l’objet de recherches ciblées
 `@identifiant #hashtag`, jamais d’une petite sélection mondiale ensuite filtrée.
 Les deux recherches sont effectuées même si la première atteint sa limite.
 L’auteur est contrôlé à la découverte puis à la lecture ; le filtre exact ET/OU
@@ -408,13 +408,15 @@ Les options vidéo, les boutons de comparaison et l’aide audiovisuelle ont ét
 Les exports TXT/ZIP, les commentaires, ET/OU, les dates et le filtre français restent disponibles.
 Les modules audiovisuels restent utilisables via l’API et le traitement par lots.
 
-Les comptes sélectionnés sont tous transmis au moteur. Les profils accessibles
-s’enchaînent automatiquement, sans validation manuelle imposée au démarrage. Une
+Les comptes sélectionnés sont tous transmis au moteur. Comme en mode hashtag,
+le navigateur s'affiche au démarrage pour permettre de traiter les cookies,
+la connexion ou un CAPTCHA. Après cette première validation, les comptes accessibles
+s’enchaînent automatiquement dans le même navigateur. Une
 vérification TikTok réelle demande toujours une intervention. Le panneau **Médias
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes, une grille vide ou en erreur ne demande plus de confirmer que les vidéos sont visibles : le moteur tente automatiquement son repli vers la recherche du compte dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; une vraie vérification reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes, après l'affichage initial du navigateur, une recherche vide essaie son repli vers le profil dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; une vraie vérification reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
 Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement au profil ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.
