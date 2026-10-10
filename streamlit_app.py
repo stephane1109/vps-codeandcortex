@@ -82,6 +82,8 @@ except RuntimeError as erreur:
 onglet_collecte, onglet_aide = st.tabs(["Collecte", "Aide"])
 
 with onglet_collecte:
+    st.caption("Profils : avec ou sans @ (ex. : @lemondefr ou lemondefr). "
+               "Hashtags : avec ou sans # (ex. : #manifestation ou manifestation), un seul par champ, sans espace.")
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
@@ -105,6 +107,7 @@ with onglet_collecte:
         st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Les comptes seront visités l’un après l’autre.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
+        st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Pour rechercher sur ces comptes sans filtre de hashtag, laissez les deux champs ci-dessous vides.")
     cle_hashtag = "hashtag" if source == "hashtags" else "hashtag_comptes"
     cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
     # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
