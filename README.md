@@ -428,7 +428,10 @@ utilisateur ne sont pas placées dans un cache Streamlit partagé. Une fenêtre 
 charge uniquement `/controle?collecte=<identifiant>` : aucun formulaire de recherche
 ni option vidéo cachés. Ses actions visent la collecte affichée, même si un autre
 onglet ouvre une collecte plus récente. Elle n’est pas recréée à chaque image.
-Le CAPTCHA reste à traiter par l’utilisateur, dans le navigateur du serveur.
+La connexion et le CAPTCHA restent à traiter par l’utilisateur, dans le navigateur
+du serveur. L’interface distingue ces deux demandes ; l’image est limitée en hauteur
+pour afficher toute la fenêtre. Le lien **Ouvrir le navigateur TikTok dans un onglet**
+permet d’intervenir séparément sans démarrer de seconde collecte.
 
 Streamlit est l’unique interface utilisateur. Le formulaire HTML historique, son
 JavaScript et sa feuille de style sont supprimés ; `/classique` renvoie 404.
@@ -467,3 +470,16 @@ Le parcours Chrome synthétique vérifie deux hashtags, une seule validation,
 la conservation du cookie de test et l’export TXT/ZIP. Les tests unitaires vérifient
 aussi qu’un nouveau blocage visible déclenche bien une intervention et que les
 comptes de presse partagent la même session.
+
+### Démarrage et arrêt cohérents
+
+Le lanceur réserve le port public et refuse un port Streamlit déjà occupé : il ne
+reprend jamais volontairement l’interface d’un ancien processus. FastAPI et
+Streamlit sont deux services de la même application, avec un seul moteur de collecte.
+Un arrêt normal (SIGTERM/SIGINT) ferme également le processus Streamlit. Si Streamlit
+s’arrête pendant l’exécution, le moteur s’arrête à son tour pour permettre un
+redémarrage complet par le superviseur Docker. Aucun réglage Redis n’est modifié.
+
+`python tests/smoke_demarrage.py` vérifie avec de vrais processus le refus des doublons,
+la fermeture des ports après SIGTERM et l’arrêt du moteur après perte de Streamlit.
+Ce test est également exécuté par le point d’entrée navigateur de la CI.

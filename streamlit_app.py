@@ -198,7 +198,12 @@ with onglet_collecte:
                     for identifiant in selection_moteur:
                         media = medias.get(identifiant)
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
-            st.write(actuel["message"])
+            if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
+                st.warning("TikTok demande une connexion à votre compte, pas un CAPTCHA. La fenêtre complète est disponible ci-dessous.")
+            elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
+                st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
+            else:
+                st.write(actuel["message"])
             st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
@@ -253,7 +258,9 @@ with onglet_collecte:
         afficher_resultats()
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
-            st.iframe(f"/controle?collecte={st.session_state['collecte']['id']}", height=850, alt="Navigateur TikTok du serveur")
+            adresse_controle = f"/controle?collecte={st.session_state['collecte']['id']}"
+            st.link_button("Ouvrir le navigateur TikTok dans un onglet", adresse_controle)
+            st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
         with st.expander("Aperçu des textes"):
             for publication in st.session_state["collecte"].get("preview",[]):
                 st.text("@" + publication["author"])
