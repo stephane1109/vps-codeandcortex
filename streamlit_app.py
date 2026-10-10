@@ -253,7 +253,7 @@ with onglet_collecte:
         afficher_resultats()
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
-            st.iframe("/classique?controle=1", height=850, alt="Navigateur TikTok du serveur")
+            st.iframe(f"/controle?collecte={st.session_state['collecte']['id']}", height=850, alt="Navigateur TikTok du serveur")
         with st.expander("Aperçu des textes"):
             for publication in st.session_state["collecte"].get("preview",[]):
                 st.text("@" + publication["author"])

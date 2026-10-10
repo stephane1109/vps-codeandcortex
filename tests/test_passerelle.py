@@ -26,7 +26,14 @@ class TestsPasserelle(unittest.TestCase):
                 ancien=client.get('/interface/',follow_redirects=False)
                 self.assertEqual(ancien.headers['location'],'/')
                 self.assertTrue(client.cookies.get(webapp.COOKIE))
-                self.assertEqual(client.get('/classique').status_code,200)
+                self.assertEqual(client.get('/classique',follow_redirects=False).headers['location'],'/')
+                ancien_controle=client.get('/classique?controle=1',follow_redirects=False)
+                self.assertEqual(ancien_controle.headers['location'],'/controle')
+                controle=client.get('/controle')
+                self.assertEqual(controle.status_code,200)
+                self.assertNotIn('search-form',controle.text)
+                self.assertNotIn('video-options',controle.text)
+                self.assertIn('browser-screen',controle.text)
                 self.assertEqual(client.post('/api/jobs',json={'hashtag':'test'}).status_code,403)
                 with self.assertRaises(WebSocketDisconnect):
                     with client.websocket_connect('/_stcore/stream',headers={'origin':'https://externe.test'}): pass
@@ -51,3 +58,12 @@ class TestsPasserelle(unittest.TestCase):
                     self.assertEqual(serveur.request.call_args.args[1],'http://127.0.0.1:65431/static/js/index.js')
                     self.assertEqual(client.get('/static/app.js').status_code,200)
                     self.assertEqual(client.get('/static/style.css').status_code,200)
+                    self.assertEqual(client.get('/static/controle.js').status_code,200)
+                    self.assertEqual(client.get('/static/navigateur.js').status_code,200)
+
+    def test_interface_historique_autonome_conservee(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(webapp.os.environ,{'UI_STREAMLIT':'0'}):
+            with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
+                self.assertIn('search-form',client.get('/classique').text)
+                self.assertIn('search-form',client.get('/').text)
+                self.assertNotIn('search-form',client.get('/controle').text)

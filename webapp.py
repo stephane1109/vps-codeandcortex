@@ -825,7 +825,7 @@ def create_app(manager=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
-        if os.getenv("UI_STREAMLIT", "0") == "1" and not request.url.path.startswith(("/api/", "/classique", "/healthz", "/static/app.js", "/static/style.css")):
+        if os.getenv("UI_STREAMLIT", "0") == "1" and not request.url.path.startswith(("/api/", "/classique", "/controle", "/healthz", "/static/app.js", "/static/style.css", "/static/navigateur.js", "/static/controle.js")):
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'"
             return response
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'"
@@ -848,8 +848,18 @@ def create_app(manager=None):
 
     @app.get("/")
     @app.get("/classique")
+    @app.get("/controle")
     async def home(request: Request):
-        response = (await app.state.relayer_streamlit(request, "") if request.url.path == "/" and os.getenv("UI_STREAMLIT", "0") == "1" else FileResponse(scraper.BASE_DIR / "static" / "index.html"))
+        if request.url.path == "/classique" and "controle" in request.query_params:
+            response = RedirectResponse("/controle", status_code=302)
+        elif request.url.path == "/classique" and os.getenv("UI_STREAMLIT", "0") == "1":
+            response = RedirectResponse("/", status_code=302)
+        elif request.url.path == "/controle":
+            response = FileResponse(scraper.BASE_DIR / "static" / "controle.html")
+        elif os.getenv("UI_STREAMLIT", "0") == "1":
+            response = await app.state.relayer_streamlit(request, "")
+        else:
+            response = FileResponse(scraper.BASE_DIR / "static" / "index.html")
         if not request.cookies.get(COOKIE):
             response.set_cookie(COOKIE, secrets.token_hex(32), httponly=True, samesite="strict",
                                 secure=os.getenv("COOKIE_SECURE", "0") == "1", max_age=86400)
@@ -1000,6 +1010,14 @@ def create_app(manager=None):
         @app.get("/static/style.css")
         def style_classique():
             return FileResponse(scraper.BASE_DIR / "static" / "style.css")
+
+        @app.get("/static/navigateur.js")
+        def gestes_navigateur():
+            return FileResponse(scraper.BASE_DIR / "static" / "navigateur.js")
+
+        @app.get("/static/controle.js")
+        def script_controle():
+            return FileResponse(scraper.BASE_DIR / "static" / "controle.js")
 
         from interface.passerelle import installer_passerelle
         installer_passerelle(app)

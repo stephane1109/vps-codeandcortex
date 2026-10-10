@@ -13,6 +13,7 @@ import threading
 import time
 from unittest.mock import patch
 import urllib.request
+from urllib.parse import parse_qs, urlsplit
 import zipfile
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -98,6 +99,9 @@ def principale():
                     return bytes(resultat['contenu']) if binaire else resultat['contenu']
                 def rediriger(pilote,url):
                     if '/tag/' in url: chemin='/fixture/tag'
+                    elif '/search/video' in url:
+                        requete_compte = parse_qs(urlsplit(url).query)['q'][0].split()[0].lstrip('@')
+                        chemin='/fixture/profil/'+requete_compte
                     elif '/video/' in url:
                         identifiant, _, compte = moteur.canonical_post(url)
                         chemin=f'/fixture/post?compte={compte}&identifiant={identifiant}'
@@ -132,7 +136,7 @@ def principale():
                     assert etat['limit']==1,etat
                     navigateur.switch_to.frame(navigateur.find_element(By.CSS_SELECTOR,'iframe'))
                     attente.until(lambda d:d.find_element(By.ID,'browser-screen').is_displayed())
-                    assert not navigateur.find_element(By.ID,'search-form').is_displayed()
+                    assert not navigateur.find_elements(By.ID,'search-form')
                     # Les clics et le glisser traversent l’iframe de contrôle et le moteur Chrome réel.
                     def action(donnees):
                         requete(f'/api/jobs/{identifiant}/action',donnees); time.sleep(.3)
@@ -210,7 +214,8 @@ def principale():
                     compteurs=list(csv.DictReader(io.StringIO(requete(f'/api/jobs/{identifiant_presse}/engagement.csv').lstrip('\ufeff')),delimiter=';'))
                     assert len(compteurs)==29 and all(c['likes']=='0' and c['commentaires']=='12' for c in compteurs),compteurs
                     assert len(etat['bilan_sources'])==29,etat
-                    assert profils_visites==list(comptes_presse),profils_visites
+                    assert profils_visites==[compte for compte in comptes_presse for _ in range(2)],profils_visites
+                    assert len(gestionnaire.jobs)==2, 'Une seule collecte doit être créée à chaque lancement'
                     texte=requete(f'/api/jobs/{identifiant_presse}/download')
                     assert all('@'+compte in texte for compte in comptes_presse),texte
                     attente.until(lambda d:'Médias pris en compte par la collecte : 29' in d.find_element(By.TAG_NAME,'body').text)
