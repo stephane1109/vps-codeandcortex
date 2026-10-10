@@ -11,7 +11,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     rapport = rapport if rapport is not None else {}
     hashtags = list(dict.fromkeys(normalize_hashtag(h) for h in hashtags))
     recherches = (["https://www.tiktok.com/tag/" + quote(h) for h in hashtags]
-                  if hashtags else ["https://www.tiktok.com/search?q=" + quote("@" + compte)])
+                  if hashtags else ["https://www.tiktok.com/search/video?q=" + quote("@" + compte)])
     rapport.update(compte_attendu=compte, mode_decouverte="hashtags" if hashtags else "recherche_compte",
                    recherches=[], exhaustif=False)
     liens = {}

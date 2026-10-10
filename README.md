@@ -214,7 +214,7 @@ auteurs sont exclues ; les publications communes sont dédoublonnées par ID Tik
 Un ou deux hashtags peuvent filtrer les légendes des comptes, avec le même ET/OU.
 La découverte utilise les mêmes pages de hashtags que la recherche générale,
 puis ne retient que les liens dont l’auteur correspond exactement au compte.
-Sans hashtag, elle utilise la recherche TikTok sur `@identifiant`, au lieu de la
+Sans hashtag, elle utilise l’onglet **Vidéos** de la recherche TikTok sur `@identifiant`, au lieu de la
 grille du profil. Les résultats sont dédoublonnés avant lecture et les filtres
 ET/OU sont toujours appliqués aux légendes. Cette recherche n’est pas exhaustive :
 elle dépend des résultats servis par TikTok et des bornes de défilement. Un résultat
