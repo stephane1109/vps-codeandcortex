@@ -45,18 +45,24 @@ class TestsEnrichis(unittest.TestCase):
             'id': str(100+i), 'url': f'https://www.tiktok.com/@{compte}/video/{100+i}',
             'author': compte, 'description': texte, 'engagement': {},
         } for i, (compte, texte) in enumerate(zip(comptes, descriptions))]
-        for operateur, attendus in [('AND', ['100']), ('OR', ['100', '102', '101'])]:
+        for operateur, attendus in [('AND', ['100']), ('OR', ['100', '101', '102'])]:
             with self.subTest(operateur=operateur), tempfile.TemporaryDirectory() as d:
                 job = web.Job('test', web.StartRequest(source_collecte='presse',
                     medias=['lemonde', 'franceinfo'], hashtag='grève', second_hashtag='école',
                     operator=operateur, french_only=False), Path(d))
-                def decouvrir(navigateur, arguments, compte, **options):
-                    return [p['url'] for p in publications if p['author'] == compte]
+                validations = []
+                def decouvrir(navigateur, arguments, rapport, **options):
+                    self.assertNotIn('compte_attendu', rapport)
+                    validations.append(options['validation_initiale'])
+                    if options['validation_initiale']: options['interact']('Vérification TikTok')
+                    return [p['url'] for p in publications]
                 def lire(navigateur, url, *args, **options):
                     return dict(next(p for p in publications if p['url'] == url))
-                with patch('collecte.comptes.collecter_compte', side_effect=decouvrir) as collecte, patch.object(web.scraper, 'read_post', side_effect=lire), patch.object(job, 'pause'):
+                with patch.object(web.scraper, 'collect_links', side_effect=decouvrir) as collecte, patch.object(web, 'wait_for_user'), patch('collecte.comptes.collecter_compte') as profils, patch.object(web.scraper, 'read_post', side_effect=lire), patch.object(job, 'pause'):
                     web.execute_job(job, driver_factory=lambda args: Mock())
-                self.assertEqual([c.args[2] for c in collecte.call_args_list], ['lemondefr', 'franceinfo'])
+                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/tag/gr%C3%A8ve', 'https://www.tiktok.com/tag/%C3%A9cole'])
+                self.assertEqual(validations, [True, False])
+                profils.assert_not_called()
                 self.assertEqual([p['id'] for p in job.records], attendus)
                 self.assertEqual(job.processed, 4)
                 self.assertEqual(job.filtered, 4-len(attendus))
@@ -136,3 +142,19 @@ from corpus.export_iramuteq import construire_corpus
 assert '****' in construire_corpus([{'id':'1','texte':'Texte'}])
 """
         subprocess.run([sys.executable,"-c",code],check=True,capture_output=True)
+
+    def test_presse_filtre_auteur_lu_apres_collecte_hashtag(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            job=web.Job('test',web.StartRequest(source_collecte='presse',medias=['lemonde'],hashtag='test'),Path(dossier))
+            liens=['https://www.tiktok.com/@lemondefr/video/101','https://www.tiktok.com/@autre/video/102']
+            # Une redirection éventuelle ne doit pas faire retenir un autre auteur.
+            textes=[{'id':'101','url':liens[0],'author':'autre','description':'#test refusé'},
+                    {'id':'102','url':liens[1],'author':'lemondefr','description':'#test retenu'}]
+            with patch.object(web.scraper,'collect_links',return_value=liens) as collecte, patch.object(web.scraper,'read_post',side_effect=textes), patch.object(job,'pause'):
+                web.execute_job(job,driver_factory=lambda args:Mock())
+            collecte.assert_called_once()
+            self.assertEqual([p['id'] for p in job.records],['102'])
+            self.assertEqual([p['id'] for p in job.publications],['102'])
+            self.assertEqual(job.processed,2)
+            self.assertIn('1 publication(s) écartée(s) car l’auteur',job.message)
+            self.assertNotIn('refusé',job.path.read_text())

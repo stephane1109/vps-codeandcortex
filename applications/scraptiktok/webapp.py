@@ -469,8 +469,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         driver = driver_factory(args)
         interact = lambda message: wait_for_user(driver, job, message)
         unique_links = {}
+        hors_selection = 0
         sources = ([{"hashtag": h} for h in job.settings.hashtags]
-                   if job.settings.source_collecte == "hashtags" else job.settings.sources)
+                   if job.settings.hashtags else job.settings.sources)
         medias_par_compte = {s["compte"]: s for s in job.settings.sources}
         session_validee = False
         def intervenir(message):
@@ -517,6 +518,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
                 record["retenue"] = False
+                # Même découverte et lecture que le mode hashtag ; filtrer ensuite
+                # l’auteur effectivement lu, et non une grille de profil différente.
+                if (job.settings.source_collecte != "hashtags"
+                        and str(record.get("author", "")).lower() not in medias_par_compte):
+                    hors_selection += 1
+                    job.journal.append({"publication_id": record.get("id"),
+                        "auteur": record.get("author"), "filtre_auteur": "hors_selection"})
+                    job.update(processed=index)
+                    continue
                 periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
                 if periode in {"hors_periode", "date_indeterminee"}:
                     with job.lock:
@@ -586,7 +596,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.settings.hashtags:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
             if job.settings.source_collecte != "hashtags":
-                final_message += f" Recherche limitée à {job.settings.limit} publication(s) accessibles par compte, avant filtrage ; l’historique complet n’est pas garanti."
+                final_message += f" Recherche limitée à {job.settings.limit} publication(s) accessibles par hashtag, puis filtrée sur les comptes sélectionnés ; l’historique complet n’est pas garanti."
+        if job.settings.source_collecte != "hashtags":
+            final_message += f" {hors_selection} publication(s) écartée(s) car l’auteur ne fait pas partie des comptes sélectionnés."
         if job.settings.date_debut or job.settings.date_fin:
             if not job.records and (job.hors_periode or job.dates_indeterminees):
                 final_message = "Aucun texte retenu avec la période et les autres filtres choisis."

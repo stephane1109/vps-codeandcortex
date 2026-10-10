@@ -40,6 +40,10 @@ class TestsDates(unittest.TestCase):
                 job=web.Job('test',web.StartRequest(**options),Path(d))
                 dates=['2026-10-01T00:00:00Z','2026-10-31T23:59:59Z','2026-09-30T23:59:59Z','', '2026-10-10T00:00:00Z']
                 publications=[{'id':str(i),'url':f'https://www.tiktok.com/@media/video/{i}','author':'media','created_at':date,'description':('Les journalistes présentent les informations et expliquent les événements de la journée. #test #presse' if i!=5 else 'Une autre publication. #test'),'engagement':{}} for i,date in enumerate(dates,1)]
+                if source == 'presse':
+                    for publication in publications:
+                        publication['author'] = 'lemondefr'
+                        publication['url'] = publication['url'].replace('@media/', '@lemondefr/')
                 urls=[p['url'] for p in publications]
                 with patch.object(web.scraper,'collect_links',return_value=urls),patch('collecte.comptes.collecter_compte',return_value=urls),patch.object(web.scraper,'read_post',side_effect=publications),patch.object(job,'pause'),patch('collecte.commentaires.collecter_commentaires',side_effect=lambda *a,**k:{'commentaires':[],'exhaustif':False}) as commentaires:
                     # La recherche ET interroge deux hashtags, puis dédoublonne les URL.
