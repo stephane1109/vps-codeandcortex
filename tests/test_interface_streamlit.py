@@ -190,3 +190,35 @@ class TestsInterface(unittest.TestCase):
                     self.assertFalse(page.exception)
                     for variable in ('date','profil','url'):
                         self.assertEqual(page.checkbox(key='txt_'+variable).value, variable in variables)
+
+    def test_liberer_acces_depuis_barre_laterale_conserve_la_collecte(self):
+        import tempfile
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as dossier:
+            tache = Job('a'*64, StartRequest(hashtag='actualite'), Path(dossier))
+            tache.update(status='attention')
+            tache.video_busy = True
+            appels = []
+            def repondre(chemin, *a, **kw):
+                if chemin == '/api/session': return {'job': tache.snapshot()}
+                if chemin == '/api/presse': return {'medias': charger_inventaire()}
+                if chemin == f'/api/jobs/{tache.id}/stop':
+                    appels.append(chemin)
+                    tache.update(busy=False, status='stopped')
+                    return {'ok': True}
+                if chemin == f'/api/jobs/{tache.id}/video/stop':
+                    appels.append(chemin)
+                    tache.video_busy = False
+                    return {'ok': True}
+                if chemin == f'/api/jobs/{tache.id}': return tache.snapshot()
+                raise AssertionError(chemin)
+            with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+                page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                self.assertEqual(page.sidebar.button(key='liberer_acces').label, "Libérer l'accès")
+                page.sidebar.button(key='liberer_acces').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(appels, [f'/api/jobs/{tache.id}/stop', f'/api/jobs/{tache.id}/video/stop'])
+                self.assertEqual(page.session_state['collecte']['id'], tache.id)
+                self.assertTrue(page.sidebar.button(key='liberer_acces').disabled)
+                self.assertTrue(any('Accès libéré' in message.value for message in page.sidebar.success))

@@ -6,7 +6,7 @@ import streamlit as st
 from interface.client import appeler_api
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
-st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="centered")
+st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
 st.title("ScrapTikTok")
 st.caption("Collecter les textes des publications TikTok.")
 
@@ -74,6 +74,34 @@ for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comp
 
 collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
+
+# Même présentation qu’Europresse ; la ressource partagée est ici le navigateur.
+with st.sidebar:
+    st.markdown("### Accès utilisateur")
+    liberation_demandee = st.session_state.get("liberation_demandee") == collecte.get("id") and bool(collecte)
+    if occupe:
+        if liberation_demandee:
+            st.info("Libération en cours… Fermeture des traitements de votre session.")
+        else:
+            st.success("Votre session utilise le navigateur ou un traitement.")
+    elif liberation_demandee:
+        st.success("Accès libéré.")
+    else:
+        st.info("Votre session ne réserve aucun traitement.")
+    if st.button("Libérer l'accès", key="liberer_acces", use_container_width=True,
+                 disabled=not occupe or liberation_demandee):
+        try:
+            if collecte.get("busy"):
+                api(f"/api/jobs/{collecte['id']}/stop", {})
+            if collecte.get("video_busy"):
+                api(f"/api/jobs/{collecte['id']}/video/stop", {})
+        except RuntimeError as erreur:
+            st.error(str(erreur))
+        else:
+            st.session_state["liberation_demandee"] = collecte["id"]
+            st.rerun()
+    st.caption("Arrête les traitements de votre session et rend la place disponible. Les résultats déjà collectés restent téléchargeables.")
+
 # Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
 try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
