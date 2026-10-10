@@ -28,7 +28,7 @@ from selenium.webdriver.support import expected_conditions as conditions
 import scraptiktok as moteur
 import webapp as web
 from collecte.presse import charger_inventaire
-from smoke_browser import TAG, CAPTION
+from fixtures_navigateur import TAG, CAPTION
 
 
 def principale():
@@ -37,7 +37,7 @@ def principale():
         port=ecoute.getsockname()[1]
         libre=socket.socket(); libre.bind(('127.0.0.1',0)); port_streamlit=libre.getsockname()[1]; libre.close()
         origine=f'http://127.0.0.1:{port}'
-        environnement={'UI_STREAMLIT':'1','STREAMLIT_PORT':str(port_streamlit),'SCRAPTIKTOK_API_URL':origine,'INSTALL_VIDEO':'1'}
+        environnement={'STREAMLIT_PORT':str(port_streamlit),'SCRAPTIKTOK_API_URL':origine,'INSTALL_VIDEO':'1'}
         with patch.dict(os.environ,environnement),patch.object(web,'video_disponible',return_value=True):
             gestionnaire=web.Manager(data_dir=temporaire)
             app=web.create_app(gestionnaire)

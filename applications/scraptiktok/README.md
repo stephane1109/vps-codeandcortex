@@ -116,7 +116,7 @@ sur Mac ; le conteneur utilise directement les paquets Chromium/ChromeDriver Deb
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
-python tests/smoke_browser.py
+python tests/smoke_controle.py
 python tests/smoke_streamlit.py
 ```
 
@@ -367,7 +367,7 @@ facultatif. Les points d’entrée et fonctions antérieures restent en place.
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
-python tests/smoke_browser.py
+python tests/smoke_controle.py
 ```
 
 Les tests vidéo sont ignorés dans le profil texte et exécutés dans le profil vidéo.
@@ -430,14 +430,14 @@ ni option vidéo cachés. Ses actions visent la collecte affichée, même si un 
 onglet ouvre une collecte plus récente. Elle n’est pas recréée à chaque image.
 Le CAPTCHA reste à traiter par l’utilisateur, dans le navigateur du serveur.
 
-L’entrée `webapp.py`, le moteur CLI et les modules restent utilisables. L’ancienne
-interface est conservée pour l’exécution autonome de FastAPI (`UI_STREAMLIT=0`) et les
-tests de non-régression. En mode Streamlit, `/classique` redirige vers `/` ;
-`/classique?controle=1` redirige vers le contrôleur dédié pour les anciens liens.
-Lancer directement Uvicorn affiche encore cette interface ;
-utiliser **`python lancer_interface.py`** pour l’accueil Streamlit. La commande Docker
-est déjà mise à jour. Le navigateur distant, les dates, ET/OU et le filtre français sont
-conservés ; ET/OU se choisit maintenant directement dans le formulaire Streamlit.
+Streamlit est l’unique interface utilisateur. Le formulaire HTML historique, son
+JavaScript et sa feuille de style sont supprimés ; `/classique` renvoie 404.
+L’ancien réglage `UI_STREAMLIT` ne sélectionne plus d’interface alternative.
+`webapp.py` reste le serveur technique des collectes, des sessions privées, des
+exports et du contrôle TikTok intégré. Le moteur CLI reste utilisable.
+Démarrer l’application avec **`python lancer_interface.py`** ; Docker utilise
+également ce lanceur. Lancer seulement Uvicorn ne démarre pas Streamlit.
+Les dates, ET/OU, les commentaires, les exports et le filtre français sont conservés.
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
 ne charge pas OpenCV, Whisper ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
@@ -446,7 +446,7 @@ sans modèle lourd : `INSTALL_VIDEO=base`. Le profil `1` conserve les dépendanc
 avancées. La disponibilité est vérifiée à partir des outils réellement installés.
 En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
 drapeau supplémentaire n’est nécessaire.
-La CI teste les trois profils Docker, le contrôleur dédié, l’interface historique et le
+La CI teste les trois profils Docker, le contrôleur dédié et le
 parcours Streamlit, avec une source synthétique hors TikTok. L’[audit des interfaces](AUDIT_INTERFACES.md)
 décrit leur séparation et les limites de cette validation.
 

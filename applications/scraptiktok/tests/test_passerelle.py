@@ -18,7 +18,7 @@ class TestsPasserelle(unittest.TestCase):
             self.assertFalse(mot_de_passe_valide({}))
             self.assertTrue(mot_de_passe_valide({'authorization':'Basic '+base64.b64encode(b'test:secret').decode()}))
     def test_routes_et_websocket_prives(self):
-        with tempfile.TemporaryDirectory() as d,patch.dict(webapp.os.environ,{'UI_STREAMLIT':'1','STREAMLIT_PORT':'65431'}):
+        with tempfile.TemporaryDirectory() as d,patch.dict(webapp.os.environ,{'STREAMLIT_PORT':'65431'}):
             with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
                 accueil=client.get('/',follow_redirects=False)
                 self.assertEqual(accueil.status_code,503)
@@ -26,9 +26,8 @@ class TestsPasserelle(unittest.TestCase):
                 ancien=client.get('/interface/',follow_redirects=False)
                 self.assertEqual(ancien.headers['location'],'/')
                 self.assertTrue(client.cookies.get(webapp.COOKIE))
-                self.assertEqual(client.get('/classique',follow_redirects=False).headers['location'],'/')
-                ancien_controle=client.get('/classique?controle=1',follow_redirects=False)
-                self.assertEqual(ancien_controle.headers['location'],'/controle')
+                for chemin in ['/classique', '/classique/', '/classique?controle=1', '/static/index.html', '/static/app.js', '/static/style.css']:
+                    self.assertEqual(client.get(chemin, follow_redirects=False).status_code, 404)
                 controle=client.get('/controle')
                 self.assertEqual(controle.status_code,200)
                 self.assertNotIn('search-form',controle.text)
@@ -44,7 +43,7 @@ class TestsPasserelle(unittest.TestCase):
                     with client.websocket_connect('/_stcore/stream',headers={'origin':'http://testserver'}): pass
 
     def test_accueil_et_ressources_streamlit_a_la_racine(self):
-        with tempfile.TemporaryDirectory() as d, patch.dict(webapp.os.environ, {'UI_STREAMLIT':'1','STREAMLIT_PORT':'65431'}):
+        with tempfile.TemporaryDirectory() as d, patch.dict(webapp.os.environ, {'STREAMLIT_PORT':'65431'}):
             with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
                 with patch('interface.passerelle.httpx.AsyncClient') as fabrique:
                     serveur=fabrique.return_value.__aenter__.return_value
@@ -56,14 +55,14 @@ class TestsPasserelle(unittest.TestCase):
                     self.assertTrue(client.cookies.get(webapp.COOKIE))
                     client.get('/static/js/index.js')
                     self.assertEqual(serveur.request.call_args.args[1],'http://127.0.0.1:65431/static/js/index.js')
-                    self.assertEqual(client.get('/static/app.js').status_code,200)
-                    self.assertEqual(client.get('/static/style.css').status_code,200)
+                    self.assertEqual(client.get('/static/app.js').status_code,404)
+                    self.assertEqual(client.get('/static/controle.css').status_code,200)
                     self.assertEqual(client.get('/static/controle.js').status_code,200)
                     self.assertEqual(client.get('/static/navigateur.js').status_code,200)
 
-    def test_interface_historique_autonome_conservee(self):
-        with tempfile.TemporaryDirectory() as d,patch.dict(webapp.os.environ,{'UI_STREAMLIT':'0'}):
+    def test_ancien_drapeau_ne_reactive_aucune_interface_html(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(webapp.os.environ,{'UI_STREAMLIT':'0','STREAMLIT_PORT':'65431'}):
             with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
-                self.assertIn('search-form',client.get('/classique').text)
-                self.assertIn('search-form',client.get('/').text)
+                self.assertEqual(client.get('/classique').status_code,404)
+                self.assertEqual(client.get('/').status_code,503)
                 self.assertNotIn('search-form',client.get('/controle').text)

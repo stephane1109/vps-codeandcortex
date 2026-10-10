@@ -17,7 +17,7 @@ def principale():
     port_interne = int(os.getenv("STREAMLIT_PORT", str(arguments.port + 1)))
     if not 1 <= arguments.port <= 65535 or not 1 <= port_interne <= 65535 or port_interne == arguments.port:
         parseur.error("Les ports public et interne doivent être valides et distincts.")
-    os.environ.update(UI_STREAMLIT="1", STREAMLIT_PORT=str(port_interne), SCRAPTIKTOK_API_URL=f"http://127.0.0.1:{arguments.port}")
+    os.environ.update(STREAMLIT_PORT=str(port_interne), SCRAPTIKTOK_API_URL=f"http://127.0.0.1:{arguments.port}")
     racine = Path(__file__).resolve().parent
     commande = [sys.executable, "-m", "streamlit", "run", str(racine / "streamlit_app.py"),
         "--server.address=127.0.0.1", f"--server.port={port_interne}",

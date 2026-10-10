@@ -25,7 +25,6 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
@@ -817,7 +816,7 @@ def create_app(manager=None):
                 accepted = False
             if not accepted:
                 return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ScrapTikTok"'})
-        if request.method == "POST" and not (os.getenv("UI_STREAMLIT", "0") == "1" and request.url.path.startswith("/_stcore/")):
+        if request.method == "POST" and not request.url.path.startswith("/_stcore/"):
             # Les requêtes de mutation viennent uniquement de notre propre page.
             if request.headers.get("x-scraptiktok") != "1":
                 return JSONResponse({"detail": "Requête non autorisée."}, status_code=403)
@@ -825,7 +824,7 @@ def create_app(manager=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
-        if os.getenv("UI_STREAMLIT", "0") == "1" and not request.url.path.startswith(("/api/", "/classique", "/controle", "/healthz", "/static/app.js", "/static/style.css", "/static/navigateur.js", "/static/controle.js")):
+        if not request.url.path.startswith(("/api/", "/controle", "/healthz", "/static/controle.css", "/static/navigateur.js", "/static/controle.js")):
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'"
             return response
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'"
@@ -839,27 +838,19 @@ def create_app(manager=None):
 
     @app.get("/healthz")
     def health():
-        if os.getenv("UI_STREAMLIT", "0") == "1":
-            import urllib.request
-            try:
-                with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/_stcore/health",timeout=2): pass
-            except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
+        import urllib.request
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/_stcore/health",timeout=2): pass
+        except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
         return {"status": "ok"}
 
     @app.get("/")
-    @app.get("/classique")
     @app.get("/controle")
     async def home(request: Request):
-        if request.url.path == "/classique" and "controle" in request.query_params:
-            response = RedirectResponse("/controle", status_code=302)
-        elif request.url.path == "/classique" and os.getenv("UI_STREAMLIT", "0") == "1":
-            response = RedirectResponse("/", status_code=302)
-        elif request.url.path == "/controle":
+        if request.url.path == "/controle":
             response = FileResponse(scraper.BASE_DIR / "static" / "controle.html")
-        elif os.getenv("UI_STREAMLIT", "0") == "1":
-            response = await app.state.relayer_streamlit(request, "")
         else:
-            response = FileResponse(scraper.BASE_DIR / "static" / "index.html")
+            response = await app.state.relayer_streamlit(request, "")
         if not request.cookies.get(COOKIE):
             response.set_cookie(COOKIE, secrets.token_hex(32), httponly=True, samesite="strict",
                                 secure=os.getenv("COOKIE_SECURE", "0") == "1", max_age=86400)
@@ -996,33 +987,26 @@ def create_app(manager=None):
         return Response(job.path.read_bytes(), media_type="text/plain; charset=utf-8",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
 
-    if os.getenv("UI_STREAMLIT", "0") == "1":
-        @app.get("/interface")
-        @app.get("/interface/")
-        def ancienne_adresse():
-            return RedirectResponse("/", status_code=302)
+    @app.get("/interface")
+    @app.get("/interface/")
+    def ancienne_adresse():
+        return RedirectResponse("/", status_code=302)
 
-        # Les deux ressources historiques restent disponibles pour le contrôleur intégré.
-        @app.get("/static/app.js")
-        def script_classique():
-            return FileResponse(scraper.BASE_DIR / "static" / "app.js")
+    # Seules les ressources du navigateur intégré sont servies par FastAPI.
+    @app.get("/static/controle.css")
+    def style_controle():
+        return FileResponse(scraper.BASE_DIR / "static" / "controle.css")
 
-        @app.get("/static/style.css")
-        def style_classique():
-            return FileResponse(scraper.BASE_DIR / "static" / "style.css")
+    @app.get("/static/navigateur.js")
+    def gestes_navigateur():
+        return FileResponse(scraper.BASE_DIR / "static" / "navigateur.js")
 
-        @app.get("/static/navigateur.js")
-        def gestes_navigateur():
-            return FileResponse(scraper.BASE_DIR / "static" / "navigateur.js")
+    @app.get("/static/controle.js")
+    def script_controle():
+        return FileResponse(scraper.BASE_DIR / "static" / "controle.js")
 
-        @app.get("/static/controle.js")
-        def script_controle():
-            return FileResponse(scraper.BASE_DIR / "static" / "controle.js")
-
-        from interface.passerelle import installer_passerelle
-        installer_passerelle(app)
-    else:
-        app.mount("/static", StaticFiles(directory=scraper.BASE_DIR / "static"), name="static")
+    from interface.passerelle import installer_passerelle
+    installer_passerelle(app)
     return app
 
 
