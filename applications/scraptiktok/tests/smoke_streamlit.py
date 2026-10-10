@@ -141,7 +141,16 @@ def principale():
                     dimensions=navigateur.execute_script('return [arguments[0].naturalWidth,arguments[0].naturalHeight]',ecran)
                     largeur,hauteur=dimensions
                     action({'kind':'click','points':[{'x':100/largeur,'y':50/hauteur}]})
-                    navigateur.execute_script("arguments[0].scrollIntoView({block:'center'})",ecran)
+                    navigateur.execute_script("arguments[0].scrollIntoView({block:'center',behavior:'instant'})",ecran)
+                    # Attendre la fin des mouvements de mise en page avant le geste.
+                    # Une image visible peut encore bouger pendant le défilement initial.
+                    position_precedente = {}
+                    def image_stable(d):
+                        position = d.execute_script('const r=arguments[0].getBoundingClientRect(),f=window.frameElement.getBoundingClientRect(); return [r.x,r.y,r.width,r.height,f.x,f.y]',ecran)
+                        if position != position_precedente.get('position'):
+                            position_precedente.update(position=position, depuis=time.monotonic())
+                        return time.monotonic() - position_precedente['depuis'] > .6
+                    attente.until(image_stable)
                     def souris(x,y,phase=None):
                         rectangle=navigateur.execute_script('const r=arguments[0].getBoundingClientRect(),f=window.frameElement.getBoundingClientRect(); return {x:r.x+f.x,y:r.y+f.y,width:r.width,height:r.height}',ecran)
                         chaine=ActionChains(navigateur,duration=100)
@@ -179,16 +188,22 @@ def principale():
                     champs[0].send_keys('tourisme', Keys.TAB)
                     attente.until(lambda d:d.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[0].get_attribute('value')=='tourisme')
                     navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[1].send_keys('été', Keys.TAB)
-                    # Les 29 profils accessibles ne doivent pas demander une validation manuelle.
+                    # Une fenêtre initiale pour les comptes, puis les 29 profils s’enchaînent.
                     # Seule l’attente entre lectures est accélérée pour ce test local.
-                    with patch.object(web,'wait_for_user',side_effect=AssertionError('Arrêt manuel inattendu')) as attente_presse, patch.object(web.Job,'pause',lambda t,secondes:t.check()):
+                    with patch.object(web,'wait_for_user',wraps=web.wait_for_user) as attente_presse, patch.object(web.Job,'pause',lambda t,secondes:t.check()):
                         bouton('Lancer la collecte').click()
                         attente.until(lambda d:json.loads(requete('/api/session'))['job']['id']!=identifiant)
                         etat=json.loads(requete('/api/session'))['job']; identifiant_presse=etat['id']
                         assert etat['medias']==[m['id'] for m in charger_inventaire()],etat
                         assert etat['hashtags']==['tourisme','été'] and etat['operator']=='AND',etat
+                        attente.until(lambda d:len(d.find_elements(By.CSS_SELECTOR,'iframe'))>0)
+                        navigateur.switch_to.frame(navigateur.find_element(By.CSS_SELECTOR,'iframe'))
+                        attente.until(lambda d:d.find_element(By.ID,'browser-screen').is_displayed())
+                        attente.until(lambda d:d.find_element(By.ID,'continue-button').is_enabled())
+                        navigateur.find_element(By.ID,'continue-button').click()
+                        navigateur.switch_to.default_content()
                         WebDriverWait(navigateur,90).until(lambda d:not json.loads(requete('/api/session'))['job']['busy'])
-                        attente_presse.assert_not_called()
+                        attente_presse.assert_called_once()
                     etat=json.loads(requete('/api/session'))['job']
                     assert etat['captions']==29,etat
                     assert etat['apercu_engagement'][0]['engagement']['likes']['valeur']==0,etat
@@ -203,7 +218,7 @@ def principale():
                     navigateur.save_screenshot('/tmp/scraptiktok-presse-resultats.png')
                     navigateur.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':390,'height':1000,'deviceScaleFactor':1,'mobile':True})
                     assert navigateur.execute_script('return document.documentElement.scrollWidth<=innerWidth'),'Débordement mobile'
-                    print('PASS : Streamlit, liste presse, deux hashtags et une seule validation, session privée, 29 médias sélectionnables, collecte et export des 29 profils sans arrêt manuel, gestes, TXT/ZIP et mobile')
+                    print('PASS : Streamlit, hashtags et comptes avec une validation initiale par collecte, session privée, collecte et export des 29 profils, gestes, TXT/ZIP et mobile')
             except Exception:
                 if navigateur:
                     navigateur.save_screenshot('/tmp/scraptiktok-streamlit-erreur.png')

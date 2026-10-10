@@ -82,8 +82,6 @@ except RuntimeError as erreur:
 onglet_collecte, onglet_aide = st.tabs(["Collecte", "Aide"])
 
 with onglet_collecte:
-    st.caption("Profils : avec ou sans @ (ex. : @lemondefr ou lemondefr). "
-               "Hashtags : avec ou sans # (ex. : #manifestation ou manifestation), un seul par champ, sans espace.")
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
@@ -107,6 +105,7 @@ with onglet_collecte:
         st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Les comptes seront visités l’un après l’autre.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
+        st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
         st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Pour rechercher sur ces comptes sans filtre de hashtag, laissez les deux champs ci-dessous vides.")
     cle_hashtag = "hashtag" if source == "hashtags" else "hashtag_comptes"
     cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
@@ -114,7 +113,9 @@ with onglet_collecte:
     with st.form("filtres_collecte", border=False, enter_to_submit=False):
         c1,c2 = st.columns(2)
         c1.text_input("Hashtag" if source == "hashtags" else "Hashtag facultatif", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
+        c1.caption("Avec ou sans # : #actualité ou actualité. Un seul hashtag, sans espace.")
         c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
+        c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
         st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
         st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
             help="Maximum de publications à consulter avant les filtres. Ce nombre n’est pas un objectif de résultats retenus.")
