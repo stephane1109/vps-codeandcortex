@@ -149,7 +149,8 @@ L'archive enrichie est créée automatiquement pour toute collecte lancée depui
 l'interface, y compris par hashtag sans commentaires. Aucune case d'activation
 n'est nécessaire.
 
-Dans « Exports et commentaires », sept cases indépendantes permettent de choisir
+Dans l'onglet « Collecte », la section « Variables à inclure avant chaque post dans
+le TXT » est affichée directement, sans volet à déplier. Sept cases indépendantes permettent de choisir
 **Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
 **Nombre de republications** et **Hashtags**. Cochez les variables souhaitées ; décochez-les
 toutes pour exporter uniquement le texte. Seules les variables cochées figurent

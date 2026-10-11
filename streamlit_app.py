@@ -152,7 +152,7 @@ with onglet_collecte:
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
-            help="Sur les publications retenues, dans la limite indiquée sous Exports et commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
+            help="Sur les publications retenues, dans la limite indiquée sous Options des commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
         with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
             d1,d2 = st.columns(2)
             d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
@@ -161,12 +161,12 @@ with onglet_collecte:
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
-        with st.expander("Exports et commentaires"):
-            st.write("Variables à inclure avant chaque post dans le TXT")
-            choix_variables = list(VARIABLES_TXT.items())
-            for debut_ligne in range(0, len(choix_variables), 3):
-                for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
-                    colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
+        st.write("Variables à inclure avant chaque post dans le TXT")
+        choix_variables = list(VARIABLES_TXT.items())
+        for debut_ligne in range(0, len(choix_variables), 3):
+            for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
+                colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
+        with st.expander("Options des commentaires"):
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
