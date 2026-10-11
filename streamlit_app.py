@@ -145,8 +145,9 @@ with onglet_collecte:
         c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
         c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
         st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
-        st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
-            help="Maximum de publications à consulter avant les filtres. Ce nombre n’est pas un objectif de résultats retenus.")
+        st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
+            help="Saisissez un nombre entre 1 et 300. Cette limite s’applique à chaque recherche de hashtag ou de compte, avant les filtres.")
+        st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
             st.caption("Sans hashtag : publications des comptes sélectionnés. Avec des hashtags : recherches ciblées sur chaque compte, puis vérification du filtre ET/OU dans les légendes. La limite s’applique par compte et par recherche ; les résultats TikTok ne sont pas exhaustifs.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
