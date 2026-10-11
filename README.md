@@ -227,14 +227,14 @@ Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
 La limite s’applique par compte et par recherche. Les recommandations d’autres
 auteurs sont exclues avant cette limite ; les publications sont dédoublonnées par ID.
-Avec ou sans hashtag, le moteur commence par la recherche vidéo sur `@identifiant`.
-La grille du profil est également parcourue tant que les recherches n'ont pas fourni
-le nombre demandé de liens distincts. Six liens pour un objectif de cinquante
-déclenchent donc ce complément, même si la recherche n'est pas vide. Les doublons
-sont retirés ; ce complément s'arrête au nombre demandé.
-Avec un ou deux hashtags, chaque compte fait également l’objet de recherches ciblées
-`@identifiant #hashtag`, jamais d’une petite sélection mondiale ensuite filtrée.
-Les deux recherches sont effectuées même si la première atteint sa limite.
+Sans hashtag, le moteur lit directement `https://www.tiktok.com/@identifiant`.
+Avec un ou deux hashtags, il utilise les mêmes pages `/tag/hashtag` que le mode
+Hashtags. Les publications d'autres auteurs ne consomment pas la limite : le moteur
+continue à défiler pour chercher celles du compte demandé, dans les limites de durée
+et de défilement configurées. Les deux hashtags sont parcourus même si le premier
+atteint sa limite. Le parcours `/search/video` n'est plus utilisé pour les comptes.
+Si les pages de hashtags ne fournissent pas le nombre demandé de liens distincts,
+la grille du profil complète les résultats, sans doublons et jusqu'à l'objectif.
 L’auteur est contrôlé à la découverte puis à la lecture ; le filtre exact ET/OU
 est appliqué aux légendes. Les résultats insuffisants sont complétés depuis le profil.
 Le moteur lit les liens HTML et les publications identifiées dans les données
@@ -244,9 +244,11 @@ En mode presse/comptes, la collecte fonctionne sans identifiants TikTok : elle
 utilise le bouton de fermeture des invitations à se connecter lorsqu'il est disponible.
 Une invitation n'empêche pas de cliquer sur **Continuer** ni de lire les publications
 publiques déjà fournies par la page. Les vrais CAPTCHA restent interactifs.
-Si TikTok ne fournit pas assez de liens publics, le moteur essaie le parcours de repli,
-puis signale la source inaccessible ; il ne demande pas de connexion pour poursuivre
-le lot. Une légende inaccessible sans compte est comptée parmi les erreurs de lecture.
+Si une fenêtre de connexion apparaît et qu'aucun lien supplémentaire n'arrive après
+l'attente de chargement, les liens déjà lus sont conservés. Le journal signale cette
+limite d'accès, sans assimiler six résultats au nombre total de publications du média.
+Le moteur ne demande pas de connexion pour poursuivre le lot. Une légende inaccessible
+sans compte est comptée parmi les erreurs de lecture.
 Une vérification visible attend une intervention humaine ; aucune résolution
 automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte d’un
 filtre qui ne trouve aucune correspondance.
@@ -450,7 +452,7 @@ vérification TikTok réelle demande toujours une intervention. Le panneau **Mé
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes, une recherche sous le nombre demandé essaie automatiquement son repli vers le profil dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; un vrai CAPTCHA reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes avec hashtags, des résultats sous le nombre demandé sont complétés depuis le profil dans la même session. Sans hashtag, le profil public est consulté directement. Une erreur TikTok déclenche au maximum un rechargement par page ; un vrai CAPTCHA reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
 Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement au profil ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.

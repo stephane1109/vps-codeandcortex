@@ -531,7 +531,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                   if rapport.get("recherches_en_echec") else "Recherche terminée.")
                 if found and rapport.get("objectif_atteint") is False:
                     message_source += (f" {len(found)} lien(s) public(s) repéré(s) sur un objectif de {rapport['objectif_liens']},"
-                                       " après la recherche et le profil. Cela ne représente pas le nombre total de publications du compte.")
+                                       " dans les pages consultées. Cela ne représente pas le nombre total de publications du compte.")
+                    if rapport.get("limite_acces_public"):
+                        message_source += " Une fenêtre de connexion TikTok est apparue sans fournir de nouveaux liens publics ; les publications déjà repérées sont conservées."
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
                     "message": message_source if found else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide."})
                 for url in found:
@@ -633,7 +635,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.settings.hashtags:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
             if job.settings.source_collecte != "hashtags":
-                final_message += f" Recherche ciblée sur chaque compte sélectionné, limitée à {job.settings.limit} publication(s) par compte et par recherche ; l’historique complet n’est pas garanti."
+                final_message += f" Pages de hashtags publics filtrées par auteur, limitées à {job.settings.limit} publication(s) par compte et par recherche ; l’historique complet n’est pas garanti."
         if job.settings.source_collecte != "hashtags":
             final_message += f" {hors_selection} publication(s) écartée(s) car l’auteur ne fait pas partie des comptes sélectionnés."
         if job.settings.date_debut or job.settings.date_fin:

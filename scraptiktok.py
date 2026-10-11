@@ -472,6 +472,13 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             idle = 0
         except TimeoutException:
             idle += 1
+            if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+                # La fenêtre empêche éventuellement le chargement suivant. Garder
+                # les liens déjà lus, sans exiger une authentification ni les perdre.
+                diagnostiquer_page(driver, report)
+                report["diagnostic"]["code"] = "connexion_apres_resultats"
+                report["discovery_stop"] = "connexion_apres_resultats"
+                break
         LOG.info("%d publication(s) repérée(s)", len(links))
         if idle >= args.idle_rounds:
             report["discovery_stop"] = "no_new_links"

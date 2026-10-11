@@ -4,21 +4,17 @@ from .verification_comptes import normaliser_compte
 
 
 def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), **options):
-    """Chercher chaque auteur avant les filtres ; ne pas tronquer un hashtag mondial."""
+    """Lire les pages publiques de hashtags ou de profil en contrôlant l'auteur."""
     from scraptiktok import collect_links, normalize_hashtag, canonical_post, manual_step, WebDriverException
     compte = normaliser_compte(compte)
     rapport = rapport if rapport is not None else {}
     hashtags = list(dict.fromkeys(normalize_hashtag(h) for h in hashtags))
     profil = "https://www.tiktok.com/@" + quote(compte)
-    recherche_compte = "https://www.tiktok.com/search/video?q=" + quote("@" + compte)
-    # Commencer par les vidéos du compte, même sans hashtag : la grille du profil
-    # n'est plus le point d'entrée obligatoire. Les hashtags restent facultatifs.
-    recherches = [recherche_compte]
-    # Compléter les candidats pour chacun des hashtags ; le filtre ET/OU exact
-    # reste appliqué aux légendes, sans confondre la requête TikTok avec ce filtre.
-    recherches.extend("https://www.tiktok.com/search/video?q=" + quote("@" + compte + " #" + h)
-                      for h in hashtags)
-    rapport.update(compte_attendu=compte, mode_decouverte="recherche_compte",
+    # Même entrée /tag/ que le mode hashtag, sans passer par la recherche globale.
+    # Sans hashtag, lire directement les publications du profil public demandé.
+    recherches = (["https://www.tiktok.com/tag/" + quote(h) for h in hashtags]
+                  if hashtags else [profil])
+    rapport.update(compte_attendu=compte, mode_decouverte="hashtags_publics" if hashtags else "profil_public",
                    recherches=[], exhaustif=False)
     liens = {}
     # Compatibilité avec les anciens appelants : ne jamais imposer de validation
@@ -55,7 +51,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         if erreur: erreurs.append(erreur)
     # Quelques résultats de recherche ne représentent pas l'historique du compte.
     # Compléter aussi les résultats partiels, sans dépasser l'objectif avec ce repli.
-    if len(liens) < arguments.limit:
+    if hashtags and len(liens) < arguments.limit:
         rapport["repli"] = "profil"
         rapport["liens_avant_profil"] = len(liens)
         erreur = rechercher(profil, plafond=arguments.limit)
@@ -64,6 +60,10 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     rapport["discovered_urls"] = list(liens.values())
     rapport["objectif_liens"] = arguments.limit
     rapport["objectif_atteint"] = len(liens) >= arguments.limit
+    rapport["limite_acces_public"] = any(
+        r.get("diagnostic", {}).get("code") == "connexion_sans_publications_publiques"
+        or r.get("discovery_stop") == "connexion_apres_resultats"
+        for r in rapport["recherches"])
     if erreurs and len(erreurs) == len(rapport["recherches"]):
         derniere = rapport["recherches"][-1]
         rapport.update({k: derniere[k] for k in ("hashtag_url", "diagnostic", "discovery_stop") if k in derniere})

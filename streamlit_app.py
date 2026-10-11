@@ -150,7 +150,7 @@ with onglet_collecte:
             help="Saisissez un nombre entre 1 et 300. Cette limite s’applique à chaque recherche de hashtag ou de compte, avant les filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
-            st.caption("Sans hashtag : publications des comptes sélectionnés. Avec des hashtags : recherches ciblées sur chaque compte, puis vérification du filtre ET/OU dans les légendes. La limite s’applique par compte et par recherche ; les résultats TikTok ne sont pas exhaustifs.")
+            st.caption("Sans hashtag : publications du profil public. Avec des hashtags : mêmes pages de hashtags que le mode Hashtags, filtrées par auteur et par ET/OU. La limite s’applique par compte et par recherche ; les résultats TikTok ne sont pas exhaustifs.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
