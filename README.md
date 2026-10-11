@@ -154,11 +154,11 @@ le TXT » est affichée directement, sans volet à déplier. Sept cases indépen
 **Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
 **Nombre de republications** et **Hashtags**. Cochez les variables souhaitées ; décochez-les
 toutes pour exporter uniquement le texte. Seules les variables cochées figurent
-avant chaque publication, dans cet ordre. Par exemple, avec Date et Profil :
+sur une seule ligne avant chaque publication, dans cet ordre, séparées par un espace.
+Le texte du post commence à la ligne suivante. Par exemple, avec Date et Profil :
 
 ```text
-*date 2026-10-09T12:00:00+00:00
-*profil @compte
+*date 2026-10-09T12:00:00+00:00 *profil @compte
 Texte original de la publication.
 
 Commentaire 1 :
@@ -178,7 +178,7 @@ Une liste explicite remplace les anciennes options d’en-tête.
 Les requêtes sans ce champ restent compatibles avec `inclure_metadonnees_txt`
 et `include_sources`. Le corpus normalisé IRaMuTeQ reste séparé dans le ZIP.
 
-Les nouvelles cases sont décochées par défaut. Elles ajoutent les lignes `*vues`,
+Les nouvelles cases sont décochées par défaut. Elles ajoutent les variables `*vues`,
 `*likes`, `*republications` et `*hashtags` avant le texte. Les hashtags proviennent
 de la publication, pas des mots saisis pour la recherche. L'absence de hashtag est
 indiquée par `*hashtags aucun`. Un compteur absent est `indéterminé`, un vrai zéro

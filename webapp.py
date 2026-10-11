@@ -164,7 +164,7 @@ class LiveAction:
 
 
 def entete_publication(publication: dict, variables=None) -> str:
-    """Écrire les variables choisies en conservant les compteurs inconnus et estimés."""
+    """Écrire les variables choisies sur une ligne, puis passer au texte du post."""
     def ligne(valeur, defaut="indéterminée"):
         return " ".join(str(valeur or "").split()) or defaut
     profil = ligne(publication.get("author"), "indéterminé")
@@ -180,14 +180,15 @@ def entete_publication(publication: dict, variables=None) -> str:
     if not isinstance(hashtags, list):
         hashtags = re.findall(r"#(\w+)", publication.get("description") or "")
     hashtags = list(dict.fromkeys("#" + str(h).strip().lstrip("#") for h in hashtags if str(h).strip().lstrip("#")))
-    valeurs = {"date": f"*date {ligne(publication.get('created_at'))}\n",
-               "profil": f"*profil {profil}\n", "url": f"*urlvidéo {ligne(publication.get('url'))}\n",
-               "vues": f"*vues {compteur('vues')}\n", "likes": f"*likes {compteur('likes')}\n",
-               "republications": f"*republications {compteur('republications')}\n",
-               "hashtags": f"*hashtags {' '.join(hashtags) or 'aucun'}\n"}
+    valeurs = {"date": f"*date {ligne(publication.get('created_at'))}",
+               "profil": f"*profil {profil}", "url": f"*urlvidéo {ligne(publication.get('url'))}",
+               "vues": f"*vues {compteur('vues')}", "likes": f"*likes {compteur('likes')}",
+               "republications": f"*republications {compteur('republications')}",
+               "hashtags": f"*hashtags {' '.join(hashtags) or 'aucun'}"}
     # Les anciens appels sans sélection gardent leur en-tête à trois variables.
     selection = set(variables if variables is not None else ("date", "profil", "url"))
-    return "".join(texte for cle, texte in valeurs.items() if cle in selection)
+    entete = " ".join(ligne(texte) for cle, texte in valeurs.items() if cle in selection)
+    return entete + "\n" if entete else ""
 
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
