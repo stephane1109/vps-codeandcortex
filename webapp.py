@@ -527,8 +527,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
+                message_source = ("Recherche partielle : une recherche TikTok a échoué."
+                                  if rapport.get("recherches_en_echec") else "Recherche terminée.")
+                if found and rapport.get("objectif_atteint") is False:
+                    message_source += (f" {len(found)} lien(s) public(s) repéré(s) sur un objectif de {rapport['objectif_liens']},"
+                                       " après la recherche et le profil. Cela ne représente pas le nombre total de publications du compte.")
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
-                    "message": ("Recherche partielle : une recherche TikTok a échoué." if rapport.get("recherches_en_echec") else "Recherche terminée.") if found else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide."})
+                    "message": message_source if found else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide."})
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity: unique_links.setdefault(identity[0], identity[1])

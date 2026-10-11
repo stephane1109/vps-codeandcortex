@@ -28,7 +28,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     options["sans_connexion"] = True
     interaction = options.pop("interact", manual_step)
 
-    def rechercher(url):
+    def rechercher(url, plafond=None):
         recherche = {"hashtag_url": url, "compte_attendu": compte}
         rapport["recherches"].append(recherche)
         try:
@@ -43,7 +43,8 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             return erreur
         for lien in trouves:
             identite = canonical_post(lien)
-            if identite and identite[2].casefold() == compte:
+            if (identite and identite[2].casefold() == compte
+                    and (plafond is None or len(liens) < plafond)):
                 liens.setdefault(identite[0], identite[1])
         rapport.update({k: recherche[k] for k in ("hashtag_url", "discovery_stop") if k in recherche})
         return None
@@ -52,13 +53,17 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     for url in recherches:
         erreur = rechercher(url)
         if erreur: erreurs.append(erreur)
-    # Une recherche sans résultat est complétée par le profil, dans la même session.
-    if not liens:
+    # Quelques résultats de recherche ne représentent pas l'historique du compte.
+    # Compléter aussi les résultats partiels, sans dépasser l'objectif avec ce repli.
+    if len(liens) < arguments.limit:
         rapport["repli"] = "profil"
-        erreur = rechercher(profil)
+        rapport["liens_avant_profil"] = len(liens)
+        erreur = rechercher(profil, plafond=arguments.limit)
         if erreur: erreurs.append(erreur)
     rapport["recherches_en_echec"] = len(erreurs)
     rapport["discovered_urls"] = list(liens.values())
+    rapport["objectif_liens"] = arguments.limit
+    rapport["objectif_atteint"] = len(liens) >= arguments.limit
     if erreurs and len(erreurs) == len(rapport["recherches"]):
         derniere = rapport["recherches"][-1]
         rapport.update({k: derniere[k] for k in ("hashtag_url", "diagnostic", "discovery_stop") if k in derniere})
