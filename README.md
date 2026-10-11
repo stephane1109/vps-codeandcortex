@@ -238,14 +238,22 @@ la grille du profil complète les résultats, sans doublons et jusqu'à l'object
 L’auteur est contrôlé à la découverte puis à la lecture ; le filtre exact ET/OU
 est appliqué aux légendes. Les résultats insuffisants sont complétés depuis le profil.
 Le moteur lit les liens HTML et les publications identifiées dans les données
-JSON de la page ; il défile dans le conteneur de la grille lorsque nécessaire.
+JSON de la page. Sur un profil, `collecte/pagination_profils.py` identifie le
+conteneur de la grille et envoie des gestes de molette Selenium par fractions
+d'écran, plutôt qu'un saut direct au bas de la page. Il relit les liens après
+chaque déplacement. Une progression dans la grille sans nouveaux liens ne compte
+pas comme une fin de chargement. Après une attente sans résultat supplémentaire,
+un mouvement vers le haut puis vers le bas réexpose la fin de grille, dans la
+limite des tentatives configurées. Le rapport `pagination_profil` conserve les
+positions, les hauteurs et le nombre de liens avant/après chaque étape.
+Le mécanisme de défilement du mode Hashtags reste inchangé.
 Cette collecte n’est pas exhaustive et dépend des publications accessibles à TikTok.
 En mode presse/comptes, la collecte fonctionne sans identifiants TikTok : elle
 utilise le bouton de fermeture des invitations à se connecter lorsqu'il est disponible.
 Une invitation n'empêche pas de cliquer sur **Continuer** ni de lire les publications
 publiques déjà fournies par la page. Les vrais CAPTCHA restent interactifs.
 Si une fenêtre de connexion apparaît et qu'aucun lien supplémentaire n'arrive après
-l'attente de chargement, les liens déjà lus sont conservés. Le journal signale cette
+les tentatives d'attente de chargement, les liens déjà lus sont conservés. Le journal signale cette
 limite d'accès, sans assimiler six résultats au nombre total de publications du média.
 Le moteur ne demande pas de connexion pour poursuivre le lot. Une légende inaccessible
 sans compte est comptée parmi les erreurs de lecture.

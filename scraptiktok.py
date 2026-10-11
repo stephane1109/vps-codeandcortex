@@ -451,6 +451,14 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 raise RuntimeError("TikTok affiche une connexion ou un CAPTCHA. Terminez la vérification dans le navigateur.") from exc
             raise RuntimeError("La page TikTok ne fournit aucun lien de publication lisible après vérification.") from exc
     idle = 0
+    # Le profil possède une grille distincte : conserver le défilement hashtag
+    # existant, mais parcourir le profil écran par écran avec la molette Selenium.
+    profil = bool(report.get("compte_attendu") and
+                  urlsplit(report["hashtag_url"]).path.rstrip("/").casefold() ==
+                  "/@" + quote(report["compte_attendu"]).casefold())
+    if profil:
+        from collecte.pagination_profils import defiler_grille_profil, etat_grille_profil
+        report["pagination_profil"] = []
     for _ in range(args.max_scrolls):
         check()
         if len(links) >= args.limit:
@@ -465,20 +473,45 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             else:
                 report["discovery_stop"] = "blocked"
                 break
-        driver.execute_script(DEFILER_PUBLICATIONS_JS)
+        defilement = None
+        if profil:
+            # Ne pas envoyer de geste à une fenêtre de connexion persistante.
+            if type_intervention_tiktok(driver) != "connexion":
+                defilement = defiler_grille_profil(driver, report["compte_attendu"],
+                                                  reprendre=idle > 0, check=check)
+                defilement["liens_avant"] = len(links)
+                report["pagination_profil"].append(defilement)
+        else:
+            driver.execute_script(DEFILER_PUBLICATIONS_JS)
         time.sleep(args.delay)
+
+        def attendre_suite(browser):
+            nouveaux = scan(browser)
+            if nouveaux or not defilement:
+                return nouveaux
+            etat = etat_grille_profil(browser, report["compte_attendu"])
+            defilement["apres"] = {c: etat[c] for c in defilement["apres"]}
+            # Il reste une portion de grille à parcourir : ne pas attendre ni
+            # compter une page vide simplement parce qu'aucun lien n'est nouveau.
+            return (not etat["fin"] and
+                    etat["position"] > defilement["avant"]["position"] + 2)
+
         try:
-            WebDriverWait(driver, args.timeout).until(scan)
+            WebDriverWait(driver, args.timeout).until(attendre_suite)
             idle = 0
         except TimeoutException:
             idle += 1
-            if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+            if (sans_connexion and idle >= args.idle_rounds
+                    and type_intervention_tiktok(driver) == "connexion"):
                 # La fenêtre empêche éventuellement le chargement suivant. Garder
                 # les liens déjà lus, sans exiger une authentification ni les perdre.
                 diagnostiquer_page(driver, report)
                 report["diagnostic"]["code"] = "connexion_apres_resultats"
                 report["discovery_stop"] = "connexion_apres_resultats"
                 break
+        finally:
+            if defilement:
+                defilement["liens_apres"] = len(links)
         LOG.info("%d publication(s) repérée(s)", len(links))
         if idle >= args.idle_rounds:
             report["discovery_stop"] = "no_new_links"
