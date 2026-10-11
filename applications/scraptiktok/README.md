@@ -145,8 +145,9 @@ les contenus accessibles et consultés sont filtrés.
 
 ### Variables et commentaires dans le TXT
 
-Dans « Exports et commentaires », trois cases indépendantes permettent de choisir
-**Date**, **Profil** et **URL**. Cochez une, deux ou trois variables ; décochez-les
+Dans « Exports et commentaires », sept cases indépendantes permettent de choisir
+**Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
+**Nombre de republications** et **Hashtags**. Cochez les variables souhaitées ; décochez-les
 toutes pour exporter uniquement le texte. Seules les variables cochées figurent
 avant chaque publication, dans cet ordre. Par exemple, avec Date et Profil :
 
@@ -167,9 +168,19 @@ figurent sous leur publication dans **le même TXT**. Les réponses récupérée
 Aucun commentaire d’une publication exclue n’est inséré.
 
 L’API accepte `variables_txt: ["date", "profil", "url"]`, ou toute sous-liste,
-y compris `[]`. Une liste explicite remplace les anciennes options d’en-tête.
+y compris `[]`, ainsi que les clés `vues`, `likes`, `republications` et `hashtags`.
+Une liste explicite remplace les anciennes options d’en-tête.
 Les requêtes sans ce champ restent compatibles avec `inclure_metadonnees_txt`
 et `include_sources`. Le corpus normalisé IRaMuTeQ reste séparé dans le ZIP.
+
+Les nouvelles cases sont décochées par défaut. Elles ajoutent les lignes `*vues`,
+`*likes`, `*republications` et `*hashtags` avant le texte. Les hashtags proviennent
+de la publication, pas des mots saisis pour la recherche. L'absence de hashtag est
+indiquée par `*hashtags aucun`. Un compteur absent est `indéterminé`, un vrai zéro
+reste `0` et une valeur abrégée est accompagnée de `(estimation)`.
+Les republications utilisent uniquement le compteur `repostCount` s'il est fourni
+dans les données de la publication ; `shareCount` reste un nombre de partages et
+n'est jamais utilisé à sa place. Les mesures brutes restent conservées dans l'archive.
 
 ### Filtre français
 

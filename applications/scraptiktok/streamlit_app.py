@@ -5,6 +5,9 @@ import re
 import streamlit as st
 from interface.client import appeler_api
 
+VARIABLES_TXT = {"date": "Date", "profil": "Profil", "url": "URL", "vues": "Nombre de vues",
+                 "likes": "Nombre de likes", "republications": "Nombre de republications", "hashtags": "Hashtags"}
+
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
 st.title("ScrapTikTok")
@@ -72,7 +75,7 @@ if "initialise" not in st.session_state:
     variables = ancienne.get("variables_txt")
     if variables is None:
         variables = ["date", "profil", "url"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "url"] if ancienne.get("include_sources", True) else []
-    for variable in ("date", "profil", "url"):
+    for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
     for nom in ("hashtag", "second_hashtag"):
@@ -84,8 +87,12 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
-for variable in ("date", "profil", "url"):
-    st.session_state.setdefault("txt_" + variable, st.session_state.get("inclure_metadonnees_txt", False) or (variable != "date" and st.session_state.get("include_sources", True)))
+for variable in VARIABLES_TXT:
+    valeur_initiale = (variable in ("date", "profil", "url") and
+        (st.session_state.get("inclure_metadonnees_txt", False) or
+         (variable in ("profil", "url") and st.session_state.get("include_sources", True))))
+    st.session_state.setdefault("txt_" + variable, valeur_initiale)
+    st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url", "enrichir",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires",
@@ -156,10 +163,11 @@ with onglet_collecte:
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         with st.expander("Exports et commentaires"):
             st.write("Variables à inclure avant chaque post dans le TXT")
-            colonnes_variables = st.columns(3)
-            for colonne, variable, titre in zip(colonnes_variables, ("date", "profil", "url"), ("Date", "Profil", "URL")):
-                colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
-            st.caption("Choisissez une, deux ou trois variables ; aucune pour le texte seul. Une date absente est indiquée comme indéterminée. Les commentaires récupérés sont ajoutés sous leur publication si leur collecte est cochée.")
+            choix_variables = list(VARIABLES_TXT.items())
+            for debut_ligne in range(0, len(choix_variables), 3):
+                for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
+                    colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
+            st.caption("Cochez les variables souhaitées, ou aucune pour le texte seul. Les compteurs absents restent indéterminés ; les estimations sont signalées. Les republications sont distinctes des partages. Les hashtags sont ceux de chaque publication. Les commentaires récupérés sont ajoutés sous leur publication si leur collecte est cochée.")
             st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
@@ -171,7 +179,7 @@ with onglet_collecte:
             if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
-                valeurs["variables_txt"] = [v for v in ("date", "profil", "url") if st.session_state["txt_" + v]]
+                valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
                 valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])

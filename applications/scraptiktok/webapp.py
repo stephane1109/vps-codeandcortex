@@ -54,7 +54,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "url"]] | None = Field(default=None, max_length=3)
+    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "republications", "hashtags"]] | None = Field(default=None, max_length=7)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -164,15 +164,29 @@ class LiveAction:
 
 
 def entete_publication(publication: dict, variables=None) -> str:
-    """Écrit seulement les variables choisies, dans l’ordre date, profil, URL."""
+    """Écrire les variables choisies en conservant les compteurs inconnus et estimés."""
     def ligne(valeur, defaut="indéterminée"):
         return " ".join(str(valeur or "").split()) or defaut
     profil = ligne(publication.get("author"), "indéterminé")
     if publication.get("author"):
         profil = "@" + profil.lstrip("@")
+    def compteur(nom):
+        mesure = (publication.get("engagement") or {}).get(nom) or {}
+        valeur = mesure.get("valeur")
+        if valeur is None:
+            return "indéterminé"
+        return str(valeur) + (" (estimation)" if mesure.get("estime") else "")
+    hashtags = publication.get("hashtags")
+    if not isinstance(hashtags, list):
+        hashtags = re.findall(r"#(\w+)", publication.get("description") or "")
+    hashtags = list(dict.fromkeys("#" + str(h).strip().lstrip("#") for h in hashtags if str(h).strip().lstrip("#")))
     valeurs = {"date": f"*date {ligne(publication.get('created_at'))}\n",
-               "profil": f"*profil {profil}\n", "url": f"*urlvidéo {ligne(publication.get('url'))}\n"}
-    selection = set(variables if variables is not None else valeurs)
+               "profil": f"*profil {profil}\n", "url": f"*urlvidéo {ligne(publication.get('url'))}\n",
+               "vues": f"*vues {compteur('vues')}\n", "likes": f"*likes {compteur('likes')}\n",
+               "republications": f"*republications {compteur('republications')}\n",
+               "hashtags": f"*hashtags {' '.join(hashtags) or 'aucun'}\n"}
+    # Les anciens appels sans sélection gardent leur en-tête à trois variables.
+    selection = set(variables if variables is not None else ("date", "profil", "url"))
     return "".join(texte for cle, texte in valeurs.items() if cle in selection)
 
 
