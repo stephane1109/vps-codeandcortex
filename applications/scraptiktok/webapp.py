@@ -831,6 +831,8 @@ def create_app(manager=None):
         manager.shutdown()
 
     app = FastAPI(title="ScrapTikTok", lifespan=lifespan, docs_url=None, redoc_url=None)
+    from interface.passerelle import CompressionInterface, ressource_interface_versionnee
+    app.add_middleware(CompressionInterface)
     app.state.manager = manager
 
     @app.middleware("http")
@@ -853,7 +855,13 @@ def create_app(manager=None):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
+        # Les scripts/styles portent une empreinte qui change avec leur contenu.
+        # Le HTML, les sessions, les exports et les captures restent sans cache.
+        if (request.method in {"GET", "HEAD"} and response.status_code in {200, 304}
+                and ressource_interface_versionnee(request.url.path)):
+            response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store"
         if not request.url.path.startswith(("/api/", "/controle", "/healthz", "/static/controle.css", "/static/navigateur.js", "/static/controle.js")):
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'"
             return response

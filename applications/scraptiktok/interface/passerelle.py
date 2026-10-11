@@ -3,16 +3,34 @@ import asyncio
 import base64
 import hmac
 import os
+import re
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Request, WebSocket
 from starlette.responses import Response
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 EXCLUS = {"host", "connection", "keep-alive", "transfer-encoding", "upgrade", "content-length", "content-encoding", "proxy-authenticate", "proxy-authorization", "te", "trailer"}
+
+
+def ressource_interface_versionnee(chemin):
+    """Limiter le cache aux scripts et styles dont le nom contient une empreinte."""
+    return bool(re.fullmatch(r"/static/(?:js/[^/]+\.[A-Za-z0-9_-]{8,}\.js|css/[^/]+\.[A-Za-z0-9_-]{8,}\.css)", chemin))
+
+
+class CompressionInterface:
+    """Compresser les ressources Streamlit sans toucher au WebSocket ni aux captures."""
+    def __init__(self, app):
+        self.app = app
+        self.compressee = GZipMiddleware(app, minimum_size=1024, compresslevel=5)
+
+    async def __call__(self, scope, receive, send):
+        cible = self.compressee if scope["type"] == "http" and ressource_interface_versionnee(scope.get("path", "")) else self.app
+        await cible(scope, receive, send)
 
 
 def mot_de_passe_valide(entetes):

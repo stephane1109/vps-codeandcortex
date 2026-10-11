@@ -380,6 +380,13 @@ globale sont exclus. Tout `data/` reste hors Git et hors contexte Docker.
 
 ## Architecture et validation
 
+Les fichiers JavaScript et CSS versionnés de Streamlit sont compressés en gzip
+si le navigateur l'accepte, puis conservés dans son cache privé. Leur nom contient
+une empreinte : une mise à jour charge les nouveaux fichiers. Le HTML, les données
+de session, les exports et les captures restent servis avec `Cache-Control: no-store`.
+L'interface Streamlit et le moteur FastAPI sont deux processus liés d'un même
+lancement ; ce couple ne constitue pas deux collectes ou deux interfaces distinctes.
+
 `collecte/` gère les sources et observations ; `stockage/` les sessions SQLite ;
 `video/` et `audio/` les traitements différés ; `analyse/` les mesures dérivées ;
 `corpus/` les exports. Aucun import lourd n’est requis pour démarrer FastAPI ou collecter
