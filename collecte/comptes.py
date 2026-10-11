@@ -21,24 +21,19 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     rapport.update(compte_attendu=compte, mode_decouverte="recherche_compte",
                    recherches=[], exhaustif=False)
     liens = {}
-    validation = options.pop("validation_initiale", True)
-    # Une grille vide doit permettre le repli automatique, pas demander une
-    # confirmation « vidéos visibles ». Une vraie vérification reste interactive.
-    options.setdefault("intervention_si_vide", False)
+    # Compatibilité avec les anciens appelants : ne jamais imposer de validation
+    # préalable en mode compte. Le moteur interrompt seulement un vrai CAPTCHA.
+    options.pop("validation_initiale", None)
+    options["intervention_si_vide"] = False
     options["sans_connexion"] = True
     interaction = options.pop("interact", manual_step)
-
-    def intervenir(message):
-        nonlocal validation
-        interaction(message)
-        validation = False
 
     def rechercher(url):
         recherche = {"hashtag_url": url, "compte_attendu": compte}
         rapport["recherches"].append(recherche)
         try:
-            trouves = collect_links(navigateur, arguments, recherche, interact=intervenir,
-                                    validation_initiale=validation, **options)
+            trouves = collect_links(navigateur, arguments, recherche, interact=interaction,
+                                    validation_initiale=False, **options)
         except (RuntimeError, WebDriverException) as erreur:
             recherche["erreur"] = str(erreur)
             # Une vérification ne doit pas être masquée en changeant de page.

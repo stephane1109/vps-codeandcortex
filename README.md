@@ -438,15 +438,16 @@ Les options vidéo, les boutons de comparaison et l’aide audiovisuelle ont ét
 Les exports TXT/ZIP, les commentaires, ET/OU, les dates et le filtre français restent disponibles.
 Les modules audiovisuels restent utilisables via l’API et le traitement par lots.
 
-Les comptes sélectionnés sont tous transmis au moteur. Comme en mode hashtag,
-le navigateur s'affiche au démarrage pour permettre de traiter les cookies,
-de fermer une invitation à se connecter ou de traiter un CAPTCHA. Après cette première validation, les comptes accessibles
+Les comptes sélectionnés sont tous transmis au moteur. En mode presse/comptes,
+la recherche des publications démarre immédiatement, sans confirmation préalable
+« Vérifiez les publications publiques » et sans demander de connexion.
+Les liens repérés sont indiqués pendant la recherche. Les comptes accessibles
 s’enchaînent automatiquement dans le même navigateur. Une
 vérification TikTok réelle demande toujours une intervention. Le panneau **Médias
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes, après l'affichage initial du navigateur, une recherche vide essaie son repli vers le profil dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; une vraie vérification reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes, une recherche vide essaie automatiquement son repli vers le profil dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; un vrai CAPTCHA reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
 Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement au profil ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.
@@ -491,8 +492,9 @@ et [contexte de session](https://docs.streamlit.io/develop/api-reference/caching
 ### Une session pour plusieurs sources
 
 Les deux hashtags (ET comme OU) et les comptes sélectionnés utilisent le même
-navigateur et ses cookies pendant toute la collecte. La vérification initiale
-manuelle n’est demandée qu’une fois. La deuxième source accessible est consultée
+navigateur et ses cookies pendant toute la collecte. En mode hashtag, la vérification
+initiale manuelle n’est demandée qu’une fois ; en mode presse/comptes, elle n'est pas
+demandée. La deuxième source accessible est consultée
 automatiquement. Si TikTok affiche un CAPTCHA, la collecte s’interrompt de nouveau
 pour permettre l’intervention de l’utilisateur. Le mode presse/comptes ne met pas
 le lot en attente d'une authentification TikTok.
