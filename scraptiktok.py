@@ -71,6 +71,36 @@ return Array.from(document.querySelectorAll(
     '[data-e2e="login-modal"]'
 )).some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
 """
+CAPTCHA_JS = """
+return Array.from(document.querySelectorAll(
+    'iframe[src*="captcha"], [id*="captcha"], [class*="captcha-verify"]'
+)).some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
+"""
+FERMETURE_CONNEXION_JS = """
+// Utiliser seulement le bouton de fermeture proposé par TikTok, sans retirer la modale.
+const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+const fenetre = Array.from(document.querySelectorAll('[data-e2e="login-modal"]')).find(visible);
+if (!fenetre) return null;
+return Array.from(fenetre.querySelectorAll(
+    '[data-e2e="tiktok-modal-close"], [data-e2e="login-modal-close"], ' +
+    'button[aria-label="Close"], button[aria-label="Fermer"], [role="button"][aria-label="Close"]'
+)).find(visible) || null;
+"""
+
+
+def fermer_invitation_connexion(navigateur):
+    """Fermer une invitation facultative avec son bouton, sans saisir d'identifiants."""
+    try:
+        if navigateur.execute_script(CAPTCHA_JS):
+            return
+        bouton = navigateur.execute_script(FERMETURE_CONNEXION_JS)
+        if bouton:
+            bouton.click()
+    except WebDriverException:
+        # Une invitation sans bouton utilisable ne doit pas imposer une connexion.
+        pass
+
+
 TYPE_INTERVENTION_JS = """
 const visible = selecteur => Array.from(document.querySelectorAll(selecteur))
     .some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
@@ -327,16 +357,23 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
 
 
 def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
-                  *, interact=manual_step, progress=None, check=None, validation_initiale=True, intervention_si_vide=True) -> list[str]:
+                  *, interact=manual_step, progress=None, check=None, validation_initiale=True, intervention_si_vide=True,
+                  sans_connexion=False) -> list[str]:
     check = check or (lambda: None)
     check()
     try:
         open_page(driver, report["hashtag_url"])
     except WebDriverException as erreur:
-        diagnostiquer_page(driver, report, erreur)
+        diagnostic = diagnostiquer_page(driver, report, erreur)
+        if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+            diagnostic["code"] = "connexion_sans_publications_publiques"
         raise
+    verification_js = CAPTCHA_JS if sans_connexion else BLOCKED_JS
+    if sans_connexion:
+        fermer_invitation_connexion(driver)
     if args.interactive and validation_initiale:
-        interact("Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
+        interact("Vérifiez les publications publiques. Fermez l’invitation à vous connecter si elle apparaît, puis cliquez sur Continuer. Traitez un éventuel CAPTCHA."
+                 if sans_connexion else "Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
     links: dict[str, str] = {}
     candidats_vus: set[str] = set()
     intervention_effectuee = bool(args.interactive and validation_initiale)
@@ -346,8 +383,11 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         check()
         # Une autre source réutilise la session ; seules les vérifications visibles
         # de TikTok interrompent alors la collecte, même si des liens restent derrière.
-        if args.interactive and browser.execute_script(BLOCKED_JS):
-            interact("TikTok affiche une connexion ou une vérification. Terminez-la pour poursuivre.")
+        if sans_connexion:
+            fermer_invitation_connexion(browser)
+        if args.interactive and browser.execute_script(verification_js):
+            interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre."
+                     if sans_connexion else "TikTok affiche une connexion ou une vérification. Terminez-la pour poursuivre.")
             intervention_effectuee = True
             check()
         precedents = len(candidats_vus)
@@ -379,6 +419,10 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             break
         except TimeoutException as exc:
             diagnostic = diagnostiquer_page(driver, report)
+            if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+                diagnostic["code"] = "connexion_sans_publications_publiques"
+                report["discovery_stop"] = "publications_non_accessibles"
+                raise RuntimeError("TikTok affiche une connexion et ne fournit aucun lien public lisible sur cette page. Aucune connexion n’a été imposée par la collecte.") from exc
             bloque = diagnostic["code"] == "verification_tiktok"
             if diagnostic["code"] == "erreur_tiktok":
                 if not recharge_effectuee and tentative < 2:
@@ -389,7 +433,9 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                     try:
                         open_page(driver, report["hashtag_url"])
                     except WebDriverException as erreur:
-                        diagnostiquer_page(driver, report, erreur)
+                        diagnostic = diagnostiquer_page(driver, report, erreur)
+                        if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+                            diagnostic["code"] = "connexion_sans_publications_publiques"
                         raise
                     continue
                 report["discovery_stop"] = "tiktok_error"
@@ -410,9 +456,12 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         if len(links) >= args.limit:
             report["discovery_stop"] = "limit"
             break
-        if driver.execute_script(BLOCKED_JS):
+        if sans_connexion:
+            fermer_invitation_connexion(driver)
+        if driver.execute_script(verification_js):
             if args.interactive:
-                interact("TikTok affiche une connexion ou une vérification.")
+                interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre."
+                         if sans_connexion else "TikTok affiche une connexion ou une vérification.")
             else:
                 report["discovery_stop"] = "blocked"
                 break
@@ -435,19 +484,28 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
 
 
 def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
-              *, interact=manual_step, check=None) -> dict:
+              *, interact=manual_step, check=None, sans_connexion=False) -> dict:
     check = check or (lambda: None)
     check()
     open_page(driver, url)
 
     def read(browser: webdriver.Chrome) -> dict | bool:
         check()
+        if sans_connexion:
+            fermer_invitation_connexion(browser)
+            if browser.execute_script(CAPTCHA_JS):
+                if not args.interactive:
+                    return False
+                interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
+                check()
         return extract_record(browser.execute_script(PAGE_JS), url) or False
 
     try:
         return WebDriverWait(driver, args.timeout).until(read)
     except TimeoutException:
-        if not args.interactive:
+        # En mode public, une légende non fournie est signalée comme inaccessible ;
+        # elle ne déclenche jamais une demande de connexion pour débloquer le lot.
+        if not args.interactive or sans_connexion:
             raise
         interact("Légende non accessible. Vérifiez la publication, la connexion et un éventuel CAPTCHA.")
         return WebDriverWait(driver, args.timeout).until(read)

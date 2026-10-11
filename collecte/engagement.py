@@ -1,7 +1,7 @@
 """Compteurs observés : zéro n’est jamais substitué à une valeur manquante."""
 import math
 import re
-CHAMPS = {"likes": "diggCount", "vues": "playCount", "partages": "shareCount", "commentaires": "commentCount", "favoris": "collectCount"}
+CHAMPS = {"likes": "diggCount", "vues": "playCount", "partages": "shareCount", "republications": "repostCount", "commentaires": "commentCount", "favoris": "collectCount"}
 
 def convertir_compteur(brut):
     if brut is None or isinstance(brut, bool):

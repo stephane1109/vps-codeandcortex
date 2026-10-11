@@ -54,7 +54,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "url"]] | None = Field(default=None, max_length=3)
+    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "republications", "hashtags"]] | None = Field(default=None, max_length=7)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -164,15 +164,29 @@ class LiveAction:
 
 
 def entete_publication(publication: dict, variables=None) -> str:
-    """Écrit seulement les variables choisies, dans l’ordre date, profil, URL."""
+    """Écrire les variables choisies en conservant les compteurs inconnus et estimés."""
     def ligne(valeur, defaut="indéterminée"):
         return " ".join(str(valeur or "").split()) or defaut
     profil = ligne(publication.get("author"), "indéterminé")
     if publication.get("author"):
         profil = "@" + profil.lstrip("@")
+    def compteur(nom):
+        mesure = (publication.get("engagement") or {}).get(nom) or {}
+        valeur = mesure.get("valeur")
+        if valeur is None:
+            return "indéterminé"
+        return str(valeur) + (" (estimation)" if mesure.get("estime") else "")
+    hashtags = publication.get("hashtags")
+    if not isinstance(hashtags, list):
+        hashtags = re.findall(r"#(\w+)", publication.get("description") or "")
+    hashtags = list(dict.fromkeys("#" + str(h).strip().lstrip("#") for h in hashtags if str(h).strip().lstrip("#")))
     valeurs = {"date": f"*date {ligne(publication.get('created_at'))}\n",
-               "profil": f"*profil {profil}\n", "url": f"*urlvidéo {ligne(publication.get('url'))}\n"}
-    selection = set(variables if variables is not None else valeurs)
+               "profil": f"*profil {profil}\n", "url": f"*urlvidéo {ligne(publication.get('url'))}\n",
+               "vues": f"*vues {compteur('vues')}\n", "likes": f"*likes {compteur('likes')}\n",
+               "republications": f"*republications {compteur('republications')}\n",
+               "hashtags": f"*hashtags {' '.join(hashtags) or 'aucun'}\n"}
+    # Les anciens appels sans sélection gardent leur en-tête à trois variables.
+    selection = set(variables if variables is not None else ("date", "profil", "url"))
     return "".join(texte for cle, texte in valeurs.items() if cle in selection)
 
 
@@ -402,7 +416,11 @@ def wait_for_user(driver, job: Job, message: str):
             except queue.Empty:
                 continue
             if command == "continue":
-                if driver.execute_script(scraper.BLOCKED_JS):
+                sans_connexion = job.settings.source_collecte != "hashtags"
+                if sans_connexion:
+                    scraper.fermer_invitation_connexion(driver)
+                verification_js = scraper.CAPTCHA_JS if sans_connexion else scraper.BLOCKED_JS
+                if driver.execute_script(verification_js):
                     nature = scraper.type_intervention_tiktok(driver)
                     erreur = ("TikTok demande encore une connexion. Terminez la connexion dans la fenêtre avant de continuer."
                               if nature == "connexion" else "TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer."
@@ -449,6 +467,8 @@ def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
     diagnostic = rapport.get("diagnostic", {})
     code = diagnostic.get("code")
+    if code == "connexion_sans_publications_publiques":
+        return "TikTok n’a fourni aucun lien public lisible et affiche une fenêtre de connexion. La collecte n’impose pas de connexion ; cette source est inaccessible sans compte dans cette session."
     if rapport.get("discovery_stop") == "blocked" or code == "verification_tiktok":
         return "Vérification TikTok non terminée."
     if code == "erreur_tiktok":
@@ -498,11 +518,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
-                    # Essayer réellement la grille et le repli avant de demander une action.
-                    # Le moteur ouvre toujours le contrôle si TikTok affiche une vérification.
+                    # Même affichage initial du navigateur que pour les hashtags,
+                    # une seule fois pour l'ensemble des comptes de cette collecte.
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport, hashtags=job.settings.hashtags,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        validation_initiale=False)
+                        validation_initiale=not session_validee)
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
@@ -526,7 +546,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.pause(args.delay)
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
-                record = scraper.read_post(driver, url, args, interact=interact, check=job.check)
+                record = scraper.read_post(driver, url, args, interact=interact, check=job.check,
+                    **({"sans_connexion": True} if job.settings.source_collecte != "hashtags" else {}))
                 record["retenue"] = False
                 # Même découverte et lecture que le mode hashtag ; filtrer ensuite
                 # l’auteur effectivement lu, et non une grille de profil différente.
@@ -810,6 +831,8 @@ def create_app(manager=None):
         manager.shutdown()
 
     app = FastAPI(title="ScrapTikTok", lifespan=lifespan, docs_url=None, redoc_url=None)
+    from interface.passerelle import CompressionInterface, ressource_interface_versionnee
+    app.add_middleware(CompressionInterface)
     app.state.manager = manager
 
     @app.middleware("http")
@@ -832,7 +855,13 @@ def create_app(manager=None):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
+        # Les scripts/styles portent une empreinte qui change avec leur contenu.
+        # Le HTML, les sessions, les exports et les captures restent sans cache.
+        if (request.method in {"GET", "HEAD"} and response.status_code in {200, 304}
+                and ressource_interface_versionnee(request.url.path)):
+            response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store"
         if not request.url.path.startswith(("/api/", "/controle", "/healthz", "/static/controle.css", "/static/navigateur.js", "/static/controle.js")):
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'"
             return response

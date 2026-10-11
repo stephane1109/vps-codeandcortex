@@ -145,8 +145,13 @@ les contenus accessibles et consultés sont filtrés.
 
 ### Variables et commentaires dans le TXT
 
-Dans « Exports et commentaires », trois cases indépendantes permettent de choisir
-**Date**, **Profil** et **URL**. Cochez une, deux ou trois variables ; décochez-les
+L'archive enrichie est créée automatiquement pour toute collecte lancée depuis
+l'interface, y compris par hashtag sans commentaires. Aucune case d'activation
+n'est nécessaire.
+
+Dans « Exports et commentaires », sept cases indépendantes permettent de choisir
+**Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
+**Nombre de republications** et **Hashtags**. Cochez les variables souhaitées ; décochez-les
 toutes pour exporter uniquement le texte. Seules les variables cochées figurent
 avant chaque publication, dans cet ordre. Par exemple, avec Date et Profil :
 
@@ -167,9 +172,19 @@ figurent sous leur publication dans **le même TXT**. Les réponses récupérée
 Aucun commentaire d’une publication exclue n’est inséré.
 
 L’API accepte `variables_txt: ["date", "profil", "url"]`, ou toute sous-liste,
-y compris `[]`. Une liste explicite remplace les anciennes options d’en-tête.
+y compris `[]`, ainsi que les clés `vues`, `likes`, `republications` et `hashtags`.
+Une liste explicite remplace les anciennes options d’en-tête.
 Les requêtes sans ce champ restent compatibles avec `inclure_metadonnees_txt`
 et `include_sources`. Le corpus normalisé IRaMuTeQ reste séparé dans le ZIP.
+
+Les nouvelles cases sont décochées par défaut. Elles ajoutent les lignes `*vues`,
+`*likes`, `*republications` et `*hashtags` avant le texte. Les hashtags proviennent
+de la publication, pas des mots saisis pour la recherche. L'absence de hashtag est
+indiquée par `*hashtags aucun`. Un compteur absent est `indéterminé`, un vrai zéro
+reste `0` et une valeur abrégée est accompagnée de `(estimation)`.
+Les republications utilisent uniquement le compteur `repostCount` s'il est fourni
+dans les données de la publication ; `shareCount` reste un nombre de partages et
+n'est jamais utilisé à sa place. Les mesures brutes restent conservées dans l'archive.
 
 ### Filtre français
 
@@ -211,9 +226,9 @@ Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
 La limite s’applique par compte et par recherche. Les recommandations d’autres
 auteurs sont exclues avant cette limite ; les publications sont dédoublonnées par ID.
-Sans hashtag, le moteur visite le profil sélectionné. Si sa grille ne fournit aucun
-lien, il essaie la recherche vidéo sur `@identifiant` dans la même session.
-Avec un ou deux hashtags, chaque compte fait l’objet de recherches ciblées
+Avec ou sans hashtag, le moteur commence par la recherche vidéo sur `@identifiant`.
+La grille du profil n'est utilisée qu'en repli si les recherches ne donnent aucun lien.
+Avec un ou deux hashtags, chaque compte fait également l’objet de recherches ciblées
 `@identifiant #hashtag`, jamais d’une petite sélection mondiale ensuite filtrée.
 Les deux recherches sont effectuées même si la première atteint sa limite.
 L’auteur est contrôlé à la découverte puis à la lecture ; le filtre exact ET/OU
@@ -221,6 +236,13 @@ est appliqué aux légendes. En l’absence de liens, le profil sert de repli.
 Le moteur lit les liens HTML et les publications identifiées dans les données
 JSON de la page ; il défile dans le conteneur de la grille lorsque nécessaire.
 Cette collecte n’est pas exhaustive et dépend des publications accessibles à TikTok.
+En mode presse/comptes, la collecte fonctionne sans identifiants TikTok : elle
+utilise le bouton de fermeture des invitations à se connecter lorsqu'il est disponible.
+Une invitation n'empêche pas de cliquer sur **Continuer** ni de lire les publications
+publiques déjà fournies par la page. Les vrais CAPTCHA restent interactifs.
+Si TikTok ne fournit aucun lien public, le moteur essaie le parcours de repli,
+puis signale la source inaccessible ; il ne demande pas de connexion pour poursuivre
+le lot. Une légende inaccessible sans compte est comptée parmi les erreurs de lecture.
 Une vérification visible attend une intervention humaine ; aucune résolution
 automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte d’un
 filtre qui ne trouve aucune correspondance.
@@ -358,6 +380,13 @@ globale sont exclus. Tout `data/` reste hors Git et hors contexte Docker.
 
 ## Architecture et validation
 
+Les fichiers JavaScript et CSS versionnés de Streamlit sont compressés en gzip
+si le navigateur l'accepte, puis conservés dans son cache privé. Leur nom contient
+une empreinte : une mise à jour charge les nouveaux fichiers. Le HTML, les données
+de session, les exports et les captures restent servis avec `Cache-Control: no-store`.
+L'interface Streamlit et le moteur FastAPI sont deux processus liés d'un même
+lancement ; ce couple ne constitue pas deux collectes ou deux interfaces distinctes.
+
 `collecte/` gère les sources et observations ; `stockage/` les sessions SQLite ;
 `video/` et `audio/` les traitements différés ; `analyse/` les mesures dérivées ;
 `corpus/` les exports. Aucun import lourd n’est requis pour démarrer FastAPI ou collecter
@@ -408,13 +437,15 @@ Les options vidéo, les boutons de comparaison et l’aide audiovisuelle ont ét
 Les exports TXT/ZIP, les commentaires, ET/OU, les dates et le filtre français restent disponibles.
 Les modules audiovisuels restent utilisables via l’API et le traitement par lots.
 
-Les comptes sélectionnés sont tous transmis au moteur. Les profils accessibles
-s’enchaînent automatiquement, sans validation manuelle imposée au démarrage. Une
+Les comptes sélectionnés sont tous transmis au moteur. Comme en mode hashtag,
+le navigateur s'affiche au démarrage pour permettre de traiter les cookies,
+de fermer une invitation à se connecter ou de traiter un CAPTCHA. Après cette première validation, les comptes accessibles
+s’enchaînent automatiquement dans le même navigateur. Une
 vérification TikTok réelle demande toujours une intervention. Le panneau **Médias
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes, une grille vide ou en erreur ne demande plus de confirmer que les vidéos sont visibles : le moteur tente automatiquement son repli vers la recherche du compte dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; une vraie vérification reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes, après l'affichage initial du navigateur, une recherche vide essaie son repli vers le profil dans la même session. Une erreur TikTok déclenche au maximum un rechargement par page ; une vraie vérification reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
 Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement au profil ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.
@@ -461,8 +492,9 @@ et [contexte de session](https://docs.streamlit.io/develop/api-reference/caching
 Les deux hashtags (ET comme OU) et les comptes sélectionnés utilisent le même
 navigateur et ses cookies pendant toute la collecte. La vérification initiale
 manuelle n’est demandée qu’une fois. La deuxième source accessible est consultée
-automatiquement. Si TikTok affiche réellement une nouvelle connexion ou un CAPTCHA,
-la collecte s’interrompt de nouveau pour permettre l’intervention de l’utilisateur.
+automatiquement. Si TikTok affiche un CAPTCHA, la collecte s’interrompt de nouveau
+pour permettre l’intervention de l’utilisateur. Le mode presse/comptes ne met pas
+le lot en attente d'une authentification TikTok.
 La correction supprime les pauses systématiques ajoutées par l’application ; elle
 ne supprime pas les vérifications décidées par TikTok.
 

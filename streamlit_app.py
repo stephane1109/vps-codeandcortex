@@ -5,6 +5,9 @@ import re
 import streamlit as st
 from interface.client import appeler_api
 
+VARIABLES_TXT = {"date": "Date", "profil": "Profil", "url": "URL", "vues": "Nombre de vues",
+                 "likes": "Nombre de likes", "republications": "Nombre de republications", "hashtags": "Hashtags"}
+
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
 st.title("ScrapTikTok")
@@ -66,13 +69,13 @@ if "initialise" not in st.session_state:
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
-        "include_sources":ancienne.get("include_sources",True), "enrichir":ancienne.get("enrichir",True),
+        "include_sources":ancienne.get("include_sources",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     variables = ancienne.get("variables_txt")
     if variables is None:
         variables = ["date", "profil", "url"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "url"] if ancienne.get("include_sources", True) else []
-    for variable in ("date", "profil", "url"):
+    for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
     for nom in ("hashtag", "second_hashtag"):
@@ -84,10 +87,14 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
-for variable in ("date", "profil", "url"):
-    st.session_state.setdefault("txt_" + variable, st.session_state.get("inclure_metadonnees_txt", False) or (variable != "date" and st.session_state.get("include_sources", True)))
+for variable in VARIABLES_TXT:
+    valeur_initiale = (variable in ("date", "profil", "url") and
+        (st.session_state.get("inclure_metadonnees_txt", False) or
+         (variable in ("profil", "url") and st.session_state.get("include_sources", True))))
+    st.session_state.setdefault("txt_" + variable, valeur_initiale)
+    st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
-            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url", "enrichir",
+            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires",
             "date_debut", "date_fin", "comptes"):
     st.session_state[cle] = st.session_state[cle]
@@ -156,22 +163,22 @@ with onglet_collecte:
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         with st.expander("Exports et commentaires"):
             st.write("Variables à inclure avant chaque post dans le TXT")
-            colonnes_variables = st.columns(3)
-            for colonne, variable, titre in zip(colonnes_variables, ("date", "profil", "url"), ("Date", "Profil", "URL")):
-                colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
-            st.caption("Choisissez une, deux ou trois variables ; aucune pour le texte seul. Une date absente est indiquée comme indéterminée. Les commentaires récupérés sont ajoutés sous leur publication si leur collecte est cochée.")
-            st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
+            choix_variables = list(VARIABLES_TXT.items())
+            for debut_ligne in range(0, len(choix_variables), 3):
+                for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
+                    colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-            st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires sont aussi conservés dans des exports séparés.")
         if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=activer_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
-                valeurs["variables_txt"] = [v for v in ("date", "profil", "url") if st.session_state["txt_" + v]]
+                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
+                valeurs["enrichir"] = True
+                valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
                 valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])
@@ -199,7 +206,10 @@ with onglet_collecte:
                         media = medias.get(identifiant)
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
-                st.warning("TikTok demande une connexion à votre compte, pas un CAPTCHA. La fenêtre complète est disponible ci-dessous.")
+                if actuel.get("source_collecte") != "hashtags":
+                    st.info("Une invitation TikTok à se connecter est affichée. Fermez-la si possible, puis cliquez sur Continuer : la collecte des publications publiques ne vous impose pas de connexion.")
+                else:
+                    st.warning("TikTok affiche une fenêtre de connexion. Vous pouvez la fermer si TikTok le permet, puis continuer.")
             elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
                 st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
             else:
