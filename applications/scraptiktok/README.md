@@ -145,6 +145,10 @@ les contenus accessibles et consultés sont filtrés.
 
 ### Variables et commentaires dans le TXT
 
+L'archive enrichie est créée automatiquement pour toute collecte lancée depuis
+l'interface, y compris par hashtag sans commentaires. Aucune case d'activation
+n'est nécessaire.
+
 Dans « Exports et commentaires », sept cases indépendantes permettent de choisir
 **Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
 **Nombre de republications** et **Hashtags**. Cochez les variables souhaitées ; décochez-les

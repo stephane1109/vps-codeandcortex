@@ -69,7 +69,7 @@ if "initialise" not in st.session_state:
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
-        "include_sources":ancienne.get("include_sources",True), "enrichir":ancienne.get("enrichir",True),
+        "include_sources":ancienne.get("include_sources",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     variables = ancienne.get("variables_txt")
@@ -94,7 +94,7 @@ for variable in VARIABLES_TXT:
     st.session_state.setdefault("txt_" + variable, valeur_initiale)
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
-            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url", "enrichir",
+            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires",
             "date_debut", "date_fin", "comptes"):
     st.session_state[cle] = st.session_state[cle]
@@ -167,18 +167,17 @@ with onglet_collecte:
             for debut_ligne in range(0, len(choix_variables), 3):
                 for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
                     colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
-            st.caption("Cochez les variables souhaitées, ou aucune pour le texte seul. Les compteurs absents restent indéterminés ; les estimations sont signalées. Les republications sont distinctes des partages. Les hashtags sont ceux de chaque publication. Les commentaires récupérés sont ajoutés sous leur publication si leur collecte est cochée.")
-            st.checkbox("Créer l’archive enrichie", key="enrichir", disabled=occupe)
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-            st.caption("La collecte par comptes crée automatiquement l’archive enrichie. Les commentaires sont aussi conservés dans des exports séparés.")
         if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=activer_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","enrichir","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
+                valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
                 valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
