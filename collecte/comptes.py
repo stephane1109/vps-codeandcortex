@@ -28,8 +28,13 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         recherche = {"hashtag_url": url, "compte_attendu": compte}
         rapport["recherches"].append(recherche)
         try:
-            trouves = collect_links(navigateur, arguments, recherche, interact=interaction,
-                                    validation_initiale=False, **options)
+            if url == profil:
+                from .profil_selenium import collecter_grille_profil
+                trouves = collecter_grille_profil(navigateur, arguments, recherche,
+                    interact=interaction, check=options.get("check"), progress=options.get("progress"))
+            else:
+                trouves = collect_links(navigateur, arguments, recherche, interact=interaction,
+                                       validation_initiale=False, **options)
         except (RuntimeError, WebDriverException) as erreur:
             recherche["erreur"] = str(erreur)
             # Une vérification ne doit pas être masquée en changeant de page.
@@ -42,7 +47,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             if (identite and identite[2].casefold() == compte
                     and (plafond is None or len(liens) < plafond)):
                 liens.setdefault(identite[0], identite[1])
-        rapport.update({k: recherche[k] for k in ("hashtag_url", "discovery_stop") if k in recherche})
+        rapport.update({k: recherche[k] for k in ("hashtag_url", "discovery_stop", "diagnostic") if k in recherche})
         return None
 
     erreurs = []
