@@ -227,6 +227,8 @@ class Job:
         self.path = self.directory / "textes.txt"
         self.lock = threading.RLock()
         self.stop = threading.Event()
+        self.demande_navigateur = threading.Event()
+        self.ouvrir_navigateur = None
         self.commands = queue.Queue(maxsize=8)
         self.created = self.last_seen = time.monotonic()
         self.finished = None
@@ -308,6 +310,8 @@ class Job:
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
+                    "navigateur_disponible": self.ouvrir_navigateur is not None and self.busy,
+                    "ouverture_navigateur_demandee": self.demande_navigateur.is_set(),
                     "action_error": self.action_error, "can_download": bool(self.records),
                     "apercu_engagement": [{"id": r["id"], "author": r["author"], "url": r["url"],
                         "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection")}
@@ -316,6 +320,18 @@ class Job:
                                 for r in self.records[:5]]}
 
     def check(self):
+        if self.stop.is_set():
+            raise Stopped()
+        # Seul le worker Selenium ouvre la fenêtre à un point d'arrêt contrôlé.
+        # La requête HTTP ne touche jamais au navigateur en parallèle.
+        ouverture = None
+        with self.lock:
+            if (self.demande_navigateur.is_set() and self.ouvrir_navigateur is not None
+                    and self.status != "attention"):
+                self.demande_navigateur.clear()
+                ouverture = self.ouvrir_navigateur
+        if ouverture is not None:
+            ouverture()
         if self.stop.is_set():
             raise Stopped()
 
@@ -395,8 +411,10 @@ def perform_action(driver, action: BrowserAction):
 
 
 def wait_for_user(driver, job: Job, message: str):
-    previous = job.status
-    job.update(status="attention", message=message, action_error="")
+    with job.lock:
+        previous, message_precedent = job.status, job.message
+        job.demande_navigateur.clear()
+        job.update(status="attention", message=message, action_error="")
     next_frame = 0
     held_since = None
     prochaine_detection = 0
@@ -453,7 +471,7 @@ def wait_for_user(driver, job: Job, message: str):
             release_pointer(driver)
         except scraper.WebDriverException:
             pass
-        job.update(status=previous, frame=b"", type_intervention="")
+        job.update(status=previous, message=message_precedent, frame=b"", type_intervention="")
         while not job.commands.empty():
             try:
                 pending = job.commands.get_nowait()
@@ -497,6 +515,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         job.check()
         driver = driver_factory(args)
         interact = lambda message: wait_for_user(driver, job, message)
+        job.update(ouvrir_navigateur=lambda: wait_for_user(driver, job,
+            "Collecte mise en pause à votre demande. Examinez TikTok ci-dessous, "
+            "puis cliquez sur Continuer pour reprendre au même endroit."))
         unique_links = {}
         hors_selection = 0
         sources = ([{"hashtag": h} for h in job.settings.hashtags]
@@ -660,6 +681,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         LOG.exception("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
     finally:
+        with job.lock:
+            job.ouvrir_navigateur = None
+            job.demande_navigateur.clear()
         try:
             job.save()
         except OSError:
@@ -986,6 +1010,17 @@ def create_app(manager=None):
         job = manager.get(owner(request), job_id)
         job.stop.set()
         return {"ok": True}
+
+    @app.post("/api/jobs/{job_id}/navigateur", status_code=202)
+    def afficher_navigateur(job_id: str, request: Request):
+        """Demander une pause visuelle sans attendre la détection d'un CAPTCHA."""
+        job = manager.get(owner(request), job_id)
+        with job.lock:
+            if not job.busy or job.stop.is_set() or job.ouvrir_navigateur is None:
+                raise HTTPException(409, "Le navigateur n’est pas disponible pour cette collecte.")
+            if job.status != "attention":
+                job.demande_navigateur.set()
+            return job.snapshot()
 
     def enqueue(job, command):
         with job.lock:
