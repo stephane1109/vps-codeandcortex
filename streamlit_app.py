@@ -203,6 +203,9 @@ with onglet_collecte:
             # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
             if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
                 st.rerun()
+            if actuel.get("comptes_filtres"):
+                st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
+                st.caption("La fenêtre TikTok affiche tous les profils du hashtag. La collecte conserve uniquement les publications des profils listés ci-dessus.")
             if actuel.get("source_collecte") == "presse":
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
@@ -222,7 +225,7 @@ with onglet_collecte:
                         ("decouvertes", "retenues", "traitees", "exportees"),
                         ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
                     colonne.metric(titre, compteurs[cle])
-                st.caption(("Les résultats d’autres auteurs sont exclus avant la lecture. " if actuel.get("source_collecte") != "hashtags" else "")
+                st.caption(("Découvertes : tous les profils du hashtag. Retenues pour lecture : uniquement les profils sélectionnés. L’auteur est à nouveau contrôlé avant les exports. " if actuel.get("source_collecte") != "hashtags" else "")
                            + "Les filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")

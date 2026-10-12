@@ -105,6 +105,38 @@ class TestsEnrichis(unittest.TestCase):
             self.assertEqual([b['liens'] for b in bilan],[0,1])
             self.assertIn('Vérification TikTok',bilan[0]['message'])
 
+    def test_auteur_non_coche_exclu_du_txt_de_l_archive_et_des_commentaires(self):
+        for mode in ("json", "dom"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as dossier:
+                job = web.Job("test", web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                    hashtag="test", collecter_commentaires=True, french_only=False), Path(dossier))
+                urls = [f"https://www.tiktok.com/@lemondefr/video/{i}" for i in (101, 102)]
+                texte_refuse = "Publication du média non coché #test @lemondefr"
+                autre_url = urls[0].replace("/@lemondefr/", "/@franceinfo/")
+                page_refusee = (
+                    {"url": urls[0], "payloads": [json.dumps({"id": "101", "desc": texte_refuse, "author": "franceinfo"})]}
+                    if mode == "json" else
+                    {"url": autre_url, "canonical": autre_url, "payloads": [], "description": texte_refuse}
+                )
+                pages = {urls[0]: page_refusee,
+                         urls[1]: {"url": urls[1], "payloads": [], "description": "Publication retenue #test"}}
+                def lire(navigateur, url, *args, **options):
+                    return web.scraper.extract_record(pages[url], url)
+                with patch.object(web.scraper, "collect_links", return_value=urls), \
+                     patch.object(web.scraper, "read_post", side_effect=lire), patch.object(job, "pause"), \
+                     patch("collecte.commentaires.collecter_commentaires",
+                           return_value={"commentaires": [], "statut": "termine", "exhaustif": False}) as commentaires:
+                    web.execute_job(job, driver_factory=lambda args: Mock())
+                self.assertEqual(job.snapshot()["comptes_filtres"], ["lemondefr"])
+                self.assertEqual([p["author"] for p in job.records], ["lemondefr"])
+                self.assertEqual([p["id"] for p in job.publications], ["102"])
+                commentaires.assert_called_once()
+                self.assertEqual(commentaires.call_args.args[1]["id"], "102")
+                self.assertNotIn(texte_refuse, job.path.read_text())
+                for fichier in ("publications.json", "engagement.csv", "corpus_iramuteq.txt"):
+                    self.assertNotIn(texte_refuse, (job.directory / fichier).read_text())
+                self.assertTrue(job.archive_prete)
+
     def test_echecs_navigation_ne_sont_pas_presentes_comme_medias_vides(self):
         self.assertIn('délai',web.expliquer_echec_source({},web.scraper.TimeoutException()))
         self.assertIn('navigateur',web.expliquer_echec_source({},web.scraper.WebDriverException()))

@@ -305,6 +305,8 @@ class Job:
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
                     "source_collecte": self.settings.source_collecte, "comptes": self.settings.comptes,
+                    "comptes_filtres": ([source["compte"] for source in self.settings.sources]
+                                        if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "diagnostics": list(self.diagnostics),
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),

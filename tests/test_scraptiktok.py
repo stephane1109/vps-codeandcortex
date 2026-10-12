@@ -42,6 +42,22 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(record["source"], "page_json")
         self.assertTrue(record["created_at"].endswith("+00:00"))
 
+    def test_auteur_json_texte_prime_sur_le_lien_demande(self):
+        page = {"url": URL, "payloads": [json.dumps({
+            "id": "1234567890", "desc": "#test @test", "author": "autre"
+        })]}
+        self.assertEqual(app.extract_record(page, URL)["author"], "autre")
+
+    def test_auteur_dom_observe_apres_redirection_du_meme_identifiant(self):
+        autre = URL.replace("/@test/", "/@autre/")
+        for page in (
+            {"url": autre, "description": "#test", "payloads": []},
+            {"url": URL, "canonical": autre, "description": "#test", "payloads": []},
+            {"url": autre, "payloads": [json.dumps({"id": "1234567890", "desc": "#test", "author": {}})]},
+        ):
+            with self.subTest(page=page):
+                self.assertEqual(app.extract_record(page, URL)["author"], "autre")
+
     def test_legacy_state_and_empty_caption(self):
         page = {"payloads": ['{"ItemModule":{"1234567890":{"id":"1234567890","desc":""}}}']}
         self.assertEqual(app.extract_record(page, URL)["status"], "empty_caption")

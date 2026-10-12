@@ -223,6 +223,12 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
     if identity is None:
         raise ValueError(f"URL de publication invalide : {url}")
     post_id, url, author = identity
+    current = canonical_post(snapshot.get("url", ""))
+    canonical = canonical_post(snapshot.get("canonical", ""))
+    # Après une redirection, l'auteur du lien demandé peut être trompeur.
+    # Une URL observée n'est utilisable que pour le même identifiant de publication.
+    page = next((cible for cible in (canonical, current) if cible and cible[0] == post_id), None)
+    author = page[2] if page else author
     record = dict.fromkeys(FIELDS, "")
     record.update(id=post_id, url=url, author=author, collected_at=utc_now())
     for raw in snapshot.get("payloads", []):
@@ -233,14 +239,15 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
         if item is not None:
             record.update(description=item["desc"], source="page_json",
                           created_at=timestamp_iso(item.get("createTime")))
-            if isinstance(item.get("author"), dict):
-                record["author"] = item["author"].get("uniqueId") or author
+            auteur = item.get("author")
+            if isinstance(auteur, dict):
+                auteur = auteur.get("uniqueId")
+            if isinstance(auteur, str) and auteur.strip():
+                record["author"] = auteur.strip().removeprefix("@")
             # Une légende vide est un résultat valide quand l'ID est confirmé.
             break
     else:
         # Vérifier l'identité de la page avant le repli sur son texte affiché.
-        current = canonical_post(snapshot.get("url", ""))
-        canonical = canonical_post(snapshot.get("canonical", ""))
         if not current or current[0] != post_id or (canonical and canonical[0] != post_id):
             return None
         if not snapshot.get("description", "").strip():

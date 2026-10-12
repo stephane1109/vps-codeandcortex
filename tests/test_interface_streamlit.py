@@ -81,6 +81,28 @@ class TestsInterface(unittest.TestCase):
             page.radio(key='source').set_value('hashtags').run()
             self.assertEqual(page.text_input(key='hashtag').value,'filtre_ancien')
 
+    def test_seuls_les_medias_coches_sont_envoyes_apres_tout_cocher(self):
+        inventaire = [m for m in charger_inventaire() if m["id"] in ("lemonde", "franceinfo")]
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == "/api/session": return {"job": None}
+            if chemin == "/api/presse": return {"medias": inventaire}
+            if chemin == "/api/jobs":
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch("streamlit.context", SimpleNamespace(cookies={"scraptiktok_session": "a"*64}, headers={})), patch("interface.client.appeler_api", side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "streamlit_app.py")).run()
+            page.radio(key='source').set_value('presse').run()
+            page.button(key="tous_medias").click().run()
+            page.checkbox(key="media_franceinfo").uncheck().run()
+            page.text_input(key="hashtag_comptes").set_value("test")
+            next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]["source_collecte"], "presse")
+            self.assertEqual(envois[-1]["medias"], ["lemonde"])
+            self.assertEqual([s["compte"] for s in StartRequest(**envois[-1]).sources], ["lemondefr"])
+
     def test_presse_transmet_deux_hashtags_et_le_choix_et_ou(self):
         envois = []
         def repondre(chemin, session, autorisation, donnees=None):
