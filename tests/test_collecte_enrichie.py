@@ -12,8 +12,8 @@ class TestsEnrichis(unittest.TestCase):
             job = web.Job('test', web.StartRequest(source_collecte='comptes', comptes=['lemondefr','franceinfo']), Path(dossier))
             validations = []
             def decouvrir(navigateur, arguments, compte, rapport, **options):
-                validations.append(options['validation_initiale'])
-                if options['validation_initiale']:
+                validations.append(options.get('validation_initiale', False))
+                if options.get('validation_initiale', False):
                     options['interact']('Vérifiez le premier profil.')
                 return []
             with patch('collecte.comptes.collecter_compte', side_effect=decouvrir), patch.object(web, 'wait_for_user') as verifier:
@@ -53,15 +53,15 @@ class TestsEnrichis(unittest.TestCase):
                 validations = []
                 def decouvrir(navigateur, arguments, rapport, **options):
                     self.assertIn(rapport['compte_attendu'], ['lemondefr', 'franceinfo'])
-                    validations.append(options['validation_initiale'])
-                    if options['validation_initiale']: options['interact']('Vérification TikTok')
-                    return [p['url'] for p in publications]
+                    validations.append(options.get('validation_initiale', False))
+                    if options.get('validation_initiale', False): options['interact']('Vérification TikTok')
+                    return [p['url'] for p in publications if p['author'] == rapport['compte_attendu']]
                 def lire(navigateur, url, *args, **options):
                     return dict(next(p for p in publications if p['url'] == url))
                 with patch.object(web.scraper, 'collect_links', side_effect=decouvrir) as collecte, patch.object(web, 'wait_for_user'), patch.object(web.scraper, 'read_post', side_effect=lire), patch.object(job, 'pause'):
                     web.execute_job(job, driver_factory=lambda args: Mock())
-                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/search/video?q=%40'+compte+'%20%23'+tag for compte in ['lemondefr','franceinfo'] for tag in ['gr%C3%A8ve','%C3%A9cole']])
-                self.assertEqual(validations, [False, False, False, False])
+                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/search/video?q=%40'+compte for compte in ['lemondefr','franceinfo']])
+                self.assertEqual(validations, [False, False])
                 self.assertEqual([p['id'] for p in job.records], attendus)
                 self.assertEqual(job.processed, 4)
                 self.assertEqual(job.filtered, 4-len(attendus))

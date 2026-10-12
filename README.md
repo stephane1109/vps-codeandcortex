@@ -235,28 +235,26 @@ et restent dans les exports enrichis CSV/JSON/IRaMuTeQ.
 
 Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
-La limite s’applique par compte et par recherche. Les recommandations d’autres
-auteurs sont exclues avant cette limite ; les publications sont dédoublonnées par ID.
-Sans hashtag, le moteur lit directement `https://www.tiktok.com/@identifiant`.
-Avec un ou deux hashtags, il utilise les mêmes pages `/tag/hashtag` que le mode
-Hashtags. Les publications d'autres auteurs ne consomment pas la limite : le moteur
-continue à défiler pour chercher celles du compte demandé, dans les limites de durée
-et de défilement configurées. Les deux hashtags sont parcourus même si le premier
-atteint sa limite. Le parcours `/search/video` n'est plus utilisé pour les comptes.
-Si les pages de hashtags ne fournissent pas le nombre demandé de liens distincts,
-la grille du profil complète les résultats, sans doublons et jusqu'à l'objectif.
-L’auteur est contrôlé à la découverte puis à la lecture ; le filtre exact ET/OU
-est appliqué aux légendes. Les résultats insuffisants sont complétés depuis le profil.
-Le moteur lit les liens HTML et les publications identifiées dans les données
-JSON de la page. Sur un profil, `collecte/pagination_profils.py` identifie le
-conteneur de la grille et envoie des gestes de molette Selenium par fractions
-d'écran, plutôt qu'un saut direct au bas de la page. Il relit les liens après
-chaque déplacement. Une progression dans la grille sans nouveaux liens ne compte
-pas comme une fin de chargement. Après une attente sans résultat supplémentaire,
-un mouvement vers le haut puis vers le bas réexpose la fin de grille, dans la
-limite des tentatives configurées. Le rapport `pagination_profil` conserve les
-positions, les hauteurs et le nombre de liens avant/après chaque étape.
-Le mécanisme de défilement du mode Hashtags reste inchangé.
+La limite s’applique par compte. La découverte utilise exclusivement
+`https://www.tiktok.com/search/video?q=%40identifiant`, avec ou sans hashtags.
+Aucune page de profil ou de hashtag ne sert de repli pour ce mode. Les hashtags
+ET/OU sont filtrés ensuite sur les légendes. L’auteur est contrôlé dans les
+résultats puis à la lecture de chaque publication.
+
+Le moteur parcourt progressivement le conteneur réellement défilant et attend
+les chargements successifs. Les résultats d’autres auteurs ne consomment pas la
+limite. Les liens sont dédoublonnés par identifiant, même après disparition d’une
+carte du DOM. Une page suivante est activée si la recherche en fournit une.
+Au moins trois tentatives sans nouveauté sont nécessaires avant un arrêt pour
+stagnation ; les premières six vidéos ne constituent jamais un critère d’arrêt.
+
+L’interface distingue **Découvertes**, **Retenues pour lecture**, **Traitées** et
+**Exportées dans le TXT**. Le compteur d’export ne progresse qu’après écriture
+réussie. Un objectif non atteint est signalé **Collecte partielle**, y compris si
+TikTok annonce la fin de ses résultats. Le mode Hashtags conserve son parcours.
+Le fonctionnement détaillé et les scénarios de test fournis sont décrits dans
+[COLLECTE_PROFILS.md](COLLECTE_PROFILS.md).
+
 Cette collecte n’est pas exhaustive et dépend des publications accessibles à TikTok.
 En mode presse/comptes, la collecte fonctionne sans identifiants TikTok : elle
 utilise le bouton de fermeture des invitations à se connecter lorsqu'il est disponible.
@@ -470,9 +468,9 @@ vérification TikTok réelle demande toujours une intervention. Le panneau **Mé
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes avec hashtags, des résultats sous le nombre demandé sont complétés depuis le profil dans la même session. Sans hashtag, le profil public est consulté directement. Une erreur TikTok déclenche au maximum un rechargement par page ; un vrai CAPTCHA reste à traiter par l’utilisateur. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes, avec ou sans hashtags, seule la recherche vidéo @compte est parcourue. Il n'existe aucun repli vers un profil. Les CAPTCHA et les recherches bloquées ouvrent automatiquement la fenêtre ; les résultats partiels restent conservés. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
-Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement au profil ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
+Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement à la recherche ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.
 
 `lancer_interface.py` démarre FastAPI sur le port public et Streamlit sur un port local

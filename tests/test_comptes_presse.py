@@ -27,73 +27,44 @@ class TestsComptes(unittest.TestCase):
         self.assertEqual(resultat["proprietaire_editorial"], "indetermine")
 
 class TestsRechercheComptes(unittest.TestCase):
-    def arguments(self):
-        import scraptiktok
-        args = scraptiktok.parse_args(['test', '--limit', '2'])
-        args.timeout = .01
-        args.delay = 0
-        args.idle_rounds = 1
-        args.max_scrolls = 3
-        return args
-
-    def test_sans_hashtag_recherche_compte_et_exclut_autres_auteurs(self):
-        from unittest.mock import Mock
-        from collecte.comptes import collecter_compte
-        import scraptiktok as moteur
-        pilote = Mock()
-        pages = iter([
-            ['https://www.tiktok.com/@autre/video/111'],
-            ['https://www.tiktok.com/@lemondefr/video/222',
-             'https://www.tiktok.com/@lemondefr/video/333'],
-        ])
-        pilote.execute_script.side_effect = lambda code: next(pages) if code == moteur.DISCOVER_JS else False
-        rapport = {}
-        liens = collecter_compte(pilote, self.arguments(), '@LeMondeFR', rapport)
-        pilote.get.assert_called_once_with('https://www.tiktok.com/search/video?q=%40lemondefr')
-        self.assertEqual(liens, ['https://www.tiktok.com/@lemondefr/video/222',
-                                'https://www.tiktok.com/@lemondefr/video/333'])
-        self.assertEqual(rapport['recherches'][0]['candidats_examines'], 3)
-        self.assertFalse(rapport['exhaustif'])
-
-    def test_deux_hashtags_une_validation_et_dedoublonnage(self):
-        from unittest.mock import Mock
-        from collecte.comptes import collecter_compte
-        import scraptiktok as moteur
-        args = self.arguments(); args.limit = 3; args.interactive = True
-        pilote, intervention = Mock(), Mock()
-        resultats = {
-            'https://www.tiktok.com/search/video?q=%40lemondefr': ['https://www.tiktok.com/@lemondefr/video/111'],
-            'https://www.tiktok.com/search/video?q=%40lemondefr%20%23lyceen': ['https://www.tiktok.com/@lemondefr/video/111'],
-            'https://www.tiktok.com/search/video?q=%40lemondefr%20%23manifestation': ['https://www.tiktok.com/@autre/video/999',
-                'https://www.tiktok.com/@lemondefr/video/111', 'https://www.tiktok.com/@lemondefr/video/222'],
-        }
-        pilote.execute_script.side_effect = lambda code: resultats[pilote.get.call_args.args[0]] if code == moteur.DISCOVER_JS else False
-        rapport = {}
-        liens = collecter_compte(pilote, args, 'lemondefr', rapport,
-                                hashtags=['#lyceen', '#manifestation'], interact=intervention)
-        self.assertEqual([c.args[0] for c in pilote.get.call_args_list], list(resultats))
-        intervention.assert_called_once()
-        self.assertEqual(liens, ['https://www.tiktok.com/@lemondefr/video/111', 'https://www.tiktok.com/@lemondefr/video/222'])
-
-    def test_autres_auteurs_seulement_ne_declenche_pas_fausse_erreur_acces(self):
-        from unittest.mock import Mock
-        from collecte.comptes import collecter_compte
-        import scraptiktok as moteur
-        pilote = Mock()
-        pilote.execute_script.side_effect = lambda code: ['https://www.tiktok.com/@autre/video/111'] if code == moteur.DISCOVER_JS else False
-        rapport = {}
-        self.assertEqual(collecter_compte(pilote, self.arguments(), 'lemondefr', rapport), [])
-        self.assertEqual(rapport['discovery_stop'], 'no_new_links')
-
-    def test_une_recherche_en_echec_conserve_les_resultats_de_l_autre(self):
+    def test_une_recherche_video_exclusive_avec_ou_sans_hashtags(self):
         from unittest.mock import Mock, patch
         from collecte.comptes import collecter_compte
-        url = 'https://www.tiktok.com/@lemondefr/video/222'
-        with patch('scraptiktok.collect_links', side_effect=[RuntimeError('Échec TikTok'), [url], [url]]):
-            rapport = {}
-            self.assertEqual(collecter_compte(Mock(), self.arguments(), 'lemondefr', rapport,
-                                             hashtags=['lyceen', 'manifestation']), [url])
-        self.assertEqual(rapport['recherches_en_echec'], 1)
+        from types import SimpleNamespace
+        for hashtags in ([], ['#lyceen', '#manifestation']):
+            with self.subTest(hashtags=hashtags), patch('scraptiktok.collect_links', return_value=[]) as moteur:
+                rapport = {}
+                collecter_compte(Mock(), SimpleNamespace(limit=50), '@LeMondeFR', rapport, hashtags=hashtags)
+                moteur.assert_called_once()
+                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=%40lemondefr')
+                self.assertEqual(rapport['hashtags_filtres'], [h.lstrip('#') for h in hashtags])
+                self.assertFalse(moteur.call_args.kwargs['validation_initiale'])
+                self.assertTrue(moteur.call_args.kwargs['sans_connexion'])
+                self.assertNotIn('repli', rapport)
+
+    def test_erreur_ou_captcha_ne_declenche_aucun_repli_profil(self):
+        from unittest.mock import Mock, patch
+        from collecte.comptes import collecter_compte
+        from types import SimpleNamespace
+        for message in ('Erreur TikTok', 'CAPTCHA'):
+            with self.subTest(message=message), patch('scraptiktok.collect_links', side_effect=RuntimeError(message)) as moteur:
+                rapport = {}
+                with self.assertRaises(RuntimeError):
+                    collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr', rapport)
+                moteur.assert_called_once()
+                self.assertEqual(rapport['recherches_en_echec'], 1)
+                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=%40lemondefr')
+
+    def test_entree_collect_links_compte_ne_navigue_jamais_vers_profil(self):
+        from unittest.mock import Mock, patch
+        from types import SimpleNamespace
+        import scraptiktok
+        pilote = Mock()
+        rapport = {'compte_attendu':'lemondefr', 'hashtag_url':'https://www.tiktok.com/@lemondefr'}
+        with patch('collecte.recherche_comptes.collecter_recherche_compte', return_value=[]) as recherche:
+            self.assertEqual(scraptiktok.collect_links(pilote, SimpleNamespace(), rapport), [])
+        recherche.assert_called_once()
+        pilote.get.assert_not_called()
 
     def test_ancienne_recherche_non_acceptee_apres_delai(self):
         import scraptiktok
@@ -101,80 +72,6 @@ class TestsRechercheComptes(unittest.TestCase):
                                                      'https://www.tiktok.com/search/video?q=%40lemondefr'))
         self.assertTrue(scraptiktok.meme_page_tiktok('https://www.tiktok.com/search/video?q=%40lemondefr&lang=fr',
                                                     'https://www.tiktok.com/search/video?q=%40lemondefr'))
-
-    def test_limite_premier_hashtag_ne_supprime_pas_le_second(self):
-        from unittest.mock import Mock, patch
-        from collecte.comptes import collecter_compte
-        args = self.arguments(); args.limit = 1
-        liens = ['https://www.tiktok.com/@lemondefr/video/111', 'https://www.tiktok.com/@lemondefr/video/222']
-        with patch('scraptiktok.collect_links', side_effect=[[liens[0]], [liens[0]], [liens[1]]]) as collecte:
-            self.assertEqual(collecter_compte(Mock(), args, 'lemondefr', hashtags=['lyceen','manifestation']), liens)
-        self.assertEqual(collecte.call_count, 3)
-
-    def test_recherche_inaccessible_profil_de_repli_meme_session(self):
-        from unittest.mock import Mock, patch
-        from collecte.comptes import collecter_compte
-        pilote = Mock(); rapport = {}
-        lien = 'https://www.tiktok.com/@lemondefr/video/222'
-        with patch('scraptiktok.collect_links', side_effect=[RuntimeError('Erreur chargement'), [lien]]) as collecte:
-            self.assertEqual(collecter_compte(pilote, self.arguments(), 'lemondefr', rapport), [lien])
-        self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list],
-                         ['https://www.tiktok.com/search/video?q=%40lemondefr', 'https://www.tiktok.com/@lemondefr'])
-        self.assertTrue(all(c.args[0] is pilote for c in collecte.call_args_list))
-        self.assertEqual(rapport['recherches_en_echec'], 1)
-
-    def test_captcha_ne_declenche_pas_navigation_de_repli(self):
-        from unittest.mock import Mock, patch
-        from collecte.comptes import collecter_compte
-        def blocage(pilote, args, rapport, **options):
-            rapport['diagnostic'] = {'code': 'verification_tiktok'}
-            raise RuntimeError('Vérification nécessaire')
-        with patch('scraptiktok.collect_links', side_effect=blocage) as collecte:
-            with self.assertRaises(RuntimeError):
-                collecter_compte(Mock(), self.arguments(), 'lemondefr')
-        collecte.assert_called_once()
-
-    def test_brut_sans_hashtag_recherche_directe_avec_validation_initiale(self):
-        from unittest.mock import Mock
-        from collecte.comptes import collecter_compte
-        import scraptiktok as moteur
-        lien = 'https://www.tiktok.com/@brutofficiel/video/222'
-        for erreur in (False, True):
-            with self.subTest(erreur_tiktok=erreur):
-                args = self.arguments(); args.limit = 1; args.interactive = True
-                pilote, intervention = Mock(), Mock()
-                def executer(code):
-                    url = pilote.get.call_args.args[0]
-                    if code == moteur.BLOCKED_JS: return False
-                    if code == moteur.DISCOVER_JS: return [lien] if '/search/video' in url else []
-                    if code == moteur.DIAGNOSTIC_JS: return {'erreur_tiktok': erreur, 'liens': 0}
-                    return []
-                pilote.execute_script.side_effect = executer
-                rapport = {}
-                self.assertEqual(collecter_compte(pilote, args, 'brutofficiel', rapport,
-                                                  interact=intervention), [lien])
-                intervention.assert_called_once()
-                visites = [c.args[0] for c in pilote.get.call_args_list]
-                self.assertEqual(visites, ['https://www.tiktok.com/search/video?q=%40brutofficiel'])
-                self.assertNotIn('repli', rapport)
-
-    def test_verification_reelle_reste_interactive_apres_validation_initiale(self):
-        from unittest.mock import Mock
-        from collecte.comptes import collecter_compte
-        import scraptiktok as moteur
-        args = self.arguments(); args.limit = 1; args.interactive = True
-        pilote = Mock(); verifie = []
-        lien = 'https://www.tiktok.com/@brutofficiel/video/222'
-        def executer(code):
-            if code == moteur.BLOCKED_JS: return not verifie
-            if code == moteur.DISCOVER_JS: return [lien] if verifie else []
-            return []
-        pilote.execute_script.side_effect = executer
-        intervention = Mock(side_effect=lambda message: verifie.append(True))
-        self.assertEqual(collecter_compte(pilote, args, 'brutofficiel', interact=intervention, validation_initiale=False), [lien])
-        intervention.assert_called_once()
-        self.assertIn('vérification', intervention.call_args.args[0])
-        pilote.get.assert_called_once_with('https://www.tiktok.com/search/video?q=%40brutofficiel')
 
     def test_donnees_json_identite_et_type_de_publication(self):
         import json

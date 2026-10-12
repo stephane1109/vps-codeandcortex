@@ -236,6 +236,9 @@ class Job:
         self.status = "starting"
         self.message = "Ouverture du navigateur…"
         self.discovered = 0
+        self.decouvertes_ids = set()
+        self.retenues_sources = {}
+        self.exportees = 0
         self.processed = 0
         self.errors = 0
         self.filtered = 0
@@ -309,6 +312,8 @@ class Job:
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
+                    "compteurs_collecte": {"decouvertes": len(self.decouvertes_ids), "retenues": self.discovered,
+                        "traitees": self.processed, "exportees": self.exportees},
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
                     "navigateur_disponible": self.ouvrir_navigateur is not None and self.busy,
                     "ouverture_navigateur_demandee": self.demande_navigateur.is_set(),
@@ -339,14 +344,26 @@ class Job:
         if self.stop.wait(seconds):
             raise Stopped()
 
+    def actualiser_decouverte(self, rapport):
+        """Compter les IDs distincts, y compris les résultats d'autres auteurs."""
+        retenues = {identite[0] for url in rapport.get("discovered_urls", [])
+                    if (identite := scraper.canonical_post(url))}
+        source = rapport.get("compte_attendu") or rapport.get("hashtag_url", "")
+        with self.lock:
+            self.decouvertes_ids.update(rapport.get("candidats_ids", retenues))
+            self.retenues_sources[source] = retenues
+            self.discovered = len(set().union(*self.retenues_sources.values()))
+
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
         with self.lock:
             content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt,
                                   self.settings.variables_txt, self.commentaires if self.settings.collecter_commentaires else None)
+            nombre_exporte = sum(bool(r.get("description")) for r in self.records)
         temp = self.path.with_suffix(".tmp")
         temp.write_text(content, encoding="utf-8")
         temp.replace(self.path)
+        self.update(exportees=nombre_exporte)
 
 
 def release_pointer(driver):
@@ -531,12 +548,17 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         for numero_source, source in enumerate(sources, 1):
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
+            rapport = {}
+            def suivre_decouverte(nombre):
+                job.actualiser_decouverte(rapport)
+                job.update(message=f"Source {numero_source}/{len(sources)} — {etiquette} : "
+                    f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), {nombre} retenue(s)…")
             try:
                 if "hashtag" in source:
                     rapport = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(source['hashtag'])}"}
                     found = scraper.collect_links(driver, args, rapport,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        validation_initiale=not session_validee)
+                        validation_initiale=not session_validee, progress=suivre_decouverte)
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
@@ -544,11 +566,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     # confirmation préalable ni authentification n'est demandée.
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport, hashtags=job.settings.hashtags,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        progress=lambda nombre: job.update(message=f"Source {numero_source}/{len(sources)} — {etiquette} : {nombre} lien(s) de publication repéré(s) dans la recherche en cours…"))
+                        progress=suivre_decouverte)
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
-                message_source = ("Recherche partielle : une recherche TikTok a échoué."
+                message_source = rapport.get("bilan_recherche") or ("Recherche partielle : une recherche TikTok a échoué."
                                   if rapport.get("recherches_en_echec") else "Recherche terminée.")
                 if found and rapport.get("objectif_atteint") is False:
                     message_source += (f" {len(found)} lien(s) public(s) repéré(s) sur un objectif de {rapport['objectif_liens']},"
@@ -556,7 +578,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     if rapport.get("limite_acces_public"):
                         message_source += " Une fenêtre de connexion TikTok est apparue sans fournir de nouveaux liens publics ; les publications déjà repérées sont conservées."
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
-                    "message": message_source if found else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide."})
+                    "message": message_source if found else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
+                        if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")})
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity: unique_links.setdefault(identity[0], identity[1])
@@ -568,6 +591,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     "message": expliquer_echec_source(rapport, erreur)})
                 if len(sources) == 1: raise
                 job.update(search_errors=job.search_errors + 1)
+            finally:
+                job.actualiser_decouverte(rapport)
             job.update(discovered=len(unique_links))
         links = list(unique_links.values())
         job.update(status="collecting", discovered=len(links))
@@ -642,7 +667,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.save()
             if job.base:
                 job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
-        final_status = "partial" if job.errors or job.search_errors else "completed"
+        recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
+        final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
             final_message = ("Aucune publication accessible : consultez le détail des sources."
@@ -656,7 +682,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.settings.hashtags:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
             if job.settings.source_collecte != "hashtags":
-                final_message += f" Pages de hashtags publics filtrées par auteur, limitées à {job.settings.limit} publication(s) par compte et par recherche ; l’historique complet n’est pas garanti."
+                final_message += " Hashtags filtrés sur les légendes des publications du compte."
         if job.settings.source_collecte != "hashtags":
             final_message += f" {hors_selection} publication(s) écartée(s) car l’auteur ne fait pas partie des comptes sélectionnés."
         if job.settings.date_debut or job.settings.date_fin:
@@ -667,6 +693,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" {job.search_errors} source(s) partiellement ou totalement inaccessible(s) ; les résultats sont incomplets."
         if job.errors:
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
+        if job.settings.source_collecte != "hashtags":
+            final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
+                              if recherche_partielle else " Recherche vidéo limitée au nombre demandé ; historique complet non garanti.")
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:
@@ -703,7 +732,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 from stockage.historique import ajouter_evenement
                 for evenement in job.journal: ajouter_evenement(job.base,job.id,evenement)
                 construire_exports(job.directory, job.publications, job.commentaires,
-                    {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(), "evenements": job.journal})
+                    {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
+                     "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal})
                 exporter_zip(job.directory, job.directory / "archive.zip")
                 job.archive_prete = True
             except Exception:

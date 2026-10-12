@@ -38,6 +38,12 @@ return ['__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE']
     .map(id => document.getElementById(id)?.textContent).filter(Boolean);
 """
 DEFILER_PUBLICATIONS_JS = """
+// Le mode recherche fournit le conteneur détecté et un pas progressif.
+// Sans paramètres, conserver le parcours hashtag existant.
+if (arguments[0] === 'progressif') {
+    arguments[1].scrollBy(0, arguments[2]);
+    return;
+}
 // TikTok peut placer sa grille dans un conteneur défilant, hors du défilement de window.
 const root = document.querySelector('main') || document;
 const liens = Array.from(root.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]'));
@@ -359,6 +365,10 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
 def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
                   *, interact=manual_step, progress=None, check=None, validation_initiale=True, intervention_si_vide=True,
                   sans_connexion=False) -> list[str]:
+    if report.get("compte_attendu"):
+        from collecte.recherche_comptes import collecter_recherche_compte
+        return collecter_recherche_compte(driver, args, report, interact=interact,
+                                         progress=progress, check=check)
     check = check or (lambda: None)
     check()
     try:
@@ -392,18 +402,14 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             check()
         precedents = len(candidats_vus)
         candidats = list(browser.execute_script(DISCOVER_JS))
-        # Les grilles de comptes peuvent recevoir les données avant leurs liens HTML.
-        if report.get("compte_attendu"):
-            candidats.extend(liens_donnees_publications(browser.execute_script(DONNEES_PUBLICATIONS_JS)))
         for href in candidats:
             identity = canonical_post(href)
             if identity:
                 candidats_vus.add(identity[0])
-            if identity and report.get("compte_attendu") and identity[2].lower() != report["compte_attendu"]:
-                continue
             if identity and len(links) < args.limit:
                 links.setdefault(identity[0], identity[1])
         report["candidats_examines"] = len(candidats_vus)
+        report["candidats_ids"] = sorted(candidats_vus)
         report["discovered_urls"] = list(links.values())
         if progress:
             progress(len(links))
@@ -451,14 +457,6 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 raise RuntimeError("TikTok affiche une connexion ou un CAPTCHA. Terminez la vérification dans le navigateur.") from exc
             raise RuntimeError("La page TikTok ne fournit aucun lien de publication lisible après vérification.") from exc
     idle = 0
-    # Le profil possède une grille distincte : conserver le défilement hashtag
-    # existant, mais parcourir le profil écran par écran avec la molette Selenium.
-    profil = bool(report.get("compte_attendu") and
-                  urlsplit(report["hashtag_url"]).path.rstrip("/").casefold() ==
-                  "/@" + quote(report["compte_attendu"]).casefold())
-    if profil:
-        from collecte.pagination_profils import defiler_grille_profil, etat_grille_profil
-        report["pagination_profil"] = []
     for _ in range(args.max_scrolls):
         check()
         if len(links) >= args.limit:
@@ -473,31 +471,11 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             else:
                 report["discovery_stop"] = "blocked"
                 break
-        defilement = None
-        if profil:
-            # Ne pas envoyer de geste à une fenêtre de connexion persistante.
-            if type_intervention_tiktok(driver) != "connexion":
-                defilement = defiler_grille_profil(driver, report["compte_attendu"],
-                                                  reprendre=idle > 0, check=check)
-                defilement["liens_avant"] = len(links)
-                report["pagination_profil"].append(defilement)
-        else:
-            driver.execute_script(DEFILER_PUBLICATIONS_JS)
+        driver.execute_script(DEFILER_PUBLICATIONS_JS)
         time.sleep(args.delay)
 
-        def attendre_suite(browser):
-            nouveaux = scan(browser)
-            if nouveaux or not defilement:
-                return nouveaux
-            etat = etat_grille_profil(browser, report["compte_attendu"])
-            defilement["apres"] = {c: etat[c] for c in defilement["apres"]}
-            # Il reste une portion de grille à parcourir : ne pas attendre ni
-            # compter une page vide simplement parce qu'aucun lien n'est nouveau.
-            return (not etat["fin"] and
-                    etat["position"] > defilement["avant"]["position"] + 2)
-
         try:
-            WebDriverWait(driver, args.timeout).until(attendre_suite)
+            WebDriverWait(driver, args.timeout).until(scan)
             idle = 0
         except TimeoutException:
             idle += 1
@@ -509,9 +487,6 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 report["diagnostic"]["code"] = "connexion_apres_resultats"
                 report["discovery_stop"] = "connexion_apres_resultats"
                 break
-        finally:
-            if defilement:
-                defilement["liens_apres"] = len(links)
         LOG.info("%d publication(s) repérée(s)", len(links))
         if idle >= args.idle_rounds:
             report["discovery_stop"] = "no_new_links"

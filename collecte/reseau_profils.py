@@ -83,8 +83,7 @@ class ObservationProfil:
             url = urlsplit(reponse.get("url", ""))
         except ValueError:
             return
-        if (url.scheme != "https" or url.hostname not in {"www.tiktok.com", "tiktok.com"}
-                or url.path.rstrip("/") != "/api/post/item_list"):
+        if not self.accepter_reponse(url):
             return
         identifiant = evenement.get("requestId")
         if not isinstance(identifiant, str):
@@ -129,7 +128,7 @@ class ObservationProfil:
                             raise ValueError("Réponse trop volumineuse")
                         if corps.get("base64Encoded"):
                             texte = base64.b64decode(texte, validate=True).decode("utf-8")
-                        page = extraire_page_publications(json.loads(texte), self.compte)
+                        page = self.analyser_page(json.loads(texte))
                         if page is None:
                             raise ValueError("Format inconnu")
                         nouveaux = page.pop("liens")
@@ -146,6 +145,15 @@ class ObservationProfil:
             if page["liste_valide"]:
                 self.derniere_page = page
         return liens
+
+    def accepter_reponse(self, url):
+        """Limiter l'observation aux listes de publications du profil."""
+        return (url.scheme == "https" and url.hostname in {"www.tiktok.com", "tiktok.com"}
+                and url.path.rstrip("/") == "/api/post/item_list")
+
+    def analyser_page(self, donnees):
+        """Décoder la réponse correspondant au parcours observé."""
+        return extraire_page_publications(donnees, self.compte)
 
     def fermer(self):
         """Retirer l'observateur avant le prochain compte ou la lecture des légendes."""

@@ -90,7 +90,7 @@ class CollectionTests(unittest.TestCase):
             if code == app.DISCOVER_JS: return [URL] if pilote.get.call_count > 1 else []
             return {'erreur_tiktok': True, 'liens': 0}
         pilote.execute_script.side_effect = executer
-        rapport = {'hashtag_url': 'https://www.tiktok.com/@test', 'compte_attendu': 'test'}
+        rapport = {'hashtag_url': 'https://www.tiktok.com/tag/test'}
         self.assertEqual(app.collect_links(pilote, args, rapport, interact=intervention, validation_initiale=False), [URL])
         self.assertEqual(pilote.get.call_count, 2)
         self.assertEqual(rapport['rechargements'], 1)
@@ -183,7 +183,7 @@ class CollectionTests(unittest.TestCase):
         driver.execute_script.side_effect=script
         def verifier(message): visible.append(URL)
         intervention=Mock(side_effect=verifier)
-        report={'hashtag_url':'https://www.tiktok.com/@test','compte_attendu':'test'}
+        report={'hashtag_url':'https://www.tiktok.com/tag/test'}
         resultat=app.collect_links(driver,args,report,interact=intervention,validation_initiale=False)
         self.assertEqual(resultat,[URL]); intervention.assert_called_once()
         self.assertIn('Examinez la page',intervention.call_args.args[0])

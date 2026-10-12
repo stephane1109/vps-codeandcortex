@@ -150,7 +150,7 @@ with onglet_collecte:
             help="Saisissez un nombre entre 1 et 300. Cette limite s’applique à chaque recherche de hashtag ou de compte, avant les filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
-            st.caption("Sans hashtag : publications du profil public. Avec des hashtags : mêmes pages de hashtags que le mode Hashtags, filtrées par auteur et par ET/OU. La limite s’applique par compte et par recherche ; les résultats TikTok ne sont pas exhaustifs.")
+            st.caption("Recherche vidéo du compte @identifiant. Les hashtags ET/OU filtrent ensuite les légendes. La limite s’applique par compte ; les résultats ne garantissent pas l’historique complet.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
@@ -216,7 +216,17 @@ with onglet_collecte:
                 st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
             else:
                 st.write(actuel["message"])
-            st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
+            compteurs = actuel.get("compteurs_collecte")
+            if compteurs:
+                colonnes = st.columns(4)
+                for colonne, cle, titre in zip(colonnes,
+                        ("decouvertes", "retenues", "traitees", "exportees"),
+                        ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
+                    colonne.metric(titre, compteurs[cle])
+                st.caption(("Les résultats d’autres auteurs sont exclus avant la lecture. " if actuel.get("source_collecte") != "hashtags" else "")
+                           + "Les filtres peuvent réduire le nombre de publications exportées.")
+            else:
+                st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
                 st.caption("Filtre appliqué : " + combinaison)
@@ -285,6 +295,6 @@ with onglet_aide:
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
                 "2. Les hashtags sont facultatifs pour les médias. Ajoutez les filtres souhaités, puis lancez la collecte.\n"
                 "3. Tous les médias cochés sont transmis au moteur. Les profils accessibles sont collectés automatiquement.\n"
-                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si un profil ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
+                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si la recherche vidéo ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
