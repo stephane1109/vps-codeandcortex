@@ -15,12 +15,33 @@ class TestsComptes(unittest.TestCase):
     def test_inventaire_et_sources(self):
         inventaire = charger_inventaire()
         self.assertGreaterEqual(len(inventaire), 2)
-        requete = StartRequest(source_collecte="presse", medias=[m["id"] for m in inventaire])
+        requete = StartRequest(hashtag="test", source_collecte="presse", medias=[m["id"] for m in inventaire])
         self.assertEqual(len(requete.sources), len(inventaire))
         self.assertEqual(selectionner_medias(["lemonde"])[0]["compte"], "lemondefr")
         with self.assertRaises(ValueError): selectionner_medias(["inconnu"])
-        self.assertTrue(StartRequest(source_collecte="comptes", comptes=["lemondefr"]).enrichie)
-        with self.assertRaises(ValueError): StartRequest(source_collecte="comptes")
+        self.assertTrue(StartRequest(hashtag="test", source_collecte="comptes", comptes=["lemondefr"]).enrichie)
+        with self.assertRaises(ValueError): StartRequest(hashtag="test", source_collecte="comptes")
+    def test_hashtag_obligatoire_pour_profils_et_presse(self):
+        for source in (
+            {"source_collecte": "comptes", "comptes": ["lemondefr"]},
+            {"source_collecte": "presse", "medias": ["lemonde"]},
+        ):
+            for filtres in ({}, {"hashtag": ""}, {"hashtag": "   "}, {"second_hashtag": "actualité"}):
+                with self.subTest(source=source["source_collecte"], filtres=filtres):
+                    with self.assertRaisesRegex(ValueError, "au moins un hashtag"):
+                        StartRequest(**source, **filtres)
+            with self.subTest(source=source["source_collecte"], filtre="unique"):
+                requete = StartRequest(**source, hashtag="#actualité")
+                self.assertEqual(requete.hashtags, ["actualité"])
+                self.assertEqual(requete.second_hashtag, "")
+            for operateur in ("AND", "OR"):
+                with self.subTest(source=source["source_collecte"], operateur=operateur):
+                    requete = StartRequest(
+                        **source, hashtag="#actualité", second_hashtag="#politique", operator=operateur
+                    )
+                    self.assertEqual(requete.hashtags, ["actualité", "politique"])
+                    self.assertEqual(requete.operator, operateur)
+
     def test_badge_ne_prouve_pas_propriete(self):
         resultat = verifier_profil("lemondefr", {"uniqueId":"lemondefr", "verified":True})
         self.assertTrue(resultat["concordant"])

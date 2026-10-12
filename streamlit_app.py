@@ -115,7 +115,7 @@ with onglet_collecte:
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
         st.write("Choisir les médias à collecter")
-        st.caption("Cochez un ou plusieurs comptes. Les hashtags ci-dessous permettent de filtrer leurs publications.")
+        st.caption("Cochez un ou plusieurs comptes. Renseignez au moins un hashtag ci-dessous pour filtrer leurs publications.")
         def memoriser_medias():
             st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
         def cocher_tous_les_medias():
@@ -131,17 +131,17 @@ with onglet_collecte:
                 key=cle, disabled=occupe, on_change=memoriser_medias)
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
-        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Chaque média coché est recherché. Les hashtags sont facultatifs.")
+        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Chaque média coché est recherché. Au moins un hashtag est obligatoire.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
         st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
-        st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Pour rechercher sur ces comptes sans filtre de hashtag, laissez les deux champs ci-dessous vides.")
+        st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
     cle_hashtag = "hashtag" if source == "hashtags" else "hashtag_comptes"
     cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
     # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
     with st.form("filtres_collecte", border=False, enter_to_submit=False):
         c1,c2 = st.columns(2)
-        c1.text_input("Hashtag" if source == "hashtags" else "Hashtag facultatif", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
+        c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
         c1.caption("Avec ou sans # : #actualité ou actualité. Un seul hashtag, sans espace.")
         c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
         c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
@@ -175,7 +175,9 @@ with onglet_collecte:
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=activer_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
-            if debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
+            if not st.session_state.get(cle_hashtag, "").strip():
+                st.error("Renseignez au moins un hashtag pour une collecte par profil ou média." if source != "hashtags" else "Le premier hashtag est obligatoire.")
+            elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires")}
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
@@ -296,7 +298,7 @@ with onglet_collecte:
 with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
-                "2. Les hashtags sont facultatifs pour les médias. Ajoutez les filtres souhaités, puis lancez la collecte.\n"
+                "2. Renseignez au moins un hashtag, y compris pour les profils et médias. Le deuxième est facultatif (ET/OU). Ajoutez les autres filtres, puis lancez la collecte.\n"
                 "3. Tous les médias cochés sont transmis au moteur. Les profils accessibles sont collectés automatiquement.\n"
                 "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si la recherche vidéo ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")

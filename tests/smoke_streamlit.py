@@ -122,7 +122,7 @@ def principale():
                     attente.until(lambda d:'20 Minutes (@20minutesfrance)' in d.find_element(By.TAG_NAME,'body').text)
                     navigateur.save_screenshot('/tmp/scraptiktok-presse.png')
                     navigateur.find_element(By.XPATH,"//label[.//*[normalize-space(.)='Hashtags']]").click()
-                    attente.until(lambda d:'Hashtag facultatif' not in d.find_element(By.TAG_NAME,'body').text)
+                    attente.until(lambda d:'Hashtag (obligatoire)' in d.find_element(By.TAG_NAME,'body').text)
                     champ=navigateur.find_element(By.CSS_SELECTOR,'[data-testid="stTextInput"] input'); champ.send_keys('tourisme')
                     navigateur.find_elements(By.CSS_SELECTOR,'[data-testid="stTextInput"] input')[1].send_keys('été')
                     limite=navigateur.find_element(By.CSS_SELECTOR,'[data-testid="stNumberInput"] input')

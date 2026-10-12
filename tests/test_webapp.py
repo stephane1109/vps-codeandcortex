@@ -305,7 +305,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_une_validation_partagee_entre_sources(self):
         for reglages in (web.StartRequest(hashtag='été', second_hashtag='voyage'),
-                        web.StartRequest(source_collecte='presse', medias=['lemonde','franceinfo'])):
+                        web.StartRequest(hashtag="test", source_collecte='presse', medias=['lemonde','franceinfo'])):
             job = web.Job('test', reglages, self.job.directory)
             pilote = Mock()
             validations = []

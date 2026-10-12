@@ -71,7 +71,7 @@ def principale():
                 assert scraptiktok.type_intervention_tiktok(navigateur) == nature
             navigateur.get(origine + '/controle')
             proprietaire = navigateur.get_cookie(webapp.COOKIE)['value']
-            collecte = webapp.Job(proprietaire, webapp.StartRequest(
+            collecte = webapp.Job(proprietaire, webapp.StartRequest(hashtag="test",
                 source_collecte='comptes', comptes=['lemondefr'], variables_txt=['date', 'url']), Path(dossier))
             capture = io.BytesIO()
             Image.new('RGB', (1440, 1000), 'white').save(capture, format='PNG')

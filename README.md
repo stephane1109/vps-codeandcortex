@@ -8,7 +8,7 @@ l'utilisateur n'a rien à installer.
 ## Utilisation
 
 1. Saisir un hashtag, avec ou sans `#`, et choisir jusqu'à 300 publications.
-2. Cliquer sur **Lancer la collecte**.
+2. Renseigner au moins un hashtag dans tous les modes, puis cliquer sur **Lancer la collecte**. Le deuxième hashtag reste facultatif (ET/OU).
 3. Vérifier l'accès à TikTok dans l'image du navigateur serveur affichée sur la
    page. Cliquer ou faire glisser pour traiter les cookies ou un CAPTCHA.
    La collecte est anonyme : aucune connexion à un compte TikTok n’est proposée.
@@ -235,7 +235,7 @@ et restent dans les exports enrichis CSV/JSON/IRaMuTeQ.
 Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
 La limite s’applique par compte. La découverte utilise exclusivement
-`https://www.tiktok.com/search/video?q=%40identifiant`, avec ou sans hashtags.
+`https://www.tiktok.com/search/video?q=%40identifiant`. Au moins un hashtag est obligatoire dans le formulaire pour les profils et les médias ; le deuxième reste facultatif (ET/OU).
 Aucune page de profil ou de hashtag ne sert de repli pour ce mode. Les hashtags
 ET/OU sont filtrés ensuite sur les légendes. L’auteur est contrôlé dans les
 résultats puis à la lecture de chaque publication.
@@ -279,7 +279,7 @@ traitements séquentiels restent inchangés.
 Dans Streamlit, choisir **Presse et médias** dans **Rechercher par** : les comptes
 s’affichent directement sous forme de cases à cocher, sans liste déroulante cachée.
 Le bouton **Tout cocher** sélectionne tous les médias ; chaque case reste modifiable.
-La sélection reste conservée lors d’un changement de mode de recherche. Le compteur indique combien de médias sont sélectionnés. Le catalogue est relu à chaque interaction pour ne pas conserver une ancienne liste en session. Les hashtags de la recherche générale sont séparés des filtres facultatifs de la recherche par comptes.
+La sélection reste conservée lors d’un changement de mode de recherche. Le compteur indique combien de médias sont sélectionnés. Le catalogue est relu à chaque interaction pour ne pas conserver une ancienne liste en session. Les hashtags de la recherche générale sont séparés des hashtags de la recherche par comptes, dont le premier est obligatoire.
 L’inventaire est extensible : `id`, `nom`, `compte`,
 `categorie`, `source_editoriale`, `statut_verification`. Les catégories sont dans
 `config/categories_medias.json`. Une référence éditoriale n’est pas une garantie de
@@ -467,7 +467,7 @@ vérification TikTok réelle demande toujours une intervention. Le panneau **Mé
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes, avec ou sans hashtags, seule la recherche vidéo @compte est parcourue. Il n'existe aucun repli vers un profil. Les CAPTCHA et les recherches bloquées ouvrent automatiquement la fenêtre ; les résultats partiels restent conservés. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes, au moins un hashtag doit être renseigné. Seule la recherche vidéo @compte est parcourue ; les hashtags filtrent ensuite les légendes. Il n'existe aucun repli vers un profil. Les CAPTCHA et les recherches bloquées ouvrent automatiquement la fenêtre ; les résultats partiels restent conservés. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
 Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement à la recherche ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.

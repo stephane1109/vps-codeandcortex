@@ -88,7 +88,9 @@ class StartRequest(BaseModel):
     def valider_sources(self):
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
-        if self.source_collecte == "hashtags" and not self.hashtag:
+        if not self.hashtag:
+            if self.source_collecte in {"comptes", "presse"}:
+                raise ValueError("Renseignez au moins un hashtag pour une collecte par profil ou média.")
             raise ValueError("Le premier hashtag est obligatoire.")
         if self.second_hashtag and not self.hashtag:
             raise ValueError("Renseignez le premier hashtag avant le deuxième.")

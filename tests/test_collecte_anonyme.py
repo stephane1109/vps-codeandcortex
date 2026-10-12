@@ -13,7 +13,7 @@ from collecte.comptes import collecter_compte
 class CollecteAnonyme(unittest.TestCase):
     def test_ancienne_option_ignoree_sans_ouvrir_de_page_de_connexion(self):
         with tempfile.TemporaryDirectory() as dossier:
-            parametres = web.StartRequest(source_collecte="comptes", comptes=["media", "presse"], se_connecter_tiktok=True)
+            parametres = web.StartRequest(hashtag="test", source_collecte="comptes", comptes=["media", "presse"], se_connecter_tiktok=True)
             self.assertNotIn("se_connecter_tiktok", parametres.model_dump())
             job = web.Job("test", parametres, Path(dossier))
             navigateur, pilotes = Mock(), []

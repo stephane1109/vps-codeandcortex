@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 class TestsEnrichis(unittest.TestCase):
     def test_profils_demarrent_sans_validation_imposee(self):
         with tempfile.TemporaryDirectory() as dossier:
-            job = web.Job('test', web.StartRequest(source_collecte='comptes', comptes=['lemondefr','franceinfo']), Path(dossier))
+            job = web.Job('test', web.StartRequest(hashtag="test", source_collecte='comptes', comptes=['lemondefr','franceinfo']), Path(dossier))
             validations = []
             def decouvrir(navigateur, arguments, compte, rapport, **options):
                 validations.append(options.get('validation_initiale', False))
@@ -24,7 +24,7 @@ class TestsEnrichis(unittest.TestCase):
 
     def test_erreur_tiktok_explicite_dans_resultats_et_journal(self):
         with tempfile.TemporaryDirectory() as dossier:
-            job = web.Job('test', web.StartRequest(source_collecte='comptes', comptes=['lemondefr']), Path(dossier))
+            job = web.Job('test', web.StartRequest(hashtag="test", source_collecte='comptes', comptes=['lemondefr']), Path(dossier))
             def echouer(navigateur, arguments, compte, rapport, **options):
                 rapport.update(diagnostic={'code':'erreur_tiktok'}, rechargements=1, discovery_stop='tiktok_error')
                 raise RuntimeError('Erreur de chargement TikTok')
@@ -77,8 +77,8 @@ class TestsEnrichis(unittest.TestCase):
 
     def test_compte_export_sqlite_et_commentaires(self):
         with tempfile.TemporaryDirectory() as d:
-            job=web.Job("test",web.StartRequest(source_collecte="comptes",comptes=["media"],collecter_commentaires=True),Path(d))
-            record={"id":"123","url":"https://www.tiktok.com/@media/video/123","author":"media","description":"Un texte","engagement":{}}
+            job=web.Job("test",web.StartRequest(hashtag="test", source_collecte="comptes",comptes=["media"],collecter_commentaires=True),Path(d))
+            record={"id":"123","url":"https://www.tiktok.com/@media/video/123","author":"media","description":"Un texte #test","engagement":{}}
             with patch("collecte.comptes.collecter_compte",return_value=[record["url"]]), patch.object(web.scraper,"read_post",return_value=record), patch.object(job,"pause"), patch("collecte.commentaires.collecter_commentaires",return_value={"commentaires":[],"statut":"indisponible_ou_vide","exhaustif":False}):
                 web.execute_job(job,driver_factory=lambda args:Mock())
             self.assertEqual(job.status,"completed"); self.assertTrue(job.archive_prete)
@@ -87,8 +87,8 @@ class TestsEnrichis(unittest.TestCase):
                 self.assertEqual(c.execute("SELECT COUNT(*) FROM publications").fetchone()[0],1)
     def test_plusieurs_medias_un_inaccessible_et_un_accessible(self):
         with tempfile.TemporaryDirectory() as d:
-            job=web.Job("test",web.StartRequest(source_collecte="presse",medias=["lemonde","franceinfo"]),Path(d))
-            record={"id":"123", "url":"https://www.tiktok.com/@franceinfo/video/123", "author":"franceinfo", "description":"Une actualité en France.", "engagement":{}}
+            job=web.Job("test",web.StartRequest(hashtag="test", source_collecte="presse",medias=["lemonde","franceinfo"]),Path(d))
+            record={"id":"123", "url":"https://www.tiktok.com/@franceinfo/video/123", "author":"franceinfo", "description":"Une actualité en France. #test", "engagement":{}}
             def decouvrir(navigateur, arguments, compte, rapport, **options):
                 if compte == 'lemondefr':
                     rapport['discovery_stop']='blocked'
@@ -115,7 +115,7 @@ class TestsEnrichis(unittest.TestCase):
             manager=web.Manager(data_dir=d,runner=terminer)
             with TestClient(web.create_app(manager)) as client:
                 client.get("/"); headers={"X-ScrapTikTok":"1"}
-                r=client.post("/api/jobs",headers=headers,json={"source_collecte":"presse","medias":["lemonde"]})
+                r=client.post("/api/jobs",headers=headers,json={"hashtag":"test", "source_collecte":"presse","medias":["lemonde"]})
                 self.assertEqual(r.status_code,202,r.text); identifiant=r.json()["id"]
                 with patch.dict(web.os.environ,{"INSTALL_VIDEO":"0"}):
                     self.assertEqual(client.post(f"/api/jobs/{identifiant}/video",headers=headers,json={}).status_code,409)
@@ -135,7 +135,7 @@ class Blocage(importlib.abc.MetaPathFinder):
             raise ImportError('Dépendance audiovisuelle interdite dans ce test')
 sys.meta_path.insert(0,Blocage())
 import webapp
-s=webapp.StartRequest(source_collecte='presse',medias=['lemonde'])
+s=webapp.StartRequest(hashtag='test',source_collecte='presse',medias=['lemonde'])
 assert s.enrichie
 from corpus.export_iramuteq import construire_corpus
 assert '****' in construire_corpus([{'id':'1','texte':'Texte'}])
