@@ -213,7 +213,7 @@ with onglet_collecte:
                         media = medias.get(identifiant)
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
-                st.info("TikTok bloque l’accès anonyme à cette page. Fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
+                st.info("Une invitation à se connecter est visible. Si un CAPTCHA apparaît, résolvez-le dans la fenêtre ci-dessous. Sinon, fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
             elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
                 st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
             else:

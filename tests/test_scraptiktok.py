@@ -126,7 +126,7 @@ class CollectionTests(unittest.TestCase):
 
     def test_captcha_prioritaire_sur_erreur_tiktok(self):
         pilote = Mock()
-        pilote.execute_script.side_effect = lambda code: True if code == app.BLOCKED_JS else {'erreur_tiktok': True}
+        pilote.execute_script.side_effect = lambda code: 'captcha' if code == app.TYPE_INTERVENTION_JS else {'erreur_tiktok': True}
         self.assertEqual(app.diagnostiquer_page(pilote, {})['code'], 'verification_tiktok')
 
     def test_source_suivante_accessible_sans_nouvelle_validation(self):
@@ -143,7 +143,7 @@ class CollectionTests(unittest.TestCase):
         args = app.parse_args(['cuisine', '--limit', '1'])
         args.interactive = True
         pilote, intervention = Mock(), Mock()
-        pilote.execute_script.side_effect = lambda script: True if script in (app.BLOCKED_JS, app.CAPTCHA_JS) else ([URL] if script == app.DISCOVER_JS else False)
+        pilote.execute_script.side_effect = lambda script: 'captcha' if script == app.TYPE_INTERVENTION_JS else ([URL] if script == app.DISCOVER_JS else False)
         resultat = app.collect_links(pilote, args, {'hashtag_url': 'https://www.tiktok.com/tag/cuisine'},
                                      interact=intervention, validation_initiale=False)
         self.assertEqual(resultat, [URL])
@@ -152,7 +152,7 @@ class CollectionTests(unittest.TestCase):
     def test_initial_captcha_is_reported_explicitly(self):
         args = app.parse_args(["cuisine"])
         driver = Mock()
-        driver.execute_script.return_value = True
+        driver.execute_script.side_effect = lambda code: 'captcha' if code == app.TYPE_INTERVENTION_JS else False
         report = {"hashtag_url": "https://www.tiktok.com/tag/cuisine"}
         with patch.object(app, "WebDriverWait") as wait:
             wait.return_value.until.side_effect = app.TimeoutException()

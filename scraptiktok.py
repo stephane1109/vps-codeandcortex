@@ -71,17 +71,37 @@ return {
     engagement: Object.fromEntries(Object.entries({likes:'like-count',partages:'share-count',commentaires:'comment-count',favoris:'collect-count',vues:'video-views'}).map(([nom,selecteur])=>[nom,Array.from(document.querySelectorAll('[data-e2e="'+selecteur+'"]')).find(e=>e.getClientRects().length)?.innerText || null]))
 };
 """
-BLOCKED_JS = """
-return Array.from(document.querySelectorAll(
-    'iframe[src*="captcha"], [id*="captcha"], [class*="captcha-verify"], ' +
-    '[data-e2e="login-modal"]'
-)).some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
+# Une seule règle distingue la vérification visuelle de l'invitation à se connecter.
+# Elle examine uniquement les éléments affichés, jamais la valeur des champs.
+DETECTION_INTERVENTION_JS = r"""
+const visible = e => {
+    if (!Array.from(e.getClientRects()).some(r => r.width > 0 && r.height > 0)) return false;
+    for (let p = e; p; p = p.parentElement) {
+        const s = getComputedStyle(p);
+        if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse' || Number(s.opacity) === 0) return false;
+    }
+    return true;
+};
+const elements = selecteur => Array.from(document.querySelectorAll(selecteur)).filter(visible);
+const captcha = elements(
+    'iframe[src*="captcha" i], iframe[src*="/verify" i], iframe[title*="captcha" i], ' +
+    '[id*="captcha" i], [class*="captcha" i], [data-e2e*="captcha" i]'
+).length > 0;
+// Certains puzzles n'exposent qu'une consigne dans une fenêtre de vérification.
+const puzzle = /drag the slider|drag the puzzle|slide to verify|faites glisser.{0,60}(?:puzzle|pi[eè]ce|curseur)|glissez.{0,40}(?:puzzle|pi[eè]ce)/i;
+const fenetres = elements('[role="dialog"], [aria-modal="true"], [data-e2e="login-modal"]');
+if ((window !== window.top || /\/(?:captcha|verify|verification)(?:\/|$)/i.test(location.pathname)) && document.body) fenetres.push(document.body);
+const consignePuzzle = fenetres.some(e => visible(e) && puzzle.test(e.innerText || ''));
+const connexion = location.pathname === '/login' || location.pathname.startsWith('/login/') ||
+    elements('[data-e2e="login-modal"], input[type="password"], iframe[src*="/login"]').length > 0;
+const nature = captcha || consignePuzzle ? 'captcha' : connexion ? 'connexion' : '';
 """
-CAPTCHA_JS = """
-return Array.from(document.querySelectorAll(
-    'iframe[src*="captcha"], [id*="captcha"], [class*="captcha-verify"]'
-)).some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
-"""
+TYPE_INTERVENTION_JS = DETECTION_INTERVENTION_JS + "return nature;"
+# Constantes conservées pour les outils existants ; le moteur utilise le détecteur
+# Python commun afin de prendre aussi en compte les cadres d'un autre domaine.
+CAPTCHA_JS = DETECTION_INTERVENTION_JS + "return nature === 'captcha';"
+BLOCKED_JS = DETECTION_INTERVENTION_JS + "return nature !== '';"
+CADRES_VISIBLES_JS = DETECTION_INTERVENTION_JS + "return elements('iframe, frame');"
 FERMETURE_CONNEXION_JS = """
 // Utiliser seulement le bouton de fermeture proposé par TikTok, sans retirer la modale.
 const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
@@ -102,7 +122,8 @@ def est_erreur_session(erreur):
 def fermer_invitation_connexion(navigateur):
     """Fermer une invitation facultative avec son bouton, sans saisir d'identifiants."""
     try:
-        if navigateur.execute_script(CAPTCHA_JS):
+        # Une détection indéterminée ne justifie pas de fermer la fenêtre.
+        if type_intervention_tiktok(navigateur) != "connexion":
             return
         bouton = navigateur.execute_script(FERMETURE_CONNEXION_JS)
         if bouton:
@@ -112,23 +133,57 @@ def fermer_invitation_connexion(navigateur):
         pass
 
 
-TYPE_INTERVENTION_JS = """
-const visible = selecteur => Array.from(document.querySelectorAll(selecteur))
-    .some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
-if (visible('iframe[src*="captcha"], [id*="captcha"], [class*="captcha-verify"]')) return 'captcha';
-if (location.pathname === '/login' || location.pathname.startsWith('/login/') ||
-    visible('[data-e2e="login-modal"], input[type="password"], iframe[src*="/login"]')) return 'connexion';
-return '';
-"""
-
-
 def type_intervention_tiktok(navigateur):
-    """Distinguer la connexion et le CAPTCHA sans lire les champs personnels."""
-    try:
+    """Donner la priorité au CAPTCHA, y compris dans les cadres intégrés visibles."""
+    cadres_restants = 12
+    cadre_visite = False
+
+    def examiner(profondeur=0):
+        nonlocal cadres_restants, cadre_visite
         resultat = navigateur.execute_script(TYPE_INTERVENTION_JS)
-        return resultat if isinstance(resultat, str) and resultat in {'captcha', 'connexion'} else ''
+        nature = resultat if isinstance(resultat, str) and resultat in {"captcha", "connexion"} else ""
+        if nature == "captcha" or profondeur >= 3 or cadres_restants <= 0:
+            return nature
+        cadres = navigateur.execute_script(CADRES_VISIBLES_JS)
+        if not isinstance(cadres, list):
+            return nature
+        for cadre in cadres:
+            if cadres_restants <= 0:
+                break
+            cadres_restants -= 1
+            try:
+                navigateur.switch_to.frame(cadre)
+            except (InvalidSessionIdException, NoSuchWindowException):
+                raise
+            except WebDriverException:
+                # Un cadre supprimé ou pas encore chargé sera réexaminé au prochain passage.
+                continue
+            cadre_visite = True
+            try:
+                enfant = examiner(profondeur + 1)
+            finally:
+                navigateur.switch_to.parent_frame()
+            if enfant == "captcha":
+                return "captcha"
+            if enfant == "connexion":
+                nature = "connexion"
+        return nature
+
+    try:
+        return examiner()
+    except (InvalidSessionIdException, NoSuchWindowException):
+        raise
     except WebDriverException:
-        return ''
+        return ""
+    finally:
+        if cadre_visite:
+            # La capture et les gestes manuels utilisent toujours la fenêtre complète.
+            navigateur.switch_to.default_content()
+
+
+def captcha_present(navigateur):
+    """Partager la même détection pour la collecte, la fermeture et le bouton Continuer."""
+    return type_intervention_tiktok(navigateur) == "captcha"
 
 
 DIAGNOSTIC_JS = """
@@ -357,7 +412,10 @@ def diagnostiquer_page(driver, report, erreur=None, code=None):
         if isinstance(page, dict): diagnostic.update(page)
         if diagnostic.get("erreur_tiktok") is True: diagnostic["code"] = "erreur_tiktok"
         # Une vraie vérification reste prioritaire : ne jamais la recharger automatiquement.
-        if driver.execute_script(BLOCKED_JS) is True: diagnostic["code"] = "verification_tiktok"
+        nature = type_intervention_tiktok(driver)
+        if nature == "captcha": diagnostic["code"] = "verification_tiktok"
+        elif nature == "connexion" and diagnostic["code"] == "page_sans_liens":
+            diagnostic["code"] = "invitation_connexion"
     except WebDriverException: pass
     report["diagnostic"] = diagnostic
     return diagnostic
@@ -428,7 +486,6 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         if type_intervention_tiktok(driver) == "connexion":
             diagnostic["code"] = "connexion_sans_publications_publiques"
         raise
-    verification_js = CAPTCHA_JS
     fermer_invitation_connexion(driver)
     if args.interactive and validation_initiale:
         interact("Vérifiez les publications publiques. Traitez les cookies ou un éventuel CAPTCHA, puis cliquez sur Continuer.")
@@ -442,7 +499,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         # Une autre source réutilise la session ; seules les vérifications visibles
         # de TikTok interrompent alors la collecte, même si des liens restent derrière.
         fermer_invitation_connexion(browser)
-        if args.interactive and browser.execute_script(verification_js):
+        if args.interactive and captcha_present(browser):
             interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             intervention_effectuee = True
             check()
@@ -535,7 +592,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             report["discovery_stop"] = "limit"
             break
         fermer_invitation_connexion(driver)
-        if driver.execute_script(verification_js):
+        if captcha_present(driver):
             if args.interactive:
                 interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             else:
@@ -585,7 +642,7 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
     def read(browser: webdriver.Chrome) -> dict | bool:
         check()
         fermer_invitation_connexion(browser)
-        if browser.execute_script(CAPTCHA_JS):
+        if captcha_present(browser):
             if not args.interactive:
                 return False
             interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")

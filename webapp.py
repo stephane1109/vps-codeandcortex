@@ -436,7 +436,8 @@ def wait_for_user(driver, job: Job, message: str):
             if held_since is not None and time.monotonic() - held_since > 15:
                 release_pointer(driver)
                 held_since = None
-            if time.monotonic() >= prochaine_detection:
+            # Ne pas parcourir les cadres pendant un glisser-déposer du puzzle.
+            if held_since is None and time.monotonic() >= prochaine_detection:
                 nature = scraper.type_intervention_tiktok(driver)
                 job.update(type_intervention=nature)
                 prochaine_detection = time.monotonic() + 1
@@ -449,7 +450,7 @@ def wait_for_user(driver, job: Job, message: str):
                 continue
             if command == "continue":
                 scraper.fermer_invitation_connexion(driver)
-                if driver.execute_script(scraper.CAPTCHA_JS):
+                if scraper.captcha_present(driver):
                     job.update(type_intervention="captcha", action_error="TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer.")
                     continue
                 break

@@ -387,15 +387,16 @@ class WorkerTests(unittest.TestCase):
             release.assert_called_once_with(driver)
 
     def test_captcha_seul_bloque_la_confirmation(self):
-        driver = Mock(); blocages = iter([True, False])
+        driver = Mock(); etat = {'captcha': True}
         driver.get_screenshot_as_png.return_value = b'png'
-        driver.execute_script.side_effect = lambda code: 'captcha' if code == web.scraper.TYPE_INTERVENTION_JS else next(blocages) if code == web.scraper.CAPTCHA_JS else None
+        driver.execute_script.side_effect = lambda code: ('captcha' if etat['captcha'] else '') if code == web.scraper.TYPE_INTERVENTION_JS else []
         self.job.commands.put('continue')
         self.job.commands.put(web.BrowserAction(kind='key', key='Tab'))
         self.job.commands.put('continue')
         def observer(*arguments):
             self.assertEqual(self.job.snapshot()['type_intervention'], 'captcha')
             self.assertIn('CAPTCHA', self.job.snapshot()['action_error'])
+            etat['captcha'] = False
         with patch.object(web,'perform_action',side_effect=observer), patch.object(web,'release_pointer'), patch.object(web.scraper,'fermer_invitation_connexion'):
             web.wait_for_user(driver, self.job, 'TikTok demande une vérification')
 
