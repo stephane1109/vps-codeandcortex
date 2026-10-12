@@ -69,7 +69,6 @@ if "initialise" not in st.session_state:
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
-        "se_connecter_tiktok":ancienne.get("se_connecter_tiktok",False),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
@@ -151,8 +150,6 @@ with onglet_collecte:
             help="Saisissez un nombre entre 1 et 300. Cette limite s’applique à chaque recherche de hashtag ou de compte, avant les filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
-            st.checkbox("Se connecter à TikTok", key="se_connecter_tiktok", disabled=occupe,
-                help="Facultatif : connexion manuelle par QR code, validée sur votre téléphone. La même session privée est utilisée pendant cette collecte puis supprimée. Aucun identifiant, mot de passe ou code à saisir ici. L’accès à toutes les publications n’est pas garanti.")
             st.caption("Recherche vidéo du compte @identifiant. Les hashtags ET/OU filtrent ensuite les légendes. La limite s’applique par compte ; les résultats ne garantissent pas l’historique complet.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
@@ -183,7 +180,6 @@ with onglet_collecte:
                 valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires")}
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
-                valeurs["se_connecter_tiktok"] = source != "hashtags" and bool(st.session_state.get("se_connecter_tiktok", False))
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
                 valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
@@ -212,12 +208,7 @@ with onglet_collecte:
                         media = medias.get(identifiant)
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
-                if actuel.get("se_connecter_tiktok"):
-                    st.info("Connexion TikTok demandée : choisissez le QR code dans la fenêtre et confirmez sur votre téléphone, puis cliquez sur Continuer. La fenêtre reste ouverte jusqu’à votre confirmation.")
-                elif actuel.get("source_collecte") != "hashtags":
-                    st.info("Une invitation TikTok à se connecter est affichée. Fermez-la si possible, puis cliquez sur Continuer : la collecte des publications publiques ne vous impose pas de connexion.")
-                else:
-                    st.warning("TikTok affiche une fenêtre de connexion. Vous pouvez la fermer si TikTok le permet, puis continuer.")
+                st.info("TikTok bloque l’accès anonyme à cette page. Fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
             elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
                 st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
             else:
@@ -251,19 +242,10 @@ with onglet_collecte:
                 if actuel.get("status") != "attention":
                     st.caption("La fenêtre TikTok s’ouvre automatiquement en cas de vérification. Pour les profils et médias, elle s’ouvre aussi si aucune publication n’est lisible ou si la pagination se bloque.")
                 if st.button("Arrêter la collecte"): lancer(f"/api/jobs/{actuel['id']}/stop",{})
-                if actuel.get("se_connecter_tiktok"):
-                    st.caption("Session temporaire commune à cette collecte. Une confirmation de connexion ne garantit pas des résultats exhaustifs.")
-                    if st.button("Se déconnecter et fermer TikTok", disabled=actuel.get("etat_connexion") == "fermeture_demandee"):
-                        lancer(f"/api/jobs/{actuel['id']}/deconnexion", {})
-            if actuel.get("se_connecter_tiktok") and not actuel["busy"]:
-                if actuel.get("etat_connexion") == "fermee":
-                    st.caption("La session TikTok de cette collecte a été fermée et son profil temporaire supprimé.")
-                elif actuel.get("etat_connexion") == "fermeture_incomplete":
-                    st.warning("La destruction complète de la session n’a pas pu être confirmée.")
             if actuel.get("diagnostics"):
                 with st.expander("Diagnostics de collecte"):
                     libelles = {"erreur_session": "Session Selenium perdue", "erreur_extraction_video": "Erreur d’extraction d’une publication",
-                                "erreur_navigateur": "Erreur du navigateur", "fermeture_session_incomplete": "Fermeture de session incomplète"}
+                                "erreur_navigateur": "Erreur du navigateur"}
                     for diagnostic in actuel["diagnostics"]:
                         st.write(libelles.get(diagnostic["code"], diagnostic["code"]) +
                                  (" · publication " + diagnostic["publication_id"] if diagnostic.get("publication_id") else ""))
@@ -305,7 +287,6 @@ with onglet_collecte:
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
             adresse_controle = f"/controle?collecte={st.session_state['collecte']['id']}"
-            st.link_button("Ouvrir le navigateur TikTok dans un onglet", adresse_controle)
             st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
         with st.expander("Aperçu des textes"):
             for publication in st.session_state["collecte"].get("preview",[]):
@@ -320,4 +301,5 @@ with onglet_aide:
                 "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si la recherche vidéo ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
+
 

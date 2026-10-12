@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit, parse_qs
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException, InvalidSessionIdException, NoSuchWindowException
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -94,6 +94,11 @@ return Array.from(fenetre.querySelectorAll(
 """
 
 
+def est_erreur_session(erreur):
+    """Identifier une session Selenium perdue sans conserver son message brut."""
+    return isinstance(erreur, (InvalidSessionIdException, NoSuchWindowException))
+
+
 def fermer_invitation_connexion(navigateur):
     """Fermer une invitation facultative avec son bouton, sans saisir d'identifiants."""
     try:
@@ -111,7 +116,8 @@ TYPE_INTERVENTION_JS = """
 const visible = selecteur => Array.from(document.querySelectorAll(selecteur))
     .some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
 if (visible('iframe[src*="captcha"], [id*="captcha"], [class*="captcha-verify"]')) return 'captcha';
-if (visible('[data-e2e="login-modal"]')) return 'connexion';
+if (location.pathname === '/login' || location.pathname.startsWith('/login/') ||
+    visible('[data-e2e="login-modal"], input[type="password"], iframe[src*="/login"]')) return 'connexion';
 return '';
 """
 
@@ -295,12 +301,6 @@ def create_driver(args: argparse.Namespace) -> webdriver.Chrome:
         options.add_argument("--no-sandbox")
     if args.headless:
         options.add_argument("--headless=new")
-    if getattr(args, "se_connecter_tiktok", False):
-        options.add_argument("--incognito")
-        options.add_experimental_option("prefs", {"credentials_enable_service": False,
-            "profile.password_manager_enabled": False, "autofill.profile_enabled": False})
-    if args.profile_dir:
-        options.add_argument(f"--user-data-dir={args.profile_dir.expanduser().resolve()}")
     if args.chrome_binary:
         options.binary_location = str(args.chrome_binary.expanduser().resolve())
     service = Service(executable_path=str(args.driver.expanduser().resolve())) if args.driver else Service()
@@ -375,26 +375,25 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
 
 def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
                   *, interact=manual_step, progress=None, check=None, validation_initiale=True, intervention_si_vide=True,
-                  sans_connexion=False) -> list[str]:
+                  sans_connexion=True) -> list[str]:
+    # Argument historique conservé pour les appels existants ; seule la collecte anonyme existe.
     if report.get("compte_attendu"):
         from collecte.recherche_comptes import collecter_recherche_compte
         return collecter_recherche_compte(driver, args, report, interact=interact,
-                                         progress=progress, check=check, sans_connexion=sans_connexion)
+                                         progress=progress, check=check)
     check = check or (lambda: None)
     check()
     try:
         open_page(driver, report["hashtag_url"])
     except WebDriverException as erreur:
         diagnostic = diagnostiquer_page(driver, report, erreur)
-        if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+        if type_intervention_tiktok(driver) == "connexion":
             diagnostic["code"] = "connexion_sans_publications_publiques"
         raise
-    verification_js = CAPTCHA_JS if sans_connexion else BLOCKED_JS
-    if sans_connexion:
-        fermer_invitation_connexion(driver)
+    verification_js = CAPTCHA_JS
+    fermer_invitation_connexion(driver)
     if args.interactive and validation_initiale:
-        interact("Vérifiez les publications publiques. Fermez l’invitation à vous connecter si elle apparaît, puis cliquez sur Continuer. Traitez un éventuel CAPTCHA."
-                 if sans_connexion else "Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
+        interact("Vérifiez les publications publiques. Traitez les cookies ou un éventuel CAPTCHA, puis cliquez sur Continuer.")
     links: dict[str, str] = {}
     candidats_vus: set[str] = set()
     intervention_effectuee = bool(args.interactive and validation_initiale)
@@ -404,11 +403,9 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         check()
         # Une autre source réutilise la session ; seules les vérifications visibles
         # de TikTok interrompent alors la collecte, même si des liens restent derrière.
-        if sans_connexion:
-            fermer_invitation_connexion(browser)
+        fermer_invitation_connexion(browser)
         if args.interactive and browser.execute_script(verification_js):
-            interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre."
-                     if sans_connexion else "TikTok affiche une connexion ou une vérification. Terminez-la pour poursuivre.")
+            interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             intervention_effectuee = True
             check()
         precedents = len(candidats_vus)
@@ -436,7 +433,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             break
         except TimeoutException as exc:
             diagnostic = diagnostiquer_page(driver, report)
-            if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+            if type_intervention_tiktok(driver) == "connexion":
                 diagnostic["code"] = "connexion_sans_publications_publiques"
                 report["discovery_stop"] = "publications_non_accessibles"
                 raise RuntimeError("TikTok affiche une connexion et ne fournit aucun lien public lisible sur cette page. Aucune connexion n’a été imposée par la collecte.") from exc
@@ -451,7 +448,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                         open_page(driver, report["hashtag_url"])
                     except WebDriverException as erreur:
                         diagnostic = diagnostiquer_page(driver, report, erreur)
-                        if sans_connexion and type_intervention_tiktok(driver) == "connexion":
+                        if type_intervention_tiktok(driver) == "connexion":
                             diagnostic["code"] = "connexion_sans_publications_publiques"
                         raise
                     continue
@@ -465,7 +462,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 continue
             report["discovery_stop"] = "blocked" if bloque else "no_accessible_links"
             if bloque:
-                raise RuntimeError("TikTok affiche une connexion ou un CAPTCHA. Terminez la vérification dans le navigateur.") from exc
+                raise RuntimeError("TikTok bloque l’accès public. Seul un éventuel CAPTCHA peut être traité dans la fenêtre intégrée.") from exc
             raise RuntimeError("La page TikTok ne fournit aucun lien de publication lisible après vérification.") from exc
     idle = 0
     for _ in range(args.max_scrolls):
@@ -473,12 +470,10 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         if len(links) >= args.limit:
             report["discovery_stop"] = "limit"
             break
-        if sans_connexion:
-            fermer_invitation_connexion(driver)
+        fermer_invitation_connexion(driver)
         if driver.execute_script(verification_js):
             if args.interactive:
-                interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre."
-                         if sans_connexion else "TikTok affiche une connexion ou une vérification.")
+                interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             else:
                 report["discovery_stop"] = "blocked"
                 break
@@ -490,7 +485,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             idle = 0
         except TimeoutException:
             idle += 1
-            if (sans_connexion and idle >= args.idle_rounds
+            if (idle >= args.idle_rounds
                     and type_intervention_tiktok(driver) == "connexion"):
                 # La fenêtre empêche éventuellement le chargement suivant. Garder
                 # les liens déjà lus, sans exiger une authentification ni les perdre.
@@ -510,41 +505,24 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
 
 
 def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
-              *, interact=manual_step, check=None, sans_connexion=False, authentification=False) -> dict:
+              *, interact=manual_step, check=None, sans_connexion=True) -> dict:
+    """Lire une publication publique ; ne jamais demander une identification."""
     check = check or (lambda: None)
     check()
     open_page(driver, url)
 
     def read(browser: webdriver.Chrome) -> dict | bool:
         check()
-        if authentification:
-            from collecte.authentification import connexion_ouverte
-            if connexion_ouverte(browser) or browser.execute_script(CAPTCHA_JS):
-                if not args.interactive:
-                    return False
-                interact("TikTok demande une vérification ou une nouvelle connexion. Validez manuellement dans la fenêtre, "
-                         "par QR code pour la connexion, puis cliquez sur Continuer.")
-                check()
-                if not meme_page_tiktok(browser.current_url, url):
-                    open_page(browser, url)
-        if sans_connexion:
-            fermer_invitation_connexion(browser)
-            if browser.execute_script(CAPTCHA_JS):
-                if not args.interactive:
-                    return False
-                interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
-                check()
+        fermer_invitation_connexion(browser)
+        if browser.execute_script(CAPTCHA_JS):
+            if not args.interactive:
+                return False
+            interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
+            check()
         return extract_record(browser.execute_script(PAGE_JS), url) or False
 
-    try:
-        return WebDriverWait(driver, args.timeout).until(read)
-    except TimeoutException:
-        # En mode public, une légende non fournie est signalée comme inaccessible ;
-        # elle ne déclenche jamais une demande de connexion pour débloquer le lot.
-        if not args.interactive or sans_connexion:
-            raise
-        interact("Légende non accessible. Vérifiez la publication, la connexion et un éventuel CAPTCHA.")
-        return WebDriverWait(driver, args.timeout).until(read)
+    # Une légende inaccessible reste une erreur d'extraction, sans pause de connexion.
+    return WebDriverWait(driver, args.timeout).until(read)
 
 
 def positive_int(value: str) -> int:
@@ -570,9 +548,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--delay", type=positive_float, default=3.0, help="Pause entre pages/défilements, en secondes (3)")
     parser.add_argument("--timeout", type=positive_float, default=20.0, help="Délai de chargement, en secondes (20)")
     parser.add_argument("--output-dir", type=Path, default=BASE_DIR / "exports")
-    parser.add_argument("--interactive", action="store_true", help="Pause pour se connecter ou traiter les blocages dans Chrome")
+    parser.add_argument("--interactive", action="store_true", help="Pause pour traiter les cookies ou un CAPTCHA dans Chrome")
     parser.add_argument("--headless", action="store_true", help="Chrome sans fenêtre, notamment sur VPS")
-    parser.add_argument("--profile-dir", type=Path, help="Profil Chrome dédié pour conserver la session")
     parser.add_argument("--chrome-binary", type=Path, help="Chemin de Chrome/Chromium si non détecté")
     parser.add_argument("--driver", type=Path, help="ChromeDriver installé manuellement (sinon Selenium Manager)")
     args = parser.parse_args(argv)

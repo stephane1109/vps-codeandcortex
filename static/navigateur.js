@@ -22,15 +22,11 @@ export function initialiserNavigateur(afficherErreur) {
     const precedent = job?.status;
     const connexion = collecte.type_intervention === "connexion";
     const captcha = collecte.type_intervention === "captcha";
-    const authentification = !!collecte.se_connecter_tiktok;
-    const sansConnexion = collecte.source_collecte !== "hashtags" && !authentification;
-    const saisieInterdite = authentification || connexion;
-    $("typing-form").hidden = saisieInterdite;
-    $("remote-text").disabled = saisieInterdite;
-    if (saisieInterdite) $("remote-text").value = "";
-    $("browser-title").textContent = connexion ? "Fenêtre de connexion TikTok" : captcha ? "Vérification CAPTCHA TikTok" : "Navigateur TikTok";
-    $("browser-description").textContent = connexion ? (sansConnexion ? "Fermez cette invitation si possible, puis continuez. La collecte lit uniquement les publications publiques et ne vous impose pas de connexion." : "Fermez cette fenêtre si TikTok le permet, puis continuez.") : captcha ? "Terminez la vérification demandée par TikTok dans l’image ci-dessous." : "Intervenez dans le navigateur du serveur si TikTok le demande.";
-    if (authentification && !captcha) $("browser-description").textContent = "Connexion par QR code : choisissez cette méthode si TikTok la propose, scannez le QR code et validez dans TikTok sur votre téléphone. Aucun identifiant, mot de passe ou code à saisir ici. Cliquez sur Continuer après confirmation.";
+    $("typing-form").hidden = connexion;
+    $("remote-text").disabled = connexion;
+    if (connexion) $("remote-text").value = "";
+    $("browser-title").textContent = connexion ? "Accès anonyme limité" : captcha ? "Vérification CAPTCHA TikTok" : "Navigateur TikTok";
+    $("browser-description").textContent = connexion ? "TikTok limite l’accès public. Fermez cette invitation si possible, puis cliquez sur Continuer. Aucune identification n’est proposée par l’application." : captcha ? "Terminez la vérification demandée par TikTok dans l’image ci-dessous." : "Examinez les publications publiques dans la fenêtre intégrée.";
     $("continue-button").textContent = captcha ? "Vérification terminée, continuer →" : "Continuer →";
     job = collecte;
     $("browser-panel").hidden = collecte.status !== "attention";
@@ -148,7 +144,7 @@ $("browser-screen").addEventListener("keydown", event => {
 });
 $("typing-form").addEventListener("submit", event => {
   event.preventDefault(); const text = $("remote-text").value; $("remote-text").value = "";
-  if (text && !job?.se_connecter_tiktok && job?.type_intervention !== "connexion") envoyerAction({kind: "text", text});
+  if (text && job?.type_intervention !== "connexion") envoyerAction({kind: "text", text});
 });
 document.querySelectorAll("[data-key]").forEach(button => button.addEventListener("click", () => envoyerAction({kind: "key", key: button.dataset.key})));
 document.querySelectorAll("[data-scroll]").forEach(button => button.addEventListener("click", () => envoyerAction({kind: "scroll", delta: Number(button.dataset.scroll)})));

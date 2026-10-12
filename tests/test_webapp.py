@@ -389,21 +389,29 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(bool(command.error), failure)
             release.assert_called_once_with(driver)
 
-    def test_connexion_et_captcha_distingues_dans_etat_et_erreur(self):
-        for nature, mot in [('connexion', 'connexion'), ('captcha', 'CAPTCHA')]:
-            with self.subTest(nature=nature):
-                driver = Mock(); blocages = iter([True, False])
-                driver.get_screenshot_as_png.return_value = b'png'
-                driver.execute_script.side_effect = lambda code: nature if code == web.scraper.TYPE_INTERVENTION_JS else next(blocages) if code == web.scraper.BLOCKED_JS else None
-                self.job.commands.put('continue')
-                self.job.commands.put(web.BrowserAction(kind='key', key='Tab'))
-                self.job.commands.put('continue')
-                def observer(*arguments):
-                    self.assertEqual(self.job.snapshot()['type_intervention'], nature)
-                    self.assertIn(mot, self.job.action_error)
-                with patch.object(web, 'perform_action', side_effect=observer), patch.object(web, 'release_pointer'):
-                    web.wait_for_user(driver, self.job, 'TikTok demande une intervention')
-                self.assertEqual(self.job.snapshot()['type_intervention'], '')
+    def test_captcha_seul_bloque_la_confirmation(self):
+        driver = Mock(); blocages = iter([True, False])
+        driver.get_screenshot_as_png.return_value = b'png'
+        driver.execute_script.side_effect = lambda code: 'captcha' if code == web.scraper.TYPE_INTERVENTION_JS else next(blocages) if code == web.scraper.CAPTCHA_JS else None
+        self.job.commands.put('continue')
+        self.job.commands.put(web.BrowserAction(kind='key', key='Tab'))
+        self.job.commands.put('continue')
+        def observer(*arguments):
+            self.assertEqual(self.job.snapshot()['type_intervention'], 'captcha')
+            self.assertIn('CAPTCHA', self.job.snapshot()['action_error'])
+        with patch.object(web,'perform_action',side_effect=observer), patch.object(web,'release_pointer'), patch.object(web.scraper,'fermer_invitation_connexion'):
+            web.wait_for_user(driver, self.job, 'TikTok demande une vérification')
+
+    def test_identification_tiktok_n_est_jamais_exigee_pour_continuer(self):
+        driver = Mock()
+        driver.get_screenshot_as_png.return_value = b'png'
+        driver.execute_script.side_effect = lambda code: 'connexion' if code == web.scraper.TYPE_INTERVENTION_JS else False
+        self.job.commands.put('continue')
+        with patch.object(web,'release_pointer'), patch.object(web.scraper,'fermer_invitation_connexion') as fermer:
+            web.wait_for_user(driver, self.job, 'Accès anonyme limité')
+        fermer.assert_called_once_with(driver)
+        self.assertEqual(self.job.frame, b'')
+        self.assertEqual(self.job.action_error, '')
 
     def test_attention_loop_processes_actions_before_continuing(self):
         driver = Mock()
@@ -420,3 +428,4 @@ class WorkerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

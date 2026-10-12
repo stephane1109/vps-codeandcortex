@@ -86,7 +86,7 @@ class CollectionTests(unittest.TestCase):
         args = app.parse_args(['test', '--limit', '1']); args.interactive = True; args.timeout = .01
         pilote, intervention = Mock(), Mock()
         def executer(code):
-            if code == app.BLOCKED_JS: return False
+            if code in (app.BLOCKED_JS, app.CAPTCHA_JS, app.FERMETURE_CONNEXION_JS): return False
             if code == app.DISCOVER_JS: return [URL] if pilote.get.call_count > 1 else []
             return {'erreur_tiktok': True, 'liens': 0}
         pilote.execute_script.side_effect = executer
@@ -100,7 +100,7 @@ class CollectionTests(unittest.TestCase):
     def test_erreur_tiktok_persistante_ne_demande_pas_un_captcha_inexistant(self):
         args = app.parse_args(['test']); args.interactive = True; args.timeout = .01
         pilote, intervention = Mock(), Mock()
-        pilote.execute_script.side_effect = lambda code: False if code == app.BLOCKED_JS else ([] if code == app.DISCOVER_JS else {'erreur_tiktok': True, 'liens': 0})
+        pilote.execute_script.side_effect = lambda code: False if code in (app.BLOCKED_JS, app.CAPTCHA_JS, app.FERMETURE_CONNEXION_JS) else ([] if code == app.DISCOVER_JS else {'erreur_tiktok': True, 'liens': 0})
         rapport = {'hashtag_url': 'https://www.tiktok.com/@test'}
         with self.assertRaisesRegex(RuntimeError, 'erreur de chargement'):
             app.collect_links(pilote, args, rapport, interact=intervention, validation_initiale=False)
@@ -117,7 +117,7 @@ class CollectionTests(unittest.TestCase):
         args = app.parse_args(['cuisine', '--limit', '1'])
         args.interactive = True
         pilote, intervention = Mock(), Mock()
-        pilote.execute_script.side_effect = lambda script: False if script == app.BLOCKED_JS else [URL]
+        pilote.execute_script.side_effect = lambda script: [URL] if script == app.DISCOVER_JS else False
         resultat = app.collect_links(pilote, args, {'hashtag_url': 'https://www.tiktok.com/tag/cuisine'},
                                      interact=intervention, validation_initiale=False)
         self.assertEqual(resultat, [URL])
@@ -127,7 +127,7 @@ class CollectionTests(unittest.TestCase):
         args = app.parse_args(['cuisine', '--limit', '1'])
         args.interactive = True
         pilote, intervention = Mock(), Mock()
-        pilote.execute_script.side_effect = lambda script: True if script == app.BLOCKED_JS else [URL]
+        pilote.execute_script.side_effect = lambda script: True if script in (app.BLOCKED_JS, app.CAPTCHA_JS) else ([URL] if script == app.DISCOVER_JS else False)
         resultat = app.collect_links(pilote, args, {'hashtag_url': 'https://www.tiktok.com/tag/cuisine'},
                                      interact=intervention, validation_initiale=False)
         self.assertEqual(resultat, [URL])
@@ -177,7 +177,7 @@ class CollectionTests(unittest.TestCase):
         args=app.parse_args(['test','--limit','1']); args.interactive=True; args.timeout=.01
         driver=Mock(); visible=[]
         def script(code):
-            if code==app.BLOCKED_JS: return False
+            if code in (app.BLOCKED_JS, app.CAPTCHA_JS, app.FERMETURE_CONNEXION_JS): return False
             if code==app.DISCOVER_JS: return visible
             return {'url':'https://www.tiktok.com/@test','etat':'complete','liens':0}
         driver.execute_script.side_effect=script
@@ -191,7 +191,7 @@ class CollectionTests(unittest.TestCase):
     def test_page_toujours_vide_une_seule_reprise_et_diagnostic(self):
         args=app.parse_args(['test']); args.interactive=True; args.timeout=.01
         driver=Mock(); intervention=Mock()
-        driver.execute_script.side_effect=lambda code: False if code==app.BLOCKED_JS else ([] if code==app.DISCOVER_JS else {'url':'https://www.tiktok.com/@test','etat':'complete','liens':0})
+        driver.execute_script.side_effect=lambda code: False if code in (app.BLOCKED_JS, app.CAPTCHA_JS, app.FERMETURE_CONNEXION_JS) else ([] if code==app.DISCOVER_JS else {'url':'https://www.tiktok.com/@test','etat':'complete','liens':0})
         report={'hashtag_url':'https://www.tiktok.com/@test'}
         with self.assertRaisesRegex(RuntimeError,'après vérification'):
             app.collect_links(driver,args,report,interact=intervention,validation_initiale=False)
@@ -246,3 +246,4 @@ class CollectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -60,9 +60,9 @@ nettoyés à l'expiration. Les sessions TikTok sont temporaires, sans profil par
 
 1. Ouvrir le domaine de l'application, saisir le hashtag et lancer la collecte.
 2. L'image du navigateur **du VPS** apparaît dans la page.
-3. Dans cette image, traiter les cookies ou le CAPTCHA (cliquer/glisser). Pour
-   se connecter, le QR code TikTok est utilisable ; pour un champ de saisie,
-   cliquer dessus puis utiliser la zone « Écrire dans le champ sélectionné ».
+3. Dans cette image intégrée, traiter les cookies ou le CAPTCHA (cliquer/glisser).
+   La collecte est anonyme : aucun identifiant TikTok n’est demandé. Une restriction
+   d’accès restante est signalée ; aucune connexion à un compte n’est proposée.
 4. Une fois les publications visibles, cliquer sur « Les vidéos sont visibles,
    continuer ». La collecte s'effectue sur le serveur.
 5. Télécharger le fichier texte. Le bouton « Arrêter » conserve les textes acquis.
@@ -200,3 +200,4 @@ Les exports existants restent accessibles par leurs liens privés jusqu’à exp
 Le déploiement utilise le Dockerfile Python/Chromium. `NIXPACKS_NODE_VERSION`
 n’est pas lu par cette application ni par son Dockerfile ; il est sans effet avec
 ce mode de construction. Aucune installation de Node.js n’est nécessaire.
+

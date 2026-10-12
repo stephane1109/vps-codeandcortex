@@ -10,9 +10,8 @@ l'utilisateur n'a rien à installer.
 1. Saisir un hashtag, avec ou sans `#`, et choisir jusqu'à 300 publications.
 2. Cliquer sur **Lancer la collecte**.
 3. Vérifier l'accès à TikTok dans l'image du navigateur serveur affichée sur la
-   page. Cliquer ou faire glisser pour traiter les cookies, la connexion ou un
-   CAPTCHA. Le champ de saisie et les touches sous l'image permettent d'écrire
-   dans un champ TikTok sélectionné ; le QR code de connexion est aussi utilisable.
+   page. Cliquer ou faire glisser pour traiter les cookies ou un CAPTCHA.
+   La collecte est anonyme : aucune connexion à un compte TikTok n’est proposée.
 4. Cliquer sur **Les vidéos sont visibles, continuer**.
 5. Suivre la progression, consulter l'aperçu et **Télécharger le fichier texte**.
 
@@ -24,7 +23,7 @@ Le bouton **Arrêter** conserve les textes déjà obtenus. Recharger la page per
 La fenêtre TikTok s’ouvre automatiquement lorsqu’une vérification est détectée.
 Pour les profils et médias, elle s’ouvre également si la page ne fournit aucun
 lien lisible après le délai de chargement, ou si la pagination reste bloquée sans
-signal de fin. Aucun bouton « Afficher le navigateur » n’est nécessaire.
+signal de fin. La fenêtre intégrée apparaît automatiquement.
 La collecte se met en pause sur la page courante ; **Continuer** relit cette page
 et reprend le parcours dans la même session. Aucun identifiant n’est imposé.
 Si TikTok ne fournit toujours pas de publications, le rapport conserve la cause
@@ -113,7 +112,7 @@ TikTok peuvent changer. Adapter l'usage aux règles d'accès et aux droits sur l
 L'interface utilise le même moteur que le script d'origine, qui reste disponible :
 
 ```bash
-python scraptiktok.py cuisine --limit 50 --interactive --profile-dir .chrome-profile
+python scraptiktok.py cuisine --limit 50 --interactive
 python scraptiktok.py --help
 ```
 
@@ -482,10 +481,9 @@ utilisateur ne sont pas placées dans un cache Streamlit partagé. Une fenêtre 
 charge uniquement `/controle?collecte=<identifiant>` : aucun formulaire de recherche
 ni option vidéo cachés. Ses actions visent la collecte affichée, même si un autre
 onglet ouvre une collecte plus récente. Elle n’est pas recréée à chaque image.
-La connexion et le CAPTCHA restent à traiter par l’utilisateur, dans le navigateur
-du serveur. L’interface distingue ces deux demandes ; l’image est limitée en hauteur
-pour afficher toute la fenêtre. Le lien **Ouvrir le navigateur TikTok dans un onglet**
-permet d’intervenir séparément sans démarrer de seconde collecte.
+Le CAPTCHA reste à traiter manuellement dans la fenêtre intégrée.
+Une identification imposée par TikTok est signalée comme une limite d’accès anonyme.
+L’image reste dans Streamlit ; aucun bouton d’ouverture dans un autre onglet n’est proposé.
 
 Streamlit est l’unique interface utilisateur. Le formulaire HTML historique, son
 JavaScript et sa feuille de style sont supprimés ; `/classique` renvoie 404.
@@ -540,20 +538,8 @@ redémarrage complet par le superviseur Docker. Aucun réglage Redis n’est mod
 la fermeture des ports après SIGTERM et l’arrêt du moteur après perte de Streamlit.
 Ce test est également exécuté par le point d’entrée navigateur de la CI.
 
-## Connexion TikTok facultative pour les comptes et médias
+## Collecte uniquement anonyme
 
-L’option **Se connecter à TikTok** est décochée par défaut. Le mode hashtags reste inchangé et ne l’active jamais.
+Aucune option de connexion TikTok, aucun écran de connexion ouvert par le moteur et aucun profil Chrome persistant ne sont proposés. Hashtags, profils et médias utilisent un navigateur neuf, commun aux opérations d’une collecte, puis fermé à la fin. Une ancienne requête contenant l’option de connexion supprimée ne peut pas réactiver cette fonctionnalité.
 
-1. Sélectionner des profils ou des médias, cocher l’option et lancer la collecte.
-2. La fenêtre Selenium distante s’ouvre sur la connexion TikTok. Choisir le QR code si TikTok le propose, le scanner dans TikTok sur son téléphone puis y confirmer la connexion. Terminer manuellement tout CAPTCHA demandé.
-3. Cliquer sur **Continuer** après confirmation. Une fenêtre de connexion encore ouverte empêche la reprise. L’application ne lit aucun cookie pour vérifier l’identité : il s’agit d’une confirmation utilisateur, pas d’une preuve d’accès exhaustif.
-
-La saisie de texte dans le contrôle distant est désactivée pour ces collectes, et l’API refuse également ce type d’action. Aucun identifiant, mot de passe ou code de vérification n’est demandé ou transmis par ce formulaire. Si TikTok ne propose pas de QR code, arrêter la collecte puis relancer en mode anonyme ; aucune autre méthode de connexion n’est automatisée.
-
-Le même navigateur est conservé pour toutes les recherches, publications et commentaires de la collecte. La découverte continue à utiliser exclusivement `https://www.tiktok.com/search/video?q=%40compte`, avec défilement progressif, pagination accessible, vérification de l’auteur et dédoublonnage. Une connexion n’enlève pas les limites imposées par TikTok ; une collecte incomplète reste signalée.
-
-**Se déconnecter et fermer TikTok** arrête la collecte et détruit sa session navigateur. La même destruction est effectuée à la fin, en cas d’annulation ou d’erreur : suppression des cookies du navigateur, fermeture et suppression du profil temporaire privé placé hors du dossier des exports. Chrome utilise une fenêtre privée et l’enregistrement des mots de passe est désactivé. Aucune réutilisation de session entre collectes, aucun fichier de cookies, jeton, identifiant de connexion ou capture de connexion dans les journaux et archives. Ce bouton ferme la session du serveur ; il ne déconnecte pas le téléphone. Une fermeture non confirmée est signalée au lieu d’être annoncée comme réussie.
-
-Les diagnostics distinguent `verification_tiktok` / `connexion_requise`, `erreur_session`, `resultats_incomplets` et `erreur_extraction_video`. Les messages bruts d’erreur Selenium ne sont pas enregistrés pour cette connexion. Les quatre compteurs (découvertes, retenues, traitées, exportées) restent disponibles.
-
-Les scénarios simulés sont fournis dans `tests/test_authentification.py` (session partagée, progression au-delà de six vidéos, CAPTCHA puis connexion, annulation, nettoyage, refus des secrets, séparation des utilisateurs et diagnostics). Ils ont été ajoutés sans exécution à la demande de l’utilisateur.
+Les invitations de TikTok sont fermées avec leur bouton lorsque c’est possible. Une restriction restante est signalée comme une collecte partielle ou une source inaccessible ; les textes déjà obtenus restent exportables. Le CAPTCHA peut toujours être traité manuellement dans la fenêtre intégrée à Streamlit. Le lien d’ouverture dans un autre onglet et les commandes API d’ouverture manuelle et de connexion ont été supprimés.
