@@ -1,74 +1,65 @@
-# Collecte par compte et média : recherche vidéo exclusive
+# Collecte par profils et médias depuis les hashtags
 
-Les modes **Profils** et **Presse/médias** interrogent exclusivement :
+Les modes **Profils** et **Presse/médias** parcourent désormais les mêmes pages
+`https://www.tiktok.com/tag/hashtag` que le mode **Hashtags**. Au moins un hashtag
+est obligatoire ; le deuxième est facultatif, avec ET/OU.
+Ils n'ouvrent plus la recherche `/search/video?q=%40compte` ni l'accueil du profil.
 
-`https://www.tiktok.com/search/video?q=%40nomducompte`
+Chaque hashtag est chargé une seule fois pour tous les médias sélectionnés,
+dans le même navigateur anonyme. La validation initiale et les CAPTCHA suivent
+le fonctionnement du mode Hashtags. Aucune connexion à TikTok n'est proposée.
 
-`collecte/comptes.py` normalise l'identifiant puis appelle `collect_links()`.
-Celui-ci délègue les comptes à `collecte/recherche_comptes.py` avant toute navigation.
-Il n'existe aucun repli vers `https://www.tiktok.com/@compte` ni vers une page de
-hashtag dans ce parcours. Une redirection vers un profil n'est pas analysée.
-La lecture des textes ouvre ensuite les URL individuelles des vidéos découvertes.
+## Sélection des publications
 
-Les hashtags ET/OU, dates et langue sont toujours filtrés sur les publications
-lues ; likes, commentaires, variables TXT et archive enrichie restent conservés.
-Le mode **Hashtags** garde ses propres pages `/tag/` et son défilement existant.
+- Les liens des résultats chargés dynamiquement sont examinés à chaque défilement.
+- L'identifiant d'auteur dans le lien doit correspondre exactement à un compte
+  sélectionné, sans distinction de casse. Une simple mention du média ne suffit pas.
+- Les autres auteurs n'utilisent pas le quota. Le défilement continue même si les
+  premières vidéos n'appartiennent à aucun média coché.
+- Le plafond s'applique par compte, tous hashtags confondus, avant les filtres de
+  légende, de langue et de date. Les identifiants TikTok sont dédoublonnés entre
+  les pages et les hashtags.
+- L'auteur effectivement lu dans la publication est contrôlé une seconde fois.
+  Les opérateurs ET/OU sont ensuite appliqués aux hashtags de sa légende.
+- Les likes, commentaires, variables TXT et archive enrichie sont conservés.
 
-## Chargement et sélection
+Le moteur utilise le défilement des hashtags existant, qui repère un conteneur
+défilant autour des publications et utilise le défilement de page à défaut.
+Il attend les nouveaux liens à chaque chargement. Trois attentes consécutives
+sans nouvel identifiant terminent le parcours ; les six premières vidéos ne
+constituent pas un critère d'arrêt. Le budget est de 40 défilements par hashtag.
 
-- La première page peut contenir six résultats ou uniquement d'autres auteurs.
-  Cela ne termine pas la découverte.
-- `pagination_recherche.py` repère le conteneur défilant des résultats, puis utilise
-  la molette Selenium par portions d'écran. Le conteneur est relu à chaque étape.
-  `DEFILER_PUBLICATIONS_JS` propose le même déplacement progressif en repli.
-- Chaque attente scrute les liens HTML et les données reçues dynamiquement.
-  L'observateur Selenium lit uniquement les réponses de la recherche courante,
-  sans rejouer de requête ni générer de signature.
-- Un bouton de pagination suivant est actionné s'il est disponible dans la page.
-  Les champs `cursor` et `has_more`/`hasMore` observés sont conservés au journal.
-- Les objets vidéo fournissent leur auteur réel. Leur identité prime sur un lien
-  HTML contradictoire de même identifiant. Le compte doit correspondre exactement,
-  sans distinction de casse ; un compte au nom voisin est exclu. L'auteur est de
-  nouveau contrôlé lors de la lecture de la publication.
-- Les publications sont dédoublonnées par identifiant TikTok, même si leurs cartes
-  disparaissent du DOM ou si leurs URL contiennent des paramètres différents.
-- Le parcours attend au moins trois chargements sans nouveauté avant de conclure
-  à une stagnation. Une progression dans une grille encore défilable ou de nouveaux
-  résultats d'autres auteurs prolonge le parcours. Les CAPTCHA gardent la fenêtre
-  automatique ; les résultats déjà collectés sont conservés.
-
-Le plafond de publications s'applique par compte avant les filtres des légendes.
-Un budget de sécurité d'au moins quatre défilements par publication demandée,
-ainsi que les délais d'expiration de session existants, bornent les ressources du
-VPS. Un arrêt avant l'objectif est signalé **Collecte partielle**. Même un signal
-`has_more=false` décrit uniquement la fin accessible de cette recherche, jamais
-l'historique exhaustif du compte. Atteindre la limite demandée n'est pas non plus
-une preuve d'exhaustivité.
+Un média peu présent dans les résultats accessibles peut fournir moins de
+publications que demandé. Le statut est alors **Collecte partielle**. Cela
+ne signifie pas que son compte est vide. Atteindre le quota ne garantit pas non
+plus l'historique exhaustif du compte. Les erreurs TikTok, de navigateur et
+d'extraction restent distinctes dans les diagnostics.
 
 ## Compteurs
 
 | Compteur | Signification |
 | --- | --- |
-| Découvertes | Identifiants distincts de tous les auteurs vus dans les recherches |
-| Retenues pour lecture | Publications dont l'auteur correspond aux comptes sélectionnés |
+| Découvertes | Identifiants distincts de tous les auteurs vus dans les hashtags |
+| Retenues pour lecture | Liens des comptes sélectionnés, après dédoublonnage et quota |
 | Traitées | Publications lues ou ayant fait l'objet d'une tentative de lecture |
-| Exportées dans le TXT | Publications réellement écrites dans le TXT après les filtres |
+| Exportées dans le TXT | Publications effectivement écrites après les filtres |
 
-L'écriture atomique du TXT doit réussir avant que le compteur d'export soit mis à
-jour. Les commentaires ne sont pas comptés comme des publications supplémentaires.
-Les quatre compteurs sont affichés dans Streamlit et conservés dans `journal.json`.
+L'écriture atomique du TXT précède la mise à jour du compteur d'export.
+Les commentaires ne comptent pas comme des publications supplémentaires.
+Le bilan de chaque hashtag inclut les comptes retenus et les nombres cumulés
+de liens par compte.
 
-## Validation fournie
+## Organisation et cas de non-régression
 
-`tests/test_recherche_comptes.py` couvre notamment six résultats initiaux suivis
-de deux chargements sans nouveauté, puis douze et dix-huit résultats, le chargement
-asynchrone, les autres auteurs, les doublons et la pagination disponible.
-`tests/test_compteurs_recherche.py` couvre les filtres, likes, commentaires, erreurs
-de lecture et d'écriture. Les scénarios antérieurs ont été adaptés à la source
-unique de recherche.
+`collecte/comptes.py` partage le parcours entre les profils et les médias ;
+`collecte/hashtags.py` appelle le moteur commun `collect_links()`.
+Les modules historiques de recherche vidéo sont conservés, mais ne sont plus
+appelés par ces modes de l'application.
 
-Ces tests sont fournis mais **non exécutés**, conformément à la consigne de
-l'utilisateur. Aucun essai TikTok ni intervention Coolify n'a été réalisé.
+`tests/test_presse_hashtags.py` couvre les chargements au-delà de six vidéos,
+deux attentes sans nouveauté, les autres auteurs, les doublons entre hashtags,
+les quotas par compte et le mode Hashtags général.
+Les cas d'intégration couvrent ET/OU, la session partagée, les erreurs,
+les commentaires et les exports.
 
-Références de mise en œuvre : [molette Selenium](https://www.selenium.dev/documentation/webdriver/actions_api/wheel/)
-et [format des réponses de recherche TikTok-Api](https://github.com/davidteather/TikTok-Api/blob/main/TikTokApi/api/search.py).
+Tests fournis **sans exécution**. Aucun essai TikTok ni intervention Coolify.

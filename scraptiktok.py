@@ -375,14 +375,43 @@ def open_page(driver: webdriver.Chrome, url: str) -> None:
 
 def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: dict,
                   *, interact=manual_step, progress=None, check=None, validation_initiale=True, intervention_si_vide=True,
-                  sans_connexion=True) -> list[str]:
+                  sans_connexion=True, comptes_attendus=(), liens_precedents=()) -> list[str]:
     # Argument historique conservé pour les appels existants ; seule la collecte anonyme existe.
-    if report.get("compte_attendu"):
+    if report.get("compte_attendu") and not comptes_attendus:
         from collecte.recherche_comptes import collecter_recherche_compte
         return collecter_recherche_compte(driver, args, report, interact=interact,
                                          progress=progress, check=check)
     check = check or (lambda: None)
+    comptes = {compte.casefold() for compte in comptes_attendus}
+    retenues = {compte: set() for compte in comptes}
+    deja_vus = set()
+    for url in liens_precedents:
+        identite = canonical_post(url)
+        if identite and identite[2].casefold() in comptes:
+            retenues[identite[2].casefold()].add(identite[0])
+            deja_vus.add(identite[0])
+    links: dict[str, str] = {}
+
+    def objectif_atteint():
+        return (all(len(ids) >= args.limit for ids in retenues.values())
+                if comptes else len(links) >= args.limit)
+
+    def publier_bilan_comptes():
+        if not comptes:
+            return
+        report.update(retenues_par_compte={compte: len(ids) for compte, ids in sorted(retenues.items())},
+                      objectif_par_compte=args.limit, objectif_atteint=objectif_atteint(),
+                      collecte_partielle=not objectif_atteint(), exhaustif=False)
+        report["bilan_recherche"] = (
+            "Limite demandée atteinte pour les comptes sélectionnés dans les pages de hashtags ; historique complet non garanti."
+            if objectif_atteint() else
+            "Collecte partielle : les pages de hashtags accessibles ne fournissent pas la limite demandée pour chaque compte. Aucun accès exhaustif n’est garanti.")
+
     check()
+    if comptes and objectif_atteint():
+        report.update(discovered_urls=[], candidats_ids=[], candidats_examines=0, discovery_stop="limit")
+        publier_bilan_comptes()
+        return []
     try:
         open_page(driver, report["hashtag_url"])
     except WebDriverException as erreur:
@@ -394,7 +423,6 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     fermer_invitation_connexion(driver)
     if args.interactive and validation_initiale:
         interact("Vérifiez les publications publiques. Traitez les cookies ou un éventuel CAPTCHA, puis cliquez sur Continuer.")
-    links: dict[str, str] = {}
     candidats_vus: set[str] = set()
     intervention_effectuee = bool(args.interactive and validation_initiale)
 
@@ -414,11 +442,21 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             identity = canonical_post(href)
             if identity:
                 candidats_vus.add(identity[0])
-            if identity and len(links) < args.limit:
+            if not identity:
+                continue
+            if comptes:
+                auteur = identity[2].casefold()
+                if (auteur not in comptes or identity[0] in deja_vus
+                        or len(retenues[auteur]) >= args.limit):
+                    continue
+                retenues[auteur].add(identity[0])
+                links.setdefault(identity[0], identity[1])
+            elif len(links) < args.limit:
                 links.setdefault(identity[0], identity[1])
         report["candidats_examines"] = len(candidats_vus)
         report["candidats_ids"] = sorted(candidats_vus)
         report["discovered_urls"] = list(links.values())
+        publier_bilan_comptes()
         if progress:
             progress(len(links))
         # Continuer à défiler même si la première page contient d’autres auteurs.
@@ -467,7 +505,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     idle = 0
     for _ in range(args.max_scrolls):
         check()
-        if len(links) >= args.limit:
+        if objectif_atteint():
             report["discovery_stop"] = "limit"
             break
         fermer_invitation_connexion(driver)
@@ -499,8 +537,9 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             break
     else:
         report["discovery_stop"] = "max_scrolls"
-    if len(links) >= args.limit:
+    if objectif_atteint():
         report["discovery_stop"] = "limit"
+    publier_bilan_comptes()
     return list(links.values())
 
 

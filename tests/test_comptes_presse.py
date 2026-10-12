@@ -48,20 +48,21 @@ class TestsComptes(unittest.TestCase):
         self.assertEqual(resultat["proprietaire_editorial"], "indetermine")
 
 class TestsRechercheComptes(unittest.TestCase):
-    def test_une_recherche_video_exclusive_avec_ou_sans_hashtags(self):
+    def test_profils_parcourent_les_hashtags_sans_recherche_compte(self):
         from unittest.mock import Mock, patch
         from collecte.comptes import collecter_compte
         from types import SimpleNamespace
-        for hashtags in ([], ['#lyceen', '#manifestation']):
-            with self.subTest(hashtags=hashtags), patch('scraptiktok.collect_links', return_value=[]) as moteur:
-                rapport = {}
-                collecter_compte(Mock(), SimpleNamespace(limit=50), '@LeMondeFR', rapport, hashtags=hashtags)
-                moteur.assert_called_once()
-                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=%40lemondefr')
-                self.assertEqual(rapport['hashtags_filtres'], [h.lstrip('#') for h in hashtags])
-                self.assertFalse(moteur.call_args.kwargs['validation_initiale'])
-                self.assertTrue(moteur.call_args.kwargs['sans_connexion'])
-                self.assertNotIn('repli', rapport)
+        rapport = {}
+        with patch('scraptiktok.collect_links', return_value=[]) as moteur:
+            collecter_compte(Mock(), SimpleNamespace(limit=50), '@LeMondeFR', rapport,
+                            hashtags=['#lyceen', '#manifestation'])
+        self.assertEqual([c.args[2]['hashtag_url'] for c in moteur.call_args_list],
+                         ['https://www.tiktok.com/tag/lyceen', 'https://www.tiktok.com/tag/manifestation'])
+        self.assertTrue(all(c.kwargs['comptes_attendus'] == ['lemondefr'] for c in moteur.call_args_list))
+        self.assertTrue(all(c.kwargs['sans_connexion'] for c in moteur.call_args_list))
+        self.assertNotIn('compte_attendu', rapport)
+        with self.assertRaisesRegex(ValueError, 'au moins un hashtag'):
+            collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr')
 
     def test_erreur_ou_captcha_ne_declenche_aucun_repli_profil(self):
         from unittest.mock import Mock, patch
@@ -71,10 +72,10 @@ class TestsRechercheComptes(unittest.TestCase):
             with self.subTest(message=message), patch('scraptiktok.collect_links', side_effect=RuntimeError(message)) as moteur:
                 rapport = {}
                 with self.assertRaises(RuntimeError):
-                    collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr', rapport)
+                    collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr', rapport, hashtags=['test'])
                 moteur.assert_called_once()
                 self.assertEqual(rapport['recherches_en_echec'], 1)
-                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=%40lemondefr')
+                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/tag/test')
 
     def test_entree_collect_links_compte_ne_navigue_jamais_vers_profil(self):
         from unittest.mock import Mock, patch

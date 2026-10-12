@@ -147,10 +147,10 @@ with onglet_collecte:
         c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
         st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
         st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
-            help="Saisissez un nombre entre 1 et 300. Cette limite s’applique à chaque recherche de hashtag ou de compte, avant les filtres.")
+            help="Saisissez un nombre entre 1 et 300. En mode Hashtags : limite par hashtag. En mode Presse/médias ou Profils : limite par compte, tous hashtags confondus, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
-            st.caption("Recherche vidéo du compte @identifiant. Les hashtags ET/OU filtrent ensuite les légendes. La limite s’applique par compte ; les résultats ne garantissent pas l’historique complet.")
+            st.caption("Les pages de hashtags sont parcourues comme en mode Hashtags. Seules les publications des comptes cochés ou saisis sont conservées, dans la limite demandée par compte. Résultats non exhaustifs.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
@@ -255,6 +255,9 @@ with onglet_collecte:
                 with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
                     for bilan in actuel["bilan_sources"]:
                         st.write(f"{bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        if bilan.get("retenues_par_compte"):
+                            st.caption("Liens retenus cumulés : " + " · ".join(
+                                f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
                         diagnostic = bilan.get("diagnostic", {})
                         if diagnostic:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
@@ -299,8 +302,8 @@ with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
                 "2. Renseignez au moins un hashtag, y compris pour les profils et médias. Le deuxième est facultatif (ET/OU). Ajoutez les autres filtres, puis lancez la collecte.\n"
-                "3. Tous les médias cochés sont transmis au moteur. Les profils accessibles sont collectés automatiquement.\n"
-                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si la recherche vidéo ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
+                "3. Tous les médias cochés sont transmis au moteur. Les hashtags sont parcourus une seule fois pour tous les comptes sélectionnés ; seuls leurs auteurs sont retenus.\n"
+                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une page de hashtag ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
 

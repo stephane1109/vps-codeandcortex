@@ -295,6 +295,7 @@ class Job:
                     "bilan_sources": [{"source": entree["source"],
                         "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
                         "message": entree.get("message", "Recherche terminée."),
+                        "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
                         "diagnostic": entree.get("rapport", {}).get("diagnostic", {})}
                         for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
@@ -522,8 +523,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         interact = lambda message: wait_for_user(driver, job, message)
         unique_links = {}
         hors_selection = 0
-        sources = ([{"hashtag": h} for h in job.settings.hashtags]
-                   if job.settings.source_collecte == "hashtags" else job.settings.sources)
+        # Chaque hashtag est parcouru une seule fois, quel que soit le nombre de médias.
+        sources = [{"hashtag": h} for h in job.settings.hashtags]
         medias_par_compte = {s["compte"]: s for s in job.settings.sources}
         session_validee = False
         def intervenir(message):
@@ -539,34 +540,31 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.update(message=f"Source {numero_source}/{len(sources)} — {etiquette} : "
                     f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), {nombre} retenue(s)…")
             try:
-                if "hashtag" in source:
+                if job.settings.source_collecte == "hashtags":
                     rapport = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(source['hashtag'])}"}
-                    found = scraper.collect_links(driver, args, rapport,
+                    from collecte.hashtags import collecter_hashtag
+                    found = collecter_hashtag(driver, args, rapport,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
                         validation_initiale=not session_validee, progress=suivre_decouverte)
                 else:
-                    from collecte.comptes import collecter_compte
-                    rapport = {}
-                    # Réutiliser le même navigateur anonyme pour les comptes sélectionnés.
-                    found = collecter_compte(driver, args, source["compte"], rapport=rapport, hashtags=job.settings.hashtags,
-                        interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        progress=suivre_decouverte, sans_connexion=True)
+                    from collecte.comptes import collecter_comptes_par_hashtag
+                    found = collecter_comptes_par_hashtag(driver, args, medias_par_compte,
+                        source["hashtag"], rapport=rapport, liens_precedents=list(unique_links.values()),
+                        interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"),
+                        check=job.check, validation_initiale=not session_validee, progress=suivre_decouverte)
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
                 message_source = rapport.get("bilan_recherche") or ("Recherche partielle : une recherche TikTok a échoué."
                                   if rapport.get("recherches_en_echec") else "Recherche terminée.")
-                if found and rapport.get("objectif_atteint") is False:
-                    message_source += (f" {len(found)} lien(s) public(s) repéré(s) sur un objectif de {rapport['objectif_liens']},"
-                                       " dans les pages consultées. Cela ne représente pas le nombre total de publications du compte.")
-                    if rapport.get("limite_acces_public"):
-                        message_source += " Une fenêtre de connexion TikTok est apparue sans fournir de nouveaux liens publics ; les publications déjà repérées sont conservées."
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
-                    "message": message_source if found else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
+                    "message": message_source if found or rapport.get("objectif_atteint") else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
                         if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")})
                 for url in found:
                     identity = scraper.canonical_post(url)
-                    if identity: unique_links.setdefault(identity[0], identity[1])
+                    if identity and (job.settings.source_collecte == "hashtags"
+                                     or identity[2].casefold() in medias_par_compte):
+                        unique_links.setdefault(identity[0], identity[1])
             except (RuntimeError, scraper.WebDriverException) as erreur:
                 LOG.warning("Source %s : %s", etiquette, type(erreur).__name__)
                 if "diagnostic" not in rapport:
@@ -659,6 +657,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if job.base:
                 job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
+        if job.settings.source_collecte != "hashtags":
+            retenues_par_compte = {compte: 0 for compte in medias_par_compte}
+            for url in links:
+                identite = scraper.canonical_post(url)
+                if identite and identite[2].casefold() in retenues_par_compte:
+                    retenues_par_compte[identite[2].casefold()] += 1
+            # Une première page partielle peut être complétée par le second hashtag.
+            recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
         final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
@@ -686,7 +692,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if job.settings.source_collecte != "hashtags":
             final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
-                              if recherche_partielle else " Recherche vidéo limitée au nombre demandé ; historique complet non garanti.")
+                              if recherche_partielle else " Recherche par hashtags limitée au nombre demandé par compte ; historique complet non garanti.")
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:

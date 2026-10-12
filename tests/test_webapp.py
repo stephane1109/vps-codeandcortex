@@ -319,11 +319,8 @@ class WorkerTests(unittest.TestCase):
                  patch('collecte.verification_comptes.observer_profil', return_value={}), \
                  patch.object(web.scraper, 'read_post', return_value=RECORD), patch.object(job, 'pause'):
                 web.execute_job(job, driver_factory=lambda args: pilote)
-            # Le faux résultat appartient à un autre auteur : les comptes essaient
-            # aussi leur repli, toujours sans seconde validation initiale.
-            self.assertEqual(validations, [True,False] if reglages.source_collecte == 'hashtags' else [False,False,False,False])
-            if reglages.source_collecte == "hashtags": intervention.assert_called_once()
-            else: intervention.assert_not_called()
+            self.assertEqual(validations, [True, False] if reglages.source_collecte == 'hashtags' else [True])
+            intervention.assert_called_once()
 
     def test_identical_hashtags_and_blank_second_input(self):
         self.assertEqual(len(web.StartRequest(hashtag="été", second_hashtag="#ÉTÉ").hashtags), 1)

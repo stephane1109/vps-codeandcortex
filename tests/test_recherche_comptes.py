@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 import scraptiktok as moteur
-from collecte.comptes import collecter_compte
+from collecte.recherche_comptes import collecter_recherche_compte
 from collecte.recherche_comptes import LIENS_RECHERCHE_JS
 from collecte.pagination_recherche import defiler_resultats
 from collecte.reseau_recherche import ObservationRecherche, extraire_page_recherche
@@ -53,13 +53,12 @@ class RechercheProgressive(unittest.TestCase):
         observation.derniere_page = {"suite": suite, "curseur": "10"}
         arguments = SimpleNamespace(limit=limite, timeout=.01, delay=0, max_scrolls=2,
                                     idle_rounds=1, interactive=False)
-        rapport, progression = {}, []
+        rapport, progression = {"compte_attendu": "media"}, []
         with patch("collecte.recherche_comptes.ObservationRecherche", return_value=observation), \
              patch("collecte.recherche_comptes.WebDriverWait", AttenteSimulee), \
              patch("collecte.recherche_comptes.defiler_resultats", side_effect=defiler), \
              patch("collecte.recherche_comptes.etat_resultats", return_value=bas):
-            resultat = collecter_compte(pilote, arguments, "@media", rapport,
-                hashtags=["#lyceen", "#manifestation"], progress=progression.append)
+            resultat = collecter_recherche_compte(pilote, arguments, rapport, progress=progression.append)
         pilote.get.assert_called_once_with("https://www.tiktok.com/search/video?q=%40media")
         observation.fermer.assert_called_once()
         return resultat, rapport, etat, progression
@@ -150,11 +149,11 @@ class RechercheProgressive(unittest.TestCase):
         pilote = Mock()
         pilote.current_url = "https://www.tiktok.com/@media"
         pilote.execute_script.side_effect = lambda code, *a: [lien(100)] if code == LIENS_RECHERCHE_JS else False
-        rapport = {}
+        rapport = {"compte_attendu": "media"}
         with patch("collecte.recherche_comptes.ObservationRecherche") as observation, \
              patch("collecte.recherche_comptes.WebDriverWait", AttenteSimulee):
             with self.assertRaises(RuntimeError):
-                collecter_compte(pilote, args, "media", rapport)
+                collecter_recherche_compte(pilote, args, rapport)
         pilote.get.assert_called_once_with("https://www.tiktok.com/search/video?q=%40media")
         observation.return_value.lire.assert_not_called()
         self.assertFalse(any(c.args[0] == LIENS_RECHERCHE_JS for c in pilote.execute_script.call_args_list))

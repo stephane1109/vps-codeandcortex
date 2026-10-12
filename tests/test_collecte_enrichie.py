@@ -7,29 +7,29 @@ import webapp as web
 from fastapi.testclient import TestClient
 
 class TestsEnrichis(unittest.TestCase):
-    def test_profils_demarrent_sans_validation_imposee(self):
+    def test_profils_partagent_la_validation_du_hashtag(self):
         with tempfile.TemporaryDirectory() as dossier:
             job = web.Job('test', web.StartRequest(hashtag="test", source_collecte='comptes', comptes=['lemondefr','franceinfo']), Path(dossier))
             validations = []
-            def decouvrir(navigateur, arguments, compte, rapport, **options):
+            def decouvrir(navigateur, arguments, comptes, hashtag, rapport, **options):
                 validations.append(options.get('validation_initiale', False))
                 if options.get('validation_initiale', False):
                     options['interact']('Vérifiez le premier profil.')
                 return []
-            with patch('collecte.comptes.collecter_compte', side_effect=decouvrir), patch.object(web, 'wait_for_user') as verifier:
+            with patch('collecte.comptes.collecter_comptes_par_hashtag', side_effect=decouvrir), patch.object(web, 'wait_for_user') as verifier:
                 web.execute_job(job, driver_factory=lambda args: Mock())
-            self.assertEqual(validations, [False, False])
-            verifier.assert_not_called()
+            self.assertEqual(validations, [True])
+            verifier.assert_called_once()
             self.assertFalse(job.busy)
 
     def test_erreur_tiktok_explicite_dans_resultats_et_journal(self):
         with tempfile.TemporaryDirectory() as dossier:
             job = web.Job('test', web.StartRequest(hashtag="test", source_collecte='comptes', comptes=['lemondefr']), Path(dossier))
-            def echouer(navigateur, arguments, compte, rapport, **options):
+            def echouer(navigateur, arguments, comptes, hashtag, rapport, **options):
                 rapport.update(diagnostic={'code':'erreur_tiktok'}, rechargements=1, discovery_stop='tiktok_error')
                 raise RuntimeError('Erreur de chargement TikTok')
             pilote = Mock()
-            with patch('collecte.comptes.collecter_compte', side_effect=echouer):
+            with patch('collecte.comptes.collecter_comptes_par_hashtag', side_effect=echouer):
                 web.execute_job(job, driver_factory=lambda args: pilote)
             self.assertFalse(job.busy)
             self.assertEqual(job.status, 'failed')
@@ -45,23 +45,24 @@ class TestsEnrichis(unittest.TestCase):
             'id': str(100+i), 'url': f'https://www.tiktok.com/@{compte}/video/{100+i}',
             'author': compte, 'description': texte, 'engagement': {},
         } for i, (compte, texte) in enumerate(zip(comptes, descriptions))]
-        for operateur, attendus in [('AND', ['100']), ('OR', ['100', '102', '101'])]:
+        for operateur, attendus in [('AND', ['100']), ('OR', ['100', '101', '102'])]:
             with self.subTest(operateur=operateur), tempfile.TemporaryDirectory() as d:
                 job = web.Job('test', web.StartRequest(source_collecte='presse',
                     medias=['lemonde', 'franceinfo'], hashtag='grève', second_hashtag='école',
-                    operator=operateur, french_only=False), Path(d))
+                    operator=operateur, french_only=False, limit=2), Path(d))
                 validations = []
                 def decouvrir(navigateur, arguments, rapport, **options):
-                    self.assertIn(rapport['compte_attendu'], ['lemondefr', 'franceinfo'])
+                    self.assertEqual(options['comptes_attendus'], ['lemondefr', 'franceinfo'])
+                    self.assertNotIn('compte_attendu', rapport)
                     validations.append(options.get('validation_initiale', False))
                     if options.get('validation_initiale', False): options['interact']('Vérification TikTok')
-                    return [p['url'] for p in publications if p['author'] == rapport['compte_attendu']]
+                    return [p['url'] for p in publications]
                 def lire(navigateur, url, *args, **options):
                     return dict(next(p for p in publications if p['url'] == url))
                 with patch.object(web.scraper, 'collect_links', side_effect=decouvrir) as collecte, patch.object(web, 'wait_for_user'), patch.object(web.scraper, 'read_post', side_effect=lire), patch.object(job, 'pause'):
                     web.execute_job(job, driver_factory=lambda args: Mock())
-                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/search/video?q=%40'+compte for compte in ['lemondefr','franceinfo']])
-                self.assertEqual(validations, [False, False])
+                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/tag/gr%C3%A8ve', 'https://www.tiktok.com/tag/%C3%A9cole'])
+                self.assertEqual(validations, [True, False])
                 self.assertEqual([p['id'] for p in job.records], attendus)
                 self.assertEqual(job.processed, 4)
                 self.assertEqual(job.filtered, 4-len(attendus))
@@ -77,26 +78,27 @@ class TestsEnrichis(unittest.TestCase):
 
     def test_compte_export_sqlite_et_commentaires(self):
         with tempfile.TemporaryDirectory() as d:
-            job=web.Job("test",web.StartRequest(hashtag="test", source_collecte="comptes",comptes=["media"],collecter_commentaires=True),Path(d))
+            job=web.Job("test",web.StartRequest(hashtag="test", source_collecte="comptes",comptes=["media"],collecter_commentaires=True,limit=1),Path(d))
             record={"id":"123","url":"https://www.tiktok.com/@media/video/123","author":"media","description":"Un texte #test","engagement":{}}
-            with patch("collecte.comptes.collecter_compte",return_value=[record["url"]]), patch.object(web.scraper,"read_post",return_value=record), patch.object(job,"pause"), patch("collecte.commentaires.collecter_commentaires",return_value={"commentaires":[],"statut":"indisponible_ou_vide","exhaustif":False}):
+            with patch("collecte.comptes.collecter_comptes_par_hashtag",return_value=[record["url"]]), patch.object(web.scraper,"read_post",return_value=record), patch.object(job,"pause"), patch("collecte.commentaires.collecter_commentaires",return_value={"commentaires":[],"statut":"indisponible_ou_vide","exhaustif":False}):
                 web.execute_job(job,driver_factory=lambda args:Mock())
             self.assertEqual(job.status,"completed"); self.assertTrue(job.archive_prete)
             self.assertEqual(json.loads((job.directory/"publications.json").read_text())[0]["id"],"123")
             with job.base.connexion() as c:
                 self.assertEqual(c.execute("SELECT COUNT(*) FROM publications").fetchone()[0],1)
-    def test_plusieurs_medias_un_inaccessible_et_un_accessible(self):
+    def test_presse_un_hashtag_inaccessible_preserve_les_autres_resultats(self):
         with tempfile.TemporaryDirectory() as d:
-            job=web.Job("test",web.StartRequest(hashtag="test", source_collecte="presse",medias=["lemonde","franceinfo"]),Path(d))
+            job=web.Job("test",web.StartRequest(hashtag="blocage",second_hashtag="test",operator="OR",source_collecte="presse",medias=["lemonde","franceinfo"]),Path(d))
             record={"id":"123", "url":"https://www.tiktok.com/@franceinfo/video/123", "author":"franceinfo", "description":"Une actualité en France. #test", "engagement":{}}
-            def decouvrir(navigateur, arguments, compte, rapport, **options):
-                if compte == 'lemondefr':
+            def decouvrir(navigateur, arguments, comptes, hashtag, rapport, **options):
+                if hashtag == 'blocage':
                     rapport['discovery_stop']='blocked'
                     raise RuntimeError('CAPTCHA')
                 return [record['url']]
-            with patch('collecte.comptes.collecter_compte',side_effect=decouvrir) as comptes, patch.object(web.scraper,'read_post',return_value=record), patch.object(job,'pause'):
+            with patch('collecte.comptes.collecter_comptes_par_hashtag',side_effect=decouvrir) as comptes, patch.object(web.scraper,'read_post',return_value=record), patch.object(job,'pause'):
                 web.execute_job(job,driver_factory=lambda args:Mock())
-            self.assertEqual([c.args[2] for c in comptes.call_args_list],['lemondefr','franceinfo'])
+            self.assertEqual([c.args[3] for c in comptes.call_args_list], ['blocage', 'test'])
+            self.assertTrue(all(list(c.args[2]) == ['lemondefr', 'franceinfo'] for c in comptes.call_args_list))
             self.assertEqual(job.status,'partial')
             self.assertIn(record['description'],job.path.read_text())
             bilan=job.snapshot()['bilan_sources']
