@@ -233,13 +233,7 @@ with onglet_collecte:
             if actuel["busy"]:
                 st.progress(min(1.0,actuel["processed"]/max(1,actuel["discovered"])))
                 if actuel.get("status") != "attention":
-                    ouverture_demandee = actuel.get("ouverture_navigateur_demandee", False)
-                    if st.button("Afficher le navigateur TikTok", disabled=ouverture_demandee or not actuel.get("navigateur_disponible", False)):
-                        lancer(f"/api/jobs/{actuel['id']}/navigateur", {})
-                    if ouverture_demandee:
-                        st.info("Ouverture demandée : la collecte se mettra en pause dès la fin de l’opération en cours.")
-                    else:
-                        st.caption("Permet de voir la page et de traiter une vérification qui ne s’affiche pas automatiquement. Met la collecte en pause jusqu’à Continuer.")
+                    st.caption("La fenêtre TikTok s’ouvre automatiquement en cas de vérification. Pour les profils et médias, elle s’ouvre aussi si aucune publication n’est lisible ou si la pagination se bloque.")
                 if st.button("Arrêter la collecte"): lancer(f"/api/jobs/{actuel['id']}/stop",{})
             if actuel.get("bilan_sources"):
                 with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
@@ -291,6 +285,6 @@ with onglet_aide:
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
                 "2. Les hashtags sont facultatifs pour les médias. Ajoutez les filtres souhaités, puis lancez la collecte.\n"
                 "3. Tous les médias cochés sont transmis au moteur. Les profils accessibles sont collectés automatiquement.\n"
-                "4. Validez TikTok dans la fenêtre intégrée si demandé, puis cliquez sur **Continuer**. Si la fenêtre n’apparaît pas, cliquez sur **Afficher le navigateur TikTok** pendant la collecte.\n"
+                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si un profil ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")

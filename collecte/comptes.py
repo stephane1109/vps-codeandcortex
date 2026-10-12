@@ -18,7 +18,8 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    recherches=[], exhaustif=False)
     liens = {}
     # Compatibilité avec les anciens appelants : ne jamais imposer de validation
-    # préalable en mode compte. Le moteur interrompt seulement un vrai CAPTCHA.
+    # préalable en mode compte. Le profil montre aussi automatiquement une page
+    # sans liens ou une pagination bloquée, même sans CAPTCHA reconnu.
     options.pop("validation_initiale", None)
     options["intervention_si_vide"] = False
     options["sans_connexion"] = True

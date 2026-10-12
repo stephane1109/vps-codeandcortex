@@ -21,13 +21,15 @@ et leurs liens, selon la case cochée. Les doublons sont supprimés par identifi
 Le bouton **Arrêter** conserve les textes déjà obtenus. Recharger la page permet
 également de retrouver la collecte tant que la session est conservée.
 
-Pendant une collecte, **Afficher le navigateur TikTok** permet d'ouvrir la page
-du navigateur serveur même si le détecteur automatique n'a pas reconnu une
-vérification. Cette commande est disponible dans les trois modes. Elle met la
-collecte en pause à la fin de l'opération Selenium en cours ; **Continuer** reprend
-le traitement. Elle ne lance pas une deuxième collecte et ne demande pas de
-connexion TikTok. La détection automatique d'un CAPTCHA conserve la même fenêtre.
-L'absence de fenêtre automatique ne prouve donc pas l'absence de vérification.
+La fenêtre TikTok s’ouvre automatiquement lorsqu’une vérification est détectée.
+Pour les profils et médias, elle s’ouvre également si la page ne fournit aucun
+lien lisible après le délai de chargement, ou si la pagination reste bloquée sans
+signal de fin. Aucun bouton « Afficher le navigateur » n’est nécessaire.
+La collecte se met en pause sur la page courante ; **Continuer** relit cette page
+et reprend le parcours dans la même session. Aucun identifiant n’est imposé.
+Si TikTok ne fournit toujours pas de publications, le rapport conserve la cause
+observée et les éventuels liens déjà obtenus. L’application ne peut pas forcer
+TikTok à afficher un CAPTCHA ou à fournir des vidéos.
 
 Le parcours initial collecte les descriptions écrites par les auteurs, hashtags compris.
 Les nouveaux modules sont facultatifs : comptes de presse, engagement, commentaires,

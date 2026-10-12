@@ -16,6 +16,23 @@ parcours ; les recherches de hashtags conservent leur moteur existant.
    `cursor` et `hasMore` servent à décrire l'avancement observé.
 6. Les limites de publications, de défilement et d'attente restent appliquées.
 
+La sélection de l'onglet des publications attend son apparition, même si les
+données initiales contiennent déjà quelques liens : une grille apparue après
+la navigation initiale reste prise en compte. Les liens sont lus dans tout le document,
+même si TikTok monte sa grille hors de `main`.
+
+La fenêtre intégrée s'ouvre automatiquement en cas de CAPTCHA détecté, de page
+sans liens après le délai de chargement ou de pagination stagnante sans signal
+de fin. Une invitation à se connecter persistante déclenche aussi cet affichage
+lorsque la pagination stagne, même si un signal de fin a été reçu. Aucun bouton
+d'ouverture n'est requis. `Continuer` relit la page courante dans la même session ;
+la sélection des médias est conservée. Une aide pour page vide et une aide pour
+pagination bloquée sont proposées au maximum une fois chacune par parcours de
+profil, en plus des CAPTCHA effectivement détectés. Le rapport conserve leurs
+motifs dans `interventions_automatiques`. Une éventuelle recharge après une erreur
+TikTok n'intervient qu'après la présentation de la page et cette nouvelle lecture.
+Cette ouverture ne crée pas de CAPTCHA et ne garantit pas que TikTok serve les vidéos.
+
 L'observateur ne réémet aucune requête, ne calcule aucune signature, ne change pas
 les cookies et n'envoie pas d'identifiants. Les CAPTCHA détectés restent à résoudre
 manuellement dans la fenêtre intégrée. Une invitation à se connecter peut être
