@@ -52,13 +52,13 @@ class CiblageComptes(unittest.TestCase):
 
     def test_requete_contient_compte_et_hashtag_normalises(self):
         self.assertEqual(adresse_recherche("@LeMondeFR", "#lycéen"),
-                         "https://www.tiktok.com/search/video?q=%40lemondefr%20%23lyc%C3%A9en")
+                         "https://www.tiktok.com/search/video?q=lyc%C3%A9en%20lemondefr")
 
     def test_compte_cible_plus_de_six_videos_apres_deux_chargements_sans_nouveaute(self):
         six = [lien(i) for i in range(100,106)]
         douze = [lien(i) for i in range(100,112)]
         autres = [lien(i, "autre") for i in range(200,206)]
-        pilote = self.pilote({"@lemondefr #manifestation": [autres, six, six, six, douze]})
+        pilote = self.pilote({"manifestation lemondefr": [autres, six, six, six, douze]})
         rapport, progressions = {}, []
         with patch.object(moteur, "WebDriverWait", AttenteSimulee), patch.object(moteur.time, "sleep"):
             resultat = collecter_compte(pilote, self.arguments(), "lemondefr", rapport,
@@ -67,13 +67,15 @@ class CiblageComptes(unittest.TestCase):
         self.assertEqual(resultat, douze[:10])
         self.assertEqual(rapport["candidats_examines"], 18)
         self.assertEqual(rapport["auteurs_ecartes"], 6)
-        self.assertIn((6, "@lemondefr #manifestation"), progressions)
+        self.assertEqual(rapport["auteurs_dans_liens"], {"autre": 6, "lemondefr": 12})
+        self.assertEqual(rapport["defilements_effectues"], 4)
+        self.assertIn((6, "manifestation lemondefr"), progressions)
         self.assertFalse(rapport["collecte_partielle"])
 
     def test_deux_hashtags_meme_compte_meme_session_et_quota_cumule(self):
         pilote = self.pilote({
-            "@lemondefr #manifestation": [[lien(100), lien(101)]],
-            "@lemondefr #lycéen": [[lien(100), lien(102), lien(103), lien(200, "autre")]],
+            "manifestation lemondefr": [[lien(100), lien(101)]],
+            "lycéen lemondefr": [[lien(100), lien(102), lien(103), lien(200, "autre")]],
         })
         rapport = {}
         with patch.object(moteur, "WebDriverWait", AttenteSimulee), patch.object(moteur.time, "sleep"):
@@ -83,7 +85,7 @@ class CiblageComptes(unittest.TestCase):
         self.assertEqual([c.args[0] for c in pilote.get.call_args_list],
                          [adresse_recherche("lemondefr", h) for h in ("manifestation", "lycéen")])
         self.assertEqual([r["requete_recherche"] for r in rapport["recherches_hashtags"]],
-                         ["@lemondefr #manifestation", "@lemondefr #lycéen"])
+                         ["manifestation lemondefr", "lycéen lemondefr"])
         self.assertEqual(rapport["retenues_par_compte"], {"lemondefr": 3})
 
     def test_erreur_tiktok_recharge_seulement_la_requete_ciblee(self):
@@ -97,7 +99,7 @@ class CiblageComptes(unittest.TestCase):
         self.assertEqual(rapport["recherches_en_echec"], 1)
 
     def test_redirection_ne_transforme_pas_la_recherche_en_hashtag_general(self):
-        pilote = self.pilote({"@lemondefr #manifestation": [[lien(100)]]}, redirection=True)
+        pilote = self.pilote({"manifestation lemondefr": [[lien(100)]]}, redirection=True)
         rapport = {}
         with patch.object(moteur, "WebDriverWait", AttenteSimulee):
             with self.assertRaises(RuntimeError):
@@ -134,3 +136,23 @@ class CiblageComptes(unittest.TestCase):
         self.assertEqual(rapport["discovered_urls"], [lien(100)])
         self.assertEqual(rapport["recherches_en_echec"], 1)
         self.assertTrue(rapport["collecte_partielle"])
+
+    def test_aucun_media_dans_les_liens_signale_les_auteurs_effectivement_recus(self):
+        pilote = self.pilote({"manifestation lemondefr": [[lien(100, "autre"), lien(101, "autre")]]})
+        rapport = {}
+        with patch.object(moteur, "WebDriverWait", AttenteSimulee), patch.object(moteur.time, "sleep"):
+            resultat = collecter_compte(pilote, self.arguments(), "lemondefr", rapport,
+                                       hashtags=["manifestation"])
+        self.assertEqual(resultat, [])
+        self.assertEqual(rapport["auteurs_dans_liens"], {"autre": 2})
+        self.assertEqual(rapport["candidats_examines"], 2)
+        self.assertEqual(rapport["discovery_stop"], "no_new_links")
+        self.assertEqual(rapport["defilements_effectues"], 3)
+
+    def test_requete_reproduit_le_cas_fourni_par_l_utilisateur(self):
+        exemple = "https://www.tiktok.com/@lemondefr/video/7691745512910900513?q=manifestation%20lemondefr&t=1791820038871"
+        recherche = adresse_recherche("@lemondefr", "#manifestation")
+        self.assertEqual(parse_qs(urlsplit(recherche).query)["q"],
+                         parse_qs(urlsplit(exemple).query)["q"])
+        self.assertEqual(moteur.canonical_post(exemple),
+                         ("7691745512910900513", "https://www.tiktok.com/@lemondefr/video/7691745512910900513", "lemondefr"))

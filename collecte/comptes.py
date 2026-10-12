@@ -33,13 +33,13 @@ def collecter_requete_compte(navigateur, arguments, compte, hashtag, rapport=Non
                              liens_precedents=(), **options):
     """Ouvrir une recherche compte + hashtag avec le moteur de collecte commun."""
     from scraptiktok import collect_links, normalize_hashtag
-    from .recherche_comptes import adresse_recherche
+    from .recherche_comptes import adresse_recherche, construire_requete_compte
 
     compte, hashtag = normaliser_compte(compte), normalize_hashtag(hashtag)
     rapport = rapport if rapport is not None else {}
     rapport.update(compte_attendu=compte, comptes_attendus=[compte],
                    hashtag_url=adresse_recherche(compte, hashtag),
-                   requete_recherche=f"@{compte} #{hashtag}", hashtag_recherche=hashtag,
+                   requete_recherche=construire_requete_compte(compte, hashtag), hashtag_recherche=hashtag,
                    mode_decouverte="recherche_compte_hashtag", exhaustif=False,
                    recherches_en_echec=0)
     options["sans_connexion"] = True
@@ -56,6 +56,7 @@ def collecter_requete_compte(navigateur, arguments, compte, hashtag, rapport=Non
 def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), **options):
     """Rechercher chaque hashtag pour ce compte, dans la même session Selenium."""
     from scraptiktok import canonical_post, est_erreur_session, normalize_hashtag, WebDriverException
+    from .recherche_comptes import construire_requete_compte
 
     compte = normaliser_compte(compte)
     hashtags = list(dict.fromkeys(normalize_hashtag(h) for h in hashtags))
@@ -79,7 +80,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         session_validee = True
 
     for hashtag in hashtags:
-        courant = {"requete_recherche": f"@{compte} #{hashtag}"}
+        courant = {"requete_recherche": construire_requete_compte(compte, hashtag)}
         recherches.append(courant)
 
         def publier(_nombre=0):

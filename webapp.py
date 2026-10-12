@@ -297,6 +297,11 @@ class Job:
                         "message": entree.get("message", "Recherche terminée."),
                         "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
                         "recherches": [{"requete": r.get("requete_recherche"),
+                            "compte": r.get("compte_attendu"),
+                            "candidats_examines": r.get("candidats_examines", 0),
+                            "auteurs_dans_liens": r.get("auteurs_dans_liens", {}),
+                            "defilements": r.get("defilements_effectues", 0),
+                            "arret": r.get("discovery_stop", ""),
                             "liens": len(r.get("discovered_urls", [])),
                             "auteurs_ecartes": r.get("auteurs_ecartes", 0),
                             "diagnostic": r.get("diagnostic", {})}

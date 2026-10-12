@@ -61,7 +61,7 @@ class TestsEnrichis(unittest.TestCase):
                     return dict(next(p for p in publications if p['url'] == url))
                 with patch.object(web.scraper, 'collect_links', side_effect=decouvrir) as collecte, patch.object(web, 'wait_for_user'), patch.object(web.scraper, 'read_post', side_effect=lire), patch.object(job, 'pause'):
                     web.execute_job(job, driver_factory=lambda args: Mock())
-                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/search/video?q=%40' + compte + '%20%23' + hashtag for compte in ['lemondefr', 'franceinfo'] for hashtag in ['gr%C3%A8ve', '%C3%A9cole']])
+                self.assertEqual([c.args[2]['hashtag_url'] for c in collecte.call_args_list], ['https://www.tiktok.com/search/video?q=' + hashtag + '%20' + compte for compte in ['lemondefr', 'franceinfo'] for hashtag in ['gr%C3%A8ve', '%C3%A9cole']])
                 self.assertEqual(validations, [True, False, False, False])
                 self.assertEqual([p['id'] for p in job.records], attendus)
                 self.assertEqual(job.processed, 4)

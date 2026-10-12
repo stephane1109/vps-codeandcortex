@@ -237,7 +237,7 @@ Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par d
 La limite s’applique par compte, tous hashtags confondus. Au moins un hashtag est
 obligatoire ; le deuxième reste facultatif (ET/OU). Les modes Profils et
 Presse/médias ouvrent une recherche vidéo pour chaque couple compte + hashtag :
-par exemple `https://www.tiktok.com/search/video?q=%40lemondefr%20%23manifestation`.
+par exemple `https://www.tiktok.com/search/video?q=manifestation%20lemondefr`.
 Le compte coché figure donc dans la requête, pas seulement dans un filtre appliqué
 à des résultats généraux. Le mode Hashtags conserve les pages `/tag/hashtag`.
 La page d’accueil du profil n’est pas utilisée pour découvrir les publications.

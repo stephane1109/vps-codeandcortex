@@ -491,6 +491,8 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         interact("Vérifiez les publications publiques. Traitez les cookies ou un éventuel CAPTCHA, puis cliquez sur Continuer.")
     candidats_vus: set[str] = set()
     auteurs_ecartes_ids: set[str] = set()
+    publications_par_auteur: dict[str, set[str]] = {}
+    report["defilements_effectues"] = 0
     intervention_effectuee = bool(args.interactive and validation_initiale)
 
     def scan(browser: webdriver.Chrome) -> bool:
@@ -513,6 +515,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             identity = canonical_post(href)
             if identity:
                 candidats_vus.add(identity[0])
+                publications_par_auteur.setdefault(identity[2].casefold(), set()).add(identity[0])
             if not identity:
                 continue
             if comptes:
@@ -528,6 +531,8 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 links.setdefault(identity[0], identity[1])
         report["candidats_examines"] = len(candidats_vus)
         report["candidats_ids"] = sorted(candidats_vus)
+        # Compter les auteurs des liens avant tout rejet ; la lecture vérifiera l'auteur réel.
+        report["auteurs_dans_liens"] = {auteur: len(ids) for auteur, ids in sorted(publications_par_auteur.items())}
         report["discovered_urls"] = list(links.values())
         if comptes:
             report.update(auteurs_ecartes_ids=sorted(auteurs_ecartes_ids),
@@ -599,6 +604,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 report["discovery_stop"] = "blocked"
                 break
         driver.execute_script(DEFILER_PUBLICATIONS_JS)
+        report["defilements_effectues"] += 1
         time.sleep(args.delay)
 
         try:

@@ -15,7 +15,7 @@ class CompteursRecherche(unittest.TestCase):
             job = web.Job("test", requete, Path(dossier))
             urls = [f"https://www.tiktok.com/@media/video/{i}" for i in (100,101,102)]
             def decouvrir(navigateur, arguments, compte, rapport, **options):
-                rapport.update(hashtag_url="https://www.tiktok.com/search/video?q=%40media%20%23test",
+                rapport.update(hashtag_url="https://www.tiktok.com/search/video?q=test%20media",
                     candidats_ids=["100","101","102","999"], candidats_examines=4,
                     discovered_urls=urls, collecte_partielle=True)
                 options["progress"](3)

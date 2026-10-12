@@ -2,9 +2,12 @@
 
 Les modes **Profils** et **Presse/médias** recherchent chaque compte sélectionné
 avec chaque hashtag saisi. Au moins un hashtag reste obligatoire.
-Pour `lemondefr` et `manifestation`, la requête est `@lemondefr #manifestation` :
+Pour `lemondefr` et `manifestation`, la requête textuelle est `manifestation lemondefr` :
 
-`https://www.tiktok.com/search/video?q=%40lemondefr%20%23manifestation`
+`https://www.tiktok.com/search/video?q=manifestation%20lemondefr`
+
+Les caractères `@` et `#` ne sont pas imposés dans la requête textuelle envoyée à TikTok.
+Le contrôle exact de l’auteur et des hashtags reste effectué dans l’application.
 
 Le moteur ne parcourt plus un hashtag général en espérant y retrouver les médias
 cochés. Il n’utilise pas non plus l’accueil du profil. Le mode **Hashtags** seul
@@ -43,7 +46,9 @@ empêche de collecter les liens de cette page. Les résultats déjà découverts
 conservés lorsqu’une autre recherche échoue.
 
 Le détail de chaque média affiche les requêtes ouvertes, leurs liens retenus,
-les exclusions d’auteurs et les diagnostics disponibles. Un média absent des
+les exclusions d’auteurs et les diagnostics disponibles. Il indique aussi les auteurs
+présents dans les liens reçus, le nombre de publications du compte ciblé avant filtrage,
+le nombre de défilements et la raison d’arrêt. Un média absent des
 résultats de recherche n’est pas présenté comme un compte vide. Un quota non
 atteint donne une collecte partielle ; un quota atteint ne prouve pas que tout
 l’historique du compte a été parcouru.

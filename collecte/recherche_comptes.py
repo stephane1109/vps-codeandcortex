@@ -15,13 +15,20 @@ return Array.from(document.querySelectorAll('a[href*="/video/"], a[href*="/photo
 """
 
 
+def construire_requete_compte(compte, hashtag=None):
+    """Reprendre la recherche textuelle TikTok : terme puis identifiant du compte."""
+    compte = normaliser_compte(compte)
+    if hashtag is None:
+        return "@" + compte
+    from scraptiktok import normalize_hashtag
+    # Exemple fourni : q=manifestation%20lemondefr. Les contrôles exacts de
+    # l'auteur et du hashtag sont faits par le moteur, pas par une syntaxe supposée de TikTok.
+    return normalize_hashtag(hashtag) + " " + compte
+
+
 def adresse_recherche(compte, hashtag=None):
-    """Cibler l'identifiant et, s'il est fourni, le hashtag dans la requête."""
-    requete = "@" + normaliser_compte(compte)
-    if hashtag is not None:
-        from scraptiktok import normalize_hashtag
-        requete += " #" + normalize_hashtag(hashtag)
-    return "https://www.tiktok.com/search/video?q=" + quote(requete, safe="")
+    """Encoder la recherche de vidéos sans utiliser l'accueil du profil."""
+    return "https://www.tiktok.com/search/video?q=" + quote(construire_requete_compte(compte, hashtag), safe="")
 
 
 def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None):

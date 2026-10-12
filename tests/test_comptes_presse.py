@@ -57,7 +57,7 @@ class TestsRechercheComptes(unittest.TestCase):
             collecter_compte(Mock(), SimpleNamespace(limit=50), '@LeMondeFR', rapport,
                             hashtags=['#lyceen', '#manifestation'])
         self.assertEqual([c.args[2]['hashtag_url'] for c in moteur.call_args_list],
-                         ['https://www.tiktok.com/search/video?q=%40lemondefr%20%23lyceen', 'https://www.tiktok.com/search/video?q=%40lemondefr%20%23manifestation'])
+                         ['https://www.tiktok.com/search/video?q=lyceen%20lemondefr', 'https://www.tiktok.com/search/video?q=manifestation%20lemondefr'])
         self.assertTrue(all(c.kwargs['comptes_attendus'] == ['lemondefr'] for c in moteur.call_args_list))
         self.assertTrue(all(c.kwargs['sans_connexion'] for c in moteur.call_args_list))
         self.assertEqual(rapport['compte_attendu'], 'lemondefr')
@@ -75,7 +75,7 @@ class TestsRechercheComptes(unittest.TestCase):
                     collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr', rapport, hashtags=['test'])
                 moteur.assert_called_once()
                 self.assertEqual(rapport['recherches_en_echec'], 1)
-                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=%40lemondefr%20%23test')
+                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=test%20lemondefr')
 
     def test_entree_collect_links_compte_ne_navigue_jamais_vers_profil(self):
         from unittest.mock import Mock, patch

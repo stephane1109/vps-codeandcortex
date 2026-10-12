@@ -263,6 +263,23 @@ with onglet_collecte:
                                 f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
                         for recherche in bilan.get("recherches", []):
                             st.write(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
+                            auteurs = recherche.get("auteurs_dans_liens", {})
+                            compte = recherche.get("compte")
+                            if compte:
+                                st.caption(f"@{compte} : {auteurs.get(compte, 0)} publication(s) dans les liens reçus de TikTok, sur {recherche.get('candidats_examines', 0)} publication(s) repérée(s).")
+                                if recherche.get("candidats_examines") and not auteurs.get(compte, 0):
+                                    st.info("Le compte ciblé est absent des liens reçus pour cette recherche. Le filtre l’a cherché ; cela ne prouve pas que ses vidéos n’existent pas.")
+                            if auteurs:
+                                frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
+                                st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
+                            motifs = {"limit": "limite demandée atteinte", "no_new_links": "plus de nouveaux liens après plusieurs attentes",
+                                      "max_scrolls": "budget de défilement atteint", "blocked": "vérification TikTok en attente",
+                                      "tiktok_error": "erreur de chargement TikTok", "no_accessible_links": "aucun lien lisible",
+                                      "connexion_apres_resultats": "invitation à se connecter et absence de nouveaux liens",
+                                      "publications_non_accessibles": "invitation à se connecter et aucun lien lisible",
+                                      "recherche_redirigee": "redirection vers une autre page"}
+                            if recherche.get("arret"):
+                                st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
                             if recherche.get("diagnostic"):
                                 st.caption("Diagnostic : " + recherche["diagnostic"].get("code", "indéterminé"))
                         diagnostic = bilan.get("diagnostic", {})
