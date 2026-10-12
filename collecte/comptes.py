@@ -13,7 +13,8 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    mode_decouverte="recherche_video", exhaustif=False, recherches_en_echec=0)
     options["validation_initiale"] = False
     options["intervention_si_vide"] = True
-    options["sans_connexion"] = True
+    # Anonyme par défaut ; le service transmet False après consentement explicite.
+    options.setdefault("sans_connexion", True)
     try:
         return collect_links(navigateur, arguments, rapport, **options)
     except Exception:

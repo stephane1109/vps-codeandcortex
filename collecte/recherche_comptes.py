@@ -20,7 +20,7 @@ def adresse_recherche(compte):
     return "https://www.tiktok.com/search/video?q=" + quote("@" + normaliser_compte(compte), safe="")
 
 
-def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None):
+def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None, sans_connexion=True):
     """Parcourir les résultats successifs et conserver uniquement l'auteur exact."""
     import scraptiktok as moteur
     compte = normaliser_compte(rapport["compte_attendu"])
@@ -57,7 +57,20 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
                 moteur.diagnostiquer_page(navigateur, rapport, code="verification_tiktok")
                 raise RuntimeError("La recherche TikTok demande un CAPTCHA.")
             afficher("captcha", "TikTok demande un CAPTCHA. Terminez-le dans la fenêtre, puis cliquez sur Continuer.")
-        moteur.fermer_invitation_connexion(navigateur)
+        if sans_connexion:
+            moteur.fermer_invitation_connexion(navigateur)
+        else:
+            from .authentification import connexion_ouverte
+            if connexion_ouverte(navigateur):
+                rapport["diagnostic"] = {"code": "connexion_requise"}
+                if not arguments.interactive:
+                    rapport["discovery_stop"] = "blocked"
+                    raise RuntimeError("La session TikTok demande une connexion manuelle.")
+                afficher("connexion", "TikTok demande de confirmer la connexion. Utilisez le QR code dans la fenêtre, "
+                         "validez sur votre téléphone puis cliquez sur Continuer.")
+                rapport.pop("diagnostic", None)
+                if not sur_la_recherche():
+                    moteur.open_page(navigateur, rapport["hashtag_url"])
 
     def sur_la_recherche():
         """Une redirection vers un profil ne devient jamais une source de liens."""
@@ -171,6 +184,11 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
         return list(liens.values())
     except WebDriverException as erreur:
         moteur.diagnostiquer_page(navigateur, rapport, erreur)
+        from .authentification import est_erreur_session
+        if est_erreur_session(erreur):
+            rapport["diagnostic"] = {"code": "erreur_session", "exception": type(erreur).__name__}
+            rapport["discovery_stop"] = "erreur_session"
+            raise
         rapport["discovery_stop"] = "erreur_recherche"
         if liens:
             return list(liens.values())
@@ -180,6 +198,8 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
         publier_compteurs()
         rapport["collecte_partielle"] = rapport.get("discovery_stop") != "limit"
         rapport["limite_acces_public"] = rapport.get("discovery_stop") == "connexion_apres_resultats"
+        if rapport["collecte_partielle"] and "diagnostic" not in rapport:
+            rapport["diagnostic"] = {"code": "resultats_incomplets", "motif": rapport.get("discovery_stop")}
         rapport["bilan_recherche"] = ("Limite demandée atteinte ; les résultats de recherche ne garantissent pas l’historique complet du compte."
             if not rapport["collecte_partielle"] else
             "Collecte partielle : seuls les résultats accessibles de la recherche TikTok ont été récupérés. L’historique du compte n’est pas exhaustif.")

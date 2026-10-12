@@ -22,9 +22,15 @@ export function initialiserNavigateur(afficherErreur) {
     const precedent = job?.status;
     const connexion = collecte.type_intervention === "connexion";
     const captcha = collecte.type_intervention === "captcha";
-    const sansConnexion = collecte.source_collecte !== "hashtags";
+    const authentification = !!collecte.se_connecter_tiktok;
+    const sansConnexion = collecte.source_collecte !== "hashtags" && !authentification;
+    const saisieInterdite = authentification || connexion;
+    $("typing-form").hidden = saisieInterdite;
+    $("remote-text").disabled = saisieInterdite;
+    if (saisieInterdite) $("remote-text").value = "";
     $("browser-title").textContent = connexion ? "Fenêtre de connexion TikTok" : captcha ? "Vérification CAPTCHA TikTok" : "Navigateur TikTok";
     $("browser-description").textContent = connexion ? (sansConnexion ? "Fermez cette invitation si possible, puis continuez. La collecte lit uniquement les publications publiques et ne vous impose pas de connexion." : "Fermez cette fenêtre si TikTok le permet, puis continuez.") : captcha ? "Terminez la vérification demandée par TikTok dans l’image ci-dessous." : "Intervenez dans le navigateur du serveur si TikTok le demande.";
+    if (authentification && !captcha) $("browser-description").textContent = "Connexion par QR code : choisissez cette méthode si TikTok la propose, scannez le QR code et validez dans TikTok sur votre téléphone. Aucun identifiant, mot de passe ou code à saisir ici. Cliquez sur Continuer après confirmation.";
     $("continue-button").textContent = captcha ? "Vérification terminée, continuer →" : "Continuer →";
     job = collecte;
     $("browser-panel").hidden = collecte.status !== "attention";
@@ -35,6 +41,8 @@ export function initialiserNavigateur(afficherErreur) {
       actualiserImage();
     } else {
       $("browser-screen").hidden = true;
+      $("browser-screen").removeAttribute("src");
+      if (frameUrl) { URL.revokeObjectURL(frameUrl); frameUrl = null; }
       $("screen-loading").hidden = false;
     }
   }
@@ -140,7 +148,7 @@ $("browser-screen").addEventListener("keydown", event => {
 });
 $("typing-form").addEventListener("submit", event => {
   event.preventDefault(); const text = $("remote-text").value; $("remote-text").value = "";
-  if (text) envoyerAction({kind: "text", text});
+  if (text && !job?.se_connecter_tiktok && job?.type_intervention !== "connexion") envoyerAction({kind: "text", text});
 });
 document.querySelectorAll("[data-key]").forEach(button => button.addEventListener("click", () => envoyerAction({kind: "key", key: button.dataset.key})));
 document.querySelectorAll("[data-scroll]").forEach(button => button.addEventListener("click", () => envoyerAction({kind: "scroll", delta: Number(button.dataset.scroll)})));

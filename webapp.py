@@ -20,6 +20,8 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from collecte.authentification import connexion_ouverte, ouvrir_connexion, detruire_session, est_erreur_session
 from typing import Literal
 from urllib.parse import quote
 
@@ -42,6 +44,7 @@ COOKIE = "scraptiktok_session"
 class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
+    se_connecter_tiktok: bool = False
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
     enrichir: bool = False
@@ -98,6 +101,8 @@ class StartRequest(BaseModel):
             from collecte.presse import selectionner_medias
             if not self.medias: raise ValueError("Sélectionnez au moins un média.")
             selectionner_medias(self.medias)
+        # Un choix conservé dans le formulaire ne doit jamais connecter le mode hashtags.
+        if self.source_collecte == "hashtags": self.se_connecter_tiktok = False
         if self.collecter_reponses: self.collecter_commentaires = True
         return self
 
@@ -227,6 +232,9 @@ class Job:
         self.path = self.directory / "textes.txt"
         self.lock = threading.RLock()
         self.stop = threading.Event()
+        self.deconnexion_demandee = threading.Event()
+        self.etat_connexion = "demandee" if settings.se_connecter_tiktok else "anonyme"
+        self.diagnostics = []
         self.demande_navigateur = threading.Event()
         self.ouvrir_navigateur = None
         self.commands = queue.Queue(maxsize=8)
@@ -304,6 +312,8 @@ class Job:
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
                     "source_collecte": self.settings.source_collecte, "comptes": self.settings.comptes,
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
+                    "se_connecter_tiktok": self.settings.se_connecter_tiktok,
+                    "etat_connexion": self.etat_connexion, "diagnostics": list(self.diagnostics),
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
                     "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {"inaccessible", "page_differente", "indisponible_ou_vide"} for r in self.records),
@@ -442,7 +452,10 @@ def wait_for_user(driver, job: Job, message: str):
                 release_pointer(driver)
                 held_since = None
             if time.monotonic() >= prochaine_detection:
-                job.update(type_intervention=scraper.type_intervention_tiktok(driver))
+                nature = scraper.type_intervention_tiktok(driver)
+                if job.settings.se_connecter_tiktok and not nature and connexion_ouverte(driver):
+                    nature = "connexion"
+                job.update(type_intervention=nature)
                 prochaine_detection = time.monotonic() + 1
             if time.monotonic() >= next_frame:
                 job.update(frame=driver.get_screenshot_as_png())
@@ -452,22 +465,29 @@ def wait_for_user(driver, job: Job, message: str):
             except queue.Empty:
                 continue
             if command == "continue":
-                sans_connexion = job.settings.source_collecte != "hashtags"
+                sans_connexion = job.settings.source_collecte != "hashtags" and not job.settings.se_connecter_tiktok
                 if sans_connexion:
                     scraper.fermer_invitation_connexion(driver)
                 verification_js = scraper.CAPTCHA_JS if sans_connexion else scraper.BLOCKED_JS
-                if driver.execute_script(verification_js):
-                    nature = scraper.type_intervention_tiktok(driver)
+                connexion = job.settings.se_connecter_tiktok and connexion_ouverte(driver)
+                if connexion or driver.execute_script(verification_js):
+                    nature = "connexion" if connexion else scraper.type_intervention_tiktok(driver)
                     erreur = ("TikTok demande encore une connexion. Terminez la connexion dans la fenêtre avant de continuer."
                               if nature == "connexion" else "TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer."
                               if nature == "captcha" else "TikTok affiche encore une vérification ou une connexion. Terminez-la dans l’image avant de continuer.")
                     job.update(type_intervention=nature, action_error=erreur)
                     continue
+                if job.settings.se_connecter_tiktok:
+                    # Confirmation humaine, sans lire cookies, identité ou jetons TikTok.
+                    job.update(etat_connexion="confirmee_utilisateur")
                 break
             live = command if isinstance(command, LiveAction) else None
             if live:
                 command = live.action
             try:
+                if command.kind == "text" and (job.settings.se_connecter_tiktok or connexion_ouverte(driver)):
+                    command.text = ""
+                    raise ValueError("La connexion se fait par QR code sur le téléphone.")
                 perform_action(driver, command)
                 if command.kind in {"pointer_down", "pointer_move"}:
                     held_since = time.monotonic()
@@ -503,6 +523,12 @@ def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
     diagnostic = rapport.get("diagnostic", {})
     code = diagnostic.get("code")
+    if code == "erreur_session":
+        return "La session Selenium a été fermée ou perdue. Relancez une collecte ; la connexion précédente ne sera pas réutilisée."
+    if code == "connexion_requise":
+        return "TikTok demande une connexion manuelle avant de poursuivre cette recherche."
+    if code == "resultats_incomplets":
+        return "La recherche TikTok reste incomplète après plusieurs chargements."
     if code == "connexion_sans_publications_publiques":
         return "TikTok n’a fourni aucun lien public lisible et affiche une fenêtre de connexion. La collecte n’impose pas de connexion ; cette source est inaccessible sans compte dans cette session."
     if rapport.get("discovery_stop") == "blocked" or code == "verification_tiktok":
@@ -527,14 +553,23 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         driver=Path(os.environ["CHROMEDRIVER"]) if os.getenv("CHROMEDRIVER") else None,
     )
     driver = None
+    profil_temporaire = None
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     try:
         job.check()
+        if job.settings.se_connecter_tiktok:
+            # Hors data/ et des exports, répertoire privé supprimé dans finally.
+            profil_temporaire = TemporaryDirectory(prefix="scraptiktok-session-")
+            args.profile_dir = Path(profil_temporaire.name)
+            args.se_connecter_tiktok = True
         driver = driver_factory(args)
         interact = lambda message: wait_for_user(driver, job, message)
         job.update(ouvrir_navigateur=lambda: wait_for_user(driver, job,
             "Collecte mise en pause à votre demande. Examinez TikTok ci-dessous, "
             "puis cliquez sur Continuer pour reprendre au même endroit."))
+        if job.settings.se_connecter_tiktok:
+            job.update(etat_connexion="a_confirmer")
+            ouvrir_connexion(driver, interact, job.check)
         unique_links = {}
         hors_selection = 0
         sources = ([{"hashtag": h} for h in job.settings.hashtags]
@@ -562,11 +597,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 else:
                     from collecte.comptes import collecter_compte
                     rapport = {}
-                    # Scanner les publications du compte immédiatement : aucune
-                    # confirmation préalable ni authentification n'est demandée.
+                    # La connexion facultative a lieu une seule fois, dans le même navigateur.
                     found = collecter_compte(driver, args, source["compte"], rapport=rapport, hashtags=job.settings.hashtags,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        progress=suivre_decouverte)
+                        progress=suivre_decouverte, sans_connexion=not job.settings.se_connecter_tiktok)
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
@@ -589,7 +623,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     rapport["diagnostic"] = {"exception": type(erreur).__name__}
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
-                if len(sources) == 1: raise
+                if len(sources) == 1 or est_erreur_session(erreur): raise
                 job.update(search_errors=job.search_errors + 1)
             finally:
                 job.actualiser_decouverte(rapport)
@@ -601,7 +635,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check,
-                    **({"sans_connexion": True} if job.settings.source_collecte != "hashtags" else {}))
+                    **({"sans_connexion": not job.settings.se_connecter_tiktok,
+                        **({"authentification": True} if job.settings.se_connecter_tiktok else {})} if job.settings.source_collecte != "hashtags" else {}))
                 record["retenue"] = False
                 # Même découverte et lecture que le mode hashtag ; filtrer ensuite
                 # l’auteur effectivement lu, et non une grille de profil différente.
@@ -655,14 +690,21 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 with job.lock:
                                     job.commentaires.extend(resultat.pop("commentaires"))
                                     record["collecte_commentaires"] = resultat
-                            except scraper.WebDriverException:
+                            except scraper.WebDriverException as erreur:
+                                if est_erreur_session(erreur): raise
                                 record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
                     else:
                         with job.lock:
                             job.legendes_vides += 1
-            except scraper.WebDriverException:
+            except scraper.WebDriverException as erreur:
+                code = "erreur_session" if est_erreur_session(erreur) else "erreur_extraction_video"
+                job.diagnostics.append({"code": code, "publication_id": scraper.canonical_post(url)[0],
+                                        "exception": type(erreur).__name__})
                 with job.lock:
                     job.errors += 1
+                if est_erreur_session(erreur):
+                    job.update(processed=index)
+                    raise
             job.update(processed=index)
             job.save()
             if job.base:
@@ -702,27 +744,41 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" La recherche a fourni {len(links)} lien(s), pour un objectif de {args.limit}."
     except Stopped:
         final_status, final_message = "stopped", "Collecte arrêtée. Les textes déjà obtenus restent téléchargeables."
+        if job.deconnexion_demandee.is_set():
+            final_message = "Déconnexion demandée : fermeture de la session TikTok. Les résultats restent téléchargeables."
+    except scraper.WebDriverException as erreur:
+        code = "erreur_session" if est_erreur_session(erreur) else "erreur_navigateur"
+        job.diagnostics.append({"code": code, "exception": type(erreur).__name__})
+        final_message = ("La session Selenium a été perdue. Relancez la collecte pour ouvrir une nouvelle session."
+                         if code == "erreur_session" else "Le navigateur TikTok n’a pas pu poursuivre. Les résultats déjà collectés sont conservés.")
     except RuntimeError:
         final_message = "Aucune publication accessible pour la source choisie. Consultez le détail des sources et vérifiez que les publications sont visibles dans TikTok avant de continuer."
         if len(job.journal) == 1 and job.journal[0].get("rapport", {}).get("diagnostic", {}).get("code") == "erreur_tiktok":
             final_message = job.journal[0]["source"] + " : " + job.journal[0]["message"]
     except Exception:
-        LOG.exception("Échec de la collecte %s", job.id)
+        # Ne pas journaliser une trace Selenium ou une réponse d’authentification.
+        LOG.error("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
     finally:
         with job.lock:
             job.ouvrir_navigateur = None
             job.demande_navigateur.clear()
+        if job.settings.se_connecter_tiktok:
+            ferme = detruire_session(driver, profil_temporaire)
+            job.update(etat_connexion="fermee" if ferme else "fermeture_incomplete", frame=b"")
+            if not ferme:
+                job.diagnostics.append({"code": "fermeture_session_incomplete"})
+                final_message += " La fermeture du navigateur n’a pas pu être confirmée ; contactez l’administrateur."
+        elif driver is not None:
+            try:
+                driver.quit()
+            except scraper.WebDriverException:
+                LOG.warning("Fermeture du navigateur impossible pour %s", job.id)
         try:
             job.save()
         except OSError:
             LOG.exception("Écriture de l’export impossible")
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
-        if driver is not None:
-            try:
-                driver.quit()
-            except scraper.WebDriverException:
-                LOG.warning("Fermeture du navigateur impossible pour %s", job.id)
         if job.base:
             try:
                 from corpus.construction import construire_exports
@@ -733,7 +789,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 for evenement in job.journal: ajouter_evenement(job.base,job.id,evenement)
                 construire_exports(job.directory, job.publications, job.commentaires,
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
-                     "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal})
+                     "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal,
+                     "diagnostics": job.diagnostics})
                 exporter_zip(job.directory, job.directory / "archive.zip")
                 job.archive_prete = True
             except Exception:
@@ -1041,6 +1098,19 @@ def create_app(manager=None):
         job.stop.set()
         return {"ok": True}
 
+    @app.post("/api/jobs/{job_id}/deconnexion", status_code=202)
+    def deconnecter_tiktok(job_id: str, request: Request):
+        """Seul le worker ferme le navigateur ; aucune commande Selenium concurrente."""
+        job = manager.get(owner(request), job_id)
+        with job.lock:
+            if not job.settings.se_connecter_tiktok:
+                raise HTTPException(409, "Cette collecte n’a pas demandé de connexion TikTok.")
+            if job.busy:
+                job.deconnexion_demandee.set()
+                job.stop.set()
+                job.update(etat_connexion="fermeture_demandee", frame=b"")
+            return job.snapshot()
+
     @app.post("/api/jobs/{job_id}/navigateur", status_code=202)
     def afficher_navigateur(job_id: str, request: Request):
         """Demander une pause visuelle sans attendre la détection d'un CAPTCHA."""
@@ -1071,6 +1141,9 @@ def create_app(manager=None):
         if payload.kind in {"click", "drag", "pointer_down", "pointer_move", "pointer_up"} and not payload.points:
             raise HTTPException(422, "Une position est requise.")
         job = manager.get(owner(request), job_id)
+        if (job.settings.se_connecter_tiktok or job.type_intervention == "connexion") and (payload.kind == "text" or payload.text):
+            payload.text = ""
+            raise HTTPException(422, "Connexion par QR code uniquement : validez sur votre téléphone, sans saisir d’identifiant ou de code ici.")
         if payload.kind.startswith("pointer_"):
             command = LiveAction(payload)
             enqueue(job, command)
@@ -1122,3 +1195,4 @@ def create_app(manager=None):
 
 
 app = create_app()
+

@@ -295,13 +295,24 @@ def create_driver(args: argparse.Namespace) -> webdriver.Chrome:
         options.add_argument("--no-sandbox")
     if args.headless:
         options.add_argument("--headless=new")
+    if getattr(args, "se_connecter_tiktok", False):
+        options.add_argument("--incognito")
+        options.add_experimental_option("prefs", {"credentials_enable_service": False,
+            "profile.password_manager_enabled": False, "autofill.profile_enabled": False})
     if args.profile_dir:
         options.add_argument(f"--user-data-dir={args.profile_dir.expanduser().resolve()}")
     if args.chrome_binary:
         options.binary_location = str(args.chrome_binary.expanduser().resolve())
     service = Service(executable_path=str(args.driver.expanduser().resolve())) if args.driver else Service()
     driver = webdriver.Chrome(options=options, service=service)
-    driver.set_page_load_timeout(args.timeout)
+    try:
+        driver.set_page_load_timeout(args.timeout)
+    except WebDriverException:
+        try:
+            driver.quit()
+        except WebDriverException:
+            pass
+        raise
     return driver
 
 
@@ -368,7 +379,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     if report.get("compte_attendu"):
         from collecte.recherche_comptes import collecter_recherche_compte
         return collecter_recherche_compte(driver, args, report, interact=interact,
-                                         progress=progress, check=check)
+                                         progress=progress, check=check, sans_connexion=sans_connexion)
     check = check or (lambda: None)
     check()
     try:
@@ -499,13 +510,23 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
 
 
 def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
-              *, interact=manual_step, check=None, sans_connexion=False) -> dict:
+              *, interact=manual_step, check=None, sans_connexion=False, authentification=False) -> dict:
     check = check or (lambda: None)
     check()
     open_page(driver, url)
 
     def read(browser: webdriver.Chrome) -> dict | bool:
         check()
+        if authentification:
+            from collecte.authentification import connexion_ouverte
+            if connexion_ouverte(browser) or browser.execute_script(CAPTCHA_JS):
+                if not args.interactive:
+                    return False
+                interact("TikTok demande une vérification ou une nouvelle connexion. Validez manuellement dans la fenêtre, "
+                         "par QR code pour la connexion, puis cliquez sur Continuer.")
+                check()
+                if not meme_page_tiktok(browser.current_url, url):
+                    open_page(browser, url)
         if sans_connexion:
             fermer_invitation_connexion(browser)
             if browser.execute_script(CAPTCHA_JS):

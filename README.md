@@ -539,3 +539,21 @@ redémarrage complet par le superviseur Docker. Aucun réglage Redis n’est mod
 `python tests/smoke_demarrage.py` vérifie avec de vrais processus le refus des doublons,
 la fermeture des ports après SIGTERM et l’arrêt du moteur après perte de Streamlit.
 Ce test est également exécuté par le point d’entrée navigateur de la CI.
+
+## Connexion TikTok facultative pour les comptes et médias
+
+L’option **Se connecter à TikTok** est décochée par défaut. Le mode hashtags reste inchangé et ne l’active jamais.
+
+1. Sélectionner des profils ou des médias, cocher l’option et lancer la collecte.
+2. La fenêtre Selenium distante s’ouvre sur la connexion TikTok. Choisir le QR code si TikTok le propose, le scanner dans TikTok sur son téléphone puis y confirmer la connexion. Terminer manuellement tout CAPTCHA demandé.
+3. Cliquer sur **Continuer** après confirmation. Une fenêtre de connexion encore ouverte empêche la reprise. L’application ne lit aucun cookie pour vérifier l’identité : il s’agit d’une confirmation utilisateur, pas d’une preuve d’accès exhaustif.
+
+La saisie de texte dans le contrôle distant est désactivée pour ces collectes, et l’API refuse également ce type d’action. Aucun identifiant, mot de passe ou code de vérification n’est demandé ou transmis par ce formulaire. Si TikTok ne propose pas de QR code, arrêter la collecte puis relancer en mode anonyme ; aucune autre méthode de connexion n’est automatisée.
+
+Le même navigateur est conservé pour toutes les recherches, publications et commentaires de la collecte. La découverte continue à utiliser exclusivement `https://www.tiktok.com/search/video?q=%40compte`, avec défilement progressif, pagination accessible, vérification de l’auteur et dédoublonnage. Une connexion n’enlève pas les limites imposées par TikTok ; une collecte incomplète reste signalée.
+
+**Se déconnecter et fermer TikTok** arrête la collecte et détruit sa session navigateur. La même destruction est effectuée à la fin, en cas d’annulation ou d’erreur : suppression des cookies du navigateur, fermeture et suppression du profil temporaire privé placé hors du dossier des exports. Chrome utilise une fenêtre privée et l’enregistrement des mots de passe est désactivé. Aucune réutilisation de session entre collectes, aucun fichier de cookies, jeton, identifiant de connexion ou capture de connexion dans les journaux et archives. Ce bouton ferme la session du serveur ; il ne déconnecte pas le téléphone. Une fermeture non confirmée est signalée au lieu d’être annoncée comme réussie.
+
+Les diagnostics distinguent `verification_tiktok` / `connexion_requise`, `erreur_session`, `resultats_incomplets` et `erreur_extraction_video`. Les messages bruts d’erreur Selenium ne sont pas enregistrés pour cette connexion. Les quatre compteurs (découvertes, retenues, traitées, exportées) restent disponibles.
+
+Les scénarios simulés sont fournis dans `tests/test_authentification.py` (session partagée, progression au-delà de six vidéos, CAPTCHA puis connexion, annulation, nettoyage, refus des secrets, séparation des utilisateurs et diagnostics). Ils ont été ajoutés sans exécution à la demande de l’utilisateur.
