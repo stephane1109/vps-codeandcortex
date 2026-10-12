@@ -236,25 +236,28 @@ Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
 Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
 La limite s’applique par compte, tous hashtags confondus. Au moins un hashtag est
 obligatoire ; le deuxième reste facultatif (ET/OU). Les modes Profils et
-Presse/médias utilisent les mêmes pages `https://www.tiktok.com/tag/hashtag` que
-le mode Hashtags. Chaque hashtag est parcouru une seule fois pour tous les comptes.
-La recherche `/search/video?q=%40compte` et la page d’accueil du profil ne sont
-plus utilisées par ces collectes.
+Presse/médias ouvrent une recherche vidéo pour chaque couple compte + hashtag :
+par exemple `https://www.tiktok.com/search/video?q=%40lemondefr%20%23manifestation`.
+Le compte coché figure donc dans la requête, pas seulement dans un filtre appliqué
+à des résultats généraux. Le mode Hashtags conserve les pages `/tag/hashtag`.
+La page d’accueil du profil n’est pas utilisée pour découvrir les publications.
 
 Le moteur attend les liens chargés dynamiquement et fait défiler le conteneur
 des publications. Seuls les auteurs correspondant exactement à la sélection
 sont retenus ; les autres auteurs ne consomment pas la limite par compte.
 Les identifiants sont dédoublonnés entre les pages et les hashtags. Trois
 chargements sans nouveauté sont nécessaires avant un arrêt pour stagnation ;
-le parcours est borné à 40 défilements par hashtag pour le VPS.
+le parcours est borné à 40 défilements par couple compte + hashtag pour le VPS.
 Les hashtags ET/OU, dates et langue sont vérifiés sur les légendes après un
 second contrôle de l’auteur à la lecture. Les likes, commentaires et exports
 restent disponibles.
 
 L’interface distingue **Découvertes**, **Retenues pour lecture**, **Traitées** et
 **Exportées dans le TXT**. Le compteur d’export ne progresse qu’après écriture
-réussie. Un objectif non atteint est signalé **Collecte partielle**, y compris si
-TikTok annonce la fin de ses résultats. Le mode Hashtags conserve son parcours.
+réussie. Le détail par média affiche les requêtes effectivement ouvertes, les liens
+retenus et les auteurs exclus. Si aucune publication n’est lue, les filtres de langue
+et de légende sont indiqués comme non appliqués. Un objectif non atteint est signalé
+**Collecte partielle**, y compris si TikTok annonce la fin de ses résultats. Le mode Hashtags conserve son parcours.
 Le fonctionnement détaillé et les scénarios de test fournis sont décrits dans
 [COLLECTE_PROFILS.md](COLLECTE_PROFILS.md).
 
@@ -471,7 +474,7 @@ vérification TikTok réelle demande toujours une intervention. Le panneau **Mé
 pris en compte par la collecte** affiche la sélection reçue par le moteur ; le message
 indique la source courante et le nombre total. **Détail des sources** indique les liens trouvés et les sources
 inaccessibles ; une vérification TikTok non terminée est distinguée d’une page sans
-publication lisible. En mode presse/comptes, au moins un hashtag doit être renseigné. Les pages de hashtags sont parcourues une seule fois pour tous les comptes sélectionnés ; les autres auteurs sont exclus. Il n'existe aucun repli vers la recherche @compte ou un profil. Les CAPTCHA et les recherches bloquées ouvrent automatiquement la fenêtre ; les résultats partiels restent conservés. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
+publication lisible. En mode presse/comptes, au moins un hashtag doit être renseigné. Chaque compte sélectionné est recherché avec chacun des hashtags, dans le même navigateur anonyme ; les autres auteurs sont exclus. Une redirection vers une page générale est signalée et ses liens ne sont pas collectés. Aucun repli vers un profil ou une recherche de hashtag général n’est effectué. Les CAPTCHA et les recherches bloquées ouvrent automatiquement la fenêtre ; les résultats partiels restent conservés. En mode hashtag, une page sans lien permet toujours une intervention manuelle. Les erreurs de navigation, de réseau et de navigateur sont distinguées dans le diagnostic de chaque source. Aucun cookie ni capture n’est exporté.
 
 Le navigateur utilise le chargement `eager` puis attend explicitement les publications. Un délai dépassé n’autorise la lecture que si le document visible correspond exactement à la recherche ou à la publication demandée ; les anciennes pages sont rejetées. Voir la [documentation Selenium](https://www.selenium.dev/documentation/webdriver/drivers/options/#pageloadstrategy). Les compteurs de filtres et d’erreurs de lecture expliquent les
 résultats vides sans les assimiler à l’absence de publications du média.

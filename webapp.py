@@ -296,6 +296,11 @@ class Job:
                         "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
                         "message": entree.get("message", "Recherche terminée."),
                         "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
+                        "recherches": [{"requete": r.get("requete_recherche"),
+                            "liens": len(r.get("discovered_urls", [])),
+                            "auteurs_ecartes": r.get("auteurs_ecartes", 0),
+                            "diagnostic": r.get("diagnostic", {})}
+                            for r in entree.get("rapport", {}).get("recherches_hashtags", [])],
                         "diagnostic": entree.get("rapport", {}).get("diagnostic", {})}
                         for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
@@ -492,6 +497,8 @@ def expliquer_echec_source(rapport, erreur):
     code = diagnostic.get("code")
     if code == "erreur_session":
         return "La session Selenium a été fermée ou perdue. Relancez une collecte pour ouvrir un nouveau navigateur anonyme."
+    if code == "recherche_redirigee":
+        return "TikTok a redirigé la recherche compte + hashtag vers une autre page. Les publications de cette autre page ne sont pas collectées."
     if code == "resultats_incomplets":
         return "La recherche TikTok reste incomplète après plusieurs chargements."
     if code == "connexion_sans_publications_publiques":
@@ -525,8 +532,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         interact = lambda message: wait_for_user(driver, job, message)
         unique_links = {}
         hors_selection = 0
-        # Chaque hashtag est parcouru une seule fois, quel que soit le nombre de médias.
-        sources = [{"hashtag": h} for h in job.settings.hashtags]
+        # En mode presse/profils, chaque compte sélectionné est une source ciblée.
+        sources = ([{"hashtag": h} for h in job.settings.hashtags]
+                   if job.settings.source_collecte == "hashtags" else job.settings.sources)
         medias_par_compte = {s["compte"]: s for s in job.settings.sources}
         session_validee = False
         def intervenir(message):
@@ -539,7 +547,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             rapport = {}
             def suivre_decouverte(nombre):
                 job.actualiser_decouverte(rapport)
-                job.update(message=f"Source {numero_source}/{len(sources)} — {etiquette} : "
+                requete = rapport.get("requete_recherche") or etiquette
+                job.update(message=f"Source {numero_source}/{len(sources)} — recherche {requete} : "
                     f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), {nombre} retenue(s)…")
             try:
                 if job.settings.source_collecte == "hashtags":
@@ -549,9 +558,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
                         validation_initiale=not session_validee, progress=suivre_decouverte)
                 else:
-                    from collecte.comptes import collecter_comptes_par_hashtag
-                    found = collecter_comptes_par_hashtag(driver, args, medias_par_compte,
-                        source["hashtag"], rapport=rapport, liens_precedents=list(unique_links.values()),
+                    from collecte.comptes import collecter_compte
+                    found = collecter_compte(driver, args, source["compte"], rapport=rapport,
+                        hashtags=job.settings.hashtags,
                         interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"),
                         check=job.check, validation_initiale=not session_validee, progress=suivre_decouverte)
                 rapport["discovered_urls"] = found
@@ -560,7 +569,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 message_source = rapport.get("bilan_recherche") or ("Recherche partielle : une recherche TikTok a échoué."
                                   if rapport.get("recherches_en_echec") else "Recherche terminée.")
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
-                    "message": message_source if found or rapport.get("objectif_atteint") else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
+                    "message": message_source if found or rapport.get("bilan_recherche") else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
                         if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")})
                 for url in found:
                     identity = scraper.canonical_post(url)
@@ -658,6 +667,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.save()
             if job.base:
                 job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
+        exclus_decouverte = set().union(*(set(e.get("rapport", {}).get("auteurs_ecartes_ids", [])) for e in job.journal))
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
         if job.settings.source_collecte != "hashtags":
             retenues_par_compte = {compte: 0 for compte in medias_par_compte}
@@ -672,18 +682,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if not job.records:
             final_message = ("Aucune publication accessible : consultez le détail des sources."
                              if not links else "Aucune légende exploitable retenue parmi les publications consultées.")
+            if not links and job.settings.source_collecte != "hashtags":
+                final_message = ("Aucune publication des comptes sélectionnés trouvée dans les recherches ciblées compte + hashtag. "
+                                 "Consultez le détail par média ; les filtres de langue et de légende n’ont pas été appliqués.")
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
-        if job.settings.french_only:
+        if job.settings.french_only and job.processed:
             if not job.records and job.non_french:
                 final_message = "Aucun texte retenu par le filtre français parmi les descriptions correspondant aux hashtags."
             final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée conservés."
-        if job.settings.hashtags:
+        if job.settings.hashtags and job.processed:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
             if job.settings.source_collecte != "hashtags":
-                final_message += " Hashtags filtrés sur les légendes des publications du compte."
+                final_message += " Combinaison ET/OU vérifiée sur les légendes des comptes sélectionnés."
         if job.settings.source_collecte != "hashtags":
-            final_message += f" {hors_selection} publication(s) écartée(s) car l’auteur ne fait pas partie des comptes sélectionnés."
+            final_message += (f" {len(exclus_decouverte)} publication(s) d’autres auteurs écartée(s) à la découverte ; "
+                              f"{hors_selection} écartée(s) après contrôle de l’auteur à la lecture.")
         if job.settings.date_debut or job.settings.date_fin:
             if not job.records and (job.hors_periode or job.dates_indeterminees):
                 final_message = "Aucun texte retenu avec la période et les autres filtres choisis."
@@ -694,7 +708,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if job.settings.source_collecte != "hashtags":
             final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
-                              if recherche_partielle else " Recherche par hashtags limitée au nombre demandé par compte ; historique complet non garanti.")
+                              if recherche_partielle else " Recherches compte + hashtag limitées au nombre demandé par compte ; historique complet non garanti.")
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:

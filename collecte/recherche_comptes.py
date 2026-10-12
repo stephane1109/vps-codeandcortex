@@ -15,9 +15,13 @@ return Array.from(document.querySelectorAll('a[href*="/video/"], a[href*="/photo
 """
 
 
-def adresse_recherche(compte):
-    """Ne construire que l'URL de recherche, jamais une URL de profil."""
-    return "https://www.tiktok.com/search/video?q=" + quote("@" + normaliser_compte(compte), safe="")
+def adresse_recherche(compte, hashtag=None):
+    """Cibler l'identifiant et, s'il est fourni, le hashtag dans la requête."""
+    requete = "@" + normaliser_compte(compte)
+    if hashtag is not None:
+        from scraptiktok import normalize_hashtag
+        requete += " #" + normalize_hashtag(hashtag)
+    return "https://www.tiktok.com/search/video?q=" + quote(requete, safe="")
 
 
 def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None):

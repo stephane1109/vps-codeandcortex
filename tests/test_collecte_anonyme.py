@@ -17,19 +17,19 @@ class CollecteAnonyme(unittest.TestCase):
             self.assertNotIn("se_connecter_tiktok", parametres.model_dump())
             job = web.Job("test", parametres, Path(dossier))
             navigateur, pilotes = Mock(), []
-            def decouvrir(pilote, arguments, comptes, hashtag, rapport, **options):
+            def decouvrir(pilote, arguments, compte, rapport, **options):
                 pilotes.append(pilote)
-                self.assertEqual(list(comptes), ["media", "presse"])
-                self.assertEqual(hashtag, "test")
+                self.assertIn(compte, ["media", "presse"])
+                self.assertEqual(options["hashtags"], ["test"])
                 return []
-            with patch("collecte.comptes.collecter_comptes_par_hashtag", side_effect=decouvrir), patch.object(web, "wait_for_user") as pause:
+            with patch("collecte.comptes.collecter_compte", side_effect=decouvrir), patch.object(web, "wait_for_user") as pause:
                 fabrique = Mock(return_value=navigateur)
                 web.execute_job(job, driver_factory=fabrique)
             fabrique.assert_called_once()
             pause.assert_not_called()
             navigateur.get.assert_not_called()
             navigateur.quit.assert_called_once()
-            self.assertEqual(pilotes, [navigateur])
+            self.assertEqual(pilotes, [navigateur, navigateur])
             self.assertNotIn("etat_connexion", job.snapshot())
             self.assertNotIn("navigateur_disponible", job.snapshot())
 

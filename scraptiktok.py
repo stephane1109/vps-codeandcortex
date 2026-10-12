@@ -409,10 +409,12 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         report.update(retenues_par_compte={compte: len(ids) for compte, ids in sorted(retenues.items())},
                       objectif_par_compte=args.limit, objectif_atteint=objectif_atteint(),
                       collecte_partielle=not objectif_atteint(), exhaustif=False)
+        origine = ("les recherches compte + hashtag" if report.get("mode_decouverte") == "recherche_compte_hashtag"
+                   else "les pages de hashtags")
         report["bilan_recherche"] = (
-            "Limite demandée atteinte pour les comptes sélectionnés dans les pages de hashtags ; historique complet non garanti."
+            f"Limite demandée atteinte pour les comptes sélectionnés dans {origine} ; historique complet non garanti."
             if objectif_atteint() else
-            "Collecte partielle : les pages de hashtags accessibles ne fournissent pas la limite demandée pour chaque compte. Aucun accès exhaustif n’est garanti.")
+            f"Collecte partielle : {origine} ne fournissent pas la limite demandée pour chaque compte. Aucun accès exhaustif n’est garanti.")
 
     check()
     if comptes and objectif_atteint():
@@ -431,6 +433,7 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     if args.interactive and validation_initiale:
         interact("Vérifiez les publications publiques. Traitez les cookies ou un éventuel CAPTCHA, puis cliquez sur Continuer.")
     candidats_vus: set[str] = set()
+    auteurs_ecartes_ids: set[str] = set()
     intervention_effectuee = bool(args.interactive and validation_initiale)
 
     def scan(browser: webdriver.Chrome) -> bool:
@@ -444,6 +447,10 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             intervention_effectuee = True
             check()
         precedents = len(candidats_vus)
+        if (report.get("mode_decouverte") == "recherche_compte_hashtag"
+                and not meme_page_tiktok(browser.current_url, report["hashtag_url"])):
+            report["redirection_recherche"] = True
+            return False
         candidats = list(browser.execute_script(DISCOVER_JS))
         for href in candidats:
             identity = canonical_post(href)
@@ -453,8 +460,10 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 continue
             if comptes:
                 auteur = identity[2].casefold()
-                if (auteur not in comptes or identity[0] in deja_vus
-                        or len(retenues[auteur]) >= args.limit):
+                if auteur not in comptes:
+                    auteurs_ecartes_ids.add(identity[0])
+                    continue
+                if identity[0] in deja_vus or len(retenues[auteur]) >= args.limit:
                     continue
                 retenues[auteur].add(identity[0])
                 links.setdefault(identity[0], identity[1])
@@ -463,6 +472,9 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
         report["candidats_examines"] = len(candidats_vus)
         report["candidats_ids"] = sorted(candidats_vus)
         report["discovered_urls"] = list(links.values())
+        if comptes:
+            report.update(auteurs_ecartes_ids=sorted(auteurs_ecartes_ids),
+                          auteurs_ecartes=len(auteurs_ecartes_ids))
         publier_bilan_comptes()
         if progress:
             progress(len(links))
@@ -483,6 +495,13 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 report["discovery_stop"] = "publications_non_accessibles"
                 raise RuntimeError("TikTok affiche une connexion et ne fournit aucun lien public lisible sur cette page. Aucune connexion n’a été imposée par la collecte.") from exc
             bloque = diagnostic["code"] == "verification_tiktok"
+            if (report.get("mode_decouverte") == "recherche_compte_hashtag"
+                    and report.get("redirection_recherche")
+                    and not meme_page_tiktok(driver.current_url, report["hashtag_url"])
+                    and diagnostic["code"] not in {"verification_tiktok", "erreur_tiktok"}):
+                diagnostic["code"] = "recherche_redirigee"
+                report["discovery_stop"] = "recherche_redirigee"
+                raise RuntimeError("TikTok a redirigé la recherche ciblée vers une autre page ; ses publications ne sont pas retenues.") from exc
             if diagnostic["code"] == "erreur_tiktok":
                 if not recharge_effectuee and tentative < 2:
                     check()
@@ -530,6 +549,12 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             idle = 0
         except TimeoutException:
             idle += 1
+            if (report.get("mode_decouverte") == "recherche_compte_hashtag"
+                    and not meme_page_tiktok(driver.current_url, report["hashtag_url"])):
+                diagnostic = diagnostiquer_page(driver, report, code="recherche_redirigee")
+                if diagnostic["code"] == "recherche_redirigee":
+                    report.update(discovery_stop="recherche_redirigee", recherches_en_echec=1)
+                    break
             if (idle >= args.idle_rounds
                     and type_intervention_tiktok(driver) == "connexion"):
                 # La fenêtre empêche éventuellement le chargement suivant. Garder

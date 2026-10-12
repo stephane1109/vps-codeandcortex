@@ -48,7 +48,7 @@ class TestsComptes(unittest.TestCase):
         self.assertEqual(resultat["proprietaire_editorial"], "indetermine")
 
 class TestsRechercheComptes(unittest.TestCase):
-    def test_profils_parcourent_les_hashtags_sans_recherche_compte(self):
+    def test_profils_recherchent_le_compte_dans_chaque_requete(self):
         from unittest.mock import Mock, patch
         from collecte.comptes import collecter_compte
         from types import SimpleNamespace
@@ -57,10 +57,10 @@ class TestsRechercheComptes(unittest.TestCase):
             collecter_compte(Mock(), SimpleNamespace(limit=50), '@LeMondeFR', rapport,
                             hashtags=['#lyceen', '#manifestation'])
         self.assertEqual([c.args[2]['hashtag_url'] for c in moteur.call_args_list],
-                         ['https://www.tiktok.com/tag/lyceen', 'https://www.tiktok.com/tag/manifestation'])
+                         ['https://www.tiktok.com/search/video?q=%40lemondefr%20%23lyceen', 'https://www.tiktok.com/search/video?q=%40lemondefr%20%23manifestation'])
         self.assertTrue(all(c.kwargs['comptes_attendus'] == ['lemondefr'] for c in moteur.call_args_list))
         self.assertTrue(all(c.kwargs['sans_connexion'] for c in moteur.call_args_list))
-        self.assertNotIn('compte_attendu', rapport)
+        self.assertEqual(rapport['compte_attendu'], 'lemondefr')
         with self.assertRaisesRegex(ValueError, 'au moins un hashtag'):
             collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr')
 
@@ -75,7 +75,7 @@ class TestsRechercheComptes(unittest.TestCase):
                     collecter_compte(Mock(), SimpleNamespace(limit=50), 'lemondefr', rapport, hashtags=['test'])
                 moteur.assert_called_once()
                 self.assertEqual(rapport['recherches_en_echec'], 1)
-                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/tag/test')
+                self.assertEqual(rapport['hashtag_url'], 'https://www.tiktok.com/search/video?q=%40lemondefr%20%23test')
 
     def test_entree_collect_links_compte_ne_navigue_jamais_vers_profil(self):
         from unittest.mock import Mock, patch

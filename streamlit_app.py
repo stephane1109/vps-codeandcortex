@@ -150,7 +150,7 @@ with onglet_collecte:
             help="Saisissez un nombre entre 1 et 300. En mode Hashtags : limite par hashtag. En mode Presse/médias ou Profils : limite par compte, tous hashtags confondus, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
-            st.caption("Les pages de hashtags sont parcourues comme en mode Hashtags. Seules les publications des comptes cochés ou saisis sont conservées, dans la limite demandée par compte. Résultats non exhaustifs.")
+            st.caption("Chaque compte sélectionné est recherché avec chaque hashtag. Seules ses publications sont conservées, dans la limite demandée par compte. Résultats non exhaustifs.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
@@ -205,7 +205,7 @@ with onglet_collecte:
                 st.rerun()
             if actuel.get("comptes_filtres"):
                 st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
-                st.caption("La fenêtre TikTok affiche tous les profils du hashtag. La collecte conserve uniquement les publications des profils listés ci-dessus.")
+                st.caption("La recherche cible successivement chaque profil ci-dessus avec les hashtags saisis. Les résultats d’autres auteurs sont exclus.")
             if actuel.get("source_collecte") == "presse":
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
@@ -225,14 +225,14 @@ with onglet_collecte:
                         ("decouvertes", "retenues", "traitees", "exportees"),
                         ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
                     colonne.metric(titre, compteurs[cle])
-                st.caption(("Découvertes : tous les profils du hashtag. Retenues pour lecture : uniquement les profils sélectionnés. L’auteur est à nouveau contrôlé avant les exports. " if actuel.get("source_collecte") != "hashtags" else "")
+                st.caption(("Découvertes : résultats des recherches compte + hashtag. Retenues pour lecture : auteur conforme au compte ciblé. L’auteur est à nouveau contrôlé avant les exports. " if actuel.get("source_collecte") != "hashtags" else "")
                            + "Les filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
                 st.caption("Filtre appliqué : " + combinaison)
-                if "bilan_hashtags" in actuel:
+                if "bilan_hashtags" in actuel and actuel.get("processed", 0):
                     with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
                         st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. Un hashtag doit être précédé de # dans la légende.")
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
@@ -261,6 +261,10 @@ with onglet_collecte:
                         if bilan.get("retenues_par_compte"):
                             st.caption("Liens retenus cumulés : " + " · ".join(
                                 f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
+                        for recherche in bilan.get("recherches", []):
+                            st.write(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
+                            if recherche.get("diagnostic"):
+                                st.caption("Diagnostic : " + recherche["diagnostic"].get("code", "indéterminé"))
                         diagnostic = bilan.get("diagnostic", {})
                         if diagnostic:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
@@ -305,8 +309,8 @@ with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
                 "2. Renseignez au moins un hashtag, y compris pour les profils et médias. Le deuxième est facultatif (ET/OU). Ajoutez les autres filtres, puis lancez la collecte.\n"
-                "3. Tous les médias cochés sont transmis au moteur. Les hashtags sont parcourus une seule fois pour tous les comptes sélectionnés ; seuls leurs auteurs sont retenus.\n"
-                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une page de hashtag ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
+                "3. Tous les médias cochés sont transmis au moteur. Chaque compte coché est recherché avec chacun des hashtags ; seuls les auteurs sélectionnés sont retenus.\n"
+                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une recherche ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
 

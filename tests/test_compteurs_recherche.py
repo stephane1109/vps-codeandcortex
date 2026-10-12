@@ -14,8 +14,8 @@ class CompteursRecherche(unittest.TestCase):
                 french_only=False, collecter_commentaires=True, variables_txt=["profil", "likes"])
             job = web.Job("test", requete, Path(dossier))
             urls = [f"https://www.tiktok.com/@media/video/{i}" for i in (100,101,102)]
-            def decouvrir(navigateur, arguments, comptes, hashtag, rapport, **options):
-                rapport.update(hashtag_url="https://www.tiktok.com/tag/test",
+            def decouvrir(navigateur, arguments, compte, rapport, **options):
+                rapport.update(hashtag_url="https://www.tiktok.com/search/video?q=%40media%20%23test",
                     candidats_ids=["100","101","102","999"], candidats_examines=4,
                     discovered_urls=urls, collecte_partielle=True)
                 options["progress"](3)
@@ -27,7 +27,7 @@ class CompteursRecherche(unittest.TestCase):
                 web.scraper.WebDriverException("Lecture indisponible"),
             ]
             commentaire = {"id":"c1", "publication_id":"100", "auteur":"lecteur", "texte":"Commentaire conservé"}
-            with patch("collecte.comptes.collecter_comptes_par_hashtag", side_effect=decouvrir), \
+            with patch("collecte.comptes.collecter_compte", side_effect=decouvrir), \
                  patch.object(web.scraper,"read_post",side_effect=publications), patch.object(job,"pause"), \
                  patch("collecte.commentaires.collecter_commentaires", return_value={"commentaires":[commentaire],"statut":"termine","exhaustif":False}) as commentaires:
                 web.execute_job(job, driver_factory=lambda args: Mock())
