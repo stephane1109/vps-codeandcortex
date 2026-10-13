@@ -54,10 +54,18 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "republications", "hashtags"]] | None = Field(default=None, max_length=7)
+    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "partages", "commentaires", "hashtags"]] | None = Field(default=None, max_length=8)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
+
+    @field_validator("variables_txt", mode="before")
+    @classmethod
+    def valider_variables_txt(cls, valeurs):
+        # Garder les anciennes sélections, en lisant désormais le vrai compteur de partages.
+        if isinstance(valeurs, (list, tuple)) and all(isinstance(v, str) for v in valeurs):
+            return normaliser_variables_txt(valeurs)
+        return valeurs
 
     @field_validator("date_debut", "date_fin")
     @classmethod
@@ -165,48 +173,83 @@ class LiveAction:
         self.error = ""
 
 
+def normaliser_variables_txt(variables):
+    """Convertir l’ancien choix republications en partages, sans renommer sa mesure."""
+    if variables is None:
+        return None
+    return list(dict.fromkeys("partages" if v == "republications" else v for v in variables))
+
+
 def entete_publication(publication: dict, variables=None) -> str:
-    """Écrire les variables choisies sur une ligne, puis passer au texte du post."""
-    def ligne(valeur, defaut="indéterminée"):
-        return " ".join(str(valeur or "").split()) or defaut
-    profil = ligne(publication.get("author"), "indéterminé")
+    """Écrire les variables choisies au format *nom_valeur sur une seule ligne."""
+    from datetime import datetime
+
+    def modalite(valeur):
+        return ("_".join(str(valeur).split()) or "indetermine") if valeur is not None else "indetermine"
+
+    try:
+        date_publication = datetime.fromisoformat(str(publication.get("created_at") or "").replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        date_publication = "indetermine"
+    profil = modalite(publication.get("author"))
     if publication.get("author"):
         profil = "@" + profil.lstrip("@")
+
     def compteur(nom):
         mesure = (publication.get("engagement") or {}).get(nom) or {}
-        valeur = mesure.get("valeur")
-        if valeur is None:
-            return "indéterminé"
-        return str(valeur) + (" (estimation)" if mesure.get("estime") else "")
+        # Zéro est une observation valide. Estimations et bruts restent dans le JSON/CSV.
+        return modalite(mesure.get("valeur"))
+
+    valeurs = {"date": f"*date_{date_publication}",
+               "profil": f"*profil_{profil}", "url": f"*url_{modalite(publication.get('url'))}",
+               "vues": f"*vues_{compteur('vues')}", "likes": f"*likes_{compteur('likes')}",
+               "partages": f"*partages_{compteur('partages')}",
+               "commentaires": f"*comment_{compteur('commentaires')}"}
+    # Les anciens appels sans sélection gardent leur en-tête à trois variables.
+    selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "url"))
+    entete = " ".join(texte for cle, texte in valeurs.items() if cle in selection)
+    return entete + "\n" if entete else ""
+
+
+def texte_et_hashtags(publication):
+    """Déplacer les hashtags sous la légende pour le TXT sans modifier les données."""
+    description = publication.get("description") or ""
     hashtags = publication.get("hashtags")
     if not isinstance(hashtags, list):
-        hashtags = re.findall(r"#(\w+)", publication.get("description") or "")
-    hashtags = list(dict.fromkeys("#" + str(h).strip().lstrip("#") for h in hashtags if str(h).strip().lstrip("#")))
-    valeurs = {"date": f"*date {ligne(publication.get('created_at'))}",
-               "profil": f"*profil {profil}", "url": f"*urlvidéo {ligne(publication.get('url'))}",
-               "vues": f"*vues {compteur('vues')}", "likes": f"*likes {compteur('likes')}",
-               "republications": f"*republications {compteur('republications')}",
-               "hashtags": f"*hashtags {' '.join(hashtags) or 'aucun'}"}
-    # Les anciens appels sans sélection gardent leur en-tête à trois variables.
-    selection = set(variables if variables is not None else ("date", "profil", "url"))
-    entete = " ".join(ligne(texte) for cle, texte in valeurs.items() if cle in selection)
-    return entete + "\n" if entete else ""
+        hashtags = []
+    # Inclure aussi les tags présents dans le texte si la liste structurée est incomplète.
+    # Les fragments d’URL ne doivent pas être supprimés du texte comme des hashtags.
+    motif = re.compile(r"https?://\S+|#(\w+)")
+    hashtags = [*hashtags, *(m.group(1) for m in motif.finditer(description) if m.group(1))]
+    uniques = {}
+    for hashtag in hashtags:
+        hashtag = str(hashtag).strip().lstrip("#")
+        if re.fullmatch(r"\w+", hashtag):
+            uniques.setdefault(hashtag.casefold(), "#" + hashtag)
+    if not uniques:
+        return description
+    texte = motif.sub(lambda m: "" if m.group(1) else m.group(0), description)
+    # Conserver les retours à la ligne du texte ; nettoyer les espaces laissés par les tags.
+    texte = "\n".join(re.sub(r"[ \t]{2,}", " ", ligne).strip() for ligne in texte.split("\n")).strip()
+    return (texte + "\n" if texte else "") + " ".join(uniques.values())
 
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
                 variables_txt=None, commentaires=None) -> str:
     blocks = []
     par_publication = {}
+    selection = normaliser_variables_txt(variables_txt)
     for commentaire in commentaires or []:
         if commentaire.get("texte"):
             par_publication.setdefault(str(commentaire.get("publication_id")), []).append(commentaire)
     for record in records:
         if not record.get("description"):
             continue
-        prefix = (entete_publication(record, variables_txt) if variables_txt is not None
+        prefix = (entete_publication(record, selection) if selection is not None
                   else entete_publication(record) if inclure_metadonnees_txt
                   else f"@{record['author']}\n{record['url']}\n" if include_sources else "")
-        bloc = prefix + record["description"]
+        texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
+        bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
             etiquette = "Réponse" if commentaire.get("est_reponse") else "Commentaire"
             bloc += f"\n\n{etiquette} {numero} :\n{commentaire['texte']}"

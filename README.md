@@ -158,43 +158,47 @@ L'archive enrichie est créée automatiquement pour toute collecte lancée depui
 l'interface, y compris par hashtag sans commentaires. Aucune case d'activation
 n'est nécessaire.
 
-Dans l'onglet « Collecte », la section « Variables à inclure avant chaque post dans
-le TXT » est affichée directement, sans volet à déplier. Sept cases indépendantes permettent de choisir
-**Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
-**Nombre de republications** et **Hashtags**. Cochez les variables souhaitées ; décochez-les
-toutes pour exporter uniquement le texte. Seules les variables cochées figurent
-sur une seule ligne avant chaque publication, dans cet ordre, séparées par un espace.
-Le texte du post commence à la ligne suivante. Par exemple, avec Date et Profil :
+Dans la section « Variables à inclure avant chaque post dans le TXT », les cases
+indépendantes sont **Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
+**Nombre de partages** et **Nombre de commentaires**. Seules les variables cochées
+figurent sur une ligne étoilée, dans cet ordre, au format `*nom_valeur`.
+La date n’inclut pas l’heure. Exemple avec toutes les variables et les hashtags :
 
 ```text
-*date 2026-10-09T12:00:00+00:00 *profil @compte
-Texte original de la publication.
+*date_2026-10-08 *profil_@bfmtv *url_https://www.tiktok.com/@bfmtv/video/7694262098129603843 *vues_8000000 *likes_576000 *partages_42 *comment_123
+Texte de la publication.
+#blocage #lycee #manifestation #lyceen #lyon
 
 Commentaire 1 :
 Texte d’un commentaire de cette publication.
 ```
 
-La case URL ajoute `*urlvidéo` suivi de l’URL complète. La date est celle de
-publication en UTC ; si elle manque, le fichier indique `*date indéterminée`.
+Les nombres de partages et de commentaires ci-dessus sont illustratifs.
+`*partages_` utilise **shareCount**, jamais **repostCount**. `*comment_` utilise le
+compteur total **commentCount** de TikTok, pas le nombre de textes récupérés. Ces
+compteurs sont disponibles même si la collecte des textes de commentaires est décochée.
+Une mesure absente est `indetermine` ; un vrai zéro reste `0`. Les valeurs estimées
+sont écrites numériquement dans le TXT ; la mesure brute, la confiance et le statut
+d’estimation restent dans les exports structurés. La date absente ou invalide est
+`*date_indetermine`, et l’URL complète suit `*url_` sans balisage Markdown.
+
+La case **Hashtags sous le texte** déplace les hashtags de la légende sur une ligne
+après son texte, avant les éventuels commentaires. Ils ne sont plus des variables
+étoilées et ne sont pas répétés dans le texte. Sans cette case, la légende reste
+inchangée. Les données originales restent conservées dans l’archive.
+
 Si « Collecter les textes des commentaires » est coché, les commentaires récupérés
-figurent sous leur publication dans **le même TXT**. Les réponses récupérées sont
+figurent sous leur publication dans le même TXT. Les réponses récupérées sont
 également ajoutées si leur option est cochée. Les exports séparés restent disponibles.
 Aucun commentaire d’une publication exclue n’est inséré.
 
-L’API accepte `variables_txt: ["date", "profil", "url"]`, ou toute sous-liste,
-y compris `[]`, ainsi que les clés `vues`, `likes`, `republications` et `hashtags`.
-Une liste explicite remplace les anciennes options d’en-tête.
-Les requêtes sans ce champ restent compatibles avec `inclure_metadonnees_txt`
-et `include_sources`. Le corpus normalisé IRaMuTeQ reste séparé dans le ZIP.
-
-Les nouvelles cases sont décochées par défaut. Elles ajoutent les variables `*vues`,
-`*likes`, `*republications` et `*hashtags` avant le texte. Les hashtags proviennent
-de la publication, pas des mots saisis pour la recherche. L'absence de hashtag est
-indiquée par `*hashtags aucun`. Un compteur absent est `indéterminé`, un vrai zéro
-reste `0` et une valeur abrégée est accompagnée de `(estimation)`.
-Les republications utilisent uniquement le compteur `repostCount` s'il est fourni
-dans les données de la publication ; `shareCount` reste un nombre de partages et
-n'est jamais utilisé à sa place. Les mesures brutes restent conservées dans l'archive.
+L’API accepte `variables_txt: ["date", "profil", "url", "vues", "likes", "partages",
+"commentaires", "hashtags"]`, ou toute sous-liste, y compris `[]`. L’ancienne clé
+`republications` est convertie en `partages` pour les sélections déjà enregistrées,
+sans réutiliser le compteur de republications. Une liste explicite remplace les
+anciennes options d’en-tête. Les requêtes sans ce champ restent compatibles avec
+`inclure_metadonnees_txt` et `include_sources`. Le corpus normalisé IRaMuTeQ reste
+séparé dans le ZIP.
 
 ### Filtre français
 

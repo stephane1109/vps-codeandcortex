@@ -6,7 +6,8 @@ import streamlit as st
 from interface.client import appeler_api
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "url": "URL", "vues": "Nombre de vues",
-                 "likes": "Nombre de likes", "republications": "Nombre de republications", "hashtags": "Hashtags"}
+                 "likes": "Nombre de likes", "partages": "Nombre de partages",
+                 "commentaires": "Nombre de commentaires", "hashtags": "Hashtags sous le texte"}
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
@@ -76,6 +77,7 @@ if "initialise" not in st.session_state:
     variables = ancienne.get("variables_txt")
     if variables is None:
         variables = ["date", "profil", "url"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "url"] if ancienne.get("include_sources", True) else []
+    variables = ["partages" if v == "republications" else v for v in variables]
     for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
@@ -92,6 +94,8 @@ for variable in VARIABLES_TXT:
     valeur_initiale = (variable in ("date", "profil", "url") and
         (st.session_state.get("inclure_metadonnees_txt", False) or
          (variable in ("profil", "url") and st.session_state.get("include_sources", True))))
+    if variable == "partages":
+        valeur_initiale = st.session_state.get("txt_republications", valeur_initiale)
     st.session_state.setdefault("txt_" + variable, valeur_initiale)
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
@@ -164,10 +168,12 @@ with onglet_collecte:
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         st.write("Variables à inclure avant chaque post dans le TXT")
-        choix_variables = list(VARIABLES_TXT.items())
+        choix_variables = [(variable, titre) for variable, titre in VARIABLES_TXT.items() if variable != "hashtags"]
         for debut_ligne in range(0, len(choix_variables), 3):
             for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
                 colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
+        st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
+            help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
         with st.expander("Options des commentaires"):
             def activer_commentaires():
                 if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True

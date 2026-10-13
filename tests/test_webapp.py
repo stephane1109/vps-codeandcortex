@@ -62,7 +62,7 @@ class WebTests(unittest.TestCase):
         job.save()
         fichier = self.client.get(f'/api/jobs/{job.id}/download')
         self.assertEqual(fichier.status_code, 200)
-        self.assertIn('*date 2026-10-09T12:00:00+00:00\n*profil @test\n*urlvidéo '+RECORD['url'], fichier.text)
+        self.assertIn('*date_2026-10-09 *profil_@test *url_'+RECORD['url'], fichier.text)
         self.assertIn(RECORD['description'], fichier.text)
 
     def test_choix_profil_seul_et_commentaires_dans_le_meme_telechargement(self):
@@ -78,7 +78,7 @@ class WebTests(unittest.TestCase):
         job.save()
         fichier = self.client.get(f'/api/jobs/{job.id}/download')
         self.assertEqual(fichier.status_code, 200)
-        self.assertEqual(fichier.text, '*profil @test\n'+RECORD['description']+'\n\nCommentaire 1 :\nRéaction conservée\n')
+        self.assertEqual(fichier.text, '*profil_@test\n'+RECORD['description']+'\n\nCommentaire 1 :\nRéaction conservée\n')
 
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
@@ -203,8 +203,8 @@ class WorkerTests(unittest.TestCase):
         date = '2026-10-09T12:00:00+00:00'
         premiere = dict(RECORD, created_at=date)
         seconde = dict(RECORD, id='456', author='autre', url='https://www.tiktok.com/@autre/video/456', description='Oui !')
-        attendu = (f"*date {date}\n*profil @test\n*urlvidéo {RECORD['url']}\n{RECORD['description']}\n\n"
-                   f"*date indéterminée\n*profil @autre\n*urlvidéo {seconde['url']}\nOui !\n")
+        attendu = (f"*date_{date[:10]} *profil_@test *url_{RECORD['url']}\n{RECORD['description']}\n\n"
+                   f"*date_indetermine *profil_@autre *url_{seconde['url']}\nOui !\n")
         for sources in (False, True):
             self.assertEqual(web.text_export([premiere, seconde], sources, True), attendu)
         self.assertEqual(web.text_export([premiere], True), f"@test\n{RECORD['url']}\n{RECORD['description']}\n")
@@ -223,10 +223,10 @@ class WorkerTests(unittest.TestCase):
                 with self.subTest(variables=variables):
                     # Une sélection explicite prime aussi sur les anciennes options.
                     texte = web.text_export(posts, True, True, list(variables), commentaires)
-                    for variable, marqueur in [('date','*date '), ('profil','*profil '), ('url','*urlvidéo ')]:
+                    for variable, marqueur in [('date','*date_'), ('profil','*profil_'), ('url','*url_')]:
                         self.assertEqual(texte.count(marqueur), 2 if variable in variables else 0)
                     self.assertEqual(RECORD['url'] in texte, 'url' in variables)
-                    self.assertEqual('*profil @test' in texte, 'profil' in variables)
+                    self.assertEqual('*profil_@test' in texte, 'profil' in variables)
                     self.assertNotIn('\n@test\n', '\n'+texte)
                     self.assertIn(RECORD['description'], texte)
                     self.assertLess(texte.index('Très bien !'), texte.index('Deuxième post'))
@@ -243,7 +243,7 @@ class WorkerTests(unittest.TestCase):
             self.job.save()
             texte = self.job.path.read_text()
             self.assertEqual('Un commentaire 🍋' in texte, active)
-            self.assertIn('*date indéterminée', texte)
+            self.assertIn('*date_indetermine', texte)
             self.assertNotIn('*profil', texte)
             self.assertNotIn(RECORD['url'], texte)
 

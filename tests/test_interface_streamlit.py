@@ -11,6 +11,34 @@ from video.parametres import charger_seuils
 from webapp import OptionsVideo, StartRequest
 
 class TestsInterface(unittest.TestCase):
+    def test_partages_commentaires_et_hashtags_transmis_independamment(self):
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.checkbox(key='txt_partages').label, 'Nombre de partages')
+            self.assertEqual(page.checkbox(key='txt_commentaires').label, 'Nombre de commentaires')
+            self.assertEqual(page.checkbox(key='txt_hashtags').label, 'Hashtags sous le texte')
+            self.assertFalse(any(c.label == 'Nombre de republications' for c in page.checkbox))
+            page.text_input(key='hashtag').set_value('#manifestation')
+            for variable in ('date', 'profil', 'url', 'vues', 'likes'):
+                page.checkbox(key='txt_'+variable).uncheck()
+            for variable in ('partages', 'commentaires', 'hashtags'):
+                page.checkbox(key='txt_'+variable).check()
+            page.checkbox(key='collecter_commentaires').uncheck()
+            next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]['variables_txt'], ['partages', 'commentaires', 'hashtags'])
+            self.assertFalse(envois[-1]['collecter_commentaires'])
+            self.assertEqual(StartRequest(**envois[-1]).variables_txt, ['partages', 'commentaires', 'hashtags'])
+
     def test_formulaire_et_selection_complete_des_medias(self):
         def repondre(chemin,*a,**kw):
             if chemin=='/api/session': return {'job':None}

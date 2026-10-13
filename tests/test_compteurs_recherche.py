@@ -34,7 +34,7 @@ class CompteursRecherche(unittest.TestCase):
             self.assertEqual(job.snapshot()["compteurs_collecte"], {"decouvertes":4,"retenues":3,"traitees":3,"exportees":1})
             self.assertEqual(job.status, "partial")
             self.assertIn("Collecte partielle", job.message)
-            self.assertIn("*likes 5", job.path.read_text())
+            self.assertIn("*likes_5", job.path.read_text())
             self.assertIn("Commentaire conservé", job.path.read_text())
             self.assertNotIn("#autre", job.path.read_text())
             commentaires.assert_called_once()
