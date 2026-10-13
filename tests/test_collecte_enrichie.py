@@ -74,7 +74,7 @@ class TestsEnrichis(unittest.TestCase):
                 export = json.loads((job.directory/'publications.json').read_text())
                 self.assertEqual([p['id'] for p in export if p['retenue']], attendus)
                 for p in publications:
-                    self.assertEqual(p['url'] in job.path.read_text(), p['id'] in attendus)
+                    self.assertEqual(('*id_'+p['id']) in job.path.read_text(), p['id'] in attendus)
 
     def test_compte_export_sqlite_et_commentaires(self):
         with tempfile.TemporaryDirectory() as d:

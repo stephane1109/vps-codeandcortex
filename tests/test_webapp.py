@@ -62,7 +62,7 @@ class WebTests(unittest.TestCase):
         job.save()
         fichier = self.client.get(f'/api/jobs/{job.id}/download')
         self.assertEqual(fichier.status_code, 200)
-        self.assertIn('*date_2026-10-09 *profil_@test *url_'+RECORD['url'], fichier.text)
+        self.assertIn('*date_2026-10-09 *profil_@test *id_'+RECORD['id'], fichier.text)
         self.assertIn(RECORD['description'], fichier.text)
 
     def test_choix_profil_seul_et_commentaires_dans_le_meme_telechargement(self):
@@ -156,7 +156,9 @@ class WebTests(unittest.TestCase):
         self.assertEqual(ligne['commentaires'], '12')
         self.assertEqual(ligne['partages'], '1200')
         self.assertEqual(ligne['partages_brut'], '1.2K')
-        self.assertEqual(ligne['partages_estime'], 'True')
+        self.assertNotIn('partages_estime', ligne)
+        self.assertEqual(ligne['id_'], RECORD['id'])
+        self.assertEqual(ligne['url'], RECORD['url'])
         self.assertEqual(ligne['langue_detection'], 'unknown')
         self.assertEqual(ligne['legende'], RECORD['description'])
         self.assertEqual(job.snapshot()['apercu_engagement'][0]['engagement']['likes']['valeur'], 0)
@@ -203,11 +205,11 @@ class WorkerTests(unittest.TestCase):
         date = '2026-10-09T12:00:00+00:00'
         premiere = dict(RECORD, created_at=date)
         seconde = dict(RECORD, id='456', author='autre', url='https://www.tiktok.com/@autre/video/456', description='Oui !')
-        attendu = (f"*date_{date[:10]} *profil_@test *url_{RECORD['url']}\n{RECORD['description']}\n\n"
-                   f"*date_indetermine *profil_@autre *url_{seconde['url']}\nOui !\n")
+        attendu = (f"*date_{date[:10]} *profil_@test *id_{RECORD['id']}\n{RECORD['description']}\n\n"
+                   f"*date_indetermine *profil_@autre *id_{seconde['id']}\nOui !\n")
         for sources in (False, True):
             self.assertEqual(web.text_export([premiere, seconde], sources, True), attendu)
-        self.assertEqual(web.text_export([premiere], True), f"@test\n{RECORD['url']}\n{RECORD['description']}\n")
+        self.assertEqual(web.text_export([premiere], True), f"*profil_@test *id_{RECORD['id']}\n{RECORD['description']}\n")
         self.assertEqual(web.text_export([dict(premiere, description='')], True, True), '')
 
     def test_toutes_les_combinaisons_de_variables_et_commentaires_rattaches(self):
@@ -219,13 +221,14 @@ class WorkerTests(unittest.TestCase):
                         {'publication_id':'123', 'texte':'Une réponse', 'est_reponse':True},
                         {'publication_id':'999', 'texte':'Ne doit pas apparaître'}]
         for taille in range(4):
-            for variables in combinations(('date', 'profil', 'url'), taille):
+            for variables in combinations(('date', 'profil', 'id'), taille):
                 with self.subTest(variables=variables):
                     # Une sélection explicite prime aussi sur les anciennes options.
                     texte = web.text_export(posts, True, True, list(variables), commentaires)
-                    for variable, marqueur in [('date','*date_'), ('profil','*profil_'), ('url','*url_')]:
+                    for variable, marqueur in [('date','*date_'), ('profil','*profil_'), ('id','*id_')]:
                         self.assertEqual(texte.count(marqueur), 2 if variable in variables else 0)
-                    self.assertEqual(RECORD['url'] in texte, 'url' in variables)
+                    self.assertEqual(('*id_'+RECORD['id']) in texte, 'id' in variables)
+                    self.assertNotIn(RECORD['url'], texte)
                     self.assertEqual('*profil_@test' in texte, 'profil' in variables)
                     self.assertNotIn('\n@test\n', '\n'+texte)
                     self.assertIn(RECORD['description'], texte)

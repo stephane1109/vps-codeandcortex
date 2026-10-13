@@ -5,7 +5,7 @@ import re
 import streamlit as st
 from interface.client import appeler_api
 
-VARIABLES_TXT = {"date": "Date", "profil": "Profil", "url": "URL", "vues": "Nombre de vues",
+VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
                  "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
                  "hashtags": "Hashtags sous le texte"}
@@ -77,8 +77,8 @@ if "initialise" not in st.session_state:
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     variables = ancienne.get("variables_txt")
     if variables is None:
-        variables = ["date", "profil", "url"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "url"] if ancienne.get("include_sources", True) else []
-    variables = ["partages" if v == "republications" else v for v in variables]
+        variables = ["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "id"] if ancienne.get("include_sources", True) else []
+    variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
@@ -92,15 +92,17 @@ if "initialise" not in st.session_state:
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
-    valeur_initiale = (variable in ("date", "profil", "url") and
+    valeur_initiale = (variable in ("date", "profil", "id") and
         (st.session_state.get("inclure_metadonnees_txt", False) or
-         (variable in ("profil", "url") and st.session_state.get("include_sources", True))))
+         (variable in ("profil", "id") and st.session_state.get("include_sources", True))))
+    if variable == "id":
+        valeur_initiale = st.session_state.get("txt_url", valeur_initiale)
     if variable == "partages":
         valeur_initiale = st.session_state.get("txt_republications", valeur_initiale)
     st.session_state.setdefault("txt_" + variable, valeur_initiale)
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
-            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_url",
+            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires",
             "date_debut", "date_fin", "comptes"):
     st.session_state[cle] = st.session_state[cle]

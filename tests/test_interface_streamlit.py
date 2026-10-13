@@ -29,7 +29,7 @@ class TestsInterface(unittest.TestCase):
             self.assertEqual(page.checkbox(key='txt_hashtags').label, 'Hashtags sous le texte')
             self.assertFalse(any(c.label == 'Nombre de republications' for c in page.checkbox))
             page.text_input(key='hashtag').set_value('#manifestation')
-            for variable in ('date', 'profil', 'url', 'vues', 'likes'):
+            for variable in ('date', 'profil', 'id', 'vues', 'likes'):
                 page.checkbox(key='txt_'+variable).uncheck()
             for variable in ('partages', 'commentaires', 'favoris', 'hashtags'):
                 page.checkbox(key='txt_'+variable).check()
@@ -145,7 +145,7 @@ class TestsInterface(unittest.TestCase):
             page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.checkbox(key='txt_date').value)
             self.assertTrue(page.checkbox(key='txt_profil').value)
-            self.assertTrue(page.checkbox(key='txt_url').value)
+            self.assertTrue(page.checkbox(key='txt_id').value)
             page.radio(key='source').set_value('presse').run()
             page.button(key='tous_medias').click().run()
             for operateur in ('AND', 'OR'):
@@ -155,7 +155,7 @@ class TestsInterface(unittest.TestCase):
                 page.checkbox(key='collecter_reponses').check()
                 page.checkbox(key='txt_date').check()
                 page.checkbox(key='txt_profil').uncheck()
-                page.checkbox(key='txt_url').uncheck()
+                page.checkbox(key='txt_id').uncheck()
                 next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
                 self.assertFalse(page.exception)
                 requete = StartRequest(**envois[-1])
@@ -231,7 +231,7 @@ class TestsInterface(unittest.TestCase):
     def test_reprise_des_variables_independantes(self):
         import tempfile
         from webapp import Job
-        for variables in ([], ['url'], ['date','profil'], ['date','profil','url']):
+        for variables in ([], ['id'], ['date','profil'], ['date','profil','id']):
             with self.subTest(variables=variables), tempfile.TemporaryDirectory() as dossier:
                 tache = Job('a'*64, StartRequest(hashtag='test', variables_txt=variables), Path(dossier))
                 tache.update(busy=False, status='completed')
@@ -243,7 +243,7 @@ class TestsInterface(unittest.TestCase):
                 with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
                     page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
                     self.assertFalse(page.exception)
-                    for variable in ('date','profil','url'):
+                    for variable in ('date','profil','id'):
                         self.assertEqual(page.checkbox(key='txt_'+variable).value, variable in variables)
 
     def test_liberer_acces_depuis_barre_laterale_conserve_la_collecte(self):

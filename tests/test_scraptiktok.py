@@ -86,6 +86,9 @@ class ExtractionTests(unittest.TestCase):
             with prefix.with_suffix(".csv").open(encoding="utf-8-sig", newline="") as stream:
                 rows = list(csv.DictReader(stream, delimiter=";"))
             self.assertEqual(rows[0]["description"], "'" + text)
+            self.assertEqual(rows[0]["id_"], record["id"])
+            self.assertEqual(rows[0]["url"], record["url"])
+            self.assertTrue(prefix.with_suffix(".txt").read_text().startswith("*id_" + record["id"] + "\n"))
             self.assertIn(text, prefix.with_suffix(".txt").read_text())
             self.assertFalse(list(Path(folder).glob("*.tmp")))
 

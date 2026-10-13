@@ -159,13 +159,13 @@ l'interface, y compris par hashtag sans commentaires. Aucune case d'activation
 n'est nécessaire.
 
 Dans la section « Variables à inclure avant chaque post dans le TXT », les cases
-indépendantes sont **Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
+indépendantes sont **Date**, **Profil**, **ID vidéo**, **Nombre de vues**, **Nombre de likes**,
 **Nombre de partages**, **Nombre de commentaires** et **Nombre de favoris**. Seules les variables cochées
 figurent sur une ligne étoilée, dans cet ordre, au format `*nom_valeur`.
 La date n’inclut pas l’heure. Exemple avec toutes les variables et les hashtags :
 
 ```text
-*date_2026-10-08 *profil_@bfmtv *url_https://www.tiktok.com/@bfmtv/video/7694262098129603843 *vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456
+*date_2026-10-08 *profil_@bfmtv *id_7694262098129603843 *vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456
 Texte de la publication.
 #blocage #lycee #manifestation #lyceen #lyon
 
@@ -181,7 +181,8 @@ compteurs sont disponibles même si la collecte des textes de commentaires est d
 Une mesure absente est `indetermine` ; un vrai zéro reste `0`. Les valeurs estimées
 sont écrites numériquement dans le TXT ; la mesure brute, la confiance et le statut
 d’estimation restent dans les exports structurés. La date absente ou invalide est
-`*date_indetermine`, et l’URL complète suit `*url_` sans balisage Markdown.
+`*date_indetermine`. Le numéro TikTok suit `*id_` à la place de l’URL, sur la même
+ligne étoilée que les autres variables. La case « ID vidéo » remplace la case « URL ».
 
 La case **Hashtags sous le texte** déplace les hashtags de la légende sur une ligne
 après son texte, avant les éventuels commentaires. Ils ne sont plus des variables
@@ -193,10 +194,11 @@ figurent sous leur publication dans le même TXT. Les réponses récupérées so
 également ajoutées si leur option est cochée. Les exports séparés restent disponibles.
 Aucun commentaire d’une publication exclue n’est inséré.
 
-L’API accepte `variables_txt: ["date", "profil", "url", "vues", "likes", "partages",
+L’API accepte `variables_txt: ["date", "profil", "id", "vues", "likes", "partages",
 "commentaires", "favoris", "hashtags"]`, ou toute sous-liste, y compris `[]`. L’ancienne clé
 `republications` est convertie en `partages` pour les sélections déjà enregistrées,
-sans réutiliser le compteur de republications. Une liste explicite remplace les
+sans réutiliser le compteur de republications. L’ancienne clé `url` est convertie
+en `id`, pour préserver la sélection au changement de version. Une liste explicite remplace les
 anciennes options d’en-tête. Les requêtes sans ce champ restent compatibles avec
 `inclure_metadonnees_txt` et `include_sources`.
 
@@ -315,7 +317,11 @@ confiance, caractère estimé et date d’observation. `1,2 K` vaut une estimati
 un compteur absent vaut `null`, jamais zéro. Les scores sont heuristiques, non calibrés.
 
 Le téléchargement « Compteurs CSV » et le fichier `engagement.csv` de l’archive
-conservent les colonnes d’identification, les compteurs et leurs valeurs `_brut`.
+conservent les colonnes d’identification, l’URL, les compteurs et leurs valeurs `_brut`.
+La colonne `id_` contient le numéro TikTok complet, également présent dans les CSV
+par publication (ratios, commentaires, variables SHS et export en ligne de commande).
+Dans `commentaires.csv`, `id` reste l’identifiant du commentaire, tandis que `id_`
+et `url` identifient sa publication. Les tableaux agrégés par média restent inchangés.
 Les 15 colonnes `_confiance`, `_source` et `_estime` des likes, vues, partages,
 commentaires et favoris sont retirées de ce CSV. Ces informations restent
 conservées dans `publications.json`.

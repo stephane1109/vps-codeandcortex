@@ -331,16 +331,17 @@ def save_results(prefix: Path, records: list[dict], report: dict) -> None:
     target = prefix.with_suffix(".csv")
     temp = target.with_suffix(".csv.tmp")
     with temp.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=FIELDS, delimiter=";")
+        colonnes = (*FIELDS, "id_")
+        writer = csv.DictWriter(stream, fieldnames=colonnes, delimiter=";")
         writer.writeheader()
         for record in records:
-            row = dict(record, hashtags=" ".join("#" + tag for tag in record["hashtags"]))
-            writer.writerow({key: csv_safe(row.get(key, "")) for key in FIELDS})
+            row = dict(record, id_=str(record["id"]), hashtags=" ".join("#" + tag for tag in record["hashtags"]))
+            writer.writerow({key: csv_safe(row.get(key, "")) for key in colonnes})
     temp.replace(target)
     target = prefix.with_suffix(".txt")
     temp = target.with_suffix(".txt.tmp")
     temp.write_text("\n\n".join(
-        f"{record['url']}\n{record['description']}" for record in records if record["description"]
+        f"*id_{record['id']}\n{record['description']}" for record in records if record["description"]
     ) + "\n", encoding="utf-8")
     temp.replace(target)
 

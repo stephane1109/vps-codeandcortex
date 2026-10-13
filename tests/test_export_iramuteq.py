@@ -13,9 +13,32 @@ from corpus.export_csv import serialiser_csv
 from corpus.construction import COLONNES_ENGAGEMENT, lignes_engagement
 from collecte.engagement import extraire_engagement
 class TestsCorpus(unittest.TestCase):
+    def test_csv_numero_video_et_url_conserves_y_compris_pour_les_commentaires(self):
+        identifiant = "7694262098129603843"
+        url = "https://www.tiktok.com/@bfmtv/video/" + identifiant
+        publication = {"id": identifiant, "url": url, "author": "bfmtv", "description": "Texte", "engagement": {}}
+        commentaire = {"id": "commentaire-1", "publication_id": identifiant, "texte": "Réponse", "auteur": "lecteur"}
+        with tempfile.TemporaryDirectory() as d:
+            dossier = Path(d)
+            (dossier / "textes.txt").write_text("*id_" + identifiant + "\nTexte\n", encoding="utf-8")
+            construire_exports(dossier, [publication], [commentaire], {})
+            exporter_zip(dossier, dossier / "archive.zip")
+            with zipfile.ZipFile(dossier / "archive.zip") as archive:
+                for nom in ("engagement.csv", "ratios_engagement.csv", "commentaires.csv"):
+                    with self.subTest(fichier=nom):
+                        ligne = next(csv.DictReader(io.StringIO(archive.read(nom).decode("utf-8-sig")), delimiter=";"))
+                        self.assertEqual(ligne["id_"], identifiant)
+                        self.assertEqual(ligne["publication_id"], identifiant)
+                        self.assertEqual(ligne["url"], url)
+                        if nom == "commentaires.csv":
+                            self.assertEqual(ligne["id"], "commentaire-1")
+                self.assertEqual(archive.read("corpus_iramuteq.txt"), archive.read("textes.txt"))
+            self.assertNotIn("id_", publication)
+            self.assertNotIn("id_", commentaire)
+
     def test_csv_compteurs_sans_colonnes_techniques_et_json_complet(self):
         compteurs = ("likes", "vues", "partages", "commentaires", "favoris")
-        attendues = ["publication_id", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"]
+        attendues = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"]
         attendues += [nom + suffixe for nom in compteurs for suffixe in ("", "_brut")]
         self.assertEqual(COLONNES_ENGAGEMENT, attendues)
         mesure = extraire_engagement({"stats": {"diggCount": 5, "shareCount": 3, "commentCount": 2, "collectCount": 0}})

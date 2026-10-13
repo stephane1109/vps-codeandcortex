@@ -10,6 +10,17 @@ from collecte.engagement import extraire_engagement
 
 
 class FormatTxt(unittest.TestCase):
+    def test_ancien_choix_url_repris_comme_id_sans_arrondir_le_numero(self):
+        settings = web.StartRequest(hashtag="test", variables_txt=["url", "id", "profil"])
+        self.assertEqual(settings.variables_txt, ["id", "profil"])
+        publication = self.publication()
+        self.assertEqual(web.entete_publication(publication, ["url"]), "*id_7694262098129603843\n")
+        texte = web.text_export([publication], True, variables_txt=["id"])
+        self.assertTrue(texte.startswith("*id_7694262098129603843\n"))
+        self.assertNotIn(publication["url"], texte)
+        self.assertNotIn("*url_", texte)
+        self.assertEqual(web.entete_publication({}, ["id"]), "*id_indetermine\n")
+
     def publication(self):
         return {"id": "7694262098129603843", "author": "bfmtv",
             "url": "https://www.tiktok.com/@bfmtv/video/7694262098129603843",
@@ -22,10 +33,10 @@ class FormatTxt(unittest.TestCase):
     def test_format_demande_et_compteurs_reels(self):
         publication = self.publication()
         avant = deepcopy(publication)
-        texte = web.text_export([publication], True, variables_txt=["date", "profil", "url",
+        texte = web.text_export([publication], True, variables_txt=["date", "profil", "id",
             "vues", "likes", "partages", "commentaires", "favoris", "hashtags"])
         self.assertEqual(texte,
-            "*date_2026-10-08 *profil_@bfmtv *url_https://www.tiktok.com/@bfmtv/video/7694262098129603843 "
+            "*date_2026-10-08 *profil_@bfmtv *id_7694262098129603843 "
             "*vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456\n"
             "Les élèves manifestent.\n#blocage #lycee #manifestation #lyceen #lyon\n")
         self.assertEqual(publication, avant)
@@ -34,7 +45,7 @@ class FormatTxt(unittest.TestCase):
         self.assertNotIn("*urlvidéo", texte)
 
     def test_options_independantes_pour_les_huit_variables(self):
-        marqueurs = {"date": "*date_", "profil": "*profil_", "url": "*url_", "vues": "*vues_",
+        marqueurs = {"date": "*date_", "profil": "*profil_", "id": "*id_", "vues": "*vues_",
                      "likes": "*likes_", "partages": "*partages_", "commentaires": "*comment_", "favoris": "*favoris_"}
         publication = self.publication()
         for taille in range(len(marqueurs) + 1):
@@ -61,7 +72,7 @@ class FormatTxt(unittest.TestCase):
                 publication["engagement"] = extraire_engagement({"stats": {"collectCount": brut, "diggCount": 999}})
                 self.assertEqual(web.entete_publication(publication, ["favoris"]), f"*favoris_{attendu}\n")
                 self.assertNotIn("*favoris_", web.text_export([publication], False, variables_txt=[]))
-        variables = ["date", "profil", "url", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]
+        variables = ["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]
         settings = web.StartRequest(hashtag="manifestation", variables_txt=variables)
         self.assertEqual(settings.variables_txt, variables)
 

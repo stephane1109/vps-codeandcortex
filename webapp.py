@@ -54,7 +54,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]] | None = Field(default=None, max_length=9)
+    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]] | None = Field(default=None, max_length=9)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -174,10 +174,10 @@ class LiveAction:
 
 
 def normaliser_variables_txt(variables):
-    """Convertir l’ancien choix republications en partages, sans renommer sa mesure."""
+    """Reprendre les anciennes sélections : republications vers partages, URL vers ID."""
     if variables is None:
         return None
-    return list(dict.fromkeys("partages" if v == "republications" else v for v in variables))
+    return list(dict.fromkeys({"republications": "partages", "url": "id"}.get(v, v) for v in variables))
 
 
 def entete_publication(publication: dict, variables=None) -> str:
@@ -201,13 +201,13 @@ def entete_publication(publication: dict, variables=None) -> str:
         return modalite(mesure.get("valeur"))
 
     valeurs = {"date": f"*date_{date_publication}",
-               "profil": f"*profil_{profil}", "url": f"*url_{modalite(publication.get('url'))}",
+               "profil": f"*profil_{profil}", "id": f"*id_{modalite(publication.get('id'))}",
                "vues": f"*vues_{compteur('vues')}", "likes": f"*likes_{compteur('likes')}",
                "partages": f"*partages_{compteur('partages')}",
                "commentaires": f"*comment_{compteur('commentaires')}",
                "favoris": f"*favoris_{compteur('favoris')}"}
     # Les anciens appels sans sélection gardent leur en-tête à trois variables.
-    selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "url"))
+    selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "id"))
     entete = " ".join(texte for cle, texte in valeurs.items() if cle in selection)
     return entete + "\n" if entete else ""
 
@@ -248,7 +248,7 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             continue
         prefix = (entete_publication(record, selection) if selection is not None
                   else entete_publication(record) if inclure_metadonnees_txt
-                  else f"@{record['author']}\n{record['url']}\n" if include_sources else "")
+                  else entete_publication(record, ("profil", "id")) if include_sources else "")
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
@@ -1075,7 +1075,7 @@ def create_app(manager=None):
         job = manager.get(owner(request), job_id)
         with job.lock:
             retenues = {p["id"]: p for p in job.records}
-            blocs = [f"Publication : {retenues[c['publication_id']]['url']}\n@{c.get('auteur') or 'inconnu'}\n{c['texte']}"
+            blocs = [f"*id_{c['publication_id']}\n@{c.get('auteur') or 'inconnu'}\n{c['texte']}"
                 for c in job.commentaires if c["publication_id"] in retenues]
         return Response("\n\n".join(blocs) + ("\n" if blocs else ""), media_type="text/plain",
             headers={"Content-Disposition": 'attachment; filename="commentaires.txt"'})

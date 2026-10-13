@@ -132,7 +132,8 @@ def traiter_lot(dossier, parametres, seuils):
     exporter_json(dossier / "groupes_visuels.json",groupes)
     exporter_json(dossier / "comparaisons.json",comparaisons)
     exporter_json(dossier / "variables_shs.json",codes)
-    exporter_csv(dossier / "variables_shs.csv",[{"publication_id":c["publication_id"],**c["variables"],"confiances":c["confiances"]} for c in codes])
+    urls_publications = {str(p["id"]): p.get("url") for p in publications}
+    exporter_csv(dossier / "variables_shs.csv",[{"publication_id":c["publication_id"],"id_":str(c["publication_id"]),"url":urls_publications.get(str(c["publication_id"])),**c["variables"],"confiances":c["confiances"]} for c in codes])
     exporter_json(dossier / "reseau_similarite.json",construire_reseau(publications,comparaisons))
     exporter_json(dossier / "circulation_visuelle.json",analyser_circulation(publications,comparaisons))
     exporter_csv(dossier / "comparaison_medias.csv",comparer_medias(publications))
