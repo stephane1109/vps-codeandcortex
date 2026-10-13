@@ -110,6 +110,8 @@ def trouver_doublons(session, entite, donnees, exclure=None):
 
 
 def soumettre(entite, donnees, jeton_defi, reponse, champ_piege="", cible_id=None, version_cible=None):
+    if entite == "tag":
+        raise ErreurMetier("La création et la modification des tags sont réservées à l'administration.")
     verifier_defi(jeton_defi, reponse, champ_piege)
     try:
         with transaction() as session:
@@ -376,3 +378,40 @@ def supprimer_plateforme(jeton_admin, identifiant):
         raise ErreurMetier(
             "Suppression impossible : cette plateforme vient d'être utilisée par une fiche."
         ) from None
+
+
+def enregistrer_tag(jeton_admin, donnees, motif, identifiant=None, version_attendue=None):
+    """Création ou modification immédiate, réservée à l'administration et historisée."""
+    exiger_admin(jeton_admin)
+    if not motif.strip():
+        raise ErreurMetier("Indiquer le motif de la création ou de la modification.")
+    try:
+        with transaction() as session:
+            verrouiller_moderation(session)
+            objet, avant = None, None
+            if identifiant is not None:
+                objet = session.scalar(select(Tag).where(Tag.id == identifiant).with_for_update())
+                if objet is None:
+                    raise ErreurMetier("Ce tag n'existe plus. Rechargez la page.")
+                if objet.version != version_attendue:
+                    raise ErreurMetier(
+                        "Ce tag a été modifié par une autre session. Rechargez-le avant de continuer."
+                    )
+                avant = obtenir_fiche(session, "tag", identifiant, liens=False)
+            d = valider_donnees(session, "tag", donnees, identifiant)
+            if trouver_doublons(session, "tag", d, identifiant):
+                raise ErreurMetier("Un tag de même nom existe déjà dans cette famille.")
+            objet = appliquer(session, "tag", d, objet)
+            session.add(
+                Historique(
+                    entite="tag",
+                    entite_id=objet.id,
+                    action="modification" if identifiant is not None else "creation",
+                    avant=avant,
+                    apres=obtenir_fiche(session, "tag", objet.id, liens=False),
+                    motif=motif.strip()[:5000],
+                )
+            )
+            return objet.id
+    except IntegrityError:
+        raise ErreurMetier("Un doublon ou une relation empêche l'enregistrement de ce tag.") from None

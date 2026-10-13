@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import func, select
 from desinfolab.base import transaction
 from desinfolab.catalogue import obtenir_fiche, rechercher
-from desinfolab.contributions import ajouter_plateforme, moderer, reviser_proposition
+from desinfolab.contributions import ajouter_plateforme, enregistrer_tag, moderer, reviser_proposition
 from desinfolab.modeles import Contribution, Defi, Historique, Source, maintenant
 from desinfolab.securite import ErreurMetier, connecter_admin, creer_defi, exiger_admin, verifier_defi
 from desinfolab.validation import Filtres, canonicaliser_url, valider_url
@@ -84,9 +84,9 @@ def test_qualification_exige_justification_par_tag(admin, source, reference):
         assert fiche["references"][0]["qualification_tag_id"] == q
 
 
-def test_qualification_ne_peut_etre_creee_sans_reference():
+def test_qualification_ne_peut_etre_creee_sans_reference(admin):
     with pytest.raises(ErreurMetier, match="référence documentaire"):
-        proposer("tag", {"nom": "Qualification", "nature": "qualification"})
+        enregistrer_tag(admin, {"nom": "Qualification", "nature": "qualification"}, "Création")
 
 
 def test_modifications_concurrentes_et_revision_explicite(admin, source):
@@ -122,14 +122,15 @@ def test_tags_cycles_et_parent_meme_nature(admin):
     parent = publier(admin, "tag", {"nom": "Sciences", "nature": "thematique"})
     enfant = publier(admin, "tag", {"nom": "Santé", "nature": "thematique", "parent_id": parent})
     with pytest.raises(ErreurMetier, match="cycle"):
-        proposer(
-            "tag",
+        enregistrer_tag(
+            admin,
             {"nom": "Sciences", "nature": "thematique", "parent_id": enfant},
-            cible_id=parent,
-            version_cible=1,
+            "Modification",
+            identifiant=parent,
+            version_attendue=1,
         )
     with pytest.raises(ErreurMetier, match="même nature"):
-        proposer("tag", {"nom": "Récit", "nature": "discours", "parent_id": parent})
+        enregistrer_tag(admin, {"nom": "Récit", "nature": "discours", "parent_id": parent}, "Création")
 
 
 def test_nouvelle_plateforme_et_relations_compte_contenu(admin, source):

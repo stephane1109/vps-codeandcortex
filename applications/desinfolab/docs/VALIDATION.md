@@ -19,3 +19,10 @@ La suite produit un avertissement de dépréciation du client de test Starlette 
 - Parcours Streamlit AppTest : création, sélection, renommage, confirmation puis suppression sans erreur.
 - 15 tests ciblés réussis sur SQLite. `ruff check` et `git diff --check` réussis.
 - Aucun changement de schéma : `alembic check` ne détecte aucune migration nécessaire.
+
+## Tags réservés à l’administration
+
+- 58 tests réussis sur PostgreSQL 16.2 ; aucun écart Alembic.
+- Création et modification depuis Administration → Tags testées avec AppTest, puis déconnexion et vérification des pages publiques en lecture seule pour les tags.
+- Soumissions publiques de tags refusées côté métier, anciennes sessions protégées, API sans route d’écriture.
+- Vérification de l’authentification, des doublons, des références, des cycles, de la famille stable, des versions concurrentes et de l’historique avant/après.

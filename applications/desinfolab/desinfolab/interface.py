@@ -21,6 +21,7 @@ from .catalogue import (
 )
 from .contributions import (
     ajouter_plateforme,
+    enregistrer_tag,
     modifier_plateforme,
     supprimer_plateforme,
     moderer,
@@ -58,12 +59,6 @@ def avis(message):
 
 def proposer_modification(entite, identifiant):
     st.session_state.modifier_cible = (entite, identifiant)
-    aller_page(PAGES[3])
-
-
-def proposer_tag():
-    st.session_state.pop("modifier_cible", None)
-    st.session_state.nouvelle_entite = "tag"
     aller_page(PAGES[3])
 
 
@@ -330,9 +325,12 @@ def fiches():
             if fiche[relation]:
                 tableau(fiche[relation], f"fiche-{relation}")
                 telechargements(fiche[relation], f"source-{relation}")
-    st.button(
-        "Proposer une modification de cette fiche", on_click=proposer_modification, args=(entite, fiche["id"])
-    )
+    if entite != "tag":
+        st.button(
+            "Proposer une modification de cette fiche",
+            on_click=proposer_modification,
+            args=(entite, fiche["id"]),
+        )
 
 
 def editeur_references(references, tags, key):
@@ -395,6 +393,10 @@ def soumission():
         "N'indiquez pas vos coordonnées dans les champs libres. Une source doit être validée avant l'ajout de ses comptes ou contenus."
     )
     cible = st.session_state.get("modifier_cible")
+    if cible and cible[0] == "tag":
+        st.session_state.pop("modifier_cible", None)
+        st.info("La création et la modification des tags sont réservées à l'administration.")
+        return
     if cible:
         entite, cible_id = cible
         st.info(f"Modification proposée : {ENTITES[entite]} #{cible_id}")
@@ -410,8 +412,11 @@ def soumission():
                 )
         initial, version_cible = st.session_state[snapshot_key]
     else:
+        entites_publiques = [e for e in ENTITES if e != "tag"]
+        if st.session_state.get("nouvelle_entite") not in entites_publiques:
+            st.session_state.pop("nouvelle_entite", None)
         entite = st.selectbox(
-            "Type de proposition", list(ENTITES), format_func=ENTITES.get, key="nouvelle_entite"
+            "Type de proposition", entites_publiques, format_func=ENTITES.get, key="nouvelle_entite"
         )
         cible_id, initial, version_cible = None, {}, None
     cle = f"saisie-{entite}-{cible_id or 'nouvelle'}"
@@ -426,22 +431,6 @@ def soumission():
         return
     d = {}
     # Les sélecteurs hors formulaire réagissent immédiatement (parents, comptes et qualifications).
-    if entite == "tag":
-        natures = list(NATURES)
-        d["nature"] = st.selectbox(
-            "Nature du tag",
-            natures,
-            format_func=NATURES.get,
-            index=natures.index(initial.get("nature", "thematique")),
-            key=cle + "-nature",
-        )
-        d["parent_id"] = choix(
-            "Tag parent (facultatif)",
-            [t for t in tags if t["nature"] == d["nature"] and t["id"] != cible_id],
-            courant=initial.get("parent_id"),
-            vide=True,
-            key=cle + "-parent",
-        )
     if entite in {"compte", "contenu"}:
         d["source_id"] = choix(
             "Source associée", sources, courant=initial.get("source_id"), key=cle + "-source"
@@ -476,9 +465,7 @@ def soumission():
             format_func=noms.get,
             key=cle + "-tags",
         )
-        st.caption(
-            "Un tag manque ? Soumettez-le séparément via le type de proposition « Tag », puis attendez sa validation."
-        )
+        st.caption("Les tags sont créés et modifiés par l'administration.")
     if "defi" not in st.session_state:
         st.session_state.defi = creer_defi()
     with st.form(cle):
@@ -576,7 +563,69 @@ def explorer_tags():
                 branche(t["id"], niveau + 1)
 
         branche(None)
-    st.button("Proposer un nouveau tag", on_click=proposer_tag)
+
+
+def administrer_tags(jeton):
+    exiger_admin(jeton)
+    with transaction() as session:
+        tags = lister_tags(session)
+    mode = st.radio("Gestion des tags", ["Créer un tag", "Modifier un tag"], horizontal=True)
+    identifiant, version, initial = None, None, {}
+    if mode == "Modifier un tag":
+        if not tags:
+            st.info("Aucun tag à modifier. Créez d'abord un tag.")
+            return
+        identifiant = choix("Tag à modifier", tags, key="admin-tag-selection")
+        with transaction() as session:
+            initial = donnees_editables(session, "tag", identifiant)
+            version = session.get(MODELES["tag"], identifiant).version
+    cle = f"admin-tag-{identifiant or 'nouveau'}-{version or 0}"
+    nature = st.selectbox(
+        "Famille du tag",
+        list(NATURES),
+        format_func=NATURES.get,
+        index=list(NATURES).index(initial.get("nature", "thematique")),
+        disabled=identifiant is not None,
+        key=cle + "-nature",
+    )
+    if identifiant is not None:
+        st.caption(
+            "La famille d'un tag existant est conservée pour préserver les qualifications et la hiérarchie."
+        )
+    parent = choix(
+        "Tag parent (facultatif)",
+        [t for t in tags if t["nature"] == nature and t["id"] != identifiant],
+        courant=initial.get("parent_id"),
+        vide=True,
+        key=cle + "-parent-" + nature,
+    )
+    with st.form(cle):
+        nom = st.text_input("Nom du tag", value=initial.get("nom", ""), max_chars=150)
+        description = st.text_area(
+            "Description du tag", value=initial.get("description", ""), max_chars=10000
+        )
+        if nature == "qualification":
+            st.caption("Une qualification factuelle nécessite au moins une référence documentaire.")
+        references = editeur_references(initial.get("references", []), [], cle + "-references")
+        motif = st.text_input("Motif de création ou de modification", max_chars=5000)
+        enregistrer = st.form_submit_button(
+            "Créer le tag" if identifiant is None else "Enregistrer le tag", type="primary"
+        )
+    if enregistrer:
+        enregistrer_tag(
+            jeton,
+            {
+                "nom": nom,
+                "nature": nature,
+                "description": description,
+                "parent_id": parent,
+                "references": references,
+            },
+            motif,
+            identifiant,
+            version,
+        )
+        avis("Tag créé." if identifiant is None else "Tag modifié.")
 
 
 def administration():
@@ -597,7 +646,12 @@ def administration():
     if st.button("Se déconnecter"):
         st.session_state.pop("admin", None)
         st.rerun()
-    onglet = st.radio("Espace de gestion", ["Contributions", "Plateformes", "Historique"], horizontal=True)
+    onglet = st.radio(
+        "Espace de gestion", ["Contributions", "Tags", "Plateformes", "Historique"], horizontal=True
+    )
+    if onglet == "Tags":
+        administrer_tags(jeton)
+        return
     if onglet == "Plateformes":
         with transaction() as session:
             plateformes = lister_plateformes(session)

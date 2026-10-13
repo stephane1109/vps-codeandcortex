@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from desinfolab.base import moteur, transaction
 from desinfolab.configuration import url_base
-from desinfolab.contributions import moderer, soumettre
+from desinfolab.contributions import enregistrer_tag, moderer, soumettre
 from desinfolab.modeles import Contribution, Defi, maintenant
 from desinfolab.securite import connecter_admin, creer_defi, hacher_mot_de_passe
 
@@ -76,6 +76,8 @@ def empreinte(identifiant):
 
 
 def publier(admin, entite, donnees):
+    if entite == "tag":
+        return enregistrer_tag(admin, donnees, "Références et contexte vérifiés.")
     identifiant = proposer(entite, donnees)
     return moderer(admin, identifiant, "valider", empreinte(identifiant), "Références et contexte vérifiés.")
 

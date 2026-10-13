@@ -9,7 +9,7 @@
 | Anonymat applicatif | Aucun champ contributeur/IP/email, quotas globaux | Test structure et données enregistrées |
 | Validation des URL et doublons | HTTP(S), ports publics, clé canonique, unicité | Tests URL dangereuses, YouTube, doublons |
 | Anti-automatisation | Défi unique, délai, expiration, leurre, quotas | Tests erreurs, réutilisation et concurrence |
-| Tags hiérarchiques extensibles | Cinq familles, parent, anti-cycle, propositions | Tests hiérarchie et parent de même nature |
+| Tags hiérarchiques extensibles | Cinq familles, parent, anti-cycle, création et modification administratives | Tests hiérarchie, droits administrateur, refus public et parcours Streamlit |
 | Qualifications documentées | Référence explicite par tag appliqué | Test refus de qualification injustifiée |
 | Recherche multicritère ET/OU | Requêtes SQL partagées API/Streamlit | Tests croisés tags/dates/pays/langue/média/URL |
 | Pagination et fiches liées | Tableaux interactifs et liens de fiches | Tests pagination et navigation AppTest |
