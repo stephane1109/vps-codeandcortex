@@ -1,7 +1,6 @@
 """Interface publique française et espace de modération."""
 
 import json
-import os
 from datetime import date
 import pandas as pd
 import streamlit as st
@@ -120,8 +119,6 @@ def accueil():
             "Proposez une source, un compte, un contenu ou une correction. Chaque proposition fait l'objet d'une validation humaine."
         )
         st.button("Soumettre une contribution", on_click=aller_page, args=(PAGES[3],))
-    api = os.getenv("PUBLIC_API_URL", "http://localhost:8000").rstrip("/")
-    st.link_button("Documentation de l'API publique", api + "/docs")
 
 
 def champs_filtres(tags, plateformes):
