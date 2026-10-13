@@ -765,7 +765,6 @@ def afficher_application():
         st.caption("SOURCES · CONTENUS · RÉFÉRENCES")
         st.radio("Navigation", PAGES, key="page", label_visibility="collapsed")
         st.divider()
-        st.caption("Un observatoire pour la recherche.\nContributions anonymes, validation humaine.")
     if message := st.session_state.pop("avis", None):
         st.success(message)
     try:
