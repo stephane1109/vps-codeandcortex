@@ -18,6 +18,8 @@ from .modeles import (
     Source,
     Tag,
     maintenant,
+    source_tags,
+    contenu_tags,
 )
 from .securite import ErreurMetier, exiger_admin, verifier_defi
 from .validation import SAISIES, canonicaliser_url, cle_texte
@@ -48,7 +50,11 @@ def valider_donnees(session, entite, donnees, cible_id=None):
         compte = session.get(Compte, d["compte_id"])
         if compte.source_id != d["source_id"] or compte.plateforme_id != d["plateforme_id"]:
             raise ErreurMetier("Le compte, sa source et sa plateforme doivent correspondre.")
-    tags = [session.get(Tag, i) for i in set(d.get("tags", []))]
+    # Protéger aussi les liens contenus dans les propositions JSON en attente.
+    tags = [
+        session.scalar(select(Tag).where(Tag.id == i).with_for_update(read=True))
+        for i in sorted(set(d.get("tags", [])))
+    ]
     if any(t is None for t in tags):
         raise ErreurMetier("Un tag n'est pas encore validé.")
     if "tags" in d:
@@ -415,3 +421,57 @@ def enregistrer_tag(jeton_admin, donnees, motif, identifiant=None, version_atten
             return objet.id
     except IntegrityError:
         raise ErreurMetier("Un doublon ou une relation empêche l'enregistrement de ce tag.") from None
+
+
+def supprimer_tag(jeton_admin, identifiant, version_attendue):
+    exiger_admin(jeton_admin)
+    try:
+        with transaction() as session:
+            verrouiller_moderation(session)
+            tag = session.scalar(select(Tag).where(Tag.id == identifiant).with_for_update())
+            if tag is None:
+                raise ErreurMetier("Ce tag n'existe plus. Rechargez la page.")
+            if tag.version != version_attendue:
+                raise ErreurMetier(
+                    "Ce tag a été modifié par une autre session. Rechargez-le avant de le supprimer."
+                )
+            for liens in (source_tags, contenu_tags):
+                if session.scalar(select(liens.c.tag_id).where(liens.c.tag_id == identifiant).limit(1)):
+                    raise ErreurMetier(
+                        "Suppression impossible : ce tag est utilisé par des fiches publiées. Retirez-le de ces fiches avant de le supprimer."
+                    )
+            if session.scalar(
+                select(Reference.id).where(Reference.qualification_tag_id == identifiant).limit(1)
+            ):
+                raise ErreurMetier("Suppression impossible : des références utilisent cette qualification.")
+            if session.scalar(select(Tag.id).where(Tag.parent_id == identifiant).limit(1)):
+                raise ErreurMetier("Suppression impossible : d'autres tags sont encore rattachés à ce tag.")
+            propositions = session.execute(
+                select(Contribution.entite, Contribution.cible_id, Contribution.donnees).where(
+                    Contribution.statut == "en_attente"
+                )
+            )
+            for entite, cible_id, donnees in propositions:
+                if (
+                    (entite == "tag" and (cible_id == identifiant or donnees.get("parent_id") == identifiant))
+                    or identifiant in donnees.get("tags", [])
+                    or any(
+                        r.get("qualification_tag_id") == identifiant for r in donnees.get("references", [])
+                    )
+                ):
+                    raise ErreurMetier(
+                        "Suppression impossible : ce tag est utilisé par une contribution en attente. Traitez ou révisez cette contribution d'abord."
+                    )
+            session.add(
+                Historique(
+                    entite="tag",
+                    entite_id=identifiant,
+                    action="suppression",
+                    avant=obtenir_fiche(session, "tag", identifiant, liens=False),
+                )
+            )
+            session.delete(tag)
+    except IntegrityError:
+        raise ErreurMetier(
+            "Suppression impossible : ce tag est encore utilisé par une autre fiche."
+        ) from None

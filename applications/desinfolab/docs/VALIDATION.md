@@ -26,3 +26,10 @@ La suite produit un avertissement de dépréciation du client de test Starlette 
 - Création et modification depuis Administration → Tags testées avec AppTest, puis déconnexion et vérification des pages publiques en lecture seule pour les tags.
 - Soumissions publiques de tags refusées côté métier, anciennes sessions protégées, API sans route d’écriture.
 - Vérification de l’authentification, des doublons, des références, des cycles, de la famille stable, des versions concurrentes et de l’historique avant/après.
+
+## Suppression des tags et simplification du formulaire
+
+- 64 tests réussis sur PostgreSQL 16.2, sans écart de schéma Alembic.
+- Suppression administrateur avec confirmation testée dans Streamlit, y compris le dernier tag de la liste.
+- Absence du champ parent vérifiée en création et en modification ; affichage de la hiérarchie retiré de l’explorateur.
+- Tests de refus sans authentification, version périmée, tag utilisé par une fiche, contribution en attente ou anciens tags enfants. Les références du tag supprimé restent consultables dans l’historique.

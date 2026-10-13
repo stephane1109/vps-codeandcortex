@@ -22,6 +22,7 @@ from .catalogue import (
 from .contributions import (
     ajouter_plateforme,
     enregistrer_tag,
+    supprimer_tag,
     modifier_plateforme,
     supprimer_plateforme,
     moderer,
@@ -526,7 +527,7 @@ def soumission():
 def explorer_tags():
     st.title("Explorer les tags")
     st.write(
-        "Un vocabulaire hiérarchisé : thématiques, types de discours, qualifications factuelles, catégories et mots-clés."
+        "Les familles de tags : thématiques, types de discours, qualifications factuelles, catégories et mots-clés."
     )
     with transaction() as session:
         tags = lister_tags(session)
@@ -534,7 +535,6 @@ def explorer_tags():
         "Famille de tags", [None] + list(NATURES), format_func=lambda x: NATURES.get(x, "Toutes")
     )
     terme = st.text_input("Rechercher un tag")
-    noms = {t["id"]: t["nom"] for t in tags}
     selection = [
         t for t in tags if (not nature or t["nature"] == nature) and terme.casefold() in t["nom"].casefold()
     ]
@@ -544,7 +544,6 @@ def explorer_tags():
                 "ID": t["id"],
                 "Nom": t["nom"],
                 "Famille": NATURES[t["nature"]],
-                "Parent": noms.get(t["parent_id"], "—"),
                 "Description": t["description"],
             }
             for t in selection
@@ -555,27 +554,19 @@ def explorer_tags():
     if selection:
         identifiant = choix("Consulter le tag et ses références", selection)
         st.button("Afficher le tag", on_click=aller_page, args=(PAGES[2], "tag", identifiant))
-    with st.expander("Hiérarchie complète", expanded=True):
-
-        def branche(parent, niveau=0):
-            for t in (t for t in tags if t["parent_id"] == parent and (not nature or t["nature"] == nature)):
-                st.text("    " * niveau + ("↳ " if niveau else "") + t["nom"] + f" · {NATURES[t['nature']]}")
-                branche(t["id"], niveau + 1)
-
-        branche(None)
 
 
 def administrer_tags(jeton):
     exiger_admin(jeton)
     with transaction() as session:
         tags = lister_tags(session)
-    mode = st.radio("Gestion des tags", ["Créer un tag", "Modifier un tag"], horizontal=True)
+    mode = st.radio("Gestion des tags", ["Créer un tag", "Modifier / supprimer un tag"], horizontal=True)
     identifiant, version, initial = None, None, {}
-    if mode == "Modifier un tag":
+    if mode == "Modifier / supprimer un tag":
         if not tags:
             st.info("Aucun tag à modifier. Créez d'abord un tag.")
             return
-        identifiant = choix("Tag à modifier", tags, key="admin-tag-selection")
+        identifiant = choix("Tag à modifier ou supprimer", tags, key="admin-tag-selection")
         with transaction() as session:
             initial = donnees_editables(session, "tag", identifiant)
             version = session.get(MODELES["tag"], identifiant).version
@@ -589,16 +580,7 @@ def administrer_tags(jeton):
         key=cle + "-nature",
     )
     if identifiant is not None:
-        st.caption(
-            "La famille d'un tag existant est conservée pour préserver les qualifications et la hiérarchie."
-        )
-    parent = choix(
-        "Tag parent (facultatif)",
-        [t for t in tags if t["nature"] == nature and t["id"] != identifiant],
-        courant=initial.get("parent_id"),
-        vide=True,
-        key=cle + "-parent-" + nature,
-    )
+        st.caption("La famille d'un tag existant est conservée pour préserver les qualifications.")
     with st.form(cle):
         nom = st.text_input("Nom du tag", value=initial.get("nom", ""), max_chars=150)
         description = st.text_area(
@@ -618,7 +600,7 @@ def administrer_tags(jeton):
                 "nom": nom,
                 "nature": nature,
                 "description": description,
-                "parent_id": parent,
+                "parent_id": initial.get("parent_id"),
                 "references": references,
             },
             motif,
@@ -626,6 +608,15 @@ def administrer_tags(jeton):
             version,
         )
         avis("Tag créé." if identifiant is None else "Tag modifié.")
+    if identifiant is not None:
+        st.divider()
+        st.caption("Un tag utilisé par une fiche ou une contribution en attente ne peut pas être supprimé.")
+        confirmer = st.checkbox(
+            f"Confirmer la suppression du tag « {initial['nom']} »", key=cle + "-supprimer"
+        )
+        if st.button("Supprimer le tag", disabled=not confirmer):
+            supprimer_tag(jeton, identifiant, version)
+            avis("Tag supprimé.")
 
 
 def administration():

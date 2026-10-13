@@ -77,7 +77,7 @@ def test_interface_tags_admin_et_lecture_publique(admin):
     next(w for w in at.text_input if w.label == "Motif de création ou de modification").set_value("Création")
     next(w for w in at.button if w.label == "Créer le tag").click().run()
     assert not at.exception and not at.error
-    next(w for w in at.radio if w.label == "Gestion des tags").set_value("Modifier un tag").run()
+    next(w for w in at.radio if w.label == "Gestion des tags").set_value("Modifier / supprimer un tag").run()
     next(w for w in at.text_input if w.label == "Nom du tag").set_value("Sciences et recherche")
     next(w for w in at.text_input if w.label == "Motif de création ou de modification").set_value("Précision")
     next(w for w in at.button if w.label == "Enregistrer le tag").click().run()
@@ -102,3 +102,85 @@ def test_interface_tags_admin_et_lecture_publique(admin):
     assert not at.exception
     assert any("réservées à l'administration" in w.value for w in at.info)
     assert not any(w.label == "Envoyer pour validation" for w in at.button)
+
+
+def test_supprimer_tag_et_conserver_historique(admin, reference):
+    from desinfolab.contributions import supprimer_tag
+    from desinfolab.modeles import Reference
+
+    identifiant = enregistrer_tag(admin, {**DONNEES, "references": [reference]}, "Création")
+    supprimer_tag(admin, identifiant, 1)
+    with transaction() as session:
+        assert session.get(Tag, identifiant) is None
+        assert session.scalar(select(func.count()).select_from(Reference)) == 0
+        historique = session.scalar(select(Historique).where(Historique.action == "suppression"))
+        assert historique.avant["nom"] == "Sciences"
+        assert historique.avant["references"][0]["url"] == reference["url"]
+    with pytest.raises(ErreurMetier, match="n'existe plus"):
+        supprimer_tag(admin, identifiant, 1)
+
+
+def test_suppression_tag_authentification_et_version(admin):
+    from desinfolab.contributions import supprimer_tag
+
+    identifiant = enregistrer_tag(admin, DONNEES, "Création")
+    with pytest.raises(ErreurMetier, match="Session"):
+        supprimer_tag(None, identifiant, 1)
+    enregistrer_tag(admin, {**DONNEES, "nom": "Recherche"}, "Correction", identifiant, 1)
+    with pytest.raises(ErreurMetier, match="autre session"):
+        supprimer_tag(admin, identifiant, 1)
+    with transaction() as session:
+        assert session.get(Tag, identifiant).nom == "Recherche"
+
+
+@pytest.mark.parametrize("publie", [False, True])
+def test_suppression_tag_utilise_refusee(admin, source, publie):
+    from desinfolab.contributions import supprimer_tag
+    from conftest import proposer, publier
+
+    identifiant = enregistrer_tag(admin, DONNEES, "Création")
+    donnees = {**source, "tags": [identifiant]}
+    if publie:
+        publier(admin, "source", donnees)
+    else:
+        proposer("source", donnees)
+    with pytest.raises(ErreurMetier, match="publiées" if publie else "en attente"):
+        supprimer_tag(admin, identifiant, 1)
+    with transaction() as session:
+        assert session.get(Tag, identifiant) is not None
+        assert (
+            session.scalar(
+                select(func.count()).select_from(Historique).where(Historique.action == "suppression")
+            )
+            == 0
+        )
+
+
+def test_suppression_ancien_parent_refusee(admin):
+    from desinfolab.contributions import supprimer_tag
+
+    identifiant = enregistrer_tag(admin, DONNEES, "Création")
+    enregistrer_tag(admin, {**DONNEES, "nom": "Santé", "parent_id": identifiant}, "Ancienne hiérarchie")
+    with pytest.raises(ErreurMetier, match="rattachés"):
+        supprimer_tag(admin, identifiant, 1)
+
+
+def test_interface_suppression_et_absence_champ_parent(admin):
+    identifiant = enregistrer_tag(admin, DONNEES, "Création")
+    at = AppTest.from_file(str(RACINE / "app.py"), default_timeout=15).run()
+    at.session_state["admin"] = admin
+    at.sidebar.radio[0].set_value(PAGES[5]).run()
+    next(w for w in at.radio if w.label == "Espace de gestion").set_value("Tags").run()
+    assert not any("parent" in w.label.lower() for w in at.selectbox)
+    next(w for w in at.radio if w.label == "Gestion des tags").set_value("Modifier / supprimer un tag").run()
+    assert not any("parent" in w.label.lower() for w in at.selectbox)
+    assert next(w for w in at.button if w.label == "Supprimer le tag").disabled
+    next(w for w in at.checkbox if w.label.startswith("Confirmer la suppression du tag")).check().run()
+    next(w for w in at.button if w.label == "Supprimer le tag").click().run()
+    assert not at.exception and not at.error
+    with transaction() as session:
+        assert session.get(Tag, identifiant) is None
+    assert any("Tag supprimé" in w.value for w in at.success)
+    at.sidebar.radio[0].set_value(PAGES[4]).run()
+    assert not at.exception and not at.error
+    assert not any(w.label == "Hiérarchie complète" for w in at.expander)
