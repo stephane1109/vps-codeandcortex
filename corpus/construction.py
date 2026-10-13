@@ -1,4 +1,5 @@
 """Assemblage reproductible des exports d’une session enrichie."""
+from pathlib import Path
 from .export_json import exporter_json
 from .export_csv import exporter_csv
 from .export_iramuteq import exporter_iramuteq
@@ -20,7 +21,13 @@ def lignes_engagement(publications):
         lignes.append(ligne)
     return lignes
 
-def construire_exports(dossier, publications, commentaires, journal, variables=None):
+def construire_exports(dossier, publications, commentaires, journal, variables=None, *, texte_source=None):
+    """Reprendre le TXT téléchargeable comme corpus principal dès qu’il existe."""
+    dossier = Path(dossier)
+    source = Path(texte_source) if texte_source is not None else dossier / "textes.txt"
+    # Une source explicitement attendue doit être lisible : pas de corpus de remplacement.
+    # Lire les octets conserve aussi les accents, retours à la ligne et un TXT vide.
+    contenu_txt = source.read_bytes() if texte_source is not None or source.is_file() else None
     exporter_json(dossier / "publications.json", publications)
     exporter_json(dossier / "commentaires.json", commentaires)
     exporter_json(dossier / "journal.json", journal)
@@ -28,5 +35,9 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     exporter_csv(dossier / "ratios_engagement.csv",[{"publication_id":p["id"],**calculer_ratios(p.get("engagement",{}))} for p in publications])
     exporter_csv(dossier / "comparaison_medias.csv",comparer_medias(publications))
     exporter_csv(dossier / "commentaires.csv", commentaires, ["id","publication_id","parent_id","est_reponse","auteur","texte","date_brute","likes","source","observe_le"])
-    exporter_iramuteq(dossier / "corpus_iramuteq.txt", construire_legendes(publications, variables))
+    if contenu_txt is not None:
+        (dossier / "corpus_iramuteq.txt").write_bytes(contenu_txt)
+    else:
+        # Compatibilité des lots autonomes créés sans collecte textuelle préalable.
+        exporter_iramuteq(dossier / "corpus_iramuteq.txt", construire_legendes(publications, variables))
     exporter_iramuteq(dossier / "corpus_commentaires_iramuteq.txt", construire_commentaires(commentaires,variables))

@@ -796,7 +796,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 construire_exports(job.directory, job.publications, job.commentaires,
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
                      "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal,
-                     "diagnostics": job.diagnostics})
+                     "diagnostics": job.diagnostics}, texte_source=job.path)
                 exporter_zip(job.directory, job.directory / "archive.zip")
                 job.archive_prete = True
             except Exception:

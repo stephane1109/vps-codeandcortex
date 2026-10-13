@@ -197,8 +197,16 @@ L’API accepte `variables_txt: ["date", "profil", "url", "vues", "likes", "part
 `republications` est convertie en `partages` pour les sélections déjà enregistrées,
 sans réutiliser le compteur de republications. Une liste explicite remplace les
 anciennes options d’en-tête. Les requêtes sans ce champ restent compatibles avec
-`inclure_metadonnees_txt` et `include_sources`. Le corpus normalisé IRaMuTeQ reste
-séparé dans le ZIP.
+`inclure_metadonnees_txt` et `include_sources`.
+
+Dans l’archive, **`corpus_iramuteq.txt` est une copie exacte, octet pour octet, du
+TXT téléchargeable `textes.txt`** : mêmes publications retenues, mêmes variables
+cochées, même ordre, mêmes hashtags et mêmes commentaires inclus. Aucun nouvel
+en-tête ni normalisation ne sont ajoutés lors de la création du ZIP. Une
+régénération de l’archive après traitement vidéo conserve également ce TXT.
+Les CSV, JSON et corpus séparés des commentaires/transcriptions restent disponibles.
+Pour un lot autonome sans fichier `textes.txt`, le générateur de corpus historique
+reste utilisé.
 
 ### Filtre français
 
