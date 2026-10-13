@@ -48,14 +48,6 @@ Documentation officielle consultée : [Docker Compose dans Coolify](https://cool
 
 ## Utiliser l'observatoire
 
-### Application Streamlit avec une base Coolify séparée
-
-Pour une application déployée avec le Dockerfile seul, créez une ressource PostgreSQL 16 sur le même serveur et le même réseau Coolify, puis démarrez-la. Dans la base, copiez **Postgres URL (internal)** en entier. Dans les variables d'environnement de l'application disponibles à l'exécution, donnez le nom `DATABASE_URL` à la variable et collez directement l'URL dans sa valeur. **Aucune modification du préfixe n'est nécessaire** : DésinfoLab accepte `postgres://`, `postgresql://` et `postgresql+psycopg://`.
-
-Enregistrez et redéployez l'application. Pour créer les tables, exécutez `cd /app && alembic upgrade head` dans le terminal du conteneur de l'application. Configurez aussi `APP_SECRET` et `ADMIN_PASSWORD_HASH` pour la contribution et l'administration. Ce mode lance Streamlit uniquement ; la pile Compose reste le mode de déploiement de l'ensemble web, API et sauvegardes.
-
-Une URL mal formée, une connexion non configurée ou des tables manquantes produisent un diagnostic français, sans afficher le mot de passe, l'URL complète ni les requêtes SQL. L'existence d'un serveur PostgreSQL ne garantit pas que la base nommée et les tables de l'application ont déjà été créées.
-
 Les six pages sont : accueil et statistiques ; recherche et exploration ; fiches sources et contenus ; soumission ; exploration des tags ; administration.
 
 - **Sources** : nom, description, URL, pays, langue, plateforme principale, tags et références.

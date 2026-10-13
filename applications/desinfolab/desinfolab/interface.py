@@ -20,8 +20,6 @@ from .catalogue import (
     statistiques,
 )
 from .contributions import ajouter_plateforme, moderer, reviser_proposition, soumettre, trouver_doublons
-from .configuration import ErreurConfiguration
-from .diagnostic import diagnostic_base
 from .exports import MIMES, exporter
 from .modeles import Compte, Contribution, Historique, Source
 from .securite import ErreurMetier, connecter_admin, creer_defi, exiger_admin
@@ -748,9 +746,9 @@ def afficher_application():
         }[st.session_state.page]()
     except ErreurMetier as erreur:
         st.error(str(erreur))
-    except ErreurConfiguration as erreur:
-        st.error(str(erreur))
-    except SQLAlchemyError as erreur:
-        st.error(diagnostic_base(erreur))
+    except SQLAlchemyError:
+        st.error(
+            "La base est indisponible ou une opération concurrente a empêché l'enregistrement. Réessayez après actualisation."
+        )
     st.divider()
     st.caption("DésinfoLab · Référencer ne vaut pas qualifier. Aucun téléchargement automatique de vidéos.")
