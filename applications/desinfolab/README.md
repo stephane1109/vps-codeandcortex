@@ -50,6 +50,8 @@ Documentation officielle consultée : [Docker Compose dans Coolify](https://cool
 
 Les six pages sont : accueil et statistiques ; recherche et exploration ; fiches sources et contenus ; soumission ; exploration des tags ; administration.
 
+Dans **Administration → Plateformes**, vous pouvez créer une plateforme, modifier son nom ou la supprimer après confirmation. Le renommage conserve les liens existants. La suppression est refusée si une source, un compte, un contenu publié ou une contribution en attente utilise la plateforme. Chaque changement est enregistré dans l’historique.
+
 - **Sources** : nom, description, URL, pays, langue, plateforme principale, tags et références.
 - **Comptes** : plateforme, pseudonyme, identifiant public, URL et source. L'identifiant est celui du compte référencé, jamais celui du contributeur.
 - **Contenus** : titre, URL originale, date de publication facultative, description, média, source et compte facultatif. Si un compte est renseigné, sa source et sa plateforme doivent correspondre.

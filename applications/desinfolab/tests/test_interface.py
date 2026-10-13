@@ -69,3 +69,31 @@ def test_recherche_export_interface(admin, source):
     next(b for b in at.button if b.label == "Préparer les exports complets").click().run()
     assert not at.exception
     assert len(at.session_state["export_filtre"]) == 1
+
+
+def test_administration_creer_modifier_supprimer_plateforme(admin):
+    from desinfolab.modeles import Plateforme
+
+    at = AppTest.from_file(str(RACINE / "app.py"), default_timeout=15).run()
+    at.session_state["admin"] = admin
+    at.sidebar.radio[0].set_value(PAGES[5]).run()
+    next(w for w in at.radio if w.label == "Espace de gestion").set_value("Plateformes").run()
+    next(w for w in at.text_input if w.label == "Nouvelle plateforme").set_value("Plateforme test")
+    next(w for w in at.button if w.label == "Ajouter la plateforme").click().run()
+    assert not at.exception and not at.error
+    with transaction() as session:
+        identifiant = session.scalar(select(Plateforme.id).where(Plateforme.nom == "Plateforme test"))
+    next(w for w in at.selectbox if w.label == "Plateforme à gérer").set_value(identifiant).run()
+    next(w for w in at.text_input if w.label == "Nom de la plateforme").set_value("Plateforme modifiée")
+    next(w for w in at.button if w.label == "Enregistrer les modifications").click().run()
+    assert not at.exception and not at.error
+    with transaction() as session:
+        assert session.get(Plateforme, identifiant).nom == "Plateforme modifiée"
+    assert next(w for w in at.button if w.label == "Supprimer la plateforme").disabled
+    next(w for w in at.checkbox if w.label.startswith("Confirmer la suppression")).check().run()
+    next(w for w in at.button if w.label == "Supprimer la plateforme").click().run()
+    assert not at.exception and not at.error
+    with transaction() as session:
+        assert session.get(Plateforme, identifiant) is None
+    next(w for w in at.button if w.label == "Ajouter la plateforme").click().run()
+    assert not at.exception

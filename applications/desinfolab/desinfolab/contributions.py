@@ -7,7 +7,18 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import ValidationError
 from .base import transaction
 from .catalogue import MODELES, donnees_editables, obtenir_fiche, serialiser
-from .modeles import Compte, Contribution, Historique, Plateforme, Quota, Reference, Source, Tag, maintenant
+from .modeles import (
+    Compte,
+    Contenu,
+    Contribution,
+    Historique,
+    Plateforme,
+    Quota,
+    Reference,
+    Source,
+    Tag,
+    maintenant,
+)
 from .securite import ErreurMetier, exiger_admin, verifier_defi
 from .validation import SAISIES, canonicaliser_url, cle_texte
 
@@ -23,7 +34,15 @@ def valider_donnees(session, entite, donnees, cible_id=None):
         ) from None
     d = saisie.model_dump(mode="json")
     for champ, modele in (("plateforme_id", Plateforme), ("source_id", Source), ("compte_id", Compte)):
-        if d.get(champ) and session.get(modele, d[champ]) is None:
+        # Le verrou partagé empêche de supprimer une plateforme pendant une soumission.
+        objet = (
+            session.scalar(select(modele).where(modele.id == d[champ]).with_for_update(read=True))
+            if d.get(champ) and modele is Plateforme
+            else session.get(modele, d[champ])
+            if d.get(champ)
+            else None
+        )
+        if d.get(champ) and objet is None:
             raise ErreurMetier(f"{champ} ne désigne aucune fiche validée.")
     if entite == "contenu" and d["compte_id"]:
         compte = session.get(Compte, d["compte_id"])
@@ -285,3 +304,75 @@ def ajouter_plateforme(jeton_admin, nom):
         session.flush()
         session.add(Historique(entite="plateforme", entite_id=p.id, action="creation", apres={"nom": nom}))
         return p.id
+
+
+def modifier_plateforme(jeton_admin, identifiant, nom):
+    exiger_admin(jeton_admin)
+    nom = nom.strip()
+    if not nom or len(nom) > 100:
+        raise ErreurMetier("Le nom de plateforme doit contenir 1 à 100 caractères.")
+    with transaction() as session:
+        verrouiller_moderation(session)
+        plateforme = session.scalar(select(Plateforme).where(Plateforme.id == identifiant).with_for_update())
+        if plateforme is None:
+            raise ErreurMetier("Cette plateforme n'existe plus. Rechargez la page.")
+        if session.scalar(
+            select(Plateforme.id).where(
+                func.lower(Plateforme.nom) == nom.lower(), Plateforme.id != identifiant
+            )
+        ):
+            raise ErreurMetier("Cette plateforme existe déjà.")
+        if plateforme.nom == nom:
+            return
+        avant = {"nom": plateforme.nom}
+        plateforme.nom = nom
+        session.add(
+            Historique(
+                entite="plateforme",
+                entite_id=identifiant,
+                action="modification",
+                avant=avant,
+                apres={"nom": nom},
+            )
+        )
+
+
+def supprimer_plateforme(jeton_admin, identifiant):
+    exiger_admin(jeton_admin)
+    try:
+        with transaction() as session:
+            verrouiller_moderation(session)
+            plateforme = session.scalar(
+                select(Plateforme).where(Plateforme.id == identifiant).with_for_update()
+            )
+            if plateforme is None:
+                raise ErreurMetier("Cette plateforme n'existe plus. Rechargez la page.")
+            for modele in (Source, Compte, Contenu):
+                if session.scalar(select(modele.id).where(modele.plateforme_id == identifiant).limit(1)):
+                    raise ErreurMetier(
+                        "Suppression impossible : cette plateforme est utilisée par des fiches publiées."
+                    )
+            if session.scalar(
+                select(Contribution.id)
+                .where(
+                    Contribution.statut == "en_attente",
+                    Contribution.donnees["plateforme_id"].as_integer() == identifiant,
+                )
+                .limit(1)
+            ):
+                raise ErreurMetier(
+                    "Suppression impossible : cette plateforme est utilisée par des contributions en attente."
+                )
+            session.add(
+                Historique(
+                    entite="plateforme",
+                    entite_id=identifiant,
+                    action="suppression",
+                    avant={"nom": plateforme.nom},
+                )
+            )
+            session.delete(plateforme)
+    except IntegrityError:
+        raise ErreurMetier(
+            "Suppression impossible : cette plateforme vient d'être utilisée par une fiche."
+        ) from None

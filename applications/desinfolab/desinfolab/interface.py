@@ -19,7 +19,15 @@ from .catalogue import (
     rechercher,
     statistiques,
 )
-from .contributions import ajouter_plateforme, moderer, reviser_proposition, soumettre, trouver_doublons
+from .contributions import (
+    ajouter_plateforme,
+    modifier_plateforme,
+    supprimer_plateforme,
+    moderer,
+    reviser_proposition,
+    soumettre,
+    trouver_doublons,
+)
 from .exports import MIMES, exporter
 from .modeles import Compte, Contribution, Historique, Source
 from .securite import ErreurMetier, connecter_admin, creer_defi, exiger_admin
@@ -592,13 +600,34 @@ def administration():
     onglet = st.radio("Espace de gestion", ["Contributions", "Plateformes", "Historique"], horizontal=True)
     if onglet == "Plateformes":
         with transaction() as session:
-            st.dataframe(lister_plateformes(session), hide_index=True, width="stretch")
+            plateformes = lister_plateformes(session)
+        st.dataframe(plateformes, hide_index=True, width="stretch")
         with st.form("plateforme"):
             nom = st.text_input("Nouvelle plateforme", max_chars=100)
             ajouter = st.form_submit_button("Ajouter la plateforme")
         if ajouter:
             ajouter_plateforme(jeton, nom)
             avis("Plateforme ajoutée.")
+        if plateformes:
+            st.divider()
+            identifiant = choix("Plateforme à gérer", plateformes, key="plateforme-a-gerer")
+            plateforme = next(p for p in plateformes if p["id"] == identifiant)
+            with st.form(f"modifier-plateforme-{identifiant}-{plateforme['nom']}"):
+                nouveau_nom = st.text_input("Nom de la plateforme", value=plateforme["nom"], max_chars=100)
+                modifier = st.form_submit_button("Enregistrer les modifications")
+            if modifier:
+                modifier_plateforme(jeton, identifiant, nouveau_nom)
+                avis("Plateforme modifiée.")
+            st.caption(
+                "La suppression est possible uniquement si aucune fiche publiée ni contribution en attente n'utilise cette plateforme."
+            )
+            confirmation = st.checkbox(
+                f"Confirmer la suppression de « {plateforme['nom']} »",
+                key=f"confirmer-suppression-plateforme-{identifiant}-{plateforme['nom']}",
+            )
+            if st.button("Supprimer la plateforme", disabled=not confirmation):
+                supprimer_plateforme(jeton, identifiant)
+                avis("Plateforme supprimée.")
         return
     if onglet == "Historique":
         contribution_id = st.number_input("Filtrer par contribution (0 = toutes)", min_value=0, step=1)
