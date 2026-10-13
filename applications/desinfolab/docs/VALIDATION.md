@@ -12,3 +12,7 @@
 Docker Engine n'est pas disponible sur ce poste : **aucune construction d'image ou exécution du Compose n'a été réalisée**. Le déploiement Coolify et le routage HTTPS devront être vérifiés sur le VPS avec les secrets d'exploitation. Aucune publication distante n'a été effectuée.
 
 La suite produit un avertissement de dépréciation du client de test Starlette lié à httpx ; il n'affecte pas les résultats ni les routes de production.
+
+## Correctif des URL Coolify
+
+54 tests réussis sur PostgreSQL après ajout de 17 cas de régression : préfixes PostgreSQL natifs, mots de passe encodés, URL incomplètes ou ports invalides, absence de configuration, tables absentes et diagnostics sans divulgation de valeurs sensibles. Le cas d'erreur de port observé au déploiement est reproduit avec un secret fictif et ne produit plus d'exception Streamlit non interceptée. La connexion effective au VPS reste dépendante de la valeur DATABASE_URL renseignée dans Coolify.
