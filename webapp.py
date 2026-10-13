@@ -54,7 +54,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "partages", "commentaires", "hashtags"]] | None = Field(default=None, max_length=8)
+    variables_txt: list[Literal["date", "profil", "url", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]] | None = Field(default=None, max_length=9)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -197,14 +197,15 @@ def entete_publication(publication: dict, variables=None) -> str:
 
     def compteur(nom):
         mesure = (publication.get("engagement") or {}).get(nom) or {}
-        # Zéro est une observation valide. Estimations et bruts restent dans le JSON/CSV.
+        # Zéro est une observation valide. Les détails des mesures restent dans le JSON.
         return modalite(mesure.get("valeur"))
 
     valeurs = {"date": f"*date_{date_publication}",
                "profil": f"*profil_{profil}", "url": f"*url_{modalite(publication.get('url'))}",
                "vues": f"*vues_{compteur('vues')}", "likes": f"*likes_{compteur('likes')}",
                "partages": f"*partages_{compteur('partages')}",
-               "commentaires": f"*comment_{compteur('commentaires')}"}
+               "commentaires": f"*comment_{compteur('commentaires')}",
+               "favoris": f"*favoris_{compteur('favoris')}"}
     # Les anciens appels sans sélection gardent leur en-tête à trois variables.
     selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "url"))
     entete = " ".join(texte for cle, texte in valeurs.items() if cle in selection)

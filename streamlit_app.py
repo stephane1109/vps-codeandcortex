@@ -7,7 +7,8 @@ from interface.client import appeler_api
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "url": "URL", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
-                 "commentaires": "Nombre de commentaires", "hashtags": "Hashtags sous le texte"}
+                 "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
+                 "hashtags": "Hashtags sous le texte"}
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")

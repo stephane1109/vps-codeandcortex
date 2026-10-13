@@ -160,12 +160,12 @@ n'est nécessaire.
 
 Dans la section « Variables à inclure avant chaque post dans le TXT », les cases
 indépendantes sont **Date**, **Profil**, **URL**, **Nombre de vues**, **Nombre de likes**,
-**Nombre de partages** et **Nombre de commentaires**. Seules les variables cochées
+**Nombre de partages**, **Nombre de commentaires** et **Nombre de favoris**. Seules les variables cochées
 figurent sur une ligne étoilée, dans cet ordre, au format `*nom_valeur`.
 La date n’inclut pas l’heure. Exemple avec toutes les variables et les hashtags :
 
 ```text
-*date_2026-10-08 *profil_@bfmtv *url_https://www.tiktok.com/@bfmtv/video/7694262098129603843 *vues_8000000 *likes_576000 *partages_42 *comment_123
+*date_2026-10-08 *profil_@bfmtv *url_https://www.tiktok.com/@bfmtv/video/7694262098129603843 *vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456
 Texte de la publication.
 #blocage #lycee #manifestation #lyceen #lyon
 
@@ -173,9 +173,10 @@ Commentaire 1 :
 Texte d’un commentaire de cette publication.
 ```
 
-Les nombres de partages et de commentaires ci-dessus sont illustratifs.
+Les nombres de partages, de commentaires et de favoris ci-dessus sont illustratifs.
 `*partages_` utilise **shareCount**, jamais **repostCount**. `*comment_` utilise le
-compteur total **commentCount** de TikTok, pas le nombre de textes récupérés. Ces
+compteur total **commentCount** de TikTok, pas le nombre de textes récupérés.
+`*favoris_` utilise le compteur **collectCount** (ajouts aux favoris). Ces
 compteurs sont disponibles même si la collecte des textes de commentaires est décochée.
 Une mesure absente est `indetermine` ; un vrai zéro reste `0`. Les valeurs estimées
 sont écrites numériquement dans le TXT ; la mesure brute, la confiance et le statut
@@ -193,7 +194,7 @@ figurent sous leur publication dans le même TXT. Les réponses récupérées so
 Aucun commentaire d’une publication exclue n’est inséré.
 
 L’API accepte `variables_txt: ["date", "profil", "url", "vues", "likes", "partages",
-"commentaires", "hashtags"]`, ou toute sous-liste, y compris `[]`. L’ancienne clé
+"commentaires", "favoris", "hashtags"]`, ou toute sous-liste, y compris `[]`. L’ancienne clé
 `republications` est convertie en `partages` pour les sélections déjà enregistrées,
 sans réutiliser le compteur de republications. Une liste explicite remplace les
 anciennes options d’en-tête. Les requêtes sans ce champ restent compatibles avec
@@ -312,6 +313,12 @@ JSON de la publication exacte, puis des éléments visibles : likes, vues, parta
 favoris et total de commentaires. Chaque mesure conserve valeur, texte brut, source,
 confiance, caractère estimé et date d’observation. `1,2 K` vaut une estimation de 1 200 ;
 un compteur absent vaut `null`, jamais zéro. Les scores sont heuristiques, non calibrés.
+
+Le téléchargement « Compteurs CSV » et le fichier `engagement.csv` de l’archive
+conservent les colonnes d’identification, les compteurs et leurs valeurs `_brut`.
+Les 15 colonnes `_confiance`, `_source` et `_estime` des likes, vues, partages,
+commentaires et favoris sont retirées de ce CSV. Ces informations restent
+conservées dans `publications.json`.
 
 La collecte des commentaires lit uniquement ce qui est accessible dans la page,
 avec une limite par publication et un nombre de défilements borné. Les réponses

@@ -25,19 +25,20 @@ class TestsInterface(unittest.TestCase):
             self.assertFalse(page.exception)
             self.assertEqual(page.checkbox(key='txt_partages').label, 'Nombre de partages')
             self.assertEqual(page.checkbox(key='txt_commentaires').label, 'Nombre de commentaires')
+            self.assertEqual(page.checkbox(key='txt_favoris').label, 'Nombre de favoris')
             self.assertEqual(page.checkbox(key='txt_hashtags').label, 'Hashtags sous le texte')
             self.assertFalse(any(c.label == 'Nombre de republications' for c in page.checkbox))
             page.text_input(key='hashtag').set_value('#manifestation')
             for variable in ('date', 'profil', 'url', 'vues', 'likes'):
                 page.checkbox(key='txt_'+variable).uncheck()
-            for variable in ('partages', 'commentaires', 'hashtags'):
+            for variable in ('partages', 'commentaires', 'favoris', 'hashtags'):
                 page.checkbox(key='txt_'+variable).check()
             page.checkbox(key='collecter_commentaires').uncheck()
             next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
             self.assertFalse(page.exception)
-            self.assertEqual(envois[-1]['variables_txt'], ['partages', 'commentaires', 'hashtags'])
+            self.assertEqual(envois[-1]['variables_txt'], ['partages', 'commentaires', 'favoris', 'hashtags'])
             self.assertFalse(envois[-1]['collecter_commentaires'])
-            self.assertEqual(StartRequest(**envois[-1]).variables_txt, ['partages', 'commentaires', 'hashtags'])
+            self.assertEqual(StartRequest(**envois[-1]).variables_txt, ['partages', 'commentaires', 'favoris', 'hashtags'])
 
     def test_formulaire_et_selection_complete_des_medias(self):
         def repondre(chemin,*a,**kw):

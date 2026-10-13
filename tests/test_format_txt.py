@@ -17,25 +17,25 @@ class FormatTxt(unittest.TestCase):
             "description": "Les élèves manifestent.\n#blocage #lycee #manifestation #lyceen #lyon",
             "hashtags": ["blocage", "lycee", "manifestation", "lyceen", "lyon"],
             "engagement": extraire_engagement({"stats": {"playCount": 8000000,
-                "diggCount": 576000, "repostCount": 0, "shareCount": 42, "commentCount": 123}})}
+                "diggCount": 576000, "repostCount": 0, "shareCount": 42, "commentCount": 123, "collectCount": 456}})}
 
     def test_format_demande_et_compteurs_reels(self):
         publication = self.publication()
         avant = deepcopy(publication)
         texte = web.text_export([publication], True, variables_txt=["date", "profil", "url",
-            "vues", "likes", "partages", "commentaires", "hashtags"])
+            "vues", "likes", "partages", "commentaires", "favoris", "hashtags"])
         self.assertEqual(texte,
             "*date_2026-10-08 *profil_@bfmtv *url_https://www.tiktok.com/@bfmtv/video/7694262098129603843 "
-            "*vues_8000000 *likes_576000 *partages_42 *comment_123\n"
+            "*vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456\n"
             "Les élèves manifestent.\n#blocage #lycee #manifestation #lyceen #lyon\n")
         self.assertEqual(publication, avant)
         self.assertNotIn("*hashtags", texte)
         self.assertNotIn("*republications", texte)
         self.assertNotIn("*urlvidéo", texte)
 
-    def test_options_independantes_pour_les_sept_variables(self):
+    def test_options_independantes_pour_les_huit_variables(self):
         marqueurs = {"date": "*date_", "profil": "*profil_", "url": "*url_", "vues": "*vues_",
-                     "likes": "*likes_", "partages": "*partages_", "commentaires": "*comment_"}
+                     "likes": "*likes_", "partages": "*partages_", "commentaires": "*comment_", "favoris": "*favoris_"}
         publication = self.publication()
         for taille in range(len(marqueurs) + 1):
             for selection in combinations(marqueurs, taille):
@@ -53,6 +53,17 @@ class FormatTxt(unittest.TestCase):
         publication["engagement"] = extraire_engagement({"stats": {"shareCount": 0}})
         texte = web.text_export([publication], False, variables_txt=["partages", "commentaires"])
         self.assertTrue(texte.startswith("*partages_0 *comment_indetermine\n"))
+
+    def test_favoris_facultatifs_zero_et_valeur_inconnue(self):
+        for brut, attendu in [(456, "456"), (0, "0"), (None, "indetermine")]:
+            with self.subTest(favoris=brut):
+                publication = self.publication()
+                publication["engagement"] = extraire_engagement({"stats": {"collectCount": brut, "diggCount": 999}})
+                self.assertEqual(web.entete_publication(publication, ["favoris"]), f"*favoris_{attendu}\n")
+                self.assertNotIn("*favoris_", web.text_export([publication], False, variables_txt=[]))
+        variables = ["date", "profil", "url", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]
+        settings = web.StartRequest(hashtag="manifestation", variables_txt=variables)
+        self.assertEqual(settings.variables_txt, variables)
 
     def test_compteur_commentaires_independant_des_textes_recuperes(self):
         publication = self.publication()

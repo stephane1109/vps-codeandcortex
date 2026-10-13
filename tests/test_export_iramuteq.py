@@ -1,4 +1,6 @@
 import json
+import csv
+import io
 import tempfile
 import unittest
 import zipfile
@@ -7,7 +9,40 @@ from unittest.mock import patch
 from corpus.construction import construire_exports
 from corpus.export_iramuteq import construire_corpus
 from corpus.export_zip import exporter_zip
+from corpus.export_csv import serialiser_csv
+from corpus.construction import COLONNES_ENGAGEMENT, lignes_engagement
+from collecte.engagement import extraire_engagement
 class TestsCorpus(unittest.TestCase):
+    def test_csv_compteurs_sans_colonnes_techniques_et_json_complet(self):
+        compteurs = ("likes", "vues", "partages", "commentaires", "favoris")
+        attendues = ["publication_id", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"]
+        attendues += [nom + suffixe for nom in compteurs for suffixe in ("", "_brut")]
+        self.assertEqual(COLONNES_ENGAGEMENT, attendues)
+        mesure = extraire_engagement({"stats": {"diggCount": 5, "shareCount": 3, "commentCount": 2, "collectCount": 0}})
+        publication = {"id": "123", "author": "media", "description": "Texte", "engagement": mesure}
+        csv_direct = serialiser_csv(lignes_engagement([publication]), COLONNES_ENGAGEMENT)
+        lecteur = csv.DictReader(io.StringIO(csv_direct), delimiter=";")
+        self.assertEqual(lecteur.fieldnames, attendues)
+        ligne = next(lecteur)
+        self.assertEqual((ligne["likes"], ligne["likes_brut"], ligne["favoris"], ligne["favoris_brut"]), ("5", "5", "0", "0"))
+        self.assertEqual(ligne["vues"], "")
+        for nom in compteurs:
+            for suffixe in ("_confiance", "_source", "_estime"):
+                self.assertNotIn(nom + suffixe, lecteur.fieldnames)
+        vide = csv.DictReader(io.StringIO(serialiser_csv([], COLONNES_ENGAGEMENT)), delimiter=";")
+        self.assertEqual(vide.fieldnames, attendues)
+        with tempfile.TemporaryDirectory() as d:
+            dossier = Path(d)
+            construire_exports(dossier, [publication], [], {})
+            exporter_zip(dossier, dossier / "archive.zip")
+            with zipfile.ZipFile(dossier / "archive.zip") as archive:
+                self.assertEqual(archive.read("engagement.csv").decode("utf-8-sig"), csv_direct)
+                conservee = json.loads(archive.read("publications.json"))[0]["engagement"]
+                self.assertEqual(conservee, mesure)
+                self.assertEqual(conservee["favoris"]["source"], "page_json")
+                self.assertEqual(conservee["favoris"]["confiance"], 1.0)
+                self.assertFalse(conservee["favoris"]["estime"])
+
     def test_corpus_archive_identique_au_txt_avec_options_et_commentaires(self):
         contenu = ("*date_2026-10-08 *profil_@bfmtv *partages_42 *comment_123\r\n"
                    "Texte avec accents é et emoji 🍋.\r\n#manifestation #lycéen\r\n\r\n"
