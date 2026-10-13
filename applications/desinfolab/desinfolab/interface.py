@@ -33,7 +33,7 @@ from .contributions import (
 from .exports import MIMES, exporter
 from .modeles import Compte, Contribution, Historique, Source
 from .securite import ErreurMetier, connecter_admin, creer_defi, exiger_admin
-from .validation import ENTITES, Filtres, MEDIAS, NATURES
+from .validation import ENTITES, Filtres, MEDIAS
 
 PAGES = [
     "Accueil et statistiques",
@@ -154,7 +154,7 @@ def champs_filtres(tags, plateformes):
             thematique = choix("Thématique", [t for t in tags if t["nature"] == "thematique"], vide=True)
             debut = st.date_input("Date de publication · début", value=None)
             fin = st.date_input("Date de publication · fin", value=None)
-        noms = {t["id"]: f"{NATURES[t['nature']]} / {t['nom']}" for t in tags}
+        noms = {t["id"]: t["nom"] for t in tags}
         selection = st.multiselect("Tags (saisissez pour rechercher)", list(noms), format_func=noms.get)
         a, b = st.columns(2)
         operateur = a.radio("Croisement des tags", ["ET", "OU"], horizontal=True)
@@ -306,7 +306,7 @@ def fiches():
         st.text(fiche["description"])
     details = {
         k: fiche[k]
-        for k in ["plateforme", "pays", "langue", "date", "type_media", "source", "identifiant", "nature"]
+        for k in ["plateforme", "pays", "langue", "date", "type_media", "source", "identifiant"]
         if fiche.get(k)
     }
     if details:
@@ -431,7 +431,7 @@ def soumission():
         )
         return
     d = {}
-    # Les sélecteurs hors formulaire réagissent immédiatement (parents, comptes et qualifications).
+    # Les sélecteurs hors formulaire réagissent immédiatement (comptes et qualifications).
     if entite in {"compte", "contenu"}:
         d["source_id"] = choix(
             "Source associée", sources, courant=initial.get("source_id"), key=cle + "-source"
@@ -458,7 +458,7 @@ def soumission():
                 "Plateforme", plateformes, courant=initial.get("plateforme_id"), key=cle + "-plateforme"
             )
     if entite in {"source", "contenu"}:
-        noms = {t["id"]: f"{NATURES[t['nature']]} / {t['nom']}" for t in tags}
+        noms = {t["id"]: t["nom"] for t in tags}
         d["tags"] = st.multiselect(
             "Tags validés · saisissez pour rechercher",
             list(noms),
@@ -526,24 +526,16 @@ def soumission():
 
 def explorer_tags():
     st.title("Explorer les tags")
-    st.write(
-        "Les familles de tags : thématiques, types de discours, qualifications factuelles, catégories et mots-clés."
-    )
+    st.write("Consultez les tags et leurs références.")
     with transaction() as session:
         tags = lister_tags(session)
-    nature = st.selectbox(
-        "Famille de tags", [None] + list(NATURES), format_func=lambda x: NATURES.get(x, "Toutes")
-    )
     terme = st.text_input("Rechercher un tag")
-    selection = [
-        t for t in tags if (not nature or t["nature"] == nature) and terme.casefold() in t["nom"].casefold()
-    ]
+    selection = [t for t in tags if terme.casefold() in t["nom"].casefold()]
     st.dataframe(
         [
             {
                 "ID": t["id"],
                 "Nom": t["nom"],
-                "Famille": NATURES[t["nature"]],
                 "Description": t["description"],
             }
             for t in selection
@@ -571,16 +563,7 @@ def administrer_tags(jeton):
             initial = donnees_editables(session, "tag", identifiant)
             version = session.get(MODELES["tag"], identifiant).version
     cle = f"admin-tag-{identifiant or 'nouveau'}-{version or 0}"
-    nature = st.selectbox(
-        "Famille du tag",
-        list(NATURES),
-        format_func=NATURES.get,
-        index=list(NATURES).index(initial.get("nature", "thematique")),
-        disabled=identifiant is not None,
-        key=cle + "-nature",
-    )
-    if identifiant is not None:
-        st.caption("La famille d'un tag existant est conservée pour préserver les qualifications.")
+    nature = initial.get("nature", "thematique")
     with st.form(cle):
         nom = st.text_input("Nom du tag", value=initial.get("nom", ""), max_chars=150)
         description = st.text_area(

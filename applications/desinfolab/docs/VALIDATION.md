@@ -33,3 +33,9 @@ La suite produit un avertissement de dépréciation du client de test Starlette 
 - Suppression administrateur avec confirmation testée dans Streamlit, y compris le dernier tag de la liste.
 - Absence du champ parent vérifiée en création et en modification ; affichage de la hiérarchie retiré de l’explorateur.
 - Tests de refus sans authentification, version périmée, tag utilisé par une fiche, contribution en attente ou anciens tags enfants. Les références du tag supprimé restent consultables dans l’historique.
+
+## Retrait des champs famille et parent
+
+- 21 tests ciblés réussis (tags et parcours Streamlit) sur SQLite.
+- Aucun sélecteur de famille ou parent en création/modification ; filtre et colonne Famille retirés de l’explorateur.
+- `ruff check` et `git diff --check` réussis ; aucune modification de schéma.

@@ -171,9 +171,9 @@ def test_interface_suppression_et_absence_champ_parent(admin):
     at.session_state["admin"] = admin
     at.sidebar.radio[0].set_value(PAGES[5]).run()
     next(w for w in at.radio if w.label == "Espace de gestion").set_value("Tags").run()
-    assert not any("parent" in w.label.lower() for w in at.selectbox)
+    assert not any(terme in w.label.lower() for w in at.selectbox for terme in ("parent", "famille"))
     next(w for w in at.radio if w.label == "Gestion des tags").set_value("Modifier / supprimer un tag").run()
-    assert not any("parent" in w.label.lower() for w in at.selectbox)
+    assert not any(terme in w.label.lower() for w in at.selectbox for terme in ("parent", "famille"))
     assert next(w for w in at.button if w.label == "Supprimer le tag").disabled
     next(w for w in at.checkbox if w.label.startswith("Confirmer la suppression du tag")).check().run()
     next(w for w in at.button if w.label == "Supprimer le tag").click().run()
@@ -184,3 +184,5 @@ def test_interface_suppression_et_absence_champ_parent(admin):
     at.sidebar.radio[0].set_value(PAGES[4]).run()
     assert not at.exception and not at.error
     assert not any(w.label == "Hiérarchie complète" for w in at.expander)
+    assert not any(terme in w.label.lower() for w in at.selectbox for terme in ("parent", "famille"))
+    assert not any(col in at.dataframe[0].value.columns for col in ("Famille", "Parent"))
