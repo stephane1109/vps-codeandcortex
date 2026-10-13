@@ -305,7 +305,6 @@ with onglet_collecte:
                     ligne["Langue"] = {"fr": "Français", "unknown": "Indéterminée"}.get(publication.get("langue_detection"), "Non évaluée")
                     lignes.append(ligne)
                 st.dataframe(lignes, hide_index=True, column_config={"Publication": st.column_config.LinkColumn("Publication", display_text="Ouvrir")})
-                st.caption("Compteurs des publications retenues (100 premières au maximum). ≈ indique une valeur arrondie par TikTok ; indisponible ne signifie pas zéro. Le CSV contient toutes les publications retenues et les mesures brutes.")
             if actuel.get("collecter_commentaires"):
                 st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
                 if actuel.get("commentaires_indisponibles"):
