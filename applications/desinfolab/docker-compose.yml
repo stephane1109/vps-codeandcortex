@@ -1,0 +1,122 @@
+x-application: &application
+  build: .
+  image: desinfolab:local
+  environment: &environnement
+    POSTGRES_HOST: db
+    POSTGRES_DB: ${POSTGRES_DB:-desinfolab}
+    POSTGRES_USER: ${POSTGRES_USER:-desinfolab}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Renseigner POSTGRES_PASSWORD}
+    APP_SECRET: ${APP_SECRET:?Renseigner APP_SECRET}
+    ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Renseigner ADMIN_PASSWORD_HASH}
+    PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    SOUMISSIONS_PAR_HEURE: ${SOUMISSIONS_PAR_HEURE:-120}
+    DEFIS_PAR_HEURE: ${DEFIS_PAR_HEURE:-600}
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  logging:
+    driver: local
+    options:
+      max-size: 5m
+      max-file: '2'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-desinfolab}
+      POSTGRES_USER: ${POSTGRES_USER:-desinfolab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Renseigner POSTGRES_PASSWORD}
+    command: [postgres, -c, log_statement=none, -c, log_min_error_statement=panic, -c, log_connections=off, -c, log_disconnections=off]
+    volumes:
+      - donnees_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: local
+      options:
+        max-size: 5m
+        max-file: '2'
+
+  migrations:
+    <<: *application
+    command: [alembic, upgrade, head]
+    restart: 'no'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *application
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${WEB_PORT:-8501}:8501'
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  api:
+    <<: *application
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-desinfolab}
+      POSTGRES_USER: ${POSTGRES_USER:-desinfolab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Renseigner POSTGRES_PASSWORD}
+    command: [uvicorn, desinfolab.api:app, --host, 0.0.0.0, --port, '8000', --no-access-log, --log-level, error]
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${API_PORT:-8000}:8000'
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/sante', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  sauvegardes:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-desinfolab}
+      PGUSER: ${POSTGRES_USER:-desinfolab}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Renseigner POSTGRES_PASSWORD}
+      RETENTION_JOURS: ${RETENTION_JOURS:-14}
+      INTERVALLE_SAUVEGARDE: ${INTERVALLE_SAUVEGARDE:-86400}
+    volumes:
+      - sauvegardes_postgres:/sauvegardes
+      - ./scripts/sauvegarder.sh:/scripts/sauvegarder.sh:ro
+    entrypoint: [sh, /scripts/sauvegarder.sh]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, 'find /sauvegardes -name "*.dump" -mmin -1500 | grep -q .']
+      interval: 5m
+      timeout: 5s
+      retries: 2
+      start_period: 2m
+    logging:
+      driver: local
+      options:
+        max-size: 5m
+        max-file: '2'
+
+volumes:
+  donnees_postgres:
+  sauvegardes_postgres:
