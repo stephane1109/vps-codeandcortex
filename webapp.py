@@ -365,7 +365,12 @@ class Job:
                     "diagnostics": list(self.diagnostics),
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
-                    "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {"inaccessible", "page_differente", "indisponible_ou_vide"} for r in self.records),
+                    "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {
+                        "inaccessible", "page_differente", "indisponible_ou_vide", "panneau_introuvable",
+                        "extraction_impossible", "chargement_incomplet", "erreur_chargement", "verification_tiktok",
+                        "connexion_requise", "desactives"} for r in self.records),
+                    "bilan_commentaires": [{"publication_id": r["id"], **r["collecte_commentaires"]}
+                        for r in self.records if "collecte_commentaires" in r],
                     "limite_commentaires":self.settings.limite_commentaires,
                     "archive_prete": self.archive_prete, "video_progression":progression, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": video_disponible(),
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
@@ -691,9 +696,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             from collecte.commentaires import collecter_commentaires
                             try:
                                 resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
-                                    job.settings.collecter_reponses, verifier=job.check, pause=job.pause)
+                                    job.settings.collecter_reponses, verifier=job.check, pause=job.pause,
+                                    interact=connexion.intervenir)
                                 with job.lock:
-                                    job.commentaires.extend(resultat.pop("commentaires"))
+                                    recuperes = resultat.pop("commentaires")
+                                    resultat.setdefault("recuperes", len(recuperes))
+                                    resultat.setdefault("annonces", (record.get("engagement") or {}).get("commentaires", {}).get("valeur"))
+                                    job.commentaires.extend(recuperes)
                                     record["collecte_commentaires"] = resultat
                             except scraper.WebDriverException as erreur:
                                 if scraper.est_erreur_session(erreur): raise

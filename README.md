@@ -326,6 +326,24 @@ Les 15 colonnes `_confiance`, `_source` et `_estime` des likes, vues, partages,
 commentaires et favoris sont retirées de ce CSV. Ces informations restent
 conservées dans `publications.json`.
 
+La collecte ouvre le panneau des commentaires si nécessaire, attend son chargement
+et fait défiler son conteneur réel. Elle lit les marqueurs placés sur le texte aussi
+bien que ceux placés sur un conteneur, puis dédoublonne les commentaires. Un CAPTCHA
+survenant pendant ce chargement utilise le contrôle manuel du navigateur existant.
+Elle ne se connecte pas à TikTok et ne contourne pas une restriction d’accès.
+
+Le détail par vidéo indique le nombre annoncé par TikTok, le nombre de textes
+récupérés et le diagnostic : panneau introuvable, chargement incomplet, erreur TikTok,
+CAPTCHA, invitation à se connecter, commentaires désactivés ou absence explicitement
+affichée. Un fichier sans texte n’est donc plus assimilé automatiquement à zéro
+commentaire. `*comment_` conserve le compteur total TikTok ; seule la case
+« Collecter les textes des commentaires » active leur extraction.
+
+Les champs conservés sont l’identifiant du commentaire (ou un identifiant local
+signalé), l’identifiant de la vidéo, l’auteur, le texte, la date affichée, la date
+d’observation, les likes observés et le lien parent/réponse lorsqu’il est disponible.
+Les champs absents restent indéterminés et les données brutes restent dans le JSON.
+
 La collecte des commentaires lit uniquement ce qui est accessible dans la page,
 avec une limite par publication et un nombre de défilements borné. Les réponses
 sont facultatives, les liens parent/enfant conservés lorsqu’ils sont observés. À défaut

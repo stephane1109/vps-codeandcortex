@@ -310,7 +310,12 @@ with onglet_collecte:
             if actuel.get("collecter_commentaires"):
                 st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
                 if actuel.get("commentaires_indisponibles"):
-                    st.caption(f"Commentaires vides ou inaccessibles pour {actuel['commentaires_indisponibles']} publication(s). La collecte ne garantit pas tous les commentaires annoncés par TikTok.")
+                    st.warning(f"Commentaires non récupérés ou collecte interrompue pour {actuel['commentaires_indisponibles']} publication(s). Voir le détail ci-dessous.")
+                if actuel.get("bilan_commentaires"):
+                    with st.expander("Détail de la collecte des commentaires"):
+                        st.dataframe([{"ID vidéo": e["publication_id"], "Nombre annoncé": e.get("annonces"),
+                            "Textes récupérés": e.get("recuperes", 0), "Diagnostic": e.get("message") or e.get("statut")}
+                            for e in actuel["bilan_commentaires"]], hide_index=True)
             else:
                 st.caption("La collecte des textes des commentaires n’était pas activée pour cette recherche. Le nombre de commentaires reste inclus dans les compteurs.")
             liens = st.columns(2)
