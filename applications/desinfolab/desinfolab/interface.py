@@ -151,7 +151,7 @@ def champs_filtres(tags, plateformes):
             )
             langue = st.text_input("Langue")
         with c:
-            thematique = choix("Thématique", [t for t in tags if t["nature"] == "thematique"], vide=True)
+            thematique = choix("Thématique", tags, vide=True)
             debut = st.date_input("Date de publication · début", value=None)
             fin = st.date_input("Date de publication · fin", value=None)
         noms = {t["id"]: t["nom"] for t in tags}

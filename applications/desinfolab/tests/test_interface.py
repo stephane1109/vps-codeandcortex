@@ -97,3 +97,22 @@ def test_administration_creer_modifier_supprimer_plateforme(admin):
         assert session.get(Plateforme, identifiant) is None
     next(w for w in at.button if w.label == "Ajouter la plateforme").click().run()
     assert not at.exception
+
+
+def test_menu_thematique_affiche_tous_les_tags_et_filtre(admin, source):
+    thematique = publier(admin, "tag", {"nom": "Sciences", "nature": "thematique"})
+    autre_tag = publier(admin, "tag", {"nom": "Débat", "nature": "discours"})
+    publier(admin, "source", {**source, "nom": "Source avec tag", "tags": [autre_tag]})
+    publier(admin, "source", {**source, "nom": "Source sans tag", "url": "https://example.net/"})
+    at = ouvrir(PAGES[1])
+    at.segmented_control[0].set_value("source").run()
+    menu = next(w for w in at.selectbox if w.label == "Thématique")
+    assert f"Sciences · #{thematique}" in menu.options
+    assert f"Débat · #{autre_tag}" in menu.options
+    menu.set_value(autre_tag).run()
+    assert not at.exception and not at.error
+    assert any("**1 résultat(s)**" in w.value for w in at.markdown)
+    assert at.dataframe[0].value["Nom / titre"].tolist() == ["Source avec tag"]
+    next(w for w in at.selectbox if w.label == "Thématique").set_value(None).run()
+    assert not at.exception and not at.error
+    assert any("**2 résultat(s)**" in w.value for w in at.markdown)

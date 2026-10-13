@@ -39,3 +39,8 @@ La suite produit un avertissement de dépréciation du client de test Starlette 
 - 21 tests ciblés réussis (tags et parcours Streamlit) sur SQLite.
 - Aucun sélecteur de famille ou parent en création/modification ; filtre et colonne Famille retirés de l’explorateur.
 - `ruff check` et `git diff --check` réussis ; aucune modification de schéma.
+
+## Menu Thématique de la recherche
+
+- 65 tests réussis sur PostgreSQL 16.2 ; aucun écart Alembic.
+- Test Streamlit : le menu propose tous les tags, la sélection d’un ancien tag non thématique filtre les résultats et le choix vide rétablit tous les résultats.

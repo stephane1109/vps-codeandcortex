@@ -156,7 +156,7 @@ def construire_requete(session, entite: str, filtres: Filtres):
         requete = requete.where(and_(*criteres) if filtres.operateur == "ET" else or_(*criteres))
     if filtres.thematique_id:
         tag = session.get(Tag, filtres.thematique_id)
-        if not tag or tag.nature != "thematique":
+        if not tag:
             raise ErreurMetier("La thématique choisie est invalide.")
         requete = requete.where(critere_tags(groupes_tags(session, [tag.id], filtres.descendants)[0]))
     return requete.order_by(modele.id)
