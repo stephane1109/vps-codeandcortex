@@ -24,7 +24,8 @@ from typing import Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field, field_validator, model_validator
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
@@ -180,7 +181,7 @@ def normaliser_variables_txt(variables):
     return list(dict.fromkeys({"republications": "partages", "url": "id"}.get(v, v) for v in variables))
 
 
-def entete_publication(publication: dict, variables=None) -> str:
+def entete_publication(publication: dict, variables=None, supprimer_arobase_profil=False) -> str:
     """Écrire les variables choisies au format *nom_valeur sur une seule ligne."""
     from datetime import datetime
 
@@ -193,7 +194,7 @@ def entete_publication(publication: dict, variables=None) -> str:
         date_publication = "indetermine"
     profil = modalite(publication.get("author"))
     if publication.get("author"):
-        profil = "@" + profil.lstrip("@")
+        profil = ("" if supprimer_arobase_profil else "@") + profil.lstrip("@")
 
     def compteur(nom):
         mesure = (publication.get("engagement") or {}).get(nom) or {}
@@ -236,7 +237,7 @@ def texte_et_hashtags(publication):
 
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
-                variables_txt=None, commentaires=None) -> str:
+                variables_txt=None, commentaires=None, supprimer_arobase_profil=False) -> str:
     blocks = []
     par_publication = {}
     selection = normaliser_variables_txt(variables_txt)
@@ -246,9 +247,9 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
     for record in records:
         if not record.get("description"):
             continue
-        prefix = (entete_publication(record, selection) if selection is not None
-                  else entete_publication(record) if inclure_metadonnees_txt
-                  else entete_publication(record, ("profil", "id")) if include_sources else "")
+        prefix = (entete_publication(record, selection, supprimer_arobase_profil) if selection is not None
+                  else entete_publication(record, supprimer_arobase_profil=supprimer_arobase_profil) if inclure_metadonnees_txt
+                  else entete_publication(record, ("profil", "id"), supprimer_arobase_profil) if include_sources else "")
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
@@ -403,6 +404,14 @@ class Job:
             self.decouvertes_ids.update(rapport.get("candidats_ids", retenues))
             self.retenues_sources[source] = retenues
             self.discovered = len(set().union(*self.retenues_sources.values()))
+
+    def texte_a_exporter(self, supprimer_arobase_profil=False):
+        """Appliquer le choix de téléchargement sans modifier les données collectées."""
+        with self.lock:
+            return text_export(self.records, self.settings.include_sources,
+                self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
+                self.commentaires if self.settings.collecter_commentaires else None,
+                supprimer_arobase_profil=supprimer_arobase_profil)
 
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
@@ -1058,10 +1067,17 @@ def create_app(manager=None):
         return {"medias": charger_inventaire()}
 
     @app.get("/api/jobs/{job_id}/archive")
-    def telecharger_archive(job_id: str, request: Request):
+    def telecharger_archive(job_id: str, request: Request, supprimer_arobase_profil: bool = False):
         job = manager.get(owner(request), job_id)
         if job.busy or job.video_busy or not job.archive_prete:
             raise HTTPException(409, "L’archive enrichie n’est pas encore disponible.")
+        if supprimer_arobase_profil:
+            from corpus.export_zip import archive_avec_texte
+            contenu = job.texte_a_exporter(supprimer_arobase_profil=True).encode("utf-8")
+            flux = archive_avec_texte(job.directory / "archive.zip", contenu)
+            return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
+                headers={"Content-Disposition": f'attachment; filename="scraptiktok_{job.id}.zip"'},
+                background=BackgroundTask(flux.close))
         return FileResponse(job.directory / "archive.zip", filename=f"scraptiktok_{job.id}.zip", media_type="application/zip")
 
     @app.get("/api/configuration")
@@ -1155,12 +1171,14 @@ def create_app(manager=None):
             return Response(job.frame, media_type="image/png", status_code=200 if job.frame else 204)
 
     @app.get("/api/jobs/{job_id}/download")
-    def download(job_id: str, request: Request):
+    def download(job_id: str, request: Request, supprimer_arobase_profil: bool = False):
         job = manager.get(owner(request), job_id)
         if not job.path.exists() or not job.records:
             raise HTTPException(409, "Aucun texte n’est encore disponible.")
         filename = job.settings.filename
-        return Response(job.path.read_bytes(), media_type="text/plain; charset=utf-8",
+        contenu = (job.texte_a_exporter(supprimer_arobase_profil=True).encode("utf-8")
+                   if supprimer_arobase_profil else job.path.read_bytes())
+        return Response(contenu, media_type="text/plain; charset=utf-8",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
 
     @app.get("/interface")

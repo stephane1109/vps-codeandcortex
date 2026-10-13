@@ -318,11 +318,16 @@ with onglet_collecte:
                             for e in actuel["bilan_commentaires"]], hide_index=True)
             else:
                 st.caption("La collecte des textes des commentaires n’était pas activée pour cette recherche. Le nombre de commentaires reste inclus dans les compteurs.")
+            choix_export = ""
+            if actuel["can_download"] or actuel["archive_prete"]:
+                sans_arobase = st.checkbox("Supprimer le @ devant les profils dans le TXT", value=True,
+                    key="export_profil_sans_arobase_" + actuel["id"])
+                choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
             liens = st.columns(2)
             if actuel["can_download"]:
-                liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download")
+                liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download{choix_export}")
                 liens[1].link_button("Télécharger les compteurs CSV", f"/api/jobs/{actuel['id']}/engagement.csv")
-            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[0].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive")
+            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[0].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive{choix_export}")
             if actuel.get("commentaires_collectes"):
                 liens[1].link_button("Télécharger les commentaires TXT", f"/api/jobs/{actuel['id']}/commentaires.txt")
         afficher_resultats()

@@ -351,6 +351,13 @@ d’ID TikTok, un ID local est signalé comme tel : deux textes identiques du m�
 peuvent alors être confondus. Un résultat vide ne prouve pas l’absence de commentaires.
 Les sélecteurs peuvent évoluer avec TikTok ; les statuts partiels restent explicites.
 
+La case « Supprimer le @ devant les profils dans le TXT », cochée par défaut
+au-dessus des téléchargements, écrit `*profil_bfmtv` au lieu de `*profil_@bfmtv`.
+Ce choix peut être modifié après la collecte, avant chaque téléchargement.
+Il s’applique au TXT et aux fichiers identiques `textes.txt` et `corpus_iramuteq.txt`
+de l’archive. Les CSV, les mentions dans les légendes et les commentaires restent
+inchangés ; aucune nouvelle collecte n’est nécessaire.
+
 **Télécharger le fichier texte** applique les variables choisies et inclut les
 commentaires récupérés si leur collecte est cochée. **Télécharger l’archive
 enrichie** fournit JSON brut, CSV (UTF-8 BOM, séparateur `;`), corpus IRaMuTeQ et journal.
