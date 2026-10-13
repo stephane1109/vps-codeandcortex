@@ -71,7 +71,7 @@ def test_api_tags_lecture_seule(admin):
 def test_interface_tags_admin_et_lecture_publique(admin):
     at = AppTest.from_file(str(RACINE / "app.py"), default_timeout=15).run()
     at.session_state["admin"] = admin
-    at.sidebar.radio[0].set_value(PAGES[5]).run()
+    at.sidebar.radio[0].set_value(PAGES[4]).run()
     next(w for w in at.radio if w.label == "Espace de gestion").set_value("Tags").run()
     next(w for w in at.text_input if w.label == "Nom du tag").set_value("Sciences")
     assert not any("motif" in w.label.lower() for w in at.text_input)
@@ -90,8 +90,6 @@ def test_interface_tags_admin_et_lecture_publique(admin):
     assert not any(w.label == "Gestion des tags" for w in at.radio)
     at.sidebar.radio[0].set_value(PAGES[3]).run()
     assert "Tag" not in next(w for w in at.selectbox if w.label == "Type de proposition").options
-    at.sidebar.radio[0].set_value(PAGES[4]).run()
-    assert not any(w.label == "Proposer un nouveau tag" for w in at.button)
     at.session_state["fiche_entite"] = "tag"
     at.session_state["fiche_id"] = identifiant
     at.sidebar.radio[0].set_value(PAGES[2]).run()
@@ -169,7 +167,7 @@ def test_interface_suppression_et_absence_champ_parent(admin):
     identifiant = enregistrer_tag(admin, DONNEES, "Création")
     at = AppTest.from_file(str(RACINE / "app.py"), default_timeout=15).run()
     at.session_state["admin"] = admin
-    at.sidebar.radio[0].set_value(PAGES[5]).run()
+    at.sidebar.radio[0].set_value(PAGES[4]).run()
     next(w for w in at.radio if w.label == "Espace de gestion").set_value("Tags").run()
     assert not any(terme in w.label.lower() for w in at.selectbox for terme in ("parent", "famille"))
     next(w for w in at.radio if w.label == "Gestion des tags").set_value("Modifier / supprimer un tag").run()
@@ -181,8 +179,3 @@ def test_interface_suppression_et_absence_champ_parent(admin):
     with transaction() as session:
         assert session.get(Tag, identifiant) is None
     assert any("Tag supprimé" in w.value for w in at.success)
-    at.sidebar.radio[0].set_value(PAGES[4]).run()
-    assert not at.exception and not at.error
-    assert not any(w.label == "Hiérarchie complète" for w in at.expander)
-    assert not any(terme in w.label.lower() for w in at.selectbox for terme in ("parent", "famille"))
-    assert not any(col in at.dataframe[0].value.columns for col in ("Famille", "Parent"))

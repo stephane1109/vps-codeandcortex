@@ -18,10 +18,16 @@ def ouvrir(page):
 
 
 def test_pages_publiques_et_admin_verrouille():
-    for page in (PAGES[0], PAGES[1], PAGES[3], PAGES[4], PAGES[5]):
+    for page in (PAGES[0], PAGES[1], PAGES[3], PAGES[4]):
         at = ouvrir(page)
         assert not at.exception
     assert any("Mot de passe" in w.label for w in at.text_input)
+    assert "Explorer les tags" not in at.sidebar.radio[0].options
+    at = AppTest.from_file(str(RACINE / "app.py"), default_timeout=15)
+    at.session_state["page"] = "Explorer les tags"
+    at.run()
+    assert not at.exception and not at.error
+    assert at.sidebar.radio[0].value == PAGES[0]
 
 
 def test_formulaire_source_jusqua_moderation_interface():
@@ -37,7 +43,7 @@ def test_formulaire_source_jusqua_moderation_interface():
     assert not at.exception and not at.error
     with transaction() as session:
         assert session.scalar(select(Contribution)).statut == "en_attente"
-    at.sidebar.radio[0].set_value(PAGES[5]).run()
+    at.sidebar.radio[0].set_value(PAGES[4]).run()
     at.text_input[0].set_value("mot-de-passe-de-test")
     next(b for b in at.button if b.label == "Se connecter").click().run()
     assert not at.exception and not at.error
@@ -76,7 +82,7 @@ def test_administration_creer_modifier_supprimer_plateforme(admin):
 
     at = AppTest.from_file(str(RACINE / "app.py"), default_timeout=15).run()
     at.session_state["admin"] = admin
-    at.sidebar.radio[0].set_value(PAGES[5]).run()
+    at.sidebar.radio[0].set_value(PAGES[4]).run()
     next(w for w in at.radio if w.label == "Espace de gestion").set_value("Plateformes").run()
     next(w for w in at.text_input if w.label == "Nouvelle plateforme").set_value("Plateforme test")
     next(w for w in at.button if w.label == "Ajouter la plateforme").click().run()

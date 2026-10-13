@@ -44,3 +44,8 @@ La suite produit un avertissement de dépréciation du client de test Starlette 
 
 - 65 tests réussis sur PostgreSQL 16.2 ; aucun écart Alembic.
 - Test Streamlit : le menu propose tous les tags, la sélection d’un ancien tag non thématique filtre les résultats et le choix vide rétablit tous les résultats.
+
+## Suppression de la page Explorer les tags
+
+- Page, entrée de navigation et fonction dédiée supprimées ; documentation et parcours adaptés aux cinq pages restantes.
+- 22 tests ciblés réussis (interface et administration des tags), dont le retour à l’accueil depuis une ancienne session pointant vers la page supprimée.

@@ -40,7 +40,6 @@ PAGES = [
     "Recherche et exploration",
     "Fiches sources et contenus",
     "Soumettre une contribution",
-    "Explorer les tags",
     "Administration",
 ]
 
@@ -524,30 +523,6 @@ def soumission():
         st.session_state.pop(f"snapshot-{entite}-{cible_id}", None)
 
 
-def explorer_tags():
-    st.title("Explorer les tags")
-    st.write("Consultez les tags et leurs références.")
-    with transaction() as session:
-        tags = lister_tags(session)
-    terme = st.text_input("Rechercher un tag")
-    selection = [t for t in tags if terme.casefold() in t["nom"].casefold()]
-    st.dataframe(
-        [
-            {
-                "ID": t["id"],
-                "Nom": t["nom"],
-                "Description": t["description"],
-            }
-            for t in selection
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-    if selection:
-        identifiant = choix("Consulter le tag et ses références", selection)
-        st.button("Afficher le tag", on_click=aller_page, args=(PAGES[2], "tag", identifiant))
-
-
 def administrer_tags(jeton):
     exiger_admin(jeton)
     with transaction() as session:
@@ -722,7 +697,7 @@ def administration():
         return
     with st.expander("Réviser la proposition avant décision"):
         st.caption(
-            "Les identifiants de tags et de plateformes sont consultables dans les pages correspondantes. "
+            "Les tags et les plateformes sont gérés dans les onglets correspondants de l’administration. "
             "Une révision est enregistrée dans l'historique, sans publier la proposition."
         )
         with st.form(f"revision-{c['id']}-{c['empreinte']}"):
@@ -778,7 +753,7 @@ def afficher_application():
     </style>""",
         unsafe_allow_html=True,
     )
-    if "page" not in st.session_state:
+    if st.session_state.get("page") not in PAGES:
         st.session_state.page = PAGES[0]
         if st.query_params.get("fiche") in ENTITES:
             try:
@@ -799,8 +774,7 @@ def afficher_application():
             PAGES[1]: recherche,
             PAGES[2]: fiches,
             PAGES[3]: soumission,
-            PAGES[4]: explorer_tags,
-            PAGES[5]: administration,
+            PAGES[4]: administration,
         }[st.session_state.page]()
     except ErreurMetier as erreur:
         st.error(str(erreur))
