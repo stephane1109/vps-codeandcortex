@@ -531,22 +531,29 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         driver=Path(os.environ["CHROMEDRIVER"]) if os.getenv("CHROMEDRIVER") else None,
     )
     driver = None
+    connexion = None
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     try:
         job.check()
-        driver = driver_factory(args)
-        interact = lambda message: wait_for_user(driver, job, message)
+        # Chaque mode possède son point d’entrée ; aucun repli implicite vers un autre mode.
+        if job.settings.source_collecte == "hashtags":
+            from connect_htag import ConnexionHashtag
+            parcours = ConnexionHashtag
+        elif job.settings.source_collecte == "presse":
+            from connect_presse import ConnexionPresse
+            parcours = ConnexionPresse
+        elif job.settings.source_collecte == "comptes":
+            from connect_profil import ConnexionProfil
+            parcours = ConnexionProfil
+        else:
+            raise ValueError("Mode de collecte inconnu.")
+        connexion = parcours(args, fabrique=driver_factory, verifier=job.check,
+            interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
+        sources = connexion.preparer_sources(job.settings)
+        driver = connexion.ouvrir()
         unique_links = {}
         hors_selection = 0
-        # En mode presse/profils, chaque compte sélectionné est une source ciblée.
-        sources = ([{"hashtag": h} for h in job.settings.hashtags]
-                   if job.settings.source_collecte == "hashtags" else job.settings.sources)
-        medias_par_compte = {s["compte"]: s for s in job.settings.sources}
-        session_validee = False
-        def intervenir(message):
-            nonlocal session_validee
-            interact(message)
-            session_validee = True
+        medias_par_compte = {s["compte"]: s for s in sources if "compte" in s}
         for numero_source, source in enumerate(sources, 1):
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
@@ -557,18 +564,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.update(message=f"Source {numero_source}/{len(sources)} — recherche {requete} : "
                     f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), {nombre} retenue(s)…")
             try:
-                if job.settings.source_collecte == "hashtags":
-                    rapport = {"hashtag_url": f"https://www.tiktok.com/tag/{quote(source['hashtag'])}"}
-                    from collecte.hashtags import collecter_hashtag
-                    found = collecter_hashtag(driver, args, rapport,
-                        interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"), check=job.check,
-                        validation_initiale=not session_validee, progress=suivre_decouverte)
-                else:
-                    from collecte.comptes import collecter_compte
-                    found = collecter_compte(driver, args, source["compte"], rapport=rapport,
-                        hashtags=job.settings.hashtags,
-                        interact=lambda message: intervenir(f"Source {numero_source}/{len(sources)} — {etiquette} : {message}"),
-                        check=job.check, validation_initiale=not session_validee, progress=suivre_decouverte)
+                found = connexion.decouvrir(source, rapport,
+                    contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
+                    progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
@@ -599,8 +597,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.pause(args.delay)
             job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
             try:
-                record = scraper.read_post(driver, url, args, interact=interact, check=job.check,
-                    sans_connexion=True)
+                record = connexion.lire_publication(url)
                 record["retenue"] = False
                 # Même découverte et lecture que le mode hashtag ; filtrer ensuite
                 # l’auteur effectivement lu, et non une grille de profil différente.
@@ -735,9 +732,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         LOG.error("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
     finally:
-        if driver is not None:
+        if connexion is not None:
             try:
-                driver.quit()
+                connexion.fermer()
             except scraper.WebDriverException:
                 LOG.warning("Fermeture du navigateur impossible pour %s", job.id)
         try:

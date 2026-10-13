@@ -408,6 +408,33 @@ globale sont exclus. Tout `data/` reste hors Git et hors contexte Docker.
 
 ## Architecture et validation
 
+### Parcours de connexion séparés
+
+Les trois modes de l’interface possèdent chacun leur module de pilotage Selenium :
+
+- `connect_htag.py` : `ConnexionHashtag`, pages `/tag/` des hashtags saisis.
+- `connect_presse.py` : `ConnexionPresse`, résolution des médias cochés dans
+  l’inventaire, puis recherches vidéo ciblées pour chaque compte et hashtag.
+- `connect_profil.py` : `ConnexionProfil`, normalisation des profils saisis avec
+  ou sans `@`, puis recherches vidéo ciblées pour chaque compte et hashtag.
+
+Le service de collecte choisit explicitement l’un de ces trois parcours. Presse
+et Profils refusent une source absente de leur sélection ; le contrôle de l’auteur
+à la découverte et avant les exports reste également actif. Ces modules pilotent
+la connexion au navigateur : ils ne proposent pas d’identification à TikTok.
+
+`collecte/session_navigateur.py` gère uniquement le cycle de vie commun : une
+session Selenium anonyme par collecte, réutilisée pour toutes les recherches,
+lectures et commentaires, puis détruite à la fin ou à l’arrêt. La validation
+initiale est partagée entre les sources ; un nouveau CAPTCHA détecté reste
+traité manuellement dans le même navigateur. Aucun import n’ouvre de navigateur.
+Le défilement et la détection TikTok restent dans le moteur commun `scraptiktok.py`.
+Le journal de chaque source indique le module utilisé, sans cookies ni identifiants.
+
+Cette séparation permet de modifier un parcours indépendamment ; elle ne garantit
+pas que TikTok fournisse tous les résultats. Les diagnostics de collecte partielle,
+les filtres, les commentaires, les compteurs et les exports restent conservés.
+
 Les fichiers JavaScript et CSS versionnés de Streamlit sont compressés en gzip
 si le navigateur l'accepte, puis conservés dans son cache privé. Leur nom contient
 une empreinte : une mise à jour charge les nouveaux fichiers. Le HTML, les données
