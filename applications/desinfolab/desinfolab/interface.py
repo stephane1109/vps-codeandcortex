@@ -102,10 +102,6 @@ def accueil():
         stats = statistiques(session)
     for colonne, (nom, total) in zip(st.columns(4), stats.items()):
         colonne.metric(nom, total)
-    st.info(
-        "Le référencement d'une source ne la qualifie pas comme source de désinformation. "
-        "Les qualifications factuelles sont explicites, documentées et validées par l'administration."
-    )
     gauche, droite = st.columns(2)
     with gauche, st.container(border=True):
         st.subheader("Explorer l'observatoire")
