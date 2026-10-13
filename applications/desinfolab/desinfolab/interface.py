@@ -120,18 +120,6 @@ def accueil():
             "Proposez une source, un compte, un contenu ou une correction. Chaque proposition fait l'objet d'une validation humaine."
         )
         st.button("Soumettre une contribution", on_click=aller_page, args=(PAGES[3],))
-    with st.expander("Méthode et confidentialité"):
-        st.write(
-            "Les références servent à situer les qualifications dans leur contexte. Elles ne constituent pas une notation automatique des sources."
-        )
-        st.write(
-            "L'application ne demande ni nom, ni adresse électronique, ni compte contributeur. "
-            "N'incluez aucune donnée personnelle dans les champs libres. Les contenus publiquement référencés peuvent, eux, nommer des auteurs."
-        )
-        st.write(
-            "L'hébergeur, le proxy et les sites ouverts peuvent voir votre adresse IP. L'anonymat absolu n'est donc pas garanti. "
-            "Aucun service de CAPTCHA tiers ni outil d'analyse d'audience n'est intégré."
-        )
     api = os.getenv("PUBLIC_API_URL", "http://localhost:8000").rstrip("/")
     st.link_button("Documentation de l'API publique", api + "/docs")
 
