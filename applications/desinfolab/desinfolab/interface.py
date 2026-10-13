@@ -572,7 +572,6 @@ def administrer_tags(jeton):
         if nature == "qualification":
             st.caption("Une qualification factuelle nécessite au moins une référence documentaire.")
         references = editeur_references(initial.get("references", []), [], cle + "-references")
-        motif = st.text_input("Motif de création ou de modification", max_chars=5000)
         enregistrer = st.form_submit_button(
             "Créer le tag" if identifiant is None else "Enregistrer le tag", type="primary"
         )
@@ -586,7 +585,9 @@ def administrer_tags(jeton):
                 "parent_id": initial.get("parent_id"),
                 "references": references,
             },
-            motif,
+            "Création depuis l'administration"
+            if identifiant is None
+            else "Modification depuis l'administration",
             identifiant,
             version,
         )

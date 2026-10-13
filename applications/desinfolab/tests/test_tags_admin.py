@@ -74,12 +74,12 @@ def test_interface_tags_admin_et_lecture_publique(admin):
     at.sidebar.radio[0].set_value(PAGES[5]).run()
     next(w for w in at.radio if w.label == "Espace de gestion").set_value("Tags").run()
     next(w for w in at.text_input if w.label == "Nom du tag").set_value("Sciences")
-    next(w for w in at.text_input if w.label == "Motif de création ou de modification").set_value("Création")
+    assert not any("motif" in w.label.lower() for w in at.text_input)
     next(w for w in at.button if w.label == "Créer le tag").click().run()
     assert not at.exception and not at.error
     next(w for w in at.radio if w.label == "Gestion des tags").set_value("Modifier / supprimer un tag").run()
     next(w for w in at.text_input if w.label == "Nom du tag").set_value("Sciences et recherche")
-    next(w for w in at.text_input if w.label == "Motif de création ou de modification").set_value("Précision")
+    assert not any("motif" in w.label.lower() for w in at.text_input)
     next(w for w in at.button if w.label == "Enregistrer le tag").click().run()
     assert not at.exception and not at.error
     with transaction() as session:
