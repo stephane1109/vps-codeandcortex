@@ -80,7 +80,7 @@ Créer une application à partir du dépôt `stephane1109/vps-codeandcortex` :
 
 | Paramètre | Valeur |
 | --- | --- |
-| Branche | `main` |
+| Branche | `deploy-visiotrack` |
 | Build Pack | `Dockerfile` |
 | Base Directory | `/applications/visiotrack` |
 | Dockerfile Location | `/Dockerfile` |
