@@ -77,7 +77,6 @@ def afficher_application():
     """Construire les seuls réglages nécessaires à l'analyse."""
     st.set_page_config(page_title="VisioTrack", page_icon="📱", layout="wide")
     st.title("VisioTrack")
-    st.write("Mesurer la visibilité des smartphones et des objets dans vos vidéos.")
     st.caption("La présence à l'écran est mesurée ; elle ne prouve pas une utilisation effective.")
 
     with st.form("analyse"):
