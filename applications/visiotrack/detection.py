@@ -1,0 +1,421 @@
+"""Détection, suivi et mesure de visibilité, indépendants de Streamlit."""
+
+from __future__ import annotations
+
+import csv
+import json
+import math
+import os
+import subprocess
+import tempfile
+import zipfile
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urlparse
+
+
+# Ordre des 80 classes COCO utilisées par le modèle YOLO fourni.
+CATEGORIES = dict(enumerate([
+    "personne", "vélo", "voiture", "moto", "avion", "bus", "train", "camion",
+    "bateau", "feu de circulation", "borne incendie", "panneau stop", "parcmètre",
+    "banc", "oiseau", "chat", "chien", "cheval", "mouton", "vache", "éléphant",
+    "ours", "zèbre", "girafe", "sac à dos", "parapluie", "sac à main", "cravate",
+    "valise", "frisbee", "skis", "snowboard", "ballon", "cerf-volant",
+    "batte de baseball", "gant de baseball", "skateboard", "planche de surf",
+    "raquette de tennis", "bouteille", "verre à vin", "tasse", "fourchette",
+    "couteau", "cuillère", "bol", "banane", "pomme", "sandwich", "orange",
+    "brocoli", "carotte", "hot-dog", "pizza", "donut", "gâteau", "chaise",
+    "canapé", "plante en pot", "lit", "table à manger", "toilettes",
+    "téléviseur", "ordinateur portable", "souris", "télécommande", "clavier",
+    "smartphone", "micro-ondes", "four", "grille-pain", "évier", "réfrigérateur",
+    "livre", "horloge", "vase", "ciseaux", "ours en peluche", "sèche-cheveux",
+    "brosse à dents",
+]))
+
+COLONNES_RESULTATS = [
+    "video_id", "source", "statut", "erreur", "duree_totale_s", "categorie",
+    "objet_detecte", "duree_visibilite_s", "pourcentage_visible",
+    "maximum_simultane", "frequence_demandee_ips", "images_analysees",
+]
+COLONNES_INTERVALLES = [
+    "video_id", "categorie", "debut_s", "fin_s", "duree_s", "maximum_simultane",
+]
+COLONNES_DETECTIONS = [
+    "video_id", "image", "horodatage_s", "categorie", "piste_id", "confiance",
+    "x1", "y1", "x2", "y2",
+]
+
+
+@dataclass
+class SourceVideo:
+    """Référence légère : les octets des vidéos ne sont pas dupliqués."""
+
+    nom: str
+    type: str
+    contenu: object
+    membre: object = None
+    erreur: str = ""
+
+
+def texte_csv(valeur):
+    """Neutraliser les formules des tableurs dans les noms fournis par l'utilisateur."""
+    if isinstance(valeur, str) and valeur.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + valeur
+    return valeur
+
+
+def ouvrir_csv(chemin, colonnes):
+    """Créer un CSV UTF-8 avec BOM, compatible avec les tableurs."""
+    fichier = Path(chemin).open("w", encoding="utf-8-sig", newline="")
+    redacteur = csv.DictWriter(fichier, fieldnames=colonnes)
+    redacteur.writeheader()
+    return fichier, redacteur
+
+
+def inventorier_sources(fichiers, texte_urls, dossier=None):
+    """Lister les MP4, y compris dans les sous-dossiers ZIP, sans les extraire."""
+    sources = []
+    for fichier in fichiers:
+        if fichier.name.lower().endswith(".zip"):
+            try:
+                fichier.seek(0)
+                with zipfile.ZipFile(fichier) as archive:
+                    membres = [m for m in archive.infolist()
+                               if not m.is_dir() and m.filename.lower().endswith(".mp4")
+                               and not m.filename.startswith("__MACOSX/")]
+                    if not membres:
+                        raise ValueError("L'archive ne contient aucun fichier MP4.")
+                    for membre in membres:
+                        sources.append(SourceVideo(
+                            f"{fichier.name} / {membre.filename}", "zip", fichier, membre))
+            except (OSError, ValueError, zipfile.BadZipFile) as erreur:
+                sources.append(SourceVideo(fichier.name, "erreur", None, erreur=str(erreur)))
+        else:
+            sources.append(SourceVideo(fichier.name, "fichier", fichier))
+    # Éviter de télécharger deux fois une URL identique dans le même lot.
+    for url in dict.fromkeys(texte_urls.splitlines()):
+        if url.strip():
+            sources.append(SourceVideo(url.strip(), "url", url.strip()))
+    if dossier:
+        racine = Path(dossier).resolve()
+        if not racine.is_dir():
+            sources.append(SourceVideo(str(racine), "erreur", None,
+                                       erreur="Le dossier serveur est introuvable."))
+        else:
+            for chemin in sorted(racine.rglob("*")):
+                # Ne pas suivre les liens menant hors du volume configuré.
+                if (chemin.suffix.lower() == ".mp4" and chemin.is_file()
+                        and chemin.resolve().is_relative_to(racine)):
+                    sources.append(SourceVideo(str(chemin.relative_to(racine)), "serveur", chemin))
+    return sources
+
+
+def verifier_url(url):
+    """Limiter l'import réseau aux URL publiques des deux plateformes annoncées."""
+    adresse = urlparse(url)
+    hote = (adresse.hostname or "").lower()
+    autorise = any(hote == domaine or hote.endswith("." + domaine)
+                   for domaine in ("youtube.com", "youtu.be", "tiktok.com"))
+    if (adresse.scheme != "https" or not autorise or adresse.username
+            or adresse.password or adresse.port not in (None, 443)):
+        raise ValueError("Utilisez une URL HTTPS YouTube ou TikTok.")
+
+
+def preparer_video(source, dossier):
+    """Matérialiser une seule vidéo ; le dossier temporaire sera ensuite supprimé."""
+    limite = int(os.getenv("VISIOTRACK_MAX_VIDEO_MB", "4096")) * 1024 * 1024
+    if source.erreur:
+        raise ValueError(source.erreur)
+    if source.type == "serveur":
+        if source.contenu.stat().st_size > limite:
+            raise ValueError("Vidéo trop volumineuse pour la limite du serveur.")
+        return source.contenu
+    cible = Path(dossier) / "video.mp4"
+    if source.type == "url":
+        from yt_dlp import YoutubeDL
+
+        verifier_url(source.contenu)
+
+        def surveiller_telechargement(etat):
+            """Arrêter un téléchargement qui dépasse la limite, même sans taille annoncée."""
+            if etat.get("downloaded_bytes", 0) > limite:
+                raise ValueError("Téléchargement trop volumineux.")
+
+        options = {
+            "outtmpl": str(Path(dossier) / "video.%(ext)s"),
+            "format": ("bestvideo[ext=mp4][vcodec^=avc1][height<=1080]/"
+                       "best[ext=mp4][height<=1080]/bestvideo[height<=1080]/"
+                       "best[height<=1080]/best"),
+            "noplaylist": True, "playlistend": 1, "quiet": True, "no_warnings": True,
+            "socket_timeout": 30, "retries": 2, "max_filesize": limite,
+            "progress_hooks": [surveiller_telechargement],
+        }
+        with YoutubeDL(options) as outil:
+            informations = outil.extract_info(source.contenu, download=False)
+            if (not informations or informations.get("is_live")
+                    or informations.get("_type") in ("playlist", "multi_video")):
+                raise ValueError("Fournissez une vidéo disponible, hors direct et hors playlist.")
+            informations = outil.process_ie_result(informations, download=True)
+            cible = Path(outil.prepare_filename(informations))
+        if not cible.is_file() or cible.stat().st_size > limite:
+            raise ValueError("Téléchargement incomplet ou trop volumineux.")
+        return cible
+
+    def copier_limite(entree):
+        """Copier par blocs, sans charger un MP4 ou une archive entière en mémoire."""
+        total = 0
+        with cible.open("wb") as sortie:
+            while bloc := entree.read(1024 * 1024):
+                total += len(bloc)
+                if total > limite:
+                    raise ValueError("Vidéo trop volumineuse pour la limite du serveur.")
+                sortie.write(bloc)
+
+    source.contenu.seek(0)
+    if source.type == "zip":
+        if source.membre.file_size > limite:
+            raise ValueError("Vidéo décompressée trop volumineuse.")
+        # Le nom du membre n'est jamais utilisé comme chemin d'extraction : même
+        # ../../video.mp4 reste contenu dans le répertoire temporaire de ce travail.
+        with zipfile.ZipFile(source.contenu) as archive:
+            with archive.open(source.membre) as entree:
+                copier_limite(entree)
+    else:
+        copier_limite(source.contenu)
+    return cible
+
+
+def lire_metadonnees(chemin):
+    """Lire la durée de la piste vidéo, sans confondre sa durée avec celle du son."""
+    try:
+        execution = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=duration,nb_frames,avg_frame_rate:format=duration",
+            "-of", "json", str(chemin),
+        ], capture_output=True, text=True, timeout=60, check=True)
+    except FileNotFoundError as erreur:
+        raise ValueError("FFmpeg/ffprobe doit être installé sur le serveur.") from erreur
+    except subprocess.TimeoutExpired as erreur:
+        raise ValueError("La lecture des métadonnées a dépassé 60 secondes.") from erreur
+    except subprocess.CalledProcessError as erreur:
+        raise ValueError("Fichier vidéo illisible ou corrompu (échec de ffprobe).") from erreur
+    donnees = json.loads(execution.stdout)
+    if not donnees.get("streams"):
+        raise ValueError("Aucune piste vidéo lisible.")
+    piste = donnees["streams"][0]
+    duree = float(piste.get("duration") or donnees.get("format", {}).get("duration", 0))
+    if not math.isfinite(duree) or duree <= 0:
+        raise ValueError("La durée de la vidéo est inconnue ou invalide.")
+    nombre = piste.get("nb_frames", "")
+    return duree, int(nombre) if nombre.isdigit() else None
+
+
+def charger_modele():
+    """Charger une seule fois par lot le petit YOLO11n, exclusivement sur CPU."""
+    from ultralytics import YOLO
+    import torch
+
+    torch.set_num_threads(max(1, int(os.getenv("VISIOTRACK_CPU_THREADS", "2"))))
+    chemin = Path(os.getenv("VISIOTRACK_MODEL", str(Path.home() / ".cache/visiotrack/yolo11n.pt")))
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    return YOLO(str(chemin))
+
+
+class MesureVisibilite:
+    """Union temporelle par catégorie : plusieurs pistes ne multiplient pas la durée."""
+
+    def __init__(self, categories, ecrire_intervalle):
+        self.categories = categories
+        self.ecrire_intervalle = ecrire_intervalle
+        self.durees = dict.fromkeys(categories, 0.0)
+        self.maximums = dict.fromkeys(categories, 0)
+        self.ouverts = {}
+
+    def ajouter(self, debut, fin, effectifs):
+        """Ajouter une plage représentée par une image, en fermant toute absence."""
+        if fin <= debut:
+            return
+        for categorie in self.categories:
+            nombre = effectifs.get(categorie, 0)
+            if nombre:
+                self.durees[categorie] += fin - debut
+                self.maximums[categorie] = max(self.maximums[categorie], nombre)
+                if categorie not in self.ouverts:
+                    self.ouverts[categorie] = [debut, fin, nombre]
+                else:
+                    self.ouverts[categorie][1] = fin
+                    self.ouverts[categorie][2] = max(self.ouverts[categorie][2], nombre)
+            else:
+                self.fermer(categorie)
+
+    def fermer(self, categorie):
+        """Écrire immédiatement un intervalle fini, sans accumuler une longue liste."""
+        if categorie in self.ouverts:
+            debut, fin, maximum = self.ouverts.pop(categorie)
+            self.ecrire_intervalle({"categorie": CATEGORIES[categorie], "debut_s": debut,
+                                   "fin_s": fin, "duree_s": fin - debut,
+                                   "maximum_simultane": maximum})
+
+    def terminer(self):
+        """Fermer les catégories encore présentes à la fin de la vidéo."""
+        for categorie in list(self.ouverts):
+            self.fermer(categorie)
+
+
+def creer_suivis(categories, frequence):
+    """Créer des ByteTrack neufs par vidéo et catégorie pour éviter les mélanges."""
+    from ultralytics.trackers.byte_tracker import BYTETracker
+
+    parametres = SimpleNamespace(track_high_thresh=0.25, track_low_thresh=0.1,
+                                new_track_thresh=0.25, track_buffer=30,
+                                match_thresh=0.8, fuse_score=True)
+    # Le tampon conserve environ une seconde de pistes perdues. Ces pistes
+    # prédites ne contribuent jamais aux durées ni aux comptages observés.
+    return {categorie: BYTETracker(parametres, frame_rate=frequence)
+            for categorie in categories}
+
+
+def detecter_image(modele, suivis, image, categories):
+    """Associer les boîtes observées à ByteTrack sans supprimer les nouvelles pistes."""
+    resultat = modele.predict(image, classes=categories, conf=0.1, iou=0.5,
+                              imgsz=640, max_det=1000, device="cpu", verbose=False)[0]
+    boites = resultat.boxes.cpu().numpy()
+    detections = []
+    for categorie in categories:
+        selection = boites[boites.cls == categorie]
+        pistes = suivis[categorie].update(selection, image)
+        # ByteTrack fournit l'indice de la boîte en dernière colonne. Une boîte
+        # non encore confirmée reste une visibilité réelle, avec piste_id vide.
+        identifiants = {int(piste[-1]): int(piste[4]) for piste in pistes}
+        for indice, boite in enumerate(selection):
+            confiance = float(boite.conf[0])
+            if confiance < 0.25:
+                continue
+            coordonnees = boite.xyxy[0].tolist()
+            detections.append({"categorie_id": categorie,
+                               "piste_id": identifiants.get(indice, ""),
+                               "confiance": confiance,
+                               **dict(zip(("x1", "y1", "x2", "y2"), coordonnees))})
+    return detections
+
+
+def analyser_video(chemin, video_id, nom, categories, frequence, modele,
+                   dossier, progression=lambda valeur: None):
+    """Décoder séquentiellement ; échantillonner sur les horodatages réels du MP4."""
+    import cv2
+
+    if not categories or not math.isfinite(frequence) or frequence <= 0:
+        raise ValueError("Sélectionnez au moins une catégorie et une fréquence positive.")
+    duree, images_attendues = lire_metadonnees(chemin)
+    suivis = creer_suivis(categories, frequence)
+    capture = cv2.VideoCapture(str(chemin))
+    if not capture.isOpened():
+        capture.release()
+        raise ValueError("Impossible d'ouvrir cette vidéo.")
+    fichier_intervalles, redacteur_intervalles = ouvrir_csv(
+        Path(dossier) / "intervalles.csv", COLONNES_INTERVALLES)
+    fichier_detections, redacteur_detections = ouvrir_csv(
+        Path(dossier) / "detections.csv", COLONNES_DETECTIONS)
+
+    def ecrire_intervalle(ligne):
+        """Associer chaque intervalle à la vidéo, avec une précision non arrondie."""
+        redacteur_intervalles.writerow({"video_id": video_id, **ligne})
+
+    mesure = MesureVisibilite(categories, ecrire_intervalle)
+    precedent = None
+    debut_echantillon = 0.0
+    effectifs = Counter()
+    prochaine_cible = 0.0
+    images_lues = images_analysees = 0
+    try:
+        while capture.grab():
+            horodatage = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
+            if (not math.isfinite(horodatage) or horodatage < 0
+                    or (precedent is not None and horodatage <= precedent)):
+                raise ValueError("Horodatages vidéo invalides : réencodez ce fichier en MP4.")
+            precedent = horodatage
+            images_lues += 1
+            if horodatage >= duree:
+                raise ValueError("La durée annoncée ne correspond pas aux horodatages vidéo.")
+            if horodatage + 1e-8 < prochaine_cible:
+                continue
+            succes, image = capture.retrieve()
+            if not succes:
+                raise ValueError("Une image sélectionnée ne peut pas être décodée.")
+            if images_analysees:
+                mesure.ajouter(debut_echantillon, horodatage, effectifs)
+            # Le tout premier échantillon représente le début du média à t=0.
+            debut_echantillon = horodatage if images_analysees else 0.0
+            detections = detecter_image(modele, suivis, image, categories)
+            effectifs = Counter(d["categorie_id"] for d in detections)
+            for detection in detections:
+                categorie = detection.pop("categorie_id")
+                redacteur_detections.writerow({"video_id": video_id, "image": images_lues - 1,
+                                               "horodatage_s": horodatage,
+                                               "categorie": CATEGORIES[categorie], **detection})
+            images_analysees += 1
+            prochaine_cible = (math.floor((horodatage + 1e-8) * frequence) + 1) / frequence
+            progression(min(horodatage / duree, 0.999))
+        if not images_analysees:
+            raise ValueError("Aucune image n'a pu être décodée.")
+        if images_attendues and images_lues != images_attendues:
+            raise ValueError(f"Vidéo incomplète : {images_lues}/{images_attendues} images lisibles.")
+        # Sans nombre d'images fiable, refuser une fin prématurée manifeste.
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        if not images_attendues and duree - precedent > max(1.0, 2 / fps if fps > 0 else 1.0):
+            raise ValueError("Décodage interrompu avant la fin annoncée de la vidéo.")
+        mesure.ajouter(debut_echantillon, duree, effectifs)
+        mesure.terminer()
+        progression(1.0)
+    finally:
+        capture.release()
+        fichier_intervalles.close()
+        fichier_detections.close()
+    return [{"video_id": video_id, "source": texte_csv(nom), "statut": "ok", "erreur": "",
+             "duree_totale_s": duree, "categorie": CATEGORIES[categorie],
+             "objet_detecte": mesure.maximums[categorie] > 0,
+             "duree_visibilite_s": min(duree, mesure.durees[categorie]),
+             "pourcentage_visible": min(100.0, mesure.durees[categorie] / duree * 100),
+             "maximum_simultane": mesure.maximums[categorie],
+             "frequence_demandee_ips": frequence, "images_analysees": images_analysees}
+            for categorie in categories]
+
+
+def traiter_lot(sources, categories, frequence, dossier, progression=lambda *args: None):
+    """Traiter un fichier à la fois et continuer après une erreur individuelle."""
+    from contextlib import ExitStack
+
+    modele = charger_modele()
+    resultats = []
+    with ExitStack() as pile:
+        sorties = {}
+        for nom, colonnes in (("resultats", COLONNES_RESULTATS),
+                              ("intervalles", COLONNES_INTERVALLES),
+                              ("detections", COLONNES_DETECTIONS)):
+            fichier, redacteur = ouvrir_csv(Path(dossier) / f"{nom}.csv", colonnes)
+            pile.enter_context(fichier)
+            sorties[nom] = redacteur
+        for numero, source in enumerate(sources, 1):
+            video_id = f"v{numero:06d}"
+            progression(numero, len(sources), source.nom, 0.0)
+            try:
+                with tempfile.TemporaryDirectory(prefix="video-", dir=dossier) as temporaire:
+                    chemin = preparer_video(source, temporaire)
+                    lignes = analyser_video(
+                        chemin, video_id, source.nom, categories, frequence, modele, temporaire,
+                        lambda valeur: progression(numero, len(sources), source.nom, valeur))
+                    # Une vidéo en erreur ne laisse jamais d'intervalles partiels
+                    # dans les exports communs au lot.
+                    for nom in ("intervalles", "detections"):
+                        with (Path(temporaire) / f"{nom}.csv").open(encoding="utf-8-sig", newline="") as entree:
+                            sorties[nom].writerows(csv.DictReader(entree))
+            except Exception as erreur:
+                lignes = [{"video_id": video_id, "source": texte_csv(source.nom),
+                           "statut": "erreur", "erreur": texte_csv(str(erreur)),
+                           "frequence_demandee_ips": frequence}]
+            sorties["resultats"].writerows(lignes)
+            resultats.extend(lignes)
+            progression(numero, len(sources), source.nom, 1.0)
+    return resultats
