@@ -118,7 +118,15 @@ def accueil():
 
 
 def champs_filtres(tags, plateformes):
-    with st.expander("Filtres de recherche", expanded=True):
+    noms = {t["id"]: t["nom"] for t in tags}
+    selection = st.multiselect(
+        "Rechercher par tags",
+        list(noms),
+        format_func=noms.get,
+        placeholder="Sélectionner un ou plusieurs tags",
+    )
+    operateur = st.radio("Croisement des tags", ["ET", "OU"], horizontal=True) if len(selection) > 1 else "ET"
+    with st.expander("Autres filtres", expanded=False):
         a, b, c = st.columns(3)
         with a:
             texte = st.text_input("Nom, titre ou pseudonyme")
@@ -131,14 +139,9 @@ def champs_filtres(tags, plateformes):
             )
             langue = st.text_input("Langue")
         with c:
-            thematique = choix("Thématique", tags, vide=True)
             debut = st.date_input("Date de publication · début", value=None)
             fin = st.date_input("Date de publication · fin", value=None)
-        noms = {t["id"]: t["nom"] for t in tags}
-        selection = st.multiselect("Tags (saisissez pour rechercher)", list(noms), format_func=noms.get)
-        a, b = st.columns(2)
-        operateur = a.radio("Croisement des tags", ["ET", "OU"], horizontal=True)
-        descendants = b.checkbox("Inclure les descendants des tags", value=True)
+        descendants = st.checkbox("Inclure les descendants des tags", value=True)
     return Filtres(
         texte=texte,
         url=url,
@@ -149,7 +152,6 @@ def champs_filtres(tags, plateformes):
         tags=selection,
         operateur=operateur,
         descendants=descendants,
-        thematique_id=thematique,
         date_debut=debut,
         date_fin=fin,
     )
@@ -184,7 +186,6 @@ def tableau(lignes, cle):
 
 def recherche():
     st.title("Recherche et exploration")
-    st.caption("Seules les fiches validées sont visibles. Les dates portent sur la publication des contenus.")
     entite = (
         st.segmented_control(
             "Rechercher dans",
