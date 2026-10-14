@@ -15,6 +15,7 @@ import numpy as np
 from detection import (MesureVisibilite, SourceVideo, analyser_video, creer_suivis,
                        creer_video_annotee,
                        detecter_image, inventorier_sources, preparer_video,
+                       reprojeter_boites, supprimer_cadres_imbriques,
                        texte_csv, traiter_lot, verifier_url)
 
 
@@ -50,6 +51,48 @@ class TestsVisibilite(unittest.TestCase):
         self.assertEqual(mesure.durees[0], 1)
         self.assertEqual([(i["debut_s"], i["fin_s"]) for i in intervalles
                           if i["categorie"] == "smartphone"], [(0, 2), (3, 3.25)])
+
+    def test_coordonnees_apres_rotation_et_recadrage(self):
+        originale = np.array([[10, 20, 50, 60, 0.8, 67]], dtype=np.float32)
+        horaire = np.array([[20, 10, 60, 50, 0.8, 67]], dtype=np.float32)
+        antihoraire = np.array([[20, 70, 60, 110, 0.8, 67]], dtype=np.float32)
+        np.testing.assert_allclose(reprojeter_boites(horaire, (0, 0, cv2.ROTATE_90_CLOCKWISE),
+                                                     (80, 120)), originale)
+        np.testing.assert_allclose(reprojeter_boites(antihoraire, (0, 0, cv2.ROTATE_90_COUNTERCLOCKWISE),
+                                                     (80, 120)), originale)
+        recadree = np.array([[0, 0, 40, 40, 0.8, 67]], dtype=np.float32)
+        np.testing.assert_allclose(reprojeter_boites(recadree, (10, 20, None), (80, 120)), originale)
+
+    def test_ecran_imbrique_et_deux_telephones_distincts(self):
+        boites = np.array([[10, 10, 100, 180, 0.8, 67],  # Téléphone complet.
+                           [40, 20, 80, 60, 0.9, 67],   # Son écran arrière.
+                           [120, 10, 200, 180, 0.7, 67]], dtype=np.float32)
+        resultat = supprimer_cadres_imbriques(boites)
+        np.testing.assert_allclose(resultat, boites[[0, 2]])
+
+    def test_rappel_centre_preserve_autres_categories_et_un_seul_suivi(self):
+        from ultralytics.engine.results import Results
+
+        class ModeleSimule:
+            """Le téléphone apparaît uniquement au deuxième recadrage."""
+
+            appels = 0
+
+            def predict(self, image, **options):
+                self.appels += 1
+                boites = {1: [[0, 0, 100, 400, 0.9, 0]],
+                          3: [[10, 20, 30, 70, 0.8, 67]]}.get(self.appels, [])
+                return [Results(image, "test", {0: "person", 67: "cell phone"},
+                                boxes=np.array(boites, dtype=np.float32).reshape(-1, 6))]
+
+        modele = ModeleSimule()
+        suivis = creer_suivis([0, 67], 1)
+        detections = detecter_image(modele, suivis, np.zeros((480, 240, 3), dtype=np.uint8), [0, 67])
+        self.assertEqual(modele.appels, 3)
+        self.assertEqual([d["categorie_id"] for d in detections], [0, 67])
+        self.assertEqual(detections[1]["y1"], 140)
+        self.assertEqual(detections[1]["y2"], 190)
+        self.assertTrue(all(suivi.frame_id == 1 for suivi in suivis.values()))
 
     def test_video_et_derniere_fraction(self):
         with tempfile.TemporaryDirectory() as dossier:

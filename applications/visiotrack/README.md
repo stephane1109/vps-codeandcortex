@@ -15,6 +15,8 @@ Après l'analyse, le lecteur **Vidéo avec détections** affiche un aperçu avec
 cadres verts et le niveau de confiance autour des smartphones (ou des autres objets
 sélectionnés). Pour un lot, choisir la vidéo dans la liste au-dessus du lecteur.
 La lecture, la pause et le déplacement dans la vidéo permettent de vérifier les détections.
+Le lecteur fait au maximum 360 pixels de large (environ 360 × 640 pour un TikTok
+vertical 9:16) et s'adapte aux petits écrans. Le rapport d'image original est conservé.
 
 Les cadres reprennent les positions de la dernière image analysée jusqu'à l'analyse
 suivante. À 1 image/s, ils sont donc actualisés une fois par seconde et peuvent être
@@ -31,8 +33,20 @@ Les vidéos en erreur ont des mesures vides, jamais des zéros trompeurs.
 
 ## Calculs et interprétation
 
-- YOLO11n fonctionne sur CPU, avec une taille d'inférence de 640 pixels et un seuil
+- YOLO11s fonctionne sur CPU, avec une taille d'inférence de 640 pixels et un seuil
   de confiance de 0,25. La suppression des boîtes redondantes utilise un IoU de 0,5.
+- Si aucun smartphone n'est reconnu, une recherche complémentaire examine jusqu'à
+  trois recadrages carrés de l'image puis ses rotations à 90° et 270°. Elle s'arrête
+  à la première vue positive et replace les cadres dans les coordonnées originales.
+  Les vues ne sont pas additionnées et ByteTrack n'est mis à jour qu'une fois par
+  image analysée. Les autres catégories conservent la détection sur l'image entière.
+  Cette méthode améliore la reconnaissance des téléphones petits ou inclinés,
+  au prix d'inférences supplémentaires sur CPU. Elle ne garantit pas une détection
+  exhaustive et peut encore produire des faux positifs.
+- Pour les smartphones, les cadres presque entièrement imbriqués (plus de 90 %
+  de l'aire du petit cadre) sont fusionnés en conservant le cadre complet parmi
+  les détections acceptées. Cela évite notamment de compter un écran arrière comme
+  un second appareil ; des téléphones réellement superposés peuvent être sous-comptés.
 - ByteTrack reçoit aussi les boîtes de confiance 0,1 à 0,25 pour les associations.
   Un suivi distinct est créé par catégorie et par vidéo. Une nouvelle détection
   non encore confirmée par ByteTrack compte dans la visibilité, avec `piste_id` vide.
@@ -82,7 +96,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Au premier lancement d'une analyse locale, les poids officiels `yolo11n.pt` sont
+Au premier lancement d'une analyse locale, les poids officiels `yolo11s.pt` sont
 téléchargés dans `~/.cache/visiotrack`. Dans Docker, ils sont déjà téléchargés à la
 construction. Il faut donc un accès réseau lors de la construction de l'image.
 
@@ -119,7 +133,7 @@ Variables d'environnement techniques (aucune option supplémentaire dans l'inter
 | `VISIOTRACK_MAX_VIDEO_MB` | `4096` | Taille maximale d'une vidéo, y compris après décompression. |
 | `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | `1024` | Taille maximale de chaque import navigateur, en Mo. |
 | `VISIOTRACK_VIDEO_DIR` | vide | Dossier serveur dont tous les MP4 seront ajoutés à chaque lot. |
-| `VISIOTRACK_MODEL` | `/app/models/yolo11n.pt` | Chemin d'un modèle YOLO compatible avec les 80 classes COCO. |
+| `VISIOTRACK_MODEL` | `/app/models/yolo11s.pt` | Chemin d'un modèle YOLO compatible avec les 80 classes COCO. |
 
 ### Grands lots et mémoire
 

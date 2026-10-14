@@ -62,7 +62,9 @@ def afficher_apercu(tableau, repertoire):
     apercu = apercus.get(identifiant, {})
     if "fichier" in apercu:
         # Le chemin pointe vers un MP4 H.264 de la session, compatible navigateur.
-        st.video(str(repertoire / apercu["fichier"]))
+        # Largeur compacte : une vidéo TikTok 9:16 occupe environ 360 × 640 px,
+        # sans recadrer ni déformer les vidéos ayant un autre rapport d'image.
+        st.video(str(repertoire / apercu["fichier"]), width=360)
         frequence = videos.loc[identifiant, "frequence_demandee_ips"]
         st.caption(f"Cadres verts : objets détectés. Positions actualisées à {frequence:g} image(s)/s "
                    "et conservées jusqu'à l'analyse suivante. La visibilité ne prouve pas une utilisation.")

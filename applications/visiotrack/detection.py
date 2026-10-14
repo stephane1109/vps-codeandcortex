@@ -214,12 +214,12 @@ def lire_metadonnees(chemin):
 
 
 def charger_modele():
-    """Charger une seule fois par lot le petit YOLO11n, exclusivement sur CPU."""
+    """Charger une seule fois par lot YOLO11s, exclusivement sur CPU."""
     from ultralytics import YOLO
     import torch
 
     torch.set_num_threads(max(1, int(os.getenv("VISIOTRACK_CPU_THREADS", "2"))))
-    chemin = Path(os.getenv("VISIOTRACK_MODEL", str(Path.home() / ".cache/visiotrack/yolo11n.pt")))
+    chemin = Path(os.getenv("VISIOTRACK_MODEL", str(Path.home() / ".cache/visiotrack/yolo11s.pt")))
     chemin.parent.mkdir(parents=True, exist_ok=True)
     return YOLO(str(chemin))
 
@@ -278,11 +278,95 @@ def creer_suivis(categories, frequence):
             for categorie in categories}
 
 
+def iterer_vues_smartphone(image):
+    """Examiner les détails puis les deux orientations, une vue à la fois sur CPU."""
+    import cv2
+
+    hauteur, largeur = image.shape[:2]
+    cote = min(hauteur, largeur)
+    # Sur une vidéo verticale, les trois carrés couvrent haut, centre et bas.
+    # Sur une vidéo horizontale, ils couvrent gauche, centre et droite.
+    if max(hauteur, largeur) > cote * 1.2:
+        ecart = max(hauteur, largeur) - cote
+        for decalage in sorted({0, ecart // 2, ecart}):
+            x, y = (0, decalage) if hauteur > largeur else (decalage, 0)
+            yield image[y:y + cote, x:x + cote], (x, y, None)
+    for rotation in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
+        yield cv2.rotate(image, rotation), (0, 0, rotation)
+
+
+def reprojeter_boites(boites, transformation, dimensions):
+    """Replacer les coordonnées d'un recadrage ou d'une rotation dans la vidéo."""
+    import cv2
+
+    resultat = boites.copy()
+    x, y, rotation = transformation
+    hauteur, largeur = dimensions[:2]
+    if rotation == cv2.ROTATE_90_CLOCKWISE:
+        resultat[:, 0], resultat[:, 2] = boites[:, 1], boites[:, 3]
+        resultat[:, 1], resultat[:, 3] = hauteur - boites[:, 2], hauteur - boites[:, 0]
+    elif rotation == cv2.ROTATE_90_COUNTERCLOCKWISE:
+        resultat[:, 0], resultat[:, 2] = largeur - boites[:, 3], largeur - boites[:, 1]
+        resultat[:, 1], resultat[:, 3] = boites[:, 0], boites[:, 2]
+    else:
+        resultat[:, (0, 2)] += x
+        resultat[:, (1, 3)] += y
+    resultat[:, (0, 2)] = resultat[:, (0, 2)].clip(0, largeur)
+    resultat[:, (1, 3)] = resultat[:, (1, 3)].clip(0, hauteur)
+    return resultat
+
+
+def supprimer_cadres_imbriques(boites):
+    """Éviter de compter un détail du téléphone comme un deuxième téléphone.
+
+    Compléter la NMS de YOLO pour les boîtes dont plus de 90 % de la plus petite
+    sont contenus dans l'autre. Prioriser les détections acceptées, puis leur aire.
+    """
+    import numpy as np
+
+    if len(boites) < 2:
+        return boites
+    aires = (boites[:, 2] - boites[:, 0]) * (boites[:, 3] - boites[:, 1])
+    ordre = sorted(range(len(boites)), key=lambda i: (boites[i, 4] >= 0.25, aires[i]), reverse=True)
+    conserves = []
+    for indice in ordre:
+        doublon = False
+        for precedent in conserves:
+            coin1 = np.maximum(boites[indice, :2], boites[precedent, :2])
+            coin2 = np.minimum(boites[indice, 2:4], boites[precedent, 2:4])
+            intersection = np.maximum(0, coin2 - coin1).prod()
+            if intersection / max(1e-8, min(aires[indice], aires[precedent])) > 0.9:
+                doublon = True
+                break
+        if not doublon:
+            conserves.append(indice)
+    return boites[sorted(conserves)]
+
+
 def detecter_image(modele, suivis, image, categories):
     """Associer les boîtes observées à ByteTrack sans supprimer les nouvelles pistes."""
+    import numpy as np
+    from ultralytics.engine.results import Boxes
+
     resultat = modele.predict(image, classes=categories, conf=0.1, iou=0.5,
                               imgsz=640, max_det=1000, device="cpu", verbose=False)[0]
     boites = resultat.boxes.cpu().numpy()
+    if 67 in categories:
+        telephones = boites.data[boites.cls == 67]
+        if not any(telephones[:, 4] >= 0.25):
+            # Un téléphone vu de côté ou petit dans une vidéo verticale peut être
+            # manqué sur l'image entière. Arrêter dès qu'une vue le retrouve :
+            # aucune somme des vues, aucune présence inventée par interpolation.
+            for vue, transformation in iterer_vues_smartphone(image):
+                rappel = modele.predict(vue, classes=[67], conf=0.25, iou=0.5,
+                                        imgsz=640, max_det=1000, device="cpu", verbose=False)[0]
+                candidates = rappel.boxes.cpu().numpy().data
+                candidates = candidates[candidates[:, 4] >= 0.25]
+                if len(candidates):
+                    telephones = reprojeter_boites(candidates, transformation, image.shape)
+                    break
+        telephones = supprimer_cadres_imbriques(telephones)
+        boites = Boxes(np.concatenate((boites.data[boites.cls != 67], telephones)), image.shape[:2])
     detections = []
     for categorie in categories:
         selection = boites[boites.cls == categorie]
