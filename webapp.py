@@ -46,6 +46,7 @@ class StartRequest(BaseModel):
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
     enrichir: bool = False
+    telecharger_mp4: bool = False
     collecter_commentaires: bool = False
     collecter_reponses: bool = False
     limite_commentaires: int = Field(default=50, ge=1, le=500)
@@ -114,7 +115,7 @@ class StartRequest(BaseModel):
 
     @property
     def enrichie(self):
-        return self.enrichir or self.source_collecte != "hashtags" or self.collecter_commentaires
+        return self.enrichir or self.source_collecte != "hashtags" or self.collecter_commentaires or self.telecharger_mp4
 
     @property
     def libelle(self):
@@ -250,6 +251,9 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
         prefix = (entete_publication(record, selection, supprimer_arobase_profil) if selection is not None
                   else entete_publication(record, supprimer_arobase_profil=supprimer_arobase_profil) if inclure_metadonnees_txt
                   else entete_publication(record, ("profil", "id"), supprimer_arobase_profil) if include_sources else "")
+        # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
+        if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
+            prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
@@ -364,6 +368,10 @@ class Job:
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "diagnostics": list(self.diagnostics),
+                    "telecharger_mp4": self.settings.telecharger_mp4,
+                    "bilan_mp4": [{"video_id": r.get("video_id"), "video_statut": r.get("video_statut", "en_attente"),
+                        "video_message": r.get("video_message", "En attente du téléchargement."),
+                        "video_fichier": r.get("video_fichier")} for r in self.records if r.get("video_id")],
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
                     "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {
@@ -657,6 +665,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             try:
                 record = connexion.lire_publication(url)
                 record["retenue"] = False
+                if job.settings.telecharger_mp4:
+                    from telechargement_videos import correspondance_video
+                    record.update(correspondance_video(record))
                 # Même découverte et lecture que le mode hashtag ; filtrer ensuite
                 # l’auteur effectivement lu, et non une grille de profil différente.
                 if (job.settings.source_collecte != "hashtags"
@@ -804,6 +815,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         except OSError:
             LOG.exception("Écriture de l’export impossible")
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
+        if job.settings.telecharger_mp4 and job.records:
+            try:
+                final_message += " " + telecharger_mp4_collecte(job)
+                if job.stop.is_set():
+                    final_status = "stopped"
+            except Exception:
+                # Garder les textes et finaliser l’archive même si ce module échoue.
+                LOG.error("Téléchargement MP4 interrompu pour %s", job.id)
+                final_message += " Téléchargement MP4 interrompu ; les textes sont conservés."
         if job.base:
             try:
                 from corpus.construction import construire_exports
@@ -816,13 +836,50 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
                      "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal,
                      "diagnostics": job.diagnostics}, texte_source=job.path)
-                exporter_zip(job.directory, job.directory / "archive.zip")
+                exporter_zip(job.directory, job.directory / "archive.zip", inclure_mp4=job.settings.telecharger_mp4)
                 job.archive_prete = True
             except Exception:
                 LOG.exception("Export enrichi impossible")
                 final_message += " L’archive enrichie n’a pas pu être finalisée ; le TXT reste disponible."
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
+
+
+def telecharger_mp4_collecte(job):
+    """Traiter les publications retenues une par une, après la fermeture de Selenium."""
+    from telechargement_videos import telecharger_video, resultat_video
+    debut = time.monotonic()
+    volume = 0
+    resultats = {}
+    with job.lock:
+        publications = list(job.records)
+    for numero, publication in enumerate(publications, 1):
+        identifiant = str(publication["id"])
+        job.update(status="downloading", message=f"Téléchargement MP4 {numero}/{len(publications)} — textes déjà disponibles…")
+        if identifiant in resultats:
+            resultat = resultats[identifiant]
+        elif job.stop.is_set():
+            resultat = resultat_video(publication, "arrete")
+        elif time.monotonic() - debut >= 900 or volume >= 2 * 1024**3:
+            resultat = resultat_video(publication, "limite_lot")
+        else:
+            maximum_mo = min(256, (2 * 1024**3 - volume) // 1024**2)
+            if maximum_mo < 1:
+                resultat = resultat_video(publication, "limite_lot")
+            else:
+                try:
+                    resultat = telecharger_video(publication, job.directory / "videos", arreter=job.stop.is_set,
+                        taille_max_mo=maximum_mo, delai_max_s=min(120, max(1, 900-(time.monotonic()-debut))),
+                        reserve_mo=512 + 2 * (volume // 1024**2 + maximum_mo))
+                    if resultat.get("video_fichier"):
+                        volume += (job.directory / resultat["video_fichier"]).stat().st_size
+                except Exception:
+                    resultat = resultat_video(publication, "erreur")
+        resultats[identifiant] = resultat
+        with job.lock:
+            publication.update(resultat)
+    recuperes = sum(bool(r.get("video_fichier")) for r in resultats.values())
+    return f"MP4 : {recuperes}/{len(resultats)} vidéo(s) disponible(s) dans l’archive. Voir le bilan MP4."
 
 
 class Manager:

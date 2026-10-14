@@ -39,6 +39,7 @@ class TestsCorpus(unittest.TestCase):
     def test_csv_compteurs_sans_colonnes_techniques_et_json_complet(self):
         compteurs = ("likes", "vues", "partages", "commentaires", "favoris")
         attendues = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"]
+        attendues += ["video_id", "video_url", "video_fichier"]
         attendues += [nom + suffixe for nom in compteurs for suffixe in ("", "_brut")]
         self.assertEqual(COLONNES_ENGAGEMENT, attendues)
         mesure = extraire_engagement({"stats": {"diggCount": 5, "shareCount": 3, "commentCount": 2, "collectCount": 0}})

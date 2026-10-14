@@ -627,3 +627,37 @@ Ce test est également exécuté par le point d’entrée navigateur de la CI.
 Aucune option de connexion TikTok, aucun écran de connexion ouvert par le moteur et aucun profil Chrome persistant ne sont proposés. Hashtags, profils et médias utilisent un navigateur neuf, commun aux opérations d’une collecte, puis fermé à la fin. Une ancienne requête contenant l’option de connexion supprimée ne peut pas réactiver cette fonctionnalité.
 
 Les invitations de TikTok sont fermées avec leur bouton lorsque c’est possible. Une restriction restante est signalée comme une collecte partielle ou une source inaccessible ; les textes déjà obtenus restent exportables. Le CAPTCHA peut toujours être traité manuellement dans la fenêtre intégrée à Streamlit. Le lien d’ouverture dans un autre onglet et les commandes API d’ouverture manuelle et de connexion ont été supprimés.
+
+
+### Télécharger les vidéos MP4 (facultatif)
+
+Cocher **Télécharger les vidéos (MP4)** avant de lancer la collecte (hashtags,
+profils ou presse). L’option est désactivée par défaut. Le module indépendant
+`telechargement_videos.py` utilise [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options),
+inclus dans les dépendances de base, sans charger les dépendances d’analyse vidéo.
+Il télécharge les publications retenues après les filtres, après la fermeture de
+Selenium. Il n’utilise ni cookies du navigateur ni connexion à un compte TikTok.
+
+Le TXT conserve la nomenclature existante : `*id_123456789` correspond à
+`videos/id_123456789.mp4` dans l’archive ZIP. Avec cette option, l’identifiant est
+inclus même si la variable « ID vidéo » est décochée. Les autres variables, le choix
+avec/sans @, les commentaires et les hashtags conservent leur fonctionnement.
+Le corpus principal de l’archive reste identique au TXT téléchargé.
+
+Les champs `video_id`, `video_url` (URL publique de la publication) et
+`video_fichier` (chemin relatif dans l’archive) sont conservés dans les CSV par
+publication et les JSON. `videos.csv` et `videos.json` détaillent le résultat par
+publication. `video_fichier` reste vide/null en cas d’échec ; aucun fichier fictif
+n’est annoncé. Le bilan MP4 apparaît dans les résultats Streamlit.
+
+Les doublons sont évités par identifiant dans la collecte et un MP4 déjà présent
+est réutilisé dans la même session. Les téléchargements sont séquentiels : 120 s
+et 256 Mio maximum par vidéo, 15 minutes et 2 Gio maximum pour le lot. Une réserve
+disque est gardée pour le texte et la préparation du ZIP. Le bouton d’arrêt
+interrompt aussi les téléchargements ; les textes et MP4 déjà obtenus restent
+exportables. Les fichiers temporaires d’un échec sont supprimés. La durée de
+conservation habituelle de la session s’applique également aux MP4.
+
+Seuls les formats MP4 accessibles via yt-dlp sont récupérés. Une restriction TikTok,
+un diaporama, un délai dépassé ou une limite de ressources est signalé et n’annule
+pas la collecte textuelle. Le téléchargement ne garantit pas l’accès à chaque vidéo.

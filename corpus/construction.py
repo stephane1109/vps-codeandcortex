@@ -1,5 +1,6 @@
 """Assemblage reproductible des exports d’une session enrichie."""
 from pathlib import Path
+from telechargement_videos import CHAMPS_VIDEO, correspondance_video
 from .export_json import exporter_json
 from .export_csv import exporter_csv
 from .export_iramuteq import exporter_iramuteq
@@ -8,7 +9,7 @@ from .corpus_commentaires import construire_commentaires
 from analyse.engagement import calculer_ratios
 from analyse.comparaison_medias import comparer_medias
 
-COLONNES_ENGAGEMENT = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"] + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
+COLONNES_ENGAGEMENT = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
@@ -16,6 +17,7 @@ def lignes_engagement(publications):
     for p in publications:
         ligne = {"publication_id": p["id"], "id_": str(p["id"]), "auteur": p["author"], "media": p.get("media_id"), "date_collecte": p.get("collected_at"),
                  "url": p.get("url"), "legende": p.get("description"), "retenue": p.get("retenue"), "langue_detection": p.get("langue_detection")}
+        ligne.update(correspondance_video(p))
         for nom, mesure in p.get("engagement", {}).items():
             ligne.update({nom: mesure.get("valeur"), nom + "_brut": mesure.get("brut")})
         lignes.append(ligne)
@@ -28,17 +30,25 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     # Une source explicitement attendue doit être lisible : pas de corpus de remplacement.
     # Lire les octets conserve aussi les accents, retours à la ligne et un TXT vide.
     contenu_txt = source.read_bytes() if texte_source is not None or source.is_file() else None
+    publications = [{**p, **correspondance_video(p)} for p in publications]
+    correspondances = {str(p["id"]): correspondance_video(p) for p in publications}
+    commentaires = [{**c, **correspondances.get(str(c.get("publication_id")), {})} for c in commentaires]
     exporter_json(dossier / "publications.json", publications)
+    if (journal.get("parametres") or {}).get("telecharger_mp4") or any("video_statut" in p for p in publications):
+        videos = [{**correspondance_video(p), "video_statut": p.get("video_statut", "non_retenue"),
+                   "video_message": p.get("video_message")} for p in publications]
+        exporter_json(dossier / "videos.json", videos)
+        exporter_csv(dossier / "videos.csv", videos, [*CHAMPS_VIDEO, "video_statut", "video_message"])
     exporter_json(dossier / "commentaires.json", commentaires)
     exporter_json(dossier / "journal.json", journal)
     exporter_csv(dossier / "engagement.csv", lignes_engagement(publications), COLONNES_ENGAGEMENT)
-    exporter_csv(dossier / "ratios_engagement.csv",[{"publication_id":p["id"],"id_":str(p["id"]),"url":p.get("url"),**calculer_ratios(p.get("engagement",{}))} for p in publications])
+    exporter_csv(dossier / "ratios_engagement.csv",[{"publication_id":p["id"],"id_":str(p["id"]),"url":p.get("url"),**correspondance_video(p),**calculer_ratios(p.get("engagement",{}))} for p in publications])
     exporter_csv(dossier / "comparaison_medias.csv",comparer_medias(publications))
     urls = {str(p["id"]): p.get("url") for p in publications}
     # id reste celui du commentaire ; id_ désigne toujours la publication TikTok.
     commentaires_csv = [{**c, "id_": str(c.get("publication_id") or ""),
                          "url": urls.get(str(c.get("publication_id")))} for c in commentaires]
-    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","texte","date_brute","likes","source","observe_le"])
+    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
     if contenu_txt is not None:
         (dossier / "corpus_iramuteq.txt").write_bytes(contenu_txt)
     else:

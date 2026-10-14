@@ -14,6 +14,7 @@ from corpus.construction import construire_exports
 from corpus.export_iramuteq import exporter_iramuteq
 from corpus.corpus_transcriptions import construire_transcriptions
 from corpus.export_zip import exporter_zip
+from telechargement_videos import correspondance_video
 from stockage.base_donnees import BaseDonnees
 from stockage.cache_video import cle_cache, lire_cache, ecrire_cache
 from .parametres import charger_parametres, charger_seuils
@@ -70,7 +71,9 @@ def traiter_lot(dossier, parametres, seuils):
                 erreurs.append({"id":identifiant,"raison":"identifiant_invalide"}); continue
             etat("en_cours","vidéo " + identifiant)
             try:
-                chemin=dossier / "videos" / (identifiant+".mp4")
+                chemin=dossier / "videos" / ("id_"+identifiant+".mp4")
+                if not chemin.exists() and not chemin.is_symlink():
+                    chemin=dossier / "videos" / (identifiant+".mp4")
                 if chemin.is_symlink(): raise ValueError("Lien symbolique vidéo interdit.")
                 if not chemin.exists() and parametres["telecharger_videos"]:
                     from collecte.telechargement import telecharger_video
@@ -133,7 +136,8 @@ def traiter_lot(dossier, parametres, seuils):
     exporter_json(dossier / "comparaisons.json",comparaisons)
     exporter_json(dossier / "variables_shs.json",codes)
     urls_publications = {str(p["id"]): p.get("url") for p in publications}
-    exporter_csv(dossier / "variables_shs.csv",[{"publication_id":c["publication_id"],"id_":str(c["publication_id"]),"url":urls_publications.get(str(c["publication_id"])),**c["variables"],"confiances":c["confiances"]} for c in codes])
+    correspondances = {str(p["id"]): correspondance_video(p) for p in publications}
+    exporter_csv(dossier / "variables_shs.csv",[{"publication_id":c["publication_id"],"id_":str(c["publication_id"]),"url":urls_publications.get(str(c["publication_id"])),**correspondances.get(str(c["publication_id"]), {}),**c["variables"],"confiances":c["confiances"]} for c in codes])
     exporter_json(dossier / "reseau_similarite.json",construire_reseau(publications,comparaisons))
     exporter_json(dossier / "circulation_visuelle.json",analyser_circulation(publications,comparaisons))
     exporter_csv(dossier / "comparaison_medias.csv",comparer_medias(publications))
@@ -143,7 +147,7 @@ def traiter_lot(dossier, parametres, seuils):
     journal["audiovisuel"]={"statut":"termine" if complet else "partiel","videos_analysees":len(analyses),"erreurs":erreurs,"parametres":parametres,"seuils":seuils,"confiance":"heuristique_non_calibree"}
     construire_exports(dossier,publications,commentaires,journal,variables)
     etat("termine" if complet else "partiel","exports disponibles")
-    exporter_zip(dossier,dossier / "archive.zip")
+    exporter_zip(dossier,dossier / "archive.zip", inclure_mp4=bool((journal.get("parametres") or {}).get("telecharger_mp4")))
     return journal["audiovisuel"]
 
 

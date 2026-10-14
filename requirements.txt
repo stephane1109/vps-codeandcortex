@@ -11,3 +11,6 @@ websockets>=15,<17
 # Contrôle d’accès partagé avec Europresse et la home.
 redis>=5,<6
 streamlit-autorefresh>=1.0.1,<2
+
+# Téléchargement MP4 facultatif, indépendant des analyses audiovisuelles.
+yt-dlp>=2025.1,<2027

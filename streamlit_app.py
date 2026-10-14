@@ -73,6 +73,7 @@ if "initialise" not in st.session_state:
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
+        "telecharger_mp4":ancienne.get("telecharger_mp4",False),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     variables = ancienne.get("variables_txt")
@@ -90,6 +91,8 @@ if "initialise" not in st.session_state:
     for cle,valeur in valeurs.items(): st.session_state.setdefault(cle,valeur)
     st.session_state["initialise"] = True
 
+st.session_state.setdefault("telecharger_mp4", False)
+
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
     valeur_initiale = (variable in ("date", "profil", "id") and
@@ -103,7 +106,7 @@ for variable in VARIABLES_TXT:
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
-            "collecter_commentaires", "collecter_reponses", "limite_commentaires",
+            "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
             "date_debut", "date_fin", "comptes"):
     st.session_state[cle] = st.session_state[cle]
 
@@ -160,6 +163,8 @@ with onglet_collecte:
             st.caption("Chaque compte sélectionné est recherché avec chaque hashtag. Seules ses publications sont conservées, dans la limite demandée par compte. Résultats non exhaustifs.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
+        st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
+            help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
             help="Sur les publications retenues, dans la limite indiquée sous Options des commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
         with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
@@ -188,7 +193,7 @@ with onglet_collecte:
                 st.error("Renseignez au moins un hashtag pour une collecte par profil ou média." if source != "hashtags" else "Le premier hashtag est obligatoire.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires")}
+                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4")}
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
@@ -318,6 +323,12 @@ with onglet_collecte:
                             for e in actuel["bilan_commentaires"]], hide_index=True)
             else:
                 st.caption("La collecte des textes des commentaires n’était pas activée pour cette recherche. Le nombre de commentaires reste inclus dans les compteurs.")
+            if actuel.get("telecharger_mp4") and actuel.get("bilan_mp4"):
+                disponibles = sum(bool(v.get("video_fichier")) for v in actuel["bilan_mp4"])
+                st.write(f"MP4 : {disponibles}/{len(actuel['bilan_mp4'])} fichier(s) disponible(s).")
+                with st.expander("Bilan des téléchargements MP4"):
+                    st.dataframe([{"ID vidéo": v["video_id"], "Fichier": v.get("video_fichier"),
+                                   "État": v.get("video_message")} for v in actuel["bilan_mp4"]], hide_index=True)
             choix_export = ""
             if actuel["can_download"] or actuel["archive_prete"]:
                 sans_arobase = st.checkbox("Supprimer le @ devant les profils dans le TXT", value=True,
