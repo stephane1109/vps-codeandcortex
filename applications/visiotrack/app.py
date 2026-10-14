@@ -1,6 +1,7 @@
 """Interface sobre de VisioTrack : imports, analyse séquentielle et exports."""
 
 import os
+import json
 import tempfile
 import threading
 from pathlib import Path
@@ -36,6 +37,7 @@ def afficher_resultats():
         "frequence_demandee_ips": "Images/s demandées", "images_analysees": "Images analysées",
     })
     repertoire = Path(st.session_state.visiotrack_exports.name)
+    afficher_apercu(tableau, repertoire)
     for colonne, (nom, libelle) in zip(st.columns(3), [
         ("resultats", "Résultats CSV"), ("intervalles", "Intervalles CSV"),
         ("detections", "Détections CSV"),
@@ -45,6 +47,27 @@ def afficher_resultats():
             with (repertoire / f"{nom}.csv").open("rb") as fichier:
                 st.download_button(libelle, fichier, f"visiotrack_{nom}.csv",
                                    mime="text/csv", on_click="ignore", width="stretch")
+
+
+def afficher_apercu(tableau, repertoire):
+    """Ne charger dans le lecteur que la vidéo sélectionnée dans le lot."""
+    videos = tableau[tableau.statut == "ok"].drop_duplicates("video_id").set_index("video_id")
+    manifeste = repertoire / "apercus.json"
+    if videos.empty or not manifeste.exists():
+        return
+    apercus = json.loads(manifeste.read_text(encoding="utf-8"))
+    st.subheader("Vidéo avec détections")
+    identifiant = st.selectbox("Vidéo à regarder", list(videos.index),
+                              format_func=lambda cle: f"{cle} — {videos.loc[cle, 'source']}")
+    apercu = apercus.get(identifiant, {})
+    if "fichier" in apercu:
+        # Le chemin pointe vers un MP4 H.264 de la session, compatible navigateur.
+        st.video(str(repertoire / apercu["fichier"]))
+        frequence = videos.loc[identifiant, "frequence_demandee_ips"]
+        st.caption(f"Cadres verts : objets détectés. Positions actualisées à {frequence:g} image(s)/s "
+                   "et conservées jusqu'à l'analyse suivante. La visibilité ne prouve pas une utilisation.")
+    else:
+        st.warning(apercu.get("erreur", "Aperçu indisponible pour cette vidéo."))
 
 
 def afficher_application():
@@ -93,7 +116,7 @@ def afficher_application():
                 ancien = st.session_state.get("visiotrack_exports")
                 st.session_state.visiotrack_exports = temporaire
                 st.session_state.visiotrack_resultats = resultats
-                temporaire = None  # La session conserve les CSV, pas les MP4 temporaires.
+                temporaire = None  # La session conserve les CSV et les aperçus annotés.
                 if ancien:
                     ancien.cleanup()
             except Exception as erreur:

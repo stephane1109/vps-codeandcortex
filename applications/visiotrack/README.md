@@ -11,6 +11,18 @@ qui peut aussi reconnaître d'autres téléphones portables.
 2. Choisir les catégories (smartphone par défaut) et la fréquence (1 image/s).
 3. Lancer l'analyse puis télécharger les résultats, intervalles et détections CSV.
 
+Après l'analyse, le lecteur **Vidéo avec détections** affiche un aperçu avec des
+cadres verts et le niveau de confiance autour des smartphones (ou des autres objets
+sélectionnés). Pour un lot, choisir la vidéo dans la liste au-dessus du lecteur.
+La lecture, la pause et le déplacement dans la vidéo permettent de vérifier les détections.
+
+Les cadres reprennent les positions de la dernière image analysée jusqu'à l'analyse
+suivante. À 1 image/s, ils sont donc actualisés une fois par seconde et peuvent être
+décalés si l'objet bouge entre deux analyses. Augmenter la fréquence pour un suivi
+visuel plus précis. Une analyse sans détection efface les cadres précédents.
+L'aperçu conserve le son lorsqu'il existe dans le média importé ; les téléchargements
+URL en piste vidéo seule ne contiennent pas de son.
+
 Les sous-dossiers ZIP sont parcourus automatiquement, sans extraction globale.
 Une erreur de téléchargement, d'archive ou de décodage est inscrite dans le tableau
 et le lot continue. Les noms identiques restent distincts grâce à `video_id`.
@@ -113,9 +125,17 @@ Variables d'environnement techniques (aucune option supplémentaire dans l'inter
 
 Une seule vidéo est préparée et analysée à la fois. Les images ne sont pas empilées,
 les détections et intervalles sont écrits au fil de l'eau sur disque. Les médias
-temporaires sont supprimés après chaque vidéo ; les CSV restent disponibles durant
-la session puis sont supprimés avec son répertoire temporaire, ou remplacés au lot
-suivant. Un verrou partagé limite à un seul lot actif par processus Streamlit.
+sources temporaires sont supprimés après chaque vidéo ; les CSV et les aperçus
+annotés restent disponibles durant la session puis sont supprimés avec son
+répertoire temporaire, ou remplacés au lot suivant. Un verrou partagé limite à
+un seul lot actif par processus Streamlit.
+
+Les aperçus sont encodés séquentiellement sur CPU en MP4 H.264, à 25 images/s et
+960 pixels maximum sur le plus grand côté. Leur fabrication ajoute un passage de
+lecture et un encodage, mais aucune nouvelle inférence YOLO. Prévoir de l'espace
+disque pour tous les aperçus du lot. Seul celui sélectionné est envoyé au lecteur
+Streamlit, dont le serveur conserve les médias servis en mémoire. Un échec
+d'encodage n'empêche pas la conservation des résultats et des exports CSV.
 
 **Streamlit conserve les fichiers téléversés et les exports téléchargeables en
 mémoire.** Le traitement séquentiel ne supprime pas cette limite du navigateur.

@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from detection import (MesureVisibilite, SourceVideo, analyser_video, creer_suivis,
+                       creer_video_annotee,
                        detecter_image, inventorier_sources, preparer_video,
                        texte_csv, traiter_lot, verifier_url)
 
@@ -161,6 +162,52 @@ class TestsVisibilite(unittest.TestCase):
                 lignes = list(csv.DictReader(fichier))
             self.assertEqual(len(lignes), 1)
             self.assertEqual(lignes[0]["video_id"], "v000002")
+            self.assertTrue((Path(dossier) / "apercus/v000002.mp4").is_file())
+
+    def test_cadres_apparition_disparition_et_video_navigateur(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "court.mp4"
+            fabriquer_video(chemin)
+            boite = {**detection_telephone(), "x1": 12, "y1": 24, "x2": 48, "y2": 52}
+            with patch("detection.detecter_image", side_effect=[[boite], [], [boite]]):
+                analyser_video(chemin, "v1", "court", [67], 1, None, dossier)
+            cible = Path(dossier) / "annote.mp4"
+            creer_video_annotee(chemin, Path(dossier) / "observations.jsonl", cible, 2.5)
+            sonde = subprocess.run([
+                "ffprobe", "-v", "error", "-show_streams", "-of", "json", str(cible),
+            ], capture_output=True, text=True, check=True)
+            piste = json.loads(sonde.stdout)["streams"][0]
+            self.assertEqual(piste["codec_name"], "h264")
+            self.assertEqual(piste["pix_fmt"], "yuv420p")
+            self.assertAlmostEqual(float(piste["duration"]), 2.5, delta=0.04)
+            capture = cv2.VideoCapture(str(cible))
+            try:
+                for instant, attendu in ((0.4, True), (1.4, False), (2.2, True)):
+                    capture.set(cv2.CAP_PROP_POS_MSEC, instant * 1000)
+                    succes, image = capture.read()
+                    self.assertTrue(succes)
+                    # Mesurer un côté du cadre, loin du libellé, après compression H.264.
+                    b, g, r = image[36, 12].astype(float)
+                    self.assertEqual(bool(g > r + 45 and g > b + 45), attendu)
+            finally:
+                capture.release()
+
+    def test_echec_apercu_preserve_mesures(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "court.mp4"
+            fabriquer_video(chemin, nombre=3)
+            with patch("detection.charger_modele", return_value=None), \
+                    patch("detection.detecter_image", side_effect=lambda *args: [detection_telephone()]), \
+                    patch("detection.creer_video_annotee", side_effect=RuntimeError("encodeur indisponible")):
+                resultat = traiter_lot([SourceVideo("court", "serveur", chemin)], [67], 1, dossier)
+            self.assertEqual(resultat[0]["statut"], "ok")
+            self.assertGreater(resultat[0]["duree_visibilite_s"], 0)
+            apercus = json.loads((Path(dossier) / "apercus.json").read_text())
+            self.assertIn("erreur", apercus["v000001"])
 
     def test_sources_non_valides(self):
         for url in ("http://youtube.com/watch?v=x", "https://youtube.com.evil.test/x",

@@ -8,6 +8,7 @@ import math
 import os
 import subprocess
 import tempfile
+import unicodedata
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
@@ -301,6 +302,112 @@ def detecter_image(modele, suivis, image, categories):
     return detections
 
 
+def dessiner_detections(image, detections):
+    """Dessiner les boîtes et libellés sur une copie, sans modifier l'image source."""
+    import cv2
+
+    hauteur, largeur = image.shape[:2]
+    facteur = min(1.0, 960 / max(largeur, hauteur))
+    dimensions = (max(2, int(largeur * facteur) // 2 * 2),
+                  max(2, int(hauteur * facteur) // 2 * 2))
+    apercu = cv2.resize(image, dimensions)
+    for detection in detections:
+        x1, x2 = [max(0, min(dimensions[0] - 1, round(detection[cle] * dimensions[0] / largeur)))
+                  for cle in ("x1", "x2")]
+        y1, y2 = [max(0, min(dimensions[1] - 1, round(detection[cle] * dimensions[1] / hauteur)))
+                  for cle in ("y1", "y2")]
+        couleur = (70, 220, 70)
+        cv2.rectangle(apercu, (x1, y1), (x2, y2), couleur, 2)
+        # La police intégrée à OpenCV ne gère pas les accents français.
+        categorie = CATEGORIES[detection["categorie_id"]]
+        libelle = unicodedata.normalize("NFKD", categorie).encode("ascii", "ignore").decode()
+        libelle += f" {detection['confiance']:.0%}"
+        largeur_texte = cv2.getTextSize(libelle, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0][0]
+        position = (max(0, min(x1, dimensions[0] - largeur_texte - 3)),
+                    min(dimensions[1] - 3, max(16, y1 - 6)))
+        cv2.putText(apercu, libelle, position, cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(apercu, libelle, position, cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, couleur, 1, cv2.LINE_AA)
+    return apercu
+
+
+def creer_video_annotee(chemin, observations, destination, duree,
+                       progression=lambda valeur: None):
+    """Encoder un MP4 H.264 lisible dans le navigateur, sans relancer YOLO.
+
+    Les boîtes de la dernière image analysée restent affichées jusqu'à l'analyse
+    suivante. Une observation vide les efface. La cadence variable du média est
+    convertie à 25 images/s en conservant sa chronologie et sa piste audio éventuelle.
+    Seules deux images décodées et une observation sont gardées en mémoire.
+    """
+    import cv2
+
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    partiel = destination.with_suffix(".part.mp4")
+    capture = cv2.VideoCapture(str(chemin))
+    encodeur = None
+    try:
+        succes, precedente = capture.read()
+        if not succes:
+            raise ValueError("Impossible de relire la vidéo pour créer l'aperçu.")
+        precedent_s = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
+        hauteur, largeur = dessiner_detections(precedente, []).shape[:2]
+        with Path(observations).open(encoding="utf-8") as entree, tempfile.TemporaryFile() as erreurs:
+            encodeur = subprocess.Popen([
+                "ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pixel_format", "bgr24",
+                "-video_size", f"{largeur}x{hauteur}", "-framerate", "25", "-i", "pipe:0",
+                "-i", str(chemin), "-map", "0:v:0", "-map", "1:a:0?",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                "-threads", os.getenv("VISIOTRACK_CPU_THREADS", "2"),
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k",
+                "-t", str(duree), "-movflags", "+faststart", str(partiel),
+            ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=erreurs)
+            prochaine = json.loads(ligne) if (ligne := entree.readline()) else None
+            detections = []
+            numero_sortie = 0
+
+            def encoder_plage(image, horodatage, fin):
+                """Répéter une image jusqu'au prochain horodatage, sans accélérer le média."""
+                nonlocal prochaine, detections, numero_sortie
+                while prochaine is not None and prochaine["horodatage_s"] <= horodatage + 1e-8:
+                    detections = prochaine["detections"]
+                    prochaine = json.loads(ligne) if (ligne := entree.readline()) else None
+                if numero_sortie / 25 < fin - 1e-8:
+                    pixels = dessiner_detections(image, detections).tobytes()
+                    while numero_sortie / 25 < fin - 1e-8:
+                        encodeur.stdin.write(pixels)
+                        numero_sortie += 1
+
+            while True:
+                succes, image = capture.read()
+                if not succes:
+                    break
+                horodatage = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
+                encoder_plage(precedente, precedent_s, min(horodatage, duree))
+                precedente, precedent_s = image, horodatage
+                progression(min(horodatage / duree, 0.999))
+            encoder_plage(precedente, precedent_s, duree)
+            encodeur.stdin.close()
+            if encodeur.wait(timeout=60) != 0:
+                raise ValueError("L'encodage de l'aperçu vidéo a échoué.")
+        partiel.replace(destination)
+        progression(1.0)
+    finally:
+        capture.release()
+        if encodeur is not None:
+            if encodeur.poll() is None:
+                encodeur.kill()
+            encodeur.wait()
+            if encodeur.stdin is not None and not encodeur.stdin.closed:
+                try:
+                    encodeur.stdin.close()
+                except BrokenPipeError:
+                    pass
+        partiel.unlink(missing_ok=True)
+
+
 def analyser_video(chemin, video_id, nom, categories, frequence, modele,
                    dossier, progression=lambda valeur: None):
     """Décoder séquentiellement ; échantillonner sur les horodatages réels du MP4."""
@@ -329,6 +436,9 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
     effectifs = Counter()
     prochaine_cible = 0.0
     images_lues = images_analysees = 0
+    # Conserver aussi les observations vides : elles font disparaître les cadres
+    # dans l'aperçu, contrairement au CSV qui ne contient que les détections.
+    observations = (Path(dossier) / "observations.jsonl").open("w", encoding="utf-8")
     try:
         while capture.grab():
             horodatage = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
@@ -349,12 +459,15 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
             # Le tout premier échantillon représente le début du média à t=0.
             debut_echantillon = horodatage if images_analysees else 0.0
             detections = detecter_image(modele, suivis, image, categories)
+            observations.write(json.dumps({"horodatage_s": horodatage, "detections": detections}) + "\n")
             effectifs = Counter(d["categorie_id"] for d in detections)
             for detection in detections:
-                categorie = detection.pop("categorie_id")
+                categorie = detection["categorie_id"]
                 redacteur_detections.writerow({"video_id": video_id, "image": images_lues - 1,
                                                "horodatage_s": horodatage,
-                                               "categorie": CATEGORIES[categorie], **detection})
+                                               "categorie": CATEGORIES[categorie],
+                                               **{cle: valeur for cle, valeur in detection.items()
+                                                  if cle != "categorie_id"}})
             images_analysees += 1
             prochaine_cible = (math.floor((horodatage + 1e-8) * frequence) + 1) / frequence
             progression(min(horodatage / duree, 0.999))
@@ -373,6 +486,7 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
         capture.release()
         fichier_intervalles.close()
         fichier_detections.close()
+        observations.close()
     return [{"video_id": video_id, "source": texte_csv(nom), "statut": "ok", "erreur": "",
              "duree_totale_s": duree, "categorie": CATEGORIES[categorie],
              "objet_detecte": mesure.maximums[categorie] > 0,
@@ -389,6 +503,7 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
 
     modele = charger_modele()
     resultats = []
+    apercus = {}
     with ExitStack() as pile:
         sorties = {}
         for nom, colonnes in (("resultats", COLONNES_RESULTATS),
@@ -405,12 +520,24 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
                     chemin = preparer_video(source, temporaire)
                     lignes = analyser_video(
                         chemin, video_id, source.nom, categories, frequence, modele, temporaire,
-                        lambda valeur: progression(numero, len(sources), source.nom, valeur))
+                        lambda valeur: progression(numero, len(sources), source.nom, valeur * 0.7))
                     # Une vidéo en erreur ne laisse jamais d'intervalles partiels
                     # dans les exports communs au lot.
                     for nom in ("intervalles", "detections"):
                         with (Path(temporaire) / f"{nom}.csv").open(encoding="utf-8-sig", newline="") as entree:
                             sorties[nom].writerows(csv.DictReader(entree))
+                    try:
+                        creer_video_annotee(
+                            chemin, Path(temporaire) / "observations.jsonl",
+                            Path(dossier) / "apercus" / f"{video_id}.mp4",
+                            lignes[0]["duree_totale_s"],
+                            lambda valeur: progression(numero, len(sources),
+                                                       f"Création de l'aperçu : {source.nom}",
+                                                       0.7 + valeur * 0.3))
+                        apercus[video_id] = {"fichier": f"apercus/{video_id}.mp4"}
+                    except Exception:
+                        # Un échec d'encodage ne remet pas en cause les mesures CSV.
+                        apercus[video_id] = {"erreur": "L'aperçu vidéo n'a pas pu être créé. Les mesures restent disponibles."}
             except Exception as erreur:
                 lignes = [{"video_id": video_id, "source": texte_csv(source.nom),
                            "statut": "erreur", "erreur": texte_csv(str(erreur)),
@@ -418,4 +545,5 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
             sorties["resultats"].writerows(lignes)
             resultats.extend(lignes)
             progression(numero, len(sources), source.nom, 1.0)
+    (Path(dossier) / "apercus.json").write_text(json.dumps(apercus), encoding="utf-8")
     return resultats
