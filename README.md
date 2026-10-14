@@ -636,7 +636,14 @@ profils ou presse). L’option est désactivée par défaut. Le module indépend
 `telechargement_videos.py` utilise [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options),
 inclus dans les dépendances de base, sans charger les dépendances d’analyse vidéo.
 Il télécharge les publications retenues après les filtres, après la fermeture de
-Selenium. Il n’utilise ni cookies du navigateur ni connexion à un compte TikTok.
+Selenium. Avant cette fermeture, seuls les cookies techniques TikTok autorisés par
+une liste fermée et le User-Agent sont repris depuis la session anonyme. Les cookies
+de connexion (`sessionid`, `sid_tt`, etc.) sont exclus. Un fichier temporaire privé,
+hors des exports, transmet les cookies techniques à yt-dlp puis est détruit après
+chaque téléchargement. Le contexte en mémoire est effacé à la fin du lot. Aucune
+connexion à un compte ni conservation de session authentifiée n’est ajoutée.
+L’extra `curl-cffi` de yt-dlp apporte le support réseau de navigateur décrit dans sa
+[documentation officielle](https://github.com/yt-dlp/yt-dlp#impersonation).
 
 Le TXT conserve la nomenclature existante : `*id_123456789` correspond à
 `videos/id_123456789.mp4` dans l’archive ZIP. Avec cette option, l’identifiant est
@@ -648,7 +655,13 @@ Les champs `video_id`, `video_url` (URL publique de la publication) et
 `video_fichier` (chemin relatif dans l’archive) sont conservés dans les CSV par
 publication et les JSON. `videos.csv` et `videos.json` détaillent le résultat par
 publication. `video_fichier` reste vide/null en cas d’échec ; aucun fichier fictif
-n’est annoncé. Le bilan MP4 apparaît dans les résultats Streamlit.
+n’est annoncé. Le bilan MP4 apparaît dans les résultats Streamlit. Les erreurs sont
+distinguées : connexion demandée, vérification TikTok, HTTP 403/429, problème réseau,
+extraction de la page impossible ou format MP4 absent. `video_diagnostic` indique
+la version de yt-dlp, son code de sortie, la disponibilité de curl-cffi et le nombre
+de cookies techniques transmis. La sortie brute est lue dans un tampon mémoire
+borné, puis effacée : aucune valeur de cookie ni URL signée n’entre dans les journaux,
+les CSV ou les JSON. Ces diagnostics ne prouvent pas à eux seuls une cause unique.
 
 Les doublons sont évités par identifiant dans la collecte et un MP4 déjà présent
 est réutilisé dans la même session. Les téléchargements sont séquentiels : 120 s

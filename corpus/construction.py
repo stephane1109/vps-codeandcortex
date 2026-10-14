@@ -36,9 +36,9 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     exporter_json(dossier / "publications.json", publications)
     if (journal.get("parametres") or {}).get("telecharger_mp4") or any("video_statut" in p for p in publications):
         videos = [{**correspondance_video(p), "video_statut": p.get("video_statut", "non_retenue"),
-                   "video_message": p.get("video_message")} for p in publications]
+                   "video_message": p.get("video_message"), "video_diagnostic": p.get("video_diagnostic")} for p in publications]
         exporter_json(dossier / "videos.json", videos)
-        exporter_csv(dossier / "videos.csv", videos, [*CHAMPS_VIDEO, "video_statut", "video_message"])
+        exporter_csv(dossier / "videos.csv", videos, [*CHAMPS_VIDEO, "video_statut", "video_message", "video_diagnostic"])
     exporter_json(dossier / "commentaires.json", commentaires)
     exporter_json(dossier / "journal.json", journal)
     exporter_csv(dossier / "engagement.csv", lignes_engagement(publications), COLONNES_ENGAGEMENT)

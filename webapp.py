@@ -805,6 +805,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         LOG.error("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
     finally:
+        contexte_mp4 = {}
+        if job.settings.telecharger_mp4 and job.records and connexion is not None:
+            try:
+                from telechargement_videos import capturer_contexte_anonyme
+                contexte_mp4 = capturer_contexte_anonyme(connexion.obtenir_navigateur())
+            except Exception:
+                pass
         if connexion is not None:
             try:
                 connexion.fermer()
@@ -817,13 +824,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
         if job.settings.telecharger_mp4 and job.records:
             try:
-                final_message += " " + telecharger_mp4_collecte(job)
+                final_message += " " + telecharger_mp4_collecte(job, contexte_mp4)
                 if job.stop.is_set():
                     final_status = "stopped"
             except Exception:
                 # Garder les textes et finaliser l’archive même si ce module échoue.
                 LOG.error("Téléchargement MP4 interrompu pour %s", job.id)
                 final_message += " Téléchargement MP4 interrompu ; les textes sont conservés."
+            finally:
+                contexte_mp4.clear()
         if job.base:
             try:
                 from corpus.construction import construire_exports
@@ -845,7 +854,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                    finished=time.monotonic(), frame=b"")
 
 
-def telecharger_mp4_collecte(job):
+def telecharger_mp4_collecte(job, contexte_anonyme=None):
     """Traiter les publications retenues une par une, après la fermeture de Selenium."""
     from telechargement_videos import telecharger_video, resultat_video
     debut = time.monotonic()
@@ -870,7 +879,7 @@ def telecharger_mp4_collecte(job):
                 try:
                     resultat = telecharger_video(publication, job.directory / "videos", arreter=job.stop.is_set,
                         taille_max_mo=maximum_mo, delai_max_s=min(120, max(1, 900-(time.monotonic()-debut))),
-                        reserve_mo=512 + 2 * (volume // 1024**2 + maximum_mo))
+                        reserve_mo=512 + 2 * (volume // 1024**2 + maximum_mo), contexte_anonyme=contexte_anonyme)
                     if resultat.get("video_fichier"):
                         volume += (job.directory / resultat["video_fichier"]).stat().st_size
                 except Exception:

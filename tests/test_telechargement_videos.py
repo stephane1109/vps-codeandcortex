@@ -28,8 +28,17 @@ class TestsTelechargementVideos(unittest.TestCase):
         self.processus.wait.return_value = 0
         self.processus.poll.return_value = 0
         self.commande = None
+        self.sortie_ytdlp = b""
+        self.cookie_contenu = None
+        self.chemin_cookie = None
         def lancer(commande, **options):
             self.commande = commande
+            self.processus.stdout = io.BytesIO(self.sortie_ytdlp)
+            if "--cookies" in commande:
+                self.chemin_cookie = Path(commande[commande.index("--cookies") + 1])
+                self.cookie_contenu = self.chemin_cookie.read_text()
+                self.assertEqual(self.chemin_cookie.stat().st_mode & 0o777, 0o600)
+                self.assertNotIn(self.dossier, self.chemin_cookie.parents)
             Path(commande[commande.index("--output") + 1]).write_bytes(MP4)
             return self.processus
         for cible, options in [
@@ -147,3 +156,68 @@ class TestsTelechargementVideos(unittest.TestCase):
         self.assertEqual(selection.count("*id_"), 1)
         self.assertIn("*profil_bfmtv", selection)
         self.assertIn("Un texte @bfmtv", selection)
+
+
+    def test_cookies_techniques_uniquement_et_fichier_detruit(self):
+        navigateur = Mock()
+        navigateur.current_url = PUBLICATION["url"]
+        navigateur.execute_script.return_value = "Mozilla/5.0 Chrome/130.0"
+        navigateur.get_cookies.return_value = [
+            {"name": "ttwid", "value": "technique", "domain": ".tiktok.com", "path": "/", "secure": True},
+            {"name": "sessionid", "value": "secret-compte", "domain": ".tiktok.com"},
+            {"name": "sid_tt", "value": "secret-compte", "domain": ".tiktok.com"},
+            {"name": "ttwid", "value": "tiers", "domain": ".example.org"},
+            {"name": "msToken", "value": "injection\nligne", "domain": ".tiktok.com"},
+        ]
+        contexte = module.capturer_contexte_anonyme(navigateur)
+        self.assertEqual(len(contexte["cookies"]), 1)
+        resultat = module.telecharger_video(PUBLICATION, self.dossier, contexte_anonyme=contexte)
+        self.assertEqual(resultat["video_statut"], "telecharge")
+        self.assertIn("technique", self.cookie_contenu)
+        self.assertNotIn("secret-compte", self.cookie_contenu)
+        self.assertNotIn("tiers", self.cookie_contenu)
+        self.assertFalse(self.chemin_cookie.exists())
+        self.assertIn("--user-agent", self.commande)
+        self.assertEqual(resultat["video_diagnostic"]["cookies_techniques"], 1)
+        self.assertNotIn("technique\t", json.dumps(resultat))
+        navigateur.get.assert_not_called()
+
+    def test_contexte_absent_ou_autre_domaine_reste_anonyme(self):
+        navigateur = Mock(current_url="https://example.org/")
+        self.assertEqual(module.capturer_contexte_anonyme(navigateur), {})
+        navigateur.get_cookies.assert_not_called()
+        navigateur.current_url = PUBLICATION["url"]
+        navigateur.get_cookies.side_effect = RuntimeError("Session perdue")
+        self.assertEqual(module.capturer_contexte_anonyme(navigateur), {})
+
+    def test_diagnostic_precis_sans_sortie_brute(self):
+        cas = [
+            ("ERROR: HTTP Error 403: Forbidden https://cdn.example/file?secret=xyz", "acces_refuse"),
+            ("ERROR: HTTP Error 429: Too Many Requests", "requetes_limitees"),
+            ("ERROR: TikTok is requiring login for access to this content", "connexion_requise"),
+            ("ERROR: Unable to extract challenge data", "verification_requise"),
+            ("ERROR: Requested format is not available", "format_absent"),
+            ("ERROR: Unable to extract universal data for rehydration", "extraction_impossible"),
+            ("ERROR: Impersonation target is not available", "support_navigateur_absent"),
+            ("ERROR: no such option: --option", "configuration_invalide"),
+            ("ERROR: certificate verify failed", "reseau_indisponible"),
+            ("video does not pass filter", "identifiant_rejete"),
+        ]
+        for texte, attendu in cas:
+            with self.subTest(attendu=attendu):
+                self.assertEqual(module.diagnostiquer_echec(texte, 1), attendu)
+        self.processus.wait.return_value = 1
+        self.sortie_ytdlp = cas[0][0].encode()
+        resultat = module.telecharger_video(PUBLICATION, self.dossier)
+        self.assertEqual(resultat["video_statut"], "acces_refuse")
+        self.assertEqual(resultat["video_diagnostic"]["code_sortie"], 1)
+        self.assertNotIn("secret=xyz", json.dumps(resultat))
+        self.assertEqual(list(self.dossier.iterdir()), [])
+
+    def test_sortie_bornee_et_pas_de_fausse_cause_cookie(self):
+        from collections import deque
+        morceaux = deque(maxlen=8)
+        module.lire_sortie_bornee(io.BytesIO(b"x" * 200000), morceaux)
+        self.assertLessEqual(sum(map(len, morceaux)), 32768)
+        self.assertEqual(module.diagnostiquer_echec("Use --cookies-from-browser or --cookies", 1), "indisponible")
+        self.assertEqual(module.diagnostiquer_echec("", 0), "aucun_fichier")
