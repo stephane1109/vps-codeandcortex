@@ -416,12 +416,48 @@ def dessiner_detections(image, detections):
     return apercu
 
 
+def reduire_image_continuite(image):
+    """Préparer une petite image pour vérifier le plan sans nouvelle inférence YOLO."""
+    import cv2
+
+    return cv2.GaussianBlur(cv2.resize(image, (160, 90), interpolation=cv2.INTER_AREA), (5, 5), 0)
+
+
+def plan_a_change(precedente, actuelle):
+    """Détecter une rupture visuelle étendue, plutôt que le seul mouvement d'une main.
+
+    Comparer les couleurs et la structure spatiale sur des miniatures lissées.
+    Une forte variation d'éclairage peut aussi effacer un cadre, par prudence.
+    Ces seuils sont fixes : aucune nouvelle option technique dans l'interface.
+    """
+    import cv2
+    import numpy as np
+
+    if precedente is None:
+        return False
+    difference = cv2.absdiff(precedente, actuelle).mean(axis=2)
+    moyenne = float(difference.mean())
+    if moyenne >= 24 and float((difference >= 30).mean()) >= 0.45:
+        return True
+    # Une coupe dans un décor aux couleurs proches peut surtout changer les formes.
+    if moyenne >= 12:
+        ancien_gris = cv2.cvtColor(precedente, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        nouveau_gris = cv2.cvtColor(actuelle, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        ancien_gris -= ancien_gris.mean()
+        nouveau_gris -= nouveau_gris.mean()
+        norme = float(np.linalg.norm(ancien_gris) * np.linalg.norm(nouveau_gris))
+        if norme > 1e-6 and float((ancien_gris * nouveau_gris).sum()) / norme < 0.55:
+            return True
+    return False
+
+
 def creer_video_annotee(chemin, observations, destination, duree,
                        progression=lambda valeur: None):
     """Encoder un MP4 H.264 lisible dans le navigateur, sans relancer YOLO.
 
-    Les boîtes de la dernière image analysée restent affichées jusqu'à l'analyse
-    suivante. Une observation vide les efface. La cadence variable du média est
+    Les boîtes ne survivent pas à une rupture de plan détectée. Elles restent
+    masquées jusqu'à une nouvelle observation positive, même si l'ancien plan
+    revient. Une observation vide les efface aussi. La cadence variable du média est
     convertie à 25 images/s en conservant sa chronologie et sa piste audio éventuelle.
     Seules deux images décodées et une observation sont gardées en mémoire.
     """
@@ -451,12 +487,30 @@ def creer_video_annotee(chemin, observations, destination, duree,
             prochaine = json.loads(ligne) if (ligne := entree.readline()) else None
             detections = []
             numero_sortie = 0
+            miniature_precedente = None
+            reference_plan = None
+            derniere_rupture_s = -1.0
 
             def encoder_plage(image, horodatage, fin):
                 """Répéter une image jusqu'au prochain horodatage, sans accélérer le média."""
                 nonlocal prochaine, detections, numero_sortie
+                nonlocal miniature_precedente, reference_plan, derniere_rupture_s
+                miniature = reduire_image_continuite(image)
+                # Comparer chaque image source, même entre deux analyses à 1 Hz.
+                # La référence permet aussi d'effacer le cadre après un déplacement
+                # progressif mais important de la caméra depuis la détection.
+                if (plan_a_change(miniature_precedente, miniature)
+                        or (reference_plan is not None and plan_a_change(reference_plan, miniature))):
+                    detections = []
+                    reference_plan = None
+                    derniere_rupture_s = horodatage
+                miniature_precedente = miniature
                 while prochaine is not None and prochaine["horodatage_s"] <= horodatage + 1e-8:
-                    detections = prochaine["detections"]
+                    # Une détection sur l'image exacte de la coupe est valable ;
+                    # une ancienne détection ne peut jamais ressusciter son cadre.
+                    if prochaine["horodatage_s"] >= derniere_rupture_s - 1e-8:
+                        detections = prochaine["detections"]
+                        reference_plan = miniature if detections else None
                     prochaine = json.loads(ligne) if (ligne := entree.readline()) else None
                 if numero_sortie / 25 < fin - 1e-8:
                     pixels = dessiner_detections(image, detections).tobytes()

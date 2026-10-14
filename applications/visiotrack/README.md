@@ -18,10 +18,20 @@ La lecture, la pause et le déplacement dans la vidéo permettent de vérifier l
 Le lecteur fait au maximum 360 pixels de large (environ 360 × 640 pour un TikTok
 vertical 9:16) et s'adapte aux petits écrans. Le rapport d'image original est conservé.
 
-Les cadres reprennent les positions de la dernière image analysée jusqu'à l'analyse
-suivante. À 1 image/s, ils sont donc actualisés une fois par seconde et peuvent être
-décalés si l'objet bouge entre deux analyses. Augmenter la fréquence pour un suivi
-visuel plus précis. Une analyse sans détection efface les cadres précédents.
+Les cadres reprennent les positions de la dernière image analysée dans le même
+plan. Chaque image source est comparée à la précédente ainsi qu'à l'image de la
+dernière détection : une rupture visuelle ou un déplacement important du plan
+efface immédiatement les cadres. Ils restent masqués jusqu'à une nouvelle
+détection dans le plan courant, même si l'ancien plan revient entre-temps.
+Une détection effectuée sur l'image exacte de la coupe peut afficher un nouveau cadre.
+Une analyse sans détection efface aussi les cadres précédents.
+
+Cette vérification légère ne relance pas YOLO et ne modifie ni les mesures de
+visibilité, ni les CSV. Elle utilise une comparaison visuelle : une transition très
+subtile peut être manquée et un fort changement d'éclairage peut effacer un cadre.
+À 1 image/s, les positions restent actualisées une fois par seconde ; le mouvement
+du téléphone dans un plan stable peut encore décaler le cadre. Augmenter la
+fréquence pour un suivi visuel plus précis.
 L'aperçu conserve le son lorsqu'il existe dans le média importé ; les téléchargements
 URL en piste vidéo seule ne contiennent pas de son.
 

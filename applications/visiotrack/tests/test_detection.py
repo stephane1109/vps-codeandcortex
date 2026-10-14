@@ -16,6 +16,7 @@ from detection import (MesureVisibilite, SourceVideo, analyser_video, creer_suiv
                        creer_video_annotee,
                        detecter_image, inventorier_sources, preparer_video,
                        reprojeter_boites, supprimer_cadres_imbriques,
+                       plan_a_change, reduire_image_continuite,
                        texte_csv, traiter_lot, verifier_url)
 
 
@@ -251,6 +252,60 @@ class TestsVisibilite(unittest.TestCase):
             self.assertGreater(resultat[0]["duree_visibilite_s"], 0)
             apercus = json.loads((Path(dossier) / "apercus.json").read_text())
             self.assertIn("erreur", apercus["v000001"])
+
+    def test_rupture_visuelle_et_petits_mouvements(self):
+        image = np.full((120, 160, 3), 60, dtype=np.uint8)
+        miniature = reduire_image_continuite(image)
+        self.assertFalse(plan_a_change(None, miniature))
+        self.assertFalse(plan_a_change(miniature, miniature))
+        mouvement_local = image.copy()
+        mouvement_local[40:50, 40:50] = 200
+        self.assertFalse(plan_a_change(miniature, reduire_image_continuite(mouvement_local)))
+        self.assertTrue(plan_a_change(miniature, reduire_image_continuite(255 - image)))
+        # Même histogramme, mais contenu disposé différemment : la coupe est repérée.
+        image[:, :80] = 180
+        self.assertTrue(plan_a_change(reduire_image_continuite(image),
+                                     reduire_image_continuite(image[:, ::-1].copy())))
+
+    def test_coupe_entre_analyses_efface_cadres_sans_resurrection(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "coupes.mp4"
+            video = cv2.VideoWriter(str(chemin), cv2.VideoWriter_fourcc(*"mp4v"), 10, (160, 90))
+            for numero in range(30):
+                couleur = (40, 40, 40)
+                if 5 <= numero < 7:
+                    couleur = (0, 0, 180)  # Coupe à 0,5 s, avant l'analyse de 1 s.
+                elif 15 <= numero < 20:
+                    couleur = (180, 180, 180)
+                elif numero >= 20:
+                    couleur = (180, 0, 0)  # Coupe sur une image analysée à 2 s.
+                video.write(np.full((90, 160, 3), couleur, dtype=np.uint8))
+            video.release()
+            premiere = {**detection_telephone(), "x1": 12, "y1": 24, "x2": 48, "y2": 52}
+            seconde = {**premiere, "x1": 90, "x2": 130}
+            observations = Path(dossier) / "observations.jsonl"
+            observations.write_text("\n".join(json.dumps({"horodatage_s": instant, "detections": [boite]})
+                                              for instant, boite in ((0, premiere), (1, seconde), (2, seconde))))
+            cible = Path(dossier) / "annote.mp4"
+            creer_video_annotee(chemin, observations, cible, 3)
+            capture = cv2.VideoCapture(str(cible))
+            try:
+                # Le retour de l'ancien plan à 0,7 s ne doit pas restaurer le cadre.
+                for instant, gauche, droite in ((0.4, True, False), (0.52, False, False),
+                                                (0.72, False, False), (0.92, False, False),
+                                                (1.12, False, True), (1.52, False, False),
+                                                (1.92, False, False), (2.04, False, True)):
+                    capture.set(cv2.CAP_PROP_POS_MSEC, instant * 1000)
+                    succes, image = capture.read()
+                    self.assertTrue(succes)
+                    for x, attendu in ((12, gauche), (90, droite)):
+                        b, g, r = image[36, x].astype(float)
+                        self.assertEqual(bool(g > r + 45 and g > b + 45), attendu,
+                                         f"Cadre x={x}, instant={instant}")
+            finally:
+                capture.release()
 
     def test_sources_non_valides(self):
         for url in ("http://youtube.com/watch?v=x", "https://youtube.com.evil.test/x",

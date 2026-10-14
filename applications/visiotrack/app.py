@@ -67,7 +67,8 @@ def afficher_apercu(tableau, repertoire):
         st.video(str(repertoire / apercu["fichier"]), width=360)
         frequence = videos.loc[identifiant, "frequence_demandee_ips"]
         st.caption(f"Cadres verts : objets détectés. Positions actualisées à {frequence:g} image(s)/s "
-                   "et conservées jusqu'à l'analyse suivante. La visibilité ne prouve pas une utilisation.")
+                   "; cadres effacés dès qu'un changement de plan est repéré, "
+                   "jusqu'à une nouvelle détection. La visibilité ne prouve pas une utilisation.")
     else:
         st.warning(apercu.get("erreur", "Aperçu indisponible pour cette vidéo."))
 
