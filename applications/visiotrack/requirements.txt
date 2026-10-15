@@ -2,6 +2,10 @@ streamlit>=1.49,<2
 ultralytics==8.3.253
 opencv-python-headless==4.11.0.86
 numpy>=1.26.4,<2
+# Garder une version de PyArrow compatible avec NumPy 1.26 pour les tableaux Streamlit.
+pyarrow==19.0.1
 yt-dlp[default]>=2025.12.8
 pandas>=2.2,<3
 lap>=0.5.12,<0.6
+
+
