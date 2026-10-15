@@ -27,15 +27,49 @@ def afficher_resultats():
     succes = tableau[tableau.statut == "ok"].video_id.nunique()
     erreurs = tableau[tableau.statut == "erreur"].video_id.nunique()
     st.caption(f"{succes} vidéo(s) analysée(s) · {erreurs} erreur(s). Une ligne par vidéo et catégorie.")
-    st.dataframe(tableau, hide_index=True, width="stretch", column_config={
-        "video_id": "Identifiant", "source": "Vidéo", "statut": "Statut", "erreur": "Erreur",
-        "duree_totale_s": st.column_config.NumberColumn("Durée totale (s)", format="%.3f"),
-        "categorie": "Objet", "objet_detecte": "Détecté",
-        "duree_visibilite_s": st.column_config.NumberColumn("Visibilité (s)", format="%.3f"),
-        "pourcentage_visible": st.column_config.NumberColumn("Temps visible (%)", format="%.2f"),
-        "maximum_simultane": "Maximum simultané",
-        "frequence_demandee_ips": "Images/s demandées", "images_analysees": "Images analysées",
-    })
+    # Les mêmes explications alimentent les info-bulles et la légende dépliable.
+    colonnes = {
+        "video_id": st.column_config.Column("Identifiant", help=(
+            "Identifiant attribué à la vidéo dans ce lot, par exemple v000001. "
+            "Il permet de retrouver la même vidéo dans les trois exports CSV.")),
+        "source": st.column_config.Column("Vidéo", help=(
+            "Nom du fichier, emplacement dans une archive ZIP ou URL de la vidéo analysée.")),
+        "statut": st.column_config.Column("Statut", help=(
+            "« ok » : analyse terminée. « erreur » : la vidéo n'a pas pu être analysée ; "
+            "ses mesures ne sont pas renseignées.")),
+        "erreur": st.column_config.Column("Erreur", help=(
+            "Explication du problème rencontré lors de l'import ou de l'analyse. "
+            "Cette cellule reste vide si l'analyse a réussi.")),
+        "duree_totale_s": st.column_config.NumberColumn("Durée totale (s)", format="%.3f", help=(
+            "Durée complète de la piste vidéo, en secondes. Ce n'est pas le temps de calcul de l'analyse.")),
+        "categorie": st.column_config.Column("Objet", help=(
+            "Catégorie recherchée sur cette ligne, par exemple smartphone. "
+            "Une vidéo peut avoir plusieurs lignes si plusieurs catégories ont été sélectionnées.")),
+        "objet_detecte": st.column_config.CheckboxColumn("Détecté", help=(
+            "Case cochée si au moins un objet de cette catégorie a été détecté sur une image analysée. "
+            "Une case non cochée signifie qu'aucun n'a été détecté, sans garantir son absence dans la vidéo.")),
+        "duree_visibilite_s": st.column_config.NumberColumn("Visibilité (s)", format="%.3f", help=(
+            "Durée cumulée estimée pendant laquelle au moins un objet de cette catégorie est visible. "
+            "Deux smartphones visibles ensemble pendant 10 secondes comptent pour 10 secondes, pas 20.")),
+        "pourcentage_visible": st.column_config.NumberColumn("Temps visible (%)", format="%.2f", help=(
+            "Part de la durée vidéo pendant laquelle la catégorie est visible : visibilité ÷ durée totale × 100. "
+            "Par exemple, 10 secondes sur une vidéo de 40 secondes donnent 25 %.")),
+        "maximum_simultane": st.column_config.NumberColumn("Maximum simultané", format="%d", help=(
+            "Plus grand nombre d'objets de cette catégorie détectés sur une même image analysée. "
+            "Deux smartphones visibles ensemble donnent 2 ; montrés l'un après l'autre, ils peuvent donner 1. "
+            "Ce n'est pas le nombre total d'objets différents dans la vidéo.")),
+        "frequence_demandee_ips": st.column_config.NumberColumn("Images/s demandées", help=(
+            "Nombre d'images à analyser par seconde demandé au lancement : 1 signifie une image par seconde, "
+            "5 signifie cinq images par seconde. Le nombre effectivement analysé reste limité par la cadence du fichier.")),
+        "images_analysees": st.column_config.NumberColumn("Images analysées", format="%d", help=(
+            "Nombre total d'images de cette vidéo effectivement analysées, y compris celles sans détection. "
+            "Ce n'est ni le nombre d'objets détectés ni le nombre total d'images du fichier.")),
+    }
+    st.dataframe(tableau, hide_index=True, width="stretch", column_config=colonnes)
+    with st.expander("Légende des colonnes (?)"):
+        st.caption("Ces explications sont aussi disponibles en survolant les en-têtes du tableau.")
+        st.table([{"Colonne": configuration["label"], "Signification": configuration["help"]}
+                  for configuration in colonnes.values()])
     repertoire = Path(st.session_state.visiotrack_exports.name)
     afficher_apercu(tableau, repertoire)
     for colonne, (nom, libelle) in zip(st.columns(3), [
