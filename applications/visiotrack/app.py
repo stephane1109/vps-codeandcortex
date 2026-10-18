@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from detection import CATEGORIES, inventorier_sources, traiter_lot
 
@@ -50,6 +51,9 @@ def afficher_resultats():
 def afficher_application():
     """Construire les seuls réglages nécessaires à l'analyse."""
     st.set_page_config(page_title="VisioTrack", page_icon="📱", layout="wide")
+    # Même propriété Analytics que la home ; une seule visite malgré les reruns.
+    components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                    height=0, scrolling=False)
     st.title("VisioTrack")
     st.write("Mesurer la visibilité des smartphones et des objets dans vos vidéos.")
     st.caption("La présence à l'écran est mesurée ; elle ne prouve pas une utilisation effective.")

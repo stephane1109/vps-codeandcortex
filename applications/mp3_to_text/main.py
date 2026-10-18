@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
@@ -260,6 +261,9 @@ def apply_page_style() -> None:
 
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, layout="centered")
+    # Même propriété Analytics que la home ; une seule visite malgré les reruns.
+    components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                    height=0, scrolling=False)
     apply_page_style()
     st.markdown(
         '<link rel="icon" href="data:,">',
