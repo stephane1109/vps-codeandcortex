@@ -7,6 +7,17 @@ ENV PYTHONUNBUFFERED=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
     STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1024 \
+    APP_TICKET_ENFORCED=1 \
+    APP_TICKET_ID=visiotrack \
+    APP_TICKET_MAX_ACTIVE=1 \
+    APP_TICKET_COST=4 \
+    CAPACITE_SERVEUR=10 \
+    APP_TICKET_TTL_SECONDS=3600 \
+    APP_TICKET_MAX_WAITING=20 \
+    APP_TICKET_WAIT_REFRESH_MS=10000 \
+    APP_TICKET_HEARTBEAT_MS=300000 \
+    APP_TICKET_HIDDEN_RELEASE_SECONDS=0 \
+    APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release \
     YOLO_AUTOINSTALL=false \
     YOLO_CONFIG_DIR=/home/app/.config/ultralytics \
     VISIOTRACK_MODEL=/app/models/yolo11s.pt \
@@ -31,6 +42,9 @@ RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0 to
     && pip install -r requirements.txt \
     && pip uninstall -y opencv-python opencv-python-headless \
     && pip install 'opencv-python-headless==4.11.0.86'
+
+# Vérifier la conversion des tableaux dès la construction, avant le déploiement.
+RUN python -c "import pandas as pd; import pyarrow as pa; tableau = pd.DataFrame({'categorie': ['smartphone'], 'duree_visibilite_s': [1.0]}); assert pa.Table.from_pandas(tableau).to_pandas().equals(tableau)"
 
 # Deno est le moteur JavaScript recommandé par yt-dlp pour les pages YouTube.
 COPY --from=denoland/deno:bin-2.5.6 /deno /usr/local/bin/deno

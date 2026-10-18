@@ -5,3 +5,6 @@ __pycache__/
 *.zip
 *.pt
 .DS_Store
+.env
+.env.*
+!.env.example

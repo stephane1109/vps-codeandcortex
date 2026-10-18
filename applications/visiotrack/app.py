@@ -4,12 +4,14 @@ import os
 import json
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 from detection import CATEGORIES, inventorier_sources, traiter_lot
+from ticket_gate import enforce_streamlit_access, renouveler_acces_analyse
 
 
 @st.cache_resource
@@ -109,7 +111,10 @@ def afficher_apercu(tableau, repertoire):
 
 def afficher_application():
     """Construire les seuls réglages nécessaires à l'analyse."""
-    st.set_page_config(page_title="VisioTrack", page_icon="📱", layout="wide")
+    st.set_page_config(page_title="VisioTrack", page_icon="📱", layout="wide",
+                       initial_sidebar_state="expanded")
+    # Réserver un accès avant de permettre les imports ou l'analyse.
+    acces_initial = enforce_streamlit_access("visiotrack", "VisioTrack")
     st.title("VisioTrack")
     st.caption("La présence à l'écran est mesurée ; elle ne prouve pas une utilisation effective.")
 
@@ -139,9 +144,18 @@ def afficher_application():
                 temporaire = tempfile.TemporaryDirectory(prefix="visiotrack-")
                 barre_lot = st.progress(0.0, text=f"Préparation de {len(sources)} vidéo(s)…")
                 barre_video = st.progress(0.0, text="Chargement du modèle CPU…")
+                dernier_renouvellement = 0.0
 
                 def actualiser_progression(numero, total, nom, valeur):
                     """Afficher une progression globale et celle de la vidéo courante."""
+                    nonlocal dernier_renouvellement
+                    maintenant = time.monotonic()
+                    # Un long lot doit conserver son accès pendant les calculs.
+                    if maintenant - dernier_renouvellement >= 30:
+                        if not renouveler_acces_analyse(acces_initial["ticket_id"]):
+                            st.error("L'accès n'est plus actif. Reprenez l'accès avant de relancer l'analyse.")
+                            st.stop()
+                        dernier_renouvellement = maintenant
                     barre_lot.progress((numero - 1 + valeur) / total,
                                        text=f"Vidéo {numero}/{total}")
                     barre_video.progress(valeur, text=nom)

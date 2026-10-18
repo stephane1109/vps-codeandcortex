@@ -123,11 +123,17 @@ Créer une application à partir du dépôt `stephane1109/vps-codeandcortex` :
 | Port | `8501` |
 | Healthcheck HTTP | `/_stcore/health` |
 
-Le conteneur s'exécute sans privilège root et installe PyTorch CPU. Il n'a besoin ni
-de GPU, ni de Redis, ni du tableau de bord VPS. Prévoir initialement 2 vCPU et 4 Go
+Le conteneur s'exécute sans privilège root et installe PyTorch CPU. Le contrôle
+d'accès utilise le même Redis que les autres applications du tableau de bord VPS.
+Il n'a pas besoin de GPU. Prévoir initialement 2 vCPU et 4 Go
 de mémoire, à ajuster selon les résolutions et les imports, ainsi que suffisamment
 d'espace temporaire pour la plus grosse vidéo. Configurer le proxy Coolify pour
 autoriser les volumes de téléversement souhaités et les connexions WebSocket.
+
+PyArrow est fixé à la version 19.0.1 ; NumPy utilise la plage `>=2.0,<2.3`. La construction
+vérifie la conversion d'un tableau Pandas vers Arrow et son retour. Après une
+modification des dépendances, reconstruire et redéployer l'image dans Coolify :
+un simple redémarrage conserve les anciennes bibliothèques.
 
 ```bash
 docker build -t visiotrack .
@@ -144,6 +150,46 @@ Variables d'environnement techniques (aucune option supplémentaire dans l'inter
 | `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | `1024` | Taille maximale de chaque import navigateur, en Mo. |
 | `VISIOTRACK_VIDEO_DIR` | vide | Dossier serveur dont tous les MP4 seront ajoutés à chaque lot. |
 | `VISIOTRACK_MODEL` | `/app/models/yolo11s.pt` | Chemin d'un modèle YOLO compatible avec les 80 classes COCO. |
+
+### Accès utilisateur et bouton de libération
+
+Dans Coolify, définir `REDIS_URL` avec **l'URL interne exacte du Redis partagé par
+les autres applications**, avec la même base Redis. Ne pas utiliser le Redis de
+l'administration Coolify. Le conteneur doit pouvoir joindre ce service.
+
+Les valeurs suivantes sont déjà définies dans l'image Docker et peuvent être
+surchargées dans les variables d'environnement de Coolify :
+
+```dotenv
+APP_TICKET_ENFORCED=1
+APP_TICKET_ID=visiotrack
+APP_TICKET_MAX_ACTIVE=1
+APP_TICKET_COST=4
+CAPACITE_SERVEUR=10
+APP_TICKET_TTL_SECONDS=3600
+APP_TICKET_MAX_WAITING=20
+APP_TICKET_WAIT_REFRESH_MS=10000
+APP_TICKET_HEARTBEAT_MS=300000
+APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release
+APP_TICKET_HIDDEN_RELEASE_SECONDS=0
+```
+
+`CAPACITE_SERVEUR` doit correspondre à la capacité du dashboard. Un utilisateur
+peut accéder à VisioTrack à la fois ; son accès compte pour 4 unités de capacité.
+La barre latérale gauche affiche **Libérer l'accès**, puis **Reprendre l'accès**
+après libération. Les autres utilisateurs patientent dans la file. Sans Redis
+disponible, l'application bloque l'accès au lieu de laisser démarrer une analyse.
+
+Le ticket est renouvelé pendant l'analyse. Changer d'onglet ne libère pas
+l'accès automatiquement (`APP_TICKET_HIDDEN_RELEASE_SECONDS=0`). Le bouton
+de libération et la fermeture de l'onglet utilisent le mécanisme commun des autres
+applications. Le délai de 3600 secondes couvre les étapes sans progression,
+comme un téléchargement ; l'augmenter si ces étapes peuvent durer plus d'une heure.
+
+Le fichier `.env.example` documente ces réglages sans secret. Streamlit ne charge
+pas automatiquement un fichier `.env` : utiliser les variables Coolify, `export`
+dans le terminal ou `docker run --env-file .env`. Pour un essai local autonome,
+utiliser explicitement `APP_TICKET_ENFORCED=0 streamlit run app.py`.
 
 ### Grands lots et mémoire
 
@@ -180,6 +226,7 @@ l'image pour suivre les changements des plateformes.
 ## Vérification
 
 ```bash
+pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 
