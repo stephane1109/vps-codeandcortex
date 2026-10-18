@@ -10,6 +10,7 @@ from importlib import import_module
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 APP_DIR = Path(__file__).parent
 if str(APP_DIR) not in sys.path:
@@ -98,6 +99,9 @@ def _load_uploaded_content(
 
 def main() -> None:
     st.set_page_config(page_title="Symbolic Connectors", layout="wide")
+    # Même propriété Analytics que la home ; une seule visite malgré les reruns.
+    components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                    height=0, scrolling=False)
     st.markdown(
         """
         <style>
