@@ -38,15 +38,26 @@ CATEGORIES = dict(enumerate([
 COLONNES_RESULTATS = [
     "video_id", "source", "statut", "erreur", "duree_totale_s", "categorie",
     "objet_detecte", "duree_visibilite_s", "pourcentage_visible",
-    "maximum_simultane", "frequence_demandee_ips", "images_analysees",
+    "maximum_simultane", "nombre_objets_distincts_estime",
+    "frequence_demandee_ips", "images_analysees",
 ]
 COLONNES_INTERVALLES = [
     "video_id", "categorie", "debut_s", "fin_s", "duree_s", "maximum_simultane",
 ]
 COLONNES_DETECTIONS = [
     "video_id", "image", "horodatage_s", "categorie", "piste_id", "confiance",
-    "x1", "y1", "x2", "y2",
+    "x1", "y1", "x2", "y2", "plan_id", "objet_id",
 ]
+
+
+def colonnes_resultats(quantifier_temps=True, compter_distincts=False):
+    """Exporter seulement les mesures demandées, sans remplacer une absence par zéro."""
+    exclues = set()
+    if not quantifier_temps:
+        exclues.update(("duree_visibilite_s", "pourcentage_visible"))
+    if not compter_distincts:
+        exclues.add("nombre_objets_distincts_estime")
+    return [colonne for colonne in COLONNES_RESULTATS if colonne not in exclues]
 
 
 @dataclass
@@ -371,9 +382,13 @@ def detecter_image(modele, suivis, image, categories):
     for categorie in categories:
         selection = boites[boites.cls == categorie]
         pistes = suivis[categorie].update(selection, image)
-        # ByteTrack fournit l'indice de la boîte en dernière colonne. Une boîte
-        # non encore confirmée reste une visibilité réelle, avec piste_id vide.
+        # ByteTrack fournit l'indice de la boîte en dernière colonne. Conserver
+        # aussi les nouvelles pistes provisoires : leur confirmation ultérieure
+        # ne doit pas faire compter une seconde fois le même objet.
         identifiants = {int(piste[-1]): int(piste[4]) for piste in pistes}
+        identifiants.update({int(piste.idx): int(piste.track_id)
+                             for piste in suivis[categorie].tracked_stracks
+                             if piste.frame_id == suivis[categorie].frame_id})
         for indice, boite in enumerate(selection):
             confiance = float(boite.conf[0])
             if confiance < 0.25:
@@ -405,6 +420,8 @@ def dessiner_detections(image, detections):
         # La police intégrée à OpenCV ne gère pas les accents français.
         categorie = CATEGORIES[detection["categorie_id"]]
         libelle = unicodedata.normalize("NFKD", categorie).encode("ascii", "ignore").decode()
+        if detection.get("objet_id"):
+            libelle += f" #{detection['objet_id']}"
         libelle += f" {detection['confiance']:.0%}"
         largeur_texte = cv2.getTextSize(libelle, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0][0]
         position = (max(0, min(x1, dimensions[0] - largeur_texte - 3)),
@@ -547,12 +564,15 @@ def creer_video_annotee(chemin, observations, destination, duree,
 
 
 def analyser_video(chemin, video_id, nom, categories, frequence, modele,
-                   dossier, progression=lambda valeur: None):
+                   dossier, progression=lambda valeur: None, *,
+                   quantifier_temps=True, compter_distincts=False):
     """Décoder séquentiellement ; échantillonner sur les horodatages réels du MP4."""
     import cv2
 
     if not categories or not math.isfinite(frequence) or frequence <= 0:
         raise ValueError("Sélectionnez au moins une catégorie et une fréquence positive.")
+    if not quantifier_temps and not compter_distincts:
+        raise ValueError("Cochez au moins une mesure à quantifier.")
     duree, images_attendues = lire_metadonnees(chemin)
     suivis = creer_suivis(categories, frequence)
     capture = cv2.VideoCapture(str(chemin))
@@ -569,6 +589,12 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
         redacteur_intervalles.writerow({"video_id": video_id, **ligne})
 
     mesure = MesureVisibilite(categories, ecrire_intervalle)
+    maximums = Counter()
+    nombres_distincts = Counter()
+    identifiants_objets = {}
+    plan_id = 1
+    miniature_precedente = None
+    reinitialiser_suivi = False
     precedent = None
     debut_echantillon = 0.0
     effectifs = Counter()
@@ -587,25 +613,55 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
             images_lues += 1
             if horodatage >= duree:
                 raise ValueError("La durée annoncée ne correspond pas aux horodatages vidéo.")
+            image = None
+            if compter_distincts:
+                # Vérifier toutes les images pour voir une coupe entre deux
+                # analyses YOLO, sans lancer davantage d'inférences.
+                succes, image = capture.retrieve()
+                if not succes:
+                    raise ValueError("Une image ne peut pas être décodée.")
+                miniature = reduire_image_continuite(image)
+                if plan_a_change(miniature_precedente, miniature):
+                    plan_id += 1
+                    reinitialiser_suivi = True
+                miniature_precedente = miniature
             if horodatage + 1e-8 < prochaine_cible:
                 continue
-            succes, image = capture.retrieve()
-            if not succes:
-                raise ValueError("Une image sélectionnée ne peut pas être décodée.")
-            if images_analysees:
+            if image is None:
+                succes, image = capture.retrieve()
+                if not succes:
+                    raise ValueError("Une image sélectionnée ne peut pas être décodée.")
+            if reinitialiser_suivi:
+                # Ne pas associer deux appareils à la même position dans des
+                # plans différents. La réidentification entre plans n'est pas garantie.
+                suivis = creer_suivis(categories, frequence)
+                identifiants_objets.clear()
+                reinitialiser_suivi = False
+            if quantifier_temps and images_analysees:
                 mesure.ajouter(debut_echantillon, horodatage, effectifs)
             # Le tout premier échantillon représente le début du média à t=0.
             debut_echantillon = horodatage if images_analysees else 0.0
             detections = detecter_image(modele, suivis, image, categories)
-            observations.write(json.dumps({"horodatage_s": horodatage, "detections": detections}) + "\n")
             effectifs = Counter(d["categorie_id"] for d in detections)
+            for categorie, nombre in effectifs.items():
+                maximums[categorie] = max(maximums[categorie], nombre)
             for detection in detections:
                 categorie = detection["categorie_id"]
+                if compter_distincts:
+                    piste = detection["piste_id"]
+                    # Une boîte sans association ne prouve aucune identité : la
+                    # compter séparément, sans fusion arbitraire avec un téléphone voisin.
+                    cle = (categorie, piste) if piste != "" else object()
+                    if cle not in identifiants_objets:
+                        nombres_distincts[categorie] += 1
+                        identifiants_objets[cle] = f"{categorie}-{nombres_distincts[categorie]}"
+                    detection.update(plan_id=plan_id, objet_id=identifiants_objets[cle])
                 redacteur_detections.writerow({"video_id": video_id, "image": images_lues - 1,
                                                "horodatage_s": horodatage,
                                                "categorie": CATEGORIES[categorie],
                                                **{cle: valeur for cle, valeur in detection.items()
                                                   if cle != "categorie_id"}})
+            observations.write(json.dumps({"horodatage_s": horodatage, "detections": detections}) + "\n")
             images_analysees += 1
             prochaine_cible = (math.floor((horodatage + 1e-8) * frequence) + 1) / frequence
             progression(min(horodatage / duree, 0.999))
@@ -617,8 +673,9 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
         fps = capture.get(cv2.CAP_PROP_FPS)
         if not images_attendues and duree - precedent > max(1.0, 2 / fps if fps > 0 else 1.0):
             raise ValueError("Décodage interrompu avant la fin annoncée de la vidéo.")
-        mesure.ajouter(debut_echantillon, duree, effectifs)
-        mesure.terminer()
+        if quantifier_temps:
+            mesure.ajouter(debut_echantillon, duree, effectifs)
+            mesure.terminer()
         progression(1.0)
     finally:
         capture.release()
@@ -627,24 +684,30 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
         observations.close()
     return [{"video_id": video_id, "source": texte_csv(nom), "statut": "ok", "erreur": "",
              "duree_totale_s": duree, "categorie": CATEGORIES[categorie],
-             "objet_detecte": mesure.maximums[categorie] > 0,
-             "duree_visibilite_s": min(duree, mesure.durees[categorie]),
-             "pourcentage_visible": min(100.0, mesure.durees[categorie] / duree * 100),
-             "maximum_simultane": mesure.maximums[categorie],
+             "objet_detecte": maximums[categorie] > 0,
+             **({"duree_visibilite_s": min(duree, mesure.durees[categorie]),
+                 "pourcentage_visible": min(100.0, mesure.durees[categorie] / duree * 100)}
+                if quantifier_temps else {}),
+             "maximum_simultane": maximums[categorie],
+             **({"nombre_objets_distincts_estime": nombres_distincts[categorie]}
+                if compter_distincts else {}),
              "frequence_demandee_ips": frequence, "images_analysees": images_analysees}
             for categorie in categories]
 
 
-def traiter_lot(sources, categories, frequence, dossier, progression=lambda *args: None):
+def traiter_lot(sources, categories, frequence, dossier, progression=lambda *args: None, *,
+                quantifier_temps=True, compter_distincts=False):
     """Traiter un fichier à la fois et continuer après une erreur individuelle."""
     from contextlib import ExitStack
 
+    if not quantifier_temps and not compter_distincts:
+        raise ValueError("Cochez au moins une mesure à quantifier.")
     modele = charger_modele()
     resultats = []
     apercus = {}
     with ExitStack() as pile:
         sorties = {}
-        for nom, colonnes in (("resultats", COLONNES_RESULTATS),
+        for nom, colonnes in (("resultats", colonnes_resultats(quantifier_temps, compter_distincts)),
                               ("intervalles", COLONNES_INTERVALLES),
                               ("detections", COLONNES_DETECTIONS)):
             fichier, redacteur = ouvrir_csv(Path(dossier) / f"{nom}.csv", colonnes)
@@ -658,7 +721,8 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
                     chemin = preparer_video(source, temporaire)
                     lignes = analyser_video(
                         chemin, video_id, source.nom, categories, frequence, modele, temporaire,
-                        lambda valeur: progression(numero, len(sources), source.nom, valeur * 0.7))
+                        lambda valeur: progression(numero, len(sources), source.nom, valeur * 0.7),
+                        quantifier_temps=quantifier_temps, compter_distincts=compter_distincts)
                     # Une vidéo en erreur ne laisse jamais d'intervalles partiels
                     # dans les exports communs au lot.
                     for nom in ("intervalles", "detections"):

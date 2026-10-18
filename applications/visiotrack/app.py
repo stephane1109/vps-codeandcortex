@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from detection import CATEGORIES, inventorier_sources, traiter_lot
+from detection import CATEGORIES, colonnes_resultats, inventorier_sources, traiter_lot
 from ticket_gate import enforce_streamlit_access, renouveler_acces_analyse
 
 
@@ -24,7 +24,9 @@ def afficher_resultats():
     """Conserver le dernier résultat pendant les téléchargements et les réaffichages."""
     if "visiotrack_resultats" not in st.session_state:
         return
-    tableau = pd.DataFrame(st.session_state.visiotrack_resultats)
+    # Conserver les choix du lot terminé, même si le formulaire est modifié ensuite.
+    choix = st.session_state.get("visiotrack_mesures", {"quantifier_temps": True, "compter_distincts": False})
+    tableau = pd.DataFrame(st.session_state.visiotrack_resultats).reindex(columns=colonnes_resultats(**choix))
     st.subheader("Résultats")
     succes = tableau[tableau.statut == "ok"].video_id.nunique()
     erreurs = tableau[tableau.statut == "erreur"].video_id.nunique()
@@ -60,6 +62,11 @@ def afficher_resultats():
             "Plus grand nombre d'objets de cette catégorie détectés sur une même image analysée. "
             "Deux smartphones visibles ensemble donnent 2 ; montrés l'un après l'autre, ils peuvent donner 1. "
             "Ce n'est pas le nombre total d'objets différents dans la vidéo.")),
+        "nombre_objets_distincts_estime": st.column_config.NumberColumn("Objets distincts (estim.)", format="%d", help=(
+            "Nombre estimé d'objets différents de cette catégorie dans cette vidéo. "
+            "Un objet suivi sur plusieurs images compte une seule fois. Une coupe, une occultation "
+            "ou un suivi perdu peut faire recompter le même téléphone ; deux appareils qui se remplacent "
+            "au même endroit peuvent aussi être confondus. Ce n'est pas un inventaire certain des appareils physiques.")),
         "frequence_demandee_ips": st.column_config.NumberColumn("Images/s demandées", help=(
             "Nombre d'images à analyser par seconde demandé au lancement : 1 signifie une image par seconde, "
             "5 signifie cinq images par seconde. Le nombre effectivement analysé reste limité par la cadence du fichier.")),
@@ -67,17 +74,22 @@ def afficher_resultats():
             "Nombre total d'images de cette vidéo effectivement analysées, y compris celles sans détection. "
             "Ce n'est ni le nombre d'objets détectés ni le nombre total d'images du fichier.")),
     }
+    colonnes = {nom: configuration for nom, configuration in colonnes.items() if nom in tableau.columns}
     st.dataframe(tableau, hide_index=True, width="stretch", column_config=colonnes)
+    if choix["compter_distincts"]:
+        st.caption("Le nombre distinct est une estimation par suivi : le même téléphone peut être recompté "
+                   "après une coupe ou une disparition. Il n'est pas reconnu avec certitude d'un plan à l'autre.")
     with st.expander("Légende des colonnes (?)"):
         st.caption("Ces explications sont aussi disponibles en survolant les en-têtes du tableau.")
         st.table([{"Colonne": configuration["label"], "Signification": configuration["help"]}
                   for configuration in colonnes.values()])
     repertoire = Path(st.session_state.visiotrack_exports.name)
     afficher_apercu(tableau, repertoire)
-    for colonne, (nom, libelle) in zip(st.columns(3), [
-        ("resultats", "Résultats CSV"), ("intervalles", "Intervalles CSV"),
-        ("detections", "Détections CSV"),
-    ]):
+    exports = [("resultats", "Résultats CSV")]
+    if choix["quantifier_temps"]:
+        exports.append(("intervalles", "Intervalles CSV"))
+    exports.append(("detections", "Détections CSV"))
+    for colonne, (nom, libelle) in zip(st.columns(len(exports)), exports):
         with colonne:
             # Streamlit lit les exports, mais aucune vidéo n'est conservée ici.
             with (repertoire / f"{nom}.csv").open("rb") as fichier:
@@ -124,6 +136,12 @@ def afficher_application():
                                     accept_multiple_files=True)
         categories = st.multiselect("Objets à détecter", list(CATEGORIES), default=[67],
                                     format_func=lambda cle: CATEGORIES[cle].capitalize())
+        quantifier_temps = st.checkbox("Quantifier le temps à l'image", value=True,
+                                      help="Calculer la durée de visibilité et le pourcentage de la vidéo.")
+        compter_distincts = st.checkbox("Quantifier le nombre d'objets distincts aperçus", value=True,
+                                        help="Smartphones par défaut. Estimation par suivi pour chaque catégorie "
+                                             "sélectionnée ; un même téléphone peut être recompté après une coupe "
+                                             "ou une disparition. Les deux mesures peuvent être cochées ensemble.")
         frequence = st.number_input("Images analysées par seconde", min_value=0.1,
                                     max_value=30.0, value=1.0, step=0.5)
         dossier_serveur = os.getenv("VISIOTRACK_VIDEO_DIR")
@@ -131,10 +149,13 @@ def afficher_application():
             st.caption("Les MP4 du dossier serveur configuré seront également analysés, sous-dossiers inclus.")
         lancer = st.form_submit_button("Lancer l'analyse", type="primary")
 
-    st.caption("Les durées sont estimées par échantillonnage. À 1 image/s, une apparition brève peut être manquée.")
+    st.caption("À 1 image/s, une apparition brève peut être manquée et le suivi d'un téléphone peut être perdu. "
+               "Les durées et le nombre d'objets distincts sont des estimations.")
     if lancer:
         sources = inventorier_sources(fichiers, urls, dossier_serveur)
-        if not categories or not sources:
+        if not quantifier_temps and not compter_distincts:
+            st.error("Cochez au moins une mesure à quantifier.")
+        elif not categories or not sources:
             st.error("Ajoutez au moins une vidéo et sélectionnez un objet à détecter.")
         elif not obtenir_verrou().acquire(blocking=False):
             st.warning("Une analyse est déjà en cours sur ce serveur. Relancez après sa fin.")
@@ -162,10 +183,13 @@ def afficher_application():
 
                 with st.spinner("Analyse en cours…"):
                     resultats = traiter_lot(sources, categories, frequence, temporaire.name,
-                                            actualiser_progression)
+                                            actualiser_progression, quantifier_temps=quantifier_temps,
+                                            compter_distincts=compter_distincts)
                 ancien = st.session_state.get("visiotrack_exports")
                 st.session_state.visiotrack_exports = temporaire
                 st.session_state.visiotrack_resultats = resultats
+                st.session_state.visiotrack_mesures = {"quantifier_temps": quantifier_temps,
+                                                      "compter_distincts": compter_distincts}
                 temporaire = None  # La session conserve les CSV et les aperçus annotés.
                 if ancien:
                     ancien.cleanup()

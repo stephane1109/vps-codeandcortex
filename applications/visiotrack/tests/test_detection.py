@@ -140,12 +140,88 @@ class TestsVisibilite(unittest.TestCase):
         modele.boites = np.array([[1, 1, 10, 20, 0.9, 67]], dtype=np.float32)
         premiere = detecter_image(modele, suivis, image, [67])
         self.assertEqual(len(premiere), 1)  # La nouvelle piste n'est pas encore confirmée.
-        self.assertEqual(premiere[0]["piste_id"], "")
+        self.assertIsInstance(premiere[0]["piste_id"], int)
         seconde = detecter_image(modele, suivis, image, [67])
-        self.assertIsInstance(seconde[0]["piste_id"], int)
+        self.assertEqual(seconde[0]["piste_id"], premiere[0]["piste_id"])
         modele.boites = np.empty((0, 6), dtype=np.float32)
         self.assertEqual(detecter_image(modele, suivis, image, [67]), [])
+        modele.boites = np.array([[1, 1, 10, 20, 0.9, 67]], dtype=np.float32)
+        retour = detecter_image(modele, suivis, image, [67])
+        self.assertEqual(retour[0]["piste_id"], premiere[0]["piste_id"])
+        modele.boites = np.empty((0, 6), dtype=np.float32)
+        for _ in range(4):
+            self.assertEqual(detecter_image(modele, suivis, image, [67]), [])
+        modele.boites = np.array([[1, 1, 10, 20, 0.9, 67]], dtype=np.float32)
+        nouvelle = detecter_image(modele, suivis, image, [67])
+        self.assertNotEqual(nouvelle[0]["piste_id"], premiere[0]["piste_id"])
         self.assertEqual(creer_suivis([67], 1)[67].frame_id, 0)
+
+    def test_objets_distincts_et_maximum_simultane(self):
+        """Deux objets ensemble, puis un nouveau : trois distincts et un maximum de deux."""
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "court.mp4"
+            fabriquer_video(chemin)
+            observations = [[detection_telephone(1), detection_telephone(2)],
+                            [detection_telephone(1)], [detection_telephone(3)]]
+            with patch("detection.detecter_image", side_effect=observations):
+                resultat = analyser_video(chemin, "v1", "court", [67, 0], 1, None, dossier,
+                                           compter_distincts=True)
+            self.assertEqual(resultat[0]["nombre_objets_distincts_estime"], 3)
+            self.assertEqual(resultat[0]["maximum_simultane"], 2)
+            self.assertEqual(resultat[0]["duree_visibilite_s"], 2.5)
+            self.assertEqual(resultat[1]["nombre_objets_distincts_estime"], 0)
+            with (Path(dossier) / "detections.csv").open(encoding="utf-8-sig") as fichier:
+                lignes = list(csv.DictReader(fichier))
+            self.assertEqual([l["objet_id"] for l in lignes], ["67-1", "67-2", "67-1", "67-3"])
+
+    def test_coupe_entre_echantillons_ne_fusionne_pas_les_objets(self):
+        """Voir une coupe même si le plan initial revient avant le prochain échantillon."""
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "coupe.mp4"
+            video = cv2.VideoWriter(str(chemin), cv2.VideoWriter_fourcc(*"mp4v"), 10, (64, 64))
+            for numero in range(25):
+                couleur = (0, 0, 200) if 5 <= numero < 8 else (0, 0, 0)
+                video.write(np.full((64, 64, 3), couleur, dtype=np.uint8))
+            video.release()
+            with patch("detection.detecter_image", side_effect=lambda *args: [detection_telephone(1)]):
+                resultat = analyser_video(chemin, "v1", "coupe", [67], 1, None, dossier,
+                                           compter_distincts=True)[0]
+            self.assertEqual(resultat["nombre_objets_distincts_estime"], 2)
+            with (Path(dossier) / "detections.csv").open(encoding="utf-8-sig") as fichier:
+                lignes = list(csv.DictReader(fichier))
+            self.assertEqual([l["plan_id"] for l in lignes], ["1", "3", "3"])
+            self.assertEqual([l["objet_id"] for l in lignes], ["67-1", "67-2", "67-2"])
+
+    def test_options_mesures_et_exports_par_video(self):
+        """Les mesures décochées sont absentes des exports ; le comptage repart par vidéo."""
+        for temps, distincts in ((True, False), (False, True), (True, True)):
+            with self.subTest(temps=temps, distincts=distincts), tempfile.TemporaryDirectory() as dossier:
+                chemin = Path(dossier) / "court.mp4"
+                fabriquer_video(chemin, nombre=12)
+                sources = [SourceVideo("court", "serveur", chemin)] * 2
+                with patch("detection.charger_modele", return_value=None), \
+                        patch("detection.detecter_image", side_effect=lambda *args: [detection_telephone()]), \
+                        patch("detection.creer_video_annotee"):
+                    resultats = traiter_lot(sources, [67], 1, dossier,
+                                            quantifier_temps=temps, compter_distincts=distincts)
+                for resultat in resultats:
+                    self.assertEqual(resultat["statut"], "ok")
+                    self.assertEqual("duree_visibilite_s" in resultat, temps)
+                    self.assertEqual("nombre_objets_distincts_estime" in resultat, distincts)
+                    if distincts:
+                        self.assertEqual(resultat["nombre_objets_distincts_estime"], 1)
+                with (Path(dossier) / "resultats.csv").open(encoding="utf-8-sig") as fichier:
+                    lecteur = csv.DictReader(fichier)
+                    self.assertEqual("duree_visibilite_s" in lecteur.fieldnames, temps)
+                    self.assertEqual("nombre_objets_distincts_estime" in lecteur.fieldnames, distincts)
+                with (Path(dossier) / "intervalles.csv").open(encoding="utf-8-sig") as fichier:
+                    self.assertEqual(bool(list(csv.DictReader(fichier))), temps)
+
+    def test_aucune_mesure_refusee_avant_chargement_modele(self):
+        with patch("detection.charger_modele") as charger:
+            with self.assertRaisesRegex(ValueError, "Cochez au moins"):
+                traiter_lot([], [67], 1, "inutilise", quantifier_temps=False, compter_distincts=False)
+            charger.assert_not_called()
 
     def test_cadence_variable(self):
         with tempfile.TemporaryDirectory() as dossier:

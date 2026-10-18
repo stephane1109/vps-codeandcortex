@@ -9,11 +9,30 @@ qui peut aussi reconnaître d'autres téléphones portables.
 
 1. Ajouter des URL HTTPS YouTube/TikTok, plusieurs MP4 ou des ZIP contenant des MP4.
 2. Choisir les catégories (smartphone par défaut) et la fréquence (1 image/s).
-3. Lancer l'analyse puis télécharger les résultats, intervalles et détections CSV.
+3. Cocher **Quantifier le temps à l'image**, **Quantifier le nombre d'objets distincts
+   aperçus**, ou les deux. Les deux mesures sont cochées par défaut. Le comptage porte
+   sur les smartphones par défaut, ou sur chacune des autres catégories sélectionnées.
+4. Lancer l'analyse puis télécharger les résultats et détections CSV, ainsi que les
+   intervalles si la mesure du temps est cochée.
+
+Le tableau et le CSV de résultats contiennent seulement les mesures demandées.
+**Objets distincts (estim.)** compte les objets suivis dans la vidéo entière ;
+**Maximum simultané** compte ceux visibles ensemble sur une même image.
+Par exemple, deux téléphones ensemble puis un nouveau donnent trois objets
+distincts estimés et un maximum simultané de deux.
+
+Le nombre distinct est une **estimation de suivis, pas une identification certaine
+des appareils physiques**. Un même téléphone peut être recompté après une coupe,
+une occultation ou une perte de suivi ; deux appareils se remplaçant au même endroit
+peuvent être confondus. Il n'y a pas de reconnaissance d'identité entre plans ou
+entre vidéos. À 1 image/s, les mouvements peuvent fragmenter davantage le suivi.
+Utiliser les identifiants affichés dans l'aperçu et le CSV des détections pour vérifier.
 
 Après l'analyse, le lecteur **Vidéo avec détections** affiche un aperçu avec des
 cadres verts et le niveau de confiance autour des smartphones (ou des autres objets
 sélectionnés). Pour un lot, choisir la vidéo dans la liste au-dessus du lecteur.
+Lorsque le comptage est coché, le libellé affiche aussi l'identifiant de l'objet suivi
+(par exemple `#67-1` pour le premier smartphone), identique au champ `objet_id` du CSV.
 La lecture, la pause et le déplacement dans la vidéo permettent de vérifier les détections.
 Le lecteur fait au maximum 360 pixels de large (environ 360 × 640 pour un TikTok
 vertical 9:16) et s'adapte aux petits écrans. Le rapport d'image original est conservé.
@@ -59,7 +78,17 @@ Les vidéos en erreur ont des mesures vides, jamais des zéros trompeurs.
   un second appareil ; des téléphones réellement superposés peuvent être sous-comptés.
 - ByteTrack reçoit aussi les boîtes de confiance 0,1 à 0,25 pour les associations.
   Un suivi distinct est créé par catégorie et par vidéo. Une nouvelle détection
-  non encore confirmée par ByteTrack compte dans la visibilité, avec `piste_id` vide.
+  non encore confirmée par ByteTrack conserve son identifiant provisoire : elle compte
+  une seule fois lorsqu'elle est ensuite confirmée. Seules les boîtes réellement
+  observées et dépassant le seuil de confiance contribuent au comptage.
+- Si le comptage distinct est coché, les images intermédiaires sont décodées pour
+  rechercher les changements de plan, sans multiplier les analyses YOLO. Une coupe
+  réinitialise le suivi, pour ne pas fusionner des appareils situés au même endroit
+  dans des plans différents. Cette comparaison visuelle est heuristique : une coupe
+  subtile peut être manquée, un changement d'éclairage peut créer une coupure.
+  Un identifiant d'objet stable est attribué à chaque piste dans son plan. Le compteur
+  est indépendant pour chaque vidéo et catégorie ; une boîte exceptionnellement sans
+  association est comptée séparément. Le décodage supplémentaire ajoute un coût CPU.
 - La lecture est séquentielle et utilise les horodatages OpenCV, y compris pour
   les vidéos à cadence variable. La première image à partir de chaque cible
   temporelle est analysée ; si la fréquence demandée dépasse celle de la vidéo,
@@ -86,12 +115,15 @@ exportées gardent leur précision ; seul l'affichage du tableau est arrondi.
 
 | Fichier | Contenu |
 | --- | --- |
-| `resultats.csv` | Une ligne par vidéo et catégorie sélectionnée : source, statut, durée totale, présence, durée visible, pourcentage, maximum, fréquence demandée, images analysées. Une ligne par vidéo en erreur. |
-| `intervalles.csv` | Une ligne par plage continue de visibilité et catégorie : identifiant vidéo, début, fin, durée, maximum simultané. |
-| `detections.csv` | Une ligne par boîte observée : identifiant vidéo, index d'image depuis zéro, horodatage réel, catégorie, piste éventuelle, confiance et coordonnées en pixels. |
+| `resultats.csv` | Une ligne par vidéo et catégorie : source, statut, durée totale, présence, maximum simultané, fréquence et images analysées. Durée visible et pourcentage si demandés ; `nombre_objets_distincts_estime` si demandé. Une ligne par vidéo en erreur. |
+| `intervalles.csv` | Si le temps est quantifié : une ligne par plage continue de visibilité et catégorie, avec identifiant vidéo, début, fin, durée et maximum simultané. Sinon, fichier interne vide (en-tête seul), sans bouton de téléchargement. |
+| `detections.csv` | Une ligne par boîte observée : identifiant vidéo, index d'image depuis zéro, horodatage réel, catégorie, piste, confiance et coordonnées. `plan_id` et `objet_id` sont renseignés lorsque le comptage distinct est coché. |
 
-Les pistes s'interprètent dans le contexte `(video_id, catégorie, piste_id)` ; elles
-ne constituent pas une reconnaissance d'identité entre vidéos. Les détections et
+Avec le comptage, les pistes s'interprètent dans le contexte
+`(video_id, plan_id, catégorie, piste_id)` : ByteTrack peut réutiliser un numéro
+après une coupe. `objet_id` reste unique par catégorie dans chaque vidéo, même
+après une coupe. Sans comptage, les pistes s'interprètent par vidéo et catégorie.
+Les identifiants ne constituent pas une reconnaissance d'identité entre vidéos. Les détections et
 intervalles partiels d'une vidéo en erreur sont exclus des exports communs.
 
 ## Installation locale
