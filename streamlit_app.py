@@ -2,7 +2,9 @@
 from datetime import date
 import re
 
+from pathlib import Path
 import streamlit as st
+import streamlit.components.v1 as components
 from interface.client import appeler_api
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
@@ -12,6 +14,9 @@ VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": 
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
+# Même propriété Analytics que la home ; une seule visite malgré les reruns.
+components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                height=0, scrolling=False)
 st.title("ScrapTikTok")
 st.caption("Appli en cours de dév - modifiée 11-10-2026")
 st.caption("Collecter les textes des publications TikTok.")
