@@ -29,8 +29,10 @@ entre vidéos. À 1 image/s, les mouvements peuvent fragmenter davantage le suiv
 Utiliser les identifiants affichés dans l'aperçu et le CSV des détections pour vérifier.
 
 Après l'analyse, le lecteur **Vidéo avec détections** affiche un aperçu avec des
-cadres verts et le niveau de confiance autour des smartphones (ou des autres objets
+cadres verts et le score de confiance entre 0 et 1 (par exemple `0,92`, au lieu de
+`92 %`) autour des smartphones (ou des autres objets
 sélectionnés). Pour un lot, choisir la vidéo dans la liste au-dessus du lecteur.
+Ce score du modèle n'est pas une probabilité calibrée de détection correcte.
 Lorsque le comptage est coché, le libellé affiche aussi l'identifiant de l'objet suivi
 (par exemple `#67-1` pour le premier smartphone), identique au champ `objet_id` du CSV.
 La lecture, la pause et le déplacement dans la vidéo permettent de vérifier les détections.

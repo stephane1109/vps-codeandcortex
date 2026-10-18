@@ -422,7 +422,9 @@ def dessiner_detections(image, detections):
         libelle = unicodedata.normalize("NFKD", categorie).encode("ascii", "ignore").decode()
         if detection.get("objet_id"):
             libelle += f" #{detection['objet_id']}"
-        libelle += f" {detection['confiance']:.0%}"
+        # Afficher le score de confiance entre 0 et 1, avec une virgule française.
+        confiance_affichee = f"{detection['confiance']:.2f}".replace(".", ",")
+        libelle += f" {confiance_affichee}"
         largeur_texte = cv2.getTextSize(libelle, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0][0]
         position = (max(0, min(x1, dimensions[0] - largeur_texte - 3)),
                     min(dimensions[1] - 3, max(16, y1 - 6)))
