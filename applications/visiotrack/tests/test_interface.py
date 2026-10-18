@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from detection import (COLONNES_DETECTIONS, COLONNES_INTERVALLES,
@@ -91,6 +92,52 @@ class TestsInterface(unittest.TestCase):
             next(b for b in application.button if b.label == "Lancer l'analyse").click().run()
             self.assertEqual(application.error[0].value, "Cochez au moins une mesure à quantifier.")
             traiter.assert_not_called()
+
+    def test_graphiques_mesures_choisies_zeros_et_erreurs(self):
+        """Garder chaque vidéo/catégorie et les zéros, exclure les échecs et mesures décochées."""
+        lignes = [
+            {"video_id": "v1", "source": "meme.mp4", "categorie": "smartphone", "statut": "ok",
+             "duree_visibilite_s": 10.5, "nombre_objets_distincts_estime": 2},
+            {"video_id": "v1", "source": "meme.mp4", "categorie": "personne", "statut": "ok",
+             "duree_visibilite_s": 20.0, "nombre_objets_distincts_estime": 3},
+            {"video_id": "v2", "source": "meme.mp4", "categorie": "smartphone", "statut": "ok",
+             "duree_visibilite_s": 0, "nombre_objets_distincts_estime": 0},
+            {"video_id": "erreur", "source": "illisible.mp4", "categorie": "smartphone", "statut": "erreur",
+             "duree_visibilite_s": 999, "nombre_objets_distincts_estime": 999},
+        ]
+        script = """
+import pandas as pd
+import streamlit as st
+from app import afficher_graphiques
+afficher_graphiques(pd.DataFrame(st.session_state.lignes), st.session_state.choix)
+"""
+        for temps, distincts in ((True, True), (True, False), (False, True)):
+            with self.subTest(temps=temps, distincts=distincts), \
+                    patch.object(st, "vega_lite_chart", wraps=st.vega_lite_chart) as graphique:
+                application = AppTest.from_string(script)
+                application.session_state["lignes"] = lignes
+                application.session_state["choix"] = {"quantifier_temps": temps, "compter_distincts": distincts}
+                application.run()
+                self.assertEqual(len(application.exception), 0)
+                self.assertEqual(graphique.call_count, int(temps) + int(distincts))
+                mesures = []
+                for appel in graphique.call_args_list:
+                    donnees, specification = appel.args
+                    mesure = specification["encoding"]["x"]["field"]
+                    mesures.append(mesure)
+                    self.assertEqual(list(donnees.video_id), ["v1", "v1", "v2"])
+                    self.assertEqual(donnees.repere.nunique(), 3)
+                    self.assertEqual(donnees.iloc[-1][mesure], 0)
+                    self.assertEqual(specification["encoding"]["x"]["scale"], {"zero": True})
+                self.assertEqual("duree_visibilite_s" in mesures, temps)
+                self.assertEqual("nombre_objets_distincts_estime" in mesures, distincts)
+        with patch.object(st, "vega_lite_chart", wraps=st.vega_lite_chart) as graphique:
+            application = AppTest.from_string(script)
+            application.session_state["lignes"] = [lignes[-1]]
+            application.session_state["choix"] = {"quantifier_temps": True, "compter_distincts": True}
+            application.run()
+            self.assertEqual(len(application.exception), 0)
+            graphique.assert_not_called()
 
 
 if __name__ == "__main__":

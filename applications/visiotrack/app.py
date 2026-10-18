@@ -83,6 +83,7 @@ def afficher_resultats():
         st.caption("Ces explications sont aussi disponibles en survolant les en-têtes du tableau.")
         st.table([{"Colonne": configuration["label"], "Signification": configuration["help"]}
                   for configuration in colonnes.values()])
+    afficher_graphiques(tableau, choix)
     repertoire = Path(st.session_state.visiotrack_exports.name)
     afficher_apercu(tableau, repertoire)
     exports = [("resultats", "Résultats CSV")]
@@ -95,6 +96,60 @@ def afficher_resultats():
             with (repertoire / f"{nom}.csv").open("rb") as fichier:
                 st.download_button(libelle, fichier, f"visiotrack_{nom}.csv",
                                    mime="text/csv", on_click="ignore", width="stretch")
+
+
+def afficher_graphiques(tableau, choix):
+    """Comparer les mesures du lot, sans transformer les erreurs en valeurs nulles."""
+    valides = tableau[tableau.statut == "ok"].copy()
+    if valides.empty:
+        return
+    graphiques = []
+    for option, mesure, titre, unite, couleur, format_nombre in (
+        ("quantifier_temps", "duree_visibilite_s", "Temps à l'image",
+         "Durée de visibilité (s)", "#2563eb", ".2f"),
+        ("compter_distincts", "nombre_objets_distincts_estime", "Nombre d'objets distincts aperçus",
+         "Nombre estimé d'objets distincts", "#16a34a", "d"),
+    ):
+        if not choix.get(option) or mesure not in valides:
+            continue
+        donnees = valides[["video_id", "source", "categorie", mesure]].copy()
+        donnees[mesure] = pd.to_numeric(donnees[mesure], errors="coerce")
+        donnees = donnees.dropna(subset=[mesure])
+        if donnees.empty:
+            continue
+        # L'identifiant distingue les vidéos portant le même nom. Le nom complet
+        # reste accessible au survol, sans encombrer les axes avec de longues URL.
+        donnees["repere"] = donnees.video_id.astype(str) + " · " + donnees.categorie.astype(str)
+        axe = {"title": unite}
+        if option == "compter_distincts":
+            axe.update(format="d", tickMinStep=1)
+        specification = {
+            "mark": {"type": "bar", "color": couleur},
+            "encoding": {
+                "x": {"field": mesure, "type": "quantitative", "scale": {"zero": True}, "axis": axe},
+                "y": {"field": "repere", "type": "nominal", "sort": None,
+                      "axis": {"title": "Vidéo · objet", "labelLimit": 220}},
+                "tooltip": [
+                    {"field": "video_id", "type": "nominal", "title": "Identifiant"},
+                    {"field": "source", "type": "nominal", "title": "Vidéo"},
+                    {"field": "categorie", "type": "nominal", "title": "Objet"},
+                    {"field": mesure, "type": "quantitative", "title": unite, "format": format_nombre},
+                ],
+            },
+        }
+        graphiques.append((titre, donnees, specification))
+    if not graphiques:
+        return
+    st.subheader("Graphiques")
+    st.caption("Une barre par vidéo et catégorie. Survolez une barre pour voir la vidéo et sa valeur. "
+               "Les vidéos en erreur sont exclues ; une absence de détection reste à zéro.")
+    for colonne, (titre, donnees, specification) in zip(st.columns(len(graphiques)), graphiques):
+        with colonne:
+            st.markdown(f"**{titre}**")
+            # Conserver toutes les vidéos des grands lots dans une zone défilante.
+            with st.container(height=420 if len(donnees) > 12 else "content", border=False):
+                st.vega_lite_chart(donnees, specification, width="stretch",
+                                   height=max(180, 28 * len(donnees)))
 
 
 def afficher_apercu(tableau, repertoire):

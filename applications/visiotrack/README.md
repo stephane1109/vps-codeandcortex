@@ -21,6 +21,14 @@ Le tableau et le CSV de résultats contiennent seulement les mesures demandées.
 Par exemple, deux téléphones ensemble puis un nouveau donnent trois objets
 distincts estimés et un maximum simultané de deux.
 
+La section **Graphiques** compare ces deux indicateurs avec des barres horizontales :
+durée de visibilité en secondes et nombre estimé d'objets distincts. Chaque barre
+représente une vidéo et une catégorie ; le survol donne le nom de la vidéo et la
+valeur. Seuls les indicateurs cochés pour le lot sont affichés. Les vidéos en erreur
+sont exclues, les absences de détection restent à zéro et les grands lots peuvent
+être parcourus dans une zone défilante. Les graphiques réutilisent les résultats
+existants, sans relancer l'analyse.
+
 Le nombre distinct est une **estimation de suivis, pas une identification certaine
 des appareils physiques**. Un même téléphone peut être recompté après une coupe,
 une occultation ou une perte de suivi ; deux appareils se remplaçant au même endroit
