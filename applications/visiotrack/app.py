@@ -131,7 +131,10 @@ def afficher_application():
     st.caption("La présence à l'écran est mesurée ; elle ne prouve pas une utilisation effective.")
 
     with st.form("analyse"):
-        urls = st.text_area("URL YouTube ou TikTok", placeholder="Une URL HTTPS par ligne", height=90)
+        urls = st.text_area("URL YouTube ou TikTok", placeholder=(
+            "https://www.tiktok.com/@ladepechedumidi/video/7691631006369058081"
+            "?q=manifestation%20toulouse&t=1791983293656"), height=90,
+            help="Une URL HTTPS par ligne.")
         fichiers = st.file_uploader("Fichiers MP4 ou archives ZIP", type=["mp4", "zip"],
                                     accept_multiple_files=True)
         categories = st.multiselect("Objets à détecter", list(CATEGORIES), default=[67],
