@@ -93,8 +93,8 @@ class TestsInterface(unittest.TestCase):
             self.assertEqual(application.error[0].value, "Cochez au moins une mesure à quantifier.")
             traiter.assert_not_called()
 
-    def test_chronologie_par_objet_et_temps_en_abscisse(self):
-        """Tracer les apparitions séparées et leur durée, jamais un total sur l'axe temporel."""
+    def test_bande_presence_sur_toute_la_video(self):
+        """Une bande entière, des segments de présence, et aucune ligne par identifiant."""
         import pandas as pd
         script = """
 import pandas as pd
@@ -113,13 +113,11 @@ identifiant = afficher_graphiques(pd.DataFrame(st.session_state.lignes), st.sess
         ]
         with tempfile.TemporaryDirectory() as dossier:
             pd.DataFrame([
-                {"video_id": "v1", "categorie": "smartphone", "objet_id": "67-1",
-                 "debut_s": 0, "fin_s": 1, "duree_s": 1},
-                {"video_id": "v1", "categorie": "smartphone", "objet_id": "67-1",
+                {"video_id": "v1", "categorie": "smartphone", "maximum_simultane": 2,
+                 "debut_s": 0.5, "fin_s": 1, "duree_s": 0.5},
+                {"video_id": "v1", "categorie": "smartphone", "maximum_simultane": 1,
                  "debut_s": 2, "fin_s": 3.5, "duree_s": 1.5},
-                {"video_id": "v1", "categorie": "smartphone", "objet_id": "67-2",
-                 "debut_s": 0.5, "fin_s": 2, "duree_s": 1.5},
-            ]).to_csv(Path(dossier) / "visibilite_objets.csv", index=False)
+            ]).to_csv(Path(dossier) / "intervalles.csv", index=False)
             pd.DataFrame([
                 {"video_id": video, "horodatage_s": instant, "categorie": "smartphone",
                  "nombre_visible": visibles, "nombre_distincts_cumule": cumul}
@@ -143,14 +141,18 @@ identifiant = afficher_graphiques(pd.DataFrame(st.session_state.lignes), st.sess
                         encodage = specification["encoding"]
                         self.assertEqual(encodage["x"]["scale"]["domain"], [0, 4])
                         self.assertEqual(set(donnees.video_id), {"v1"})
-                        if specification["mark"]["type"] == "bar":
+                        if "layer" in specification:
                             self.assertEqual(encodage["x"]["field"], "debut_s")
                             self.assertEqual(encodage["x2"]["field"], "fin_s")
-                            self.assertEqual(len(donnees), 3)
-                            objet1 = donnees[donnees.objet_id == "67-1"]
-                            self.assertEqual(list(objet1.debut_s), [0, 2])
-                            self.assertEqual(list(objet1.fin_s), [1, 3.5])
-                            self.assertEqual(set(objet1.duree_objet_s), {2.5})
+                            self.assertEqual(encodage["y"]["field"], "categorie")
+                            self.assertEqual(set(donnees.categorie), {"smartphone"})
+                            self.assertEqual(list(donnees.debut_s), [0.5, 2])
+                            self.assertEqual(list(donnees.fin_s), [1, 3.5])
+                            self.assertNotIn("objet_id", donnees.columns)
+                            fond, presence = specification["layer"]
+                            self.assertEqual(fond["data"]["values"], [
+                                {"categorie": "smartphone", "debut_s": 0, "fin_s": 4}])
+                            self.assertEqual(presence["mark"]["color"], "#22c55e")
                         else:
                             self.assertEqual(encodage["x"]["field"], "horodatage_s")
                             self.assertEqual(specification["mark"]["interpolate"], "step-after")
@@ -158,7 +160,13 @@ identifiant = afficher_graphiques(pd.DataFrame(st.session_state.lignes), st.sess
                     graphique.reset_mock()
                     application.selectbox[0].select("v2").run()
                     self.assertEqual(len(application.exception), 0)
-                    self.assertEqual(graphique.call_count, int(distincts))
+                    self.assertEqual(graphique.call_count, int(temps) + int(distincts))
+                    if temps:
+                        donnees, specification = graphique.call_args_list[0].args
+                        self.assertTrue(donnees.empty)
+                        self.assertEqual(specification["encoding"]["x"]["scale"]["domain"], [0, 10])
+                        self.assertEqual(specification["layer"][0]["data"]["values"], [
+                            {"categorie": "smartphone", "debut_s": 0, "fin_s": 10}])
                     if distincts:
                         self.assertEqual(set(graphique.call_args.args[0].nombre_distincts_cumule), {0})
                     graphique.reset_mock()

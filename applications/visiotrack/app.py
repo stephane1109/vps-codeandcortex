@@ -109,14 +109,14 @@ def lire_chronologie_video(chemin, identifiant):
 
 
 def afficher_graphiques(tableau, choix, repertoire):
-    """Afficher une chronologie par objet, avec le temps vidéo sur l'axe horizontal."""
+    """Situer les plages de présence sur toute la durée de la vidéo."""
     videos = tableau[tableau.statut == "ok"].drop_duplicates("video_id").set_index("video_id")
     if videos.empty:
         return None
-    fichiers = {"quantifier_temps": repertoire / "visibilite_objets.csv",
+    fichiers = {"quantifier_temps": repertoire / "intervalles.csv",
                 "compter_distincts": repertoire / "chronologie.csv"}
     if any(choix.get(option) and not chemin.exists() for option, chemin in fichiers.items()):
-        st.info("Relancez l'analyse pour obtenir les chronologies par objet de ce lot.")
+        st.info("Relancez l'analyse pour obtenir les chronologies de ce lot.")
         return None
     st.subheader("Chronologie des détections")
     if len(videos) > 1:
@@ -129,45 +129,42 @@ def afficher_graphiques(tableau, choix, repertoire):
     axe_temps = {"type": "quantitative", "title": "Temps dans la vidéo (s)",
                  "scale": {"domain": [0, duree], "nice": False}}
     if choix.get("quantifier_temps"):
-        st.markdown("**Visibilité de chaque objet au fil du temps**")
+        st.markdown("**Présence dans la vidéo**")
         plages = lire_chronologie_video(fichiers["quantifier_temps"], identifiant)
+        categories = tableau.loc[(tableau.video_id == identifiant) & (tableau.statut == "ok"),
+                                 "categorie"].dropna().unique().tolist()
+        # Une seule bande par catégorie, même lorsque plusieurs appareils sont
+        # visibles ensemble. Les intervalles de catégorie évitent les doublons.
+        fond = [{"categorie": categorie, "debut_s": 0, "fin_s": duree}
+                for categorie in categories]
         if plages.empty:
-            st.info("Aucun objet détecté dans cette vidéo : aucune plage de visibilité.")
-        else:
-            # Cumuler séparément les plages de chaque objet ; ne pas remplir les
-            # absences entre deux apparitions du même identifiant.
-            plages = plages.sort_values(["debut_s", "objet_id"], kind="stable")
-            plages["duree_objet_s"] = plages.groupby(["categorie", "objet_id"])["duree_s"].transform("sum")
-            plages["objet"] = plages.categorie + " #" + plages.objet_id.astype(str)
-            specification = {
-                "mark": {"type": "bar", "size": 16},
-                "encoding": {
-                    "x": {**axe_temps, "field": "debut_s"},
-                    "x2": {"field": "fin_s"},
-                    "y": {"field": "objet", "type": "nominal", "sort": None, "title": "Objet suivi"},
-                    "color": {"field": "categorie", "type": "nominal", "title": "Catégorie"},
-                    "tooltip": [
-                        {"field": "objet", "type": "nominal", "title": "Objet"},
-                        {"field": "debut_s", "type": "quantitative", "title": "Début (s)", "format": ".2f"},
-                        {"field": "fin_s", "type": "quantitative", "title": "Fin (s)", "format": ".2f"},
-                        {"field": "duree_s", "type": "quantitative", "title": "Durée de cette apparition (s)", "format": ".2f"},
-                        {"field": "duree_objet_s", "type": "quantitative", "title": "Durée cumulée de cet objet (s)", "format": ".2f"},
-                    ],
-                },
-            }
-            nombre = plages.objet.nunique()
-            with st.container(height=420 if nombre > 12 else "content", border=False):
-                st.vega_lite_chart(plages, specification, width="stretch", height=max(180, 28 * nombre))
-            st.caption("Chaque segment indique quand l'objet est visible. Survolez-le pour lire sa durée "
-                       "et la durée cumulée de cet objet. Les espaces entre segments représentent ses absences.")
-            durees = plages[["objet", "duree_objet_s"]].drop_duplicates("objet").rename(
-                columns={"objet": "Objet suivi", "duree_objet_s": "Visibilité cumulée (s)"})
-            with st.expander("Durée de visibilité par objet"):
-                st.dataframe(durees, hide_index=True, width="stretch")
-        st.caption("Les plages sont estimées entre deux images analysées et arrêtées aux changements de plan repérés. "
-                   "Un identifiant désigne un objet suivi, pas une identité physique certaine entre les plans.")
-        st.download_button("Visibilité par objet CSV", fichiers["quantifier_temps"].read_bytes(),
-                           "visiotrack_visibilite_objets.csv", mime="text/csv", on_click="ignore")
+            plages = pd.DataFrame(columns=["categorie", "debut_s", "fin_s", "duree_s"])
+        specification = {
+            "encoding": {
+                "x": {**axe_temps, "field": "debut_s"},
+                "x2": {"field": "fin_s"},
+                "y": {"field": "categorie", "type": "nominal", "sort": categories,
+                      "title": None, "axis": {"ticks": False, "domain": False}},
+            },
+            "layer": [
+                # La bande grise couvre toujours la vidéo entière, y compris
+                # avant la première apparition et après la dernière détection.
+                {"data": {"values": fond}, "mark": {"type": "bar", "size": 24, "color": "#e5e7eb"}},
+                {"mark": {"type": "bar", "size": 24, "color": "#22c55e"},
+                 "encoding": {"tooltip": [
+                     {"field": "categorie", "type": "nominal", "title": "Objet"},
+                     {"field": "debut_s", "type": "quantitative", "title": "Début (s)", "format": ".2f"},
+                     {"field": "fin_s", "type": "quantitative", "title": "Fin (s)", "format": ".2f"},
+                     {"field": "duree_s", "type": "quantitative", "title": "Durée visible (s)", "format": ".2f"},
+                 ]}},
+            ],
+        }
+        st.vega_lite_chart(plages, specification, width="stretch", height=max(80, 44 * len(categories)))
+        st.caption("Gris : durée totale de la vidéo. Vert : au moins un objet de cette catégorie est visible. "
+                   "L'axe horizontal indique le temps en secondes.")
+        if plages.empty:
+            st.info("Aucun objet détecté dans cette vidéo.")
+        st.caption("Les plages sont estimées entre deux images analysées et arrêtées aux changements de plan repérés.")
     if choix.get("compter_distincts"):
         st.markdown("**Nombre d'objets distincts aperçus au fil du temps**")
         evolution = lire_chronologie_video(fichiers["compter_distincts"], identifiant)

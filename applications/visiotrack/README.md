@@ -25,10 +25,12 @@ La section **Chronologie des détections** affiche le temps dans la vidéo, en
 secondes, sur l'axe horizontal des deux graphiques. Une seule vidéo est affichée
 à la fois ; le sélecteur du lot contrôle aussi l'aperçu vidéo.
 
-- **Visibilité de chaque objet au fil du temps** : une ligne par objet suivi et
-  un segment pour chacune de ses périodes de visibilité. Les absences restent
-  vides. Le survol indique début, fin, durée de l'apparition et durée cumulée de
-  cet objet. Le détail des durées par objet est aussi disponible sous le graphique.
+- **Présence dans la vidéo** : une bande grise représente toute la durée de la
+  vidéo, de 0 à sa fin en secondes. Les segments verts montrent les moments où
+  au moins un smartphone est visible ; les absences restent grises. Plusieurs
+  smartphones simultanés restent sur la même bande. Si plusieurs catégories
+  sont sélectionnées, chacune possède sa bande. Le survol donne début, fin et
+  durée de chaque plage de présence.
 - **Nombre d'objets distincts aperçus au fil du temps** : une courbe en escalier
   par catégorie compte les identifiants distincts rencontrés depuis le début.
   Le survol précise aussi le nombre d'objets visibles à cet instant.
