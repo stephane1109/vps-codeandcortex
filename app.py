@@ -23,6 +23,8 @@ import textwrap
 import pandas as pd
 from bs4 import BeautifulSoup
 import streamlit as st
+import streamlit.components.v1 as components
+from pathlib import Path
 from io import StringIO, BytesIO
 import zipfile
 from datetime import datetime
@@ -38,6 +40,9 @@ from doublons import (
 APP_DIR = os.path.dirname(__file__)
 
 st.set_page_config(layout="wide")
+# Exécuter la balise dans la page principale ; le JavaScript ignore les reruns.
+components.html((Path(__file__).with_name("analytics.html")).read_text(encoding="utf-8"),
+                height=0, scrolling=False)
 st.markdown(
     """
     <style>
@@ -882,21 +887,6 @@ def afficher_interface_europresse():
     else:
         st.info("Lancez d'abord un traitement pour afficher les exports.")
 
-
-    # Injection du script GA après le contenu
-    GA_CODE = """
-        <div style="display: none;">
-            <!-- Google Analytics -->
-            <script async src="https://www.googletagmanager.com/gtag/js?id=G-438652717"></script>
-            <script>
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-438652717');
-            </script>
-        </div>
-    """
-    st.markdown(GA_CODE, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     afficher_interface_europresse()
