@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from detection import CATEGORIES, colonnes_resultats, inventorier_sources, traiter_lot
 from ticket_gate import enforce_streamlit_access, renouveler_acces_analyse
@@ -222,6 +223,9 @@ def afficher_application():
     """Construire les seuls réglages nécessaires à l'analyse."""
     st.set_page_config(page_title="VisioTrack", page_icon="📱", layout="wide",
                        initial_sidebar_state="expanded")
+    # Même propriété Analytics que la home ; une seule visite malgré les reruns.
+    components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                    height=0, scrolling=False)
     # Réserver un accès avant de permettre les imports ou l'analyse.
     acces_initial = enforce_streamlit_access("visiotrack", "VisioTrack")
     st.title("VisioTrack")
