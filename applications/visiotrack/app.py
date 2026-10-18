@@ -83,9 +83,9 @@ def afficher_resultats():
         st.caption("Ces explications sont aussi disponibles en survolant les en-têtes du tableau.")
         st.table([{"Colonne": configuration["label"], "Signification": configuration["help"]}
                   for configuration in colonnes.values()])
-    afficher_graphiques(tableau, choix)
     repertoire = Path(st.session_state.visiotrack_exports.name)
-    afficher_apercu(tableau, repertoire)
+    identifiant = afficher_graphiques(tableau, choix, repertoire)
+    afficher_apercu(tableau, repertoire, identifiant)
     exports = [("resultats", "Résultats CSV")]
     if choix["quantifier_temps"]:
         exports.append(("intervalles", "Intervalles CSV"))
@@ -98,61 +98,105 @@ def afficher_resultats():
                                    mime="text/csv", on_click="ignore", width="stretch")
 
 
-def afficher_graphiques(tableau, choix):
-    """Comparer les mesures du lot, sans transformer les erreurs en valeurs nulles."""
-    valides = tableau[tableau.statut == "ok"].copy()
-    if valides.empty:
-        return
-    graphiques = []
-    for option, mesure, titre, unite, couleur, format_nombre in (
-        ("quantifier_temps", "duree_visibilite_s", "Temps à l'image",
-         "Durée de visibilité (s)", "#2563eb", ".2f"),
-        ("compter_distincts", "nombre_objets_distincts_estime", "Nombre d'objets distincts aperçus",
-         "Nombre estimé d'objets distincts", "#16a34a", "d"),
-    ):
-        if not choix.get(option) or mesure not in valides:
-            continue
-        donnees = valides[["video_id", "source", "categorie", mesure]].copy()
-        donnees[mesure] = pd.to_numeric(donnees[mesure], errors="coerce")
-        donnees = donnees.dropna(subset=[mesure])
-        if donnees.empty:
-            continue
-        # L'identifiant distingue les vidéos portant le même nom. Le nom complet
-        # reste accessible au survol, sans encombrer les axes avec de longues URL.
-        donnees["repere"] = donnees.video_id.astype(str) + " · " + donnees.categorie.astype(str)
-        axe = {"title": unite}
-        if option == "compter_distincts":
-            axe.update(format="d", tickMinStep=1)
-        specification = {
-            "mark": {"type": "bar", "color": couleur},
-            "encoding": {
-                "x": {"field": mesure, "type": "quantitative", "scale": {"zero": True}, "axis": axe},
-                "y": {"field": "repere", "type": "nominal", "sort": None,
-                      "axis": {"title": "Vidéo · objet", "labelLimit": 220}},
-                "tooltip": [
-                    {"field": "video_id", "type": "nominal", "title": "Identifiant"},
-                    {"field": "source", "type": "nominal", "title": "Vidéo"},
-                    {"field": "categorie", "type": "nominal", "title": "Objet"},
-                    {"field": mesure, "type": "quantitative", "title": unite, "format": format_nombre},
-                ],
-            },
-        }
-        graphiques.append((titre, donnees, specification))
-    if not graphiques:
-        return
-    st.subheader("Graphiques")
-    st.caption("Une barre par vidéo et catégorie. Survolez une barre pour voir la vidéo et sa valeur. "
-               "Les vidéos en erreur sont exclues ; une absence de détection reste à zéro.")
-    for colonne, (titre, donnees, specification) in zip(st.columns(len(graphiques)), graphiques):
-        with colonne:
-            st.markdown(f"**{titre}**")
-            # Conserver toutes les vidéos des grands lots dans une zone défilante.
-            with st.container(height=420 if len(donnees) > 12 else "content", border=False):
-                st.vega_lite_chart(donnees, specification, width="stretch",
-                                   height=max(180, 28 * len(donnees)))
+def lire_chronologie_video(chemin, identifiant):
+    """Lire les CSV par blocs et ne conserver que la vidéo sélectionnée."""
+    blocs = []
+    for bloc in pd.read_csv(chemin, chunksize=10000, dtype={"video_id": str}):
+        selection = bloc[bloc.video_id == identifiant]
+        if not selection.empty:
+            blocs.append(selection)
+    return pd.concat(blocs, ignore_index=True) if blocs else pd.DataFrame()
 
 
-def afficher_apercu(tableau, repertoire):
+def afficher_graphiques(tableau, choix, repertoire):
+    """Afficher une chronologie par objet, avec le temps vidéo sur l'axe horizontal."""
+    videos = tableau[tableau.statut == "ok"].drop_duplicates("video_id").set_index("video_id")
+    if videos.empty:
+        return None
+    fichiers = {"quantifier_temps": repertoire / "visibilite_objets.csv",
+                "compter_distincts": repertoire / "chronologie.csv"}
+    if any(choix.get(option) and not chemin.exists() for option, chemin in fichiers.items()):
+        st.info("Relancez l'analyse pour obtenir les chronologies par objet de ce lot.")
+        return None
+    st.subheader("Chronologie des détections")
+    if len(videos) > 1:
+        identifiant = st.selectbox("Vidéo des graphiques et de l'aperçu", list(videos.index),
+                                  format_func=lambda cle: f"{cle} — {videos.loc[cle, 'source']}")
+    else:
+        identifiant = videos.index[0]
+        st.caption(f"{identifiant} — {videos.loc[identifiant, 'source']}")
+    duree = float(videos.loc[identifiant, "duree_totale_s"])
+    axe_temps = {"type": "quantitative", "title": "Temps dans la vidéo (s)",
+                 "scale": {"domain": [0, duree], "nice": False}}
+    if choix.get("quantifier_temps"):
+        st.markdown("**Visibilité de chaque objet au fil du temps**")
+        plages = lire_chronologie_video(fichiers["quantifier_temps"], identifiant)
+        if plages.empty:
+            st.info("Aucun objet détecté dans cette vidéo : aucune plage de visibilité.")
+        else:
+            # Cumuler séparément les plages de chaque objet ; ne pas remplir les
+            # absences entre deux apparitions du même identifiant.
+            plages = plages.sort_values(["debut_s", "objet_id"], kind="stable")
+            plages["duree_objet_s"] = plages.groupby(["categorie", "objet_id"])["duree_s"].transform("sum")
+            plages["objet"] = plages.categorie + " #" + plages.objet_id.astype(str)
+            specification = {
+                "mark": {"type": "bar", "size": 16},
+                "encoding": {
+                    "x": {**axe_temps, "field": "debut_s"},
+                    "x2": {"field": "fin_s"},
+                    "y": {"field": "objet", "type": "nominal", "sort": None, "title": "Objet suivi"},
+                    "color": {"field": "categorie", "type": "nominal", "title": "Catégorie"},
+                    "tooltip": [
+                        {"field": "objet", "type": "nominal", "title": "Objet"},
+                        {"field": "debut_s", "type": "quantitative", "title": "Début (s)", "format": ".2f"},
+                        {"field": "fin_s", "type": "quantitative", "title": "Fin (s)", "format": ".2f"},
+                        {"field": "duree_s", "type": "quantitative", "title": "Durée de cette apparition (s)", "format": ".2f"},
+                        {"field": "duree_objet_s", "type": "quantitative", "title": "Durée cumulée de cet objet (s)", "format": ".2f"},
+                    ],
+                },
+            }
+            nombre = plages.objet.nunique()
+            with st.container(height=420 if nombre > 12 else "content", border=False):
+                st.vega_lite_chart(plages, specification, width="stretch", height=max(180, 28 * nombre))
+            st.caption("Chaque segment indique quand l'objet est visible. Survolez-le pour lire sa durée "
+                       "et la durée cumulée de cet objet. Les espaces entre segments représentent ses absences.")
+            durees = plages[["objet", "duree_objet_s"]].drop_duplicates("objet").rename(
+                columns={"objet": "Objet suivi", "duree_objet_s": "Visibilité cumulée (s)"})
+            with st.expander("Durée de visibilité par objet"):
+                st.dataframe(durees, hide_index=True, width="stretch")
+        st.caption("Les plages sont estimées entre deux images analysées et arrêtées aux changements de plan repérés. "
+                   "Un identifiant désigne un objet suivi, pas une identité physique certaine entre les plans.")
+        st.download_button("Visibilité par objet CSV", fichiers["quantifier_temps"].read_bytes(),
+                           "visiotrack_visibilite_objets.csv", mime="text/csv", on_click="ignore")
+    if choix.get("compter_distincts"):
+        st.markdown("**Nombre d'objets distincts aperçus au fil du temps**")
+        evolution = lire_chronologie_video(fichiers["compter_distincts"], identifiant)
+        if not evolution.empty:
+            specification = {
+                "mark": {"type": "line", "interpolate": "step-after", "point": True},
+                "encoding": {
+                    "x": {**axe_temps, "field": "horodatage_s"},
+                    "y": {"field": "nombre_distincts_cumule", "type": "quantitative",
+                          "title": "Objets distincts depuis le début (estim.)",
+                          "scale": {"zero": True}, "axis": {"format": "d", "tickMinStep": 1}},
+                    "color": {"field": "categorie", "type": "nominal", "title": "Catégorie"},
+                    "tooltip": [
+                        {"field": "horodatage_s", "type": "quantitative", "title": "Temps (s)", "format": ".2f"},
+                        {"field": "categorie", "type": "nominal", "title": "Objet"},
+                        {"field": "nombre_distincts_cumule", "type": "quantitative", "title": "Distincts cumulés", "format": "d"},
+                        {"field": "nombre_visible", "type": "quantitative", "title": "Visibles à cet instant", "format": "d"},
+                    ],
+                },
+            }
+            st.vega_lite_chart(evolution, specification, width="stretch", height=260)
+            st.caption("Le cumul augmente à chaque nouvel identifiant aperçu ; il ne diminue pas quand un objet disparaît. "
+                       "Le survol indique aussi combien d'objets sont visibles à cet instant.")
+        st.download_button("Évolution des détections CSV", fichiers["compter_distincts"].read_bytes(),
+                           "visiotrack_chronologie.csv", mime="text/csv", on_click="ignore")
+    return identifiant
+
+
+def afficher_apercu(tableau, repertoire, identifiant=None):
     """Ne charger dans le lecteur que la vidéo sélectionnée dans le lot."""
     videos = tableau[tableau.statut == "ok"].drop_duplicates("video_id").set_index("video_id")
     manifeste = repertoire / "apercus.json"
@@ -160,8 +204,9 @@ def afficher_apercu(tableau, repertoire):
         return
     apercus = json.loads(manifeste.read_text(encoding="utf-8"))
     st.subheader("Vidéo avec détections")
-    identifiant = st.selectbox("Vidéo à regarder", list(videos.index),
-                              format_func=lambda cle: f"{cle} — {videos.loc[cle, 'source']}")
+    if identifiant is None:
+        identifiant = st.selectbox("Vidéo à regarder", list(videos.index),
+                                  format_func=lambda cle: f"{cle} — {videos.loc[cle, 'source']}")
     apercu = apercus.get(identifiant, {})
     if "fichier" in apercu:
         # Le chemin pointe vers un MP4 H.264 de la session, compatible navigateur.

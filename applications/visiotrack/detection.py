@@ -48,6 +48,76 @@ COLONNES_DETECTIONS = [
     "video_id", "image", "horodatage_s", "categorie", "piste_id", "confiance",
     "x1", "y1", "x2", "y2", "plan_id", "objet_id",
 ]
+COLONNES_VISIBILITE_OBJETS = ["video_id", "categorie", "objet_id", "debut_s", "fin_s", "duree_s"]
+COLONNES_CHRONOLOGIE = ["video_id", "horodatage_s", "categorie", "nombre_visible",
+                       "nombre_distincts_cumule"]
+
+
+def construire_chronologie(observations, video_id, categories, duree, dossier,
+                           quantifier_temps=True, compter_distincts=True):
+    """Écrire les plages par objet et les effectifs au fil du temps, sans charger la vidéo."""
+    from contextlib import ExitStack
+
+    ouverts = {}
+    distincts = {CATEGORIES[categorie]: set() for categorie in categories}
+    with ExitStack() as pile:
+        fichier_objets, objets = ouvrir_csv(Path(dossier) / "visibilite_objets.csv", COLONNES_VISIBILITE_OBJETS)
+        fichier_temps, temps = ouvrir_csv(Path(dossier) / "chronologie.csv", COLONNES_CHRONOLOGIE)
+        pile.enter_context(fichier_objets)
+        pile.enter_context(fichier_temps)
+
+        def fermer(cle):
+            """Fermer une plage continue, sans fusionner une absence intermédiaire."""
+            debut, fin = ouverts.pop(cle)
+            objets.writerow({"video_id": video_id, "categorie": cle[0], "objet_id": cle[1],
+                              "debut_s": debut, "fin_s": fin, "duree_s": fin - debut})
+
+        def ajouter_plage(evenement, fin):
+            """Une observation vaut jusqu'à la suivante, une coupe ou la fin du média."""
+            debut = evenement["horodatage_s"]
+            if fin <= debut:
+                return
+            presents = {(CATEGORIES[d["categorie_id"]], d["objet_id"])
+                        for d in evenement["detections"]}
+            if quantifier_temps:
+                for cle in list(ouverts):
+                    if cle not in presents:
+                        fermer(cle)
+                for cle in sorted(presents):
+                    if cle in ouverts:
+                        ouverts[cle][1] = fin
+                    else:
+                        ouverts[cle] = [debut, fin]
+
+        def ecrire_effectifs(evenement):
+            """Conserver aussi les zéros et le cumul, sans recompter un identifiant."""
+            effectifs = Counter()
+            for detection in evenement["detections"]:
+                categorie = CATEGORIES[detection["categorie_id"]]
+                effectifs[categorie] += 1
+                distincts[categorie].add(detection["objet_id"])
+            if compter_distincts:
+                for categorie, identifiants in distincts.items():
+                    temps.writerow({"video_id": video_id, "horodatage_s": evenement["horodatage_s"],
+                                    "categorie": categorie, "nombre_visible": effectifs[categorie],
+                                    "nombre_distincts_cumule": len(identifiants)})
+
+        precedent = {"horodatage_s": 0.0, "detections": []}
+        with Path(observations).open(encoding="utf-8") as fichier:
+            for ligne in fichier:
+                evenement = json.loads(ligne)
+                ajouter_plage(precedent, evenement["horodatage_s"])
+                # Deux événements au même instant (coupe puis analyse) sont
+                # représentés par la dernière observation à cet instant.
+                if evenement["horodatage_s"] > precedent["horodatage_s"]:
+                    ecrire_effectifs(precedent)
+                precedent = evenement
+        ajouter_plage(precedent, duree)
+        ecrire_effectifs(precedent)
+        if precedent["horodatage_s"] < duree:
+            ecrire_effectifs({**precedent, "horodatage_s": duree})
+        for cle in list(ouverts):
+            fermer(cle)
 
 
 def colonnes_resultats(quantifier_temps=True, compter_distincts=False):
@@ -615,24 +685,26 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
             images_lues += 1
             if horodatage >= duree:
                 raise ValueError("La durée annoncée ne correspond pas aux horodatages vidéo.")
-            image = None
-            if compter_distincts:
-                # Vérifier toutes les images pour voir une coupe entre deux
-                # analyses YOLO, sans lancer davantage d'inférences.
-                succes, image = capture.retrieve()
-                if not succes:
-                    raise ValueError("Une image ne peut pas être décodée.")
-                miniature = reduire_image_continuite(image)
-                if plan_a_change(miniature_precedente, miniature):
-                    plan_id += 1
-                    reinitialiser_suivi = True
-                miniature_precedente = miniature
+            # Vérifier toutes les images pour voir une coupe entre deux
+            # analyses YOLO, sans lancer davantage d'inférences.
+            succes, image = capture.retrieve()
+            if not succes:
+                raise ValueError("Une image ne peut pas être décodée.")
+            miniature = reduire_image_continuite(image)
+            if plan_a_change(miniature_precedente, miniature):
+                # Une visibilité ne doit pas traverser une coupe jusqu'à
+                # la prochaine analyse YOLO. Conserver cette borne temporelle.
+                observations.write(json.dumps({"horodatage_s": horodatage, "detections": []}) + "\n")
+                if quantifier_temps and images_analysees:
+                    mesure.ajouter(debut_echantillon, horodatage, effectifs)
+                    mesure.terminer()
+                    debut_echantillon = horodatage
+                    effectifs = Counter()
+                plan_id += 1
+                reinitialiser_suivi = True
+            miniature_precedente = miniature
             if horodatage + 1e-8 < prochaine_cible:
                 continue
-            if image is None:
-                succes, image = capture.retrieve()
-                if not succes:
-                    raise ValueError("Une image sélectionnée ne peut pas être décodée.")
             if reinitialiser_suivi:
                 # Ne pas associer deux appareils à la même position dans des
                 # plans différents. La réidentification entre plans n'est pas garantie.
@@ -649,15 +721,14 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
                 maximums[categorie] = max(maximums[categorie], nombre)
             for detection in detections:
                 categorie = detection["categorie_id"]
-                if compter_distincts:
-                    piste = detection["piste_id"]
-                    # Une boîte sans association ne prouve aucune identité : la
-                    # compter séparément, sans fusion arbitraire avec un téléphone voisin.
-                    cle = (categorie, piste) if piste != "" else object()
-                    if cle not in identifiants_objets:
-                        nombres_distincts[categorie] += 1
-                        identifiants_objets[cle] = f"{categorie}-{nombres_distincts[categorie]}"
-                    detection.update(plan_id=plan_id, objet_id=identifiants_objets[cle])
+                piste = detection["piste_id"]
+                # Une boîte sans association ne prouve aucune identité : la
+                # compter séparément, sans fusion arbitraire avec un téléphone voisin.
+                cle = (categorie, piste) if piste != "" else object()
+                if cle not in identifiants_objets:
+                    nombres_distincts[categorie] += 1
+                    identifiants_objets[cle] = f"{categorie}-{nombres_distincts[categorie]}"
+                detection.update(plan_id=plan_id, objet_id=identifiants_objets[cle])
                 redacteur_detections.writerow({"video_id": video_id, "image": images_lues - 1,
                                                "horodatage_s": horodatage,
                                                "categorie": CATEGORIES[categorie],
@@ -684,6 +755,8 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
         fichier_intervalles.close()
         fichier_detections.close()
         observations.close()
+    construire_chronologie(Path(dossier) / "observations.jsonl", video_id, categories,
+                           duree, dossier, quantifier_temps, compter_distincts)
     return [{"video_id": video_id, "source": texte_csv(nom), "statut": "ok", "erreur": "",
              "duree_totale_s": duree, "categorie": CATEGORIES[categorie],
              "objet_detecte": maximums[categorie] > 0,
@@ -711,7 +784,9 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
         sorties = {}
         for nom, colonnes in (("resultats", colonnes_resultats(quantifier_temps, compter_distincts)),
                               ("intervalles", COLONNES_INTERVALLES),
-                              ("detections", COLONNES_DETECTIONS)):
+                              ("detections", COLONNES_DETECTIONS),
+                              ("visibilite_objets", COLONNES_VISIBILITE_OBJETS),
+                              ("chronologie", COLONNES_CHRONOLOGIE)):
             fichier, redacteur = ouvrir_csv(Path(dossier) / f"{nom}.csv", colonnes)
             pile.enter_context(fichier)
             sorties[nom] = redacteur
@@ -727,7 +802,7 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
                         quantifier_temps=quantifier_temps, compter_distincts=compter_distincts)
                     # Une vidéo en erreur ne laisse jamais d'intervalles partiels
                     # dans les exports communs au lot.
-                    for nom in ("intervalles", "detections"):
+                    for nom in ("intervalles", "detections", "visibilite_objets", "chronologie"):
                         with (Path(temporaire) / f"{nom}.csv").open(encoding="utf-8-sig", newline="") as entree:
                             sorties[nom].writerows(csv.DictReader(entree))
                     try:

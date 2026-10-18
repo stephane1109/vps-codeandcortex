@@ -93,51 +93,79 @@ class TestsInterface(unittest.TestCase):
             self.assertEqual(application.error[0].value, "Cochez au moins une mesure à quantifier.")
             traiter.assert_not_called()
 
-    def test_graphiques_mesures_choisies_zeros_et_erreurs(self):
-        """Garder chaque vidéo/catégorie et les zéros, exclure les échecs et mesures décochées."""
-        lignes = [
-            {"video_id": "v1", "source": "meme.mp4", "categorie": "smartphone", "statut": "ok",
-             "duree_visibilite_s": 10.5, "nombre_objets_distincts_estime": 2},
-            {"video_id": "v1", "source": "meme.mp4", "categorie": "personne", "statut": "ok",
-             "duree_visibilite_s": 20.0, "nombre_objets_distincts_estime": 3},
-            {"video_id": "v2", "source": "meme.mp4", "categorie": "smartphone", "statut": "ok",
-             "duree_visibilite_s": 0, "nombre_objets_distincts_estime": 0},
-            {"video_id": "erreur", "source": "illisible.mp4", "categorie": "smartphone", "statut": "erreur",
-             "duree_visibilite_s": 999, "nombre_objets_distincts_estime": 999},
-        ]
+    def test_chronologie_par_objet_et_temps_en_abscisse(self):
+        """Tracer les apparitions séparées et leur durée, jamais un total sur l'axe temporel."""
+        import pandas as pd
         script = """
 import pandas as pd
 import streamlit as st
+from pathlib import Path
 from app import afficher_graphiques
-afficher_graphiques(pd.DataFrame(st.session_state.lignes), st.session_state.choix)
+identifiant = afficher_graphiques(pd.DataFrame(st.session_state.lignes), st.session_state.choix,
+                                  Path(st.session_state.dossier))
 """
-        for temps, distincts in ((True, True), (True, False), (False, True)):
-            with self.subTest(temps=temps, distincts=distincts), \
-                    patch.object(st, "vega_lite_chart", wraps=st.vega_lite_chart) as graphique:
-                application = AppTest.from_string(script)
-                application.session_state["lignes"] = lignes
-                application.session_state["choix"] = {"quantifier_temps": temps, "compter_distincts": distincts}
-                application.run()
-                self.assertEqual(len(application.exception), 0)
-                self.assertEqual(graphique.call_count, int(temps) + int(distincts))
-                mesures = []
-                for appel in graphique.call_args_list:
-                    donnees, specification = appel.args
-                    mesure = specification["encoding"]["x"]["field"]
-                    mesures.append(mesure)
-                    self.assertEqual(list(donnees.video_id), ["v1", "v1", "v2"])
-                    self.assertEqual(donnees.repere.nunique(), 3)
-                    self.assertEqual(donnees.iloc[-1][mesure], 0)
-                    self.assertEqual(specification["encoding"]["x"]["scale"], {"zero": True})
-                self.assertEqual("duree_visibilite_s" in mesures, temps)
-                self.assertEqual("nombre_objets_distincts_estime" in mesures, distincts)
-        with patch.object(st, "vega_lite_chart", wraps=st.vega_lite_chart) as graphique:
-            application = AppTest.from_string(script)
-            application.session_state["lignes"] = [lignes[-1]]
-            application.session_state["choix"] = {"quantifier_temps": True, "compter_distincts": True}
-            application.run()
-            self.assertEqual(len(application.exception), 0)
-            graphique.assert_not_called()
+        lignes = [
+            {"video_id": "v1", "source": "meme.mp4", "categorie": "smartphone", "statut": "ok",
+             "duree_totale_s": 4},
+            {"video_id": "v2", "source": "meme.mp4", "categorie": "smartphone", "statut": "ok",
+             "duree_totale_s": 10},
+            {"video_id": "erreur", "source": "illisible.mp4", "statut": "erreur"},
+        ]
+        with tempfile.TemporaryDirectory() as dossier:
+            pd.DataFrame([
+                {"video_id": "v1", "categorie": "smartphone", "objet_id": "67-1",
+                 "debut_s": 0, "fin_s": 1, "duree_s": 1},
+                {"video_id": "v1", "categorie": "smartphone", "objet_id": "67-1",
+                 "debut_s": 2, "fin_s": 3.5, "duree_s": 1.5},
+                {"video_id": "v1", "categorie": "smartphone", "objet_id": "67-2",
+                 "debut_s": 0.5, "fin_s": 2, "duree_s": 1.5},
+            ]).to_csv(Path(dossier) / "visibilite_objets.csv", index=False)
+            pd.DataFrame([
+                {"video_id": video, "horodatage_s": instant, "categorie": "smartphone",
+                 "nombre_visible": visibles, "nombre_distincts_cumule": cumul}
+                for video, instant, visibles, cumul in [("v1", 0, 1, 1), ("v1", 1, 2, 2),
+                                                       ("v1", 2, 0, 2), ("v1", 4, 0, 2),
+                                                       ("v2", 0, 0, 0), ("v2", 10, 0, 0)]
+            ]).to_csv(Path(dossier) / "chronologie.csv", index=False)
+            for temps, distincts in ((True, True), (True, False), (False, True)):
+                with self.subTest(temps=temps, distincts=distincts), \
+                        patch.object(st, "vega_lite_chart", wraps=st.vega_lite_chart) as graphique:
+                    application = AppTest.from_string(script)
+                    application.session_state["lignes"] = lignes
+                    application.session_state["dossier"] = dossier
+                    application.session_state["choix"] = {"quantifier_temps": temps, "compter_distincts": distincts}
+                    application.run()
+                    self.assertEqual(len(application.exception), 0)
+                    self.assertEqual(graphique.call_count, int(temps) + int(distincts))
+                    self.assertEqual(application.selectbox[0].options, ["v1 — meme.mp4", "v2 — meme.mp4"])
+                    for appel in graphique.call_args_list:
+                        donnees, specification = appel.args
+                        encodage = specification["encoding"]
+                        self.assertEqual(encodage["x"]["scale"]["domain"], [0, 4])
+                        self.assertEqual(set(donnees.video_id), {"v1"})
+                        if specification["mark"]["type"] == "bar":
+                            self.assertEqual(encodage["x"]["field"], "debut_s")
+                            self.assertEqual(encodage["x2"]["field"], "fin_s")
+                            self.assertEqual(len(donnees), 3)
+                            objet1 = donnees[donnees.objet_id == "67-1"]
+                            self.assertEqual(list(objet1.debut_s), [0, 2])
+                            self.assertEqual(list(objet1.fin_s), [1, 3.5])
+                            self.assertEqual(set(objet1.duree_objet_s), {2.5})
+                        else:
+                            self.assertEqual(encodage["x"]["field"], "horodatage_s")
+                            self.assertEqual(specification["mark"]["interpolate"], "step-after")
+                            self.assertEqual(list(donnees.nombre_distincts_cumule), [1, 2, 2, 2])
+                    graphique.reset_mock()
+                    application.selectbox[0].select("v2").run()
+                    self.assertEqual(len(application.exception), 0)
+                    self.assertEqual(graphique.call_count, int(distincts))
+                    if distincts:
+                        self.assertEqual(set(graphique.call_args.args[0].nombre_distincts_cumule), {0})
+                    graphique.reset_mock()
+                    application.session_state["lignes"] = [lignes[-1]]
+                    application.run()
+                    self.assertEqual(len(application.exception), 0)
+                    graphique.assert_not_called()
 
 
 if __name__ == "__main__":

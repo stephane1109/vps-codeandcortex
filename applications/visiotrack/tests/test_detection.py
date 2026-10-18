@@ -191,6 +191,35 @@ class TestsVisibilite(unittest.TestCase):
                 lignes = list(csv.DictReader(fichier))
             self.assertEqual([l["plan_id"] for l in lignes], ["1", "3", "3"])
             self.assertEqual([l["objet_id"] for l in lignes], ["67-1", "67-2", "67-2"])
+            with (Path(dossier) / "visibilite_objets.csv").open(encoding="utf-8-sig") as fichier:
+                plages = list(csv.DictReader(fichier))
+            self.assertEqual([(float(p["debut_s"]), float(p["fin_s"])) for p in plages],
+                             [(0, 0.5), (1, 2.5)])
+            self.assertAlmostEqual(sum(float(p["duree_s"]) for p in plages), 2.0)
+            self.assertAlmostEqual(resultat["duree_visibilite_s"], 2.0)
+
+    def test_chronologie_durees_par_objet_et_absences(self):
+        """Un retour conserve son identité mais pas une visibilité à travers l'absence."""
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "court.mp4"
+            fabriquer_video(chemin, nombre=35)
+            observations = [[detection_telephone(1), detection_telephone(2)], [],
+                            [detection_telephone(1)], [detection_telephone(1)]]
+            with patch("detection.detecter_image", side_effect=observations):
+                resultat = analyser_video(chemin, "v1", "court", [67], 1, None, dossier,
+                                           compter_distincts=True)[0]
+            with (Path(dossier) / "visibilite_objets.csv").open(encoding="utf-8-sig") as fichier:
+                plages = list(csv.DictReader(fichier))
+            objet1 = sorted((float(p["debut_s"]), float(p["fin_s"]), float(p["duree_s"]))
+                            for p in plages if p["objet_id"] == "67-1")
+            self.assertEqual(objet1, [(0, 1, 1), (2, 3.5, 1.5)])
+            self.assertAlmostEqual(resultat["duree_visibilite_s"], 2.5)
+            self.assertEqual(resultat["nombre_objets_distincts_estime"], 2)
+            with (Path(dossier) / "chronologie.csv").open(encoding="utf-8-sig") as fichier:
+                evolution = list(csv.DictReader(fichier))
+            self.assertEqual([float(p["horodatage_s"]) for p in evolution], [0, 1, 2, 3, 3.5])
+            self.assertEqual([int(p["nombre_visible"]) for p in evolution], [2, 0, 1, 1, 1])
+            self.assertEqual([int(p["nombre_distincts_cumule"]) for p in evolution], [2] * 5)
 
     def test_options_mesures_et_exports_par_video(self):
         """Les mesures décochées sont absentes des exports ; le comptage repart par vidéo."""
@@ -216,6 +245,14 @@ class TestsVisibilite(unittest.TestCase):
                     self.assertEqual("nombre_objets_distincts_estime" in lecteur.fieldnames, distincts)
                 with (Path(dossier) / "intervalles.csv").open(encoding="utf-8-sig") as fichier:
                     self.assertEqual(bool(list(csv.DictReader(fichier))), temps)
+                with (Path(dossier) / "visibilite_objets.csv").open(encoding="utf-8-sig") as fichier:
+                    plages = list(csv.DictReader(fichier))
+                    self.assertEqual(bool(plages), temps)
+                    if temps:
+                        self.assertEqual({p["video_id"] for p in plages}, {"v000001", "v000002"})
+                        self.assertEqual({p["objet_id"] for p in plages}, {"67-1"})
+                with (Path(dossier) / "chronologie.csv").open(encoding="utf-8-sig") as fichier:
+                    self.assertEqual(bool(list(csv.DictReader(fichier))), distincts)
 
     def test_aucune_mesure_refusee_avant_chargement_modele(self):
         with patch("detection.charger_modele") as charger:

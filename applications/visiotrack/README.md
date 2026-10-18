@@ -21,13 +21,22 @@ Le tableau et le CSV de résultats contiennent seulement les mesures demandées.
 Par exemple, deux téléphones ensemble puis un nouveau donnent trois objets
 distincts estimés et un maximum simultané de deux.
 
-La section **Graphiques** compare ces deux indicateurs avec des barres horizontales :
-durée de visibilité en secondes et nombre estimé d'objets distincts. Chaque barre
-représente une vidéo et une catégorie ; le survol donne le nom de la vidéo et la
-valeur. Seuls les indicateurs cochés pour le lot sont affichés. Les vidéos en erreur
-sont exclues, les absences de détection restent à zéro et les grands lots peuvent
-être parcourus dans une zone défilante. Les graphiques réutilisent les résultats
-existants, sans relancer l'analyse.
+La section **Chronologie des détections** affiche le temps dans la vidéo, en
+secondes, sur l'axe horizontal des deux graphiques. Une seule vidéo est affichée
+à la fois ; le sélecteur du lot contrôle aussi l'aperçu vidéo.
+
+- **Visibilité de chaque objet au fil du temps** : une ligne par objet suivi et
+  un segment pour chacune de ses périodes de visibilité. Les absences restent
+  vides. Le survol indique début, fin, durée de l'apparition et durée cumulée de
+  cet objet. Le détail des durées par objet est aussi disponible sous le graphique.
+- **Nombre d'objets distincts aperçus au fil du temps** : une courbe en escalier
+  par catégorie compte les identifiants distincts rencontrés depuis le début.
+  Le survol précise aussi le nombre d'objets visibles à cet instant.
+
+Seuls les indicateurs cochés pour le lot sont affichés. Les vidéos en erreur
+sont exclues. Les nouvelles chronologies sont conservées en CSV, sans relancer
+l'analyse lors d'un changement de vidéo. Les anciens résultats doivent être
+réanalysés une fois pour produire ces nouveaux fichiers.
 
 Le nombre distinct est une **estimation de suivis, pas une identification certaine
 des appareils physiques**. Un même téléphone peut être recompté après une coupe,
@@ -39,9 +48,9 @@ Utiliser les identifiants affichés dans l'aperçu et le CSV des détections pou
 Après l'analyse, le lecteur **Vidéo avec détections** affiche un aperçu avec des
 cadres verts et le score de confiance entre 0 et 1 (par exemple `0,92`, au lieu de
 `92 %`) autour des smartphones (ou des autres objets
-sélectionnés). Pour un lot, choisir la vidéo dans la liste au-dessus du lecteur.
+sélectionnés). Pour un lot, choisir la vidéo dans le sélecteur des chronologies.
 Ce score du modèle n'est pas une probabilité calibrée de détection correcte.
-Lorsque le comptage est coché, le libellé affiche aussi l'identifiant de l'objet suivi
+Le libellé affiche aussi l'identifiant de l'objet suivi
 (par exemple `#67-1` pour le premier smartphone), identique au champ `objet_id` du CSV.
 La lecture, la pause et le déplacement dans la vidéo permettent de vérifier les détections.
 Le lecteur fait au maximum 360 pixels de large (environ 360 × 640 pour un TikTok
@@ -91,7 +100,7 @@ Les vidéos en erreur ont des mesures vides, jamais des zéros trompeurs.
   non encore confirmée par ByteTrack conserve son identifiant provisoire : elle compte
   une seule fois lorsqu'elle est ensuite confirmée. Seules les boîtes réellement
   observées et dépassant le seuil de confiance contribuent au comptage.
-- Si le comptage distinct est coché, les images intermédiaires sont décodées pour
+- Pour les deux mesures, les images intermédiaires sont décodées pour
   rechercher les changements de plan, sans multiplier les analyses YOLO. Une coupe
   réinitialise le suivi, pour ne pas fusionner des appareils situés au même endroit
   dans des plans différents. Cette comparaison visuelle est heuristique : une coupe
@@ -103,7 +112,9 @@ Les vidéos en erreur ont des mesures vides, jamais des zéros trompeurs.
   les vidéos à cadence variable. La première image à partir de chaque cible
   temporelle est analysée ; si la fréquence demandée dépasse celle de la vidéo,
   chaque image est analysée une seule fois.
-- Chaque échantillon représente l'intervalle allant jusqu'au prochain échantillon.
+- Chaque échantillon représente l'intervalle allant jusqu'au prochain échantillon,
+  ou jusqu'à la première coupe repérée si elle survient avant. Après la coupe,
+  aucune visibilité n'est prolongée avant une nouvelle détection.
   Le dernier est borné par la durée de la piste vidéo lue avec ffprobe. Les intervalles
   sont semi-ouverts `[début, fin[`, sauf la borne finale du média.
 - La durée d'une catégorie est l'union de ses plages visibles, et non la somme
@@ -120,19 +131,21 @@ Les vidéos en erreur ont des mesures vides, jamais des zéros trompeurs.
 
 ## Exports
 
-Les trois CSV sont encodés en UTF-8 avec BOM et séparés par des virgules. Les valeurs
+Les CSV sont encodés en UTF-8 avec BOM et séparés par des virgules. Les valeurs
 exportées gardent leur précision ; seul l'affichage du tableau est arrondi.
 
 | Fichier | Contenu |
 | --- | --- |
 | `resultats.csv` | Une ligne par vidéo et catégorie : source, statut, durée totale, présence, maximum simultané, fréquence et images analysées. Durée visible et pourcentage si demandés ; `nombre_objets_distincts_estime` si demandé. Une ligne par vidéo en erreur. |
 | `intervalles.csv` | Si le temps est quantifié : une ligne par plage continue de visibilité et catégorie, avec identifiant vidéo, début, fin, durée et maximum simultané. Sinon, fichier interne vide (en-tête seul), sans bouton de téléchargement. |
-| `detections.csv` | Une ligne par boîte observée : identifiant vidéo, index d'image depuis zéro, horodatage réel, catégorie, piste, confiance et coordonnées. `plan_id` et `objet_id` sont renseignés lorsque le comptage distinct est coché. |
+| `detections.csv` | Une ligne par boîte observée : identifiant vidéo, index d'image depuis zéro, horodatage réel, catégorie, piste, confiance, coordonnées, `plan_id` et `objet_id`. |
+| `visibilite_objets.csv` | Si le temps est quantifié : vidéo, catégorie, identifiant d'objet et chaque plage de visibilité avec début, fin et durée en secondes. La somme des plages d'un objet donne sa durée cumulée. |
+| `chronologie.csv` | Si le comptage est coché : vidéo, horodatage en secondes, catégorie, nombre visible et nombre distinct cumulé. Inclut les absences, les coupes et la borne de fin de la vidéo. |
 
-Avec le comptage, les pistes s'interprètent dans le contexte
+Les pistes s'interprètent dans le contexte
 `(video_id, plan_id, catégorie, piste_id)` : ByteTrack peut réutiliser un numéro
 après une coupe. `objet_id` reste unique par catégorie dans chaque vidéo, même
-après une coupe. Sans comptage, les pistes s'interprètent par vidéo et catégorie.
+après une coupe, y compris lorsque seule la durée est demandée.
 Les identifiants ne constituent pas une reconnaissance d'identité entre vidéos. Les détections et
 intervalles partiels d'une vidéo en erreur sont exclus des exports communs.
 
