@@ -6,6 +6,28 @@
     <link rel="icon" href="./logo_iramuteqlab.png?v=20260928-logo" type="image/png" />
     <link rel="apple-touch-icon" href="./logo_iramuteqlab.png?v=20260928-logo" />
     <link rel="stylesheet" href="./styles.css?v=20261006-labbe-source-script" />
+<!-- Google Analytics : même propriété que la home Code & Cortex. -->
+<script>
+(function () {
+  const page = window.parent;
+  const identifiant = 'G-HRHJCYTP4N';
+  // Un rerun Streamlit recrée l'iframe : ne pas renvoyer une visite.
+  if (page.__codeCortexAnalytics) return;
+  page.__codeCortexAnalytics = true;
+  page.dataLayer = page.dataLayer || [];
+  page.gtag = page.gtag || function () { page.dataLayer.push(arguments); };
+  page.gtag('js', new Date());
+  page.gtag('config', identifiant, {
+    // Ne pas transmettre les paramètres d'accès présents dans l'URL.
+    page_location: page.location.origin + page.location.pathname,
+    page_title: page.document.title
+  });
+  const balise = page.document.createElement('script');
+  balise.async = true;
+  balise.src = 'https://www.googletagmanager.com/gtag/js?id=' + identifiant;
+  page.document.head.appendChild(balise);
+})();
+</script>
   </head>
   <body>
     <div class="app-shell">
