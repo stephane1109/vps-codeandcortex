@@ -10,6 +10,8 @@ import re
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 import altair as alt
 
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
@@ -428,6 +430,9 @@ def transcrire_whisper_en_segments(file_bytes: bytes, langue: str = "fr") -> lis
 # =========================
 
 st.set_page_config(page_title="Temporalité multimodale – SHS/Politique", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 st.markdown(
     """
     <style>
