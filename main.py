@@ -45,6 +45,8 @@ import html
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 import matplotlib.pyplot as plt
 from collections import Counter, defaultdict
 from wordcloud import WordCloud
@@ -418,6 +420,9 @@ def document_html_kwic(titre: str, lignes_html):
 # INTERFACE — TITRE + EXPLICATIONS
 # ================================
 st.set_page_config(page_title="Cooccurrences mot pivot", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 st.markdown(
     """
     <style>
