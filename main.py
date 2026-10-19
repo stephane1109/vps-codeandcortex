@@ -8,6 +8,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from ticket_gate import enforce_streamlit_access
@@ -402,6 +404,9 @@ def load_help_markdown() -> str:
 
 
 st.set_page_config(page_title="Extract Comments YouTube", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 enforce_streamlit_access("extract_comments_youtube", APP_DISPLAY_NAME)
 st.markdown(APP_SHELL_STYLE, unsafe_allow_html=True)
 
