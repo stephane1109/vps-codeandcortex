@@ -1,0 +1,4 @@
+# Paire compatible officielle, variantes CPU pour le VPS Linux.
+# Le suffixe +cpu empêche pip de substituer une distribution CUDA.
+torch==2.8.0+cpu
+torchvision==0.23.0+cpu

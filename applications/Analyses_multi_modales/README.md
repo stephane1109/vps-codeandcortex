@@ -30,3 +30,15 @@ Les fichiers ajoutes pour le VPS sont :
 - `DEPLOIEMENT_OVH_COOLIFY.md`
 
 Le dossier GitHub cible est `applications/Analyses_multi_modales`.
+
+## Installation CPU sur le VPS
+
+Le Dockerfile installe `torch==2.8.0+cpu` et `torchvision==0.23.0+cpu`
+depuis l’index CPU officiel PyTorch. `constraints-cpu.txt` conserve ces variantes
+pendant l’installation des autres dépendances, sans bibliothèques NVIDIA/CUDA.
+La construction vérifie ensuite les versions, l’absence de paquets GPU et une
+opération CPU de torchvision avec `verifier_installation_cpu.py`.
+
+Cette modification réduit le volume à installer ; elle ne libère pas le cache
+Docker déjà présent. Une erreur `No space left on device` peut encore nécessiter
+de libérer de l’espace disque avant de redéployer.
