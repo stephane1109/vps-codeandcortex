@@ -4,6 +4,8 @@
 # on trouve des pics d’intensité, et on estime un débit de parole via segments "voisés" naïfs.
 
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -12,6 +14,9 @@ import io
 from app_runtime import enforce_access, heartbeat
 
 st.set_page_config(page_title="Analyse audio", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[1] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 enforce_access()
 st.title("Analyse audio : pauses, intensité, débit")
 

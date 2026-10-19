@@ -7,6 +7,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 
 from analysedebit import analyser_debit, format_timestamp, resolve_storage_directory
 from analysepauses import analyser_pauses, generer_export_pauses, graph_pauses
@@ -31,6 +33,9 @@ def render_download_button(path_str: str, label: str, mime: str) -> None:
 
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, layout="centered")
+    # Balise de la home : une seule initialisation par page, même après un rerun.
+    _analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                               height=0, scrolling=False)
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN
     # - REDIS_URL

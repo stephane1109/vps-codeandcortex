@@ -12,6 +12,8 @@ import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from PIL import Image
 
 
@@ -374,6 +376,9 @@ def load_help() -> str:
 
 
 st.set_page_config(page_title=APP_NAME, layout="wide", initial_sidebar_state="expanded")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 
 st.markdown(
     """

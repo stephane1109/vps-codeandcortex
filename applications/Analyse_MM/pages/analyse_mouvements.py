@@ -21,6 +21,8 @@ from typing import List, Tuple, Optional, Dict
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 
 from app_runtime import enforce_access, heartbeat
 from core_media import initialiser_repertoires, info_ffmpeg
@@ -216,6 +218,9 @@ def zscore(x: np.ndarray) -> Tuple[np.ndarray, float, float]:
 BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 
 st.set_page_config(page_title="Analyse des mouvements (scores garantis)", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[1] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 enforce_access()
 st.title("Analyse des mouvements avec pas d’analyse, Farneback et secours MAE")
 st.markdown("**www.codeandcortex.fr**")

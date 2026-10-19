@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 
 
 DEFAULT_TITLES = "Bordeaux\nParis"
@@ -192,6 +194,9 @@ def init_state() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Scraper Wikipedia", layout="wide")
+    # Balise de la home : une seule initialisation par page, même après un rerun.
+    _analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                               height=0, scrolling=False)
     init_state()
 
     st.title("Scraper Wikipedia")

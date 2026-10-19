@@ -5,6 +5,8 @@ import os
 from datetime import date
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from .base import transaction
@@ -784,6 +786,9 @@ def administration():
 
 def afficher_application():
     st.set_page_config(page_title="DésinfoLab · Observatoire collaboratif", page_icon="◈", layout="wide")
+    # Balise de la home : une seule initialisation par page, même après un rerun.
+    _analytics_components.html((_AnalyticsPath(__file__).resolve().parents[1] / "analytics.html").read_text(encoding="utf-8"),
+                               height=0, scrolling=False)
     st.markdown(
         """<style>
     .block-container {max-width: 1280px; padding-top: 4.5rem;}

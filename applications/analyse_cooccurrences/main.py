@@ -20,6 +20,8 @@ import html  # pour html.escape
 import math
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from wordcloud import WordCloud
 import spacy
 import networkx as nx
@@ -503,6 +505,9 @@ def calculer_llr_et_pval(paires_freq: dict, fenetres):
 # INTERFACE — PARAMÈTRES ET EXPLICATIONS
 # ================================
 st.set_page_config(page_title="Cooccurrences globales (sans mot pivot) — Graphe, Likelihood, Nuage, Concordancier")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 
 st.markdown("<h1 style='color:#e63946'>Cooccurrences globales (sans mot pivot)</h1>", unsafe_allow_html=True)
 st.caption("Stéphane Meurisse — version beta 1.1 - 26/07/2025 \\- [www.codeandcortex.fr](https://www.codeandcortex.fr)")

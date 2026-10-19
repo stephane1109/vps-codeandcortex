@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 
 from ticket_gate import enforce_streamlit_access, keep_ticket_alive
 
@@ -441,6 +443,9 @@ def formater_sortie_texte(
 
 def main() -> None:
     st.set_page_config(page_title="Extraction PDF → Texte", layout="wide")
+    # Balise de la home : une seule initialisation par page, même après un rerun.
+    _analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                               height=0, scrolling=False)
     appliquer_style_page()
 
     # #### VARIABLES D'ENVIRONNEMENT VPS A AJUSTER DANS COOLIFY SI BESOIN

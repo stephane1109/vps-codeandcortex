@@ -23,6 +23,8 @@ from typing import List, Tuple, Dict, Optional
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 import altair as alt
 
 from app_runtime import enforce_access, heartbeat
@@ -250,6 +252,9 @@ def timeline_occurrences_chart(df: pd.DataFrame, titre: str) -> alt.Chart:
 
 BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 st.set_page_config(page_title="Transcription & Cooccurrences", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[1] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 enforce_access()
 st.title("Transcription horodatée & cooccurrences")
 st.markdown("www.codeandcortex.fr")

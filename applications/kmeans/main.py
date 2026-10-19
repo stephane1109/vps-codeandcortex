@@ -21,6 +21,8 @@ import pandas as pd
 import plotly.express as px
 import seaborn as sns
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from nltk.corpus import stopwords
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
@@ -1089,6 +1091,9 @@ base solide pour des analyses plus approfondies.
 
 def main() -> None:
     st.set_page_config(page_title="Analyse textuelle avec K-means", layout="wide", initial_sidebar_state="expanded")
+    # Balise de la home : une seule initialisation par page, même après un rerun.
+    _analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                               height=0, scrolling=False)
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
     enforce_streamlit_access(APP_TICKET_DEFAULT_ID, APP_NAME)
 
