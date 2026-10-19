@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 
 from app_runtime import apply_page_style, enforce_access, heartbeat
 from core_media import initialiser_repertoires, info_ffmpeg
@@ -64,6 +66,9 @@ def zipper_dossier(dossier: Path) -> Path:
 
 BASE_DIR, REP_SORTIE, REP_TMP = initialiser_repertoires()
 st.set_page_config(page_title="Extraction", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[1] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 apply_page_style()
 enforce_access()
 st.title("Extraction")
