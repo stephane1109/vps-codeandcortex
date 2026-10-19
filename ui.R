@@ -34,6 +34,8 @@ build_main_ui <- function() {
 
   fluidPage(
     tags$head(
+      # Même propriété Analytics que le portail Code & Cortex.
+      includeHTML("analytics.html"),
       tags$style(HTML("
         html, body {
           min-height: 100%;
