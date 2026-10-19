@@ -50,10 +50,16 @@ RUN apt-get update \
 
 RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
-COPY requirements.txt /app/requirements.txt
+COPY requirements.txt constraints-cpu.txt /app/
+COPY verifier_installation_cpu.py /app/verifier_installation_cpu.py
 
+# Installer la paire CPU officielle puis la conserver pendant la résolution
+# des dépendances de spaCy, DeepFace et Ultralytics.
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r /app/requirements.txt
+    && pip install --index-url https://download.pytorch.org/whl/cpu \
+        -c /app/constraints-cpu.txt torch torchvision \
+    && pip install -c /app/constraints-cpu.txt -r /app/requirements.txt \
+    && python /app/verifier_installation_cpu.py
 
 COPY . /app
 
