@@ -20,6 +20,8 @@ import html  # pour html.escape
 import math
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 from wordcloud import WordCloud
 import spacy
 import networkx as nx
@@ -506,6 +508,9 @@ st.set_page_config(
     page_title="Cooccurrences globales (sans mot pivot) — Graphe, Likelihood, Nuage, Concordancier",
     layout="wide",
 )
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 st.markdown(
     """
     <style>
