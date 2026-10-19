@@ -1,6 +1,8 @@
 # pip install streamlit opencv-python yt-dlp
 
 import streamlit as st
+import streamlit.components.v1 as _analytics_components
+from pathlib import Path as _AnalyticsPath
 import cv2
 import os
 import re
@@ -650,6 +652,9 @@ def reencoder_video_h264(chemin_entrée, chemin_sortie):
 
 # Interface Streamlit
 st.set_page_config(page_title="StopMotion", layout="wide")
+# Balise de la home : une seule initialisation par page, même après un rerun.
+_analytics_components.html((_AnalyticsPath(__file__).resolve().parents[0] / "analytics.html").read_text(encoding="utf-8"),
+                           height=0, scrolling=False)
 apply_page_style()
 enforce_streamlit_access("stopmotion_opticalflow", "StopMotion")
 st.title("Générateur de Stop Motion")
