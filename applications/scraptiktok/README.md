@@ -475,7 +475,7 @@ Les dates, ET/OU, les commentaires, les exports et le filtre français sont cons
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
 ne charge pas OpenCV, Whisper ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
-Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : SHA-256/pHash/ORB et CLIP sur CPU. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR/Whisper. La disponibilité est vérifiée à partir des outils réellement installés.
+Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : DINOv2/FAISS sur CPU, SHA-256/pHash/ORB et CLIP facultatif. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR/Whisper. La disponibilité est vérifiée à partir des outils réellement installés.
 En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
 drapeau supplémentaire n’est nécessaire.
 La CI teste les trois profils Docker, le contrôleur dédié et le
@@ -591,7 +591,7 @@ pas une mesure de durée de traitement de 1 000 téléchargements TikTok réels
 sur le VPS. Les API externes et les temps de téléchargement ne sont pas simulés
 comme des garanties de performances.
 
-### Scènes et contenus similaires
+### Complément CLIP : scènes et contenus similaires
 
 Dans Multimodale, cocher **Rechercher des scènes et contenus similaires (IA)** et
 **Autoriser le téléchargement des modèles facultatifs**, puis lancer l'analyse.
@@ -615,3 +615,77 @@ Les résultats ont leur propre tableau avec URL et score, ainsi que les fichiers
 Ils ne créent pas de groupe de réemploi. Le diagnostic distingue les modèles
 indisponibles de l'absence de correspondance. CLIP augmente la mémoire requise
 et le temps CPU ; sa sélection reste facultative.
+
+## Moteur principal DINOv2 — 20 octobre 2026
+
+`facebook/dinov2-small` produit un vecteur CLS normalisé de 384 composantes pour
+chaque image (3 secondes par défaut, intervalle configurable). Aucune moyenne
+vidéo n'est calculée par DINOv2. CLIP reste facultatif, dans sa section distincte.
+Le téléchargement du modèle est proposé par défaut dans l'interface ; le cache
+local fonctionne sans réseau lorsque l'autorisation est désactivée.
+
+L'index FAISS HNSW à produit scalaire est persistant et privé par propriétaire et
+profil d'échantillonnage. SQLite conserve les vecteurs, horodatages et JPEG ;
+FAISS est reconstruit par blocs après modification et réutilisé sinon. Un verrou
+empêche deux écrivains concurrents. Les MP4 peuvent être nettoyés après succès.
+Une analyse incomplète conserve ses fichiers pour permettre une reprise.
+Les images d'une même publication sont exclues des voisins ; chaque vidéo
+a au plus dix autres publications, classées par le meilleur score d'une paire
+d'images. Les voisins affichés ne sont jamais filtrés par seuil. HNSW est une
+recherche approchée, pas une comparaison exhaustive de toutes les vidéos.
+
+Le regroupement est désactivé par défaut : choisir un seuil après inspection des
+scores. Les groupes sont des composantes de liens directs, pas une preuve que
+tous leurs membres sont identiques. La progression monotone des horodatages
+et la diversité des images distinguent une ressemblance ponctuelle d'une
+séquence temporellement cohérente. Cette cohérence seule ne prouve pas un
+réemploi. SHA-256, pHash/ORB et RANSAC restent des contrôles complémentaires ;
+aucun résultat DINOv2 ne dépend de leur validation.
+
+Le tableau « Vidéos similaires » permet de sélectionner une publication puis
+de consulter ses dix voisins, les miniatures, les positions et les URL TikTok.
+Exports : `similarites_dino.json`, `similarites_dino.csv`, `groupes_dino.json`,
+`miniatures_dino/`, `audit_video.json` et `diagnostic_visuel.json` dans le ZIP.
+Le diagnostic distingue MP4 présents, téléchargements effectués, vidéos
+décodées, images décodées, embeddings calculés, traitements désactivés et
+modèles indisponibles. Les fichiers déjà présents ne sont pas comptés comme de
+nouveaux téléchargements. Les compteurs historiques survivent au nettoyage.
+
+### Référence mesurée sur CPU
+
+Le test `tests/reference_dinov2.py` crée six vidéos depuis deux MP4 locaux :
+source Brut 7697829530844663072 (24–42 s), réencodage H.264 CRF32, extrait
+30–39 s, recadrage central à 70 %, autre magasin filmé entre 70 et 88 s,
+et vidéo de rue 7697724586003057953 (0–6 s). Les médias ne sont pas redistribués.
+
+| Rang | Comparaison avec la référence | Cosinus maximal | Temporalité |
+|---|---|---|---|
+| 1 | Extrait raccourci | 0,9963 | Cohérente |
+| 2 | Copie réencodée | 0,9916 | Cohérente |
+| 3 | Recadrage | 0,8669 | Cohérente |
+| 4 | Autre magasin, type de scène comparable | 0,4735 | Ponctuelle |
+| 5 | Rue sans rapport avec le magasin | 0,1326 | Ponctuelle |
+
+Les trois copies connues sont les trois premiers résultats. Les cinq voisins
+sont affichés, y compris le score faible. Ce petit jeu ne calibre pas un seuil
+universel ; aucun seuil de regroupement n'est imposé. Résultats bruts :
+`tests/reference_dinov2_scores.json`. L'essai complet de lot a décodé six vidéos,
+calculé 29 embeddings et exporté 30 liens orientés (cinq voisins par vidéo),
+sans ORB. La référence a pris environ 38 secondes sur le poste local, ce qui
+ne prédit pas la durée sur le VPS.
+
+Validation locale : tests d'index à 1 000 publications (vecteurs de test),
+reprise inter-sessions, absence de modèle, désactivation, cohérence temporelle,
+interface et accès privé aux miniatures. Pas de traitement neuronal de 1 000
+vidéos réelles réalisé. Docker absent localement : aucune construction Docker
+ni exécution Coolify revendiquée. La CI Linux inclut le profil `semantique`.
+
+### Déploiement
+
+Reconstruire `deploy-scraptiktok` avec `INSTALL_VIDEO=semantique` (défaut) ou `1`.
+`base` conserve les contrôles de copie mais n'installe pas DINOv2. Conserver
+`/app/data` pour les modèles Hugging Face et les index inter-lots. PyTorch,
+Transformers et FAISS sont utilisés sur CPU ; CUDA n'est pas nécessaire.
+
+Sources techniques : [fiche DINOv2-small](https://huggingface.co/facebook/dinov2-small),
+[index FAISS](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes).

@@ -778,8 +778,10 @@ class Manager:
 
 
 class OptionsVideo(BaseModel):
+    dinov2: bool = True
+    seuil_groupes_dino: float | None = Field(default=None, ge=-1, le=1)
     seuil_semantique: float = Field(default=0.75, ge=0.5, le=0.99)
-    pas_images_s: float = Field(default=1.0, ge=0.25, le=30)
+    pas_images_s: float = Field(default=3.0, ge=0.25, le=30)
     nettoyer_videos: bool = False
     comparer_sha256: bool = True
     comparer_sequences: bool = True
@@ -915,16 +917,28 @@ def create_app(manager=None):
         return job.snapshot()
 
     @app.get("/api/jobs/{job_id}/videos-similaires")
-    def resultats_visuels(job_id: str, request: Request):
+    def resultats_visuels(job_id: str, request: Request, video: str | None = None):
         """Le propriétaire de la collecte peut consulter ses preuves directes."""
         job = manager.get(owner(request), job_id)
         def lire(nom, defaut):
             chemin = job.directory / nom
             return json.loads(chemin.read_text()) if chemin.is_file() else defaut
-        return {"similarites_semantiques":lire("similarites_semantiques.json",[]),
+        dino=lire('similarites_dino.json',[])
+        return {"videos_dino":sorted({r['a'] for r in dino}),
+                "dinov2":[r for r in dino if r['a']==video],
+                "groupes_dino":lire('groupes_dino.json',[]),
+                "similarites_semantiques":lire("similarites_semantiques.json",[]),
                 "groupes":lire("groupes_visuels.json",[]),
                 "correspondances":lire("comparaisons.json",[]),
                 "etat":lire("traitement_video.json",{}),"diagnostic":lire("diagnostic_visuel.json",{})}
+
+    @app.get("/api/jobs/{job_id}/miniatures-dino/{numero}")
+    def miniature_dino(job_id: str, numero: int, request: Request):
+        """Miniatures accessibles uniquement au propriétaire de la collecte."""
+        job=manager.get(owner(request),job_id)
+        chemin=job.directory/'miniatures_dino'/(str(numero)+'.jpg')
+        if not chemin.is_file(): raise HTTPException(404,'Miniature indisponible')
+        return FileResponse(chemin,media_type='image/jpeg',headers={'Cache-Control':'private, no-store'})
 
     @app.post("/api/jobs/{job_id}/video/stop")
     def arreter_analyse_video(job_id: str, request: Request):

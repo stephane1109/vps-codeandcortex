@@ -14,7 +14,7 @@ def coder_variables(publication, indicateurs=None, reemploi=None, parametres=Non
         "parole":presence(i.get("transcription",{}).get("parole")),"reemploi":presence(reemploi)}
     if parametres is not None:
         # « no » signifie désactivé ; une mesure activée mais échouée reste indéterminée.
-        for option in ('ocr','transcription','embeddings','comparer_sha256','comparer_sequences',
+        for option in ('dinov2','ocr','transcription','embeddings','comparer_sha256','comparer_sequences',
                        'telecharger_modeles','telecharger_videos','conserver_images','nettoyer_videos'):
             if option in parametres:
                 variables[option]='yes' if parametres[option] else 'no'

@@ -36,7 +36,7 @@ RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "semantique" ] || [
 # La comparaison de contenu utilise CLIP sur CPU, sans installer Whisper/OCR.
 RUN if [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
       pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-      && pip install 'open-clip-torch>=2.30,<4'; fi
+      && pip install 'open-clip-torch>=2.30,<4' 'transformers>=4.48,<5' 'faiss-cpu>=1.9,<2'; fi
 # Les fonctions audiovisuelles avancées restent facultatives.
 RUN if [ "$INSTALL_VIDEO" = "1" ]; then \
       apt-get update \

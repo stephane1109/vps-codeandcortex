@@ -239,8 +239,11 @@ class TestsInterface(unittest.TestCase):
             def repondre(chemin, session, autorisation, donnees=None):
                 if chemin=='/api/session': return {'job':instantane}
                 if chemin=='/api/presse': return {'medias':charger_inventaire()}
-                if chemin.endswith('/videos-similaires'):
-                    return {'groupes':[], 'correspondances':[], 'etat':{}}
+                if '/videos-similaires' in chemin:
+                    return {'groupes':[], 'correspondances':[], 'etat':{}, 'videos_dino':['1'],
+                        'dinov2':[{'a':'1','b':'2','score':.1,'nature':'ressemblance_ponctuelle','segments':[],
+                                  'meilleure':{'image_a':1,'image_b':2,'temps_a':0,'temps_b':3},
+                                  'url_a':'https://www.tiktok.com/@a/video/1','url_b':'https://www.tiktok.com/@b/video/2'}]}
                 if chemin.endswith('/video'):
                     envois.append(donnees); return instantane
                 if chemin.startswith('/api/jobs/'): return instantane
@@ -252,5 +255,8 @@ class TestsInterface(unittest.TestCase):
                 next(b for b in page.button if b.label=='Lancer / reprendre l’analyse').click().run()
                 self.assertFalse(page.exception)
                 self.assertEqual(envois[-1]['pas_images_s'],2)
+                self.assertTrue(envois[-1]['dinov2'])
+                self.assertIsNone(envois[-1]['seuil_groupes_dino'])
+                self.assertTrue(any('miniatures-dino' in m.value for m in page.markdown))
                 self.assertTrue(envois[-1]['comparer_sequences'])
                 self.assertFalse(envois[-1]['nettoyer_videos'])

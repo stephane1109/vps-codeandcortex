@@ -21,7 +21,7 @@ class TestsSimilariteContenu(unittest.TestCase):
                                  'description':'Texte','engagement':{}})
         (dossier/'publications.json').write_text(json.dumps(publications))
         parametres=charger_parametres()
-        parametres.update(embeddings=True, comparer_sequences=False, comparer_sha256=False, conserver_images=False)
+        parametres.update(dinov2=False,embeddings=True, comparer_sequences=False, comparer_sha256=False, conserver_images=False)
         return parametres
 
     def test_contenu_exporte_sans_reemploi_ni_orb(self):

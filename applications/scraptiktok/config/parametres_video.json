@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "pas_images_s": 1.0,
+  "pas_images_s": 3.0,
   "images_max": 180,
   "dimension_max": 384,
   "duree_max_s": 180,
@@ -27,5 +27,7 @@
   "comparer_sha256": true,
   "comparer_sequences": true,
   "nettoyer_videos": false,
-  "seuil_semantique": 0.75
+  "seuil_semantique": 0.75,
+  "dinov2": true,
+  "seuil_groupes_dino": null
 }

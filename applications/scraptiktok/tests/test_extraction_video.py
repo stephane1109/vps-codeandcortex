@@ -13,7 +13,7 @@ class TestsVideo(unittest.TestCase):
     def test_limites_decodage(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/"a.mp4"; ecrire_video(p)
-            param=charger_parametres(); param.update(images_max=3,dimension_max=160)
+            param=charger_parametres(); param.update(pas_images_s=1,dinov2=False); param.update(images_max=3,dimension_max=160)
             r=extraire_images(p,param)
             self.assertEqual(len(r["images"]),3); self.assertTrue(r["tronque"])
             self.assertLessEqual(max(r["images"][0]["image"].shape[:2]),160)
@@ -25,7 +25,7 @@ class TestsVideo(unittest.TestCase):
             ecrire_video(dossier/"videos/3.mp4",graines=(51,52,53,54,55))
             publications=[{"id":str(i),"author":"media"+str(i),"description":"Une description en français.","media_id":"m"+str(i),"engagement":{}} for i in (1,2,3)]
             (dossier/"publications.json").write_text(json.dumps(publications))
-            param=charger_parametres(); param.update(conserver_images=False)
+            param=charger_parametres(); param.update(pas_images_s=1,dinov2=False); param.update(conserver_images=False)
             r=analyser_lot(dossier,param)
             self.assertEqual(r["statut"],"termine",r)
             comparaisons=json.loads((dossier/"comparaisons.json").read_text())
@@ -59,7 +59,7 @@ class TestsVideo(unittest.TestCase):
             shutil.copyfile(dossier/"videos/1.mp4",dossier/"videos/2.mp4")
             publications=[{"id":str(i),"author":"media"+str(i),"description":"Texte","engagement":{}} for i in (1,2)]
             (dossier/"publications.json").write_text(json.dumps(publications))
-            param=charger_parametres(); param.update(comparer_sequences=False,conserver_images=False)
+            param=charger_parametres(); param.update(pas_images_s=1,dinov2=False); param.update(comparer_sequences=False,conserver_images=False)
             with patch("video.lots.extraire_orb",side_effect=AssertionError("ORB désactivé")):
                 resultat=analyser_lot(dossier,param)
             self.assertEqual(resultat["statut"],"termine",resultat)
