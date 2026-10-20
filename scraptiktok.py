@@ -488,6 +488,18 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             diagnostic["code"] = "connexion_sans_publications_publiques"
         raise
     fermer_invitation_connexion(driver)
+    if (comptes and report.get("mode_decouverte") == "recherche_compte_hashtag"
+            and type_intervention_tiktok(driver) == "connexion"):
+        # La recherche peut exiger une connexion alors que le hashtag reste public.
+        # Conserver le filtre d'auteur ; ne jamais inviter à saisir des identifiants.
+        from collecte.comptes import collecter_comptes_par_hashtag
+        requete = report.get("hashtag_url")
+        hashtag = report["hashtag_recherche"]
+        report["repli_public"] = {"motif": "connexion_recherche", "recherche": requete}
+        return collecter_comptes_par_hashtag(driver, args, sorted(comptes), hashtag, report,
+            liens_precedents=liens_precedents, interact=interact, progress=progress,
+            check=check, validation_initiale=validation_initiale,
+            intervention_si_vide=intervention_si_vide)
     if args.interactive and validation_initiale:
         interact("Vérifiez les publications publiques. Traitez les cookies ou un éventuel CAPTCHA, puis cliquez sur Continuer.")
     candidats_vus: set[str] = set()
