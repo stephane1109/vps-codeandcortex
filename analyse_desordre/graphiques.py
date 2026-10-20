@@ -19,7 +19,7 @@ def tracer_engagements(tableau,correlations,dossier):
             texte=f"n = {mesure['n']}"
             if mesure['rho'] is not None: texte+=f" ; ρ = {mesure['rho']:.3f} ; p = {mesure['p']:.3g}"
             else: texte+=' ; corrélation non calculable'
-            axe.set(title=texte,xlabel=indicateur.replace('_',' '),ylabel=taux.replace('_',' '))
+            axe.set(title=texte,xlabel='Vitesse des sujets en mouvements (diagonales/s)' if indicateur=='vitesse_residuelle' else indicateur.replace('_',' '),ylabel=taux.replace('_',' '))
             axe.xaxis.set_major_formatter(FuncFormatter(lambda valeur,position:formater_nombre(valeur)))
             axe.yaxis.set_major_formatter(FuncFormatter(lambda valeur,position:formater_nombre(valeur)))
             axe.grid(alpha=.2)
