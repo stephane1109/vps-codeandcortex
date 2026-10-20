@@ -250,7 +250,7 @@ with onglet_collecte:
                     return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
                 lignes = []
                 for publication in actuel["apercu_engagement"]:
-                    ligne = {"Auteur": "@" + publication["author"], "Publication": publication["url"]}
+                    ligne = {"Auteur": "@" + publication["author"], "Publication": publication["url"], "URL TikTok": publication["url"]}
                     for cle, titre in (("likes", "Likes"), ("vues", "Vues"), ("partages", "Partages"), ("commentaires", "Nombre de commentaires")):
                         ligne[titre] = compteur(publication.get("engagement", {}).get(cle, {}))
                     ligne["Langue"] = {"fr": "Français", "unknown": "Indéterminée"}.get(publication.get("langue_detection"), "Non évaluée")
@@ -343,7 +343,18 @@ with onglet_multimodale:
                                 "Début B (s)":segment['debut_b_s'],"Fin B (s)":segment['fin_b_s'],
                                 "Type":c['type'],"Confiance":c['confiance']})
                     st.dataframe(lignes,hide_index=True,column_config={"URL A":st.column_config.LinkColumn(),"URL B":st.column_config.LinkColumn()})
-            if donnees['etat'] and not donnees['groupes']: st.info("Aucune séquence commune confirmée à ce stade.")
+            diagnostic=donnees.get('diagnostic',{})
+            if diagnostic:
+                st.caption(f"{diagnostic['paires_candidates']} paire(s) candidate(s) · {diagnostic['paires_orb_testees']} vérification(s) ORB · {diagnostic['images_confirmees']} image(s) confirmée(s)")
+                with st.expander('Diagnostic de la recherche'):
+                    st.json(diagnostic)
+            if donnees['etat'] and not donnees['groupes']:
+                if not etat.get('videos_analysees'):
+                    st.warning('Aucune vidéo analysée : vérifiez les erreurs de téléchargement ci-dessus.')
+                elif diagnostic and not diagnostic['paires_candidates']:
+                    st.info('Aucun candidat visuel trouvé dans les images échantillonnées. Cela ne prouve pas que les vidéos sont différentes.')
+                else:
+                    st.info('Des candidats ont été examinés, sans séquence commune confirmée. Le diagnostic indique les étapes de rejet.')
             if not actuel.get('video_busy'):
                 st.link_button("Exporter les résultats (CSV, JSON, IRaMuTeQ dans le ZIP)",f"/api/jobs/{tache['id']}/archive")
         afficher_similarites()

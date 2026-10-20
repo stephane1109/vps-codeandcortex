@@ -922,7 +922,7 @@ def create_app(manager=None):
             return json.loads(chemin.read_text()) if chemin.is_file() else defaut
         return {"groupes":lire("groupes_visuels.json",[]),
                 "correspondances":lire("comparaisons.json",[]),
-                "etat":lire("traitement_video.json",{})}
+                "etat":lire("traitement_video.json",{}),"diagnostic":lire("diagnostic_visuel.json",{})}
 
     @app.post("/api/jobs/{job_id}/video/stop")
     def arreter_analyse_video(job_id: str, request: Request):

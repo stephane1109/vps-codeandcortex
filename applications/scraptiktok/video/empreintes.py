@@ -32,6 +32,24 @@ def calculer_regions(image):
     return list(dict.fromkeys(regions))
 
 
+def repartir_candidats(candidats, maximum):
+    """Répartir le budget sur toute la vidéo, puis compléter par les meilleurs voisins."""
+    from collections import defaultdict
+    groupes=defaultdict(list)
+    for i,j,distance in set(tuple(c) for c in candidats):
+        groupes[i].append([i,j,distance])
+    for groupe in groupes.values(): groupe.sort(key=lambda c:(c[2],c[1]))
+    cles=sorted(groupes)
+    if len(cles)>maximum:
+        cles=[cles[round(i*(len(cles)-1)/max(1,maximum-1))] for i in range(maximum)]
+    resultat=[]; rang=0
+    while len(resultat)<maximum:
+        ajouts=[groupes[cle][rang] for cle in cles if len(groupes[cle])>rang]
+        if not ajouts: break
+        resultat.extend(ajouts[:maximum-len(resultat)]); rang+=1
+    return resultat
+
+
 class IndexVisuel:
     """Index SQLite cloisonné par corpus ; vignettes et ORB survivent aux MP4.
 
@@ -46,6 +64,8 @@ class IndexVisuel:
         self.base = sqlite3.connect(chemin, timeout=30)
         self.base.execute("PRAGMA journal_mode=WAL")
         self.base.executescript("""
+            CREATE TABLE IF NOT EXISTS version_recherche(version INTEGER);
+            CREATE TABLE IF NOT EXISTS recherches(video TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS videos(id TEXT PRIMARY KEY, sha TEXT, donnees TEXT);
             CREATE INDEX IF NOT EXISTS videos_sha ON videos(sha);
             CREATE TABLE IF NOT EXISTS images(numero INTEGER PRIMARY KEY, video TEXT,
@@ -59,6 +79,14 @@ class IndexVisuel:
             CREATE TABLE IF NOT EXISTS paires(a TEXT, b TEXT, candidats TEXT, resultat TEXT,
                 PRIMARY KEY(a,b));
         """)
+        # Recalculer les candidats sans perdre vignettes/ORB ni exiger les MP4 nettoyés.
+        version=self.base.execute('SELECT version FROM version_recherche').fetchone()
+        with self.base:
+            if version != (3,):
+                self.base.execute('DELETE FROM paires')
+                self.base.execute('INSERT OR IGNORE INTO recherches SELECT id FROM videos')
+                self.base.execute('DELETE FROM version_recherche')
+                self.base.execute('INSERT INTO version_recherche VALUES(3)')
         self.tronque = False
 
     def fermer(self):
@@ -89,6 +117,7 @@ class IndexVisuel:
             self.base.execute("DELETE FROM paires WHERE a=? OR b=?", (identifiant,identifiant))
             self.base.execute("INSERT OR REPLACE INTO videos VALUES(?,?,?)",
                               (identifiant,video['sha256'],json.dumps(video)))
+            self.base.execute('INSERT OR IGNORE INTO recherches VALUES(?)',(identifiant,))
             for image in images:
                 regions = calculer_regions(image['image'])
                 succes, octets = cv2.imencode('.jpg',image['image'],[cv2.IMWRITE_JPEG_QUALITY,92])
@@ -99,10 +128,12 @@ class IndexVisuel:
                           for h in regions for bande in range(4)}
                 self.base.executemany("INSERT INTO bandes VALUES(?,?,?)",sorted(bandes))
 
-    def preparer_candidats(self, identifiant, seuils, verifier=lambda: None):
+    def preparer_candidats(self, identifiant, seuils, verifier=lambda: None, options=None):
         """Accumuler uniquement des paires proposées par l'index, sur disque."""
         import json
+        options=options or {}
         video = self.lire_video(identifiant)
+        par_paire={}
         for bande,valeur in self.base.execute("SELECT bande,valeur FROM semantique WHERE video=?",(identifiant,)).fetchall():
             valeurs=[valeur]+[valeur^(1<<i) for i in range(16)]
             lignes=self.base.execute("SELECT DISTINCT video FROM semantique WHERE bande=? AND valeur IN ("+
@@ -129,21 +160,34 @@ class IndexVisuel:
             for voisin in sorted(voisins):
                 autre, t, empreintes = self.base.execute("SELECT video,temps,regions FROM images WHERE numero=?",(voisin,)).fetchone()
                 if autre == identifiant: continue
-                if self.lire_video(autre)['sha256']==video['sha256']: continue
+                if options.get('comparer_sha256',True) and self.lire_video(autre)['sha256']==video['sha256']: continue
                 distance = min(distance_phash(a,b) for a in regions for b in json.loads(empreintes))
                 if distance <= seuils['distance_phash']: meilleurs.append((distance,autre,t,voisin))
+            # Alterner les publications avant de compléter : une longue vidéo ne
+            # doit pas consommer les 64 places réservées aux voisins d'une image.
             meilleurs.sort()
+            par_video={}
+            for candidat in meilleurs: par_video.setdefault(candidat[1],[]).append(candidat)
+            equilibres=[]; rang=0
+            while len(equilibres)<64:
+                ajouts=[g[rang] for g in par_video.values() if len(g)>rang]
+                if not ajouts: break
+                equilibres.extend(ajouts[:64-len(equilibres)]); rang+=1
             if len(meilleurs)>64: self.tronque = True
-            for distance, autre, t, voisin in meilleurs[:64]:
+            for distance, autre, t, voisin in equilibres:
                 a,b = sorted((identifiant,autre))
                 couple = [numero,voisin,distance] if a==identifiant else [voisin,numero,distance]
-                ligne = self.base.execute("SELECT candidats,resultat FROM paires WHERE a=? AND b=?",(a,b)).fetchone()
-                if ligne and ligne[1] is not None: continue
-                candidats = json.loads(ligne[0]) if ligne else []
-                if couple not in candidats:
-                    if len(candidats)<seuils['paires_orb_max']: candidats.append(couple)
-                    else: self.tronque = True
-                self.base.execute("INSERT OR REPLACE INTO paires VALUES(?,?,?,NULL)",(a,b,json.dumps(candidats)))
+                par_paire.setdefault((a,b),[]).append(couple)
+        for (a,b),candidats in par_paire.items():
+            ligne=self.base.execute('SELECT candidats FROM paires WHERE a=? AND b=?',(a,b)).fetchone()
+            precedents=json.loads(ligne[0]) if ligne else []
+            ensemble={tuple(c) for c in precedents+candidats}
+            if len(ensemble)>seuils['paires_orb_max']: self.tronque=True
+            retenus=repartir_candidats(ensemble,seuils['paires_orb_max'])
+            # Les candidats sont choisis APRÈS toute la vidéo, pas sur son début seul.
+            if {tuple(c) for c in retenus}!={tuple(c) for c in precedents}:
+                self.base.execute('INSERT OR REPLACE INTO paires VALUES(?,?,?,NULL)',(a,b,json.dumps(retenus)))
+        self.base.execute('DELETE FROM recherches WHERE video=?',(identifiant,))
         self.base.commit()
 
     def lire_image(self, numero):
