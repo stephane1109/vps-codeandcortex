@@ -34,7 +34,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         validation = False
 
     def rechercher(url):
-        recherche = {"hashtag_url": url, "compte_attendu": compte}
+        recherche = {"hashtag_url": url, "compte_attendu": compte, "hashtag_repli": hashtags[0] if hashtags else None}
         rapport["recherches"].append(recherche)
         try:
             trouves = collect_links(navigateur, arguments, recherche, interact=intervenir,

@@ -371,6 +371,14 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     verification_js = CAPTCHA_JS if sans_connexion else BLOCKED_JS
     if sans_connexion:
         fermer_invitation_connexion(driver)
+    if (sans_connexion and report.get("hashtag_repli") and "/search/" in report["hashtag_url"]
+            and type_intervention_tiktok(driver) == "connexion"):
+        # Le filtre d'auteur reste appliqué par collecter_compte après découverte.
+        from urllib.parse import quote
+        report['repli_public'] = {'motif':'connexion_recherche','recherche':report['hashtag_url']}
+        report['hashtag_url'] = 'https://www.tiktok.com/tag/' + quote(report['hashtag_repli'])
+        open_page(driver, report['hashtag_url'])
+        fermer_invitation_connexion(driver)
     if args.interactive and validation_initiale:
         interact("Vérifiez les publications publiques. Fermez l’invitation à vous connecter si elle apparaît, puis cliquez sur Continuer. Traitez un éventuel CAPTCHA."
                  if sans_connexion else "Vérifiez que les publications sont visibles. Traitez les cookies, une connexion ou un CAPTCHA si nécessaire.")
