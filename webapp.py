@@ -988,6 +988,7 @@ class Manager:
 
 
 class OptionsVideo(BaseModel):
+    seuil_semantique: float = Field(default=0.75, ge=0.5, le=0.99)
     pas_images_s: float = Field(default=1.0, ge=0.25, le=30)
     nettoyer_videos: bool = False
     comparer_sha256: bool = True
@@ -1130,7 +1131,8 @@ def create_app(manager=None):
         def lire(nom, defaut):
             chemin = job.directory / nom
             return json.loads(chemin.read_text()) if chemin.is_file() else defaut
-        return {"groupes":lire("groupes_visuels.json",[]),
+        return {"similarites_semantiques":lire("similarites_semantiques.json",[]),
+                "groupes":lire("groupes_visuels.json",[]),
                 "correspondances":lire("comparaisons.json",[]),
                 "etat":lire("traitement_video.json",{}),"diagnostic":lire("diagnostic_visuel.json",{})}
 

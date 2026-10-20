@@ -1,18 +1,29 @@
 """Embeddings CLIP facultatifs : similarité sémantique, jamais preuve de réemploi."""
 from pathlib import Path
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def charger_modele(modele, poids, threads):
+    """Réutiliser un seul modèle CPU pendant les lots successifs du processus."""
+    import torch
+    import open_clip
+    torch.set_num_threads(threads)
+    reseau, _, preparer = open_clip.create_model_and_transforms(modele, pretrained=poids, device="cpu")
+    reseau.eval()
+    return reseau, preparer
+
 
 def calculer_embeddings(images, parametres):
     if not parametres["embeddings"]: return {"statut":"desactive","vecteur":None,"modele":None}
     import torch
-    import open_clip
     from PIL import Image
     import cv2
     poids=parametres["poids_embeddings"]
     if not parametres["telecharger_modeles"] and not Path(poids).is_file():
         return {"statut":"poids_locaux_requis","vecteur":None,"modele":parametres["modele_embeddings"]}
     torch.set_num_threads(parametres["threads"])
-    modele,_,preparer=open_clip.create_model_and_transforms(parametres["modele_embeddings"],pretrained=poids,device="cpu")
-    modele.eval(); vecteurs=[]
+    modele,preparer=charger_modele(parametres["modele_embeddings"],poids,parametres["threads"])
+    vecteurs=[]
     with torch.inference_mode():
         for entree in images[::max(1,len(images)//12)][:12]:
             tenseur=preparer(Image.fromarray(cv2.cvtColor(entree["image"],cv2.COLOR_BGR2RGB))).unsqueeze(0)
@@ -28,3 +39,13 @@ def comparer_embeddings(a,b):
     if len(va)!=len(vb) or not va: return None
     denominateur=math.sqrt(sum(x*x for x in va)*sum(x*x for x in vb))
     return max(-1,min(1,sum(x*y for x,y in zip(va,vb))/denominateur)) if denominateur else None
+
+
+def construire_similarites_semantiques(comparaisons):
+    """Exporter les proximités de contenu indépendamment des preuves de réemploi."""
+    return sorted([
+        {**{cle:c.get(cle) for cle in ('a','b','url_a','url_b','media_a','media_b')},
+         'score_cosinus':c['cosinus_semantique'], 'type':'similarite_semantique_visuelle',
+         'preuve_reemploi':False}
+        for c in comparaisons if c.get('semantiquement_similaires')
+    ], key=lambda ligne: (-ligne['score_cosinus'],ligne['a'],ligne['b']))

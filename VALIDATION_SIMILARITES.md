@@ -36,3 +36,23 @@ restent inchangées ; le nettoyage MP4 n’est actif que sur demande explicite.
 - Essai réel : vidéos TikTok 7697829530844663072 et 7697724586003057953 téléchargées et examinées. Scènes différentes, aucun candidat détecté. Cela ne valide pas les huit autres vidéos du lot utilisateur.
 - Contrôle positif dérivé de la vidéo Brut : extrait 10–16 s, recadrage central à 85 %, redimensionnement 360 px, réencodage H.264 CRF 30 sans audio. Correspondance retrouvée avec 0–6 s de l'extrait, six images confirmées par ORB, score interne 0,799 (non calibré comme probabilité).
 - Docker/Coolify non exécuté lors de cette validation locale.
+
+## Comparaison de contenu CLIP — 20 octobre 2026
+
+Deux résultats séparés : séquences réutilisées et scènes/contenus similaires.
+La seconde recherche utilise CLIP CPU existant, son index de projections persistant,
+un modèle réutilisé en mémoire, un seuil cosinus réglable (0,75 par défaut),
+et des exports CSV/JSON distincts. Les proximités sémantiques ne créent pas de
+groupes de réemploi. Modèles indisponibles explicités dans le diagnostic.
+
+Validation : 33 tests ciblés réussis sur deploy-scraptiktok, 29 sur main, dont
+une paire sémantique simulée exportée sans ORB ni réemploi et le cas des poids
+absents. Inférence réelle CLIP ViT-B-32/laion2b_s34b_b79k sur CPU : score
+0,524 entre les deux liens TikTok fournis ; 0,777 entre Brut et son extrait
+recadré. Cette dernière paire est retrouvée par l'index et retenue à 0,75.
+Un seul chargement du modèle pour trois vidéos (deux réutilisations du cache).
+Ces essais ne constituent pas une calibration sur des événements similaires
+filmés indépendamment, ni une validation de charge sur 1 000 vidéos.
+Docker non disponible localement : construction et déploiement Coolify non validés.
+Le profil semantique est le nouveau défaut ; un argument Coolify explicite
+INSTALL_VIDEO=base doit être remplacé par semantique (ou 1).

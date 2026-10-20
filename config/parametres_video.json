@@ -26,5 +26,6 @@
   "debut_videos": 0,
   "comparer_sha256": true,
   "comparer_sequences": true,
-  "nettoyer_videos": false
+  "nettoyer_videos": false,
+  "seuil_semantique": 0.75
 }

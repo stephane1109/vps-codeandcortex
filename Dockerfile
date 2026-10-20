@@ -1,5 +1,5 @@
 FROM python:3.11-slim-bookworm
-ARG INSTALL_VIDEO=base
+ARG INSTALL_VIDEO=semantique
 ENV INSTALL_VIDEO=${INSTALL_VIDEO}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,6 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CHROME_NO_SANDBOX=1 \
     SCRAPTIKTOK_HEADLESS=0 \
     SE_AVOID_STATS=true \
+    HF_HOME=/app/data/modeles/huggingface \
     DATA_DIR=/app/data
 
 # Navigateur et pilote proviennent du même dépôt Debian : versions compatibles.
@@ -25,19 +26,22 @@ RUN apt-get update \
 WORKDIR /app
 COPY requirements.txt requirements-video-base.txt requirements-video.txt ./
 RUN pip install -r requirements.txt
-# Le déploiement standard compare les séquences sans gros modèles.
+# Les profils vidéo partagent le moteur de détection des séquences.
 # INSTALL_VIDEO=0 conserve un profil limité aux textes.
-RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
+RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
       apt-get update \
       && apt-get install -y --no-install-recommends ffmpeg \
       && rm -rf /var/lib/apt/lists/* \
       && pip install -r requirements-video-base.txt; fi
+# La comparaison de contenu utilise CLIP sur CPU, sans installer Whisper/OCR.
+RUN if [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
+      pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+      && pip install 'open-clip-torch>=2.30,<4'; fi
 # Les fonctions audiovisuelles avancées restent facultatives.
 RUN if [ "$INSTALL_VIDEO" = "1" ]; then \
       apt-get update \
       && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
       && rm -rf /var/lib/apt/lists/* \
-      && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
       && pip install -r requirements-video.txt; fi
 COPY . .
 RUN mkdir -p /app/data /app/.selenium-cache \
