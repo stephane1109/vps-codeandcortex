@@ -23,3 +23,30 @@ class TestsApiDino(unittest.TestCase):
                 self.assertEqual(client.get(f'/api/jobs/{job.id}/miniatures-dino/1').content,b'jpeg-test')
                 client.cookies.clear();client.get('/')
                 self.assertEqual(client.get(f'/api/jobs/{job.id}/miniatures-dino/1').status_code,404)
+
+    def test_regions_privees_paire_validee_et_erreur_modele(self):
+        from unittest.mock import patch, MagicMock
+        with tempfile.TemporaryDirectory() as d:
+            manager=web.Manager(data_dir=d)
+            with TestClient(web.create_app(manager)) as client:
+                client.get('/')
+                job=web.Job(client.cookies[web.COOKIE],web.StartRequest(hashtag='test',enrichir=True),Path(d))
+                job.busy=False
+                manager.jobs[job.id]=job
+                miniatures=job.directory/'miniatures_dino';miniatures.mkdir()
+                for n in (1,2): (miniatures/f'{n}.jpg').write_bytes(b'image'+str(n).encode())
+                (job.directory/'similarites_dino.json').write_text(json.dumps([{'correspondances':[{'image_a':1,'image_b':2}]}]))
+                url=f'/api/jobs/{job.id}/regions-dino/1/2'
+                self.assertEqual(client.get(url).json()['statut'],'non_calcule')
+                self.assertEqual(client.get(url+'/../../3/4').status_code,404)
+                self.assertEqual(client.get(f'/api/jobs/{job.id}/regions-dino/1/3').status_code,404)
+                self.assertEqual(client.post(url,json={}).status_code,403)
+                processus=MagicMock();processus.poll.return_value=1;processus.returncode=1
+                with patch('ticket_gate.verifier_session_active',return_value=True),patch('webapp.subprocess.Popen',return_value=processus):
+                    self.assertEqual(client.post(url,json={},headers={'X-ScrapTikTok':'1'}).status_code,202)
+                    job.video_thread.join(timeout=3)
+                self.assertFalse(job.video_busy)
+                self.assertEqual(client.get(url).json()['statut'],'erreur')
+                client.cookies.clear();client.get('/')
+                self.assertEqual(client.get(url).status_code,404)
+                self.assertEqual(client.get(url+'/a').status_code,404)
