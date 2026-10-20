@@ -424,7 +424,11 @@ with onglet_multimodale:
             st.write(etat.get('etape','Analyse non lancée'))
             st.progress(min(1.0,etat.get('videos_analysees',0)/max(1,etat.get('videos_total',1))))
             st.caption(f"{etat.get('videos_analysees',0)} vidéo(s) analysée(s) — {actuel.get('video_statut','non_lance')}")
-            if etat.get('erreurs'): st.warning("Analyse partielle : "+" ; ".join(e.get('raison','Erreur') for e in etat['erreurs']))
+            if etat.get('erreurs'):
+                st.warning(f"Analyse partielle : {len(etat['erreurs'])} erreur(s). Consultez les causes ci-dessous ; les résultats des vidéos analysées restent disponibles.")
+                with st.expander("Détail des erreurs par vidéo", expanded=True):
+                    st.dataframe([{"Vidéo":e.get('id','Lot'),"Cause":e.get('statut',e.get('type','Erreur')),
+                                   "Détail":e.get('raison','Erreur')} for e in etat['erreurs']],hide_index=True)
             st.caption("Un groupe relie des publications par des correspondances directes ; toutes les vidéos du groupe ne sont pas nécessairement identiques. Le score est heuristique, pas une probabilité calibrée.")
             st.subheader("Vidéos similaires")
             st.caption("Chaque vidéo est interrogée. Jusqu'à 50 vidéos : toutes les paires du lot sont calculées. Au-delà : dix voisins indexés par vidéo. Le score DINOv2 porte sur les images ; CLIP compare le contenu global.")

@@ -162,7 +162,11 @@ def traiter_lot(dossier, parametres, seuils):
                     if parametres.get('nettoyer_videos',False) and not incomplet(resultat): chemin.unlink()
                 except TimeoutError: raise
                 except Exception as erreur:
-                    erreurs.append({"id":identifiant,"raison":str(erreur)[:200],"type":type(erreur).__name__})
+                    diagnostic_erreur={"id":identifiant,"raison":str(erreur)[:200],"type":type(erreur).__name__}
+                    if hasattr(erreur,'statut'):
+                        diagnostic_erreur.update(statut=erreur.statut,code=erreur.code)
+                        audit[identifiant]['telechargement']=erreur.statut
+                    erreurs.append(diagnostic_erreur)
                     audit[identifiant]['erreur']=str(erreur)[:200]
                 finally:
                     exporter_json(audit_path,audit)
