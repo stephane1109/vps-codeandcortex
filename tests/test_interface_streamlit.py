@@ -348,6 +348,10 @@ class TestsInterface(unittest.TestCase):
                 self.assertFalse(page.exception)
                 self.assertIn('Désordre visuel',[t.label for t in page.tabs])
                 self.assertEqual(page.selectbox(key='desordre_y').value,'likes')
+                tableaux=[element.value for element in page.dataframe if 'numero_video' in element.value.columns]
+                self.assertEqual(tableaux[0].columns[0],'numero_video')
+                self.assertEqual(list(tableaux[0]['numero_video']),[1,2,3])
+                self.assertTrue(any('3 vidéo(s) représentée(s)' in element.value for element in page.caption))
                 self.assertTrue(any('Spearman' in element.value for element in page.markdown))
                 self.assertTrue(page.button(key='lancer_desordre').disabled)
                 page.checkbox(key='activer_desordre').check().run()

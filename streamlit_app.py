@@ -591,30 +591,44 @@ with onglet_desordre:
             lignes=donnees.get('indicateurs',[])
             if not lignes: return
             import pandas as pd
+            from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, preparer_graphique, formater_nombre
             tableau=pd.DataFrame(lignes)
-            st.dataframe(tableau,hide_index=True,column_config={'url':st.column_config.LinkColumn('URL TikTok')})
+            tableau.insert(0,'numero_video',range(1,len(tableau)+1))
+            st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
+            st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage.")
+            st.dataframe(tableau,hide_index=True,column_config={
+                'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
+                'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
+                'url':st.column_config.LinkColumn('URL TikTok')})
             st.subheader("Croiser les variables")
-            indicateurs={'indice_desordre':'Indice de désordre visuel','instabilite_camera':'Instabilité de la caméra',
-                'entropie_directionnelle':'Entropie directionnelle','irregularite_temporelle':'Irrégularité temporelle',
-                'vitesse_residuelle':'Vitesse des mouvements résiduels'}
+            indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
+                'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
+                'vitesse_residuelle':'Vitesse des mouvements résiduels (diagonales/s)'}
             engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
-            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x')
+            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help=AIDE_INDICE)
             axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y')
             st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
             if axe_x not in tableau or axe_y not in tableau:
                 st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
             else:
-                points=tableau[[axe_x,axe_y]].apply(pd.to_numeric,errors='coerce').dropna()
+                st.markdown("**Comprendre l’indicateur choisi**",help=AIDES_INDICATEURS[axe_x])
+                points,specification,effectifs=preparer_graphique(tableau,axe_x,axe_y,indicateurs[axe_x],engagements[axe_y])
+                st.caption(f"{effectifs['videos']} vidéo(s) représentée(s) sur {len(tableau)} · {effectifs['exclues']} exclue(s) faute de mesures valides · {effectifs['positions']} position(s) distincte(s). Un point = une vidéo ; des points très proches peuvent aussi se masquer visuellement.")
+                if effectifs['superposees']:
+                    st.info(f"{effectifs['superposees']} vidéos partagent exactement des coordonnées avec d’autres : leurs points se superposent. Survolez pour retrouver leurs numéros dans le tableau.")
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
                 else:
-                    st.scatter_chart(points.rename(columns={axe_x:indicateurs[axe_x],axe_y:engagements[axe_y]}),
-                        x=indicateurs[axe_x],y=engagements[axe_y])
+                    st.vega_lite_chart(points,specification,use_container_width=True)
+                    st.caption(f"Axe vertical : {engagements[axe_y]}. Les espaces séparent les milliers : 1 600 000 = un million six cent mille. Survolez un point pour voir son numéro, son identifiant et ses valeurs.")
                 correlation=next((r for r in donnees.get('correlations',[]) if r['indicateur']==axe_x and r['engagement']==axe_y),None)
                 if correlation and correlation.get('rho') is not None:
-                    st.write(f"Spearman : ρ = {correlation['rho']:.3f} · n = {int(correlation['n'])} · p = {correlation['p']:.4g} · p ajustée = {correlation.get('p_ajustee_bh',1.):.4g}")
+                    st.write(f"Spearman : ρ = {formater_nombre(correlation['rho'],3)} · {int(correlation['n'])} vidéos · p = {formater_nombre(correlation['p'],6)} · p ajustée = {formater_nombre(correlation.get('p_ajustee_bh',1.),6)}")
                 else:
                     st.info("Corrélation indisponible : il faut au moins trois publications et des variables non constantes, ou relancer d’anciens résultats.")
+            st.markdown("**Spearman est-il adapté ?**",help=AIDE_SPEARMAN)
+            with st.expander("Comment interpréter cette corrélation ?"):
+                st.write(AIDE_SPEARMAN)
             with st.expander("Toutes les corrélations"):
                 st.dataframe(donnees.get('correlations',[]),hide_index=True)
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
