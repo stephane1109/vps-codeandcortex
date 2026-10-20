@@ -323,3 +323,36 @@ class TestsInterface(unittest.TestCase):
                 self.assertTrue(any(b.label=='Localiser les régions proches' for b in page.button))
                 self.assertTrue(envois[-1]['comparer_sequences'])
                 self.assertFalse(envois[-1]['nettoyer_videos'])
+
+    def test_onglet_desordre_et_croisement_likes(self):
+        import tempfile
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as d:
+            job=Job('a'*64,StartRequest(hashtag='test',enrichir=True),Path(d))
+            job.update(busy=False,status='completed',archive_prete=True)
+            instantane={**job.snapshot(),'video_disponible':False}
+            envois=[]
+            def repondre(chemin,session,autorisation,donnees=None):
+                if chemin=='/api/session': return {'job':instantane}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin.endswith('/desordre'):
+                    if donnees is not None:
+                        envois.append(donnees);return instantane
+                    return {'disponible':True,'mp4_locaux':3,'etat':{'statut':'termine'},
+                        'indicateurs':[{'publication_id':str(i),'indice_desordre':i*10,'likes':i*100,'vues':1000,'likes_pour_1000_vues':i*100} for i in (1,2,3)],
+                        'correlations':[{'indicateur':'indice_desordre','engagement':'likes','rho':1.,'n':3,'p':.3333,'p_ajustee_bh':.5}]}
+                if chemin.startswith('/api/jobs/'): return instantane
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                self.assertIn('Désordre visuel',[t.label for t in page.tabs])
+                self.assertEqual(page.selectbox(key='desordre_y').value,'likes')
+                self.assertTrue(any('Spearman' in element.value for element in page.markdown))
+                self.assertTrue(page.button(key='lancer_desordre').disabled)
+                page.checkbox(key='activer_desordre').check().run()
+                page.button(key='lancer_desordre').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(envois[-1]['frequence'],10.)
+                page.selectbox(key='desordre_y').set_value('likes_pour_1000_vues').run()
+                self.assertFalse(page.exception)

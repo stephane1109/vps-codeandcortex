@@ -2,7 +2,7 @@
 
 Ce module est **facultatif**. Il lit uniquement des MP4 locaux et les engagements
 collectés par ScrapTikTok. Il n'importe aucun moteur de collecte, ORB, pHash,
-DINOv2 ou comparaison vidéo. L'interface principale ne l'appelle pas.
+DINOv2 ou comparaison vidéo. L’onglet **Désordre visuel** le lance uniquement après activation explicite et clic sur le bouton de lancement.
 Aucun accès réseau, GPU ou téléchargement de poids n'est nécessaire.
 
 ## Arborescence
@@ -117,12 +117,12 @@ Compteurs manquants, négatifs, non finis, abrégés non normalisés et vues nul
 taux absent, jamais remplacé par zéro. Un zéro observé avec des vues positives
 reste zéro. Les compteurs source sont exportés avec les taux.
 
-Spearman est calculé entre chacun des cinq indicateurs et les trois taux, au
+Spearman est calculé entre chacun des cinq indicateurs et les sept variables d’engagement (likes, commentaires, partages, vues et trois taux), au
 niveau **publication**, jamais en traitant les images comme observations
 indépendantes. Ex aequo : rangs moyens. Valeurs absentes : exclusion paire par
 paire. Moins de trois publications ou variable constante : résultat indisponible.
 Test bilatéral exact jusqu'à sept publications, sinon permutations Monte-Carlo
-(graine fixée, correction +1). Les 15 tests disponibles sont aussi corrigés par
+(graine fixée, correction +1). Les 35 tests disponibles sont aussi corrigés par
 Benjamini–Hochberg ; `p_ajustee_bh` accompagne les p brutes.
 
 Il s'agit d'associations exploratoires, non causales : compte, audience, date,
@@ -143,7 +143,7 @@ simple ne modélise pas ces regroupements. Des compteurs arrondis et des collect
 
 Les CSV sont UTF-8 avec BOM. Les cellules vides signifient « non mesuré ».
 
-## Futur appel depuis l'interface
+## Onglet Désordre visuel et appel Python
 
 ```python
 # À exécuter seulement dans la branche d'activation explicite de cette option.
@@ -159,13 +159,27 @@ resultat = analyser_lot(
 )
 ```
 
-L'import du paquet seul ne charge ni OpenCV ni modèle. L'appel est synchrone ;
-la future interface devra le lancer dans son mécanisme de tâche facultative.
-Le module ne s'active jamais automatiquement. Aucun changement Docker/Coolify
-n'est appliqué : pour l'intégrer ultérieurement à l'image, installer ses dépendances
-avec `pip install -r analyse_desordre/requirements.txt`. Calcul CPU séquentiel,
-OpenCV limité à un thread, mémoire indépendante du nombre de vidéos ; seules les
-mesures scalaires d'une vidéo et le tableau des publications sont conservés.
+Dans l’onglet **Désordre visuel**, cocher l’activation puis lancer le calcul.
+L’interface présente le nombre de MP4 locaux, une progression, un bouton d’arrêt,
+les mesures par vidéo, un graphique interactif et les exports CSV. Le menu
+« Variable à croiser » propose le nombre de likes par défaut, mais aussi les
+commentaires, partages, vues et les trois taux pour 1 000 vues. Le changement de
+variable réutilise les mesures sans réanalyser les vidéos. Le tableau de Spearman
+indique rho, n, p et p ajustée pour chaque couple disponible. Les PNG autonomes
+restent consacrés aux trois taux ; le graphique interactif couvre les sept variables.
+
+L'import du paquet seul ne charge ni OpenCV ni modèle. L'appel Python est synchrone ;
+l’interface utilise `service.py` dans un processus séparé, réservé au propriétaire
+de la collecte. Les exports et l’état sont privés. La réservation CPU empêche un
+calcul simultané avec la collecte ou l’analyse multimodale. Arrêt explicite,
+libération d’accès et limite de deux heures interrompent le processus. Chaque
+lancement écrit dans un nouveau sous-dossier ; les MP4 ne sont jamais supprimés.
+
+Le Dockerfile installe les dépendances du module avec les profils
+`INSTALL_VIDEO=base`, `semantique` ou `1`. Un redéploiement est nécessaire après
+cette intégration. Le profil `0` reste limité aux textes. L’analyse ne démarre
+jamais automatiquement. Calcul CPU séquentiel, OpenCV limité à un thread ; seules
+les mesures scalaires d'une vidéo et le tableau des publications sont conservés.
 
 ## Validation
 

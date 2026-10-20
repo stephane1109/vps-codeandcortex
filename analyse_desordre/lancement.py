@@ -18,7 +18,7 @@ from .mouvement_camera import compenser_camera, mesurer_instabilite
 from .mouvements import mesurer_mouvements
 from .irregularite_temporelle import mesurer_irregularite
 from .indice import calculer_indice, resumer_mesures, INDICATEURS
-from .engagement import charger_metadonnees, calculer_taux, TAUX
+from .engagement import charger_metadonnees, calculer_taux, VARIABLES_ENGAGEMENT
 from .statistiques import calculer_correlations
 from .graphiques import tracer_engagements
 
@@ -96,7 +96,7 @@ def analyser_lot(videos,metadonnees,sortie,parametres=None,progression=None):
             resumes.append(resume)
             if progression: progression(rang,len(identifiants),identifiant,resume['statut'])
     tableau=pd.DataFrame(resumes)
-    for nom in (*INDICATEURS,*TAUX):
+    for nom in (*INDICATEURS,*VARIABLES_ENGAGEMENT):
         if nom not in tableau: tableau[nom]=float('nan')
         tableau[nom]=pd.to_numeric(tableau[nom],errors='coerce')
     tableau.to_csv(sortie/'indicateurs_engagement.csv',index=False,encoding='utf-8-sig')

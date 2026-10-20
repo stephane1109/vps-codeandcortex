@@ -1035,6 +1035,45 @@ def executer_video(job, options):
         job.update(video_busy=False, video_process=None, finished=time.monotonic())
 
 
+class OptionsDesordre(BaseModel):
+    frequence: float = Field(default=10., ge=1, le=60)
+    dimension: int = Field(default=320, ge=64, le=1280)
+    duree_max: float = Field(default=600., gt=0, le=3600)
+
+
+def executer_desordre(job, options, dossier):
+    """Partager la réservation CPU et l'arrêt des analyses sans changer leurs algorithmes."""
+    from analyse_desordre.service import ecrire_etat, lire_etat
+    processus = None
+    try:
+        with (job.directory/'desordre.log').open('w') as journal:
+            processus = subprocess.Popen([sys.executable, '-m', 'analyse_desordre.service',
+                '--session', str(job.directory), '--dossier', dossier,
+                '--frequence', str(options.frequence), '--dimension', str(options.dimension),
+                '--duree-max', str(options.duree_max)], cwd=scraper.BASE_DIR,
+                stdout=journal, stderr=subprocess.STDOUT, start_new_session=True)
+            job.video_process = processus
+            limite = time.monotonic()+7200
+            while processus.poll() is None:
+                if job.video_stop.wait(.5) or time.monotonic()>limite:
+                    processus.terminate()
+                    try: processus.wait(timeout=5)
+                    except subprocess.TimeoutExpired: processus.kill(); processus.wait()
+                    ecrire_etat(job.directory,{**lire_etat(job.directory),'statut':'interrompu','etape':'Analyse arrêtée'})
+                    break
+            else:
+                if processus.returncode:
+                    ecrire_etat(job.directory,{**lire_etat(job.directory),'statut':'echec',
+                        'erreur':'Le processus a échoué. Consultez desordre.log sur le serveur.'})
+    except Exception:
+        LOG.exception('Analyse du désordre interrompue')
+        ecrire_etat(job.directory,{'statut':'echec','erreur':'Impossible de démarrer le calcul sur le serveur.'})
+    finally:
+        if processus is not None and processus.poll() is None:
+            processus.kill(); processus.wait()
+        job.update(video_busy=False,video_process=None,finished=time.monotonic())
+
+
 def create_app(manager=None):
     manager = manager or Manager()
 
@@ -1125,6 +1164,57 @@ def create_app(manager=None):
             job.video_thread = threading.Thread(target=executer_video, args=(job, options), daemon=True)
             job.video_thread.start()
         return job.snapshot()
+
+    @app.post("/api/jobs/{job_id}/desordre", status_code=202)
+    def lancer_desordre(job_id: str, options: OptionsDesordre, request: Request):
+        """Lancement explicite réservé au propriétaire et au détenteur de l'accès actif."""
+        exiger_ticket(request)
+        job = manager.get(owner(request), job_id)
+        from analyse_desordre.service import dependances_disponibles, ecrire_etat
+        if not dependances_disponibles():
+            raise HTTPException(409, 'Dépendances absentes : redéployez avec INSTALL_VIDEO=base, semantique ou 1.')
+        with manager.lock:
+            if any(j.busy or j.video_busy for j in manager.jobs.values()):
+                raise HTTPException(409, 'Une collecte ou une analyse est déjà en cours.')
+            if not job.archive_prete or not (job.directory/'publications.json').is_file():
+                raise HTTPException(409, 'Effectuez d’abord une collecte enrichie.')
+            if not any(p.is_file() and not p.is_symlink() for p in (job.directory/'videos').glob('*.mp4')):
+                raise HTTPException(409, 'Aucun MP4 local. Collectez les MP4 ou téléchargez-les via Multimodale, sans activer leur suppression.')
+            dossier = 'desordre_'+secrets.token_hex(8)
+            ecrire_etat(job.directory,{'statut':'en_cours','dossier':dossier,'terminees':0,'total':0,'etape':'Démarrage'})
+            job.video_stop.clear()
+            job.update(video_busy=True,video_debut=time.monotonic())
+            job.video_thread=threading.Thread(target=executer_desordre,args=(job,options,dossier),daemon=True)
+            job.video_thread.start()
+        return job.snapshot()
+
+    def dossier_desordre(job, etat):
+        nom = etat.get('dossier','')
+        if not re.fullmatch(r'desordre_[a-f0-9]{16}',nom): return None
+        dossier=job.directory/nom
+        return dossier if dossier.is_dir() and not dossier.is_symlink() else None
+
+    @app.get("/api/jobs/{job_id}/desordre")
+    def resultats_desordre(job_id: str, request: Request):
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.service import lire_etat, lire_tableau, dependances_disponibles
+        etat=lire_etat(job.directory);dossier=dossier_desordre(job,etat)
+        disponibles=dossier is not None and etat['statut'] in ('termine','partiel')
+        return {'etat':etat,'disponible':dependances_disponibles(),
+            'mp4_locaux':sum(p.is_file() and not p.is_symlink() for p in (job.directory/'videos').glob('*.mp4')),
+            'indicateurs':lire_tableau(dossier/'indicateurs_engagement.csv') if disponibles else [],
+            'correlations':lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []}
+
+    @app.get("/api/jobs/{job_id}/desordre/export/{nom}")
+    def exporter_desordre(job_id: str, nom: str, request: Request):
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.service import lire_etat, FICHIERS_EXPORTABLES
+        etat=lire_etat(job.directory);dossier=dossier_desordre(job,etat)
+        if dossier is None or etat['statut'] not in ('termine','partiel') or nom not in FICHIERS_EXPORTABLES:
+            raise HTTPException(404, 'Export indisponible')
+        chemin=dossier/nom
+        if not chemin.is_file() or chemin.is_symlink(): raise HTTPException(404, 'Export indisponible')
+        return FileResponse(chemin,filename=nom)
 
     @app.get("/api/jobs/{job_id}/videos-similaires")
     def resultats_visuels(job_id: str, request: Request, video: str | None = None):

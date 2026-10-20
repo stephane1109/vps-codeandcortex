@@ -25,6 +25,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY requirements.txt requirements-video-base.txt requirements-video.txt ./
+COPY analyse_desordre/requirements.txt /tmp/requirements-desordre.txt
 RUN pip install -r requirements.txt
 # Les profils vidéo partagent le moteur de détection des séquences.
 # INSTALL_VIDEO=0 conserve un profil limité aux textes.
@@ -32,7 +33,8 @@ RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "semantique" ] || [
       apt-get update \
       && apt-get install -y --no-install-recommends ffmpeg \
       && rm -rf /var/lib/apt/lists/* \
-      && pip install -r requirements-video-base.txt; fi
+      && pip install -r requirements-video-base.txt \
+      && pip install -r /tmp/requirements-desordre.txt; fi
 # La comparaison de contenu utilise CLIP sur CPU, sans installer Whisper/OCR.
 RUN if [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
       pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
