@@ -4,7 +4,7 @@ import math
 import numpy as np
 from scipy.stats import rankdata
 from .indice import INDICATEURS
-from .engagement import TAUX
+from .engagement import VARIABLES_ENGAGEMENT
 
 
 def correlation_spearman(x,y,permutations=1999,graine=42):
@@ -33,7 +33,7 @@ def calculer_correlations(tableau,parametres):
     """Une ligne par publication ; exclusion paire par paire des données manquantes."""
     resultat=[]
     for indicateur in INDICATEURS:
-        for taux in TAUX:
+        for taux in VARIABLES_ENGAGEMENT:
             resultat.append({'indicateur':indicateur,'engagement':taux,
                 **correlation_spearman(tableau[indicateur],tableau[taux],parametres.permutations,parametres.graine)})
     valides=sorted((i for i,r in enumerate(resultat) if r['p'] is not None),key=lambda i:resultat[i]['p'])

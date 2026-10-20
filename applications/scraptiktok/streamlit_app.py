@@ -119,7 +119,7 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_multimodale, onglet_aide = st.tabs(["Collecte", "Multimodale", "Aide"])
+onglet_collecte, onglet_multimodale, onglet_desordre, onglet_aide = st.tabs(["Collecte", "Multimodale", "Désordre visuel", "Aide"])
 
 with onglet_collecte:
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
@@ -467,3 +467,75 @@ with onglet_multimodale:
             if not actuel.get('video_busy'):
                 st.link_button("Exporter les résultats (CSV, JSON, IRaMuTeQ dans le ZIP)",f"/api/jobs/{tache['id']}/archive")
         afficher_similarites()
+
+
+with onglet_desordre:
+    st.subheader("Désordre visuel et engagement")
+    st.caption("Analyse facultative des MP4 déjà collectés, indépendante de la recherche de vidéos similaires. L’indice est exploratoire ; une corrélation n’établit pas une causalité.")
+    tache_desordre=st.session_state.get('collecte') or {}
+    if not tache_desordre.get('archive_prete'):
+        st.info("Effectuez une collecte enrichie avec des MP4 pour utiliser cette analyse.")
+    else:
+        @st.fragment(run_every='3s')
+        def afficher_desordre():
+            try:
+                actuel=api(f"/api/jobs/{tache_desordre['id']}")
+                donnees=api(f"/api/jobs/{tache_desordre['id']}/desordre")
+            except RuntimeError as erreur:
+                st.error(str(erreur));return
+            etat=donnees.get('etat',{})
+            en_cours=etat.get('statut')=='en_cours' and actuel.get('video_busy',False)
+            st.write(f"{donnees.get('mp4_locaux',0)} MP4 disponible(s) dans cette collecte.")
+            if not donnees.get('disponible'):
+                st.warning("Le serveur doit être redéployé avec les dépendances de cette analyse (INSTALL_VIDEO=base, semantique ou 1).")
+            elif not donnees.get('mp4_locaux'):
+                st.info("Collectez les MP4 ou récupérez-les dans Multimodale. L’option de suppression des MP4 doit rester décochée.")
+            activation=st.checkbox("Activer l’analyse du désordre visuel",key='activer_desordre',value=False)
+            with st.expander("Paramètres de cette analyse"):
+                frequence=st.number_input("Images analysées par seconde",min_value=1.,max_value=60.,value=10.,step=1.,key='frequence_desordre')
+                duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=600.,step=60.,key='duree_desordre')
+            indisponible=not activation or not donnees.get('disponible') or not donnees.get('mp4_locaux') or actuel.get('busy') or actuel.get('video_busy')
+            if st.button("Lancer l’analyse du désordre",disabled=bool(indisponible),key='lancer_desordre'):
+                lancer(f"/api/jobs/{tache_desordre['id']}/desordre",{'frequence':frequence,'duree_max':duree})
+            if en_cours:
+                st.progress(min(1.,etat.get('terminees',0)/max(1,etat.get('total',0))))
+                st.write(etat.get('etape','Calcul en cours'))
+                if st.button("Arrêter l’analyse du désordre",key='arreter_desordre'):
+                    lancer(f"/api/jobs/{tache_desordre['id']}/video/stop",{})
+            elif etat.get('statut') in ('echec','interrompu'):
+                st.warning(etat.get('erreur') or etat.get('etape','Analyse interrompue'))
+            elif etat.get('statut')=='partiel':
+                st.warning("Résultats partiels : consultez les statuts et la couverture de chaque vidéo.")
+            lignes=donnees.get('indicateurs',[])
+            if not lignes: return
+            import pandas as pd
+            tableau=pd.DataFrame(lignes)
+            st.dataframe(tableau,hide_index=True,column_config={'url':st.column_config.LinkColumn('URL TikTok')})
+            st.subheader("Croiser les variables")
+            indicateurs={'indice_desordre':'Indice de désordre visuel','instabilite_camera':'Instabilité de la caméra',
+                'entropie_directionnelle':'Entropie directionnelle','irregularite_temporelle':'Irrégularité temporelle',
+                'vitesse_residuelle':'Vitesse des mouvements résiduels'}
+            engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','vues':'Nombre de vues',
+                'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
+            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x')
+            axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y')
+            st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
+            if axe_x not in tableau or axe_y not in tableau:
+                st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
+            else:
+                points=tableau[[axe_x,axe_y]].apply(pd.to_numeric,errors='coerce').dropna()
+                if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
+                else:
+                    st.scatter_chart(points.rename(columns={axe_x:indicateurs[axe_x],axe_y:engagements[axe_y]}),
+                        x=indicateurs[axe_x],y=engagements[axe_y])
+                correlation=next((r for r in donnees.get('correlations',[]) if r['indicateur']==axe_x and r['engagement']==axe_y),None)
+                if correlation and correlation.get('rho') is not None:
+                    st.write(f"Spearman : ρ = {correlation['rho']:.3f} · n = {int(correlation['n'])} · p = {correlation['p']:.4g} · p ajustée = {correlation.get('p_ajustee_bh',1.):.4g}")
+                else:
+                    st.info("Corrélation indisponible : il faut au moins trois publications et des variables non constantes, ou relancer d’anciens résultats.")
+            with st.expander("Toutes les corrélations"):
+                st.dataframe(donnees.get('correlations',[]),hide_index=True)
+            st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
+            for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
+                st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
+        afficher_desordre()

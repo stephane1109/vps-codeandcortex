@@ -1,0 +1,62 @@
+"""L'analyse facultative et ses exports restent privés, avec réservation du calcul CPU."""
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+import webapp as web
+from analyse_desordre.service import ecrire_etat
+
+
+class TestsApiDesordre(unittest.TestCase):
+    def test_exports_prives_et_lancement_explicitement_valide(self):
+        with tempfile.TemporaryDirectory() as d:
+            manager=web.Manager(data_dir=d)
+            with TestClient(web.create_app(manager)) as client:
+                client.get('/')
+                job=web.Job(client.cookies[web.COOKIE],web.StartRequest(hashtag='test',enrichir=True),Path(d))
+                job.update(busy=False,archive_prete=True)
+                manager.jobs[job.id]=job
+                (job.directory/'publications.json').write_text('[{"id":"1"}]')
+                base=f'/api/jobs/{job.id}/desordre'
+                self.assertEqual(client.get(base).json()['etat']['statut'],'non_lance')
+                self.assertEqual(client.post(base,json={}).status_code,403)
+                entetes={'X-ScrapTikTok':'1'}
+                with patch('ticket_gate.verifier_session_active',return_value=True),patch('analyse_desordre.service.dependances_disponibles',return_value=True):
+                    self.assertEqual(client.post(base,json={},headers=entetes).status_code,409)
+                    (job.directory/'videos').mkdir();(job.directory/'videos'/'id_1.mp4').write_bytes(b'test')
+                    self.assertEqual(client.post(base,json={'frequence':0},headers=entetes).status_code,422)
+                    with patch('webapp.executer_desordre') as executer:
+                        self.assertEqual(client.post(base,json={},headers=entetes).status_code,202)
+                        job.video_thread.join(2);self.assertTrue(executer.called)
+                        self.assertTrue(job.video_busy)
+                        self.assertEqual(client.post(base,json={},headers=entetes).status_code,409)
+                job.update(video_busy=False)
+                dossier=job.directory/'desordre_0123456789abcdef';dossier.mkdir()
+                ecrire_etat(job.directory,{'statut':'termine','dossier':dossier.name})
+                (dossier/'indicateurs_engagement.csv').write_text('publication_id,likes,indice_desordre\n7697829530844663072,100,12.3\n')
+                resultat=client.get(base).json()
+                self.assertEqual(resultat['indicateurs'][0]['publication_id'],'7697829530844663072')
+                self.assertEqual(resultat['indicateurs'][0]['likes'],100)
+                self.assertEqual(client.get(base+'/export/indicateurs_engagement.csv').status_code,200)
+                self.assertEqual(client.get(base+'/export/desordre.log').status_code,404)
+                client.cookies.clear();client.get('/')
+                self.assertEqual(client.get(base).status_code,404)
+                self.assertEqual(client.get(base+'/export/indicateurs_engagement.csv').status_code,404)
+
+    def test_arret_libere_la_reservation_cpu(self):
+        from unittest.mock import MagicMock
+        from analyse_desordre.service import lire_etat
+        with tempfile.TemporaryDirectory() as d:
+            job=web.Job('a'*64,web.StartRequest(hashtag='test',enrichir=True),Path(d))
+            job.update(video_busy=True)
+            job.video_stop.set()
+            ecrire_etat(job.directory,{'statut':'en_cours','dossier':'desordre_0123456789abcdef'})
+            processus=MagicMock();processus.poll.side_effect=[None,0]
+            with patch('webapp.subprocess.Popen',return_value=processus):
+                web.executer_desordre(job,web.OptionsDesordre(),'desordre_0123456789abcdef')
+            processus.terminate.assert_called_once()
+            self.assertFalse(job.video_busy)
+            self.assertIsNone(job.video_process)
+            self.assertEqual(lire_etat(job.directory)['statut'],'interrompu')

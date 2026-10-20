@@ -133,7 +133,7 @@ class TestsIntegration(unittest.TestCase):
             self.assertEqual(len(list(sortie.glob('*.png'))),5)
             self.assertTrue((sortie/'mesures_temporelles.csv').is_file())
             with (sortie/'correlations_spearman.csv').open(encoding='utf-8-sig') as f:
-                lignes=list(csv.DictReader(f));self.assertEqual(len(lignes),15)
+                lignes=list(csv.DictReader(f));self.assertEqual(len(lignes),35)
             with self.assertRaises(FileExistsError): analyser_lot(videos,meta,sortie,Parametres(permutations=99))
 
     def test_limite_duree_et_video_uniforme(self):

@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 TAUX=('likes_pour_1000_vues','commentaires_pour_1000_vues','partages_pour_1000_vues')
+VARIABLES_ENGAGEMENT=('likes','commentaires','partages','vues',*TAUX)
 
 
 def nombre_observe(valeur):
