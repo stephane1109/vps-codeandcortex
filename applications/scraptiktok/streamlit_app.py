@@ -511,10 +511,12 @@ with onglet_desordre:
             elif etat.get('statut')=='partiel':
                 st.warning("Résultats partiels : consultez les statuts et la couverture de chaque vidéo.")
             if etat.get('erreurs_telechargement'):
-                st.warning("Certains MP4 n’ont pas pu être récupérés ; les autres vidéos peuvent être analysées.")
+                st.warning("MP4 exclus du lot : détail des échecs de téléchargement ci-dessous.")
                 st.dataframe(etat['erreurs_telechargement'],hide_index=True)
             lignes=donnees.get('indicateurs',[])
             if not lignes: return
+            if etat.get('statut') not in ('termine','partiel'):
+                st.info('Résultats intermédiaires sauvegardés : les vidéos déjà traitées restent consultables, même si le lot est encore en cours ou a été interrompu.')
             import pandas as pd
             from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, AIDES_STATISTIQUES, AIDES_COLONNES, preparer_graphique, formater_nombre
             tableau=pd.DataFrame(lignes)
@@ -556,7 +558,7 @@ with onglet_desordre:
                             ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée'),(3,0,6,6)):
                         colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
                 else:
-                    st.info("Corrélation indisponible : il faut au moins trois publications et des variables non constantes, ou relancer d’anciens résultats.")
+                    st.info("Les corrélations sont calculées à la fin du lot. Elles nécessitent au moins trois publications et des variables non constantes.")
             st.markdown("**Spearman est-il adapté ?**",help=AIDE_SPEARMAN)
             with st.expander("Comment interpréter cette corrélation ?"):
                 st.write(AIDE_SPEARMAN)
@@ -566,5 +568,6 @@ with onglet_desordre:
                     column_config={nom:st.column_config.Column(help=aide) for nom,aide in AIDES_STATISTIQUES.items()})
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
-                st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
+                if etat.get('statut') in ('termine','partiel') or nom=='indicateurs_engagement.csv':
+                    st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
         afficher_desordre()

@@ -52,7 +52,7 @@ def executer(session,dossier,frequence,dimension,duree_max,telecharger_manquants
     etat={'statut':'en_cours','dossier':dossier,'terminees':0,'total':0,'etape':'Préparation','telecharger_manquants':telecharger_manquants}
     ecrire_etat(session,etat)
     def progression(rang,total,identifiant,statut):
-        etat.update(terminees=rang,total=total,etape='Vidéo '+identifiant+' : '+statut)
+        etat.update(phase='analyse',terminees=rang,total=total,etape='Vidéo '+identifiant+' : '+statut)
         if rang==total: etat['etape']='Calcul des corrélations et des graphiques'
         ecrire_etat(session,etat)
     try:
@@ -65,10 +65,13 @@ def executer(session,dossier,frequence,dimension,duree_max,telecharger_manquants
         if telecharger_manquants:
             from collecte.telechargement import telecharger_video
             limites={'espace_libre_min_mo':512,'taille_max_mo':150,'duree_max_s':duree_max}
-            for rang,publication in enumerate(publications,1):
+            manquantes=[publication for publication in publications
+                if str(publication.get('id') or publication.get('publication_id')) not in fichiers and url_telechargeable(publication)]
+            etat.update(phase='telechargement',total=len(manquantes),terminees=0)
+            for rang,publication in enumerate(manquantes,1):
                 identifiant=str(publication.get('id') or publication.get('publication_id'))
                 if identifiant in fichiers or not url_telechargeable(publication): continue
-                etat.update(etape=f'Téléchargement du MP4 {rang}/{len(publications)} — {identifiant}')
+                etat.update(etape=f'Téléchargement du MP4 {rang}/{len(manquantes)} — {identifiant}')
                 ecrire_etat(session,etat)
                 try:
                     fichiers[identifiant]=telecharger_video({**publication,'id':identifiant},session/'videos',limites)
@@ -76,8 +79,9 @@ def executer(session,dossier,frequence,dimension,duree_max,telecharger_manquants
                 except Exception as erreur:
                     etat['erreurs_telechargement'].append({'publication_id':identifiant,
                         'cause':getattr(erreur,'statut',type(erreur).__name__),'detail':str(erreur)[:200]})
+                etat.update(terminees=rang)
                 ecrire_etat(session,etat)
-        etat.update(mp4_prets=len(fichiers),etape='Analyse des MP4 disponibles')
+        etat.update(phase='analyse',terminees=0,total=len(publications),mp4_prets=len(fichiers),etape='Analyse des MP4 disponibles')
         ecrire_etat(session,etat)
         # Adapter les noms importés aux identifiants, sans modifier ni supprimer les originaux.
         # Les liens physiques sont temporaires ; les téléchargements restent dans videos/.

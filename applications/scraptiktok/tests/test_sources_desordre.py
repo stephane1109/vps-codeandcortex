@@ -48,3 +48,38 @@ class TestsSourcesDesordre(unittest.TestCase):
             self.assertEqual(etat['erreurs_telechargement'][0]['publication_id'],'3')
             self.assertFalse(list(p.glob('desordre_sources_*')))
             self.assertTrue((p/'videos'/'2.mp4').exists())
+
+    def test_taille_depassee_puis_videos_valides_et_resultats_sauvegardes(self):
+        """L'exclusion signalée ne doit ni arrêter les téléchargements ni perdre les mesures."""
+        from collecte.telechargement import ErreurTelechargement
+        from analyse_desordre.tests.test_analyse import creer_texture, ecrire_video
+        from analyse_desordre.service import lire_tableau
+        with tempfile.TemporaryDirectory() as d:
+            dossier=Path(d)
+            identifiants=['7552202548308872470','7552202548308872471','7552202548308872472']
+            publications=[{'id':identifiant,'url':f'https://www.tiktok.com/@test/video/{identifiant}',
+                          'vues':1000,'likes':10} for identifiant in identifiants]
+            (dossier/'publications.json').write_text(json.dumps(publications))
+            appels=[]
+            def telecharger(publication,cible,parametres):
+                appels.append(publication['id'])
+                if publication['id']==identifiants[0]:
+                    raise ErreurTelechargement('taille_depassee','Vidéo exclue par la taille maximale configurée.')
+                cible.mkdir(exist_ok=True)
+                chemin=cible/(publication['id']+'.mp4')
+                ecrire_video(chemin,[creer_texture()]*8)
+                return chemin
+            # Un échec tardif des graphiques ne doit pas effacer les mesures calculées.
+            with patch('collecte.telechargement.telecharger_video',side_effect=telecharger),patch(
+                    'analyse_desordre.lancement.tracer_engagements',side_effect=RuntimeError('Échec graphique simulé')):
+                executer(dossier,'desordre_0123456789abcdef',10,320,600,True)
+            self.assertEqual(appels,identifiants)
+            etat=lire_etat(dossier)
+            self.assertEqual(etat['erreurs_telechargement'][0]['cause'],'taille_depassee')
+            self.assertEqual(etat['telecharges'],2)
+            self.assertEqual(etat['terminees'],3)
+            lignes=lire_tableau(dossier/'desordre_0123456789abcdef'/'indicateurs_engagement.csv')
+            self.assertEqual(len(lignes),3)
+            self.assertEqual(lignes[0]['statut'],'erreur')
+            self.assertTrue(all(ligne['indice_desordre'] is not None for ligne in lignes[1:]))
+            self.assertFalse(list(dossier.glob('desordre_sources_*')))

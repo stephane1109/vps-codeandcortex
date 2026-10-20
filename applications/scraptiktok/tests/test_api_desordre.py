@@ -41,6 +41,10 @@ class TestsApiDesordre(unittest.TestCase):
                 self.assertEqual(resultat['indicateurs'][0]['likes'],100)
                 self.assertEqual(client.get(base+'/export/indicateurs_engagement.csv').status_code,200)
                 self.assertEqual(client.get(base+'/export/desordre.log').status_code,404)
+                for statut in ('en_cours','echec','interrompu'):
+                    ecrire_etat(job.directory,{'statut':statut,'dossier':dossier.name})
+                    self.assertEqual(len(client.get(base).json()['indicateurs']),1)
+                    self.assertEqual(client.get(base+'/export/indicateurs_engagement.csv').status_code,200)
                 client.cookies.clear();client.get('/')
                 self.assertEqual(client.get(base).status_code,404)
                 self.assertEqual(client.get(base+'/export/indicateurs_engagement.csv').status_code,404)
