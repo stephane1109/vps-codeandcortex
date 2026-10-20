@@ -220,3 +220,25 @@ Les noms de fichiers importés sont adaptés temporairement aux identifiants par
 liens physiques (ou copie), sans modifier les sources. Cette préparation est
 nettoyée à la fin ou lors d’un arrêt. Le lancement autonome `lancement.py` reste
 strictement local ; le téléchargement appartient uniquement au service de l’interface.
+
+
+### Lire les tableaux et les graphiques
+
+La première colonne **N° vidéo** numérote les lignes de l’analyse. Ce numéro de
+repérage, distinct de l’identifiant TikTok, est repris au survol du graphique.
+Chaque point représente une vidéo avec deux mesures valides. L’interface donne
+le nombre de vidéos représentées, les exclusions pour données manquantes et le
+nombre de positions distinctes. Les vidéos aux mêmes coordonnées se superposent ;
+leur liste de numéros apparaît au survol. Aucun décalage artificiel n’est ajouté.
+Des valeurs proches peuvent également se recouvrir à l’écran.
+
+Les axes affichent des milliers séparés par des espaces (`1 600 000`) et des
+décimales séparées par une virgule (`12,5`). Les valeurs au survol sont présentées
+de la même manière. L’unité dépend de la variable sélectionnée : vues, likes,
+commentaires, partages, ou taux pour 1 000 vues. Les PNG autonomes utilisent aussi
+cette notation, sans multiplicateur scientifique implicite.
+
+Une infobulle explique l’indice de 0 à 100 et chaque indicateur. Une aide dédiée
+à Spearman rappelle son usage exploratoire, les limites des petits effectifs et
+l’absence d’ajustement sur les comptes, l’audience et les dates. Aucun test ni
+poids du score n’a été modifié par ces changements d’affichage.
