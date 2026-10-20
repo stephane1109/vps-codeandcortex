@@ -555,7 +555,8 @@ with onglet_desordre:
             with st.expander("Comment interpréter cette corrélation ?"):
                 st.write(AIDE_SPEARMAN)
             with st.expander("Toutes les corrélations"):
-                st.dataframe(donnees.get('correlations',[]),hide_index=True)
+                st.dataframe([{cle:valeur for cle,valeur in ligne.items() if cle != 'permutations'}
+                              for ligne in donnees.get('correlations',[])],hide_index=True)
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
                 st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
