@@ -212,3 +212,119 @@ class IndexVisuel:
         for (resultat,) in self.base.execute("SELECT resultat FROM paires WHERE resultat IS NOT NULL ORDER BY a,b"):
             valeur = json.loads(resultat)
             if valeur['type'] in TYPES_REEMPLOI or valeur.get('semantiquement_similaires'): yield valeur
+
+
+class IndexDino:
+    """Index privé inter-lots : SQLite durable et FAISS HNSW dérivé, sans MP4 requis."""
+    def __init__(self, dossier, threads=1):
+        import sqlite3
+        import fcntl
+        from pathlib import Path
+        self.dossier=Path(dossier); self.dossier.mkdir(parents=True,exist_ok=True)
+        # Deux analyses d'un même propriétaire ne doivent pas réécrire l'index ensemble.
+        self.verrou=(self.dossier/'index.lock').open('w')
+        try: fcntl.flock(self.verrou,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.verrou.close(); raise RuntimeError('Une autre analyse DINOv2 utilise cet index ; réessayez après sa fin.')
+        self.base=sqlite3.connect(self.dossier/'images.sqlite',timeout=30)
+        self.base.executescript('''
+            CREATE TABLE IF NOT EXISTS images(id INTEGER PRIMARY KEY AUTOINCREMENT, video TEXT,
+              temps REAL, vecteur BLOB, vignette BLOB, phash TEXT);
+            CREATE INDEX IF NOT EXISTS images_video ON images(video);
+            CREATE TABLE IF NOT EXISTS videos(id TEXT PRIMARY KEY, donnees TEXT);
+            CREATE TABLE IF NOT EXISTS revision(valeur INTEGER);
+            INSERT INTO revision SELECT 0 WHERE NOT EXISTS(SELECT 1 FROM revision);
+        ''')
+        self.threads=threads; self.index=None
+
+    def fermer(self):
+        self.base.close(); self.verrou.close()
+
+    def enregistrer(self, video, images, embeddings):
+        """Remplacer les images d'une publication atomiquement, sans conserver de doublons."""
+        import json
+        import cv2
+        import numpy as np
+        if len(images)!=len(embeddings): raise ValueError('Nombre incohérent d’images DINOv2.')
+        with self.base:
+            self.base.execute('DELETE FROM images WHERE video=?',(video['id'],))
+            self.base.execute('INSERT OR REPLACE INTO videos VALUES(?,?)',(video['id'],json.dumps(video)))
+            for image,embedding in zip(images,embeddings):
+                vecteur=np.asarray(embedding['vecteur'],dtype='float32')
+                if vecteur.shape!=(384,) or not np.isfinite(vecteur).all() or np.linalg.norm(vecteur)==0:
+                    raise ValueError('Embedding DINOv2 invalide.')
+                vecteur/=np.linalg.norm(vecteur)
+                miniature=image['image']; h,w=miniature.shape[:2]
+                miniature=cv2.resize(miniature,(max(1,round(w*min(1,224/max(h,w)))),max(1,round(h*min(1,224/max(h,w))))))
+                succes,jpeg=cv2.imencode('.jpg',miniature,[cv2.IMWRITE_JPEG_QUALITY,80])
+                if not succes: raise ValueError('Miniature DINOv2 illisible.')
+                self.base.execute('INSERT INTO images(video,temps,vecteur,vignette,phash) VALUES(?,?,?,?,?)',
+                    (video['id'],embedding['temps_s'],vecteur.tobytes(),jpeg.tobytes(),calculer_phash(image['image'])))
+            self.base.execute('UPDATE revision SET valeur=valeur+1')
+        self.index=None
+
+    def contient(self, identifiant, sha):
+        import json
+        ligne=self.base.execute('SELECT donnees FROM videos WHERE id=?',(identifiant,)).fetchone()
+        return bool(ligne and json.loads(ligne[0]).get('sha256')==sha)
+
+    def preparer(self, verifier=lambda:None):
+        """Reconstruire par blocs si nécessaire ; ne jamais charger toutes les vignettes."""
+        import faiss
+        import numpy as np
+        import os
+        faiss.omp_set_num_threads(self.threads)
+        revision=str(self.base.execute('SELECT valeur FROM revision').fetchone()[0])
+        chemin=self.dossier/'index.faiss'; marqueur=self.dossier/'revision.txt'
+        if chemin.exists() and marqueur.exists() and marqueur.read_text()==revision:
+            try:
+                self.index=faiss.read_index(str(chemin)); return
+            except RuntimeError: pass
+        graphe=faiss.IndexHNSWFlat(384,32,faiss.METRIC_INNER_PRODUCT)
+        graphe.hnsw.efConstruction=80; graphe.hnsw.efSearch=128
+        self.index=faiss.IndexIDMap2(graphe)
+        curseur=self.base.execute('SELECT id,vecteur FROM images ORDER BY id')
+        while True:
+            lignes=curseur.fetchmany(256)
+            if not lignes: break
+            verifier()
+            self.index.add_with_ids(np.stack([np.frombuffer(v,dtype='float32') for _,v in lignes]),np.array([i for i,_ in lignes],dtype='int64'))
+        temporaire=self.dossier/'index.tmp'
+        faiss.write_index(self.index,str(temporaire)); os.replace(temporaire,chemin)
+        temporaire=self.dossier/'revision.tmp'; temporaire.write_text(revision); os.replace(temporaire,marqueur)
+
+    def rechercher(self, identifiant, verifier=lambda:None):
+        """Dix autres publications, sans seuil ; davantage de voisins si une vidéo domine."""
+        import numpy as np
+        import json
+        if self.index is None: self.preparer(verifier)
+        videos={i:json.loads(d) for i,d in self.base.execute('SELECT id,donnees FROM videos')}
+        if identifiant not in videos: return []
+        objectif=min(10,len(videos)-1); correspondances={}
+        if objectif<=0: return []
+        for numero,temps,vecteur,phash in self.base.execute('SELECT id,temps,vecteur,phash FROM images WHERE video=? ORDER BY temps',(identifiant,)):
+            verifier(); k=min(self.index.ntotal,128)
+            while k:
+                scores,ids=self.index.search(np.frombuffer(vecteur,dtype='float32').reshape(1,-1),k)
+                voisins={}
+                for score,autre in zip(scores[0],ids[0]):
+                    if autre<0: continue
+                    ligne=self.base.execute('SELECT video,temps,phash FROM images WHERE id=?',(int(autre),)).fetchone()
+                    if not ligne or ligne[0]==identifiant: continue
+                    video,t,h=ligne
+                    if video not in voisins:
+                        voisins[video]={'image_a':numero,'image_b':int(autre),'temps_a':temps,'temps_b':t,
+                            'score':max(-1.,min(1.,float(score))),'phash_a':phash,'phash_b':h}
+                if len(voisins)>=objectif or k==self.index.ntotal: break
+                k=min(self.index.ntotal,k*2)
+            for video,mesure in voisins.items(): correspondances.setdefault(video,[]).append(mesure)
+        resultats=[]
+        for autre,mesures in correspondances.items():
+            meilleure=max(mesures,key=lambda m:m['score'])
+            resultats.append({'a':identifiant,'b':autre,'url_a':videos[identifiant].get('url'),'url_b':videos[autre].get('url'),
+                'score':meilleure['score'],'meilleure':meilleure,'correspondances':mesures,'preuve_reemploi':False})
+        return sorted(resultats,key=lambda r:(-r['score'],r['b']))[:10]
+
+    def miniature(self, numero):
+        ligne=self.base.execute('SELECT vignette FROM images WHERE id=?',(numero,)).fetchone()
+        return ligne[0] if ligne else None

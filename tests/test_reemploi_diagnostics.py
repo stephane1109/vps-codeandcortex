@@ -92,7 +92,7 @@ class TestsReemploi(unittest.TestCase):
                 ecrire_video(dossier/'videos'/f'{i}.mp4',graines=graines,recadrer=i==10)
                 publications.append({'id':str(i),'author':'compte'+str(i),'description':'Texte','engagement':{}})
             (dossier/'publications.json').write_text(json.dumps(publications))
-            parametres=charger_parametres(); parametres['conserver_images']=False
+            parametres=charger_parametres(); parametres.update(pas_images_s=1,dinov2=False); parametres['conserver_images']=False
             analyser_lot(dossier,parametres)
             liens=json.loads((dossier/'comparaisons.json').read_text())
             self.assertTrue(any({c['a'],c['b']}=={'1','10'} for c in liens))

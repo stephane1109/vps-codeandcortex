@@ -49,7 +49,7 @@ class TestsDisponibilite(unittest.TestCase):
                 (job.directory/'publications.json').write_text(json.dumps(job.publications))
                 job.update(busy=False,status='completed',archive_prete=True)
                 reponse=client.post(f'/api/jobs/{job.id}/video',headers={'X-ScrapTikTok':'1'},
-                    json={'comparer_sha256':True,'comparer_sequences':True})
+                    json={'dinov2':False,'pas_images_s':1,'comparer_sha256':True,'comparer_sequences':True})
                 self.assertEqual(reponse.status_code,202,reponse.text)
                 limite=time.monotonic()+60
                 while job.video_busy and time.monotonic()<limite: time.sleep(.1)

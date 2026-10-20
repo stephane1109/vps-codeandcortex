@@ -18,12 +18,12 @@ from telechargement_videos import correspondance_video
 from stockage.base_donnees import BaseDonnees
 from stockage.cache_video import cle_cache, lire_cache, ecrire_cache
 from .parametres import charger_parametres, charger_seuils
-from .empreintes import calculer_sha256, calculer_phash, IndexVisuel
+from .empreintes import calculer_sha256, calculer_phash, IndexVisuel, IndexDino
 from .comparaison_orb import extraire_orb
 from .extraction_images import extraire_images
 from .indicateurs import calculer_indicateurs
-from .embeddings import calculer_embeddings, construire_similarites_semantiques
-from .recherche_similaires import comparer_videos
+from .embeddings import calculer_embeddings, construire_similarites_semantiques, calculer_dinov2
+from .recherche_similaires import comparer_videos, qualifier_dinov2, regrouper_dinov2
 from .groupes_visuels import regrouper_videos, TYPES_REEMPLOI
 from analyse.codage_automatique import coder_variables
 from analyse.reseau_similarite import construire_reseau
@@ -59,21 +59,28 @@ def traiter_lot(dossier, parametres, seuils):
     commentaires=json.loads((dossier / "commentaires.json").read_text()) if (dossier / "commentaires.json").exists() else []
     journal=json.loads((dossier / "journal.json").read_text()) if (dossier / "journal.json").exists() else {}
     debut=time.monotonic(); analyses=[]; erreurs=[]; mesures={}; comparaisons=[]
+    audit_path=dossier/'audit_video.json'
+    audit=json.loads(audit_path.read_text()) if audit_path.exists() else {}
     base=BaseDonnees(dossier.parent.parent / "scraptiktok.sqlite")
     # Une base par propriétaire et profil protège les collectes des autres utilisateurs.
     import hashlib
     with base.connexion() as connexion:
         ligne=connexion.execute("SELECT proprietaire FROM sessions WHERE id=?",(dossier.name,)).fetchone()
     proprietaire=ligne[0] if ligne else "corpus_local"
-    profil={k:v for k,v in parametres.items() if k not in {"debut_videos","videos_max","paires_max","duree_lot_max_s","telecharger_videos","nettoyer_videos","exclure_videos","reessayer_options"}}
+    profil={k:v for k,v in parametres.items() if k not in {"debut_videos","videos_max","paires_max","duree_lot_max_s","telecharger_videos","nettoyer_videos","seuil_groupes_dino","exclure_videos","reessayer_options"}}
     signature=hashlib.sha256(json.dumps(["index_v2",profil,seuils],sort_keys=True).encode()).hexdigest()
     espace=hashlib.sha256(proprietaire.encode()).hexdigest()
     index=IndexVisuel(dossier.parent.parent / "index_visuel" / espace / (signature+".sqlite"))
+    # L'index DINOv2 ne dépend ni du seuil de regroupement ni des options OCR/audio.
+    profil_dino=hashlib.sha256(json.dumps(['facebook/dinov2-small','cls_v1',parametres['pas_images_s'],parametres['dimension_max'],parametres['images_max'],parametres['duree_max_s']]).encode()).hexdigest()[:16]
+    index_dino=None
     try:
+        if parametres.get('dinov2',True):
+            index_dino=IndexDino(dossier.parent.parent/'index_dino'/espace/profil_dino,parametres['threads'])
         def incomplet(valeur):
             """Réessayer une option dont le modèle ou la dépendance était indisponible."""
             if isinstance(valeur,dict):
-                return valeur.get('statut') in {'indetermine','poids_locaux_requis','dependance_absente'} or any(incomplet(v) for v in valeur.values())
+                return valeur.get('statut') in {'indetermine','poids_locaux_requis','dependance_absente','modele_indisponible'} or any(incomplet(v) for v in valeur.values())
             return False
         deja_traites=set()
         for publication in publications:
@@ -85,7 +92,7 @@ def traiter_lot(dossier, parametres, seuils):
                 mp4=dossier / 'videos' / ('id_'+identifiant+'.mp4')
                 if not mp4.exists() and not mp4.is_symlink(): mp4=dossier / 'videos' / (identifiant+'.mp4')
                 fichier_identique=(not mp4.exists() or (mp4.stat().st_size==ancienne.get('fichier_taille') and mp4.stat().st_mtime_ns==ancienne.get('fichier_mtime_ns')))
-                if not mp4.is_symlink() and fichier_identique and ancienne.get('signature_index')==signature and (not incomplet(ancienne) or not parametres.get('reessayer_options',True)) and index.lire_video(identifiant):
+                if not mp4.is_symlink() and fichier_identique and ancienne.get('signature_index')==signature and (not incomplet(ancienne) or not parametres.get('reessayer_options',True)) and index.lire_video(identifiant) and (index_dino is None or index_dino.contient(identifiant,ancienne["sha256"])):
                     analyses.append(ancienne); mesures[identifiant]=ancienne['indicateurs']; deja_traites.add(identifiant)
         def verifier():
             if time.monotonic()-debut>parametres["duree_lot_max_s"]: raise TimeoutError("Durée maximale du lot atteinte.")
@@ -99,21 +106,31 @@ def traiter_lot(dossier, parametres, seuils):
                     erreurs.append({"id":identifiant,"raison":"identifiant_invalide"}); continue
                 etat("en_cours","vidéo " + identifiant)
                 try:
+                    audit[identifiant]={'telechargement':'absent','decodage':'non_execute','dinov2':'non_execute'}
                     chemin=dossier / "videos" / ("id_"+identifiant+".mp4")
                     if not chemin.exists() and not chemin.is_symlink():
                         chemin=dossier / "videos" / (identifiant+".mp4")
+                    if chemin.is_file(): audit[identifiant]['telechargement']='present_local'
                     if chemin.is_symlink(): raise ValueError("Lien symbolique vidéo interdit.")
                     if not chemin.exists() and parametres["telecharger_videos"]:
                         from collecte.telechargement import telecharger_video
                         chemin=telecharger_video(publication,dossier / "videos",parametres)
+                        audit[identifiant]["telechargement"]="telecharge"
                     if not chemin.exists(): raise FileNotFoundError("vidéo locale absente et téléchargement désactivé")
                     if chemin.stat().st_size>parametres["taille_max_mo"]*1024**2: raise ValueError("vidéo trop volumineuse")
                     if shutil.disk_usage(dossier).free<parametres["espace_libre_min_mo"]*1024**2: raise OSError("espace disque insuffisant")
                     sha=calculer_sha256(chemin); cle=cle_cache(sha,parametres)
                     resultat=index.lire_video(identifiant)
-                    if resultat and (resultat['sha256']!=sha or incomplet(resultat)): resultat=None
+                    if resultat and (resultat['sha256']!=sha or incomplet(resultat) or (index_dino and not index_dino.contient(identifiant,sha))): resultat=None
                     if resultat is None:
                         extraction=extraire_images(chemin,parametres,dossier / "images" / identifiant if parametres["conserver_images"] else None,verifier)
+                        audit[identifiant].update(decodage='mesure',images_decodees=len(extraction['images']))
+                        etat('en_cours','DINOv2 : modèle et images de la vidéo '+identifiant)
+                        dino=calculer_dinov2(extraction['images'],parametres,verifier)
+                        if dino['statut']=='mesure' and index_dino:
+                            index_dino.enregistrer({'id':identifiant,'sha256':sha,'url':publication.get('url')},extraction['images'],dino['images'])
+                        dino={**dino,'images':len(dino['images'])}
+                        audit[identifiant]['dinov2']=dino['statut']
                         indicateurs=calculer_indicateurs(extraction,parametres)
                         verifier()
                         try: embedding=calculer_embeddings(extraction["images"],parametres)
@@ -131,7 +148,7 @@ def traiter_lot(dossier, parametres, seuils):
                             except Exception as erreur: indicateurs["audio"]={"statut":"indetermine","raison":type(erreur).__name__,"presence":None}
                         resultat={"sha256":sha,"duree_s":extraction["duree_s"],"pas_s":extraction["pas_s"],"tronque":extraction["tronque"],
                             "images":[],
-                            "indicateurs":indicateurs,"embedding":embedding}
+                            "indicateurs":indicateurs,"embedding":embedding,"dinov2":dino,"images_decodees":len(extraction["images"]),"mp4_valide":True}
                         resultat.update(id=identifiant,media_id=publication.get("media_id") or publication.get("author"),
                                         url=publication.get("url"),signature_index=signature)
                         index.enregistrer_video(resultat,extraction['images'] if parametres.get('comparer_sequences',True) else [])
@@ -142,9 +159,13 @@ def traiter_lot(dossier, parametres, seuils):
                     analyses.append({k:v for k,v in resultat.items() if k != "images"}); mesures[identifiant]=resultat["indicateurs"]
                     exporter_json(dossier / "empreintes" / (identifiant+".json"),resultat)
                     # Le nettoyage est explicite ; les vignettes restent dans l'index privé.
-                    if parametres.get('nettoyer_videos',False): chemin.unlink()
+                    if parametres.get('nettoyer_videos',False) and not incomplet(resultat): chemin.unlink()
                 except TimeoutError: raise
-                except Exception as erreur: erreurs.append({"id":identifiant,"raison":str(erreur)[:200],"type":type(erreur).__name__})
+                except Exception as erreur:
+                    erreurs.append({"id":identifiant,"raison":str(erreur)[:200],"type":type(erreur).__name__})
+                    audit[identifiant]['erreur']=str(erreur)[:200]
+                finally:
+                    exporter_json(audit_path,audit)
             # Rejouer également les recherches des vidéos déjà indexées après mise à jour.
             for (identifiant,) in index.base.execute('SELECT video FROM recherches ORDER BY video LIMIT ?', (parametres['videos_max'],)).fetchall():
                 verifier(); index.preparer_candidats(identifiant,seuils,verifier,parametres)
@@ -169,6 +190,7 @@ def traiter_lot(dossier, parametres, seuils):
         attente+=recherches_attente
         ids_reemploi={c[k] for c in comparaisons if c["type"] in TYPES_REEMPLOI for k in ("a","b")}
         complet=(len(analyses)==len(publications) and not erreurs and not attente
+                 and (not parametres.get('dinov2',True) or all(a.get('dinov2',{}).get('statut')=='mesure' for a in analyses))
                  and not index.tronque and not any(a.get('tronque') or a.get('recherche_tronquee') for a in analyses))
         if index.tronque:
             erreurs.append({'type':'index_sature','raison':'Recherche de candidats plafonnée ; absence de lien non concluante.'})
@@ -215,6 +237,42 @@ def traiter_lot(dossier, parametres, seuils):
         exporter_json(dossier / 'similarites_semantiques.json',similarites)
         exporter_csv(dossier / 'similarites_semantiques.csv',similarites,
                      ['a','b','url_a','url_b','media_a','media_b','score_cosinus','type','preuve_reemploi'])
+        diagnostic['videos_mp4_disponibles']=sum(1 for p in publications if any((dossier/'videos'/nom).is_file() for nom in (p['id']+'.mp4','id_'+p['id']+'.mp4')))
+        diagnostic['videos_telechargees']=sum(audit.get(p['id'],{}).get('telechargement')=='telecharge' for p in publications)
+        diagnostic['videos_decodees']=sum(audit.get(p['id'],{}).get('decodage')=='mesure' for p in publications)
+        diagnostic['images_decodees']=sum(audit.get(p['id'],{}).get('images_decodees',0) for p in publications)
+        diagnostic['videos_mp4_valides_historiques']=sum(bool(a.get('mp4_valide')) for a in analyses)
+        statuts_dino={}
+        for analyse in analyses:
+            statut=analyse.get('dinov2',{}).get('statut','non_execute')
+            statuts_dino[statut]=statuts_dino.get(statut,0)+1
+        diagnostic['dinov2']={'active':parametres.get('dinov2',True),'modele':'facebook/dinov2-small',
+            'statuts':statuts_dino,'images_analysees':sum(a.get('dinov2',{}).get('images',0) for a in analyses),
+            'seuil_groupes':parametres.get('seuil_groupes_dino'),'erreurs':[]}
+        diagnostic['traitements']={cle:('active' if parametres.get(cle) else 'desactive') for cle in ('dinov2','embeddings','comparer_sha256','comparer_sequences','ocr','audio','transcription')}
+        resultats_dino=[]
+        try:
+            if index_dino and index_dino.base.execute('SELECT count(*) FROM images').fetchone()[0]:
+                index_dino.preparer(verifier)
+                miniatures=dossier/'miniatures_dino'; miniatures.mkdir(exist_ok=True)
+                for publication in publications:
+                    for resultat in index_dino.rechercher(publication['id'],verifier):
+                        resultat=qualifier_dinov2(resultat,parametres['pas_images_s'],parametres.get('seuil_groupes_dino'))
+                        for cote in ('a','b'):
+                            numero=resultat['meilleure']['image_'+cote]
+                            fichier=miniatures/(str(numero)+'.jpg')
+                            fichier.write_bytes(index_dino.miniature(numero))
+                        # Les meilleures positions et segments restent exportables ; limiter la réponse API.
+                        resultat['correspondances']=sorted(resultat['correspondances'],key=lambda c:-c['score'])[:12]
+                        resultats_dino.append(resultat)
+        except (ImportError,RuntimeError,TimeoutError) as erreur:
+            diagnostic['dinov2']['erreurs'].append(type(erreur).__name__+': '+str(erreur)[:160])
+            complet=False
+        exporter_json(dossier/'similarites_dino.json',resultats_dino)
+        exporter_json(dossier/'groupes_dino.json',regrouper_dinov2(resultats_dino,parametres.get('seuil_groupes_dino')))
+        exporter_csv(dossier/'similarites_dino.csv',[{**{k:r[k] for k in ('a','b','url_a','url_b','score','nature','preuve_reemploi')},
+            'temps_a_s':r['meilleure']['temps_a'],'temps_b_s':r['meilleure']['temps_b']} for r in resultats_dino],
+            ['a','b','url_a','url_b','score','nature','preuve_reemploi','temps_a_s','temps_b_s'])
         exporter_json(dossier / 'diagnostic_visuel.json',diagnostic)
         exporter_json(dossier / "groupes_visuels.json",groupes)
         exporter_csv(dossier / "correspondances_visuelles.csv",[
@@ -238,6 +296,7 @@ def traiter_lot(dossier, parametres, seuils):
         exporter_zip(dossier,dossier / "archive.zip", inclure_mp4=bool((journal.get("parametres") or {}).get("telecharger_mp4")))
         return journal["audiovisuel"]
     finally:
+        if index_dino: index_dino.fermer()
         index.fermer()
 
 

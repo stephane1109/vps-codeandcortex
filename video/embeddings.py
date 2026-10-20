@@ -49,3 +49,43 @@ def construire_similarites_semantiques(comparaisons):
          'preuve_reemploi':False}
         for c in comparaisons if c.get('semantiquement_similaires')
     ], key=lambda ligne: (-ligne['score_cosinus'],ligne['a'],ligne['b']))
+
+
+@lru_cache(maxsize=1)
+def charger_dinov2(autoriser_telechargement, threads):
+    """Charger uniquement DINOv2-small sur CPU, y compris depuis le cache hors ligne."""
+    import torch
+    import os
+    os.environ.setdefault("USE_TF", "0")
+    os.environ.setdefault("USE_FLAX", "0")
+    from transformers import AutoImageProcessor, AutoModel
+    torch.set_num_threads(threads)
+    nom = 'facebook/dinov2-small'
+    preparer = AutoImageProcessor.from_pretrained(nom, local_files_only=not autoriser_telechargement, use_fast=False)
+    modele = AutoModel.from_pretrained(nom, local_files_only=not autoriser_telechargement).to('cpu').eval()
+    return modele, preparer
+
+
+def calculer_dinov2(images, parametres, verifier=lambda: None):
+    """Conserver un CLS normalisé par image, sans moyenne entre images."""
+    resultat = {'modele':'facebook/dinov2-small','statut':'desactive','images':[]}
+    if not parametres.get('dinov2', True): return resultat
+    try:
+        import torch
+        import cv2
+        import faiss  # Vérifier l'index avant d'engager une inférence coûteuse.
+        from PIL import Image
+        modele, preparer = charger_dinov2(parametres['telecharger_modeles'], parametres['threads'])
+    except ImportError as erreur:
+        return {**resultat,'statut':'dependance_absente','raison':type(erreur).__name__}
+    except OSError:
+        return {**resultat,'statut':'modele_indisponible',
+                'raison':'Poids DINOv2 absents du cache ou téléchargement impossible.'}
+    with torch.inference_mode():
+        for entree in images:
+            verifier()
+            pixels = preparer(images=Image.fromarray(cv2.cvtColor(entree['image'], cv2.COLOR_BGR2RGB)), return_tensors='pt')
+            vecteur = modele(**pixels).last_hidden_state[:, 0, :].float()
+            vecteur = torch.nn.functional.normalize(vecteur, dim=-1)
+            resultat['images'].append({'temps_s':entree['temps_s'],'vecteur':vecteur[0].tolist()})
+    return {**resultat,'statut':'mesure' if resultat['images'] else 'aucune_image'}

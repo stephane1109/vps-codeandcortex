@@ -99,7 +99,7 @@ class TestsIndexVisuel(unittest.TestCase):
 
     def test_lots_sessions_et_nettoyage_mp4(self):
         racine=Path(self.temporaire.name)/'donnees'
-        param=charger_parametres(); param.update(videos_max=1,conserver_images=False,nettoyer_videos=True)
+        param=charger_parametres(); param.update(pas_images_s=1,dinov2=False); param.update(videos_max=1,conserver_images=False,nettoyer_videos=True)
         for numero in ('1','2'):
             dossier=racine/'sessions'/numero
             (dossier/'videos').mkdir(parents=True)
@@ -122,7 +122,7 @@ class TestsIndexVisuel(unittest.TestCase):
         publications=[{'id':str(i),'author':'m'+str(i),'description':'Texte','engagement':{}} for i in range(1,4)]
         (dossier/'publications.json').write_text(json.dumps(publications))
         for i in (2,3): ecrire_video(dossier/'videos'/f'{i}.mp4')
-        options=charger_parametres(); options.update(videos_max=1,conserver_images=False)
+        options=charger_parametres(); options.update(dinov2=False,pas_images_s=1,videos_max=1,conserver_images=False)
         configuration=Path(self.temporaire.name)/'parametres.json'
         configuration.write_text(json.dumps(options))
         processus=subprocess.run([sys.executable,'-m','video.lots','--session',str(dossier),
@@ -186,6 +186,6 @@ class TestsIndexVisuel(unittest.TestCase):
             capture.release(); encodeur.release()
         self.assertNotEqual(calculer_sha256(source),calculer_sha256(sortie))
         for identifiant,chemin in [('1',source),('2',sortie)]:
-            images=extraire_images(chemin,charger_parametres())['images']
+            images=extraire_images(chemin,{**charger_parametres(),'pas_images_s':1,'dinov2':False})['images']
             self.enregistrer(identifiant,[i['image'] for i in images],sha=calculer_sha256(chemin))
         self.assertIn(self.comparer()['type'],{'reemploi_sequence','videos_visuellement_quasi_identiques'})

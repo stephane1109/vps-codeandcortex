@@ -17,6 +17,10 @@ def charger_parametres(chemin=None):
         if not isinstance(valeurs[cle],int): raise ValueError(f"Entier requis : {cle}.")
     for cle in ("comparer_sha256","comparer_sequences","ocr","embeddings","audio","transcription","telecharger_modeles","telecharger_videos","conserver_images","nettoyer_videos"):
         if not isinstance(valeurs[cle],bool): raise ValueError(f"Booléen requis : {cle}.")
+    if not isinstance(valeurs['dinov2'], bool): raise ValueError('Booléen requis : dinov2.')
+    seuil=valeurs.get('seuil_groupes_dino')
+    if seuil is not None and (isinstance(seuil,bool) or not isinstance(seuil,(int,float)) or not -1<=seuil<=1):
+        raise ValueError('Seuil DINOv2 requis entre -1 et 1, ou null.')
     return valeurs
 
 def charger_seuils():

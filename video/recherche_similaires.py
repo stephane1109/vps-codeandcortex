@@ -72,3 +72,30 @@ def comparer_videos(a,b,seuils,verifier=lambda:None,options=None,candidats_index
     resultat["cosinus_semantique"]=comparer_embeddings(a.get("embedding",{}),b.get("embedding",{}))
     resultat["semantiquement_similaires"]=(resultat["cosinus_semantique"]>=seuils["cosinus_semantique"] if resultat["cosinus_semantique"] is not None else None)
     return resultat
+
+
+def qualifier_dinov2(resultat, pas_s, seuil_groupes=None):
+    """Chercher une progression temporelle ; une cohérence n'est pas une preuve de copie."""
+    from .parametres import charger_seuils
+    points=[]
+    for mesure in resultat['correspondances']:
+        if seuil_groupes is not None and mesure['score']<seuil_groupes: continue
+        points.append({**mesure,'confiance':mesure['score']})
+    seuils={**charger_seuils(),'ecart_max_s':max(4,pas_s*2.1),'duree_min_s':max(2,pas_s*2)}
+    alignement=aligner_sequences(points,seuils)
+    return {**resultat,'nature':'sequence_temporellement_coherente' if alignement['detecte'] else 'ressemblance_ponctuelle',
+            'segments':alignement['segments'], 'preuve_reemploi':False,
+            'seuil_groupes':seuil_groupes}
+
+
+def regrouper_dinov2(resultats, seuil):
+    """Grouper les liens au seuil choisi, sans les assimiler aux copies confirmées."""
+    from .groupes_visuels import regrouper_videos
+    if seuil is None: return []
+    liens=[{**r,'type':'reemploi_sequence'} for r in resultats if r['score']>=seuil]
+    groupes=regrouper_videos(liens)
+    for groupe in groupes:
+        groupe['id']=groupe['id'].replace('groupe_','dino_')
+        groupe['relation']='composante_connexe_similarite_dinov2'
+        groupe['seuil']=seuil; groupe['preuve_reemploi']=False
+    return groupes

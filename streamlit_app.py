@@ -375,28 +375,35 @@ with onglet_multimodale:
     if not tache.get("archive_prete"):
         st.info("Effectuez une collecte enrichie avant de lancer l’analyse multimodale.")
     elif not tache.get("video_disponible"):
-        st.info("Le serveur doit utiliser INSTALL_VIDEO=base ou 1 pour activer l’analyse vidéo.")
+        st.info("Le serveur doit utiliser INSTALL_VIDEO=semantique ou 1 pour DINOv2 (base pour les copies seules) pour activer l’analyse vidéo.")
     else:
-        pas = st.number_input("Intervalle entre les images (secondes)", min_value=0.25, max_value=30.0, value=1.0, step=0.25)
+        pas = st.number_input("Intervalle entre les images (secondes)", min_value=0.25, max_value=30.0, value=3.0, step=0.25)
+        dinov2 = st.checkbox("Rechercher les vidéos similaires avec DINOv2", value=True)
+        groupes_dino = st.checkbox("Créer des groupes de similarité DINOv2", value=False)
+        seuil_dino = st.number_input("Seuil de regroupement DINOv2 (−1 à 1)", min_value=-1.0, max_value=1.0,
+            value=None, step=0.01, disabled=not groupes_dino,
+            help="Choisissez ce seuil après examen des scores. Aucun seuil ne filtre les dix voisins affichés.")
         with st.expander("Options multimodales"):
             sha = st.checkbox("Comparer les fichiers identiques", value=True)
-            sequences = st.checkbox("Rechercher les séquences visuelles communes", value=True)
+            sequences = st.checkbox("Vérifier aussi les séquences avec pHash/ORB", value=True)
             audio = st.checkbox("Mesurer les indicateurs audio")
             transcription = st.checkbox("Transcrire la parole")
             ocr = st.checkbox("Lire les textes incrustés (OCR)")
-            embeddings = st.checkbox("Rechercher des scènes et contenus similaires (IA)",
+            embeddings = st.checkbox("Comparer aussi le contenu global avec CLIP",
                 help="Compare le contenu visuel même sans images identiques : décors, objets, types de scènes. Ne prouve pas un même événement et ne compare pas les paroles.")
             seuil_semantique = st.slider("Similarité de contenu minimale", min_value=0.5, max_value=0.99,
                 value=0.75, step=0.01, disabled=not embeddings,
                 help="Un seuil bas propose davantage de rapprochements à vérifier. Le score n'est pas une probabilité.")
-            modeles = st.checkbox("Autoriser le téléchargement des modèles facultatifs")
+            modeles = st.checkbox("Autoriser le téléchargement des modèles facultatifs", value=True)
+            if dinov2:
+                st.caption("DINOv2 nécessite ses poids : téléchargement au premier usage si autorisé, sinon utilisation du cache local uniquement.")
             if embeddings and not modeles:
                 st.info("La similarité de contenu utilise CLIP. Autorisez le téléchargement des modèles, sauf si des poids locaux ont été configurés sur le serveur.")
             nettoyer = st.checkbox("Supprimer les MP4 après indexation", value=False,
                 help="Les empreintes et vignettes sont conservées pour les comparaisons futures. Les MP4 supprimés ne figureront plus dans le ZIP.")
         st.caption("Traitement séquentiel par lots de 20, reprise automatique. Relancer reprend les éléments en attente après une interruption.")
-        if st.button("Lancer / reprendre l’analyse", disabled=occupe):
-            lancer(f"/api/jobs/{tache['id']}/video", {"pas_images_s":pas,"comparer_sha256":sha,
+        if st.button("Lancer / reprendre l’analyse", disabled=occupe or (groupes_dino and seuil_dino is None)):
+            lancer(f"/api/jobs/{tache['id']}/video", {"dinov2":dinov2,"seuil_groupes_dino":seuil_dino if groupes_dino else None,"pas_images_s":pas,"comparer_sha256":sha,
                 "comparer_sequences":sequences,"audio":audio,"transcription":transcription,
                 "ocr":ocr,"embeddings":embeddings,"seuil_semantique":seuil_semantique,"telecharger_modeles":modeles,"nettoyer_videos":nettoyer})
         @st.fragment(run_every="3s")
@@ -412,7 +419,26 @@ with onglet_multimodale:
             st.caption(f"{etat.get('videos_analysees',0)} vidéo(s) analysée(s) — {actuel.get('video_statut','non_lance')}")
             if etat.get('erreurs'): st.warning("Analyse partielle : "+" ; ".join(e.get('raison','Erreur') for e in etat['erreurs']))
             st.caption("Un groupe relie des publications par des correspondances directes ; toutes les vidéos du groupe ne sont pas nécessairement identiques. Le score est heuristique, pas une probabilité calibrée.")
-            st.subheader("Séquences réutilisées")
+            st.subheader("Vidéos similaires")
+            st.caption("DINOv2 : dix autres publications au maximum, classées sans seuil par leur meilleure paire d'images. Les scores ne sont pas des probabilités. Une cohérence temporelle reste un indice à vérifier, pas une preuve de réemploi.")
+            if donnees.get('videos_dino'):
+                source=st.selectbox("Vidéo à comparer",donnees['videos_dino'],key='source_dino_'+tache['id'])
+                selection=api(f"/api/jobs/{tache['id']}/videos-similaires?video={source}")
+                for rang,r in enumerate(selection['dinov2'],1):
+                    m=r['meilleure']
+                    with st.expander(f"{rang}. {r['b']} — score {r['score']:.3f} — {r['nature']}"):
+                        colonnes=st.columns(2)
+                        for colonne,cote in zip(colonnes,('a','b')):
+                            with colonne:
+                                st.markdown(f"![Image à {m['temps_'+cote]:.1f} s](/api/jobs/{tache['id']}/miniatures-dino/{m['image_'+cote]})")
+                                if r.get('url_'+cote): st.link_button("Ouvrir sur TikTok",r['url_'+cote])
+                        if r['segments']: st.json(r['segments'])
+                if selection.get('groupes_dino'):
+                    with st.expander("Groupes DINOv2 — liens directs, pas identité de tous les membres"):
+                        st.json(selection['groupes_dino'])
+            else:
+                st.info("Analyse DINOv2 en cours ; les résultats apparaîtront à la fin du lot." if actuel.get("video_busy") else "Aucun voisin DINOv2 disponible. Consultez ci-dessous les statuts du modèle et le nombre d'images analysées.")
+            st.subheader("Copies et séquences — vérification complémentaire")
             for groupe in donnees['groupes']:
                 with st.expander(groupe['id']+" — "+str(len(groupe['publications']))+" publications",expanded=True):
                     lignes=[]
@@ -427,10 +453,13 @@ with onglet_multimodale:
                     st.dataframe(lignes,hide_index=True,column_config={"URL A":st.column_config.LinkColumn(),"URL B":st.column_config.LinkColumn()})
             diagnostic=donnees.get('diagnostic',{})
             if diagnostic:
+                dino=diagnostic.get('dinov2',{})
+                st.write({"MP4 présents":diagnostic.get('videos_mp4_disponibles'),"Vidéos décodées":diagnostic.get('videos_decodees'),
+                          "Images décodées":diagnostic.get('images_decodees'),"DINOv2":dino})
                 st.caption(f"{diagnostic['paires_candidates']} paire(s) candidate(s) · {diagnostic['paires_orb_testees']} vérification(s) ORB · {diagnostic['images_confirmees']} image(s) confirmée(s)")
                 with st.expander('Diagnostic de la recherche'):
                     st.json(diagnostic)
-            if donnees['etat'] and not donnees['groupes']:
+            if donnees['etat'] and not donnees['groupes'] and not actuel.get('video_busy'):
                 if not etat.get('videos_analysees'):
                     st.warning('Aucune vidéo analysée : vérifiez les erreurs de téléchargement ci-dessus.')
                 elif diagnostic and not diagnostic['paires_candidates']:
@@ -448,7 +477,7 @@ with onglet_multimodale:
             semantique=diagnostic.get('semantique',{})
             statuts=semantique.get('statuts',{})
             if not semantique.get('activee'):
-                st.info("Cochez « Rechercher des scènes et contenus similaires (IA) » puis lancez l'analyse.")
+                st.info("Cochez « Comparer aussi le contenu global avec CLIP » puis lancez l'analyse.")
             elif sum(n for statut,n in statuts.items() if statut!='mesure'):
                 st.warning("Comparaison de contenu incomplète : certains modèles ou dépendances sont indisponibles. Vérifiez le diagnostic et l'autorisation de téléchargement des modèles.")
             elif not similaires:
