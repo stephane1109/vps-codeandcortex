@@ -98,7 +98,7 @@ class StartRequest(BaseModel):
             from collecte.presse import selectionner_medias
             if not self.medias: raise ValueError("Sélectionnez au moins un média.")
             selectionner_medias(self.medias)
-        if self.collecter_reponses: self.collecter_commentaires = True
+        if not self.collecter_commentaires: self.collecter_reponses = False
         return self
 
     @property

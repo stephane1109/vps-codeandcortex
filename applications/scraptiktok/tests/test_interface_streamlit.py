@@ -97,6 +97,7 @@ class TestsInterface(unittest.TestCase):
                 page.text_input(key='hashtag_comptes').set_value('#GRÈVE')
                 page.text_input(key='second_hashtag_comptes').set_value('#école')
                 page.radio(key='operator').set_value(operateur)
+                page.checkbox(key='collecter_commentaires').check()
                 page.checkbox(key='collecter_reponses').check()
                 page.checkbox(key='txt_date').check()
                 page.checkbox(key='txt_profil').uncheck()
