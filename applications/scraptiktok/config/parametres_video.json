@@ -1,12 +1,12 @@
 {
   "version": 1,
   "pas_images_s": 1.0,
-  "images_max": 120,
+  "images_max": 180,
   "dimension_max": 384,
   "duree_max_s": 180,
   "taille_max_mo": 150,
   "videos_max": 20,
-  "paires_max": 190,
+  "paires_max": 2000,
   "duree_lot_max_s": 1800,
   "threads": 1,
   "ocr": false,
@@ -25,5 +25,6 @@
   "espace_libre_min_mo": 512,
   "debut_videos": 0,
   "comparer_sha256": true,
-  "comparer_sequences": true
+  "comparer_sequences": true,
+  "nettoyer_videos": false
 }

@@ -20,7 +20,19 @@ def aligner_sequences(correspondances, seuils):
         debut=points[chaine[0]]; dernier=points[chaine[-1]]
         da=dernier["temps_a"]-debut["temps_a"]; db=dernier["temps_b"]-debut["temps_b"]
         # Les logos fixes / images répétées ne constituent pas une preuve de séquence.
-        diversite = len({points[i].get("phash_a") for i in chaine})
+        def diversite_visuelle(cle):
+            from .empreintes import distance_phash
+            representatives = []
+            for i in chaine:
+                valeur = points[i].get(cle)
+                if valeur is None: continue
+                try: distincte = all(distance_phash(valeur,h)>=6 for h in representatives)
+                except ValueError: distincte = valeur not in representatives
+                if distincte: representatives.append(valeur)
+            return len(representatives)
+        diversite = diversite_visuelle("phash_a")
+        if any("phash_b" in points[i] for i in chaine):
+            diversite = min(diversite,diversite_visuelle("phash_b"))
         if len(chaine)<seuils["images_min"] or min(da,db)<seuils["duree_min_s"] or diversite<2: continue
         utilises.update(chaine)
         segments.append({"debut_a_s":debut["temps_a"],"fin_a_s":dernier["temps_a"],"debut_b_s":debut["temps_b"],"fin_b_s":dernier["temps_b"],

@@ -3,7 +3,7 @@ from video.comparaison_temporelle import aligner_sequences
 from video.parametres import charger_seuils
 
 class TestsTemps(unittest.TestCase):
-    def points(self): return [{"temps_a":i,"temps_b":i+10,"phash_a":str(i),"confiance":.9} for i in range(5)]
+    def points(self): return [{"temps_a":i,"temps_b":i+10,"phash_a":f"{(255 << (i*8)):016x}","confiance":.9} for i in range(5)]
     def test_decalage_et_vitesse(self):
         p=self.points(); self.assertTrue(aligner_sequences(p,charger_seuils())["detecte"])
         for v in p: v["temps_b"]*=1.5

@@ -50,7 +50,7 @@ class StartRequest(BaseModel):
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     operator: Literal["AND", "OR"] = "AND"
-    limit: int = Field(default=50, ge=1, le=300)
+    limit: int = Field(default=50, ge=1, le=1000)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
@@ -778,6 +778,8 @@ class Manager:
 
 
 class OptionsVideo(BaseModel):
+    pas_images_s: float = Field(default=1.0, ge=0.25, le=30)
+    nettoyer_videos: bool = False
     comparer_sha256: bool = True
     comparer_sequences: bool = True
     audio: bool = False
@@ -911,6 +913,17 @@ def create_app(manager=None):
             job.video_thread.start()
         return job.snapshot()
 
+    @app.get("/api/jobs/{job_id}/videos-similaires")
+    def resultats_visuels(job_id: str, request: Request):
+        """Le propriétaire de la collecte peut consulter ses preuves directes."""
+        job = manager.get(owner(request), job_id)
+        def lire(nom, defaut):
+            chemin = job.directory / nom
+            return json.loads(chemin.read_text()) if chemin.is_file() else defaut
+        return {"groupes":lire("groupes_visuels.json",[]),
+                "correspondances":lire("comparaisons.json",[]),
+                "etat":lire("traitement_video.json",{})}
+
     @app.post("/api/jobs/{job_id}/video/stop")
     def arreter_analyse_video(job_id: str, request: Request):
         manager.get(owner(request), job_id).video_stop.set()
@@ -940,7 +953,13 @@ def create_app(manager=None):
         from corpus.export_csv import serialiser_csv
         job = manager.get(owner(request), job_id)
         with job.lock:
-            contenu = serialiser_csv(lignes_engagement(job.records), COLONNES_ENGAGEMENT)
+            publications=job.records
+            fichier=job.directory / 'publications.json'
+            if fichier.is_file():
+                visuelles={str(p['id']):p for p in json.loads(fichier.read_text())}
+                publications=[{**p,**{k:visuelles.get(str(p['id']),{}).get(k)
+                                      for k in ('groupe_visuel','reemploi_visuel')}} for p in publications]
+            contenu = serialiser_csv(lignes_engagement(publications), COLONNES_ENGAGEMENT)
         return Response(contenu.encode("utf-8-sig"), media_type="text/csv",
             headers={"Content-Disposition": 'attachment; filename="engagement.csv"'})
 

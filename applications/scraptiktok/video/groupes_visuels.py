@@ -7,8 +7,14 @@ def regrouper_videos(comparaisons):
         parents.setdefault(x,x)
         while parents[x]!=x: parents[x]=parents[parents[x]]; x=parents[x]
         return x
-    for c in comparaisons:
+    for c in sorted(comparaisons,key=lambda c:(c["a"],c["b"])):
         if c["type"] in TYPES_REEMPLOI: parents[racine(c["b"])]=racine(c["a"])
     groupes={}
     for identifiant in parents: groupes.setdefault(racine(identifiant),[]).append(identifiant)
-    return [{"id":f"groupe_{i+1}","publications":sorted(ids),"relation":"composante_connexe_reemploi"} for i,ids in enumerate(groupes.values())]
+    # Un identifiant déterministe évite une renumérotation à chaque ordre de lecture.
+    import hashlib
+    return [{"id":"groupe_"+hashlib.sha256("|".join(sorted(ids)).encode()).hexdigest()[:12],
+             "publications":sorted(ids),"relation":"composante_connexe_reemploi",
+             "liens_directs":[{"a":c["a"],"b":c["b"]} for c in comparaisons
+                              if c["type"] in TYPES_REEMPLOI and c["a"] in ids and c["b"] in ids]}
+            for ids in sorted(groupes.values(),key=lambda ids:sorted(ids))]

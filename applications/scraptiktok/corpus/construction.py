@@ -7,7 +7,9 @@ from .corpus_commentaires import construire_commentaires
 from analyse.engagement import calculer_ratios
 from analyse.comparaison_medias import comparer_medias
 
-COLONNES_ENGAGEMENT = ["publication_id", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"] + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut", "_confiance", "_source", "_estime")]
+CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
+
+COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"] + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut", "_confiance", "_source", "_estime")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
@@ -15,6 +17,7 @@ def lignes_engagement(publications):
     for p in publications:
         ligne = {"publication_id": p["id"], "auteur": p["author"], "media": p.get("media_id"), "date_collecte": p.get("collected_at"),
                  "url": p.get("url"), "legende": p.get("description"), "retenue": p.get("retenue"), "langue_detection": p.get("langue_detection")}
+        ligne.update({k:p.get(k) for k in CHAMPS_VISUELS})
         for nom, mesure in p.get("engagement", {}).items():
             ligne.update({nom: mesure.get("valeur"), nom + "_brut": mesure.get("brut"), nom + "_confiance": mesure.get("confiance"), nom + "_source": mesure.get("source"), nom + "_estime": mesure.get("estime")})
         lignes.append(ligne)

@@ -112,7 +112,7 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_aide = st.tabs(["Collecte", "Aide"])
+onglet_collecte, onglet_multimodale, onglet_aide = st.tabs(["Collecte", "Multimodale", "Aide"])
 
 with onglet_collecte:
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
@@ -150,7 +150,7 @@ with onglet_collecte:
         c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
         c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
         st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
-        st.number_input("Publications par source", min_value=1, max_value=300, step=1, key="limit", disabled=occupe,
+        st.number_input("Publications par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
             help="Maximum de publications à consulter avant les filtres. Ce nombre n’est pas un objectif de résultats retenus.")
         if source != "hashtags":
             st.caption("Sans hashtag : publications des comptes sélectionnés. Avec des hashtags : recherches ciblées sur chaque compte, puis vérification du filtre ET/OU dans les légendes. La limite s’applique par compte et par recherche ; les résultats TikTok ne sont pas exhaustifs.")
@@ -289,3 +289,61 @@ with onglet_aide:
                 "4. Validez TikTok dans la fenêtre intégrée si demandé, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
+
+
+
+
+with onglet_multimodale:
+    st.subheader("Vidéos similaires")
+    st.caption("Recherche de séquences visuelles communes, y compris entre lots et collectes du même utilisateur. Le son seul ne constitue pas une preuve visuelle.")
+    tache = st.session_state.get("collecte") or {}
+    if not tache.get("archive_prete"):
+        st.info("Effectuez une collecte enrichie avant de lancer l’analyse multimodale.")
+    elif not tache.get("video_disponible"):
+        st.info("Le serveur doit utiliser INSTALL_VIDEO=base ou 1 pour activer l’analyse vidéo.")
+    else:
+        pas = st.number_input("Intervalle entre les images (secondes)", min_value=0.25, max_value=30.0, value=1.0, step=0.25)
+        with st.expander("Options multimodales"):
+            sha = st.checkbox("Comparer les fichiers identiques", value=True)
+            sequences = st.checkbox("Rechercher les séquences visuelles communes", value=True)
+            audio = st.checkbox("Mesurer les indicateurs audio")
+            transcription = st.checkbox("Transcrire la parole")
+            ocr = st.checkbox("Lire les textes incrustés (OCR)")
+            embeddings = st.checkbox("Calculer les ressemblances sémantiques")
+            modeles = st.checkbox("Autoriser le téléchargement des modèles facultatifs")
+            nettoyer = st.checkbox("Supprimer les MP4 après indexation", value=False,
+                help="Les empreintes et vignettes sont conservées pour les comparaisons futures. Les MP4 supprimés ne figureront plus dans le ZIP.")
+        st.caption("Traitement séquentiel par lots de 20, reprise automatique. Relancer reprend les éléments en attente après une interruption.")
+        if st.button("Lancer / reprendre l’analyse", disabled=occupe):
+            lancer(f"/api/jobs/{tache['id']}/video", {"pas_images_s":pas,"comparer_sha256":sha,
+                "comparer_sequences":sequences,"audio":audio,"transcription":transcription,
+                "ocr":ocr,"embeddings":embeddings,"telecharger_modeles":modeles,"nettoyer_videos":nettoyer})
+        @st.fragment(run_every="3s")
+        def afficher_similarites():
+            try:
+                actuel=api(f"/api/jobs/{tache['id']}")
+                donnees=api(f"/api/jobs/{tache['id']}/videos-similaires")
+            except RuntimeError as erreur:
+                st.error(str(erreur)); return
+            etat=donnees['etat']
+            st.write(etat.get('etape','Analyse non lancée'))
+            st.progress(min(1.0,etat.get('videos_analysees',0)/max(1,etat.get('videos_total',1))))
+            st.caption(f"{etat.get('videos_analysees',0)} vidéo(s) analysée(s) — {actuel.get('video_statut','non_lance')}")
+            if etat.get('erreurs'): st.warning("Analyse partielle : "+" ; ".join(e.get('raison','Erreur') for e in etat['erreurs']))
+            st.caption("Un groupe relie des publications par des correspondances directes ; toutes les vidéos du groupe ne sont pas nécessairement identiques. Le score est heuristique, pas une probabilité calibrée.")
+            for groupe in donnees['groupes']:
+                with st.expander(groupe['id']+" — "+str(len(groupe['publications']))+" publications",expanded=True):
+                    lignes=[]
+                    for c in donnees['correspondances']:
+                        if c['a'] not in groupe['publications'] or c['b'] not in groupe['publications']: continue
+                        for segment in c['segments']:
+                            lignes.append({"TikTok A":c['a'],"URL A":c.get('url_a'),"Média A":c.get('media_a'),
+                                "TikTok B":c['b'],"URL B":c.get('url_b'),"Média B":c.get('media_b'),
+                                "Début A (s)":segment['debut_a_s'],"Fin A (s)":segment['fin_a_s'],
+                                "Début B (s)":segment['debut_b_s'],"Fin B (s)":segment['fin_b_s'],
+                                "Type":c['type'],"Confiance":c['confiance']})
+                    st.dataframe(lignes,hide_index=True,column_config={"URL A":st.column_config.LinkColumn(),"URL B":st.column_config.LinkColumn()})
+            if donnees['etat'] and not donnees['groupes']: st.info("Aucune séquence commune confirmée à ce stade.")
+            if not actuel.get('video_busy'):
+                st.link_button("Exporter les résultats (CSV, JSON, IRaMuTeQ dans le ZIP)",f"/api/jobs/{tache['id']}/archive")
+        afficher_similarites()

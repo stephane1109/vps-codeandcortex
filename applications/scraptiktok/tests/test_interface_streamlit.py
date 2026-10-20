@@ -20,7 +20,7 @@ class TestsInterface(unittest.TestCase):
         with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
             page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.exception)
-            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Aide'])
+            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Multimodale','Aide'])
             self.assertFalse(any('vidéo' in e.label.lower() for e in page.expander))
             self.assertFalse(any(c.key in {'comparer_sha256','comparer_sequences'} for c in page.checkbox))
             self.assertFalse(any(b.label=='Comparer les vidéos' for b in page.button))
@@ -227,3 +227,30 @@ class TestsInterface(unittest.TestCase):
                 self.assertEqual(page.session_state['collecte']['id'], tache.id)
                 self.assertTrue(any(b.label == "Reprendre l'accès" for b in page.sidebar.button))
                 self.assertTrue(any('Accès libéré' in message.value for message in page.sidebar.info))
+
+    def test_onglet_multimodale_options_et_resultats(self):
+        import tempfile
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as d:
+            tache=Job('a'*64,StartRequest(hashtag='test',enrichir=True),Path(d))
+            tache.update(busy=False,status='completed',archive_prete=True)
+            instantane={**tache.snapshot(),'video_disponible':True}
+            envois=[]
+            def repondre(chemin, session, autorisation, donnees=None):
+                if chemin=='/api/session': return {'job':instantane}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin.endswith('/videos-similaires'):
+                    return {'groupes':[], 'correspondances':[], 'etat':{}}
+                if chemin.endswith('/video'):
+                    envois.append(donnees); return instantane
+                if chemin.startswith('/api/jobs/'): return instantane
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                next(n for n in page.number_input if n.label.startswith('Intervalle')).set_value(2.0)
+                next(b for b in page.button if b.label=='Lancer / reprendre l’analyse').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(envois[-1]['pas_images_s'],2)
+                self.assertTrue(envois[-1]['comparer_sequences'])
+                self.assertFalse(envois[-1]['nettoyer_videos'])

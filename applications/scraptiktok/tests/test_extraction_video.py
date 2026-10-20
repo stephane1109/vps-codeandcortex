@@ -35,8 +35,8 @@ class TestsVideo(unittest.TestCase):
             self.assertIn("*reemploi_detecte",(dossier/"corpus_iramuteq.txt").read_text())
             param["videos_max"]=1
             r=analyser_lot(dossier,param)
-            self.assertEqual(r["statut"],"partiel")
-            self.assertIn("*reemploi_indetermine",(dossier/"corpus_iramuteq.txt").read_text())
+            self.assertEqual(r["statut"],"termine")
+            self.assertIn("*reemploi_detecte",(dossier/"corpus_iramuteq.txt").read_text())
     def test_sha_identique_sans_comparaison_orb(self):
         from video.recherche_similaires import comparer_videos
         a={"id":"1","sha256":"hash"}; b={"id":"2","sha256":"hash"}

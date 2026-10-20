@@ -82,7 +82,7 @@ class WebTests(unittest.TestCase):
 
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
-        for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 301}):
+        for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 1001}):
             response = self.client.post("/api/jobs", headers=HEADERS, json=payload)
             self.assertEqual(response.status_code, 422)
         self.assertEqual(len(self.manager.jobs), 0)
