@@ -471,10 +471,10 @@ with onglet_multimodale:
 
 with onglet_desordre:
     st.subheader("Désordre visuel et engagement")
-    st.caption("Analyse facultative des MP4 déjà collectés, indépendante de la recherche de vidéos similaires. L’indice est exploratoire ; une corrélation n’établit pas une causalité.")
+    st.caption("Analyse facultative des vidéos de la collecte : les MP4 présents sont réutilisés et les manquants peuvent être téléchargés. L’indice est exploratoire ; une corrélation n’établit pas une causalité.")
     tache_desordre=st.session_state.get('collecte') or {}
     if not tache_desordre.get('archive_prete'):
-        st.info("Effectuez une collecte enrichie avec des MP4 pour utiliser cette analyse.")
+        st.info("Effectuez une collecte enrichie pour utiliser cette analyse.")
     else:
         @st.fragment(run_every='3s')
         def afficher_desordre():
@@ -485,18 +485,22 @@ with onglet_desordre:
                 st.error(str(erreur));return
             etat=donnees.get('etat',{})
             en_cours=etat.get('statut')=='en_cours' and actuel.get('video_busy',False)
-            st.write(f"{donnees.get('mp4_locaux',0)} MP4 disponible(s) dans cette collecte.")
+            st.write(f"{donnees.get('publications_collectees',0)} publication(s) collectée(s) · {donnees.get('mp4_locaux',0)} MP4 présent(s) · {donnees.get('mp4_manquants',0)} MP4 manquant(s).")
             if not donnees.get('disponible'):
                 st.warning("Le serveur doit être redéployé avec les dépendances de cette analyse (INSTALL_VIDEO=base, semantique ou 1).")
+            elif not donnees.get('mp4_locaux') and not donnees.get('mp4_telechargeables'):
+                st.warning("Aucun MP4 associé ni URL TikTok exploitable dans cette collecte. Consultez les publications collectées.")
             elif not donnees.get('mp4_locaux'):
-                st.info("Collectez les MP4 ou récupérez-les dans Multimodale. L’option de suppression des MP4 doit rester décochée.")
+                st.info("Les publications sont collectées, mais aucun MP4 associé n’a été retrouvé. Le téléchargement ci-dessous permet de préparer les vidéos avant l’analyse.")
+            telecharger=st.checkbox("Télécharger les MP4 manquants avant l’analyse",value=True,key='desordre_telecharger',
+                help="Les MP4 déjà présents sont réutilisés. Les échecs TikTok seront indiqués par publication.")
             activation=st.checkbox("Activer l’analyse du désordre visuel",key='activer_desordre',value=False)
             with st.expander("Paramètres de cette analyse"):
                 frequence=st.number_input("Images analysées par seconde",min_value=1.,max_value=60.,value=10.,step=1.,key='frequence_desordre')
                 duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=600.,step=60.,key='duree_desordre')
-            indisponible=not activation or not donnees.get('disponible') or not donnees.get('mp4_locaux') or actuel.get('busy') or actuel.get('video_busy')
+            indisponible=not activation or not donnees.get('disponible') or not (donnees.get('mp4_locaux') or (telecharger and donnees.get('mp4_telechargeables'))) or actuel.get('busy') or actuel.get('video_busy')
             if st.button("Lancer l’analyse du désordre",disabled=bool(indisponible),key='lancer_desordre'):
-                lancer(f"/api/jobs/{tache_desordre['id']}/desordre",{'frequence':frequence,'duree_max':duree})
+                lancer(f"/api/jobs/{tache_desordre['id']}/desordre",{'frequence':frequence,'duree_max':duree,'telecharger_manquants':telecharger})
             if en_cours:
                 st.progress(min(1.,etat.get('terminees',0)/max(1,etat.get('total',0))))
                 st.write(etat.get('etape','Calcul en cours'))
@@ -506,6 +510,9 @@ with onglet_desordre:
                 st.warning(etat.get('erreur') or etat.get('etape','Analyse interrompue'))
             elif etat.get('statut')=='partiel':
                 st.warning("Résultats partiels : consultez les statuts et la couverture de chaque vidéo.")
+            if etat.get('erreurs_telechargement'):
+                st.warning("Certains MP4 n’ont pas pu être récupérés ; les autres vidéos peuvent être analysées.")
+                st.dataframe(etat['erreurs_telechargement'],hide_index=True)
             lignes=donnees.get('indicateurs',[])
             if not lignes: return
             import pandas as pd

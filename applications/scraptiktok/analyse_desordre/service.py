@@ -44,20 +44,50 @@ def lire_tableau(chemin):
     return lignes
 
 
-def executer(session,dossier,frequence,dimension,duree_max):
-    """Travailler sur les MP4 déjà présents, sans téléchargement ni moteur de similarité."""
+def executer(session,dossier,frequence,dimension,duree_max,telecharger_manquants=False):
+    """Préparer les sources sur demande puis appeler le moteur autonome inchangé."""
     from .lancement import analyser_lot
     from .parametres import Parametres
     session=Path(session)
-    etat={'statut':'en_cours','dossier':dossier,'terminees':0,'total':0,'etape':'Préparation'}
+    etat={'statut':'en_cours','dossier':dossier,'terminees':0,'total':0,'etape':'Préparation','telecharger_manquants':telecharger_manquants}
     ecrire_etat(session,etat)
     def progression(rang,total,identifiant,statut):
         etat.update(terminees=rang,total=total,etape='Vidéo '+identifiant+' : '+statut)
         if rang==total: etat['etape']='Calcul des corrélations et des graphiques'
         ecrire_etat(session,etat)
     try:
-        bilan=analyser_lot(session/'videos',session/'publications.json',session/dossier,
-            Parametres(frequence=frequence,dimension=dimension,duree_max=duree_max),progression)
+        import os
+        import shutil
+        from tempfile import TemporaryDirectory
+        from .sources import retrouver_sources, url_telechargeable
+        publications,fichiers=retrouver_sources(session)
+        etat.update(total=len(publications),telecharges=0,erreurs_telechargement=[])
+        if telecharger_manquants:
+            from collecte.telechargement import telecharger_video
+            limites={'espace_libre_min_mo':512,'taille_max_mo':150,'duree_max_s':duree_max}
+            for rang,publication in enumerate(publications,1):
+                identifiant=str(publication.get('id') or publication.get('publication_id'))
+                if identifiant in fichiers or not url_telechargeable(publication): continue
+                etat.update(etape=f'Téléchargement du MP4 {rang}/{len(publications)} — {identifiant}')
+                ecrire_etat(session,etat)
+                try:
+                    fichiers[identifiant]=telecharger_video({**publication,'id':identifiant},session/'videos',limites)
+                    etat['telecharges']+=1
+                except Exception as erreur:
+                    etat['erreurs_telechargement'].append({'publication_id':identifiant,
+                        'cause':getattr(erreur,'statut',type(erreur).__name__),'detail':str(erreur)[:200]})
+                ecrire_etat(session,etat)
+        etat.update(mp4_prets=len(fichiers),etape='Analyse des MP4 disponibles')
+        ecrire_etat(session,etat)
+        # Adapter les noms importés aux identifiants, sans modifier ni supprimer les originaux.
+        # Les liens physiques sont temporaires ; les téléchargements restent dans videos/.
+        with TemporaryDirectory(prefix='desordre_sources_',dir=session) as temporaire:
+            for identifiant,chemin in fichiers.items():
+                cible=Path(temporaire)/(identifiant+'.mp4')
+                try: os.link(chemin,cible)
+                except OSError: shutil.copy2(chemin,cible)
+            bilan=analyser_lot(temporaire,session/'publications.json',session/dossier,
+                Parametres(frequence=frequence,dimension=dimension,duree_max=duree_max),progression)
         etat.update(statut='termine' if set(bilan['statuts'])=={'mesure'} else 'partiel',
                     etape='Analyse terminée',bilan=bilan['statuts'])
     except Exception as erreur:
@@ -72,5 +102,6 @@ if __name__=='__main__':
     arguments.add_argument('--frequence',type=float,default=10.)
     arguments.add_argument('--dimension',type=int,default=320)
     arguments.add_argument('--duree-max',type=float,default=600.)
+    arguments.add_argument('--telecharger-manquants',action='store_true')
     options=arguments.parse_args()
-    executer(options.session,options.dossier,options.frequence,options.dimension,options.duree_max)
+    executer(options.session,options.dossier,options.frequence,options.dimension,options.duree_max,options.telecharger_manquants)
