@@ -3,7 +3,7 @@ from pathlib import Path
 import hashlib
 import json
 
-VERSION = 'regions-dino-v1'
+VERSION = 'regions-dino-v2-contenu'
 
 
 def cle_localisation(dossier, image_a, image_b):
@@ -45,14 +45,54 @@ def extraire_regions(chemin, cache):
     return vecteurs, grille
 
 
-def rapprocher_regions(vecteurs_a, grille_a, vecteurs_b, grille_b, maximum=6):
+def reperer_regions_informatives(chemin, grille):
+    """Écarter les bandes noires et les aplats à partir des pixels, pas des embeddings."""
+    import numpy as np
+    from PIL import Image
+    pixels = np.asarray(Image.open(chemin).convert('RGB'), dtype=np.float32)
+    hauteur, largeur = pixels.shape[:2]
+    luminance = pixels.mean(axis=2)
+    # Chercher seulement les bandes continues depuis les bords. Un objet sombre
+    # au milieu de la scène ne doit pas provoquer un recadrage de toute l'image.
+    noir = pixels.max(axis=2) <= 24
+    lignes = noir.mean(axis=1) >= .98
+    colonnes = noir.mean(axis=0) >= .98
+    haut, bas, gauche, droite = 0, hauteur, 0, largeur
+    while haut < bas and lignes[haut]: haut += 1
+    while bas > haut and lignes[bas-1]: bas -= 1
+    while gauche < droite and colonnes[gauche]: gauche += 1
+    while droite > gauche and colonnes[droite-1]: droite -= 1
+    masque = []
+    for y in range(grille[0]):
+        for x in range(grille[1]):
+            x1,x2 = int(x*largeur/grille[1]), int((x+1)*largeur/grille[1])
+            y1,y2 = int(y*hauteur/grille[0]), int((y+1)*hauteur/grille[0])
+            zone = luminance[y1:y2,x1:x2]
+            # Le cadre entier doit être dans le contenu, sans chevaucher une bande.
+            valide = zone.size > 0 and x1 >= gauche and x2 <= droite and y1 >= haut and y2 <= bas
+            if valide:
+                contraste = np.percentile(zone,95)-np.percentile(zone,5)
+                # Les aplats colorés, blancs, noirs et leur léger bruit de compression
+                # ne constituent pas un détail exploitable. Seuils de texture, pas de similarité.
+                valide = contraste >= 18 and zone.std() >= 6 and noir[y1:y2,x1:x2].mean() < .5
+            masque.append(bool(valide))
+    return np.asarray(masque, dtype=bool)
+
+
+def rapprocher_regions(vecteurs_a, grille_a, vecteurs_b, grille_b, maximum=6, masque_a=None, masque_b=None):
     """Choisir des voisins réciproques espacés, sans seuil de validation arbitraire."""
     import numpy as np
+    if masque_a is None: masque_a = np.ones(len(vecteurs_a), dtype=bool)
+    if masque_b is None: masque_b = np.ones(len(vecteurs_b), dtype=bool)
+    if not np.any(masque_a) or not np.any(masque_b): return []
     scores = vecteurs_a @ vecteurs_b.T
+    # Filtrer avant le voisinage réciproque : une bande ne doit pas éliminer un vrai candidat.
+    scores[~masque_a, :] = -np.inf
+    scores[:, ~masque_b] = -np.inf
     voisins_b = scores.argmax(axis=1)
     voisins_a = scores.argmax(axis=0)
     candidats = sorted(((float(scores[a,b]), a, int(b)) for a,b in enumerate(voisins_b)
-                         if voisins_a[b] == a), reverse=True)
+                         if masque_a[a] and masque_b[b] and voisins_a[b] == a), reverse=True)
     retenus = []
     for score, a, b in candidats:
         ya, xa = divmod(a, grille_a[1]); yb, xb = divmod(b, grille_b[1])
@@ -98,10 +138,13 @@ def calculer_localisation(dossier, image_a, image_b):
     chemins = [dossier/'miniatures_dino'/f'{n}.jpg' for n in (image_a,image_b)]
     a,ga = extraire_regions(chemins[0],dossier/'cache_regions_dino')
     b,gb = extraire_regions(chemins[1],dossier/'cache_regions_dino')
-    regions = rapprocher_regions(a,ga,b,gb)
+    masque_a = reperer_regions_informatives(chemins[0],ga)
+    masque_b = reperer_regions_informatives(chemins[1],gb)
+    regions = rapprocher_regions(a,ga,b,gb,masque_a=masque_a,masque_b=masque_b)
     for cote,chemin in zip(('a','b'),chemins):
         surligner_regions(chemin,regions,cote,sortie/f'{cote}.jpg')
     resultat = {'statut':'termine','regions':regions,'methode':VERSION,'preuve_reemploi':False,
+                'regions_informatives_a':int(masque_a.sum()),'regions_informatives_b':int(masque_b.sum()),
                 'limite':'Régions proches sur miniatures. Les scores ne sont pas des probabilités ni une explication du score global.'}
     temporaire = sortie/'resultat.tmp'
     temporaire.write_text(json.dumps(resultat),encoding='utf-8')

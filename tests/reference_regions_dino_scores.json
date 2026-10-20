@@ -123,8 +123,10 @@
         ]
       }
     ],
-    "methode": "regions-dino-v1",
+    "methode": "regions-dino-v2-contenu",
     "preuve_reemploi": false,
+    "regions_informatives_a": 319,
+    "regions_informatives_b": 314,
     "limite": "Régions proches sur miniatures. Les scores ne sont pas des probabilités ni une explication du score global."
   },
   "scene_differente": {
@@ -232,27 +234,29 @@
       },
       {
         "numero": 6,
-        "score": 0.5677210092544556,
-        "xa": 0,
-        "ya": 23,
+        "score": 0.5463070869445801,
+        "xa": 3,
+        "ya": 6,
         "xb": 1,
-        "yb": 23,
+        "yb": 5,
         "zone_a": [
-          0.0,
-          0.9583333333333334,
-          0.07142857142857142,
-          1.0
+          0.21428571428571427,
+          0.25,
+          0.2857142857142857,
+          0.2916666666666667
         ],
         "zone_b": [
           0.07142857142857142,
-          0.9583333333333334,
+          0.20833333333333334,
           0.14285714285714285,
-          1.0
+          0.25
         ]
       }
     ],
-    "methode": "regions-dino-v1",
+    "methode": "regions-dino-v2-contenu",
     "preuve_reemploi": false,
+    "regions_informatives_a": 319,
+    "regions_informatives_b": 319,
     "limite": "Régions proches sur miniatures. Les scores ne sont pas des probabilités ni une explication du score global."
   },
   "erreurs_coordonnees_recadrage": [
@@ -263,6 +267,6 @@
     0.008928571428571418,
     0.015306122448979609
   ],
-  "duree_s": 2.3575847090687603,
+  "duree_s": 2.817824166966602,
   "note": "Mesures sur ces seules images, aucun seuil universel déduit."
 }
