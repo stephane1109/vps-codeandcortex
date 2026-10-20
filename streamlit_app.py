@@ -427,19 +427,40 @@ with onglet_multimodale:
             if etat.get('erreurs'): st.warning("Analyse partielle : "+" ; ".join(e.get('raison','Erreur') for e in etat['erreurs']))
             st.caption("Un groupe relie des publications par des correspondances directes ; toutes les vidéos du groupe ne sont pas nécessairement identiques. Le score est heuristique, pas une probabilité calibrée.")
             st.subheader("Vidéos similaires")
-            st.caption("DINOv2 : dix autres publications au maximum, classées sans seuil par leur meilleure paire d'images. Les scores ne sont pas des probabilités. Une cohérence temporelle reste un indice à vérifier, pas une preuve de réemploi.")
-            if donnees.get('videos_dino'):
+            st.caption("Chaque vidéo est interrogée. Jusqu'à 50 vidéos : toutes les paires du lot sont calculées. Au-delà : dix voisins indexés par vidéo. Le score DINOv2 porte sur les images ; CLIP compare le contenu global.")
+            couverture=donnees.get('diagnostic',{}).get('dinov2',{})
+            if 'paires_uniques_du_lot' in couverture:
+                st.caption(f"Lot courant : {couverture['paires_uniques_du_lot']} paires avec résultat sur {couverture['paires_possibles_du_lot']} combinaisons possibles. Les voisins inter-lots peuvent s'ajouter au tableau.")
+            paires=donnees.get('paires_dino',[])
+            cible=None
+            if paires:
+                st.write(f"{len(donnees['videos_dino'])} vidéos avec résultats · {len(paires)} paires distinctes, sans doubler A/B et B/A")
+                st.dataframe([{"Vidéo A":r['a'],"Vidéo B":r['b'],"URL A":r.get('url_a'),"URL B":r.get('url_b'),
+                    "DINOv2":round(r['score'],3),"CLIP (contenu global)":round(r['score_clip'],3) if r.get('score_clip') is not None else None,
+                    "Moment A (s)":r.get('temps_a'),"Moment B (s)":r.get('temps_b'),"Temporalité":r.get('nature')} for r in paires],hide_index=True)
+                source,cible=st.selectbox("Paire à examiner",[(r['a'],r['b']) for r in paires],
+                    format_func=lambda paire:paire[0]+" ↔ "+paire[1],key='paire_dino_'+tache['id'])
+            elif donnees.get('videos_dino'):
                 source=st.selectbox("Vidéo à comparer",donnees['videos_dino'],key='source_dino_'+tache['id'])
+            if donnees.get('videos_dino'):
                 selection=api(f"/api/jobs/{tache['id']}/videos-similaires?video={source}")
                 for rang,r in enumerate(selection['dinov2'],1):
-                    m=r['meilleure']
-                    with st.expander(f"{rang}. {r['b']} — score {r['score']:.3f} — {r['nature']}"):
-                        colonnes=st.columns(2)
-                        for colonne,cote in zip(colonnes,('a','b')):
-                            with colonne:
-                                st.markdown(f"![Image à {m['temps_'+cote]:.1f} s](/api/jobs/{tache['id']}/miniatures-dino/{m['image_'+cote]})")
-                                if r.get('url_'+cote): st.link_button("Ouvrir sur TikTok",r['url_'+cote])
-                        if r['segments']: st.json(r['segments'])
+                    if cible is not None and r['b']!=cible:continue
+                    with st.expander(f"{r['a']} ↔ {r['b']} — DINOv2 {r['score']:.3f} — {r['nature']}",expanded=cible is not None):
+                        if r.get('score_clip') is not None: st.write(f"CLIP — contenu global : {r['score_clip']:.3f}")
+                        st.caption("Voici les images qui ont obtenu les meilleurs scores. DINOv2 ne fournit pas de libellé d'objet ni de localisation précise du détail responsable. Une proximité ne prouve pas un même événement.")
+                        exemples=r.get('correspondances') or [r['meilleure']]
+                        for m in exemples[:3]:
+                            st.write(f"Images à {m['temps_a']:.1f} s et {m['temps_b']:.1f} s — score {m.get('score',r['score']):.3f}")
+                            colonnes=st.columns(2)
+                            for colonne,cote in zip(colonnes,('a','b')):
+                                with colonne:
+                                    st.markdown(f"![Image à {m['temps_'+cote]:.1f} s](/api/jobs/{tache['id']}/miniatures-dino/{m['image_'+cote]})")
+                        for cote in ('a','b'):
+                            if r.get('url_'+cote): st.link_button("Ouvrir la vidéo "+cote.upper()+" sur TikTok",r['url_'+cote])
+                        if r['segments']:
+                            st.dataframe([{"Début A (s)":seg['debut_a_s'],"Fin A (s)":seg['fin_a_s'],
+                                "Début B (s)":seg['debut_b_s'],"Fin B (s)":seg['fin_b_s'],"Images concordantes":seg['images']} for seg in r['segments']],hide_index=True)
                 if selection.get('groupes_dino'):
                     with st.expander("Groupes DINOv2 — liens directs, pas identité de tous les membres"):
                         st.json(selection['groupes_dino'])

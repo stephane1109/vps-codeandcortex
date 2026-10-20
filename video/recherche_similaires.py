@@ -99,3 +99,14 @@ def regrouper_dinov2(resultats, seuil):
         groupe['relation']='composante_connexe_similarite_dinov2'
         groupe['seuil']=seuil; groupe['preuve_reemploi']=False
     return groupes
+
+
+def synthetiser_paires(resultats):
+    """Une ligne par paire non orientée, sans compter A/B et B/A deux fois."""
+    paires={}
+    for r in resultats:
+        cle=tuple(sorted((r['a'],r['b'])))
+        if cle not in paires or r['score']>paires[cle]['score']:
+            paires[cle]={k:r.get(k) for k in ('a','b','url_a','url_b','score','score_clip','nature')}
+            paires[cle].update(temps_a=r.get('meilleure',{}).get('temps_a'),temps_b=r.get('meilleure',{}).get('temps_b'))
+    return sorted(paires.values(),key=lambda r:(-r['score'],r['a'],r['b']))

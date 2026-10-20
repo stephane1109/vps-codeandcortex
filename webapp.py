@@ -1134,8 +1134,11 @@ def create_app(manager=None):
             chemin = job.directory / nom
             return json.loads(chemin.read_text()) if chemin.is_file() else defaut
         dino=lire('similarites_dino.json',[])
-        return {"videos_dino":sorted({r['a'] for r in dino}),
-                "dinov2":[r for r in dino if r['a']==video],
+        from video.recherche_similaires import synthetiser_paires
+        return {"paires_dino":synthetiser_paires(dino),"videos_dino":sorted({r['a'] for r in dino}),
+                "dinov2":[{**r,'correspondances':[c for c in r.get('correspondances',[]) if all(
+                    (job.directory/'miniatures_dino'/(str(c.get('image_'+cote))+'.jpg')).is_file() for cote in ('a','b'))]}
+                    for r in dino if r['a']==video],
                 "groupes_dino":lire('groupes_dino.json',[]),
                 "similarites_semantiques":lire("similarites_semantiques.json",[]),
                 "groupes":lire("groupes_visuels.json",[]),

@@ -848,3 +848,21 @@ Transformers et FAISS sont utilisés sur CPU ; CUDA n'est pas nécessaire.
 
 Sources techniques : [fiche DINOv2-small](https://huggingface.co/facebook/dinov2-small),
 [index FAISS](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes).
+
+### Vue globale des paires et rapprochement avec CLIP
+
+Chaque vidéo est une source de recherche. Pour les lots de 50 publications au
+maximum, toutes les paires du lot sont désormais calculées à partir des
+embeddings normalisés (matrice d'une paire vidéo à la fois). Dix vidéos donnent
+45 paires distinctes si toutes ont des embeddings ; les voisins inter-lots
+peuvent s'ajouter. Pour les grands lots, FAISS conserve dix voisins par vidéo.
+Le tableau global élimine les doublons A/B et B/A et indique la couverture du lot.
+Une paire sélectionnée présente jusqu'à trois couples d'images, leurs temps et
+la cohérence temporelle. Les miniatures supplémentaires nécessitent une reprise
+de l'analyse sur les anciens résultats.
+
+Le score CLIP global est ajouté à chaque paire DINOv2 lorsque les embeddings
+CLIP sont disponibles pour les deux vidéos, sans appliquer le seuil de la
+section CLIP à ce score. Sinon il reste absent, jamais remplacé par zéro.
+DINOv2 n'explique pas en mots le détail responsable et ne localise pas un objet.
+Exports supplémentaires : `paires_dino.json` et `paires_dino.csv`.
