@@ -9,7 +9,9 @@ from .corpus_commentaires import construire_commentaires
 from analyse.engagement import calculer_ratios
 from analyse.comparaison_medias import comparer_medias
 
-COLONNES_ENGAGEMENT = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
+CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
+
+COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
@@ -17,6 +19,7 @@ def lignes_engagement(publications):
     for p in publications:
         ligne = {"publication_id": p["id"], "id_": str(p["id"]), "auteur": p["author"], "media": p.get("media_id"), "date_collecte": p.get("collected_at"),
                  "url": p.get("url"), "legende": p.get("description"), "retenue": p.get("retenue"), "langue_detection": p.get("langue_detection")}
+        ligne.update({k:p.get(k) for k in CHAMPS_VISUELS})
         ligne.update(correspondance_video(p))
         for nom, mesure in p.get("engagement", {}).items():
             ligne.update({nom: mesure.get("valeur"), nom + "_brut": mesure.get("brut")})
@@ -50,6 +53,22 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
                          "url": urls.get(str(c.get("publication_id")))} for c in commentaires]
     exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
     if contenu_txt is not None:
+        if variables:
+            # Enrichir uniquement les en-têtes avec un ID, sans réécrire les textes collectés.
+            import re
+            from .export_iramuteq import normaliser_modalite
+            def enrichir_entete(correspondance):
+                entete=correspondance.group(0)
+                identifiant=re.search(r"\*id_(\d+)(?:\s|$)",entete)
+                if not identifiant: return entete
+                champs=variables.get(identifiant.group(1),{})
+                for cle in CHAMPS_VISUELS:
+                    entete=re.sub(r" \*"+cle+r"_\S+", "", entete)
+                    entete+=" *"+cle+"_"+normaliser_modalite(champs.get(cle))
+                return entete
+            contenu_txt=re.sub(r"^\*\*\*\*[^\r\n]*",enrichir_entete,contenu_txt.decode('utf-8'),flags=re.M).encode('utf-8')
+            # Corpus garanti avec identifiants même si l'utilisateur a désactivé les en-têtes TXT.
+            exporter_iramuteq(dossier / "corpus_visuel_iramuteq.txt",construire_legendes(publications,variables))
         (dossier / "corpus_iramuteq.txt").write_bytes(contenu_txt)
     else:
         # Compatibilité des lots autonomes créés sans collecte textuelle préalable.

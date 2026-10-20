@@ -2,9 +2,9 @@
 def extraire_orb(image):
     import cv2
     gris = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-    points, descripteurs = cv2.ORB_create(nfeatures=800).detectAndCompute(gris,None)
+    points, descripteurs = cv2.ORB_create(nfeatures=1200, edgeThreshold=15, nlevels=12, scaleFactor=1.15).detectAndCompute(gris,None)
     return {"points":[list(p.pt) for p in points], "descripteurs":descripteurs.tolist() if descripteurs is not None else [],
-            "largeur":int(image.shape[1]),"hauteur":int(image.shape[0])}
+            "apercu":cv2.resize(gris,(64,64)).tolist(), "largeur":int(image.shape[1]),"hauteur":int(image.shape[0])}
 
 def comparer_orb(a,b,seuils):
     import cv2
@@ -27,6 +27,14 @@ def comparer_orb(a,b,seuils):
         if len(points)<3: return 0.0
         return float(cv2.contourArea(cv2.convexHull(points)))/(largeur*hauteur)
     ca = couverture(pa[selection],a["largeur"],a["hauteur"]); cb = couverture(pb[selection],b["largeur"],b["hauteur"])
+    # La diversité temporelle porte sur la zone appariée, pas sur le fond autour d'un logo.
+    def empreinte_zone(donnees, points):
+        from .empreintes import calculer_phash
+        if 'apercu' not in donnees or len(points)<3: return None
+        x0,y0 = points.min(axis=0); x1,y1 = points.max(axis=0)
+        x0,x1 = int(x0*64/donnees['largeur']), min(64,int(x1*64/donnees['largeur'])+1)
+        y0,y1 = int(y0*64/donnees['hauteur']), min(64,int(y1*64/donnees['hauteur'])+1)
+        return calculer_phash(np.asarray(donnees['apercu'],dtype=np.uint8)[y0:y1,x0:x1]) if x1>x0 and y1>y0 else None
     valide = n>=seuils["orb_inliers_min"] and ratio>=seuils["orb_ratio_inliers"] and min(ca,cb)>=seuils["orb_couverture_min"]
     return {"valide":valide,"confiance":round(ratio*min(1,n/30),4),"inliers":n,"correspondances":len(bons),
-            "ratio_inliers":ratio,"couverture_a":ca,"couverture_b":cb,"homographie":matrice.tolist(),"statut":"mesure"}
+            "ratio_inliers":ratio,"couverture_a":ca,"couverture_b":cb,"phash_zone_a":empreinte_zone(a,pa[selection]),"phash_zone_b":empreinte_zone(b,pb[selection]),"homographie":matrice.tolist(),"statut":"mesure"}

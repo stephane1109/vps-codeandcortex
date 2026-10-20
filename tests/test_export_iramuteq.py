@@ -41,12 +41,12 @@ class TestsCorpus(unittest.TestCase):
         attendues = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"]
         attendues += ["video_id", "video_url", "video_fichier"]
         attendues += [nom + suffixe for nom in compteurs for suffixe in ("", "_brut")]
-        self.assertEqual(COLONNES_ENGAGEMENT, attendues)
+        self.assertEqual(COLONNES_ENGAGEMENT, ["groupe_visuel","reemploi_visuel"] + attendues)
         mesure = extraire_engagement({"stats": {"diggCount": 5, "shareCount": 3, "commentCount": 2, "collectCount": 0}})
         publication = {"id": "123", "author": "media", "description": "Texte", "engagement": mesure}
         csv_direct = serialiser_csv(lignes_engagement([publication]), COLONNES_ENGAGEMENT)
         lecteur = csv.DictReader(io.StringIO(csv_direct), delimiter=";")
-        self.assertEqual(lecteur.fieldnames, attendues)
+        self.assertEqual(lecteur.fieldnames, ["groupe_visuel","reemploi_visuel"] + attendues)
         ligne = next(lecteur)
         self.assertEqual((ligne["likes"], ligne["likes_brut"], ligne["favoris"], ligne["favoris_brut"]), ("5", "5", "0", "0"))
         self.assertEqual(ligne["vues"], "")
@@ -54,7 +54,7 @@ class TestsCorpus(unittest.TestCase):
             for suffixe in ("_confiance", "_source", "_estime"):
                 self.assertNotIn(nom + suffixe, lecteur.fieldnames)
         vide = csv.DictReader(io.StringIO(serialiser_csv([], COLONNES_ENGAGEMENT)), delimiter=";")
-        self.assertEqual(vide.fieldnames, attendues)
+        self.assertEqual(vide.fieldnames, ["groupe_visuel","reemploi_visuel"] + attendues)
         with tempfile.TemporaryDirectory() as d:
             dossier = Path(d)
             construire_exports(dossier, [publication], [], {})

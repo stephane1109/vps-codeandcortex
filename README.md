@@ -674,3 +674,80 @@ conservation habituelle de la session s’applique également aux MP4.
 Seuls les formats MP4 accessibles via yt-dlp sont récupérés. Une restriction TikTok,
 un diaporama, un délai dépassé ou une limite de ressources est signalé et n’annule
 pas la collecte textuelle. Le téléchargement ne garantit pas l’accès à chaque vidéo.
+
+## Multimodale — Vidéos similaires
+
+L’onglet **Multimodale** lance le moteur existant après une collecte enrichie.
+L’intervalle vaut une seconde par défaut. Le processus enchaîne des lots de
+20 publications et reprend les vidéos déjà indexées et les paires en attente.
+La collecte accepte désormais 1 000 publications par source. Une interruption
+ou la limite de temps du processus peut demander de cliquer sur **Lancer /
+reprendre l’analyse**. Une vidéo en erreur ne bloque pas les lots suivants.
+
+Le profil Docker `INSTALL_VIDEO=base` suffit : OpenCV sur CPU, sans PyTorch,
+CUDA ni téléchargement de modèle. Les options audio, transcription, OCR et
+embeddings restent disponibles avec le profil facultatif `1` et ses outils.
+Conserver un volume local persistant monté sur **`/app/data`** dans Coolify
+(le fichier Compose le fait déjà). Aucun nouveau service n’est nécessaire.
+
+### Index, preuves et limites
+
+- L’index SQLite et ses vignettes sont enregistrés sous `data/index_visuel/`,
+  séparés par propriétaire et profil de traitement. Ils survivent à la purge
+  des sessions et des MP4. Les collectes doivent partager la même identité
+  privée du navigateur pour être comparées ; une nouvelle identité ne donne
+  pas accès aux anciens corpus. La perte du volume supprime l’index.
+- Chaque image fournit un pHash global et dix fenêtres à 80 % ou 60 % des
+  dimensions. Quatre bandes de 16 bits, sondées à un bit près, proposent les
+  candidats. Jusqu’à sept bits de distance, ce sondage retrouve les voisins
+  **hors plafonnement** ; au-delà, la recherche est approximative. Elle ne
+  compare pas exhaustivement toutes les vidéos.
+- Une première cohérence temporelle élimine les paires isolées. ORB est calculé
+  seulement sur les images candidates, puis conservé compressé dans SQLite.
+  RANSAC confirme la géométrie et la couverture spatiale ; une seconde
+  vérification temporelle exige plusieurs images et une diversité de la zone
+  appariée, pour limiter les logos, bandeaux et images fixes.
+- Les options d’embeddings utilisent aussi des candidats indexés par projections
+  aléatoires déterministes. Leurs liens sémantiques restent séparés dans le
+  réseau et ne suffisent jamais à établir un réemploi visuel.
+- Les budgets sont explicites : 256 voisins par interrogation de bande,
+  64 candidats par image, 400 confirmations ORB par paire et 2 000 paires par
+  lot par défaut. Un dépassement est signalé comme recherche partielle.
+  Le traitement conserve au plus les images d’une vidéo en mémoire, avec
+  180 images / 180 secondes / 384 pixels par défaut. Une vidéo plus longue
+  est signalée comme tronquée. Les limites sont réglables dans le JSON existant.
+- Les passages sont mesurés à la résolution de l’échantillonnage. Les scores
+  sont heuristiques, non calibrés. Une absence de preuve reste `indetermine`,
+  particulièrement pour les vidéos très courtes, peu texturées ou fortement
+  transformées. Il ne s’agit pas d’une reconnaissance de l’audio seul.
+
+**Supprimer les MP4 après indexation** est facultatif et désactivé par défaut.
+Les vignettes conservées permettent de confirmer de futures correspondances
+sans le fichier original. L’index n’a pas de purge automatique : sa taille est
+à surveiller sur le volume du VPS. Les exports n’incluent pas la base privée.
+
+Le résultat **Vidéos similaires** affiche les URL, médias, deux intervalles et
+la confiance pour chaque lien direct. Un groupe est une composante connexe,
+jamais une preuve d’identité de tous ses membres. Son identifiant est
+reproductible pour les mêmes membres et change si le groupe fusionne/s’agrandit.
+Les fichiers `comparaisons.json`, `groupes_visuels.json` et
+`correspondances_visuelles.csv` conservent ces preuves dans le ZIP.
+`groupe_visuel` et `reemploi_visuel` enrichissent les publications JSON, les
+compteurs CSV et les corpus IRaMuTeQ. Le texte source est conservé ; les en-têtes
+identifiés sont enrichis, et `corpus_visuel_iramuteq.txt` fournit un corpus avec
+identifiants si les en-têtes du TXT avaient été désactivés.
+
+### Vérification locale
+
+```sh
+PYTHONPATH=.:tests python -m unittest test_index_visuel test_empreintes test_comparaison_temporelle test_groupes_visuels test_extraction_video
+```
+
+Les tests couvrent la compression JPEG, le réencodage MP4, les copies binaires,
+un recadrage ne conservant que 36 % de la surface, un extrait décalé, des
+contenus différents avec bandeau commun, les images fixes, le cache ORB,
+la persistance entre collectes et le nettoyage des MP4. Le test de charge
+porte sur **1 000 publications à empreintes synthétiques** ; il ne constitue
+pas une mesure de durée de traitement de 1 000 téléchargements TikTok réels
+sur le VPS. Les API externes et les temps de téléchargement ne sont pas simulés
+comme des garanties de performances.

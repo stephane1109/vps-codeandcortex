@@ -63,4 +63,4 @@ class TestsDisponibilite(unittest.TestCase):
                 par_paire={(c['a'],c['b']):c['type'] for c in comparaisons}
                 self.assertEqual(par_paire['1','2'],'fichier_identique')
                 self.assertIn(par_paire['1','3'],('reemploi_sequence','videos_visuellement_quasi_identiques'))
-                self.assertEqual(par_paire['1','4'],'aucun_reemploi_detecte')
+                self.assertNotIn(('1','4'),par_paire)  # Seules les preuves sont exportées.
