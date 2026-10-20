@@ -12,6 +12,13 @@ VARIABLES_TXT = {"date": "Date", "profil": "Profil", "url": "URL", "vues": "Nomb
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
+# Réduire la marge supérieure native sans masquer les commandes de la barre latérale.
+st.html("""<style>
+[data-testid="stMainBlockContainer"] { padding-top: 1rem; }
+[data-testid="stHeader"] { background: transparent; height: 0; }
+/* Le composant Analytics invisible ne doit pas occuper une ligne avant le titre. */
+[data-testid="stElementContainer"]:has(iframe[height="0"]) { display: none; }
+</style>""")
 # Même propriété Analytics que la home ; une seule visite malgré les reruns.
 components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
                 height=0, scrolling=False)
