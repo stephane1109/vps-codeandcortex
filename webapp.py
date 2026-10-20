@@ -1208,7 +1208,7 @@ def create_app(manager=None):
         job=manager.get(owner(request),job_id)
         from analyse_desordre.service import lire_etat, lire_tableau, dependances_disponibles
         etat=lire_etat(job.directory);dossier=dossier_desordre(job,etat)
-        disponibles=dossier is not None and etat['statut'] in ('termine','partiel')
+        disponibles=dossier is not None
         from analyse_desordre.sources import inventaire_sources
         return {'etat':etat,'disponible':dependances_disponibles(),
             **inventaire_sources(job.directory),
@@ -1220,7 +1220,7 @@ def create_app(manager=None):
         job=manager.get(owner(request),job_id)
         from analyse_desordre.service import lire_etat, FICHIERS_EXPORTABLES
         etat=lire_etat(job.directory);dossier=dossier_desordre(job,etat)
-        if dossier is None or etat['statut'] not in ('termine','partiel') or nom not in FICHIERS_EXPORTABLES:
+        if dossier is None or nom not in FICHIERS_EXPORTABLES or (etat['statut'] not in ('termine','partiel') and nom != 'indicateurs_engagement.csv'):
             raise HTTPException(404, 'Export indisponible')
         chemin=dossier/nom
         if not chemin.is_file() or chemin.is_symlink(): raise HTTPException(404, 'Export indisponible')

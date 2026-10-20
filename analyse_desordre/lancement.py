@@ -58,6 +58,18 @@ def analyser_video(chemin,parametres):
     return resume,lignes
 
 
+def enregistrer_indicateurs(resumes,sortie):
+    """Publier un instantané complet après chaque vidéo, sans CSV partiellement lisible."""
+    tableau=pd.DataFrame(resumes)
+    for nom in (*INDICATEURS,*VARIABLES_ENGAGEMENT):
+        if nom not in tableau: tableau[nom]=float('nan')
+        tableau[nom]=pd.to_numeric(tableau[nom],errors='coerce')
+    temporaire=sortie/'indicateurs_engagement.csv.tmp'
+    tableau.to_csv(temporaire,index=False,encoding='utf-8-sig')
+    temporaire.replace(sortie/'indicateurs_engagement.csv')
+    return tableau
+
+
 def analyser_lot(videos,metadonnees,sortie,parametres=None,progression=None):
     """Entrée facultative : chemins locaux uniquement ; ne jamais écraser les exports collectés."""
     parametres=parametres or Parametres();videos=Path(videos);sortie=Path(sortie)
@@ -84,6 +96,7 @@ def analyser_lot(videos,metadonnees,sortie,parametres=None,progression=None):
     with (sortie/'mesures_temporelles.csv').open('w',encoding='utf-8-sig',newline='') as flux:
         export=csv.DictWriter(flux,fieldnames=CHAMPS_TEMPORELS);export.writeheader()
         for rang,identifiant in enumerate(identifiants,1):
+            if progression: progression(rang-1,len(identifiants),identifiant,'analyse_en_cours')
             publication=publications.get(identifiant,{})
             resume={'publication_id':identifiant,'url':publication.get('url'),
                     'metadonnees_presentes':identifiant in publications,**calculer_taux(publication)}
@@ -94,14 +107,13 @@ def analyser_lot(videos,metadonnees,sortie,parametres=None,progression=None):
             except (OSError,ValueError,cv2.error) as erreur:
                 resume.update(statut='erreur',erreur=str(erreur))
             resumes.append(resume)
+            enregistrer_indicateurs(resumes,sortie)
             if progression: progression(rang,len(identifiants),identifiant,resume['statut'])
-    tableau=pd.DataFrame(resumes)
-    for nom in (*INDICATEURS,*VARIABLES_ENGAGEMENT):
-        if nom not in tableau: tableau[nom]=float('nan')
-        tableau[nom]=pd.to_numeric(tableau[nom],errors='coerce')
-    tableau.to_csv(sortie/'indicateurs_engagement.csv',index=False,encoding='utf-8-sig')
+    tableau=enregistrer_indicateurs(resumes,sortie)
     correlations=calculer_correlations(tableau,parametres)
-    pd.DataFrame(correlations).to_csv(sortie/'correlations_spearman.csv',index=False,encoding='utf-8-sig')
+    temporaire=sortie/'correlations_spearman.csv.tmp'
+    pd.DataFrame(correlations).to_csv(temporaire,index=False,encoding='utf-8-sig')
+    temporaire.replace(sortie/'correlations_spearman.csv')
     tracer_engagements(tableau,correlations,sortie)
     return {'dossier':str(sortie),'publications':len(resumes),'statuts':tableau['statut'].value_counts().to_dict()}
 
