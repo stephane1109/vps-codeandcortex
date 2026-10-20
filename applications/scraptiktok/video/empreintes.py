@@ -328,3 +328,31 @@ class IndexDino:
     def miniature(self, numero):
         ligne=self.base.execute('SELECT vignette FROM images WHERE id=?',(numero,)).fetchone()
         return ligne[0] if ligne else None
+
+    def comparer_lot(self, identifiant, publications, verifier=lambda:None):
+        """Comparer toutes les paires d'un petit lot, une vidéo cible à la fois."""
+        import json
+        import numpy as np
+        if len(publications)>50: raise ValueError('Comparaison exhaustive limitée à 50 publications.')
+        def images(video):
+            return self.base.execute('SELECT id,temps,vecteur,phash FROM images WHERE video=? ORDER BY temps',(video,)).fetchall()
+        source=images(identifiant)
+        if not source:return []
+        matrice=np.stack([np.frombuffer(r[2],dtype='float32') for r in source])
+        meta=self.base.execute('SELECT donnees FROM videos WHERE id=?',(identifiant,)).fetchone()
+        resultat=[]
+        for autre in sorted(set(publications)-{identifiant}):
+            verifier(); cible=images(autre)
+            if not cible:continue
+            # Seule la petite matrice d'une paire vidéo est conservée en mémoire.
+            scores=matrice@np.stack([np.frombuffer(r[2],dtype='float32') for r in cible]).T
+            correspondances=[]
+            for i,j in enumerate(scores.argmax(axis=1)):
+                a,b=source[i],cible[j]
+                correspondances.append({'image_a':a[0],'image_b':b[0],'temps_a':a[1],'temps_b':b[1],
+                    'phash_a':a[3],'phash_b':b[3],'score':max(-1.,min(1.,float(scores[i,j])))})
+            meilleure=max(correspondances,key=lambda c:c['score'])
+            voisin=json.loads(self.base.execute('SELECT donnees FROM videos WHERE id=?',(autre,)).fetchone()[0])
+            resultat.append({'a':identifiant,'b':autre,'url_a':json.loads(meta[0]).get('url'),'url_b':voisin.get('url'),
+                'score':meilleure['score'],'meilleure':meilleure,'correspondances':correspondances,'preuve_reemploi':False})
+        return resultat

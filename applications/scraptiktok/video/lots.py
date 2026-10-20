@@ -21,8 +21,8 @@ from .empreintes import calculer_sha256, calculer_phash, IndexVisuel, IndexDino
 from .comparaison_orb import extraire_orb
 from .extraction_images import extraire_images
 from .indicateurs import calculer_indicateurs
-from .embeddings import calculer_embeddings, construire_similarites_semantiques, calculer_dinov2
-from .recherche_similaires import comparer_videos, qualifier_dinov2, regrouper_dinov2
+from .embeddings import calculer_embeddings, construire_similarites_semantiques, calculer_dinov2, comparer_embeddings
+from .recherche_similaires import comparer_videos, qualifier_dinov2, regrouper_dinov2, synthetiser_paires
 from .groupes_visuels import regrouper_videos, TYPES_REEMPLOI
 from analyse.codage_automatique import coder_variables
 from analyse.reseau_similarite import construire_reseau
@@ -254,19 +254,34 @@ def traiter_lot(dossier, parametres, seuils):
             if index_dino and index_dino.base.execute('SELECT count(*) FROM images').fetchone()[0]:
                 index_dino.preparer(verifier)
                 miniatures=dossier/'miniatures_dino'; miniatures.mkdir(exist_ok=True)
+                ids_lot=[p['id'] for p in publications]
                 for publication in publications:
-                    for resultat in index_dino.rechercher(publication['id'],verifier):
+                    voisins={r['b']:r for r in index_dino.rechercher(publication['id'],verifier)}
+                    if len(ids_lot)<=50:
+                        voisins.update({r['b']:r for r in index_dino.comparer_lot(publication['id'],ids_lot,verifier)})
+                    for resultat in sorted(voisins.values(),key=lambda r:-r['score']):
                         resultat=qualifier_dinov2(resultat,parametres['pas_images_s'],parametres.get('seuil_groupes_dino'))
-                        for cote in ('a','b'):
-                            numero=resultat['meilleure']['image_'+cote]
-                            fichier=miniatures/(str(numero)+'.jpg')
-                            fichier.write_bytes(index_dino.miniature(numero))
+                        a=index.lire_video(resultat['a']) or {}; b=index.lire_video(resultat['b']) or {}
+                        resultat['score_clip']=comparer_embeddings(a.get('embedding',{}),b.get('embedding',{}))
+                        # Montrer plusieurs instants pour qu'un unique détail ne résume pas la paire.
+                        exemples=sorted(resultat['correspondances'],key=lambda c:-c['score'])[:3]
+                        for exemple in exemples:
+                            for cote in ('a','b'):
+                                numero=exemple['image_'+cote]
+                                (miniatures/(str(numero)+'.jpg')).write_bytes(index_dino.miniature(numero))
                         # Les meilleures positions et segments restent exportables ; limiter la réponse API.
                         resultat['correspondances']=sorted(resultat['correspondances'],key=lambda c:-c['score'])[:12]
                         resultats_dino.append(resultat)
         except (ImportError,RuntimeError,TimeoutError) as erreur:
             diagnostic['dinov2']['erreurs'].append(type(erreur).__name__+': '+str(erreur)[:160])
             complet=False
+        diagnostic['dinov2']['sources_comparees']=len({r['a'] for r in resultats_dino})
+        diagnostic['dinov2']['paires_uniques']=len(synthetiser_paires(resultats_dino))
+        diagnostic['dinov2']['paires_uniques_du_lot']=len({tuple(sorted((r['a'],r['b']))) for r in resultats_dino if r['a'] in ids_session and r['b'] in ids_session})
+        diagnostic['dinov2']['paires_possibles_du_lot']=len(publications)*(len(publications)-1)//2
+        diagnostic['dinov2']['mode']='toutes_paires_du_lot_et_voisins_inter_lots' if len(publications)<=50 else 'voisins_indexes_de_chaque_video'
+        exporter_json(dossier/'paires_dino.json',synthetiser_paires(resultats_dino))
+        exporter_csv(dossier/'paires_dino.csv',synthetiser_paires(resultats_dino),['a','b','url_a','url_b','score','score_clip','nature','temps_a','temps_b'])
         exporter_json(dossier/'similarites_dino.json',resultats_dino)
         exporter_json(dossier/'groupes_dino.json',regrouper_dinov2(resultats_dino,parametres.get('seuil_groupes_dino')))
         exporter_csv(dossier/'similarites_dino.csv',[{**{k:r[k] for k in ('a','b','url_a','url_b','score','nature','preuve_reemploi')},

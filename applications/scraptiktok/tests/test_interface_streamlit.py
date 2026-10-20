@@ -242,6 +242,7 @@ class TestsInterface(unittest.TestCase):
                 if chemin=='/api/presse': return {'medias':charger_inventaire()}
                 if '/videos-similaires' in chemin:
                     return {'groupes':[], 'correspondances':[], 'etat':{}, 'videos_dino':['1'],
+                        'paires_dino':[{'a':'1','b':'2','score':.1,'score_clip':.8,'temps_a':0,'temps_b':3}],
                         'dinov2':[{'a':'1','b':'2','score':.1,'nature':'ressemblance_ponctuelle','segments':[],
                                   'meilleure':{'image_a':1,'image_b':2,'temps_a':0,'temps_b':3},
                                   'url_a':'https://www.tiktok.com/@a/video/1','url_b':'https://www.tiktok.com/@b/video/2'}]}

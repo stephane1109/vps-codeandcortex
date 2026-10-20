@@ -67,17 +67,19 @@ class TestsDino(unittest.TestCase):
     def test_lots_inter_sessions_sans_orb(self):
         with tempfile.TemporaryDirectory() as d:
             racine=Path(d)
-            p=charger_parametres();p.update(pas_images_s=1,comparer_sequences=False,embeddings=False,conserver_images=False,nettoyer_videos=True)
+            p=charger_parametres();p.update(pas_images_s=1,comparer_sequences=False,embeddings=True,conserver_images=False,nettoyer_videos=True)
             def embeddings(images,*args):
                 return {'statut':'mesure','modele':'facebook/dinov2-small','images':[{'temps_s':im['temps_s'],'vecteur':([1.]+[0.]*383)} for im in images]}
             for numero in ('1','2'):
                 dossier=racine/'sessions'/numero;(dossier/'videos').mkdir(parents=True)
                 ecrire_video(dossier/'videos'/(numero+'.mp4'))
                 (dossier/'publications.json').write_text(json.dumps([{'id':numero,'author':'test','url':'https://example.org/'+numero,'description':'','engagement':{}}]))
-                with patch('video.lots.calculer_dinov2',side_effect=embeddings),patch('video.recherche_similaires.comparer_orb',side_effect=AssertionError('ORB interdit')):
+                with patch('video.lots.calculer_dinov2',side_effect=embeddings),patch('video.lots.calculer_embeddings',return_value={'statut':'mesure','modele':'test','poids':'test','vecteur':[1.,0.]}),patch('video.recherche_similaires.comparer_orb',side_effect=AssertionError('ORB interdit')):
                     analyser_lot(dossier,p)
             resultats=json.loads((dossier/'similarites_dino.json').read_text())
             self.assertEqual(resultats[0]['b'],'1')
+            self.assertEqual(resultats[0]['score_clip'],1.)
+            self.assertIn('score_clip',(dossier/'paires_dino.csv').read_text())
             self.assertEqual(resultats[0]['meilleure']['temps_a'],0)
             diagnostic=json.loads((dossier/'diagnostic_visuel.json').read_text())
             self.assertEqual(diagnostic['videos_decodees'],1)
@@ -112,3 +114,24 @@ class TestsDino(unittest.TestCase):
             diagnostic=json.loads((dossier/'diagnostic_visuel.json').read_text())
             self.assertEqual(diagnostic['dinov2']['statuts'],{'modele_indisponible':1})
             self.assertEqual(diagnostic['videos_decodees'],1)
+
+    def test_dix_videos_toutes_les_45_paires_meme_scores_faibles(self):
+        from video.recherche_similaires import synthetiser_paires
+        with tempfile.TemporaryDirectory() as d:
+            index=IndexDino(d)
+            try:
+                ids=[str(i) for i in range(10)]
+                for i,identifiant in enumerate(ids):
+                    v=np.zeros(384);v[i]=1
+                    index.enregistrer({'id':identifiant,'sha256':identifiant},[{'temps_s':0,'image':image_test(i)}],
+                                      [{'temps_s':0,'vecteur':v.tolist()}])
+                resultats=[]
+                for identifiant in ids:
+                    voisins=index.comparer_lot(identifiant,ids)
+                    self.assertEqual(len(voisins),9)
+                    self.assertNotIn(identifiant,{r['b'] for r in voisins})
+                    resultats.extend(voisins)
+                self.assertEqual(len(resultats),90)
+                self.assertEqual(len(synthetiser_paires(resultats)),45)
+                with self.assertRaises(ValueError):index.comparer_lot('0',[str(i) for i in range(51)])
+            finally:index.fermer()
