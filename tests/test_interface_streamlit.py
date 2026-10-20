@@ -338,7 +338,7 @@ class TestsInterface(unittest.TestCase):
                 if chemin.endswith('/desordre'):
                     if donnees is not None:
                         envois.append(donnees);return instantane
-                    return {'disponible':True,'mp4_locaux':3,'etat':{'statut':'termine'},
+                    return {'disponible':True,'publications_collectees':10,'mp4_locaux':0,'mp4_manquants':10,'mp4_telechargeables':10,'etat':{'statut':'termine'},
                         'indicateurs':[{'publication_id':str(i),'indice_desordre':i*10,'likes':i*100,'vues':1000,'likes_pour_1000_vues':i*100} for i in (1,2,3)],
                         'correlations':[{'indicateur':'indice_desordre','engagement':'likes','rho':1.,'n':3,'p':.3333,'p_ajustee_bh':.5}]}
                 if chemin.startswith('/api/jobs/'): return instantane
@@ -354,5 +354,6 @@ class TestsInterface(unittest.TestCase):
                 page.button(key='lancer_desordre').click().run()
                 self.assertFalse(page.exception)
                 self.assertEqual(envois[-1]['frequence'],10.)
+                self.assertTrue(envois[-1]['telecharger_manquants'])
                 page.selectbox(key='desordre_y').set_value('likes_pour_1000_vues').run()
                 self.assertFalse(page.exception)

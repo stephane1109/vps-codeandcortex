@@ -1036,6 +1036,7 @@ def executer_video(job, options):
 
 
 class OptionsDesordre(BaseModel):
+    telecharger_manquants: bool = False
     frequence: float = Field(default=10., ge=1, le=60)
     dimension: int = Field(default=320, ge=64, le=1280)
     duree_max: float = Field(default=600., gt=0, le=3600)
@@ -1050,15 +1051,18 @@ def executer_desordre(job, options, dossier):
             processus = subprocess.Popen([sys.executable, '-m', 'analyse_desordre.service',
                 '--session', str(job.directory), '--dossier', dossier,
                 '--frequence', str(options.frequence), '--dimension', str(options.dimension),
-                '--duree-max', str(options.duree_max)], cwd=scraper.BASE_DIR,
+                '--duree-max', str(options.duree_max)]+(['--telecharger-manquants'] if options.telecharger_manquants else []), cwd=scraper.BASE_DIR,
                 stdout=journal, stderr=subprocess.STDOUT, start_new_session=True)
             job.video_process = processus
             limite = time.monotonic()+7200
             while processus.poll() is None:
                 if job.video_stop.wait(.5) or time.monotonic()>limite:
-                    processus.terminate()
+                    os.killpg(processus.pid,signal.SIGTERM)
                     try: processus.wait(timeout=5)
-                    except subprocess.TimeoutExpired: processus.kill(); processus.wait()
+                    except subprocess.TimeoutExpired:
+                        os.killpg(processus.pid,signal.SIGKILL); processus.wait()
+                    try: os.killpg(processus.pid,signal.SIGKILL)
+                    except ProcessLookupError: pass
                     ecrire_etat(job.directory,{**lire_etat(job.directory),'statut':'interrompu','etape':'Analyse arrêtée'})
                     break
             else:
@@ -1070,7 +1074,10 @@ def executer_desordre(job, options, dossier):
         ecrire_etat(job.directory,{'statut':'echec','erreur':'Impossible de démarrer le calcul sur le serveur.'})
     finally:
         if processus is not None and processus.poll() is None:
-            processus.kill(); processus.wait()
+            os.killpg(processus.pid,signal.SIGKILL); processus.wait()
+        # Un arrêt forcé ne doit pas laisser les liens MP4 de préparation dans les exports.
+        for temporaire in job.directory.glob('desordre_sources_*'):
+            if temporaire.is_dir() and not temporaire.is_symlink(): shutil.rmtree(temporaire,ignore_errors=True)
         job.update(video_busy=False,video_process=None,finished=time.monotonic())
 
 
@@ -1178,8 +1185,10 @@ def create_app(manager=None):
                 raise HTTPException(409, 'Une collecte ou une analyse est déjà en cours.')
             if not job.archive_prete or not (job.directory/'publications.json').is_file():
                 raise HTTPException(409, 'Effectuez d’abord une collecte enrichie.')
-            if not any(p.is_file() and not p.is_symlink() for p in (job.directory/'videos').glob('*.mp4')):
-                raise HTTPException(409, 'Aucun MP4 local. Collectez les MP4 ou téléchargez-les via Multimodale, sans activer leur suppression.')
+            from analyse_desordre.sources import inventaire_sources
+            sources=inventaire_sources(job.directory)
+            if not sources['mp4_locaux'] and not (options.telecharger_manquants and sources['mp4_telechargeables']):
+                raise HTTPException(409, 'Aucun MP4 associé à la collecte. Activez le téléchargement des MP4 manquants si des URL TikTok sont disponibles.')
             dossier = 'desordre_'+secrets.token_hex(8)
             ecrire_etat(job.directory,{'statut':'en_cours','dossier':dossier,'terminees':0,'total':0,'etape':'Démarrage'})
             job.video_stop.clear()
@@ -1200,8 +1209,9 @@ def create_app(manager=None):
         from analyse_desordre.service import lire_etat, lire_tableau, dependances_disponibles
         etat=lire_etat(job.directory);dossier=dossier_desordre(job,etat)
         disponibles=dossier is not None and etat['statut'] in ('termine','partiel')
+        from analyse_desordre.sources import inventaire_sources
         return {'etat':etat,'disponible':dependances_disponibles(),
-            'mp4_locaux':sum(p.is_file() and not p.is_symlink() for p in (job.directory/'videos').glob('*.mp4')),
+            **inventaire_sources(job.directory),
             'indicateurs':lire_tableau(dossier/'indicateurs_engagement.csv') if disponibles else [],
             'correlations':lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []}
 

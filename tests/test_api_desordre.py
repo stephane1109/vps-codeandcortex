@@ -54,9 +54,26 @@ class TestsApiDesordre(unittest.TestCase):
             job.video_stop.set()
             ecrire_etat(job.directory,{'statut':'en_cours','dossier':'desordre_0123456789abcdef'})
             processus=MagicMock();processus.poll.side_effect=[None,0]
-            with patch('webapp.subprocess.Popen',return_value=processus):
+            with patch('webapp.subprocess.Popen',return_value=processus),patch('webapp.os.killpg') as arreter:
                 web.executer_desordre(job,web.OptionsDesordre(),'desordre_0123456789abcdef')
-            processus.terminate.assert_called_once()
+            self.assertTrue(arreter.called)
             self.assertFalse(job.video_busy)
             self.assertIsNone(job.video_process)
             self.assertEqual(lire_etat(job.directory)['statut'],'interrompu')
+
+    def test_collecte_sans_mp4_autorise_preparation_explicitement(self):
+        with tempfile.TemporaryDirectory() as d:
+            manager=web.Manager(data_dir=d)
+            with TestClient(web.create_app(manager)) as client:
+                client.get('/')
+                job=web.Job(client.cookies[web.COOKIE],web.StartRequest(hashtag='test',enrichir=True),Path(d))
+                job.update(busy=False,archive_prete=True);manager.jobs[job.id]=job
+                (job.directory/'publications.json').write_text(json.dumps([{'id':'123','url':'https://www.tiktok.com/@test/video/123'}]))
+                url=f'/api/jobs/{job.id}/desordre';entetes={'X-ScrapTikTok':'1'}
+                inventaire=client.get(url).json()
+                self.assertEqual(inventaire['mp4_locaux'],0);self.assertEqual(inventaire['mp4_telechargeables'],1)
+                with patch('ticket_gate.verifier_session_active',return_value=True),patch('analyse_desordre.service.dependances_disponibles',return_value=True),patch('webapp.executer_desordre') as executer:
+                    self.assertEqual(client.post(url,json={'telecharger_manquants':False},headers=entetes).status_code,409)
+                    self.assertEqual(client.post(url,json={'telecharger_manquants':True},headers=entetes).status_code,202)
+                    job.video_thread.join(2);self.assertTrue(executer.call_args.args[1].telecharger_manquants)
+                job.update(video_busy=False)

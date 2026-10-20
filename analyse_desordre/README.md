@@ -3,7 +3,8 @@
 Ce module est **facultatif**. Il lit uniquement des MP4 locaux et les engagements
 collectés par ScrapTikTok. Il n'importe aucun moteur de collecte, ORB, pHash,
 DINOv2 ou comparaison vidéo. L’onglet **Désordre visuel** le lance uniquement après activation explicite et clic sur le bouton de lancement.
-Aucun accès réseau, GPU ou téléchargement de poids n'est nécessaire.
+Le moteur autonome n’a besoin d’aucun accès réseau, GPU ou téléchargement de poids.
+Dans l’interface, une préparation facultative peut récupérer les MP4 manquants depuis leurs URL TikTok.
 
 ## Arborescence
 
@@ -194,3 +195,28 @@ MP4 corrompu et exports sans modification des sources.
 
 Références : [Farnebäck dans OpenCV](https://docs.opencv.org/4.7.0/dc/d6b/group__video__track.html)
 et [Spearman et précautions sur les p-values, SciPy](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.spearmanr.html).
+
+
+### Publications collectées et MP4 disponibles
+
+L’onglet distingue le nombre de publications (liens, textes et engagements), les
+MP4 présents et les MP4 manquants. Une collecte de dix publications ne garantit
+pas que dix fichiers vidéo ont été téléchargés.
+
+La recherche suit `video_fichier` et les noms canoniques dans `videos/`, y compris
+les sous-dossiers et l’extension `.MP4`. Seuls les fichiers contenus dans la session
+sont accessibles ; les liens symboliques et les références externes sont refusés.
+
+L’option **Télécharger les MP4 manquants avant l’analyse** est cochée initialement
+mais ne fait rien avant le lancement explicite. Avec des URL TikTok valides, le
+lancement est possible même si aucun MP4 n’est encore présent. Le service réutilise
+le téléchargeur existant sans modifier les algorithmes de collecte ni de similarité.
+Il indique chaque téléchargement et les causes d’échec, conserve les MP4 récupérés
+et poursuit avec les fichiers disponibles. Limites de préparation : 150 Mo par
+vidéo, 512 Mo de disque libre minimum et limite de durée choisie pour l’analyse.
+Le succès dépend de l’accès à TikTok ; un refus n’est pas remplacé par une mesure nulle.
+
+Les noms de fichiers importés sont adaptés temporairement aux identifiants par
+liens physiques (ou copie), sans modifier les sources. Cette préparation est
+nettoyée à la fin ou lors d’un arrêt. Le lancement autonome `lancement.py` reste
+strictement local ; le téléchargement appartient uniquement au service de l’interface.
