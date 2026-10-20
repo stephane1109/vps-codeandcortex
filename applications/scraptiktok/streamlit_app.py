@@ -524,11 +524,12 @@ with onglet_desordre:
             st.dataframe(tableau,hide_index=True,column_config={
                 'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
                 'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
+                'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',help=AIDES_INDICATEURS['vitesse_residuelle']),
                 'url':st.column_config.LinkColumn('URL TikTok')})
             st.subheader("Croiser les variables")
             indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
                 'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
-                'vitesse_residuelle':'Vitesse des mouvements résiduels (diagonales/s)'}
+                'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)'}
             engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
             axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help=AIDE_INDICE)
@@ -555,7 +556,7 @@ with onglet_desordre:
             with st.expander("Comment interpréter cette corrélation ?"):
                 st.write(AIDE_SPEARMAN)
             with st.expander("Toutes les corrélations"):
-                st.dataframe([{cle:valeur for cle,valeur in ligne.items() if cle != 'permutations'}
+                st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
                               for ligne in donnees.get('correlations',[])],hide_index=True)
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
