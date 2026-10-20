@@ -744,3 +744,17 @@ Les mesures de `tests/reference_regions_dino_scores.json` portent sur un
 recadrage connu et une scène différente ; elles ne définissent aucun seuil
 universel. Les tests unitaires couvrent aussi les coordonnées, l'invalidation
 du cache, la confidentialité et l'indisponibilité du modèle.
+
+
+### Exclusion des bandes et aplats dans la localisation
+
+La version `regions-dino-v2-contenu` invalide automatiquement les anciens caches.
+Avant de rechercher les voisins, elle exclut les régions qui chevauchent une
+bande noire continue au bord, sont majoritairement noires ou ne présentent pas
+assez de variation de luminance. Les seuils de texture (contraste 5–95 % de
+18/255, écart-type de 6/255) éliminent aussi le faible bruit de compression.
+Ils ne constituent pas des seuils de validation de similarité et peuvent
+écarter des détails sombres ou peu contrastés. Aucun remplissage à six cadres
+n'est forcé : si aucun rapprochement exploitable ne reste, l'interface le dit.
+Le classement global des vidéos reste inchangé ; cette correction concerne
+les correspondances locales et leur affichage.

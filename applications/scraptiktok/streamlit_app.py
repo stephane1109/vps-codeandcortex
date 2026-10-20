@@ -401,10 +401,13 @@ with onglet_multimodale:
                             elif localisation.get('statut') == 'erreur':
                                 st.warning(localisation.get('raison'))
                             elif localisation.get('statut') == 'termine':
+                                if not localisation.get('regions'):
+                                    st.info("Aucune région informative à rapprocher après exclusion des bandes noires et des zones uniformes.")
+                                    continue
                                 for colonne,cote in zip(st.columns(2),('a','b')):
                                     with colonne:
                                         st.markdown(f"![Régions correspondantes — {cote.upper()}]({chemin_regions}/{cote})")
-                                st.caption("Localisation approximative sur miniatures ; meilleurs voisins réciproques, sans seuil de validation. Le score cosinus local n’est pas une probabilité.")
+                                st.caption("Bandes noires et zones uniformes exclues. Localisation approximative sur miniatures ; meilleurs voisins réciproques, sans seuil de validation. Le score cosinus local n’est pas une probabilité.")
                                 st.dataframe([{"Région":z['numero'], "Score local":round(z['score'],3)}
                                               for z in localisation['regions']],hide_index=True)
                         for cote in ('a','b'):
