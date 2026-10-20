@@ -240,6 +240,8 @@ class TestsInterface(unittest.TestCase):
             def repondre(chemin, session, autorisation, donnees=None):
                 if chemin=='/api/session': return {'job':instantane}
                 if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if '/regions-dino/' in chemin:
+                    return {'statut':'termine','regions':[{'numero':1,'score':.87}]}
                 if '/videos-similaires' in chemin:
                     return {'groupes':[], 'correspondances':[], 'etat':{}, 'videos_dino':['1'],
                         'paires_dino':[{'a':'1','b':'2','score':.1,'score_clip':.8,'temps_a':0,'temps_b':3}],
@@ -260,5 +262,7 @@ class TestsInterface(unittest.TestCase):
                 self.assertTrue(envois[-1]['dinov2'])
                 self.assertIsNone(envois[-1]['seuil_groupes_dino'])
                 self.assertTrue(any('miniatures-dino' in m.value for m in page.markdown))
+                self.assertTrue(any('regions-dino' in m.value for m in page.markdown))
+                self.assertTrue(any(b.label=='Localiser les régions proches' for b in page.button))
                 self.assertTrue(envois[-1]['comparer_sequences'])
                 self.assertFalse(envois[-1]['nettoyer_videos'])

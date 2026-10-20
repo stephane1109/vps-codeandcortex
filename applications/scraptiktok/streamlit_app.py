@@ -373,7 +373,7 @@ with onglet_multimodale:
                     if cible is not None and r['b']!=cible:continue
                     with st.expander(f"{r['a']} ↔ {r['b']} — DINOv2 {r['score']:.3f} — {r['nature']}",expanded=cible is not None):
                         if r.get('score_clip') is not None: st.write(f"CLIP — contenu global : {r['score_clip']:.3f}")
-                        st.caption("Voici les images qui ont obtenu les meilleurs scores. DINOv2 ne fournit pas de libellé d'objet ni de localisation précise du détail responsable. Une proximité ne prouve pas un même événement.")
+                        st.caption("Les régions de même couleur et de même numéro indiquent des rapprochements locaux. Elles ne disent pas s’il s’agit du même objet, d’une texture ou d’une couleur proche, et n’expliquent pas à elles seules le score global. Même des images sans rapport peuvent avoir des régions proches.")
                         exemples=r.get('correspondances') or [r['meilleure']]
                         for m in exemples[:3]:
                             st.write(f"Images à {m['temps_a']:.1f} s et {m['temps_b']:.1f} s — score {m.get('score',r['score']):.3f}")
@@ -381,6 +381,28 @@ with onglet_multimodale:
                             for colonne,cote in zip(colonnes,('a','b')):
                                 with colonne:
                                     st.markdown(f"![Image à {m['temps_'+cote]:.1f} s](/api/jobs/{tache['id']}/miniatures-dino/{m['image_'+cote]})")
+                            chemin_regions = f"/api/jobs/{tache['id']}/regions-dino/{m['image_a']}/{m['image_b']}"
+                            cle_regions = chemin_regions
+                            if st.button("Localiser les régions proches", key=cle_regions, disabled=actuel.get('video_busy',False)):
+                                try:
+                                    api(chemin_regions, {})
+                                except RuntimeError as erreur:
+                                    st.error(str(erreur))
+                            try:
+                                localisation = api(chemin_regions)
+                            except RuntimeError:
+                                localisation = {'statut':'non_calcule'}
+                            if localisation.get('statut') == 'en_cours':
+                                st.info("Comparaison des régions en cours sur CPU…")
+                            elif localisation.get('statut') == 'erreur':
+                                st.warning(localisation.get('raison'))
+                            elif localisation.get('statut') == 'termine':
+                                for colonne,cote in zip(st.columns(2),('a','b')):
+                                    with colonne:
+                                        st.markdown(f"![Régions correspondantes — {cote.upper()}]({chemin_regions}/{cote})")
+                                st.caption("Localisation approximative sur miniatures ; meilleurs voisins réciproques, sans seuil de validation. Le score cosinus local n’est pas une probabilité.")
+                                st.dataframe([{"Région":z['numero'], "Score local":round(z['score'],3)}
+                                              for z in localisation['regions']],hide_index=True)
                         for cote in ('a','b'):
                             if r.get('url_'+cote): st.link_button("Ouvrir la vidéo "+cote.upper()+" sur TikTok",r['url_'+cote])
                         if r['segments']:

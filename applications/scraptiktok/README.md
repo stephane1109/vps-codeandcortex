@@ -705,5 +705,42 @@ de l'analyse sur les anciens résultats.
 Le score CLIP global est ajouté à chaque paire DINOv2 lorsque les embeddings
 CLIP sont disponibles pour les deux vidéos, sans appliquer le seuil de la
 section CLIP à ce score. Sinon il reste absent, jamais remplacé par zéro.
-DINOv2 n'explique pas en mots le détail responsable et ne localise pas un objet.
+DINOv2 n'explique pas en mots le détail responsable. La localisation décrite ci-dessous compare des régions ; elle ne détecte pas automatiquement des objets.
 Exports supplémentaires : `paires_dino.json` et `paires_dino.csv`.
+
+
+## Localiser les régions proches
+
+Dans Multimodale → Vidéos similaires, sélectionner une paire puis cliquer sur
+**Localiser les régions proches** sous un couple d'images. Jusqu'à six régions
+portent le même numéro et la même couleur dans les deux images. Le tableau
+indique leur cosinus local, distinct du score global et d'une probabilité.
+
+Les tokens spatiaux de `facebook/dinov2-small` sont normalisés puis comparés
+par voisinage réciproque ; les marqueurs sont espacés pour éviter les amas.
+Aucun seuil ne transforme ces rapprochements en preuve. Les tokens incorporent
+le contexte de l'image : ce n'est ni une segmentation d'objet, ni une carte
+expliquant causalement le score CLS. Textes, textures et couleurs peuvent se
+rapprocher même entre scènes différentes.
+
+Le calcul couvre l'ensemble de la miniature, sans recadrage central. Le grand
+côté est redimensionné à 336 pixels, les dimensions arrondies au multiple de
+14, et les coordonnées sont rapportées à l'image affichée. La précision reste
+limitée par la miniature conservée (224 pixels au plus à l'origine).
+
+Le calcul est à la demande, dans un sous-processus CPU à un thread, limité à
+120 secondes, sans téléchargement supplémentaire de modèle. Les poids doivent
+être présents dans le cache utilisé par l'analyse DINOv2. Un seul traitement
+vidéo peut s'exécuter à la fois ; arrêt et libération de session l'interrompent.
+Les descripteurs sont conservés dans `cache_regions_dino/` et les images et
+rapports dans `regions_dino/`, privés à la collecte et invalidés par le contenu
+des miniatures. La mémoire du modèle est libérée à la sortie du processus.
+Les résultats locaux calculés après l'archive initiale ne sont pas ajoutés à
+cette archive ; ils restent consultables dans l'interface pendant la session.
+
+Référence reproductible avec les MP4 du test DINOv2 :
+`python tests/reference_regions_dino.py --reference /private/tmp/reference-dinov2 --sortie /tmp/regions_scores.json`.
+Les mesures de `tests/reference_regions_dino_scores.json` portent sur un
+recadrage connu et une scène différente ; elles ne définissent aucun seuil
+universel. Les tests unitaires couvrent aussi les coordonnées, l'invalidation
+du cache, la confidentialité et l'indisponibilité du modèle.

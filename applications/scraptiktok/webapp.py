@@ -943,6 +943,81 @@ def create_app(manager=None):
         if not chemin.is_file(): raise HTTPException(404,'Miniature indisponible')
         return FileResponse(chemin,media_type='image/jpeg',headers={'Cache-Control':'private, no-store'})
 
+    def dossier_regions(job, image_a, image_b):
+        """N'accepter que des images effectivement rapprochées dans cette collecte."""
+        fichier = job.directory/'similarites_dino.json'
+        resultats = json.loads(fichier.read_text()) if fichier.is_file() else []
+        autorise = any(c.get('image_a') == image_a and c.get('image_b') == image_b
+            for r in resultats for c in (r.get('correspondances') or [r.get('meilleure', {})]))
+        if not autorise: raise HTTPException(404, 'Paire d’images indisponible')
+        from video.localisation import cle_localisation
+        try: cle = cle_localisation(job.directory, image_a, image_b)
+        except FileNotFoundError: raise HTTPException(404, 'Miniature indisponible')
+        return job.directory/'regions_dino'/cle
+
+    @app.get("/api/jobs/{job_id}/regions-dino/{image_a}/{image_b}")
+    def lire_regions(job_id: str, image_a: int, image_b: int, request: Request):
+        job = manager.get(owner(request), job_id)
+        dossier = dossier_regions(job, image_a, image_b)
+        fichier = dossier/'resultat.json'
+        return json.loads(fichier.read_text()) if fichier.is_file() else {'statut':'non_calcule'}
+
+    @app.get("/api/jobs/{job_id}/regions-dino/{image_a}/{image_b}/{cote}")
+    def image_regions(job_id: str, image_a: int, image_b: int, cote: str, request: Request):
+        job = manager.get(owner(request), job_id)
+        dossier = dossier_regions(job, image_a, image_b)
+        if cote not in ('a','b') or not (dossier/f'{cote}.jpg').is_file():
+            raise HTTPException(404, 'Localisation indisponible')
+        return FileResponse(dossier/f'{cote}.jpg', media_type='image/jpeg', headers={'Cache-Control':'private, no-store'})
+
+    @app.post("/api/jobs/{job_id}/regions-dino/{image_a}/{image_b}", status_code=202)
+    def lancer_regions(job_id: str, image_a: int, image_b: int, request: Request):
+        """Isoler le modèle dans un processus borné et libérer sa mémoire après calcul."""
+        exiger_ticket(request)
+        job = manager.get(owner(request), job_id)
+        dossier = dossier_regions(job, image_a, image_b)
+        with manager.lock:
+            if any(j.busy or j.video_busy for j in manager.jobs.values()):
+                raise HTTPException(409, 'Attendez la fin du traitement en cours.')
+            dossier.mkdir(parents=True, exist_ok=True)
+            fichier = dossier/'resultat.json'
+            if fichier.is_file() and json.loads(fichier.read_text()).get('statut') == 'termine':
+                return json.loads(fichier.read_text())
+            temporaire = dossier/'attente.tmp'
+            temporaire.write_text(json.dumps({'statut':'en_cours'})); temporaire.replace(fichier)
+            job.video_stop.clear()
+            job.update(video_busy=True, video_debut=time.monotonic())
+            def calculer():
+                resultat = None
+                processus = None
+                try:
+                    environnement = {**os.environ, 'USE_TF':'0', 'USE_FLAX':'0', 'OMP_NUM_THREADS':'1'}
+                    with (dossier/'calcul.log').open('w') as journal:
+                        processus = subprocess.Popen([sys.executable, '-m', 'video.localisation',
+                            str(job.directory), str(image_a), str(image_b)], cwd=scraper.BASE_DIR,
+                            env=environnement, stdout=journal, stderr=subprocess.STDOUT)
+                        debut = time.monotonic()
+                        while processus.poll() is None:
+                            if job.video_stop.is_set() or time.monotonic()-debut > 120:
+                                processus.kill(); processus.wait()
+                                resultat = {'statut':'erreur','raison':'Localisation arrêtée ou délai de 120 secondes dépassé.'}
+                                break
+                            time.sleep(.2)
+                        if resultat is None and processus.returncode != 0:
+                            resultat = {'statut':'erreur','raison':'Localisation indisponible : vérifiez les dépendances et les poids DINOv2 dans le cache du serveur. Détail dans regions_dino/*/calcul.log.'}
+                except Exception:
+                    resultat = {'statut':'erreur','raison':'Impossible de démarrer la localisation sur le serveur.'}
+                finally:
+                    if processus is not None and processus.poll() is None:
+                        processus.kill(); processus.wait()
+                    if resultat:
+                        temporaire = dossier/'erreur.tmp'
+                        temporaire.write_text(json.dumps(resultat)); temporaire.replace(fichier)
+                    job.update(video_busy=False, finished=time.monotonic())
+            job.video_thread = threading.Thread(target=calculer, daemon=True)
+            job.video_thread.start()
+        return {'statut':'en_cours'}
+
     @app.post("/api/jobs/{job_id}/video/stop")
     def arreter_analyse_video(job_id: str, request: Request):
         manager.get(owner(request), job_id).video_stop.set()
