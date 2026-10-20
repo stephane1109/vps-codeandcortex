@@ -155,3 +155,37 @@ class TestsIndexVisuel(unittest.TestCase):
         self.assertEqual(len(list(self.index.liens())),1)
         self.enregistrer('2',[image_test(i+50) for i in range(5)],sha='remplace')
         self.assertEqual(list(self.index.liens()),[])
+
+    def test_texte_incruste_sur_une_sequence_reutilisee(self):
+        import cv2
+        images=[image_test(i) for i in range(5)]
+        surimpressions=[]
+        for i,image in enumerate(images):
+            copie=image.copy()
+            cv2.rectangle(copie,(0,0),(319,36),(255,255,255),-1)
+            cv2.putText(copie,'ACTUALITE '+str(i),(4,25),cv2.FONT_HERSHEY_SIMPLEX,.6,(0,0,0),2)
+            surimpressions.append(copie)
+        self.enregistrer('1',images); self.enregistrer('2',surimpressions)
+        self.assertIn(self.comparer()['type'],TYPES_REEMPLOI)
+
+    def test_reencodage_mp4_reel(self):
+        import cv2
+        from video.extraction_images import extraire_images
+        from video.empreintes import calculer_sha256
+        source=Path(self.temporaire.name)/'source.mp4'
+        sortie=Path(self.temporaire.name)/'reencode.mp4'
+        ecrire_video(source)
+        capture=cv2.VideoCapture(str(source))
+        encodeur=cv2.VideoWriter(str(sortie),cv2.VideoWriter_fourcc(*'mp4v'),5,(320,240))
+        try:
+            while True:
+                succes,image=capture.read()
+                if not succes: break
+                encodeur.write(image)
+        finally:
+            capture.release(); encodeur.release()
+        self.assertNotEqual(calculer_sha256(source),calculer_sha256(sortie))
+        for identifiant,chemin in [('1',source),('2',sortie)]:
+            images=extraire_images(chemin,charger_parametres())['images']
+            self.enregistrer(identifiant,[i['image'] for i in images],sha=calculer_sha256(chemin))
+        self.assertIn(self.comparer()['type'],{'reemploi_sequence','videos_visuellement_quasi_identiques'})

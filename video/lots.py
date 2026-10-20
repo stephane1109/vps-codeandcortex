@@ -55,6 +55,7 @@ def analyser_lot(dossier, parametres=None, seuils=None):
 
 def traiter_lot(dossier, parametres, seuils):
     publications=json.loads((dossier / "publications.json").read_text())
+    publications=[{**p,"id":str(p["id"])} for p in publications]
     commentaires=json.loads((dossier / "commentaires.json").read_text()) if (dossier / "commentaires.json").exists() else []
     journal=json.loads((dossier / "journal.json").read_text()) if (dossier / "journal.json").exists() else {}
     debut=time.monotonic(); analyses=[]; erreurs=[]; mesures={}; comparaisons=[]
@@ -64,7 +65,7 @@ def traiter_lot(dossier, parametres, seuils):
     with base.connexion() as connexion:
         ligne=connexion.execute("SELECT proprietaire FROM sessions WHERE id=?",(dossier.name,)).fetchone()
     proprietaire=ligne[0] if ligne else "corpus_local"
-    profil={k:v for k,v in parametres.items() if k not in {"debut_videos","videos_max","paires_max","duree_lot_max_s","telecharger_videos","nettoyer_videos","exclure_videos"}}
+    profil={k:v for k,v in parametres.items() if k not in {"debut_videos","videos_max","paires_max","duree_lot_max_s","telecharger_videos","nettoyer_videos","exclure_videos","reessayer_options"}}
     signature=hashlib.sha256(json.dumps(["index_v2",profil,seuils],sort_keys=True).encode()).hexdigest()
     espace=hashlib.sha256(proprietaire.encode()).hexdigest()
     index=IndexVisuel(dossier.parent.parent / "index_visuel" / espace / (signature+".sqlite"))
@@ -77,13 +78,14 @@ def traiter_lot(dossier, parametres, seuils):
         deja_traites=set()
         for publication in publications:
             identifiant=str(publication['id'])
+            if not identifiant.isdecimal(): continue
             fichier=dossier / "empreintes" / (identifiant+".json")
             if fichier.is_file():
                 ancienne=json.loads(fichier.read_text())
                 mp4=dossier / 'videos' / ('id_'+identifiant+'.mp4')
                 if not mp4.exists() and not mp4.is_symlink(): mp4=dossier / 'videos' / (identifiant+'.mp4')
                 fichier_identique=(not mp4.exists() or (mp4.stat().st_size==ancienne.get('fichier_taille') and mp4.stat().st_mtime_ns==ancienne.get('fichier_mtime_ns')))
-                if not mp4.is_symlink() and fichier_identique and ancienne.get('signature_index')==signature and not incomplet(ancienne) and index.lire_video(identifiant):
+                if not mp4.is_symlink() and fichier_identique and ancienne.get('signature_index')==signature and (not incomplet(ancienne) or not parametres.get('reessayer_options',True)) and index.lire_video(identifiant):
                     analyses.append(ancienne); mesures[identifiant]=ancienne['indicateurs']; deja_traites.add(identifiant)
         def verifier():
             if time.monotonic()-debut>parametres["duree_lot_max_s"]: raise TimeoutError("Durée maximale du lot atteinte.")
@@ -222,7 +224,7 @@ def principale():
     while True:
         restant=limite-time.monotonic()
         if restant<=0: break
-        options={**parametres,'duree_lot_max_s':restant,'exclure_videos':sorted(echecs)}
+        options={**parametres,'duree_lot_max_s':restant,'exclure_videos':sorted(echecs),'reessayer_options':precedent is None}
         resultat=analyser_lot(arguments.session,options)
         echecs.update(e['id'] for e in resultat['erreurs'] if e.get('id'))
         progression=(resultat['videos_analysees'],resultat['paires_en_attente'],len(echecs))
