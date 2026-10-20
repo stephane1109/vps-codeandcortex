@@ -33,11 +33,13 @@ class TestsInterface(unittest.TestCase):
                 page.checkbox(key='txt_'+variable).uncheck()
             for variable in ('partages', 'commentaires', 'favoris', 'hashtags'):
                 page.checkbox(key='txt_'+variable).check()
+            page.checkbox(key='collecter_reponses').check()
             page.checkbox(key='collecter_commentaires').uncheck()
             next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
             self.assertFalse(page.exception)
             self.assertEqual(envois[-1]['variables_txt'], ['partages', 'commentaires', 'favoris', 'hashtags'])
             self.assertFalse(envois[-1]['collecter_commentaires'])
+            self.assertFalse(envois[-1]['collecter_reponses'])
             self.assertEqual(StartRequest(**envois[-1]).variables_txt, ['partages', 'commentaires', 'favoris', 'hashtags'])
 
     def test_formulaire_et_selection_complete_des_medias(self):
@@ -152,6 +154,7 @@ class TestsInterface(unittest.TestCase):
                 page.text_input(key='hashtag_comptes').set_value('#GRÈVE')
                 page.text_input(key='second_hashtag_comptes').set_value('#école')
                 page.radio(key='operator').set_value(operateur)
+                page.checkbox(key='collecter_commentaires').check()
                 page.checkbox(key='collecter_reponses').check()
                 page.checkbox(key='txt_date').check()
                 page.checkbox(key='txt_profil').uncheck()

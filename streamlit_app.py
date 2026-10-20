@@ -79,7 +79,7 @@ if "initialise" not in st.session_state:
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
         "telecharger_mp4":ancienne.get("telecharger_mp4",False),
-        "collecter_commentaires":ancienne.get("collecter_commentaires",True), "collecter_reponses":ancienne.get("collecter_reponses",False),
+        "collecter_commentaires":ancienne.get("collecter_commentaires",False), "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
     variables = ancienne.get("variables_txt")
     if variables is None:
@@ -188,11 +188,11 @@ with onglet_collecte:
         st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
         with st.expander("Options des commentaires"):
-            def activer_commentaires():
-                if st.session_state["collecter_reponses"]: st.session_state["collecter_commentaires"] = True
-            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Inclure les réponses active aussi la collecte des commentaires.")
+            def respecter_choix_commentaires():
+                if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
+            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-        if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=activer_commentaires):
+        if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if not st.session_state.get(cle_hashtag, "").strip():
                 st.error("Renseignez au moins un hashtag pour une collecte par profil ou média." if source != "hashtags" else "Le premier hashtag est obligatoire.")
