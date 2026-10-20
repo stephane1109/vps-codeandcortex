@@ -309,15 +309,21 @@ with onglet_multimodale:
             audio = st.checkbox("Mesurer les indicateurs audio")
             transcription = st.checkbox("Transcrire la parole")
             ocr = st.checkbox("Lire les textes incrustés (OCR)")
-            embeddings = st.checkbox("Calculer les ressemblances sémantiques")
+            embeddings = st.checkbox("Rechercher des scènes et contenus similaires (IA)",
+                help="Compare le contenu visuel même sans images identiques : décors, objets, types de scènes. Ne prouve pas un même événement et ne compare pas les paroles.")
+            seuil_semantique = st.slider("Similarité de contenu minimale", min_value=0.5, max_value=0.99,
+                value=0.75, step=0.01, disabled=not embeddings,
+                help="Un seuil bas propose davantage de rapprochements à vérifier. Le score n'est pas une probabilité.")
             modeles = st.checkbox("Autoriser le téléchargement des modèles facultatifs")
+            if embeddings and not modeles:
+                st.info("La similarité de contenu utilise CLIP. Autorisez le téléchargement des modèles, sauf si des poids locaux ont été configurés sur le serveur.")
             nettoyer = st.checkbox("Supprimer les MP4 après indexation", value=False,
                 help="Les empreintes et vignettes sont conservées pour les comparaisons futures. Les MP4 supprimés ne figureront plus dans le ZIP.")
         st.caption("Traitement séquentiel par lots de 20, reprise automatique. Relancer reprend les éléments en attente après une interruption.")
         if st.button("Lancer / reprendre l’analyse", disabled=occupe):
             lancer(f"/api/jobs/{tache['id']}/video", {"pas_images_s":pas,"comparer_sha256":sha,
                 "comparer_sequences":sequences,"audio":audio,"transcription":transcription,
-                "ocr":ocr,"embeddings":embeddings,"telecharger_modeles":modeles,"nettoyer_videos":nettoyer})
+                "ocr":ocr,"embeddings":embeddings,"seuil_semantique":seuil_semantique,"telecharger_modeles":modeles,"nettoyer_videos":nettoyer})
         @st.fragment(run_every="3s")
         def afficher_similarites():
             try:
@@ -331,6 +337,7 @@ with onglet_multimodale:
             st.caption(f"{etat.get('videos_analysees',0)} vidéo(s) analysée(s) — {actuel.get('video_statut','non_lance')}")
             if etat.get('erreurs'): st.warning("Analyse partielle : "+" ; ".join(e.get('raison','Erreur') for e in etat['erreurs']))
             st.caption("Un groupe relie des publications par des correspondances directes ; toutes les vidéos du groupe ne sont pas nécessairement identiques. Le score est heuristique, pas une probabilité calibrée.")
+            st.subheader("Séquences réutilisées")
             for groupe in donnees['groupes']:
                 with st.expander(groupe['id']+" — "+str(len(groupe['publications']))+" publications",expanded=True):
                     lignes=[]
@@ -355,6 +362,22 @@ with onglet_multimodale:
                     st.info('Aucun candidat visuel trouvé dans les images échantillonnées. Cela ne prouve pas que les vidéos sont différentes.')
                 else:
                     st.info('Des candidats ont été examinés, sans séquence commune confirmée. Le diagnostic indique les étapes de rejet.')
+            st.subheader("Scènes et contenus similaires")
+            st.caption("Proximité visuelle calculée par CLIP, même sans séquence commune. Le score cosinus n'est pas une probabilité ; il ne confirme ni un même événement, ni un même lieu. Les paroles ne sont pas comparées.")
+            similaires=donnees.get('similarites_semantiques',[])
+            if similaires:
+                st.dataframe([{"TikTok A":c['a'],"URL A":c.get('url_a'),"Média A":c.get('media_a'),
+                               "TikTok B":c['b'],"URL B":c.get('url_b'),"Média B":c.get('media_b'),
+                               "Similarité visuelle (cosinus)":round(c['score_cosinus'],3)} for c in similaires],
+                             hide_index=True)
+            semantique=diagnostic.get('semantique',{})
+            statuts=semantique.get('statuts',{})
+            if not semantique.get('activee'):
+                st.info("Cochez « Rechercher des scènes et contenus similaires (IA) » puis lancez l'analyse.")
+            elif sum(n for statut,n in statuts.items() if statut!='mesure'):
+                st.warning("Comparaison de contenu incomplète : certains modèles ou dépendances sont indisponibles. Vérifiez le diagnostic et l'autorisation de téléchargement des modèles.")
+            elif not similaires:
+                st.info("Aucune proximité de contenu au-dessus du seuil parmi les candidats examinés. Cela ne prouve pas que les sujets sont différents.")
             if not actuel.get('video_busy'):
                 st.link_button("Exporter les résultats (CSV, JSON, IRaMuTeQ dans le ZIP)",f"/api/jobs/{tache['id']}/archive")
         afficher_similarites()

@@ -21,7 +21,7 @@ from .empreintes import calculer_sha256, calculer_phash, IndexVisuel
 from .comparaison_orb import extraire_orb
 from .extraction_images import extraire_images
 from .indicateurs import calculer_indicateurs
-from .embeddings import calculer_embeddings
+from .embeddings import calculer_embeddings, construire_similarites_semantiques
 from .recherche_similaires import comparer_videos
 from .groupes_visuels import regrouper_videos, TYPES_REEMPLOI
 from analyse.codage_automatique import coder_variables
@@ -45,7 +45,7 @@ def repartir_publications(publications, debut=0):
 def analyser_lot(dossier, parametres=None, seuils=None):
     dossier=Path(dossier).resolve()
     if not (dossier / "publications.json").is_file(): raise ValueError("Session sans publications.json.")
-    parametres=parametres or charger_parametres(); seuils=seuils or charger_seuils()
+    parametres=parametres or charger_parametres(); seuils=seuils or {**charger_seuils(),"cosinus_semantique":parametres.get("seuil_semantique",0.75)}
     with (dossier / ".video.lock").open("w") as verrou:
         try: fcntl.flock(verrou,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError as erreur: raise RuntimeError("Un traitement utilise déjà cette session.") from erreur
@@ -203,6 +203,17 @@ def traiter_lot(dossier, parametres, seuils):
             for cle in ('paires_orb_testees','images_confirmees'): diagnostic[cle]+=mesure.get(cle,0)
             if mesure['type'] not in TYPES_REEMPLOI:
                 diagnostic['rejets'][mesure['type']]=diagnostic['rejets'].get(mesure['type'],0)+1
+        # Une analyse sémantique indisponible ne doit jamais ressembler à un résultat négatif.
+        statuts_semantiques={}
+        for analyse in analyses:
+            statut=analyse.get('embedding',{}).get('statut','indetermine')
+            statuts_semantiques[statut]=statuts_semantiques.get(statut,0)+1
+        diagnostic['semantique']={'activee':parametres['embeddings'],'statuts':statuts_semantiques,
+                                 'seuil_cosinus':seuils['cosinus_semantique']}
+        similarites=construire_similarites_semantiques(comparaisons)
+        exporter_json(dossier / 'similarites_semantiques.json',similarites)
+        exporter_csv(dossier / 'similarites_semantiques.csv',similarites,
+                     ['a','b','url_a','url_b','media_a','media_b','score_cosinus','type','preuve_reemploi'])
         exporter_json(dossier / 'diagnostic_visuel.json',diagnostic)
         exporter_json(dossier / "groupes_visuels.json",groupes)
         exporter_csv(dossier / "correspondances_visuelles.csv",[

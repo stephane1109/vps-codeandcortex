@@ -475,9 +475,7 @@ Les dates, ET/OU, les commentaires, les exports et le filtre français sont cons
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
 ne charge pas OpenCV, Whisper ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
-Le déploiement Docker standard installe la comparaison de base (SHA-256/pHash/ORB)
-sans modèle lourd : `INSTALL_VIDEO=base`. Le profil `1` conserve les dépendances
-avancées. La disponibilité est vérifiée à partir des outils réellement installés.
+Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : SHA-256/pHash/ORB et CLIP sur CPU. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR/Whisper. La disponibilité est vérifiée à partir des outils réellement installés.
 En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
 drapeau supplémentaire n’est nécessaire.
 La CI teste les trois profils Docker, le contrôleur dédié et le
@@ -592,3 +590,28 @@ porte sur **1 000 publications à empreintes synthétiques** ; il ne constitue
 pas une mesure de durée de traitement de 1 000 téléchargements TikTok réels
 sur le VPS. Les API externes et les temps de téléchargement ne sont pas simulés
 comme des garanties de performances.
+
+### Scènes et contenus similaires
+
+Dans Multimodale, cocher **Rechercher des scènes et contenus similaires (IA)** et
+**Autoriser le téléchargement des modèles facultatifs**, puis lancer l'analyse.
+Les modèles sont réutilisés pendant le traitement ; le cache Hugging Face réside
+dans `/app/data/modeles/huggingface` (à conserver dans le volume de données).
+Un chemin de poids locaux peut remplacer le téléchargement dans la configuration.
+Si Coolify impose déjà `INSTALL_VIDEO=base` comme argument de construction,
+le remplacer par `semantique` et reconstruire l'image. Le profil `1` convient aussi.
+
+Cette seconde recherche compare la représentation CLIP du contenu visuel, même
+sans images identiques. Elle reste distincte des séquences réutilisées et ne
+prouve ni un même événement, ni un même lieu. Elle ne compare pas les paroles.
+La moyenne d'au plus 12 images réparties dans la vidéo représente le contenu ;
+les candidats sont recherchés dans l'index persistant par projections, sans
+comparaison exhaustive. Un passage court ou une transformation importante peut
+être manqué. Le seuil cosinus est réglable dans l'interface (0,75 par défaut) ;
+il s'agit d'un seuil heuristique, pas d'une probabilité calibrée.
+
+Les résultats ont leur propre tableau avec URL et score, ainsi que les fichiers
+`similarites_semantiques.csv` et `similarites_semantiques.json` dans le ZIP.
+Ils ne créent pas de groupe de réemploi. Le diagnostic distingue les modèles
+indisponibles de l'absence de correspondance. CLIP augmente la mémoire requise
+et le temps CPU ; sa sélection reste facultative.

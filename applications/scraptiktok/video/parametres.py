@@ -6,7 +6,7 @@ CONFIG = Path(__file__).resolve().parents[1] / "config"
 def charger_parametres(chemin=None):
     valeurs = json.loads((CONFIG / "parametres_video.json").read_text())
     if chemin: valeurs.update(json.loads(Path(chemin).read_text()))
-    bornes = {"debut_videos":(0,100000),"pas_images_s":(0.25,30),"images_max":(3,300),"dimension_max":(128,720),"duree_max_s":(3,600),
+    bornes = {"seuil_semantique":(0.5,0.99),"debut_videos":(0,100000),"pas_images_s":(0.25,30),"images_max":(3,300),"dimension_max":(128,720),"duree_max_s":(3,600),
               "taille_max_mo":(1,500),"videos_max":(1,1000),"paires_max":(1,50000),"duree_lot_max_s":(30,7200),
               "threads":(1,4),"ocr_images_max":(1,30),"espace_libre_min_mo":(128,100000)}
     for cle,(bas,haut) in bornes.items():
