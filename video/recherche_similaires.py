@@ -7,7 +7,7 @@ from .embeddings import comparer_embeddings
 def comparer_videos(a,b,seuils,verifier=lambda:None,options=None,candidats_indexes=None,index=None):
     options = options or {}
     resultat={"a":a["id"],"b":b["id"],"media_a":a.get("media_id"),"media_b":b.get("media_id"),
-              "type":"indetermine","confiance":None,"segments":[],"comparaisons":[],"tronque":False}
+              "type":"indetermine","confiance":None,"segments":[],"comparaisons":[],"tronque":False,"candidats_images":0,"paires_orb_testees":0,"images_confirmees":0}
     resultat["methodes"] = {"sha256":options.get("comparer_sha256",True), "phash_orb_temporel":options.get("comparer_sequences",True)}
     resultat["cosinus_semantique"]=comparer_embeddings(a.get("embedding",{}),b.get("embedding",{}))
     resultat["semantiquement_similaires"]=(resultat["cosinus_semantique"]>=seuils["cosinus_semantique"] if resultat["cosinus_semantique"] is not None else None)
@@ -25,6 +25,7 @@ def comparer_videos(a,b,seuils,verifier=lambda:None,options=None,candidats_index
             distances=sorted((distance_phash(ia["phash"],ib["phash"]),j) for j,ib in enumerate(b["images"]))
             for rang,(distance,j) in enumerate(distances):
                 if distance<=seuils["distance_phash"] or rang<2: candidats.append((distance,i,j))
+    resultat['candidats_images']=len(candidats)
     if index and a['sha256']!=b['sha256']:
         # Écarter les candidats sans séquence plausible AVANT le calcul coûteux d'ORB.
         propositions=[]
@@ -32,7 +33,7 @@ def comparer_videos(a,b,seuils,verifier=lambda:None,options=None,candidats_index
             ta,ha=index.base.execute("SELECT temps,phash FROM images WHERE numero=?",(i,)).fetchone()
             tb,hb=index.base.execute("SELECT temps,phash FROM images WHERE numero=?",(j,)).fetchone()
             propositions.append({'temps_a':ta,'temps_b':tb,'phash_a':ha,'phash_b':hb,'confiance':1})
-        if not aligner_sequences(propositions,seuils)['detecte']:
+        if not aligner_sequences(propositions,seuils,verifier_diversite=False)['detecte']:
             return {**resultat,'type':'preuve_temporelle_insuffisante'}
     # L'ordre temporel évite de consacrer tout le budget au début d'une vidéo.
     candidats.sort(key=lambda c:(c[1],c[0],c[2]))
@@ -42,10 +43,12 @@ def comparer_videos(a,b,seuils,verifier=lambda:None,options=None,candidats_index
         verifier()
         ia=index.lire_image(i) if index else a["images"][i]
         ib=index.lire_image(j) if index else b["images"][j]
+        resultat['paires_orb_testees']+=1
         orb=comparer_orb(ia["orb"],ib["orb"],seuils)
         mesure={"temps_a":ia["temps_s"],"temps_b":ib["temps_s"],"distance_phash":distance,"orb":orb}
         resultat["comparaisons"].append(mesure)
         if orb["valide"]:
+            resultat["images_confirmees"]+=1
             points.append({"temps_a":ia["temps_s"],"temps_b":ib["temps_s"],
                 "phash_a":orb.get("phash_zone_a") or ia["phash"],"phash_b":orb.get("phash_zone_b") or ib["phash"],
                 "confiance":orb["confiance"],"distance_phash":distance,"inliers":orb["inliers"]})

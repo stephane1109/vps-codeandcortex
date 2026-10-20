@@ -26,3 +26,13 @@
 Pour Coolify : déployer `deploy-scraptiktok`, profil `base`, avec `/app/data`
 sur un volume persistant local. Les options de téléchargement et de collecte
 restent inchangées ; le nettoyage MP4 n’est actif que sur demande explicite.
+
+## Correctif du 20 octobre 2026
+
+- Présélection temporelle sans rejet prématuré des empreintes globales stables ; la diversité des zones confirmées par ORB reste obligatoire.
+- Budget de 400 candidats réparti sur toute la vidéo ; répartition des voisins entre publications. Migration des recherches existantes sans supprimer les vignettes et caches ORB.
+- Diagnostic des candidats, vérifications ORB, rejets et erreurs disponible dans l'interface et le ZIP. Options désactivées exportées avec la modalité `no`. Colonne URL TikTok copiable dans le tableau de collecte.
+- 37 tests ciblés réussis (diagnostic, index, codage, exports, extraction, temporalité, disponibilité et onglet Multimodale).
+- Essai réel : vidéos TikTok 7697829530844663072 et 7697724586003057953 téléchargées et examinées. Scènes différentes, aucun candidat détecté. Cela ne valide pas les huit autres vidéos du lot utilisateur.
+- Contrôle positif dérivé de la vidéo Brut : extrait 10–16 s, recadrage central à 85 %, redimensionnement 360 px, réencodage H.264 CRF 30 sans audio. Correspondance retrouvée avec 0–6 s de l'extrait, six images confirmées par ORB, score interne 0,799 (non calibré comme probabilité).
+- Docker/Coolify non exécuté lors de cette validation locale.

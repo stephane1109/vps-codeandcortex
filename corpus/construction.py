@@ -62,11 +62,12 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
                 identifiant=re.search(r"\*id_(\d+)(?:\s|$)",entete)
                 if not identifiant: return entete
                 champs=variables.get(identifiant.group(1),{})
-                for cle in CHAMPS_VISUELS:
+                cles_a_ajouter=set(CHAMPS_VISUELS)|{cle for cle,valeur in champs.items() if valeur=='no'}
+                for cle in sorted(cles_a_ajouter):
                     entete=re.sub(r" \*"+cle+r"_\S+", "", entete)
                     entete+=" *"+cle+"_"+normaliser_modalite(champs.get(cle))
                 return entete
-            contenu_txt=re.sub(r"^\*\*\*\*[^\r\n]*",enrichir_entete,contenu_txt.decode('utf-8'),flags=re.M).encode('utf-8')
+            contenu_txt=re.sub(r"^\*[^\r\n]*",enrichir_entete,contenu_txt.decode('utf-8'),flags=re.M).encode('utf-8')
             # Corpus garanti avec identifiants même si l'utilisateur a désactivé les en-têtes TXT.
             exporter_iramuteq(dossier / "corpus_visuel_iramuteq.txt",construire_legendes(publications,variables))
         (dossier / "corpus_iramuteq.txt").write_bytes(contenu_txt)

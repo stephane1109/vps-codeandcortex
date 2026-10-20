@@ -1,5 +1,5 @@
 """Alignement monotone avec vitesse et lacunes bornées, indépendant des embeddings."""
-def aligner_sequences(correspondances, seuils):
+def aligner_sequences(correspondances, seuils, verifier_diversite=True):
     points = sorted(correspondances,key=lambda c:(c["temps_a"],c["temps_b"]))
     if not points: return {"detecte":False,"segments":[],"confiance":None,"statut":"aucune_correspondance"}
     longueurs = [1]*len(points); parents = [-1]*len(points)
@@ -33,7 +33,7 @@ def aligner_sequences(correspondances, seuils):
         diversite = diversite_visuelle("phash_a")
         if any("phash_b" in points[i] for i in chaine):
             diversite = min(diversite,diversite_visuelle("phash_b"))
-        if len(chaine)<seuils["images_min"] or min(da,db)<seuils["duree_min_s"] or diversite<2: continue
+        if len(chaine)<seuils["images_min"] or min(da,db)<seuils["duree_min_s"] or (verifier_diversite and diversite<2): continue
         utilises.update(chaine)
         segments.append({"debut_a_s":debut["temps_a"],"fin_a_s":dernier["temps_a"],"debut_b_s":debut["temps_b"],"fin_b_s":dernier["temps_b"],
             "images":len(chaine),"vitesse_b_sur_a":db/da,"confiance":sum(points[i]["confiance"] for i in chaine)/len(chaine),"correspondances":[points[i] for i in chaine]})

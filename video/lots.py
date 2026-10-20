@@ -137,7 +137,7 @@ def traiter_lot(dossier, parametres, seuils):
                         index.enregistrer_video(resultat,extraction['images'] if parametres.get('comparer_sequences',True) else [])
                         del extraction
                     resultat={**resultat,"fichier_taille":chemin.stat().st_size,"fichier_mtime_ns":chemin.stat().st_mtime_ns,"id":identifiant,"media_id":publication.get("media_id") or publication.get("author")}
-                    index.preparer_candidats(identifiant,seuils,verifier)
+                    index.preparer_candidats(identifiant,seuils,verifier,parametres)
                     resultat['recherche_tronquee']=index.tronque
                     analyses.append({k:v for k,v in resultat.items() if k != "images"}); mesures[identifiant]=resultat["indicateurs"]
                     exporter_json(dossier / "empreintes" / (identifiant+".json"),resultat)
@@ -145,6 +145,9 @@ def traiter_lot(dossier, parametres, seuils):
                     if parametres.get('nettoyer_videos',False): chemin.unlink()
                 except TimeoutError: raise
                 except Exception as erreur: erreurs.append({"id":identifiant,"raison":str(erreur)[:200],"type":type(erreur).__name__})
+            # Rejouer également les recherches des vidéos déjà indexées après mise à jour.
+            for (identifiant,) in index.base.execute('SELECT video FROM recherches ORDER BY video LIMIT ?', (parametres['videos_max'],)).fetchall():
+                verifier(); index.preparer_candidats(identifiant,seuils,verifier,parametres)
             for a_id,b_id,candidats in index.base.execute("SELECT a,b,candidats FROM paires WHERE resultat IS NULL ORDER BY a,b LIMIT ?",(parametres['paires_max'],)).fetchall():
                 verifier()
                 a=index.lire_video(a_id); b=index.lire_video(b_id)
@@ -162,6 +165,8 @@ def traiter_lot(dossier, parametres, seuils):
         # Conserver l'ensemble des preuves directes du corpus privé, entre les lots.
         comparaisons=list(index.liens())
         attente=index.base.execute("SELECT count(*) FROM paires WHERE resultat IS NULL").fetchone()[0]
+        recherches_attente=index.base.execute('SELECT count(*) FROM recherches').fetchone()[0]
+        attente+=recherches_attente
         ids_reemploi={c[k] for c in comparaisons if c["type"] in TYPES_REEMPLOI for k in ("a","b")}
         complet=(len(analyses)==len(publications) and not erreurs and not attente
                  and not index.tronque and not any(a.get('tronque') or a.get('recherche_tronquee') for a in analyses))
@@ -174,16 +179,32 @@ def traiter_lot(dossier, parametres, seuils):
                 meta=index.lire_video(identifiant)
                 publications_reseau[identifiant]={'id':identifiant,'media_id':meta.get('media_id'),'url':meta.get('url')}
         publications_reseau=list(publications_reseau.values())
-        codes=[coder_variables(p,mesures.get(p["id"]),True if p["id"] in ids_reemploi else None) for p in publications]
+        codes=[coder_variables(p,mesures.get(p["id"]),True if p["id"] in ids_reemploi else None,parametres) for p in publications]
         variables={c["publication_id"]:c["variables"] for c in codes}
         groupes=regrouper_videos(comparaisons)
         groupes_par_id={identifiant:g['id'] for g in groupes for identifiant in g['publications']}
         for publication in publications:
             identifiant=str(publication['id'])
             champs={'groupe_visuel':groupes_par_id.get(identifiant,'aucun'),
-                    'reemploi_visuel':'detecte' if identifiant in ids_reemploi else 'indetermine'}
+                    'reemploi_visuel':('no' if not (parametres.get('comparer_sha256',True) or parametres.get('comparer_sequences',True)) else 'detecte' if identifiant in ids_reemploi else 'indetermine')}
             publication.update(champs)
             variables[identifiant].update(champs)
+        diagnostic={'videos_demandees':len(publications),'videos_analysees':len(analyses),
+                    'videos_en_erreur':len({e['id'] for e in erreurs if e.get('id')}),
+                    'paires_candidates':0,'paires_terminees':0,'candidats_images':0,
+                    'paires_orb_testees':0,'images_confirmees':0,'rejets':{},
+                    'recherches_en_attente':recherches_attente,'paires_en_attente':attente-recherches_attente}
+        ids_session={str(p['id']) for p in publications}
+        for a,b,candidats,resultat in index.base.execute('SELECT a,b,candidats,resultat FROM paires'):
+            if a not in ids_session and b not in ids_session: continue
+            diagnostic['paires_candidates']+=1
+            diagnostic['candidats_images']+=len(json.loads(candidats))
+            if resultat is None: continue
+            mesure=json.loads(resultat); diagnostic['paires_terminees']+=1
+            for cle in ('paires_orb_testees','images_confirmees'): diagnostic[cle]+=mesure.get(cle,0)
+            if mesure['type'] not in TYPES_REEMPLOI:
+                diagnostic['rejets'][mesure['type']]=diagnostic['rejets'].get(mesure['type'],0)+1
+        exporter_json(dossier / 'diagnostic_visuel.json',diagnostic)
         exporter_json(dossier / "groupes_visuels.json",groupes)
         exporter_csv(dossier / "correspondances_visuelles.csv",[
             {**{k:c.get(k) for k in ('a','b','url_a','url_b','media_a','media_b','fichier_a','fichier_b','type','confiance')},
