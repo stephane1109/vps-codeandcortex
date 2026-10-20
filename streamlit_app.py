@@ -591,24 +591,26 @@ with onglet_desordre:
             lignes=donnees.get('indicateurs',[])
             if not lignes: return
             import pandas as pd
-            from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, preparer_graphique, formater_nombre
+            from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, AIDES_STATISTIQUES, AIDES_COLONNES, preparer_graphique, formater_nombre
             tableau=pd.DataFrame(lignes)
             tableau.insert(0,'numero_video',range(1,len(tableau)+1))
             st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
             st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage.")
             st.dataframe(tableau,hide_index=True,column_config={
+                **{nom:st.column_config.Column(help=aide) for nom,aide in AIDES_COLONNES.items() if nom in tableau},
                 'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
                 'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
                 'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',help=AIDES_INDICATEURS['vitesse_residuelle']),
-                'url':st.column_config.LinkColumn('URL TikTok')})
+                'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])})
             st.subheader("Croiser les variables")
             indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
                 'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
                 'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)'}
             engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
-            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help=AIDE_INDICE)
-            axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y')
+            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur visuel. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
+            axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y',help='Choisissez un compteur brut ou un taux pour 1 000 vues ; la définition de la variable choisie est disponible ci-dessous.')
+            st.markdown('**Comprendre la variable d’engagement choisie**',help=AIDES_COLONNES[axe_y])
             st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
             if axe_x not in tableau or axe_y not in tableau:
                 st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
@@ -624,7 +626,10 @@ with onglet_desordre:
                     st.caption(f"Axe vertical : {engagements[axe_y]}. Les espaces séparent les milliers : 1 600 000 = un million six cent mille. Survolez un point pour voir son numéro, son identifiant et ses valeurs.")
                 correlation=next((r for r in donnees.get('correlations',[]) if r['indicateur']==axe_x and r['engagement']==axe_y),None)
                 if correlation and correlation.get('rho') is not None:
-                    st.write(f"Spearman : ρ = {formater_nombre(correlation['rho'],3)} · {int(correlation['n'])} vidéos · p = {formater_nombre(correlation['p'],6)} · p ajustée = {formater_nombre(correlation.get('p_ajustee_bh',1.),6)}")
+                    st.markdown("**Corrélation de Spearman**",help=AIDE_SPEARMAN)
+                    for colonne,cle,libelle,decimales in zip(st.columns(4),('rho','n','p','p_ajustee_bh'),
+                            ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée'),(3,0,6,6)):
+                        colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
                 else:
                     st.info("Corrélation indisponible : il faut au moins trois publications et des variables non constantes, ou relancer d’anciens résultats.")
             st.markdown("**Spearman est-il adapté ?**",help=AIDE_SPEARMAN)
@@ -632,7 +637,8 @@ with onglet_desordre:
                 st.write(AIDE_SPEARMAN)
             with st.expander("Toutes les corrélations"):
                 st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
-                              for ligne in donnees.get('correlations',[])],hide_index=True)
+                              for ligne in donnees.get('correlations',[])],hide_index=True,
+                    column_config={nom:st.column_config.Column(help=aide) for nom,aide in AIDES_STATISTIQUES.items()})
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
                 st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")

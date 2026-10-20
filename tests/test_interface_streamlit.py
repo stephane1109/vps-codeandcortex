@@ -353,6 +353,9 @@ class TestsInterface(unittest.TestCase):
                 self.assertEqual(list(tableaux[0]['numero_video']),[1,2,3])
                 self.assertTrue(any('3 vidéo(s) représentée(s)' in element.value for element in page.caption))
                 self.assertTrue(any('Spearman' in element.value for element in page.markdown))
+                statistiques=[element for element in page.metric if element.label in ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée')]
+                self.assertEqual(len(statistiques),4)
+                self.assertTrue(all(element.proto.help for element in statistiques))
                 self.assertTrue(page.button(key='lancer_desordre').disabled)
                 page.checkbox(key='activer_desordre').check().run()
                 page.button(key='lancer_desordre').click().run()

@@ -72,3 +72,45 @@ def preparer_graphique(tableau,axe_x,axe_y,libelle_x,libelle_y):
     return pd.DataFrame(points),specification,{
         'videos':len(points),'exclues':len(tableau)-len(points),'positions':len(groupes),
         'superposees':sum(len(n) for n in groupes.values() if len(n)>1)}
+
+
+AIDES_STATISTIQUES={
+    'rho':"Rho (ρ) est le coefficient de Spearman, entre −1 et +1. Proche de +1 : les deux variables tendent à augmenter ensemble. Proche de −1 : l’une tend à diminuer quand l’autre augmente. Proche de 0 : aucune tendance monotone nette, mais une autre forme de relation peut exister. Ce n’est ni un pourcentage ni une preuve de causalité.",
+    'n':"Nombre de vidéos ayant une valeur valide pour les deux variables comparées. Les vidéos avec une mesure manquante sont exclues de ce calcul. Ce nombre peut être inférieur au nombre de publications collectées.",
+    'p':"P-value bilatérale obtenue par permutations : sous l’hypothèse d’absence d’association et d’échangeabilité des observations, fréquence d’une corrélation au moins aussi extrême que celle observée. Ce n’est pas la probabilité que l’hypothèse soit vraie, ni la taille de l’effet.",
+    'p_ajustee_bh':"P-value ajustée par Benjamini–Hochberg sur les croisements calculables, pour tenir compte des comparaisons multiples. L’ajustement ne corrige ni les biais du corpus ni la dépendance entre vidéos d’un même compte.",
+    'methode':"Méthode du test : permutations exactes jusqu’à sept vidéos utilisables, sinon tirages aléatoires reproductibles. Le coefficient rho reste calculé sur les rangs, avec rangs moyens pour les ex aequo.",
+    'raison':"Explication lorsqu’une corrélation ne peut pas être calculée : moins de trois vidéos utilisables ou variable constante. Une cellule vide signifie que le calcul a pu être effectué.",
+    'indicateur':"Indicateur visuel comparé à la variable d’engagement de cette ligne. Sa définition figure dans l’aide du tableau des vidéos et du sélecteur du graphique.",
+    'engagement':"Compteur ou taux comparé à l’indicateur visuel : likes, commentaires, partages, vues ou taux pour 1 000 vues."
+}
+AIDES_COLONNES={
+    **AIDES_INDICATEURS,
+    'numero_video':"Numéro de repérage dans cette analyse, repris au survol des points. Ce n’est pas l’identifiant TikTok.",
+    'publication_id':"Identifiant de la publication TikTok, conservé comme texte pour préserver tous ses chiffres.",
+    'url':"Lien vers la publication TikTok correspondante.",
+    'metadonnees_presentes':"Indique si cette vidéo dispose d’une ligne de métadonnées collectées. Cela ne garantit pas que tous ses compteurs sont connus.",
+    'vues':"Nombre de vues observé lors de la collecte. Il ne s’agit pas nécessairement de personnes distinctes.",
+    'likes':"Nombre de likes observé lors de la collecte, sans division par le nombre de vues.",
+    'commentaires':"Nombre de commentaires indiqué pour la publication, pas le nombre de textes de commentaires effectivement récupérés.",
+    'partages':"Nombre de partages observé lors de la collecte, sans division par le nombre de vues.",
+    'fps_source':"Fréquence d’images annoncée par le fichier vidéo, en images par seconde. Elle peut différer de la fréquence choisie pour l’analyse.",
+    'duree_annoncee_s':"Durée du fichier estimée à partir du nombre d’images et de sa fréquence annoncés, en secondes.",
+    'images_decodees':"Nombre d’images lues dans le fichier ; seule une partie peut être retenue pour l’analyse.",
+    'images_extraites':"Nombre d’images retenues à la fréquence d’analyse choisie. Ce n’est pas le nombre de vidéos.",
+    'horodatage_reconstitue':"Vrai lorsque des horodatages ont dû être reconstruits depuis la fréquence annoncée, faute de timestamps vidéo progressant normalement.",
+    'tronque':"Vrai lorsque la limite de durée configurée a interrompu l’analyse avant la fin de la vidéo.",
+    'dernier_temps_s':"Horodatage de la dernière image retenue pour l’analyse, en secondes depuis le début de la vidéo.",
+    'decodage_incomplet':"Vrai lorsque la lecture s’est terminée avant le nombre d’images annoncé, sans atteindre la limite de durée.",
+    'duree_observee_s':"Somme des intervalles entre les images analysées, en secondes, y compris les intervalles ensuite exclus.",
+    'duree_valide_s':"Durée totale des intervalles pour lesquels la compensation du mouvement de caméra a permis une mesure, en secondes.",
+    'couverture_mouvement':"Part de la durée observée où le mouvement a pu être mesuré : 0,8 signifie 80 %. Une faible couverture rend la moyenne moins représentative.",
+    'changements_plan':"Nombre de transitions classées comme changements de plans. Elles sont exclues du calcul des mouvements ; la détection reste heuristique.",
+    'paires_exclues':"Nombre de paires d’images exclues, par exemple en raison d’une coupure, d’un changement de format ou d’une compensation de caméra indisponible.",
+    'statut':"État de l’analyse : mesure disponible, résultat partiel, données insuffisantes ou erreur. Consulter la couverture et les erreurs avant d’interpréter le score.",
+    'erreur':"Message expliquant un échec de traitement. Une cellule vide signifie qu’aucune erreur n’a été renseignée pour cette vidéo."
+}
+for _nom in ('likes','commentaires','partages'):
+    AIDES_COLONNES[_nom+'_pour_1000_vues']=f"Nombre de {_nom} divisé par le nombre de vues, multiplié par 1 000. Ce n’est pas un pourcentage. Une valeur manque si les compteurs sont inconnus ou si le nombre de vues est nul."
+for _nom in AIDES_INDICATEURS:
+    AIDES_COLONNES[_nom+'_duree_s']="Durée des intervalles ayant effectivement contribué à la moyenne de cet indicateur, en secondes. Elle peut différer de celle des autres indicateurs."
