@@ -129,6 +129,10 @@ for variable in VARIABLES_TXT:
         valeur_initiale = st.session_state.get("txt_republications", valeur_initiale)
     st.session_state.setdefault("txt_" + variable, valeur_initiale)
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
+# Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
+# clé du session_state à la fin d'une exécution. Le formulaire médias doit
+# rester lançable sans ce widget.
+st.session_state.setdefault("operator", "AND")
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
@@ -223,7 +227,8 @@ with onglet_collecte:
                 st.error("Sélectionnez au moins un média.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4")}
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4")}
+                valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
