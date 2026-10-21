@@ -323,6 +323,51 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             web.StartRequest(source_collecte="hashtags")
 
+    def test_presse_deux_medias_lit_le_premier_avant_le_second(self):
+        params = web.StartRequest(
+            source_collecte="presse", medias=["lemonde", "franceinfo"],
+            limit=1, french_only=False,
+        )
+        job = web.Job("presse", params, self.job.directory)
+        job.base = None
+        urls = {
+            "lemondefr": "https://www.tiktok.com/@lemondefr/video/123456789",
+            "franceinfo": "https://www.tiktok.com/@franceinfo/video/987654321",
+        }
+        textes = {
+            url: dict(RECORD, id=url.rsplit("/", 1)[-1], url=url,
+                      author=compte, description="Actualité sans hashtag : " + compte,
+                      created_at="2026-10-20T14:00:00+00:00")
+            for compte, url in urls.items()
+        }
+        passages = []
+
+        def decouvrir(source, rapport, **options):
+            compte = source["compte"]
+            passages.append((compte, job.processed))
+            if compte == "franceinfo":
+                # Le premier TXT doit exister AVANT de chercher le deuxième média.
+                self.assertEqual(job.processed, 1)
+                self.assertIn("Actualité sans hashtag : lemondefr",
+                              job.path.read_text(encoding="utf-8"))
+            return [urls[compte]]
+
+        with patch("connect_presse.ConnexionPresse.decouvrir",
+                   side_effect=decouvrir), \
+             patch.object(web.scraper, "read_post",
+                          side_effect=lambda driver, url, *a, **kw: dict(textes[url])) as lecture, \
+             patch.object(job, "pause"):
+            web.execute_job(job, driver_factory=lambda args: Mock())
+
+        self.assertEqual(passages, [("lemondefr", 0), ("franceinfo", 1)])
+        self.assertEqual(job.processed, 2)
+        self.assertEqual(lecture.call_count, 2)
+        self.assertEqual(len(job.records), 2)
+        self.assertEqual(job.filtered, 0)
+        self.assertEqual(job.status, "completed")
+        self.assertIn("Actualité sans hashtag : franceinfo",
+                      job.path.read_text(encoding="utf-8"))
+
     def test_connecteur_medias_transmet_un_profil_sans_hashtags(self):
         from connect_presse import ConnexionPresse
 
