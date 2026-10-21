@@ -701,7 +701,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             nonlocal links, hors_selection
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
-            for index, url in enumerate(links, 1):
+            for index in range(job.processed + 1, len(links) + 1):
+                url = links[index - 1]
                 job.pause(args.delay)
                 job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
                 try:
