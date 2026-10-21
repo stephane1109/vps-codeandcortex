@@ -242,10 +242,13 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         validation_initiale=options.get("validation_initiale", True)))
 
     if not liens:
-        executer(f"@{compte} : recherche vidéo", lambda etat, suivi:
-                 collecter_recherche_compte(
-                     navigateur, arguments, dict(etat, compte_attendu=compte),
-                     interact=intervenir, progress=suivi, check=verifier))
+        def recherche_ciblee(etat, suivi):
+            etat["compte_attendu"] = compte
+            return collecter_recherche_compte(
+                navigateur, arguments, etat,
+                interact=intervenir, progress=suivi, check=verifier)
+
+        executer(f"@{compte} : recherche vidéo", recherche_ciblee)
         # collecter_recherche_compte fournit des liens filtrés par auteur exact.
         # Un résultat d'autres comptes ne doit jamais entrer dans le corpus.
 
