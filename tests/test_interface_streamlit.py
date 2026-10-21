@@ -347,6 +347,9 @@ class TestsInterface(unittest.TestCase):
                 page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
                 self.assertFalse(page.exception)
                 self.assertIn('Désordre visuel',[t.label for t in page.tabs])
+                page.checkbox(key='debug_collecte_active').check().run()
+                self.assertFalse(page.exception)
+                self.assertTrue(any('cause_arret' in element.value for element in page.json))
                 self.assertEqual(page.selectbox(key='desordre_y').value,'likes')
                 tableaux=[element.value for element in page.dataframe if 'numero_video' in element.value.columns]
                 self.assertEqual(tableaux[0].columns[0],'numero_video')
