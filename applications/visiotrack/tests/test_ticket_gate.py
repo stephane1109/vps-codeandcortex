@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ticket_gate as gate
+import synchronisation_dashboard as synchronisation
 
 
 class TestRenouvellementTicket(unittest.TestCase):
@@ -18,6 +19,21 @@ class TestRenouvellementTicket(unittest.TestCase):
             "max_waiting": 20, "wait_refresh_ms": 10000,
             "heartbeat_ms": 300000,
         }
+
+    def test_publication_runtime_meme_sans_session_streamlit(self):
+        client = MagicMock()
+        with patch.object(synchronisation, "_config", return_value=self.cfg), \
+             patch.object(synchronisation, "_redis_client", return_value=(client, None)), \
+             patch.object(synchronisation, "_publish_runtime_config") as publier:
+            self.assertTrue(synchronisation.publier())
+        publier.assert_called_once_with(client, self.cfg)
+
+    def test_publication_runtime_signale_redis_indisponible(self):
+        with patch.object(synchronisation, "_config", return_value=self.cfg), \
+             patch.object(synchronisation, "_redis_client", return_value=(None, "non connecte")), \
+             patch.object(synchronisation, "_publish_runtime_config") as publier:
+            self.assertFalse(synchronisation.publier())
+        publier.assert_not_called()
 
     def test_renouvellement_rafraichit_horodatage_et_config(self):
         client = MagicMock()
