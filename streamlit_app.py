@@ -833,10 +833,19 @@ with onglet_desordre:
                 'violence_visible':'Violence physique visible — codage manuel (0/1)'}
             engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','favoris':'Nombre de favoris','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
-            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur visuel. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
-            axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y',help='Choisissez un compteur brut ou un taux pour 1 000 vues ; la définition de la variable choisie est disponible ci-dessous.')
-            st.markdown('**Comprendre la variable d’engagement choisie**',help=AIDES_COLONNES[axe_y])
-            st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
+            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur automatique ou le codage manuel de violence. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
+            autres_mesures={cle:nom for cle,nom in indicateurs.items() if cle!='violence_visible'} if axe_x=='violence_visible' else {}
+            variables_verticales={**engagements, **autres_mesures}
+            # Une nouvelle option ne doit pas rendre invalide une ancienne sélection Streamlit.
+            if st.session_state.get('desordre_y') not in variables_verticales:
+                st.session_state['desordre_y']='likes'
+            axe_y=st.selectbox("Variable à croiser (axe vertical)",list(variables_verticales),format_func=variables_verticales.get,key='desordre_y',help='Choisissez un compteur, un taux pour 1 000 vues, ou, avec le codage manuel, un indicateur automatique.')
+            st.markdown('**Comprendre la variable choisie**',
+                help=AIDES_COLONNES[axe_y] if axe_y in AIDES_COLONNES else AIDES_INDICATEURS[axe_y])
+            if axe_y in engagements:
+                st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
+            else:
+                st.caption("Comparer les deux groupes (violence oui/non) sur les valeurs de l’indicateur visuel automatique.")
             afficher_droite=st.checkbox("Afficher la droite de régression linéaire",
                 value=False, key="desordre_droite_regression",
                 help="Ajoute une droite de tendance en pointillés au nuage de points, quand au moins "
@@ -848,7 +857,7 @@ with onglet_desordre:
                 st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
             else:
                 st.markdown("**Comprendre l’indicateur choisi**",help=AIDES_INDICATEURS[axe_x])
-                points,specification,effectifs=preparer_graphique(tableau,axe_x,axe_y,indicateurs[axe_x],engagements[axe_y])
+                points,specification,effectifs=preparer_graphique(tableau,axe_x,axe_y,indicateurs[axe_x],variables_verticales[axe_y])
                 st.caption(f"{effectifs['videos']} vidéo(s) représentée(s) sur {total_collecte} publications collectées · {max(0,total_collecte-len(resultats))} sans résultat · {max(0,effectifs['exclues']-len(absentes))} résultat(s) sans les deux mesures valides · {effectifs['positions']} position(s) distincte(s). Un point = une vidéo ; des points très proches peuvent aussi se masquer visuellement.")
                 if effectifs['superposees']:
                     st.info(f"{effectifs['superposees']} vidéos partagent exactement des coordonnées avec d’autres : leurs points se superposent. Survolez pour retrouver leurs numéros dans le tableau.")
@@ -864,7 +873,7 @@ with onglet_desordre:
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
                 else:
                     st.vega_lite_chart(points,specification,use_container_width=True)
-                    st.caption(f"Axe vertical : {engagements[axe_y]}. Les espaces séparent les milliers : 1 600 000 = un million six cent mille. Survolez un point pour voir son numéro, son identifiant et ses valeurs.")
+                    st.caption(f"Axe vertical : {variables_verticales[axe_y]}. Les espaces séparent les milliers : 1 600 000 = un million six cent mille. Survolez un point pour voir son numéro, son identifiant et ses valeurs.")
                 correlation=next((r for r in donnees.get('correlations',[]) if r['indicateur']==axe_x and r['engagement']==axe_y),None)
                 if correlation and correlation.get('rho') is not None:
                     st.markdown("**Corrélation de Spearman**",help=AIDE_SPEARMAN)
@@ -882,7 +891,7 @@ with onglet_desordre:
                     column_config={nom:st.column_config.Column(help=aide) for nom,aide in AIDES_STATISTIQUES.items()})
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro. "
                        "Les corrélations avec la violence sont exploratoires et calculées uniquement "
-                       "sur les annotations enregistrées, avec correction séparée pour ces huit comparaisons.")
+                       "sur les annotations enregistrées, avec correction séparée pour les treize comparaisons possibles.")
             if etat.get('statut') in ('termine','partiel'):
                 st.link_button("Corrélations avec violence (CSV)",
                     f"/api/jobs/{tache_desordre['id']}/desordre/correlations_violence.csv")
