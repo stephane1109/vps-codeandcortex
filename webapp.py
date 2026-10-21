@@ -144,16 +144,32 @@ def tag_key(value):
 
 
 def matches_hashtags(description, settings):
-    presents = set(re.findall(r"#(\w+)", tag_key(description)))
-    recherches = [tag_key(tag) for tag in settings.hashtags]
+    texte = tag_key(description)
+    presents = set(re.findall(r"#(\w+)", texte))
 
-    if not recherches:
+    def correspond(tag):
+        tag = tag_key(tag)
+
+        if tag in presents:
+            return True
+
+        morceaux = re.findall(r"\d+|[^\W\d_]+", tag)
+
+        if len(morceaux) < 2 or not any(m.isdecimal() for m in morceaux):
+            return False
+
+        motif = r"(?<!\w)" + r"[\s_]+".join(
+            map(re.escape, morceaux)
+        ) + r"(?!\w)"
+
+        return re.search(motif, texte) is not None
+
+    resultats = [correspond(tag) for tag in settings.hashtags]
+
+    if not resultats:
         return False
 
-    if settings.operator == "AND":
-        return all(tag in presents for tag in recherches)
-
-    return any(tag in presents for tag in recherches)
+    return all(resultats) if settings.operator == "AND" else any(resultats)
 
 
 class Point(BaseModel):
