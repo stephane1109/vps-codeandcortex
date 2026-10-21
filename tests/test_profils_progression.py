@@ -46,7 +46,6 @@ class TestCollecteProfil(unittest.TestCase):
         with patch("collecte.reseau_profils.ObservationProfil") as observation, \
              patch("collecte.pagination_profils.defiler_grille_profil",
                    return_value=page_fin) as defilement, \
-             patch("collecte.comptes.scraptiktok", create=True), \
              patch("scraptiktok.open_page"), \
              patch("scraptiktok.diagnostiquer_page", return_value={"code": "ok"}), \
              patch("scraptiktok.type_intervention_tiktok", return_value=""), \
