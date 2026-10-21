@@ -701,13 +701,19 @@ with onglet_desordre:
     if not tache_desordre.get('archive_prete'):
         st.info("Effectuez une collecte enrichie pour utiliser cette analyse.")
     else:
-        @st.fragment(run_every='3s')
+        # Ne pas rafraîchir automatiquement le formulaire d'annotation une fois
+        # l'analyse terminée : l'édition des cellules doit rester stable.
+        @st.fragment(run_every='3s' if tache_desordre.get('video_busy') or tache_desordre.get('busy') else None)
         def afficher_desordre():
             try:
                 actuel=api(f"/api/jobs/{tache_desordre['id']}")
                 donnees=api(f"/api/jobs/{tache_desordre['id']}/desordre")
             except RuntimeError as erreur:
                 st.error(str(erreur));return
+            if (bool(actuel.get('video_busy')) != bool(tache_desordre.get('video_busy')) or
+                    bool(actuel.get('busy')) != bool(tache_desordre.get('busy'))):
+                st.session_state['collecte'] = actuel
+                st.rerun()
             etat=donnees.get('etat',{})
             en_cours=etat.get('statut')=='en_cours' and actuel.get('video_busy',False)
             st.write(f"{donnees.get('publications_collectees',0)} publication(s) collectée(s) · {donnees.get('mp4_locaux',0)} MP4 présent(s) · {donnees.get('mp4_manquants',0)} MP4 manquant(s).")
@@ -756,6 +762,8 @@ with onglet_desordre:
             import pandas as pd
             from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, AIDES_STATISTIQUES, AIDES_COLONNES, preparer_graphique, superposer_droite_regression, formater_nombre
             tableau=pd.DataFrame(lignes)
+            # Les identifiants restent des chaînes, même au-delà de 15 chiffres.
+            tableau['publication_id']=tableau['publication_id'].astype(str)
             tableau.insert(0,'numero_video',range(1,len(tableau)+1))
             st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
             st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage.")
@@ -765,10 +773,64 @@ with onglet_desordre:
                 'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
                 'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',help=AIDES_INDICATEURS['vitesse_residuelle']),
                 'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])})
+
+            # Grille dédiée au codage qualitatif, indépendante de l'analyse MP4.
+            st.markdown("**Annotation manuelle — violence physique visible**")
+            st.caption("Après visionnage de la portion de vidéo analysée : Oui = 1, Non = 0, "
+                       "Non évaluée = valeur manquante. Une vidéo non évaluée n’est jamais considérée comme non violente.")
+            modalites={0:'Non',1:'Oui'}
+            annotations=tableau[['numero_video','publication_id','url']].copy()
+            annotations['violence_physique']=[
+                modalites.get(valeur,'Non évaluée') for valeur in tableau['violence_visible']
+            ]
+            etat_finalise=etat.get('statut') in ('termine','partiel')
+            with st.form("annotations_violence_form"):
+                annotations_modifiees=st.data_editor(
+                    annotations, hide_index=True, use_container_width=True, num_rows="fixed",
+                    disabled=['numero_video','publication_id','url'],
+                    column_config={
+                        'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d'),
+                        'publication_id':st.column_config.TextColumn('ID TikTok'),
+                        'url':st.column_config.LinkColumn('Vidéo TikTok',display_text='Visionner'),
+                        'violence_physique':st.column_config.SelectboxColumn(
+                            'Violence physique visible',options=['Non évaluée','Non','Oui'],
+                            required=True,help=AIDES_INDICATEURS['violence_visible'])
+                    },
+                    key='desordre_annotation_editor'
+                )
+                sauvegarder_annotations=st.form_submit_button(
+                    "Enregistrer les annotations",disabled=not etat_finalise)
+            if sauvegarder_annotations:
+                modifications=[]
+                conversion={'Non évaluée':None,'Non':0,'Oui':1}
+                for (_,avant),(_,apres) in zip(
+                        annotations.iterrows(),annotations_modifiees.iterrows()):
+                    if apres['violence_physique'] != avant['violence_physique']:
+                        modifications.append({
+                            'publication_id':str(apres['publication_id']),
+                            'violence_visible':conversion[apres['violence_physique']]
+                        })
+                if modifications:
+                    try:
+                        api(f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
+                            {'annotations':modifications})
+                    except RuntimeError as erreur:
+                        st.error("Enregistrement impossible : "+str(erreur))
+                    else:
+                        st.rerun()
+                else:
+                    st.info("Aucune annotation modifiée.")
+            effectif_ann=donnees.get('annotations_violence',{})
+            st.caption(f"Annotations sauvegardées : {effectif_ann.get('oui',0)} oui · "
+                       f"{effectif_ann.get('non',0)} non · "
+                       f"{effectif_ann.get('non_evaluees',len(tableau))} non évaluées.")
+            st.link_button("Exporter les annotations (CSV)",
+                f"/api/jobs/{tache_desordre['id']}/desordre/annotations.csv")
             st.subheader("Croiser les variables")
             indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
                 'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
-                'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)'}
+                'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)',
+                'violence_visible':'Violence physique visible — codage manuel (0/1)'}
             engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','favoris':'Nombre de favoris','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
             axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur visuel. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
@@ -791,11 +853,14 @@ with onglet_desordre:
                 if effectifs['superposees']:
                     st.info(f"{effectifs['superposees']} vidéos partagent exactement des coordonnées avec d’autres : leurs points se superposent. Survolez pour retrouver leurs numéros dans le tableau.")
                 if afficher_droite:
-                    specification, raison_droite = superposer_droite_regression(points, specification)
-                    if raison_droite:
-                        st.info("Droite non disponible : " + raison_droite)
+                    if axe_x=='violence_visible':
+                        st.info("Droite non affichée pour le codage binaire 0/1 : comparez directement les deux groupes de vidéos.")
                     else:
-                        st.caption("Droite en pointillés : régression linéaire descriptive sur les valeurs brutes, distincte de la corrélation de Spearman. Elle ne démontre pas de causalité.")
+                        specification, raison_droite = superposer_droite_regression(points, specification)
+                        if raison_droite:
+                            st.info("Droite non disponible : " + raison_droite)
+                        else:
+                            st.caption("Droite en pointillés : régression linéaire descriptive sur les valeurs brutes, distincte de la corrélation de Spearman. Elle ne démontre pas de causalité.")
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
                 else:
                     st.vega_lite_chart(points,specification,use_container_width=True)
@@ -807,12 +872,20 @@ with onglet_desordre:
                             ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée'),(3,0,6,6)):
                         colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
                 else:
-                    st.info("Les corrélations sont calculées à la fin du lot. Elles nécessitent au moins trois publications et des variables non constantes.")
+                    st.info("La corrélation nécessite au moins trois vidéos comparables et des variables non constantes. "
+                            + ("Pour le codage de violence, évaluez plusieurs vidéos dans les deux catégories (0 et 1)."
+                               if axe_x=='violence_visible' else
+                               "Les corrélations automatiques sont disponibles à la fin du lot."))
             with st.expander("Toutes les corrélations"):
                 st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
                               for ligne in donnees.get('correlations',[])],hide_index=True,
                     column_config={nom:st.column_config.Column(help=aide) for nom,aide in AIDES_STATISTIQUES.items()})
-            st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro.")
+            st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro. "
+                       "Les corrélations avec la violence sont exploratoires et calculées uniquement "
+                       "sur les annotations enregistrées, avec correction séparée pour ces huit comparaisons.")
+            if etat.get('statut') in ('termine','partiel'):
+                st.link_button("Corrélations avec violence (CSV)",
+                    f"/api/jobs/{tache_desordre['id']}/desordre/correlations_violence.csv")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
                 if etat.get('statut') in ('termine','partiel') or nom=='indicateurs_engagement.csv':
                     st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
