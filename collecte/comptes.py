@@ -137,7 +137,6 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                     liens.setdefault(identite[0], identite[1])
             publier()
 
-    explorer(f"https://www.tiktok.com/@{compte}", f"@{compte}", "profil_direct")
 
     if len(liens) < arguments.limit:
         for hashtag in hashtags:
