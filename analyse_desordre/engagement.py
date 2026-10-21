@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 TAUX=('likes_pour_1000_vues','commentaires_pour_1000_vues','partages_pour_1000_vues')
-VARIABLES_ENGAGEMENT=('likes','commentaires','partages','vues',*TAUX)
+VARIABLES_ENGAGEMENT=('likes','commentaires','partages','favoris','vues',*TAUX)
 
 
 def nombre_observe(valeur):
@@ -21,7 +21,7 @@ def nombre_observe(valeur):
 def calculer_taux(publication):
     """Taux descriptifs pour 1 000 vues ; un dénominateur nul n'est pas une absence d'engagement."""
     compteurs=publication.get('engagement') or publication
-    valeurs={nom:nombre_observe(compteurs.get(nom)) for nom in ('vues','likes','commentaires','partages')}
+    valeurs={nom:nombre_observe(compteurs.get(nom)) for nom in ('vues','likes','commentaires','partages','favoris')}
     vues=valeurs['vues']
     return {**valeurs,**{nom+'_pour_1000_vues':1000*valeurs[nom]/vues if vues and valeurs[nom] is not None else None
                         for nom in ('likes','commentaires','partages')}}
