@@ -98,12 +98,18 @@ class StartRequest(BaseModel):
     def valider_sources(self):
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
-        if not self.hashtag:
-            if self.source_collecte in {"comptes", "presse"}:
-                raise ValueError("Renseignez au moins un hashtag pour une collecte par profil ou média.")
-            raise ValueError("Le premier hashtag est obligatoire.")
-        if self.second_hashtag and not self.hashtag:
-            raise ValueError("Renseignez le premier hashtag avant le deuxième.")
+        if self.source_collecte == "presse":
+            # La collecte média dépend uniquement des comptes choisis ; ignorer
+            # aussi les anciens hashtags présents dans une requête sauvegardée.
+            self.hashtag = ""
+            self.second_hashtag = ""
+        else:
+            if not self.hashtag:
+                if self.source_collecte == "comptes":
+                    raise ValueError("Renseignez au moins un hashtag pour une collecte par profil.")
+                raise ValueError("Le premier hashtag est obligatoire.")
+            if self.second_hashtag and not self.hashtag:
+                raise ValueError("Renseignez le premier hashtag avant le deuxième.")
         if self.source_collecte == "comptes" and not self.comptes:
             raise ValueError("Renseignez au moins un compte TikTok.")
         if self.source_collecte == "presse":
@@ -167,7 +173,8 @@ def matches_hashtags(description, settings):
     resultats = [correspond(tag) for tag in settings.hashtags]
 
     if not resultats:
-        return False
+        # La collecte presse ne filtre pas les légendes sur les hashtags.
+        return settings.source_collecte == "presse"
 
     return all(resultats) if settings.operator == "AND" else any(resultats)
 
@@ -830,13 +837,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message = ("Aucune publication accessible : consultez le détail des sources."
                              if not links else "Aucune légende exploitable retenue parmi les publications consultées.")
             if not links and job.settings.source_collecte != "hashtags":
-                final_message = ("Aucune publication des comptes sélectionnés trouvée dans les recherches ciblées compte + hashtag. "
-                                 "Consultez le détail par média ; les filtres de langue et de légende n’ont pas été appliqués.")
+                final_message = ("Aucune publication publique accessible pour les comptes sélectionnés. "
+                                 "Consultez les diagnostics de chaque source ; les filtres de langue et de légende n’ont pas été appliqués.")
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only and job.processed:
             if not job.records and job.non_french:
-                final_message = "Aucun texte retenu par le filtre français parmi les descriptions correspondant aux hashtags."
+                final_message = "Aucun texte retenu par le filtre français parmi les légendes consultées."
             final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée conservés."
         if job.settings.hashtags and job.processed:
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
@@ -855,7 +862,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if job.settings.source_collecte != "hashtags":
             final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
-                              if recherche_partielle else " Recherches compte + hashtag limitées au nombre demandé par compte ; historique complet non garanti.")
+                              if recherche_partielle else " Collecte limitée au nombre demandé par compte ; historique complet non garanti.")
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:
