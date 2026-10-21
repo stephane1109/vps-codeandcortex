@@ -60,4 +60,6 @@ RUN python -c "from detection import charger_modele; charger_modele()"
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.getenv('PORT','8501')+'/_stcore/health',timeout=3)"
-CMD ["sh", "-c", "exec streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-8501}"]
+# Maintenir la configuration Redis visible depuis le dashboard sans session ouverte.
+# Le processus de synchronisation partage le même cycle de vie que le conteneur.
+CMD ["sh", "-c", "python -u /app/synchronisation_dashboard.py & exec streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-8501}"]
