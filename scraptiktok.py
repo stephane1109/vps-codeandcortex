@@ -488,6 +488,13 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             diagnostic["code"] = "connexion_sans_publications_publiques"
         raise
     fermer_invitation_connexion(driver)
+    if report.get("mode_decouverte") == "profil_direct":
+        diagnostic = diagnostiquer_page(driver, report)
+        if diagnostic["code"] == "erreur_tiktok":
+            report["discovery_stop"] = "tiktok_error"
+            raise RuntimeError(
+                "TikTok ne charge pas le profil public."
+            )
     if (comptes and report.get("mode_decouverte") == "recherche_compte_hashtag"
             and type_intervention_tiktok(driver) == "connexion"):
         # La recherche peut exiger une connexion alors que le hashtag reste public.
