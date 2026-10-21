@@ -1,6 +1,7 @@
 """Annotations humaines de violence : persistance, API privée, exclusion des non-évaluées."""
 import json
 import tempfile
+import pandas as pd
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,7 +10,7 @@ from fastapi.testclient import TestClient
 import webapp as web
 from analyse_desordre.annotation import (
     lire_annotations, enregistrer_annotations, exporter_annotations_csv,
-    correlations_violence
+    correlations_violence, modifications_depuis_tableau, publications_annotables
 )
 from analyse_desordre.service import ecrire_etat
 
@@ -41,6 +42,35 @@ class TestsAnnotations(unittest.TestCase):
             ],lire_annotations(session))
             self.assertIn("123;https://www.tiktok.com/@x/video/123;\r\n",csv)
             self.assertIn("456;https://www.tiktok.com/@x/video/456;1",csv)
+
+    def test_menus_deroulants_dans_tableau_principal_codes_et_identifiants(self):
+        avant=pd.DataFrame({
+            "publication_id":["7697829530844663072","101","102"],
+            "annotation_violence":["Non évaluée","Non (0)","Oui (1)"]
+        })
+        apres=avant.copy()
+        # Simuler un tableau trié par l'utilisateur avant l'enregistrement.
+        apres=apres.iloc[[2,0,1]].reset_index(drop=True)
+        apres.loc[apres["publication_id"]=="7697829530844663072","annotation_violence"]="Oui (1)"
+        apres.loc[apres["publication_id"]=="101","annotation_violence"]="Non évaluée"
+        changements=modifications_depuis_tableau(avant,apres)
+        self.assertEqual(changements,[
+            {"publication_id":"7697829530844663072","violence_visible":1},
+            {"publication_id":"101","violence_visible":None}
+        ])
+        self.assertEqual(modifications_depuis_tableau(avant,avant),[])
+        invalide=apres.copy()
+        invalide.loc[0,"annotation_violence"]="inconnue"
+        with self.assertRaises(ValueError):
+            modifications_depuis_tableau(avant,invalide)
+
+    def test_publications_supplementaires_conservent_identifiants_et_urls(self):
+        publications=publications_annotables(
+            [{"id":"123","url":"https://www.tiktok.com/@test/video/123"}],
+            [{"publication_id":"123"},{"publication_id":"456","url":"https://www.tiktok.com/@test/video/456"}]
+        )
+        self.assertEqual([p["id"] for p in publications],["123","456"])
+        self.assertEqual(publications[1]["url"],"https://www.tiktok.com/@test/video/456")
 
     def test_correlations_binaires_excluent_non_evaluees(self):
         with tempfile.TemporaryDirectory() as d:
