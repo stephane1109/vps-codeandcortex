@@ -278,6 +278,13 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(web.matches_hashtags("#gréviste", settings))
         self.assertEqual(settings.filename, "tiktok_GRÈVE_OU_école.txt")
 
+    def test_hashtag_17octobre_reconnait_aussi_17_octobre_dans_le_texte(self):
+        settings = web.StartRequest(hashtag="17octobre")
+        self.assertTrue(web.matches_hashtags("#17octobre mobilisation", settings))
+        self.assertTrue(web.matches_hashtags("Manifestation le 17 octobre au lycée", settings))
+        self.assertFalse(web.matches_hashtags("Manifestation du 18 octobre", settings))
+        self.assertFalse(web.matches_hashtags("Manifestation des lycéens", settings))
+
     def test_two_searches_deduplicate_and_export_only_matching_descriptions(self):
         urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111, 222, 333)]
         records = {url: dict(RECORD, id=str(i), url=url, description=caption) for i, url, caption in zip(
