@@ -53,7 +53,11 @@ class TestVariantesHashtags(unittest.TestCase):
         def trouver(navigateur, arguments, rapport, **options):
             visités.append((rapport["hashtag_url"], arguments.limit))
             # Deux pages différentes peuvent présenter des vidéos identiques.
-            return [urls[0]] if len(visités) == 1 else urls[:arguments.limit + 1]
+            if len(visités) == 1:
+                return [urls[0]]
+            if len(visités) == 2:
+                return [urls[0], urls[1]]
+            return [urls[0], urls[2]]
 
         resultat = []
         with patch("collecte.hashtags.collecter_hashtag", side_effect=trouver):
