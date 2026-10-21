@@ -26,6 +26,25 @@ class TestsPresentationDesordre(unittest.TestCase):
         self.assertTrue(any(t['field']=='numero_video' for t in specification['encoding']['tooltip']))
         self.assertIn('replace',specification['encoding']['y']['axis']['labelExpr'])
 
+    def test_favoris_en_axe_vertical_et_en_entiers(self):
+        tableau=pd.DataFrame({
+            'numero_video':[1,2,3,4],
+            'publication_id':['10','11','12','13'],
+            'indice_desordre':[5,15,25,35],
+            'favoris':[1000,1500,None,0],
+        })
+        points,specification,effectifs=preparer_graphique(
+            tableau,'indice_desordre','favoris','Indice','Nombre de favoris')
+        self.assertEqual(effectifs['videos'],3)
+        self.assertEqual(effectifs['exclues'],1)
+        self.assertEqual(points['y'].tolist(),[1000.,1500.,0.])
+        self.assertEqual(points.iloc[0]['valeur_y'],'1 000')
+        self.assertEqual(specification['encoding']['y']['axis']['tickMinStep'],1)
+        self.assertTrue(any(t['field']=='valeur_y' for t in specification['encoding']['tooltip']))
+        graphique,raison=superposer_droite_regression(points,specification)
+        self.assertIsNone(raison)
+        self.assertEqual(graphique['layer'][0]['transform'][0]['regression'],'y')
+
     def test_droite_disponible_et_superposee_sans_modifier_les_points(self):
         tableau=pd.DataFrame({
             'numero_video':[1,2,3,4],
