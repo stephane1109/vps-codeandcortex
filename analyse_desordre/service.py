@@ -105,7 +105,7 @@ if __name__=='__main__':
     arguments.add_argument('--dossier',required=True)
     arguments.add_argument('--frequence',type=float,default=10.)
     arguments.add_argument('--dimension',type=int,default=320)
-    arguments.add_argument('--duree-max',type=float,default=60.)
+    arguments.add_argument('--duree-max',type=float,default=30.)
     arguments.add_argument('--telecharger-manquants',action='store_true')
     options=arguments.parse_args()
     executer(options.session,options.dossier,options.frequence,options.dimension,options.duree_max,options.telecharger_manquants)
