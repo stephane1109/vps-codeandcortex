@@ -127,7 +127,7 @@ def principale():
     arguments.add_argument('--sortie',required=True,type=Path,help='Nouveau dossier réservé aux résultats.')
     arguments.add_argument('--frequence',type=float,default=10.,help='Images analysées par seconde (10 par défaut).')
     arguments.add_argument('--dimension',type=int,default=320,help='Dimension maximale des images en pixels.')
-    arguments.add_argument('--duree-max',type=float,default=60.,help='Durée maximale par vidéo en secondes.')
+    arguments.add_argument('--duree-max',type=float,default=30.,help='Durée maximale par vidéo en secondes (30 par défaut).')
     arguments.add_argument('--permutations',type=int,default=1999,help='Tirages Monte-Carlo pour Spearman.')
     options=arguments.parse_args()
     try:
