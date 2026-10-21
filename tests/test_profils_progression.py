@@ -67,7 +67,7 @@ class TestCollecteProfil(unittest.TestCase):
 
     def test_recherche_generale_ignoree_si_profil_a_des_liens(self):
         urls = ["https://www.tiktok.com/@lemondefr/video/12345"]
-        args = argparse.Namespace(limit=50)
+        args = argparse.Namespace(limit=1)
         with patch("collecte.comptes.collecter_profil_public",
                    return_value=urls) as profil, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
@@ -80,6 +80,62 @@ class TestCollecteProfil(unittest.TestCase):
         self.assertEqual(rapport["retenues_par_compte"], {"lemondefr": 1})
         profil.assert_called_once()
         recherche.assert_not_called()
+
+
+    def test_profil_partiel_recherche_les_videos_manquantes(self):
+        initiales = [
+            f"https://www.tiktok.com/@lemondefr/video/{1100+i}"
+            for i in range(6)
+        ]
+        suivantes = [
+            initiales[0], initiales[1],
+            "https://www.tiktok.com/@lemondefr/video/2001",
+            "https://www.tiktok.com/@lemondefr/video/2002",
+            "https://www.tiktok.com/@autre/video/9999",
+        ]
+        args = argparse.Namespace(limit=8)
+        def recherche(navigateur, arguments, rapport, **options):
+            self.assertEqual(options["liens_precedents"], initiales)
+            self.assertEqual(rapport["compte_attendu"], "lemondefr")
+            self.assertFalse(options["intervention_si_vide"])
+            return suivantes
+        with patch("collecte.comptes.collecter_profil_public", return_value=initiales), \
+             patch("collecte.recherche_comptes.collecter_recherche_compte",
+                   side_effect=recherche) as supplement:
+            rapport = {}
+            resultat = collecter_compte(
+                Mock(), args, "lemondefr", rapport, hashtags=(), interact=Mock(),
+            )
+        self.assertEqual(len(resultat), 8)
+        self.assertEqual(len(set(resultat)), 8)
+        self.assertTrue(all("/@lemondefr/" in u for u in resultat))
+        self.assertEqual(rapport["retenues_par_compte"], {"lemondefr": 8})
+        self.assertFalse(rapport["collecte_partielle"])
+        supplement.assert_called_once()
+
+    def test_recherche_complementaire_compte_les_liens_deja_trouves(self):
+        from collecte.recherche_comptes import collecter_recherche_compte
+        args = argparse.Namespace(limit=3, timeout=20, max_scrolls=40, idle_rounds=3,
+                                  delay=3.0, interactive=True)
+        url = "https://www.tiktok.com/@leparisien/video/123"
+        compte = {"compte_attendu": "leparisien"}
+        driver = Mock()
+        with patch("collecte.recherche_comptes.ObservationRecherche") as observation, \
+             patch("scraptiktok.open_page") as charger:
+            resultat = collecter_recherche_compte(
+                driver, args, compte, interact=Mock(),
+                liens_precedents=[
+                    url,
+                    "https://www.tiktok.com/@leparisien/video/456",
+                    "https://www.tiktok.com/@leparisien/video/789",
+                    "https://www.tiktok.com/@autre/video/999",
+                ],
+            )
+        self.assertEqual(len(resultat), 3)
+        self.assertEqual(compte["discovery_stop"], "limit")
+        self.assertEqual(compte["objectif_atteint"], True)
+        charger.assert_called_once()
+        observation.return_value.fermer.assert_called_once()
 
 
 if __name__ == "__main__":
