@@ -24,9 +24,14 @@ class ConnexionHashtag(SessionNavigateur):
         for hashtag in demandes:
             variantes = variantes_hashtag(
                 hashtag, avec_accents=parametres.variantes_accents)
-            # Supprimer les doublons entre recherches sans perdre le lien vers le tag initial.
-            variantes = [v for v in variantes if v.casefold() not in vus
-                         and not vus.add(v.casefold())]
+            # Supprimer les doublons entre recherches sans perdre le tag initial.
+            distinctes = []
+            for variante in variantes:
+                cle = variante.casefold()
+                if cle not in vus:
+                    vus.add(cle)
+                    distinctes.append(variante)
+            variantes = distinctes
             for rang, variante in enumerate(variantes):
                 sources.append({
                     "hashtag": variante, "hashtag_demande": hashtag,
