@@ -165,9 +165,15 @@ L’interface présente le nombre de MP4 locaux, une progression, un bouton d’
 les mesures par vidéo, un graphique interactif et les exports CSV. Le menu
 « Variable à croiser » propose le nombre de likes par défaut, mais aussi les
 commentaires, partages, vues et les trois taux pour 1 000 vues. Le changement de
-variable réutilise les mesures sans réanalyser les vidéos. Le tableau de Spearman
-indique rho, n, p et p ajustée pour chaque couple disponible. Les PNG autonomes
-restent consacrés aux trois taux ; le graphique interactif couvre les sept variables.
+variable réutilise les mesures sans réanalyser les vidéos. Une case
+« Afficher la droite de régression linéaire » ajoute facultativement au nuage de
+points une droite en pointillés, calculée par les moindres carrés sur les valeurs
+brutes. Elle est indisponible avec moins de trois observations valides ou lorsqu'une
+variable est constante. Cette droite linéaire ne représente pas le rho de Spearman,
+calculé sur les rangs, et ne démontre pas de causalité ; elle est sensible aux
+valeurs extrêmes. Le tableau de Spearman indique rho, n, p et p ajustée pour
+chaque couple disponible. Les PNG autonomes restent consacrés aux trois taux ;
+le graphique interactif couvre les sept variables.
 
 L'import du paquet seul ne charge ni OpenCV ni modèle. L'appel Python est synchrone ;
 l’interface utilise `service.py` dans un processus séparé, réservé au propriétaire
