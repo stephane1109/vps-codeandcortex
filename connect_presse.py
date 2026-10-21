@@ -2,7 +2,6 @@
 from collecte.presse import selectionner_medias
 from collecte.session_navigateur import SessionNavigateur
 from collecte.verification_comptes import normaliser_compte
-from scraptiktok import normalize_hashtag
 
 
 class ConnexionPresse(SessionNavigateur):
@@ -10,9 +9,6 @@ class ConnexionPresse(SessionNavigateur):
 
     def preparer_sources(self, parametres):
         """Résoudre uniquement les médias cochés dans l’inventaire de presse."""
-        self.hashtags = tuple(dict.fromkeys(normalize_hashtag(h) for h in parametres.hashtags))
-        if not self.hashtags:
-            raise ValueError("Renseignez au moins un hashtag pour les médias sélectionnés.")
         medias = selectionner_medias(parametres.medias)
         if not medias:
             raise ValueError("Sélectionnez au moins un média.")
@@ -20,7 +16,7 @@ class ConnexionPresse(SessionNavigateur):
         return [dict(media) for media in medias]
 
     def decouvrir(self, source, rapport, *, contexte="", progression=None):
-        """Rechercher chaque couple média + hashtag sans visiter le profil."""
+        """Parcourir uniquement les comptes de médias, sans filtre de hashtag."""
         from collecte.comptes import collecter_compte
 
         media = getattr(self, "medias_selectionnes", {}).get(source.get("id"))
@@ -28,5 +24,5 @@ class ConnexionPresse(SessionNavigateur):
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
         rapport.update(media_id=media["id"], compte_selectionne=media["compte"])
         return collecter_compte(self.obtenir_navigateur(), self.arguments, media["compte"],
-            rapport=rapport, hashtags=list(self.hashtags),
+            rapport=rapport, hashtags=(),
             **self.options_decouverte(rapport, contexte, progression))
