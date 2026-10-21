@@ -323,6 +323,19 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             web.StartRequest(source_collecte="hashtags")
 
+    def test_connecteur_medias_transmet_un_profil_sans_hashtags(self):
+        from connect_presse import ConnexionPresse
+
+        params = web.StartRequest(source_collecte="presse", medias=["lemonde"])
+        connexion = ConnexionPresse(Mock())
+        sources = connexion.preparer_sources(params)
+        self.assertEqual([s["compte"] for s in sources], ["lemondefr"])
+        connexion.navigateur = Mock()
+        with patch("collecte.comptes.collecter_compte", return_value=[]) as collecte:
+            self.assertEqual(connexion.decouvrir(sources[0], {}), [])
+        self.assertEqual(collecte.call_args.args[2], "lemondefr")
+        self.assertEqual(collecte.call_args.kwargs["hashtags"], ())
+
     def test_presse_ne_lit_et_n_exporte_que_les_comptes_selectionnes(self):
         params = web.StartRequest(source_collecte="presse", medias=["lemonde"],
                                   limit=2, french_only=False)
