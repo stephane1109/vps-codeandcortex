@@ -53,6 +53,7 @@ class StartRequest(BaseModel):
     second_hashtag: str = Field(default="", max_length=100)
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
+    variantes_accents: bool = False
     limit: int = Field(default=50, ge=1, le=1000)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
@@ -105,6 +106,7 @@ class StartRequest(BaseModel):
             self.hashtag = ""
             self.second_hashtag = ""
             self.rechercher_dans_texte = False
+            self.variantes_accents = False
         else:
             if not self.hashtag:
                 if self.source_collecte == "comptes":
@@ -157,12 +159,16 @@ def normaliser_terme_texte(texte):
                    if not unicodedata.combining(caractere))
 
 
-def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False):
+def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False,
+                           variantes_accents=False):
     """Comparer un hashtag entier ; lire les mots de la légende seulement sur demande."""
     texte = tag_key(description or "")
     terme = tag_key(hashtag).removeprefix("#")
     presents = set(re.findall(r"#(\w+)", texte))
     if terme in presents:
+        return True
+    if variantes_accents and normaliser_terme_texte(terme) in {
+            normaliser_terme_texte(present) for present in presents}:
         return True
     if not rechercher_dans_texte:
         return False
@@ -183,7 +189,8 @@ def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False)
 def matches_hashtags(description, settings):
     resultats = [
         correspondance_hashtag(description, tag,
-            rechercher_dans_texte=settings.rechercher_dans_texte)
+            rechercher_dans_texte=settings.rechercher_dans_texte,
+            variantes_accents=settings.variantes_accents)
         for tag in settings.hashtags
     ]
 
@@ -425,6 +432,7 @@ class Job:
             return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
+                    "variantes_accents": self.settings.variantes_accents,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "bilan_hashtags": dict(self.bilan_hashtags),
@@ -754,7 +762,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 for hashtag in job.bilan_hashtags:
                                     if correspondance_hashtag(
                                             record["description"], hashtag,
-                                            rechercher_dans_texte=job.settings.rechercher_dans_texte):
+                                            rechercher_dans_texte=job.settings.rechercher_dans_texte,
+                                            variantes_accents=job.settings.variantes_accents):
                                         job.bilan_hashtags[hashtag] += 1
                                 if matches:
                                     job.correspondances_hashtags += 1
