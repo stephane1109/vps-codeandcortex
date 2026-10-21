@@ -51,3 +51,116 @@ def collecter_requete_compte(navigateur, arguments, compte, hashtag, rapport=Non
     except Exception:
         rapport["recherches_en_echec"] = 1
         raise
+  def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), **options):
+    """Parcourir le profil public, puis compléter par les hashtags."""
+    from scraptiktok import (
+        canonical_post, collect_links, est_erreur_session,
+        normalize_hashtag, WebDriverException,
+    )
+
+    compte = normaliser_compte(compte)
+    hashtags = list(dict.fromkeys(normalize_hashtag(h) for h in hashtags))
+    if not hashtags:
+        raise ValueError("Renseignez au moins un hashtag.")
+
+    rapport = rapport if rapport is not None else {}
+    options = dict(options)
+    interaction = options.pop("interact", None)
+    progression = options.pop("progress", None)
+    validation_initiale = options.pop("validation_initiale", True)
+    liens = {}
+    recherches = []
+    derniere_erreur = None
+    session_validee = False
+
+    def intervenir(message):
+        nonlocal session_validee
+        if interaction is not None:
+            interaction(message)
+        else:
+            from scraptiktok import manual_step
+            manual_step(message)
+        session_validee = True
+
+    def explorer(adresse, etiquette, mode):
+        nonlocal derniere_erreur
+        courant = {
+            "hashtag_url": adresse,
+            "requete_recherche": etiquette,
+            "mode_decouverte": mode,
+            "compte_attendu": compte,
+            "recherches_en_echec": 0,
+        }
+        recherches.append(courant)
+
+        def publier(_nombre=0):
+            visibles = dict(liens)
+            for url in courant.get("discovered_urls", []):
+                identite = canonical_post(url)
+                if identite and identite[2].casefold() == compte and len(visibles) < arguments.limit:
+                    visibles.setdefault(identite[0], identite[1])
+            rapport.update(
+                requete_recherche=etiquette,
+                candidats_examines=sum(r.get("candidats_examines", 0) for r in recherches),
+                recherches_hashtags=recherches,
+                discovered_urls=list(visibles.values()),
+                retenues_par_compte={compte: len(visibles)},
+                recherches_en_echec=sum(r.get("recherches_en_echec", 0) for r in recherches),
+            )
+            if progression:
+                progression(len(visibles))
+
+        reglages = dict(
+            options,
+            interact=intervenir,
+            progress=publier,
+            validation_initiale=validation_initiale and not session_validee,
+        )
+        try:
+            collect_links(
+                navigateur, arguments, courant,
+                comptes_attendus=[compte],
+                liens_precedents=list(liens.values()),
+                **reglages,
+            )
+        except (RuntimeError, WebDriverException) as erreur:
+            derniere_erreur = erreur
+            courant["recherches_en_echec"] = 1
+            courant["erreur"] = str(erreur)
+            if est_erreur_session(erreur):
+                raise
+        finally:
+            for url in courant.get("discovered_urls", []):
+                identite = canonical_post(url)
+                if identite and identite[2].casefold() == compte and len(liens) < arguments.limit:
+                    liens.setdefault(identite[0], identite[1])
+            publier()
+
+    explorer(f"https://www.tiktok.com/@{compte}", f"@{compte}", "profil_direct")
+
+    if len(liens) < arguments.limit:
+        for hashtag in hashtags:
+            explorer(
+                f"https://www.tiktok.com/tag/{quote(hashtag)}",
+                f"#{hashtag}",
+                "hashtags_comptes",
+            )
+            if len(liens) >= arguments.limit:
+                break
+
+    rapport.update(
+        discovered_urls=list(liens.values()),
+        recherches_hashtags=recherches,
+        recherches_en_echec=sum(r.get("recherches_en_echec", 0) for r in recherches),
+        retenues_par_compte={compte: len(liens)},
+        collecte_partielle=len(liens) < arguments.limit,
+        exhaustif=False,
+        bilan_recherche=(
+            f"@{compte} : {len(liens)} publication(s) publique(s) découverte(s). "
+            "Profil parcouru en premier ; hashtags utilisés en complément. "
+            "Résultats non exhaustifs."
+        ),
+    )
+    if not liens and derniere_erreur is not None:
+        raise derniere_erreur
+    return list(liens.values())
