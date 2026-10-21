@@ -144,12 +144,21 @@ def tag_key(value):
 
 
 def matches_hashtags(description, settings):
-    # Un seul hashtag : la découverte TikTok suffit.
-    if not settings.second_hashtag:
-        return True
-    # Deux hashtags : conserver le filtre ET/OU.
     presents = set(re.findall(r"#(\w+)", tag_key(description)))
-    matches = [tag_key(tag) in presents for tag in settings.hashtags]
+    recherches = [tag_key(tag) for tag in settings.hashtags]
+
+    if not recherches:
+        return False
+
+    if settings.operator == "AND":
+        return all(tag in presents for tag in recherches)
+
+    return any(tag in presents for tag in recherches)
+
+
+class Point(BaseModel):
+    x: float = Field(ge=0, le=1, allow_inf_nan=False)
+    y: float = Field(ge=0, le=1, allow_inf_nan=False)
 
     return all(matches) if settings.operator == "AND" else any(matches)
 
