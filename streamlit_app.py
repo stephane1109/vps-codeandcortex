@@ -327,6 +327,7 @@ with onglet_collecte:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
                             st.caption(" · ".join(indices))
             if actuel.get("apercu_engagement"):
+                st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres. Le tableau inclut aussi les publications non retenues dans le TXT.")
                 def compteur(mesure):
                     if mesure.get("valeur") is None: return "Indisponible"
                     return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
@@ -335,6 +336,7 @@ with onglet_collecte:
                     ligne = {"Auteur": "@" + publication["author"], "Publication": publication["url"], "URL TikTok": publication["url"]}
                     for cle, titre in (("likes", "Likes"), ("vues", "Vues"), ("partages", "Partages"), ("commentaires", "Nombre de commentaires")):
                         ligne[titre] = compteur(publication.get("engagement", {}).get(cle, {}))
+                    ligne["Retenue dans le TXT"] = "Oui" if publication.get("retenue_txt",True) else "Non"
                     ligne["Langue"] = {"fr": "Français", "unknown": "Indéterminée"}.get(publication.get("langue_detection"), "Non évaluée")
                     lignes.append(ligne)
                 st.dataframe(lignes, hide_index=True, column_config={"Publication": st.column_config.LinkColumn("Publication", display_text="Ouvrir")})
@@ -602,8 +604,14 @@ with onglet_desordre:
             if etat.get('erreurs_telechargement'):
                 st.warning("MP4 exclus du lot : détail des échecs de téléchargement ci-dessous.")
                 st.dataframe(etat['erreurs_telechargement'],hide_index=True)
-            lignes=donnees.get('indicateurs',[])
+            resultats=donnees.get('indicateurs',[])
+            absentes=donnees.get('sans_resultat',[])
+            lignes=resultats+absentes
+            if absentes and etat.get('statut') in ('termine','partiel','echec','interrompu'):
+                st.warning(f"Analyse incomplète : {len(absentes)} publication(s) du corpus n’ont aucun résultat enregistré. Consultez les lignes sans résultat et relancez l’analyse pour les traiter.")
             if not lignes: return
+            total_collecte=max(donnees.get('publications_collectees',0),len(lignes))
+            st.caption(f"{len(resultats)} publication(s) avec un résultat enregistré sur {total_collecte} · {max(0,total_collecte-len(resultats))} sans résultat enregistré. Un résultat peut lui-même signaler une erreur.")
             if etat.get('statut') not in ('termine','partiel'):
                 st.info('Résultats intermédiaires sauvegardés : les vidéos déjà traitées restent consultables, même si le lot est encore en cours ou a été interrompu.')
             import pandas as pd
@@ -633,7 +641,7 @@ with onglet_desordre:
             else:
                 st.markdown("**Comprendre l’indicateur choisi**",help=AIDES_INDICATEURS[axe_x])
                 points,specification,effectifs=preparer_graphique(tableau,axe_x,axe_y,indicateurs[axe_x],engagements[axe_y])
-                st.caption(f"{effectifs['videos']} vidéo(s) représentée(s) sur {len(tableau)} · {effectifs['exclues']} exclue(s) faute de mesures valides · {effectifs['positions']} position(s) distincte(s). Un point = une vidéo ; des points très proches peuvent aussi se masquer visuellement.")
+                st.caption(f"{effectifs['videos']} vidéo(s) représentée(s) sur {total_collecte} publications collectées · {max(0,total_collecte-len(resultats))} sans résultat · {max(0,effectifs['exclues']-len(absentes))} résultat(s) sans les deux mesures valides · {effectifs['positions']} position(s) distincte(s). Un point = une vidéo ; des points très proches peuvent aussi se masquer visuellement.")
                 if effectifs['superposees']:
                     st.info(f"{effectifs['superposees']} vidéos partagent exactement des coordonnées avec d’autres : leurs points se superposent. Survolez pour retrouver leurs numéros dans le tableau.")
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
@@ -648,9 +656,6 @@ with onglet_desordre:
                         colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
                 else:
                     st.info("Les corrélations sont calculées à la fin du lot. Elles nécessitent au moins trois publications et des variables non constantes.")
-            st.markdown("**Spearman est-il adapté ?**",help=AIDE_SPEARMAN)
-            with st.expander("Comment interpréter cette corrélation ?"):
-                st.write(AIDE_SPEARMAN)
             with st.expander("Toutes les corrélations"):
                 st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
                               for ligne in donnees.get('correlations',[])],hide_index=True,

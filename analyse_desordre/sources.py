@@ -55,3 +55,19 @@ def inventaire_sources(session):
     manquantes=[p for p in publications if str(p.get('id') or p.get('publication_id')) not in fichiers]
     return {'publications_collectees':len(publications),'mp4_locaux':len(fichiers),
         'mp4_manquants':len(manquantes),'mp4_telechargeables':sum(url_telechargeable(p) for p in manquantes)}
+
+
+def publications_sans_resultat(session,lignes,etat):
+    """Afficher les publications absentes du résultat sans inventer de mesure."""
+    presents={str(ligne.get('publication_id')) for ligne in lignes}
+    erreurs={str(ligne['publication_id']):ligne for ligne in etat.get('erreurs_telechargement',[])}
+    resultat=[]
+    for publication in lire_publications(session):
+        identifiant=str(publication.get('id') or publication.get('publication_id'))
+        if identifiant in presents: continue
+        presents.add(identifiant)
+        erreur=erreurs.get(identifiant)
+        resultat.append({'publication_id':identifiant,'url':publication.get('url'),
+            'statut':'telechargement_echoue' if erreur else 'en_attente' if etat.get('statut')=='en_cours' else 'sans_resultat',
+            'erreur':erreur.get('detail') if erreur else 'Aucun résultat enregistré pour cette publication.'})
+    return resultat
