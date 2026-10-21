@@ -1380,8 +1380,12 @@ def create_app(manager=None):
         dossier=dossier_desordre(job,etat)
         if dossier is None or etat.get('statut') not in ('termine','partiel'):
             raise HTTPException(409, "Terminez d’abord l’analyse du désordre visuel.")
-        publications=lire_publications(job.directory)
-        identifiants={str(p.get('id') or p.get('publication_id')) for p in publications}
+        from analyse_desordre.service import lire_tableau
+        from analyse_desordre.annotation import publications_annotables
+        publications=publications_annotables(
+            lire_publications(job.directory),
+            lire_tableau(dossier/'indicateurs_engagement.csv'))
+        identifiants={p['id'] for p in publications}
         changements=[p.model_dump() for p in modifications.annotations]
         with job.lock:
             try:
@@ -1394,10 +1398,17 @@ def create_app(manager=None):
     def export_annotations_desordre(job_id: str, request: Request):
         job=manager.get(owner(request),job_id)
         from analyse_desordre.sources import lire_publications
-        from analyse_desordre.annotation import lire_annotations, exporter_annotations_csv
+        from analyse_desordre.service import lire_etat, lire_tableau
+        from analyse_desordre.annotation import (
+            lire_annotations, exporter_annotations_csv, publications_annotables
+        )
+        etat=lire_etat(job.directory)
+        dossier=dossier_desordre(job,etat)
+        lignes=lire_tableau(dossier/'indicateurs_engagement.csv') if dossier else []
         with job.lock:
             codes=lire_annotations(job.directory)
-        texte=exporter_annotations_csv(lire_publications(job.directory),codes)
+        publications=publications_annotables(lire_publications(job.directory),lignes)
+        texte=exporter_annotations_csv(publications,codes)
         return Response(texte,media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition":'attachment; filename="annotations_violence.csv"'})
 
