@@ -159,14 +159,7 @@ def matches_hashtags(description, settings):
 class Point(BaseModel):
     x: float = Field(ge=0, le=1, allow_inf_nan=False)
     y: float = Field(ge=0, le=1, allow_inf_nan=False)
-
-    return all(matches) if settings.operator == "AND" else any(matches)
-
-
-class Point(BaseModel):
-    x: float = Field(ge=0, le=1, allow_inf_nan=False)
-    y: float = Field(ge=0, le=1, allow_inf_nan=False)
-
+    
 
 class BrowserAction(BaseModel):
     kind: Literal["click", "drag", "pointer_down", "pointer_move", "pointer_up", "pointer_cancel", "text", "key", "scroll"]
