@@ -354,8 +354,9 @@ class Job:
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
                     "action_error": self.action_error, "can_download": bool(self.records),
                     "apercu_engagement": [{"id": r["id"], "author": r["author"], "url": r["url"],
-                        "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection")}
-                        for r in self.records[:100]],
+                        "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection"),
+                        "retenue_txt": bool(r.get("retenue", r in self.records))}
+                        for r in (self.publications or self.records)],
                     "preview": [{"author": r["author"], "description": r["description"]}
                                 for r in self.records[:5]]}
 
@@ -1049,10 +1050,12 @@ def create_app(manager=None):
         from analyse_desordre.service import lire_etat, lire_tableau, dependances_disponibles
         etat=lire_etat(job.directory);dossier=dossier_desordre(job,etat)
         disponibles=dossier is not None
-        from analyse_desordre.sources import inventaire_sources
+        from analyse_desordre.sources import inventaire_sources, publications_sans_resultat
+        lignes=lire_tableau(dossier/'indicateurs_engagement.csv') if disponibles else []
         return {'etat':etat,'disponible':dependances_disponibles(),
             **inventaire_sources(job.directory),
-            'indicateurs':lire_tableau(dossier/'indicateurs_engagement.csv') if disponibles else [],
+            'indicateurs':lignes,
+            'sans_resultat':publications_sans_resultat(job.directory,lignes,etat),
             'correlations':lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []}
 
     @app.get("/api/jobs/{job_id}/desordre/export/{nom}")
