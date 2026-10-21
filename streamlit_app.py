@@ -772,59 +772,66 @@ with onglet_desordre:
             tableau.insert(0,'numero_video',range(1,len(tableau)+1))
             st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
             st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage.")
-            st.dataframe(tableau,hide_index=True,column_config={
-                **{nom:st.column_config.Column(help=aide) for nom,aide in AIDES_COLONNES.items() if nom in tableau},
-                'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
-                'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
-                'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',help=AIDES_INDICATEURS['vitesse_residuelle']),
-                'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])})
-
-            # Grille dédiée au codage qualitatif, indépendante de l'analyse MP4.
-            st.markdown("**Annotation manuelle — violence physique visible**")
-            st.caption("Après visionnage de la portion de vidéo analysée : Oui = 1, Non = 0, "
-                       "Non évaluée = valeur manquante. Une vidéo non évaluée n’est jamais considérée comme non violente.")
-            modalites={0:'Non',1:'Oui'}
-            annotations=tableau[['numero_video','publication_id','url']].copy()
-            annotations['violence_physique']=[
-                modalites.get(valeur,'Non évaluée') for valeur in tableau['violence_visible']
-            ]
+            # Une seule grille : menus déroulants directement dans la colonne
+            # de chaque vidéo ; toutes les mesures automatiques restent protégées.
+            from analyse_desordre.annotation import modifications_depuis_tableau
+            options_violence=('Non évaluée','Non (0)','Oui (1)')
+            etiquette_violence={None:'Non évaluée',0:'Non (0)',1:'Oui (1)'}
+            tableau_editable=tableau.copy()
+            tableau_editable.insert(1,'annotation_violence',[
+                etiquette_violence.get(
+                    None if pd.isna(valeur) else int(valeur),'Non évaluée')
+                for valeur in tableau['violence_visible']
+            ])
+            colonnes_visibles=[nom for nom in tableau_editable.columns
+                              if nom!='violence_visible']
             etat_finalise=etat.get('statut') in ('termine','partiel')
-            with st.form("annotations_violence_form"):
-                annotations_modifiees=st.data_editor(
-                    annotations, hide_index=True, use_container_width=True, num_rows="fixed",
-                    disabled=['numero_video','publication_id','url'],
-                    column_config={
-                        'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d'),
-                        'publication_id':st.column_config.TextColumn('ID TikTok'),
-                        'url':st.column_config.LinkColumn('Vidéo TikTok',display_text='Visionner'),
-                        'violence_physique':st.column_config.SelectboxColumn(
-                            'Violence physique visible',options=['Non évaluée','Non','Oui'],
-                            required=True,help=AIDES_INDICATEURS['violence_visible'])
-                    },
-                    key=f"desordre_annotation_editor_{tache_desordre['id']}_{donnees.get('annotation_version','0')}"
-                )
-                sauvegarder_annotations=st.form_submit_button(
-                    "Enregistrer les annotations",disabled=not etat_finalise)
-            if sauvegarder_annotations:
-                modifications=[]
-                conversion={'Non évaluée':None,'Non':0,'Oui':1}
-                for (_,avant),(_,apres) in zip(
-                        annotations.iterrows(),annotations_modifiees.iterrows()):
-                    if apres['violence_physique'] != avant['violence_physique']:
-                        modifications.append({
-                            'publication_id':str(apres['publication_id']),
-                            'violence_visible':conversion[apres['violence_physique']]
-                        })
-                if modifications:
-                    try:
-                        api(f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
-                            {'annotations':modifications})
-                    except RuntimeError as erreur:
-                        st.error("Enregistrement impossible : "+str(erreur))
-                    else:
-                        st.rerun()
+            st.caption("Dans la colonne « Violence physique visible », cliquez sur une cellule et "
+                       "choisissez Non évaluée, Non (0) ou Oui (1), puis enregistrez. "
+                       "Les vidéos non évaluées ne sont pas codées 0.")
+            tableau_modifie=st.data_editor(
+                tableau_editable,hide_index=True,use_container_width=True,num_rows='fixed',
+                disabled=[nom for nom in tableau_editable.columns if nom!='annotation_violence']
+                         if etat_finalise else True,
+                column_order=colonnes_visibles,
+                column_config={
+                    **{nom:st.column_config.Column(help=aide)
+                       for nom,aide in AIDES_COLONNES.items() if nom in tableau_editable},
+                    'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',
+                        help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
+                    'publication_id':st.column_config.TextColumn('ID TikTok'),
+                    'annotation_violence':st.column_config.SelectboxColumn(
+                        'Violence physique visible',options=list(options_violence),
+                        required=True,help=AIDES_INDICATEURS['violence_visible'],width='medium'),
+                    'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
+                    'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',
+                        help=AIDES_INDICATEURS['vitesse_residuelle']),
+                    'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])
+                },
+                key=f"desordre_editeur_principal_{tache_desordre['id']}_{donnees.get('annotation_version','0')}"
+            )
+            changements=modifications_depuis_tableau(
+                tableau_editable,tableau_modifie,colonne='annotation_violence')
+            bouton_enregistrement=st.button(
+                f"Enregistrer les annotations ({len(changements)} modification(s))",
+                disabled=not etat_finalise or not changements,
+                key='desordre_enregistrer_annotations')
+            if bouton_enregistrement:
+                try:
+                    resultat_sauvegarde=api(
+                        f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
+                        {'annotations':changements})
+                    if not resultat_sauvegarde.get('ok'):
+                        raise RuntimeError("L’API n’a pas confirmé la sauvegarde.")
+                except RuntimeError as erreur:
+                    st.error("Enregistrement impossible : "+str(erreur))
                 else:
-                    st.info("Aucune annotation modifiée.")
+                    st.session_state['desordre_dernier_enregistrement']=(
+                        tache_desordre['id'],len(changements))
+                    st.rerun()
+            confirmation=st.session_state.pop('desordre_dernier_enregistrement',None)
+            if confirmation and confirmation[0]==tache_desordre['id']:
+                st.success(f"{confirmation[1]} annotation(s) enregistrée(s).")
             effectif_ann=donnees.get('annotations_violence',{})
             st.caption(f"Annotations sauvegardées : {effectif_ann.get('oui',0)} oui · "
                        f"{effectif_ann.get('non',0)} non · "
