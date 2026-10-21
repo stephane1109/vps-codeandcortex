@@ -137,6 +137,10 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
             raise RuntimeError("Le profil public ne fournit aucun lien de publication lisible.")
 
         inactif = 0
+        # Les premières publications doivent être lues dès que la pagination
+        # ne progresse plus : attendre 20 s x plusieurs scrolls gardait le TXT
+        # vide malgré des liens déjà retenus.
+        attente_suite = min(6.0, max(2.0, arguments.timeout / 4))
         for _ in range(arguments.max_scrolls):
             check()
             if len(liens) >= arguments.limit:
@@ -158,13 +162,18 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
                 etape = defiler_grille_profil(navigateur, compte, reprendre=inactif > 0, check=check)
                 rapport["pagination_profil"].append(etape)
                 rapport["defilements_effectues"] += 1
-                time.sleep(arguments.delay)
-                WebDriverWait(navigateur, arguments.timeout).until(lambda _: scanner())
+                time.sleep(min(arguments.delay, 1.5))
+                WebDriverWait(navigateur, attente_suite, poll_frequency=0.5).until(
+                    lambda _: scanner())
                 inactif = 0
             except TimeoutException:
                 inactif += 1
-                if inactif >= tentatives_vides:
-                    rapport["discovery_stop"] = "aucune_nouvelle_publication"
+                # Grille déjà en bas et immobile : conserver les liens existants,
+                # arrêter la découverte et passer à read_post().
+                immobile = (etape["avant"]["fin"] and etape["apres"]["fin"]
+                           and etape["avant"]["position"] == etape["apres"]["position"])
+                if immobile or inactif >= min(tentatives_vides, 2):
+                    rapport["discovery_stop"] = "pagination_epuisee"
                     break
         else:
             rapport["discovery_stop"] = "max_scrolls"
