@@ -796,7 +796,7 @@ with onglet_desordre:
                             'Violence physique visible',options=['Non évaluée','Non','Oui'],
                             required=True,help=AIDES_INDICATEURS['violence_visible'])
                     },
-                    key='desordre_annotation_editor'
+                    key=f"desordre_annotation_editor_{tache_desordre['id']}_{donnees.get('annotation_version','0')}"
                 )
                 sauvegarder_annotations=st.form_submit_button(
                     "Enregistrer les annotations",disabled=not etat_finalise)
