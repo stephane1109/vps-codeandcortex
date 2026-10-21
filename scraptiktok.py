@@ -190,7 +190,7 @@ DIAGNOSTIC_JS = """
 const liens = document.querySelectorAll('a[href*="/video/"],a[href*="/photo/"]').length;
 const texte = (document.body?.innerText || '').toLowerCase().replaceAll('’', "'");
 const erreur = liens === 0 && (
-    (texte.includes('something went wrong') && (texte.includes('please try again later') || texte.includes('something wrong with the server'))) ||
+    texte.includes('something went wrong') ||
     (texte.includes('une erreur') && (texte.includes('réessaie plus tard') || texte.includes('réessayer plus tard'))) ||
     (texte.includes('problème est survenu avec le serveur') && texte.includes('réessayer'))
 );
