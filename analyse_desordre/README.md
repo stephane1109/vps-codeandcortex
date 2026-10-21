@@ -155,10 +155,11 @@ pas les MP4 ni les mesures du flux optique.
 « Violence physique visible (0/1) » est proposée comme indicateur du graphique :
 les deux groupes Non (0) et Oui (1) sont affichés sans décalage artificiel et
 les non-évaluées sont exclues. Un coefficient de Spearman est calculé sur les
-rangs en croisant le codage binaire avec chacun des huit compteurs ou taux
-d’engagement, à condition de disposer d’au moins trois observations valides
+rangs en croisant le codage binaire avec les huit compteurs/taux d’engagement
+et les cinq indicateurs automatiques (dont l’indice de désordre visuel),
+à condition de disposer d’au moins trois observations valides
 et de deux catégories représentées. Les p-values sont obtenues par permutations
-avec ajustement BH **séparé sur ces huit tests**, qui ne sont pas fusionnés
+avec ajustement BH **séparé sur ces treize tests**, qui ne sont pas fusionnés
 dans la famille des 40 corrélations automatiques. Interprétation descriptive,
 non causale ; pour une variable dichotomique, des comparaisons de distributions
 et la corrélation point-bisériale constituent des compléments possibles.
