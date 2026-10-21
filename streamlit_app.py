@@ -319,12 +319,12 @@ with onglet_collecte:
                     colonne.metric(titre, compteurs[cle])
                 st.caption(("Découvertes : publications des médias sélectionnés ; retenues : auteur vérifié. Aucun filtre par hashtag. "
                             if actuel.get("source_collecte") == "presse" else
-                            "Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues : auteur conforme ; hashtags filtrés après lecture. "
+                            "Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues : auteur conforme ; filtrage hashtags/texte effectué après lecture. "
                             if actuel.get("source_collecte") == "comptes" else "")
                            + "Les autres filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
-            if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
+            if actuel.get("hashtags"):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
                 st.caption("Filtre appliqué : " + combinaison
                            + (" (hashtags et texte)" if actuel.get("rechercher_dans_texte")
