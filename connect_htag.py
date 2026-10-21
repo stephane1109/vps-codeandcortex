@@ -10,10 +10,22 @@ class ConnexionHashtag(SessionNavigateur):
 
     def preparer_sources(self, parametres):
         """Conserver les hashtags saisis, sans restriction de compte."""
-        self.hashtags = tuple(dict.fromkeys(normalize_hashtag(h) for h in parametres.hashtags))
-        if not self.hashtags:
+        from collecte.hashtags import variantes_hashtag
+        demandes = tuple(dict.fromkeys(normalize_hashtag(h) for h in parametres.hashtags))
+        if not demandes:
             raise ValueError("Renseignez au moins un hashtag.")
-        return [{"hashtag": hashtag} for hashtag in self.hashtags]
+        # Les pages proposées par TikTok sont explorées avec un budget borné.
+        # Chaque vidéo sera revérifiée à partir de ses hashtags réels.
+        sources = []
+        vus = set()
+        for hashtag in demandes:
+            for variante in variantes_hashtag(
+                    hashtag, avec_accents=parametres.variantes_accents):
+                if variante.casefold() not in vus:
+                    vus.add(variante.casefold())
+                    sources.append({"hashtag": variante, "hashtag_demande": hashtag})
+        self.hashtags = tuple(s["hashtag"] for s in sources)
+        return sources
 
     def decouvrir(self, source, rapport, *, contexte="", progression=None):
         """Ouvrir la page du hashtag et employer son défilement existant."""
