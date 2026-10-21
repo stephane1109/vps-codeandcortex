@@ -92,8 +92,9 @@ class TestsAnnotations(unittest.TestCase):
                     {"publication_id":str(i),"violence_visible":int(i>=4)}
                     for i in range(1,7)
                 ]}
-                self.assertEqual(client.post(chemin+"/annotations",json=payload,
-                                             headers=entetes).status_code,409)
+                with patch("ticket_gate.verifier_session_active",return_value=True):
+                    self.assertEqual(client.post(chemin+"/annotations",json=payload,
+                                                 headers=entetes).status_code,409)
                 ecrire_etat(job.directory,{"statut":"termine","dossier":dossier.name})
                 self.assertEqual(client.post(chemin+"/annotations",json=payload).status_code,403)
                 with patch("ticket_gate.verifier_session_active",return_value=True):
