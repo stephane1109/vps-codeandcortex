@@ -43,7 +43,7 @@ def preparer_graphique(tableau,axe_x,axe_y,libelle_x,libelle_y):
     groupes={}
     for _,ligne in donnees.iterrows():
         groupes.setdefault((float(ligne[axe_x]),float(ligne[axe_y])),[]).append(int(ligne['numero_video']))
-    compte_brut=axe_y in ('likes','commentaires','partages','vues')
+    compte_brut=axe_y in ('likes','commentaires','partages','favoris','vues')
     points=[]
     for _,ligne in donnees.iterrows():
         x,y=float(ligne[axe_x]),float(ligne[axe_y]);numeros=groupes[(x,y)]
@@ -111,7 +111,7 @@ AIDES_STATISTIQUES={
     'methode':"Méthode du test : permutations exactes jusqu’à sept vidéos utilisables, sinon tirages aléatoires reproductibles. Le coefficient rho reste calculé sur les rangs, avec rangs moyens pour les ex aequo.",
     'raison':"Explication lorsqu’une corrélation ne peut pas être calculée : moins de trois vidéos utilisables ou variable constante. Une cellule vide signifie que le calcul a pu être effectué.",
     'indicateur':"Indicateur visuel comparé à la variable d’engagement de cette ligne. Sa définition figure dans l’aide du tableau des vidéos et du sélecteur du graphique.",
-    'engagement':"Compteur ou taux comparé à l’indicateur visuel : likes, commentaires, partages, vues ou taux pour 1 000 vues."
+    'engagement':"Compteur ou taux comparé à l’indicateur visuel : likes, commentaires, partages, favoris, vues ou taux pour 1 000 vues."
 }
 AIDES_COLONNES={
     **AIDES_INDICATEURS,
@@ -123,6 +123,7 @@ AIDES_COLONNES={
     'likes':"Nombre de likes observé lors de la collecte, sans division par le nombre de vues.",
     'commentaires':"Nombre de commentaires indiqué pour la publication, pas le nombre de textes de commentaires effectivement récupérés.",
     'partages':"Nombre de partages observé lors de la collecte, sans division par le nombre de vues.",
+    'favoris':"Nombre de mises en favoris (enregistrements) observées sur TikTok lors de la collecte. Ce compteur peut être absent pour certaines publications ; une absence ne vaut pas zéro.",
     'fps_source':"Fréquence d’images annoncée par le fichier vidéo, en images par seconde. Elle peut différer de la fréquence choisie pour l’analyse.",
     'duree_annoncee_s':"Durée du fichier estimée à partir du nombre d’images et de sa fréquence annoncés, en secondes.",
     'images_decodees':"Nombre d’images lues dans le fichier ; seule une partie peut être retenue pour l’analyse.",
