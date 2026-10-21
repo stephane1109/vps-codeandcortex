@@ -525,6 +525,16 @@ with onglet_aide:
                 "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une recherche ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
+    st.subheader("Comprendre l’analyse du désordre visuel")
+    from analyse_desordre.presentation import (
+        AIDE_PREPARATION_DESORDRE, PROCESSUS_DESORDRE, AIDE_AGREGATION_DESORDRE
+    )
+    st.markdown(AIDE_PREPARATION_DESORDRE)
+    for titre, explication in PROCESSUS_DESORDRE:
+        with st.expander(titre):
+            st.markdown(explication)
+    st.markdown("**Comment est calculé l’indice de désordre visuel ?**")
+    st.markdown(AIDE_AGREGATION_DESORDRE)
 
 
 
