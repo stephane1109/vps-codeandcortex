@@ -656,7 +656,7 @@ with onglet_desordre:
             activation=st.checkbox("Activer l’analyse du désordre visuel",key='activer_desordre',value=False)
             with st.expander("Paramètres de cette analyse"):
                 frequence=st.number_input("Images analysées par seconde",min_value=1.,max_value=60.,value=10.,step=1.,key='frequence_desordre')
-                duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=600.,step=60.,key='duree_desordre')
+                duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=60.,step=60.,key='duree_desordre')
             indisponible=not activation or not donnees.get('disponible') or not (donnees.get('mp4_locaux') or (telecharger and donnees.get('mp4_telechargeables'))) or actuel.get('busy') or actuel.get('video_busy')
             if st.button("Lancer l’analyse du désordre",disabled=bool(indisponible),key='lancer_desordre'):
                 lancer(f"/api/jobs/{tache_desordre['id']}/desordre",{'frequence':frequence,'duree_max':duree,'telecharger_manquants':telecharger})
