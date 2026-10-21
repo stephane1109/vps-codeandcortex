@@ -28,6 +28,30 @@ class TestsSourcesDesordre(unittest.TestCase):
             _,fichiers=retrouver_sources(session)
             self.assertEqual(set(fichiers),{'1','2'})
 
+    def test_limite_60_secondes_telecharge_un_extrait_pas_un_filtre(self):
+        """Une vidéo de 120 s doit pouvoir fournir ses 60 premières secondes."""
+        from types import SimpleNamespace
+        from collecte.telechargement import telecharger_video
+        with tempfile.TemporaryDirectory() as d:
+            appels = []
+
+            def simuler_telechargement(commande, **kwargs):
+                appels.append(commande)
+                sortie = Path(commande[commande.index("-o") + 1])
+                sortie.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"0" * 32)
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+            publication = {"id": "123456", "url": "https://www.tiktok.com/@lemondefr/video/123456"}
+            with patch("collecte.telechargement.shutil.which", return_value="/usr/bin/ffmpeg"), \
+                 patch("collecte.telechargement.subprocess.run", side_effect=simuler_telechargement):
+                cible = telecharger_video(publication, Path(d),
+                    {"espace_libre_min_mo": 1, "taille_max_mo": 150, "duree_max_s": 60})
+            self.assertTrue(cible.is_file())
+            self.assertEqual(len(appels), 1)
+            self.assertIn("--download-sections", appels[0])
+            self.assertIn("*0-60", appels[0])
+            self.assertNotIn("--match-filter", appels[0])
+
     def test_preparation_telecharge_et_reutilise_sans_moteur_similarite(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d);(p/'videos').mkdir();(p/'videos'/'id_1.mp4').write_bytes(b'existant')
