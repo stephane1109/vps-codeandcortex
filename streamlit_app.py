@@ -209,8 +209,9 @@ with onglet_collecte:
                     help="Décoché : seul le hashtag exact est accepté (#lyceen différent de #lycéen). "
                          "Coché : les variantes avec ou sans accents sont prises en compte ; "
                          "ScrapTikTok explore également un nombre limité de pages de variantes (#lyceen, #lycéen…). "
-                         "Les variantes proposées sont heuristiques et ne garantissent pas une collecte exhaustive. "
-                         "Les hashtags doivent toujours correspondre à des mots entiers.")
+                         "Les variantes proposées sont heuristiques (huit graphies au maximum par hashtag) : "
+                         "la recherche peut être plus longue sans garantir un résultat exhaustif. "
+                         "Le nombre de vidéos demandé reste commun à toutes les variantes du même hashtag.")
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
                 help="Décoché (par défaut) : seuls les #hashtags exacts de la légende comptent. "
@@ -219,7 +220,7 @@ with onglet_collecte:
                      "La règle ET/OU s’applique aux deux sources de correspondance. "
                      "Le choix agit après la découverte des vidéos TikTok, lors de la sélection pour le TXT.")
         st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
-            help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag. En mode Presse/médias ou Profils : limite par compte, tous hashtags confondus, avant les autres filtres.")
+            help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag saisi, variantes accentuées incluses si activées. En mode Presse/médias ou Profils : limite par compte, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source == "presse":
             st.caption("Parcours des profils publics des médias sélectionnés. Seuls leurs auteurs sont admis ; les filtres de langue et de période restent disponibles. Couverture potentiellement incomplète.")
