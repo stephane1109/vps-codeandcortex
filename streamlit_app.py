@@ -715,8 +715,6 @@ with onglet_desordre:
                 st.warning("Le serveur doit être redéployé avec les dépendances de cette analyse (INSTALL_VIDEO=base, semantique ou 1).")
             elif not donnees.get('mp4_locaux') and not donnees.get('mp4_telechargeables'):
                 st.warning("Aucun MP4 associé ni URL TikTok exploitable dans cette collecte. Consultez les publications collectées.")
-            elif not donnees.get('mp4_locaux'):
-                st.info("Les publications sont collectées, mais aucun MP4 associé n’a été retrouvé. Le téléchargement ci-dessous permet de préparer les vidéos avant l’analyse.")
             telecharger=st.checkbox("Télécharger les MP4 manquants avant l’analyse",value=True,key='desordre_telecharger',
                 help="Les MP4 déjà présents sont réutilisés. Les échecs TikTok seront indiqués par publication.")
             activation=st.checkbox("Activer l’analyse du désordre visuel",key='activer_desordre',value=False)
