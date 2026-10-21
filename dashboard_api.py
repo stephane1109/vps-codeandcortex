@@ -138,12 +138,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(payload)
 
     def _serve_health(self, send_body: bool) -> None:
+        """Diagnostic public borné : jamais d'URL Redis, de mot de passe ni de ticket."""
         try:
-            connecter_redis()
-        except Exception:
-            payload = {"status": "degraded"}
-        else:
-            payload = {"status": "ok"}
+            client_redis = connecter_redis()
+            cle_config = "app:visiotrack:config"
+            configuration = client_redis.hgetall(cle_config) or {}
+            payload = {
+                "status": "ok",
+                "redis": "connecte",
+                "visiotrack": {
+                    "configuration_publiee": bool(configuration),
+                    "ttl_configuration_secondes": client_redis.ttl(cle_config),
+                    "identifiant_application": configuration.get("application_id") or None,
+                    "derniere_publication": configuration.get("updated_at") or None,
+                },
+            }
+        except Exception as erreur:
+            payload = {
+                "status": "degraded",
+                "redis": "indisponible",
+                "erreur_type": type(erreur).__name__,
+                "visiotrack": {"configuration_publiee": False},
+            }
         self._send_json(HTTPStatus.OK, payload, send_body)
 
     def _serve_dashboard(self, params: dict[str, str], send_body: bool) -> None:
