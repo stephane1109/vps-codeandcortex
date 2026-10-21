@@ -789,46 +789,60 @@ with onglet_desordre:
             st.caption("Dans la colonne « Violence physique visible », cliquez sur une cellule et "
                        "choisissez Non évaluée, Non (0) ou Oui (1), puis enregistrez. "
                        "Les vidéos non évaluées ne sont pas codées 0.")
-            tableau_modifie=st.data_editor(
-                tableau_editable,hide_index=True,use_container_width=True,num_rows='fixed',
-                disabled=[nom for nom in tableau_editable.columns if nom!='annotation_violence']
-                         if etat_finalise else True,
-                column_order=colonnes_visibles,
-                column_config={
-                    **{nom:st.column_config.Column(help=aide)
-                       for nom,aide in AIDES_COLONNES.items() if nom in tableau_editable},
-                    'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',
-                        help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
-                    'publication_id':st.column_config.TextColumn('ID TikTok'),
-                    'annotation_violence':st.column_config.SelectboxColumn(
-                        'Violence physique visible',options=list(options_violence),
-                        required=True,help=AIDES_INDICATEURS['violence_visible'],width='medium'),
-                    'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
-                    'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',
-                        help=AIDES_INDICATEURS['vitesse_residuelle']),
-                    'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])
-                },
-                key=f"desordre_editeur_principal_{tache_desordre['id']}_{donnees.get('annotation_version','0')}"
-            )
-            changements=modifications_depuis_tableau(
-                tableau_editable,tableau_modifie,colonne='annotation_violence')
-            bouton_enregistrement=st.button(
-                f"Enregistrer les annotations ({len(changements)} modification(s))",
-                disabled=not etat_finalise or not changements,
-                key='desordre_enregistrer_annotations')
+            # Un formulaire empêche chaque sélection de provoquer un rerun
+            # de Streamlit et de remettre la colonne à « Non évaluée ».
+            # Les cellules et la ligne restent affichées jusqu'à la sauvegarde.
+            with st.form(f"desordre_annotations_{tache_desordre['id']}",clear_on_submit=False):
+                tableau_modifie=st.data_editor(
+                    tableau_editable,hide_index=True,use_container_width=True,num_rows='fixed',
+                    disabled=[nom for nom in tableau_editable.columns if nom!='annotation_violence']
+                             if etat_finalise else True,
+                    column_order=colonnes_visibles,
+                    column_config={
+                        **{nom:st.column_config.Column(help=aide)
+                           for nom,aide in AIDES_COLONNES.items() if nom in tableau_editable},
+                        'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',
+                            help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
+                        'publication_id':st.column_config.TextColumn('ID TikTok'),
+                        'annotation_violence':st.column_config.SelectboxColumn(
+                            'Violence physique visible',options=list(options_violence),
+                            required=True,help=AIDES_INDICATEURS['violence_visible'],width='medium'),
+                        'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
+                        'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',
+                            help=AIDES_INDICATEURS['vitesse_residuelle']),
+                        'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])
+                    },
+                    key=f"desordre_editeur_principal_{tache_desordre['id']}_{donnees.get('annotation_version','0')}"
+                )
+                bouton_enregistrement=st.form_submit_button(
+                    "Enregistrer les annotations",disabled=not etat_finalise)
             if bouton_enregistrement:
                 try:
-                    resultat_sauvegarde=api(
-                        f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
-                        {'annotations':changements})
-                    if not resultat_sauvegarde.get('ok'):
-                        raise RuntimeError("L’API n’a pas confirmé la sauvegarde.")
-                except RuntimeError as erreur:
+                    changements=modifications_depuis_tableau(
+                        tableau_editable,tableau_modifie,colonne='annotation_violence')
+                    if changements:
+                        resultat_sauvegarde=api(
+                            f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
+                            {'annotations':changements})
+                        if not resultat_sauvegarde.get('ok'):
+                            raise RuntimeError("L’API n’a pas confirmé la sauvegarde.")
+                        # Vérifier la lecture persistante après l'écriture.
+                        nouvelles_donnees=api(f"/api/jobs/{tache_desordre['id']}/desordre")
+                        lignes_confirmees={
+                            str(ligne['publication_id']):ligne.get('violence_visible')
+                            for ligne in nouvelles_donnees.get('indicateurs',[])+
+                                         nouvelles_donnees.get('sans_resultat',[])
+                        }
+                        if any(lignes_confirmees.get(c['publication_id'],'absent') !=
+                               c['violence_visible'] for c in changements):
+                            raise RuntimeError("La lecture après sauvegarde ne confirme pas toutes les annotations.")
+                        st.session_state['desordre_dernier_enregistrement']=(
+                            tache_desordre['id'],len(changements))
+                        st.rerun()
+                    else:
+                        st.info("Aucune annotation modifiée.")
+                except (RuntimeError,ValueError) as erreur:
                     st.error("Enregistrement impossible : "+str(erreur))
-                else:
-                    st.session_state['desordre_dernier_enregistrement']=(
-                        tache_desordre['id'],len(changements))
-                    st.rerun()
             confirmation=st.session_state.pop('desordre_dernier_enregistrement',None)
             if confirmation and confirmation[0]==tache_desordre['id']:
                 st.success(f"{confirmation[1]} annotation(s) enregistrée(s).")
