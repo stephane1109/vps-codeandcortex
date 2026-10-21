@@ -10,6 +10,12 @@ from analyse_desordre.service import ecrire_etat
 
 
 class TestsApiDesordre(unittest.TestCase):
+    def test_duree_analyse_defaut_60_secondes(self):
+        from analyse_desordre.parametres import Parametres
+        self.assertEqual(web.OptionsDesordre().duree_max, 60)
+        self.assertEqual(Parametres().duree_max, 60)
+        self.assertEqual(web.OptionsDesordre(duree_max=3600).duree_max, 3600)
+
     def test_exports_prives_et_lancement_explicitement_valide(self):
         with tempfile.TemporaryDirectory() as d:
             manager=web.Manager(data_dir=d)
