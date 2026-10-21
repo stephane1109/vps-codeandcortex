@@ -26,8 +26,15 @@ def variantes_hashtag(hashtag, *, avec_accents=False, maximum=8):
 
     base = sans_accents(original)
     variantes = list(dict.fromkeys([original, base]))
-    # Prendre aussi la graphie courante avec plusieurs « é » : ete -> été.
-    if sum(c.casefold() == "e" for c in base) > 1:
+    # Privilégier le premier « é » avant les combinaisons, pour que
+    # #lyceen explore rapidement #lycéen même avec un faible objectif.
+    e_positions = [i for i, c in enumerate(base) if c.casefold() == "e"]
+    if len(e_positions) > 1:
+        premier = e_positions[0]
+        simple_aigu = base[:premier] + ("É" if base[premier] == "E" else "é") + base[premier+1:]
+        if simple_aigu.casefold() not in {mot.casefold() for mot in variantes}:
+            variantes.append(simple_aigu)
+        # Graphies avec plusieurs accents : ete -> été.
         tout_aigu = "".join("É" if c == "E" else "é" if c == "e" else c for c in base)
         if tout_aigu.casefold() not in {mot.casefold() for mot in variantes}:
             variantes.append(tout_aigu)
