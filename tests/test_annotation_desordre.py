@@ -96,6 +96,38 @@ class TestsAnnotations(unittest.TestCase):
             self.assertIsNone(result["rho"])
             self.assertEqual(result["raison"],"indicateur_constant")
 
+    def test_api_sauvegarde_une_video_presente_au_tableau_mais_absente_metadonnees(self):
+        with tempfile.TemporaryDirectory() as d:
+            manager=web.Manager(data_dir=d)
+            with TestClient(web.create_app(manager)) as client:
+                client.get("/")
+                job=web.Job(client.cookies[web.COOKIE],
+                            web.StartRequest(hashtag="test",enrichir=True),Path(d))
+                job.update(busy=False,archive_prete=True)
+                manager.jobs[job.id]=job
+                (job.directory/"publications.json").write_text(
+                    json.dumps([{"id":"1","url":"https://www.tiktok.com/@test/video/1"}]))
+                dossier=job.directory/"desordre_0123456789abcdef"
+                dossier.mkdir()
+                (dossier/"indicateurs_engagement.csv").write_text(
+                    "publication_id,url,indice_desordre\n"
+                    "1,https://www.tiktok.com/@test/video/1,10\n"
+                    "7697829530844663072,https://www.tiktok.com/@test/video/7697829530844663072,20\n")
+                ecrire_etat(job.directory,{"statut":"termine","dossier":dossier.name})
+                url=f"/api/jobs/{job.id}/desordre"
+                with patch("ticket_gate.verifier_session_active",return_value=True):
+                    reponse=client.post(url+"/annotations",json={
+                        "annotations":[
+                            {"publication_id":"7697829530844663072","violence_visible":1}
+                        ]},headers={"X-ScrapTikTok":"1"})
+                self.assertEqual(reponse.status_code,200,reponse.text)
+                lignes=client.get(url).json()["indicateurs"]
+                self.assertEqual(lignes[1]["publication_id"],"7697829530844663072")
+                self.assertEqual(lignes[1]["violence_visible"],1)
+                texte=client.get(url+"/annotations.csv").text
+                self.assertIn("7697829530844663072;",texte)
+                self.assertIn(";1",texte)
+
     def test_routes_sauvegarde_enrichissent_resultats_et_exports_prives(self):
         with tempfile.TemporaryDirectory() as d:
             manager=web.Manager(data_dir=d)
