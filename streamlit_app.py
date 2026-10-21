@@ -192,9 +192,11 @@ with onglet_collecte:
             aide_hashtag = (
                 "Saisissez un hashtag sans espace, avec ou sans #. Exemple : #17octobre ou 17octobre. "
                 "Par défaut, la sélection finale porte uniquement sur les hashtags précédés de #. "
-                "Si vous cochez « Rechercher aussi dans le texte », #17octobre peut aussi "
-                "correspondre à « 17 octobre » et #lyceen à « lycéen » dans la légende. "
-                "TikTok fournit d’abord des vidéos candidates, puis la légende est vérifiée avant l’export TXT."
+                "Si vous cochez « Rechercher aussi dans le texte », une vidéo dont la légende "
+                "contient le mot recherché est retenue pour le TXT, même sans # (par exemple "
+                "#lyceen et « lycéen », ou #17octobre et « 17 octobre »). "
+                "La règle ET/OU et les filtres de langue/période restent applicables. "
+                "Seules les vidéos effectivement découvertes et lues sur TikTok peuvent être retenues."
             )
             c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité",
                           help=aide_hashtag, disabled=occupe)
@@ -217,8 +219,10 @@ with onglet_collecte:
                 help="Décoché (par défaut) : seuls les #hashtags exacts de la légende comptent. "
                      "Coché : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
                      "Par exemple, #lyceen peut correspondre à « lycéen » et #17octobre à « 17 octobre ». "
-                     "La règle ET/OU s’applique aux deux sources de correspondance. "
-                     "Le choix agit après la découverte des vidéos TikTok, lors de la sélection pour le TXT.")
+                     "Une vidéo dont la légende contient le mot correspondant est donc retenue "
+                     "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
+                     "et les autres filtres (langue et période). "
+                     "Ce choix agit après la découverte des vidéos TikTok.")
         st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
             help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag saisi, variantes accentuées incluses si activées. En mode Presse/médias ou Profils : limite par compte, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
