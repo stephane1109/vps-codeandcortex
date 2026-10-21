@@ -10,7 +10,7 @@ from scipy.stats import spearmanr
 from analyse_desordre.parametres import Parametres
 from analyse_desordre.mouvement_camera import compenser_camera, mesurer_instabilite
 from analyse_desordre.mouvements import mesurer_mouvements
-from analyse_desordre.engagement import calculer_taux, charger_metadonnees
+from analyse_desordre.engagement import calculer_taux, charger_metadonnees, VARIABLES_ENGAGEMENT
 from analyse_desordre.statistiques import correlation_spearman
 from analyse_desordre.lancement import analyser_video, analyser_lot
 
@@ -100,6 +100,16 @@ class TestsEngagementStatistiques(unittest.TestCase):
         self.assertIsNone(calculer_taux({'vues':0,'likes':0})['likes_pour_1000_vues'])
         self.assertIsNone(calculer_taux({'vues':100})['likes_pour_1000_vues'])
         self.assertEqual(calculer_taux({'engagement':{'vues':{'valeur':100},'likes':{'valeur':0}}})['likes_pour_1000_vues'],0)
+        valeurs=calculer_taux({'engagement':{
+            'vues':{'valeur':1000},'partages':{'valeur':12},
+            'commentaires':{'valeur':6},'favoris':{'valeur':40}}})
+        self.assertEqual(valeurs['partages'],12)
+        self.assertEqual(valeurs['commentaires'],6)
+        self.assertEqual(valeurs['favoris'],40)
+        self.assertIsNone(calculer_taux({'vues':100,'favoris':None})['favoris'])
+        self.assertEqual(calculer_taux({'vues':100,'favoris':0})['favoris'],0)
+        self.assertEqual(len(VARIABLES_ENGAGEMENT),8)
+        self.assertIn('favoris',VARIABLES_ENGAGEMENT)
 
     def test_spearman_ex_aequo_exact_et_manquants(self):
         x=[1,1,2,3,4];y=[3,2,4,1,5]
@@ -133,7 +143,13 @@ class TestsIntegration(unittest.TestCase):
             self.assertEqual(len(list(sortie.glob('*.png'))),5)
             self.assertTrue((sortie/'mesures_temporelles.csv').is_file())
             with (sortie/'correlations_spearman.csv').open(encoding='utf-8-sig') as f:
-                lignes=list(csv.DictReader(f));self.assertEqual(len(lignes),35)
+                lignes=list(csv.DictReader(f))
+            self.assertEqual(len(lignes),40)
+            self.assertEqual(sum(l['engagement']=='favoris' for l in lignes),5)
+            with (sortie/'indicateurs_engagement.csv').open(encoding='utf-8-sig') as f:
+                publications=list(csv.DictReader(f))
+            self.assertIn('favoris',publications[0])
+            self.assertEqual(publications[0]['favoris'],'')
             with self.assertRaises(FileExistsError): analyser_lot(videos,meta,sortie,Parametres(permutations=99))
 
     def test_limite_duree_et_video_uniforme(self):
