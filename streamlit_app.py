@@ -406,7 +406,8 @@ with onglet_collecte:
                         ("likes", "Likes"),
                         ("vues", "Vues"),
                         ("partages", "Partages"),
-                        ("commentaires", "Nombre de commentaires")
+                        ("commentaires", "Nombre de commentaires"),
+                        ("favoris", "Nombre de favoris")
                     ):
                         ligne[titre] = compteur(
                             publication.get("engagement", {}).get(cle, {})
@@ -732,7 +733,7 @@ with onglet_desordre:
             indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
                 'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
                 'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)'}
-            engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','vues':'Nombre de vues',
+            engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','favoris':'Nombre de favoris','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
             axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur visuel. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
             axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y',help='Choisissez un compteur brut ou un taux pour 1 000 vues ; la définition de la variable choisie est disponible ci-dessous.')
