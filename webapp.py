@@ -798,8 +798,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             def suivre_decouverte(nombre):
                 job.actualiser_decouverte(rapport)
                 requete = rapport.get("requete_recherche") or etiquette
+                objectif = f"{nombre}/{args.limit}" if job.settings.source_collecte != "hashtags" else str(nombre)
                 job.update(message=f"Source {numero_source}/{len(sources)} — recherche {requete} : "
-                    f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), {nombre} retenue(s)…")
+                    f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), "
+                    f"{objectif} retenue(s) pour ce compte…")
             try:
                 found = connexion.decouvrir(source, rapport,
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
