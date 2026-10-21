@@ -1,10 +1,29 @@
 """Numérotation, effectifs et unités lisibles sans changer les coordonnées."""
 import unittest
 import pandas as pd
-from analyse_desordre.presentation import formater_nombre,preparer_graphique,superposer_droite_regression,AIDE_INDICE
+from analyse_desordre.presentation import (
+    formater_nombre, preparer_graphique, superposer_droite_regression, AIDE_INDICE,
+    AIDE_PREPARATION_DESORDRE, PROCESSUS_DESORDRE, AIDE_AGREGATION_DESORDRE
+)
 
 
 class TestsPresentationDesordre(unittest.TestCase):
+    def test_aide_decrit_les_trois_processus_du_moteur(self):
+        self.assertEqual(len(PROCESSUS_DESORDRE),3)
+        for titre,texte in PROCESSUS_DESORDRE:
+            self.assertTrue(titre)
+            self.assertIn("**Exemple :**",texte)
+        self.assertIn("instabilité",PROCESSUS_DESORDRE[0][0].lower())
+        self.assertIn("RANSAC",AIDE_PREPARATION_DESORDRE)
+        self.assertIn("10 premières secondes",AIDE_PREPARATION_DESORDRE)
+        self.assertIn("12 secteurs",PROCESSUS_DESORDRE[1][1])
+        self.assertIn("Shannon",PROCESSUS_DESORDRE[1][1])
+        self.assertIn("même plan",PROCESSUS_DESORDRE[2][1])
+        self.assertIn("trois composantes",AIDE_AGREGATION_DESORDRE)
+        self.assertIn("0,05",AIDE_AGREGATION_DESORDRE)
+        self.assertIn("0,01",AIDE_AGREGATION_DESORDRE)
+        self.assertIn("annotation humaine",AIDE_AGREGATION_DESORDRE)
+
     def test_notation_francaise(self):
         self.assertEqual(formater_nombre(1600000,0),'1 600 000')
         self.assertEqual(formater_nombre(1234.56),'1 234,56')
