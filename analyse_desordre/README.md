@@ -52,7 +52,7 @@ Le dossier de sortie doit être nouveau : aucun fichier existant n'est écrasé.
 Les sources ne sont ni modifiées ni supprimées. Une erreur de lecture d'une vidéo
 n'interrompt pas les autres. Les erreurs de programmation ne sont pas masquées.
 
-Réglages CLI : `--frequence 10`, `--dimension 320`, `--duree-max 30`,
+Réglages CLI : `--frequence 10`, `--dimension 320`, `--duree-max 10`,
 `--permutations 1999`. Une limite atteinte produit un résultat **partiel**.
 Les paramètres avancés sont disponibles dans `Parametres` pour les appels Python.
 Farnebäck doit comparer des images assez proches : 10 Hz est un compromis initial,
@@ -143,7 +143,7 @@ liste déroulante avec **Oui (1)**, **Non (0)** et **Non évaluée**. Le bouton
 « Enregistrer les annotations » sauvegarde uniquement les cellules modifiées et
 confirme la réussite. **Non évaluée est une donnée manquante**, jamais un
 code 0. Le codage est indépendant du score de désordre et porte sur la portion de la vidéo
-analysée (par défaut les 30 premières secondes), après visionnage humain.
+analysée (par défaut les 10 premières secondes), après visionnage humain.
 On entend ici par violence physique visible les coups, agressions physiques ou
 affrontements effectivement observables ; une caméra instable, une foule agitée
 ou des propos hostiles ne suffisent pas en eux-mêmes à coder « Oui ».
