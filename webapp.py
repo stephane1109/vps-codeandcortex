@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import signal
 import subprocess
 import sys
@@ -1351,7 +1352,7 @@ def create_app(manager=None):
             codages=lire_annotations(job.directory)
         # L'identité de l'éditeur change après sauvegarde pour éliminer ses
         # anciennes modifications locales (et ne pas les réappliquer au nouveau CSV).
-        revision=__import__('hashlib').sha256(
+        revision=hashlib.sha256(
             json.dumps(codages,sort_keys=True).encode('utf-8')).hexdigest()[:12]
         sans_resultat=publications_sans_resultat(job.directory,lignes,etat)
         base=lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []
