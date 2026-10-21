@@ -109,7 +109,7 @@ if "initialise" not in st.session_state:
         valeurs["txt_" + variable] = variable in variables
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
     for nom in ("hashtag", "second_hashtag"):
-        valeurs[nom + "_comptes"] = ancienne.get(nom, "") if ancienne.get("source_collecte") in {"presse", "comptes"} else ""
+        valeurs[nom + "_comptes"] = ancienne.get(nom, "") if ancienne.get("source_collecte") == "comptes" else ""
         if ancienne.get("source_collecte") in {"presse", "comptes"}: valeurs[nom] = ""
     for nom in ("date_debut","date_fin"):
         valeurs[nom] = date.fromisoformat(ancienne[nom]) if ancienne.get(nom) else None
@@ -150,7 +150,7 @@ with onglet_collecte:
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
         st.write("Choisir les médias à collecter")
-        st.caption("Cochez un ou plusieurs comptes. Renseignez au moins un hashtag ci-dessous pour filtrer leurs publications.")
+        st.caption("Cochez les médias dont vous souhaitez collecter les publications publiques. Aucun hashtag nécessaire.")
         def memoriser_medias():
             st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
         def cocher_tous_les_medias():
@@ -166,7 +166,7 @@ with onglet_collecte:
                 key=cle, disabled=occupe, on_change=memoriser_medias)
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
-        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Chaque média coché est recherché. Au moins un hashtag est obligatoire.")
+        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Collecte des légendes sans filtre de hashtag ; seules les publications des comptes cochés sont retenues.")
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
         st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
@@ -175,16 +175,19 @@ with onglet_collecte:
     cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
     # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
     with st.form("filtres_collecte", border=False, enter_to_submit=False):
-        c1,c2 = st.columns(2)
-        c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
-        c1.caption("Avec ou sans # : #actualité ou actualité. Un seul hashtag, sans espace.")
-        c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
-        c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
-        st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
+        if source != "presse":
+            c1,c2 = st.columns(2)
+            c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
+            c1.caption("Avec ou sans # : #actualité ou actualité. Un seul hashtag, sans espace.")
+            c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
+            c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
+            st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
         st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
             help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag. En mode Presse/médias ou Profils : limite par compte, tous hashtags confondus, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
-        if source != "hashtags":
+        if source == "presse":
+            st.caption("Parcours des profils publics des médias sélectionnés. Seuls leurs auteurs sont admis ; les filtres de langue et de période restent disponibles. Couverture potentiellement incomplète.")
+        elif source == "comptes":
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
@@ -214,15 +217,19 @@ with onglet_collecte:
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
-            if not st.session_state.get(cle_hashtag, "").strip():
-                st.error("Renseignez au moins un hashtag pour une collecte par profil ou média." if source != "hashtags" else "Le premier hashtag est obligatoire.")
+            if source != "presse" and not st.session_state.get(cle_hashtag, "").strip():
+                st.error("Le premier hashtag est obligatoire pour la collecte par hashtags ou profils.")
+            elif source == "presse" and not st.session_state.get("medias"):
+                st.error("Sélectionnez au moins un média.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("operator","limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4")}
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
-                valeurs.update(hashtag=st.session_state.get(cle_hashtag,""), second_hashtag=st.session_state.get(cle_second,""), source_collecte=source, date_debut=debut, date_fin=fin,
+                valeurs.update(hashtag="" if source == "presse" else st.session_state.get(cle_hashtag,""),
+                    second_hashtag="" if source == "presse" else st.session_state.get(cle_second,""),
+                    source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])
                 lancer("/api/jobs",valeurs)
@@ -244,7 +251,10 @@ with onglet_collecte:
                 st.rerun()
             if actuel.get("comptes_filtres"):
                 st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
-                st.caption("Chaque profil est parcouru directement. Si sa grille est inaccessible, la recherche vidéo utilise son identifiant seul. Les hashtags sont vérifiés ensuite dans les légendes ; les autres auteurs sont exclus.")
+                st.caption("Les comptes sont parcourus directement, avec recherche par identifiant en secours. "
+                           + ("Aucun hashtag n'est imposé aux médias ; les autres auteurs sont exclus."
+                              if actuel.get("source_collecte") == "presse" else
+                              "Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus."))
             if actuel.get("source_collecte") == "presse":
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
@@ -277,8 +287,11 @@ with onglet_collecte:
                         ("decouvertes", "retenues", "traitees", "exportees"),
                         ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
                     colonne.metric(titre, compteurs[cle])
-                st.caption(("Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues pour lecture : auteur conforme au compte ciblé. Les hashtags sont filtrés après la lecture des légendes. " if actuel.get("source_collecte") != "hashtags" else "")
-                           + "Les filtres peuvent réduire le nombre de publications exportées.")
+                st.caption(("Découvertes : publications des médias sélectionnés ; retenues : auteur vérifié. Aucun filtre par hashtag. "
+                            if actuel.get("source_collecte") == "presse" else
+                            "Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues : auteur conforme ; hashtags filtrés après lecture. "
+                            if actuel.get("source_collecte") == "comptes" else "")
+                           + "Les autres filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
@@ -429,8 +442,8 @@ with onglet_collecte:
 with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
-                "2. Renseignez au moins un hashtag, y compris pour les profils et médias. Le deuxième est facultatif (ET/OU). Ajoutez les autres filtres, puis lancez la collecte.\n"
-                "3. Tous les médias cochés sont transmis au moteur. Chaque compte coché est recherché avec chacun des hashtags ; seuls les auteurs sélectionnés sont retenus.\n"
+                "2. Pour Presse et médias, aucun hashtag n'est nécessaire : cochez les comptes, choisissez les filtres facultatifs et lancez la collecte. Pour Hashtags et Profils, indiquez un hashtag (deuxième facultatif, ET/OU).\n"
+                "3. Les médias sont parcourus par compte public, avec recherche ciblée en secours. Seules les publications des auteurs sélectionnés sont conservées.\n"
                 "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une recherche ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
