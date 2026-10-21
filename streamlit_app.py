@@ -885,11 +885,8 @@ with onglet_desordre:
                     for colonne,cle,libelle,decimales in zip(st.columns(4),('rho','n','p','p_ajustee_bh'),
                             ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée'),(3,0,6,6)):
                         colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
-                else:
-                    st.info("La corrélation nécessite au moins trois vidéos comparables et des variables non constantes. "
-                            + ("Pour le codage de violence, évaluez plusieurs vidéos dans les deux catégories (0 et 1)."
-                               if axe_x=='violence_visible' else
-                               "Les corrélations automatiques sont disponibles à la fin du lot."))
+                elif axe_x=='violence_visible':
+                    st.info("Pour le codage de violence, évaluez plusieurs vidéos dans les deux catégories (0 et 1).")
             with st.expander("Toutes les corrélations"):
                 st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
                               for ligne in donnees.get('correlations',[])],hide_index=True,
