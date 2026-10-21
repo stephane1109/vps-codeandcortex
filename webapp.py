@@ -695,6 +695,101 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         unique_links = {}
         hors_selection = 0
         medias_par_compte = {s["compte"]: s for s in sources if "compte" in s}
+        links = []
+        def lire_decouvertes():
+            """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
+            nonlocal links, hors_selection
+            links = list(unique_links.values())
+            job.update(status="collecting", discovered=len(links))
+            for index, url in enumerate(links, 1):
+                job.pause(args.delay)
+                job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
+                try:
+                    record = connexion.lire_publication(url)
+                    record["retenue"] = False
+                    if job.settings.telecharger_mp4:
+                        from telechargement_videos import correspondance_video
+                        record.update(correspondance_video(record))
+                    # Même découverte et lecture que le mode hashtag ; filtrer ensuite
+                    # l’auteur effectivement lu, et non une grille de profil différente.
+                    if (job.settings.source_collecte != "hashtags"
+                            and str(record.get("author", "")).lower() not in medias_par_compte):
+                        hors_selection += 1
+                        job.journal.append({"publication_id": record.get("id"),
+                            "auteur": record.get("author"), "filtre_auteur": "hors_selection"})
+                        job.update(processed=index)
+                        continue
+                    periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
+                    if periode in {"hors_periode", "date_indeterminee"}:
+                        with job.lock:
+                            if periode == "hors_periode": job.hors_periode += 1
+                            else: job.dates_indeterminees += 1
+                        job.journal.append({"publication_id":record["id"], "created_at":record.get("created_at"), "filtre_date":periode})
+                    else:
+                        if job.settings.enrichie:
+                            media = medias_par_compte.get(record["author"].lower(), {})
+                            record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
+                            job.publications.append(record)
+                        if record["description"]:
+                            matches = matches_hashtags(record["description"], job.settings)
+                            # Compter sur la même légende et dans la même période que le filtre.
+                            presents = set(re.findall(r"#(\w+)", tag_key(record["description"])))
+                            with job.lock:
+                                for hashtag in job.bilan_hashtags:
+                                    if tag_key(hashtag) in presents:
+                                        job.bilan_hashtags[hashtag] += 1
+                                if matches:
+                                    job.correspondances_hashtags += 1
+                            # Évaluer la langue indépendamment du filtre des hashtags.
+                            language = (
+                                classify_description(record["description"])
+                                if job.settings.french_only else None
+                            )
+                            record["langue_detection"] = language
+                            
+                            with job.lock:
+                                if not matches:
+                                    job.filtered += 1
+                                elif language == "other":
+                                    job.non_french += 1
+                                else:
+                                    if language == "unknown":
+                                        job.language_unknown += 1
+                                    record["retenue"] = True
+                                    job.records.append(record)
+                            # Les commentaires sont demandés uniquement pour les publications retenues.
+                            if record.get("retenue") and job.settings.collecter_commentaires:
+                                from collecte.commentaires import collecter_commentaires
+                                try:
+                                    resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
+                                        job.settings.collecter_reponses, verifier=job.check, pause=job.pause,
+                                        interact=connexion.intervenir)
+                                    with job.lock:
+                                        recuperes = resultat.pop("commentaires")
+                                        resultat.setdefault("recuperes", len(recuperes))
+                                        resultat.setdefault("annonces", (record.get("engagement") or {}).get("commentaires", {}).get("valeur"))
+                                        job.commentaires.extend(recuperes)
+                                        record["collecte_commentaires"] = resultat
+                                except scraper.WebDriverException as erreur:
+                                    if scraper.est_erreur_session(erreur): raise
+                                    record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
+                        else:
+                            with job.lock:
+                                job.legendes_vides += 1
+                except scraper.WebDriverException as erreur:
+                    code = "erreur_session" if scraper.est_erreur_session(erreur) else "erreur_extraction_video"
+                    job.diagnostics.append({"code": code, "publication_id": scraper.canonical_post(url)[0],
+                                            "exception": type(erreur).__name__})
+                    with job.lock:
+                        job.errors += 1
+                    if scraper.est_erreur_session(erreur):
+                        job.update(processed=index)
+                        raise
+                job.update(processed=index)
+                job.save()
+                if job.base:
+                    job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
+
         for numero_source, source in enumerate(sources, 1):
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
@@ -732,96 +827,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             finally:
                 job.actualiser_decouverte(rapport)
             job.update(discovered=len(unique_links))
-        links = list(unique_links.values())
-        job.update(status="collecting", discovered=len(links))
-        for index, url in enumerate(links, 1):
-            job.pause(args.delay)
-            job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
-            try:
-                record = connexion.lire_publication(url)
-                record["retenue"] = False
-                if job.settings.telecharger_mp4:
-                    from telechargement_videos import correspondance_video
-                    record.update(correspondance_video(record))
-                # Même découverte et lecture que le mode hashtag ; filtrer ensuite
-                # l’auteur effectivement lu, et non une grille de profil différente.
-                if (job.settings.source_collecte != "hashtags"
-                        and str(record.get("author", "")).lower() not in medias_par_compte):
-                    hors_selection += 1
-                    job.journal.append({"publication_id": record.get("id"),
-                        "auteur": record.get("author"), "filtre_auteur": "hors_selection"})
-                    job.update(processed=index)
-                    continue
-                periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
-                if periode in {"hors_periode", "date_indeterminee"}:
-                    with job.lock:
-                        if periode == "hors_periode": job.hors_periode += 1
-                        else: job.dates_indeterminees += 1
-                    job.journal.append({"publication_id":record["id"], "created_at":record.get("created_at"), "filtre_date":periode})
-                else:
-                    if job.settings.enrichie:
-                        media = medias_par_compte.get(record["author"].lower(), {})
-                        record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
-                        job.publications.append(record)
-                    if record["description"]:
-                        matches = matches_hashtags(record["description"], job.settings)
-                        # Compter sur la même légende et dans la même période que le filtre.
-                        presents = set(re.findall(r"#(\w+)", tag_key(record["description"])))
-                        with job.lock:
-                            for hashtag in job.bilan_hashtags:
-                                if tag_key(hashtag) in presents:
-                                    job.bilan_hashtags[hashtag] += 1
-                            if matches:
-                                job.correspondances_hashtags += 1
-                        # Évaluer la langue indépendamment du filtre des hashtags.
-                        language = (
-                            classify_description(record["description"])
-                            if job.settings.french_only else None
-                        )
-                        record["langue_detection"] = language
-                        
-                        with job.lock:
-                            if not matches:
-                                job.filtered += 1
-                            elif language == "other":
-                                job.non_french += 1
-                            else:
-                                if language == "unknown":
-                                    job.language_unknown += 1
-                                record["retenue"] = True
-                                job.records.append(record)
-                        # Les commentaires sont demandés uniquement pour les publications retenues.
-                        if record.get("retenue") and job.settings.collecter_commentaires:
-                            from collecte.commentaires import collecter_commentaires
-                            try:
-                                resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
-                                    job.settings.collecter_reponses, verifier=job.check, pause=job.pause,
-                                    interact=connexion.intervenir)
-                                with job.lock:
-                                    recuperes = resultat.pop("commentaires")
-                                    resultat.setdefault("recuperes", len(recuperes))
-                                    resultat.setdefault("annonces", (record.get("engagement") or {}).get("commentaires", {}).get("valeur"))
-                                    job.commentaires.extend(recuperes)
-                                    record["collecte_commentaires"] = resultat
-                            except scraper.WebDriverException as erreur:
-                                if scraper.est_erreur_session(erreur): raise
-                                record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
-                    else:
-                        with job.lock:
-                            job.legendes_vides += 1
-            except scraper.WebDriverException as erreur:
-                code = "erreur_session" if scraper.est_erreur_session(erreur) else "erreur_extraction_video"
-                job.diagnostics.append({"code": code, "publication_id": scraper.canonical_post(url)[0],
-                                        "exception": type(erreur).__name__})
-                with job.lock:
-                    job.errors += 1
-                if scraper.est_erreur_session(erreur):
-                    job.update(processed=index)
-                    raise
-            job.update(processed=index)
-            job.save()
-            if job.base:
-                job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
+            # Exporter chaque compte aussitôt sa découverte terminée.
+            if job.settings.source_collecte != "hashtags" and len(unique_links) > job.processed:
+                lire_decouvertes()
+        if job.settings.source_collecte == "hashtags":
+            lire_decouvertes()
         exclus_decouverte = set().union(*(set(e.get("rapport", {}).get("auteurs_ecartes_ids", [])) for e in job.journal))
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
         if job.settings.source_collecte != "hashtags":
@@ -830,7 +840,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 identite = scraper.canonical_post(url)
                 if identite and identite[2].casefold() in retenues_par_compte:
                     retenues_par_compte[identite[2].casefold()] += 1
-            # Une première page partielle peut être complétée par le second hashtag.
+            # Chaque profil contribue indépendamment à la limite demandée.
             recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
         final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
