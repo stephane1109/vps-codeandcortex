@@ -135,6 +135,39 @@ même compte ou les copies ne sont pas indépendantes. Le test de permutation
 simple ne modélise pas ces regroupements. Des compteurs arrondis et des collectes
 à des dates différentes peuvent également biaiser l'interprétation.
 
+## Annotation humaine de la violence physique visible
+
+Après le calcul automatique, le tableau « Annotation manuelle » permet un codage
+indépendant du score de désordre : **Oui = 1**, **Non = 0**,
+**Non évaluée = donnée manquante**. Le codage porte sur la portion de la vidéo
+analysée (par défaut les 60 premières secondes), après visionnage humain.
+On entend ici par violence physique visible les coups, agressions physiques ou
+affrontements effectivement observables ; une caméra instable, une foule agitée
+ou des propos hostiles ne suffisent pas en eux-mêmes à coder « Oui ».
+Cette définition doit être stabilisée dans un protocole de recherche et, pour
+améliorer la fiabilité, peut faire l’objet d’un double codage inter-juges.
+
+Le codage est enregistré **par identifiant TikTok** dans
+`annotations_violence.json`, à la racine de la session privée, indépendamment
+des résultats automatiques. Changer un codage ou relancer une analyse ne modifie
+pas les MP4 ni les mesures du flux optique.
+
+« Violence physique visible (0/1) » est proposée comme indicateur du graphique :
+les deux groupes Non (0) et Oui (1) sont affichés sans décalage artificiel et
+les non-évaluées sont exclues. Un coefficient de Spearman est calculé sur les
+rangs en croisant le codage binaire avec chacun des huit compteurs ou taux
+d’engagement, à condition de disposer d’au moins trois observations valides
+et de deux catégories représentées. Les p-values sont obtenues par permutations
+avec ajustement BH **séparé sur ces huit tests**, qui ne sont pas fusionnés
+dans la famille des 40 corrélations automatiques. Interprétation descriptive,
+non causale ; pour une variable dichotomique, des comparaisons de distributions
+et la corrélation point-bisériale constituent des compléments possibles.
+
+L’interface permet de télécharger `annotations_violence.csv` et
+`correlations_violence.csv`. Le CSV automatique initial reste inchangé :
+les données annotées sont jointes dynamiquement dans l’interface, sans recalcul
+des vidéos. Une cellule de codage vide signifie « non évaluée », jamais « Non ».
+
 ## Résultats
 
 - `parametres.json` : réglages du calcul.
