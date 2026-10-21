@@ -26,6 +26,23 @@ class TestsPresentationDesordre(unittest.TestCase):
         self.assertTrue(any(t['field']=='numero_video' for t in specification['encoding']['tooltip']))
         self.assertIn('replace',specification['encoding']['y']['axis']['labelExpr'])
 
+    def test_violence_binaire_axe_et_exclusion_des_videos_non_evaluees(self):
+        tableau=pd.DataFrame({
+            'numero_video':[1,2,3,4],
+            'publication_id':['1','2','3','4'],
+            'violence_visible':[0,1,None,0],
+            'partages':[10,40,99,20]
+        })
+        points,specification,effectifs=preparer_graphique(
+            tableau,'violence_visible','partages','Violence (0/1)','Partages')
+        self.assertEqual(effectifs['videos'],3)
+        self.assertEqual(effectifs['exclues'],1)
+        self.assertEqual(points['x'].tolist(),[0.,1.,0.])
+        self.assertEqual(points['valeur_x'].tolist(),['Non (0)','Oui (1)','Non (0)'])
+        self.assertEqual(specification['encoding']['x']['axis']['values'],[0,1])
+        self.assertEqual(specification['encoding']['x']['scale']['domain'],[-0.2,1.2])
+        self.assertEqual(specification['encoding']['y']['axis']['tickMinStep'],1)
+
     def test_favoris_en_axe_vertical_et_en_entiers(self):
         tableau=pd.DataFrame({
             'numero_video':[1,2,3,4],
