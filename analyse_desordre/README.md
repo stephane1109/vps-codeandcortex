@@ -41,7 +41,7 @@ Les chemins `/donnees` sont des exemples à adapter. `--metadonnees` accepte aus
 `engagement.csv` de ScrapTikTok. Les identifiants restent des chaînes, même pour
 les très grands identifiants TikTok. Le JSON attendu est une liste de publications
 avec `id`, `url` et `engagement.<compteur>.valeur`. Le CSV utilise `publication_id`
-ou `id`, `url`, `vues`, `likes`, `commentaires`, `partages`.
+ou `id`, `url`, `vues`, `likes`, `commentaires`, `partages`, `favoris`.
 
 Les fichiers vidéo doivent s'appeler `<identifiant>.mp4` ou `id_<identifiant>.mp4`.
 Les sous-dossiers sont parcourus. Deux fichiers de même identifiant sont signalés,
@@ -117,8 +117,11 @@ couverture n'est appliqué silencieusement aux corrélations.
 Compteurs manquants, négatifs, non finis, abrégés non normalisés et vues nulles :
 taux absent, jamais remplacé par zéro. Un zéro observé avec des vues positives
 reste zéro. Les compteurs source sont exportés avec les taux.
+Le nombre de favoris correspond aux enregistrements de la vidéo sur TikTok. Une
+valeur de favoris absente reste manquante (jamais zéro par défaut) ; les
+corrélations correspondantes utilisent seulement les observations disponibles.
 
-Spearman est calculé entre chacun des cinq indicateurs et les sept variables d’engagement (likes, commentaires, partages, vues et trois taux), au
+Spearman est calculé entre chacun des cinq indicateurs et les huit variables d’engagement (likes, commentaires, partages, favoris, vues et trois taux), au
 niveau **publication**, jamais en traitant les images comme observations
 indépendantes. Ex aequo : rangs moyens. Valeurs absentes : exclusion paire par
 paire. Moins de trois publications ou variable constante : résultat indisponible.
@@ -164,7 +167,7 @@ Dans l’onglet **Désordre visuel**, cocher l’activation puis lancer le calcu
 L’interface présente le nombre de MP4 locaux, une progression, un bouton d’arrêt,
 les mesures par vidéo, un graphique interactif et les exports CSV. Le menu
 « Variable à croiser » propose le nombre de likes par défaut, mais aussi les
-commentaires, partages, vues et les trois taux pour 1 000 vues. Le changement de
+commentaires, partages, favoris, vues et les trois taux pour 1 000 vues. Le changement de
 variable réutilise les mesures sans réanalyser les vidéos. Une case
 « Afficher la droite de régression linéaire » ajoute facultativement au nuage de
 points une droite en pointillés, calculée par les moindres carrés sur les valeurs
@@ -241,7 +244,7 @@ Des valeurs proches peuvent également se recouvrir à l’écran.
 Les axes affichent des milliers séparés par des espaces (`1 600 000`) et des
 décimales séparées par une virgule (`12,5`). Les valeurs au survol sont présentées
 de la même manière. L’unité dépend de la variable sélectionnée : vues, likes,
-commentaires, partages, ou taux pour 1 000 vues. Les PNG autonomes utilisent aussi
+commentaires, partages, favoris, ou taux pour 1 000 vues. Les PNG autonomes utilisent aussi
 cette notation, sans multiplicateur scientifique implicite.
 
 Une infobulle explique l’indice de 0 à 100 et chaque indicateur. Une aide dédiée
