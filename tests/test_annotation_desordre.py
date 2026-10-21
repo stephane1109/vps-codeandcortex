@@ -51,12 +51,15 @@ class TestsAnnotations(unittest.TestCase):
                            "7,999,20,99\n",encoding="utf-8")
             codes={"1":0,"2":0,"3":0,"4":1,"5":1,"6":1}
             correlations=correlations_violence(csv,codes)
-            self.assertEqual(len(correlations),8)
+            self.assertEqual(len(correlations),13)
             result=next(c for c in correlations if c["engagement"]=="commentaires")
             self.assertEqual(result["indicateur"],"violence_visible")
             self.assertEqual(result["n"],6)
             self.assertGreater(result["rho"],0.8)
             self.assertIsNotNone(result["p_ajustee_bh"])
+            visuel=next(c for c in correlations if c["engagement"]=="indice_desordre")
+            self.assertEqual(visuel["n"],6)
+            self.assertGreater(visuel["rho"],0.8)
             # Un groupe constant n'est pas une corrélation calculable.
             constante=correlations_violence(csv,{"1":0,"2":0,"3":0})
             result=next(c for c in constante if c["engagement"]=="commentaires")
@@ -114,6 +117,10 @@ class TestsAnnotations(unittest.TestCase):
                             and r["engagement"]=="commentaires")
                 self.assertEqual(mesure["n"],6)
                 self.assertIsNotNone(mesure["rho"])
+                visuel=next(r for r in retour["correlations"]
+                    if r["indicateur"]=="violence_visible"
+                    and r["engagement"]=="indice_desordre")
+                self.assertEqual(visuel["n"],6)
                 self.assertEqual(client.get(chemin+"/annotations.csv").status_code,200)
                 self.assertIn("1;https://www.tiktok.com/@test/video/1;0",
                               client.get(chemin+"/annotations.csv").text)
