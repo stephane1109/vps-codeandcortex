@@ -144,11 +144,14 @@ def tag_key(value):
 
 
 def matches_hashtags(description, settings):
-    if not settings.second_hashtag and (settings.source_collecte == "hashtags" or not settings.hashtag):
-        return True  # Conserver le comportement historique de la recherche simple.
-    present = set(re.findall(r"#(\w+)", tag_key(description)))
-    matches = [tag_key(tag) in present for tag in settings.hashtags]
-    return all(matches) if settings.operator == "AND" else any(matches)
+    # Un seul hashtag : la découverte TikTok suffit.
+    if not settings.second_hashtag:
+        return True
+    # Deux hashtags : conserver le filtre ET/OU.
+    presents = set(re.findall(r"#(\w+)", tag_key(description)))
+    matches = [tag_key(tag) in presents for tag in settings.hashtags]
+
+    return all(matches) if settings.operator == "AND" else any(matches
 
 
 class Point(BaseModel):
