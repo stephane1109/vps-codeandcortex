@@ -260,12 +260,15 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         interact=intervenir, progress=suivi, check=verifier,
         validation_initiale=options.get("validation_initiale", True)))
 
-    if not liens:
+    # Compléter jusqu'au nombre demandé pour CHAQUE compte, même si la
+    # grille a déjà fourni quelques vidéos (ex. 6/50 ou 8/50).
+    if len(liens) < arguments.limit:
         def recherche_ciblee(etat, suivi):
             etat["compte_attendu"] = compte
             return collecter_recherche_compte(
                 navigateur, arguments, etat,
                 interact=intervenir, progress=suivi, check=verifier,
+                liens_precedents=list(liens.values()),
                 intervention_si_vide=False)
 
         executer(f"@{compte} : recherche vidéo", recherche_ciblee)
@@ -279,10 +282,11 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    candidats_examines=sum(e.get("candidats_examines", 0) for e in etapes),
                    collecte_partielle=len(liens) < arguments.limit or any(e.get("echec") for e in etapes),
                    exhaustif=False,
-                   bilan_recherche=(f"@{compte} : {len(liens)} publication(s) du compte retrouvée(s). "
-                                    "Grille du profil en priorité ; recherche par @identifiant en secours. "
-                                    "Aucun résultat d'autres auteurs n'est conservé. "
-                                    "Accès public potentiellement incomplet."))
+                   bilan_recherche=(f"@{compte} : {len(liens)}/{arguments.limit} publication(s) "
+                                    "publiques accessibles. Grille du profil, puis recherche par "
+                                    "@identifiant pour compléter les résultats manquants. "
+                                    "Seul l'auteur sélectionné est conservé ; le nombre demandé "
+                                    "est un objectif, non une garantie d'accès."))
     if not liens and erreur_finale is not None:
         raise erreur_finale
     return list(liens.values())
