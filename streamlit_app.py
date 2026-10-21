@@ -717,7 +717,7 @@ with onglet_desordre:
             if etat.get('statut') not in ('termine','partiel'):
                 st.info('Résultats intermédiaires sauvegardés : les vidéos déjà traitées restent consultables, même si le lot est encore en cours ou a été interrompu.')
             import pandas as pd
-            from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, AIDES_STATISTIQUES, AIDES_COLONNES, preparer_graphique, formater_nombre
+            from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, AIDES_STATISTIQUES, AIDES_COLONNES, preparer_graphique, superposer_droite_regression, formater_nombre
             tableau=pd.DataFrame(lignes)
             tableau.insert(0,'numero_video',range(1,len(tableau)+1))
             st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
@@ -738,6 +738,13 @@ with onglet_desordre:
             axe_y=st.selectbox("Variable à croiser (axe vertical)",list(engagements),format_func=engagements.get,key='desordre_y',help='Choisissez un compteur brut ou un taux pour 1 000 vues ; la définition de la variable choisie est disponible ci-dessous.')
             st.markdown('**Comprendre la variable d’engagement choisie**',help=AIDES_COLONNES[axe_y])
             st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
+            afficher_droite=st.checkbox("Afficher la droite de régression linéaire",
+                value=False, key="desordre_droite_regression",
+                help="Ajoute une droite de tendance en pointillés au nuage de points, quand au moins "
+                     "trois vidéos ont deux mesures valides et qu'aucune variable n'est constante. "
+                     "Elle représente une régression linéaire (moindres carrés) sur les valeurs brutes, "
+                     "pas le coefficient de Spearman (ρ), qui compare les rangs. "
+                     "Une droite ne prouve pas une causalité et peut être sensible aux valeurs extrêmes.")
             if axe_x not in tableau or axe_y not in tableau:
                 st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
             else:
@@ -746,6 +753,12 @@ with onglet_desordre:
                 st.caption(f"{effectifs['videos']} vidéo(s) représentée(s) sur {total_collecte} publications collectées · {max(0,total_collecte-len(resultats))} sans résultat · {max(0,effectifs['exclues']-len(absentes))} résultat(s) sans les deux mesures valides · {effectifs['positions']} position(s) distincte(s). Un point = une vidéo ; des points très proches peuvent aussi se masquer visuellement.")
                 if effectifs['superposees']:
                     st.info(f"{effectifs['superposees']} vidéos partagent exactement des coordonnées avec d’autres : leurs points se superposent. Survolez pour retrouver leurs numéros dans le tableau.")
+                if afficher_droite:
+                    specification, raison_droite = superposer_droite_regression(points, specification)
+                    if raison_droite:
+                        st.info("Droite non disponible : " + raison_droite)
+                    else:
+                        st.caption("Droite en pointillés : régression linéaire descriptive sur les valeurs brutes, distincte de la corrélation de Spearman. Elle ne démontre pas de causalité.")
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
                 else:
                     st.vega_lite_chart(points,specification,use_container_width=True)
