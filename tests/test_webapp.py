@@ -278,12 +278,68 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(web.matches_hashtags("#gréviste", settings))
         self.assertEqual(settings.filename, "tiktok_GRÈVE_OU_école.txt")
 
-    def test_hashtag_17octobre_reconnait_aussi_17_octobre_dans_le_texte(self):
+    def test_texte_optionnel_17octobre_et_lyceen_avec_accents(self):
         settings = web.StartRequest(hashtag="17octobre")
         self.assertTrue(web.matches_hashtags("#17octobre mobilisation", settings))
+        self.assertFalse(web.matches_hashtags("Manifestation le 17 octobre au lycée", settings))
+        settings.rechercher_dans_texte = True
         self.assertTrue(web.matches_hashtags("Manifestation le 17 octobre au lycée", settings))
+        self.assertTrue(web.matches_hashtags("Le 17octobre mobilisation", settings))
         self.assertFalse(web.matches_hashtags("Manifestation du 18 octobre", settings))
         self.assertFalse(web.matches_hashtags("Manifestation des lycéens", settings))
+
+        settings = web.StartRequest(hashtag="lyceen")
+        self.assertFalse(web.matches_hashtags("Un lycéen manifeste", settings))
+        self.assertTrue(web.matches_hashtags("#lyceen manifeste", settings))
+        settings.rechercher_dans_texte = True
+        self.assertTrue(web.matches_hashtags("Un lycéen manifeste", settings))
+        self.assertTrue(web.matches_hashtags("UN LYCÉEN MANIFESTE", settings))
+        self.assertFalse(web.matches_hashtags("Des lycéens manifestent", settings))
+        self.assertFalse(web.matches_hashtags("Un ancien lyceenisme", settings))
+
+    def test_hashtag_et_texte_mixte_avec_operateur_et_ou(self):
+        settings = web.StartRequest(hashtag="lyceen", second_hashtag="manifestation",
+                                    operator="AND", rechercher_dans_texte=True)
+        self.assertTrue(web.matches_hashtags("#lyceen et manifestation pacifique", settings))
+        self.assertTrue(web.matches_hashtags("Lycéen dans une #manifestation", settings))
+        self.assertFalse(web.matches_hashtags("Une manifestation populaire", settings))
+        self.assertFalse(web.matches_hashtags("Lycéen en colère", settings))
+        settings.operator = "OR"
+        self.assertTrue(web.matches_hashtags("Une manifestation populaire", settings))
+        self.assertFalse(web.matches_hashtags("Le lycée est fermé", settings))
+
+    def test_presse_ignore_option_texte_et_aucun_hashtag(self):
+        settings = web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                                    rechercher_dans_texte=True)
+        self.assertFalse(settings.rechercher_dans_texte)
+        self.assertTrue(web.matches_hashtags("Publication sans hashtag", settings))
+
+    def test_reprise_api_retient_choix_recherche_texte(self):
+        response = self.client.post("/api/jobs", headers=HEADERS,
+                                    json={"hashtag": "lyceen", "rechercher_dans_texte": True})
+        self.assertEqual(response.status_code, 202)
+        job = self.manager.jobs[response.json()["id"]]
+        self.assertTrue(job.settings.rechercher_dans_texte)
+        self.assertTrue(job.snapshot()["rechercher_dans_texte"])
+        self.assertTrue(self.client.get("/api/session").json()["job"]["rechercher_dans_texte"])
+
+    def test_filtre_recherche_texte_preserve_le_corpus_et_les_compteurs(self):
+        urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111, 222, 333)]
+        records = {url: dict(RECORD, id=str(i), url=url, description=caption) for i, url, caption in zip(
+            (111, 222, 333), urls, ("Un lycéen participe à la manifestation", "#lyceen témoigne", "Journée à la plage"))}
+        for active, expected in ((False, 1), (True, 2)):
+            job = web.Job("test", web.StartRequest(hashtag="lyceen", rechercher_dans_texte=active), self.job.directory)
+            with patch.object(web.scraper, "collect_links", return_value=urls), \
+                 patch.object(web.scraper, "read_post", side_effect=lambda _driver, url, *a, **k: dict(records[url])), \
+                 patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(job.processed, 3)
+            self.assertEqual(job.filtered, 3 - expected)
+            self.assertEqual(job.correspondances_hashtags, expected)
+            self.assertEqual(job.bilan_hashtags["lyceen"], expected)
+            self.assertEqual(job.exportees, expected)
+            self.assertEqual(len(job.records), expected)
+            self.assertEqual(job.path.read_text(encoding="utf-8").count("lycéen"), 1 if active else 0)
 
     def test_two_searches_deduplicate_and_export_only_matching_descriptions(self):
         urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111, 222, 333)]
