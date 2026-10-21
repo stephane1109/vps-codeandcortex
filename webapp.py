@@ -52,6 +52,7 @@ class StartRequest(BaseModel):
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     operator: Literal["AND", "OR"] = "AND"
+    rechercher_dans_texte: bool = False
     limit: int = Field(default=50, ge=1, le=1000)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
@@ -103,6 +104,7 @@ class StartRequest(BaseModel):
             # aussi les anciens hashtags présents dans une requête sauvegardée.
             self.hashtag = ""
             self.second_hashtag = ""
+            self.rechercher_dans_texte = False
         else:
             if not self.hashtag:
                 if self.source_collecte == "comptes":
@@ -149,28 +151,39 @@ def tag_key(value):
     return unicodedata.normalize("NFC", value).casefold()
 
 
-def matches_hashtags(description, settings):
-    texte = tag_key(description)
+def normaliser_terme_texte(texte):
+    """Comparaison facultative des mots, sans différence entre é et e."""
+    return "".join(caractere for caractere in unicodedata.normalize("NFD", tag_key(texte))
+                   if not unicodedata.combining(caractere))
+
+
+def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False):
+    """Comparer un hashtag entier ; lire les mots de la légende seulement sur demande."""
+    texte = tag_key(description or "")
+    terme = tag_key(hashtag).removeprefix("#")
     presents = set(re.findall(r"#(\w+)", texte))
+    if terme in presents:
+        return True
+    if not rechercher_dans_texte:
+        return False
 
-    def correspond(tag):
-        tag = tag_key(tag)
+    texte = normaliser_terme_texte(texte)
+    terme = normaliser_terme_texte(terme)
+    # L'option texte accepte les accents et des expressions telles que
+    # #17octobre -> "17 octobre" ou #lyceens_en_colere -> "lycéens en colère".
+    parties = re.findall(r"\d+|[^\W\d_]+", terme)
+    separateur = bool("_" in terme or (len(parties) > 1 and any(p.isdecimal() for p in parties)))
+    motif = (r"[\s_]+".join(map(re.escape, parties))
+             if separateur and len(parties) > 1 else re.escape(terme))
+    return re.search(r"(?<!\w)" + motif + r"(?!\w)", texte) is not None
 
-        if tag in presents:
-            return True
 
-        morceaux = re.findall(r"\d+|[^\W\d_]+", tag)
-
-        if len(morceaux) < 2 or not any(m.isdecimal() for m in morceaux):
-            return False
-
-        motif = r"(?<!\w)" + r"[\s_]+".join(
-            map(re.escape, morceaux)
-        ) + r"(?!\w)"
-
-        return re.search(motif, texte) is not None
-
-    resultats = [correspond(tag) for tag in settings.hashtags]
+def matches_hashtags(description, settings):
+    resultats = [
+        correspondance_hashtag(description, tag,
+            rechercher_dans_texte=settings.rechercher_dans_texte)
+        for tag in settings.hashtags
+    ]
 
     if not resultats:
         # La collecte presse ne filtre pas les légendes sur les hashtags.
@@ -409,6 +422,7 @@ class Job:
                 except (OSError, ValueError): pass
             return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
+                    "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "bilan_hashtags": dict(self.bilan_hashtags),
@@ -734,10 +748,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         if record["description"]:
                             matches = matches_hashtags(record["description"], job.settings)
                             # Compter sur la même légende et dans la même période que le filtre.
-                            presents = set(re.findall(r"#(\w+)", tag_key(record["description"])))
                             with job.lock:
                                 for hashtag in job.bilan_hashtags:
-                                    if tag_key(hashtag) in presents:
+                                    if correspondance_hashtag(
+                                            record["description"], hashtag,
+                                            rechercher_dans_texte=job.settings.rechercher_dans_texte):
                                         job.bilan_hashtags[hashtag] += 1
                                 if matches:
                                     job.correspondances_hashtags += 1
