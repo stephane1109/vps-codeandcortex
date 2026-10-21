@@ -326,11 +326,32 @@ with onglet_collecte:
                 else: st.info('Diagnostic indisponible pour cette ancienne session. Relancez une collecte après le déploiement.')
             compteurs = actuel.get("compteurs_collecte")
             if compteurs:
+                aides_retenues = {
+                    "hashtags": (
+                        "Nombre de publications TikTok distinctes retenues pour lecture, avant vérification "
+                        "des hashtags dans les légendes et avant les autres filtres. La limite est PAR HASHTAG "
+                        "saisi : avec 20 posts et deux hashtags, jusqu’à 40 vidéos différentes peuvent être "
+                        "retenues, en mode OU comme en mode ET. Les doublons sont dédupliqués ; les variantes "
+                        "accentuées partagent le quota du hashtag initial. Le choix ET/OU s’applique ensuite "
+                        "aux légendes pour déterminer les textes exportés."
+                    ),
+                    "comptes": (
+                        "Nombre de publications distinctes trouvées sur les profils choisis, avant filtrage "
+                        "des hashtags dans les légendes. La limite s’applique à chaque compte ; les doublons "
+                        "ne sont comptés qu’une fois."
+                    ),
+                    "presse": (
+                        "Nombre de publications distinctes trouvées pour les médias sélectionnés, avant "
+                        "filtrage de langue et de période. La limite s’applique à chaque média ; les doublons "
+                        "ne sont comptés qu’une fois."
+                    ),
+                }
                 colonnes = st.columns(4)
                 for colonne, cle, titre in zip(colonnes,
                         ("decouvertes", "retenues", "traitees", "exportees"),
                         ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
-                    colonne.metric(titre, compteurs[cle])
+                    colonne.metric(titre, compteurs[cle],
+                        help=aides_retenues.get(actuel.get("source_collecte")) if cle == "retenues" else None)
                 st.caption(("Découvertes : publications des médias sélectionnés ; retenues : auteur vérifié. Aucun filtre par hashtag. "
                             if actuel.get("source_collecte") == "presse" else
                             "Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues : auteur conforme ; filtrage hashtags/texte effectué après lecture. "
