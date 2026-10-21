@@ -427,7 +427,8 @@ class Job:
                             "liens": len(r.get("discovered_urls", [])),
                             "auteurs_ecartes": r.get("auteurs_ecartes", 0),
                             "diagnostic": r.get("diagnostic", {})}
-                            for r in entree.get("rapport", {}).get("recherches_hashtags", [])],
+                            for r in (entree.get("rapport", {}).get("recherches_compte")
+                                      or entree.get("rapport", {}).get("recherches_hashtags", []))],
                         "diagnostic": entree.get("rapport", {}).get("diagnostic", {})}
                         for entree in self.journal if "source" in entree],
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
