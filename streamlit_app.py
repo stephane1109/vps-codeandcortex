@@ -343,19 +343,35 @@ with onglet_collecte:
                 def compteur(mesure):
                     if mesure.get("valeur") is None: return "Indisponible"
                     return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
-                lignes = []
+                                lignes = []
                 for publication in actuel["apercu_engagement"]:
-                    ligne = {"Auteur": "@" + publication["author"], "Publication": publication["url"], "URL TikTok": publication["url"]}
-                    for cle, titre in (("likes", "Likes"), ("vues", "Vues"), ("partages", "Partages"), ("commentaires", "Nombre de commentaires")):
-                        ligne[titre] = compteur(publication.get("engagement", {}).get(cle, {}))
-                    ligne["Retenue dans le TXT"] = "Oui" if publication.get("retenue_txt",True) else "Non"
+                    ligne = {
+                        "Auteur": "@" + publication["author"],
+                        "Publication": publication["url"],
+                        "URL TikTok": publication["url"]
+                    }
+                    for cle, titre in (
+                        ("likes", "Likes"),
+                        ("vues", "Vues"),
+                        ("partages", "Partages"),
+                        ("commentaires", "Nombre de commentaires")
+                    ):
+                        ligne[titre] = compteur(
+                            publication.get("engagement", {}).get(cle, {})
+                        )
+
+                    ligne["Retenue dans le TXT"] = (
+                        "Oui" if publication.get("retenue_txt", True) else "Non"
+                    )
+
                     ligne["Langue"] = {
-                    "fr": "Français",
-                    "other": "Autre langue",
-                    "unknown": "Indéterminée",
-                    None: "Non évaluée"
-                  }.get(publication.get("langue_detection"), "Non évaluée")
-                  lignes.append(ligne)
+                        "fr": "Français",
+                        "other": "Autre langue",
+                        "unknown": "Indéterminée",
+                        None: "Non évaluée"
+                    }.get(publication.get("langue_detection"), "Non évaluée")
+
+                    lignes.append(ligne)
                 st.dataframe(lignes, hide_index=True, column_config={"Publication": st.column_config.LinkColumn("Publication", display_text="Ouvrir")})
             if actuel.get("collecter_commentaires"):
                 st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
