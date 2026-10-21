@@ -265,7 +265,8 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             etat["compte_attendu"] = compte
             return collecter_recherche_compte(
                 navigateur, arguments, etat,
-                interact=intervenir, progress=suivi, check=verifier)
+                interact=intervenir, progress=suivi, check=verifier,
+                intervention_si_vide=False)
 
         executer(f"@{compte} : recherche vidéo", recherche_ciblee)
         # collecter_recherche_compte fournit des liens filtrés par auteur exact.
