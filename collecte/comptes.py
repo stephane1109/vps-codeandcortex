@@ -51,7 +51,8 @@ def collecter_requete_compte(navigateur, arguments, compte, hashtag, rapport=Non
     except Exception:
         rapport["recherches_en_echec"] = 1
         raise
-  def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), **options):
+      
+def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), **options):
     """Parcourir le profil public, puis compléter par les hashtags."""
     from scraptiktok import (
         canonical_post, collect_links, est_erreur_session,
