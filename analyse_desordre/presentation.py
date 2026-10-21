@@ -100,7 +100,7 @@ def superposer_droite_regression(points, specification):
     graphique["layer"] = [
         {
             "transform": [{"regression": "y", "on": "x", "method": "linear"}],
-            "mark": {"type": "line", "strokeDash": [6, 4], "strokeWidth": 2.5},
+            "mark": {"type": "line", "stroke": "#FFFFFF", "strokeDash": [6, 4], "strokeWidth": 2.5},
             "encoding": {
                 "x": {"field": "x", "type": "quantitative"},
                 "y": {"field": "y", "type": "quantitative"},
