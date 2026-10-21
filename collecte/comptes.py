@@ -158,6 +158,7 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
             if not moteur.meme_page_tiktok(navigateur.current_url, url_profil):
                 rapport["discovery_stop"] = "profil_redirige"
                 break
+            etape = None
             try:
                 etape = defiler_grille_profil(navigateur, compte, reprendre=inactif > 0, check=check)
                 rapport["pagination_profil"].append(etape)
@@ -170,7 +171,7 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
                 inactif += 1
                 # Grille déjà en bas et immobile : conserver les liens existants,
                 # arrêter la découverte et passer à read_post().
-                immobile = (etape["avant"]["fin"] and etape["apres"]["fin"]
+                immobile = (etape is not None and etape["avant"]["fin"] and etape["apres"]["fin"]
                            and etape["avant"]["position"] == etape["apres"]["position"])
                 if immobile or inactif >= min(tentatives_vides, 2):
                     rapport["discovery_stop"] = "pagination_epuisee"
