@@ -11,6 +11,7 @@ AIDE_INDICE=(
 )
 AIDES_INDICATEURS={
     'indice_desordre':AIDE_INDICE,
+    'violence_visible':"Codage manuel réalisé après visionnage de la portion de vidéo analysée : 1 = violence physique visible ; 0 = absence de violence physique visible ; valeur manquante = vidéo non évaluée. Ce codage humain ne se déduit pas de l’indice automatique de désordre. La variable binaire permet des comparaisons exploratoires, sans prouver de lien causal.",
     'instabilite_camera':'Variation de la vitesse du mouvement global estimé, en diagonales d’image par seconde au carré. Un déplacement régulier peut avoir une faible instabilité.',
     'entropie_directionnelle':'Diversité des directions du mouvement résiduel, de 0 à 1 : proche de 0 pour une direction dominante ou aucun mouvement, proche de 1 pour des directions équilibrées.',
     'irregularite_temporelle':'Variation relative de l’amplitude du mouvement entre deux intervalles du même plan, de 0 à 1. Proche de 0 si elle reste stable.',
@@ -49,17 +50,24 @@ def preparer_graphique(tableau,axe_x,axe_y,libelle_x,libelle_y):
         x,y=float(ligne[axe_x]),float(ligne[axe_y]);numeros=groupes[(x,y)]
         points.append({'x':x,'y':y,'numero_video':int(ligne['numero_video']),
             'publication_id':str(ligne.get('publication_id','')),'url':str(ligne.get('url')) if pd.notna(ligne.get('url')) else '',
-            'valeur_x':formater_nombre(x,4),'valeur_y':formater_nombre(y,0 if compte_brut else 4),
+            'valeur_x':("Oui (1)" if x==1 else "Non (0)") if axe_x=='violence_visible' else formater_nombre(x,4),
+            'valeur_y':formater_nombre(y,0 if compte_brut else 4),
             'videos_superposees':', '.join(map(str,numeros)),'nombre_superposees':len(numeros)})
     # La locale du navigateur ne doit pas réintroduire 1,600,000 ou une notation scientifique.
     precision_x=2 if axe_x=='indice_desordre' else 4
     expression_x=f"replace(replace(format(datum.value, ',.{precision_x}f'), /,/g, ' '), '.', ',')"
     expression_y="replace(format(datum.value, ',.0f'), /,/g, ' ')" if compte_brut else expression_x
+    if axe_x == 'violence_visible':
+        axe_horizontal = {'values':[0,1],
+            'labelExpr':"datum.value === 0 ? 'Non (0)' : datum.value === 1 ? 'Oui (1)' : ''"}
+    else:
+        axe_horizontal = {'labelExpr':expression_x,'labelOverlap':True}
     specification={
         'mark':{'type':'circle','size':85,'opacity':.65},
         'encoding':{
             'x':{'field':'x','type':'quantitative','title':libelle_x,
-                 'axis':{'labelExpr':expression_x,'labelOverlap':True}},
+                 'axis':axe_horizontal,
+                 **({'scale':{'domain':[-0.2,1.2]}} if axe_x=='violence_visible' else {})},
             'y':{'field':'y','type':'quantitative','title':libelle_y,
                  'axis':{'labelExpr':expression_y,**({'tickMinStep':1} if compte_brut else {})}},
             'tooltip':[{'field':'numero_video','type':'ordinal','title':'N° vidéo'},
@@ -111,12 +119,13 @@ AIDES_STATISTIQUES={
     'methode':"Méthode du test : permutations exactes jusqu’à sept vidéos utilisables, sinon tirages aléatoires reproductibles. Le coefficient rho reste calculé sur les rangs, avec rangs moyens pour les ex aequo.",
     'raison':"Explication lorsqu’une corrélation ne peut pas être calculée : moins de trois vidéos utilisables ou variable constante. Une cellule vide signifie que le calcul a pu être effectué.",
     'indicateur':"Indicateur visuel comparé à la variable d’engagement de cette ligne. Sa définition figure dans l’aide du tableau des vidéos et du sélecteur du graphique.",
-    'engagement':"Compteur ou taux comparé à l’indicateur visuel : likes, commentaires, partages, favoris, vues ou taux pour 1 000 vues."
+    'engagement':"Compteur ou taux comparé à l’indicateur automatique ou au codage humain de violence : likes, commentaires, partages, favoris, vues ou taux pour 1 000 vues."
 }
 AIDES_COLONNES={
     **AIDES_INDICATEURS,
     'numero_video':"Numéro de repérage dans cette analyse, repris au survol des points. Ce n’est pas l’identifiant TikTok.",
     'publication_id':"Identifiant de la publication TikTok, conservé comme texte pour préserver tous ses chiffres.",
+    'violence_visible':AIDES_INDICATEURS['violence_visible'],
     'url':"Lien vers la publication TikTok correspondante.",
     'metadonnees_presentes':"Indique si cette vidéo dispose d’une ligne de métadonnées collectées. Cela ne garantit pas que tous ses compteurs sont connus.",
     'vues':"Nombre de vues observé lors de la collecte. Il ne s’agit pas nécessairement de personnes distinctes.",
