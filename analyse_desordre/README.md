@@ -137,9 +137,12 @@ simple ne modélise pas ces regroupements. Des compteurs arrondis et des collect
 
 ## Annotation humaine de la violence physique visible
 
-Après le calcul automatique, le tableau « Annotation manuelle » permet un codage
-indépendant du score de désordre : **Oui = 1**, **Non = 0**,
-**Non évaluée = donnée manquante**. Le codage porte sur la portion de la vidéo
+Après le calcul automatique, une colonne éditable **« Violence physique visible »**
+figure directement dans le tableau des vidéos : cliquer sur la cellule ouvre une
+liste déroulante avec **Oui (1)**, **Non (0)** et **Non évaluée**. Le bouton
+« Enregistrer les annotations » sauvegarde uniquement les cellules modifiées et
+confirme la réussite. **Non évaluée est une donnée manquante**, jamais un
+code 0. Le codage est indépendant du score de désordre et porte sur la portion de la vidéo
 analysée (par défaut les 30 premières secondes), après visionnage humain.
 On entend ici par violence physique visible les coups, agressions physiques ou
 affrontements effectivement observables ; une caméra instable, une foule agitée
