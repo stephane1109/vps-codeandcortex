@@ -78,17 +78,29 @@ if "initialise" not in st.session_state:
     try:
         ancienne = api("/api/session")["job"]
     except RuntimeError as erreur:
-        st.error(str(erreur)); st.stop()
+        st.error(str(erreur))
+        st.stop()
+
+    # Restaurer uniquement une collecte ou une analyse en cours.
+    # Ne pas réafficher automatiquement les résultats terminés.
+    if ancienne and not (
+        ancienne.get("busy", False)
+        or ancienne.get("video_busy", False)
+    ):
+        ancienne = None
+
     st.session_state["collecte"] = ancienne
     ancienne = ancienne or {}
+
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
-        "telecharger_mp4":ancienne.get("telecharger_mp4",False),
-        "collecter_commentaires":ancienne.get("collecter_commentaires",False), "collecter_reponses":ancienne.get("collecter_reponses",False),
+        "collecter_commentaires":ancienne.get("collecter_commentaires",False),
+        "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
+
     variables = ancienne.get("variables_txt")
     if variables is None:
         variables = ["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "id"] if ancienne.get("include_sources", True) else []
