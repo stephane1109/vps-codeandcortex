@@ -349,8 +349,13 @@ with onglet_collecte:
                     for cle, titre in (("likes", "Likes"), ("vues", "Vues"), ("partages", "Partages"), ("commentaires", "Nombre de commentaires")):
                         ligne[titre] = compteur(publication.get("engagement", {}).get(cle, {}))
                     ligne["Retenue dans le TXT"] = "Oui" if publication.get("retenue_txt",True) else "Non"
-                    ligne["Langue"] = {"fr": "Français", "unknown": "Indéterminée"}.get(publication.get("langue_detection"), "Non évaluée")
-                    lignes.append(ligne)
+                    ligne["Langue"] = {
+                    "fr": "Français",
+                    "other": "Autre langue",
+                    "unknown": "Indéterminée",
+                    None: "Non évaluée"
+                  }.get(publication.get("langue_detection"), "Non évaluée")
+                  lignes.append(ligne)
                 st.dataframe(lignes, hide_index=True, column_config={"Publication": st.column_config.LinkColumn("Publication", display_text="Ouvrir")})
             if actuel.get("collecter_commentaires"):
                 st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
