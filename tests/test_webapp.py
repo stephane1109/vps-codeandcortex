@@ -278,6 +278,47 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(web.matches_hashtags("#gréviste", settings))
         self.assertEqual(settings.filename, "tiktok_GRÈVE_OU_école.txt")
 
+    def test_hashtag_variantes_accents_optionnelles_et_compteurs(self):
+        strict = web.StartRequest(hashtag="lyceen")
+        self.assertFalse(strict.variantes_accents)
+        self.assertTrue(web.matches_hashtags("Manifestation #lyceen", strict))
+        self.assertFalse(web.matches_hashtags("Manifestation #lycéen", strict))
+        self.assertFalse(web.matches_hashtags("Manifestation de lycéen", strict))
+
+        variantes = web.StartRequest(hashtag="lyceen", variantes_accents=True)
+        self.assertTrue(web.matches_hashtags("Manifestation #lycéen", variantes))
+        self.assertTrue(web.matches_hashtags("Manifestation #LycéEn", variantes))
+        self.assertFalse(web.matches_hashtags("Manifestation de lycéen", variantes))
+        self.assertFalse(web.matches_hashtags("#lycéens et #manifestation", variantes))
+        self.assertTrue(web.StartRequest(hashtag="lycéen", variantes_accents=True).rechercher_dans_texte is False)
+        self.assertTrue(web.matches_hashtags("#lyceen", web.StartRequest(
+            hashtag="lycéen", variantes_accents=True)))
+
+        or_settings = web.StartRequest(
+            hashtag="lyceen", second_hashtag="manifestation", operator="OR",
+            variantes_accents=True)
+        self.assertTrue(web.matches_hashtags("#lycéen", or_settings))
+        or_settings.operator = "AND"
+        self.assertFalse(web.matches_hashtags("#lycéen", or_settings))
+        self.assertTrue(web.matches_hashtags("#lycéen #manifestation", or_settings))
+
+    def test_hashtag_variantes_accents_filtre_les_publications_et_compte(self):
+        url = "https://www.tiktok.com/@test/video/123456"
+        publication = dict(RECORD, id="123456", url=url,
+                           description="Un rassemblement #lycéen aujourd'hui")
+        for option, attendu in ((False, 0), (True, 1)):
+            reglages = web.StartRequest(hashtag="lyceen", variantes_accents=option)
+            job = web.Job("test", reglages, self.job.directory)
+            job.base = None
+            with patch("collecte.hashtags.collecter_hashtag", return_value=[url]), \
+                 patch.object(web.scraper, "read_post", return_value=dict(publication)), \
+                 patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(len(job.records), attendu)
+            self.assertEqual(job.bilan_hashtags["lyceen"], attendu)
+            self.assertEqual(job.snapshot()["variantes_accents"], option)
+            self.assertEqual(job.exportees, attendu)
+
     def test_texte_optionnel_17octobre_et_lyceen_avec_accents(self):
         settings = web.StartRequest(hashtag="17octobre")
         self.assertTrue(web.matches_hashtags("#17octobre mobilisation", settings))
