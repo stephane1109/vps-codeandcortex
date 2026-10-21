@@ -29,6 +29,11 @@ class TestVariantesHashtags(unittest.TestCase):
         self.assertEqual(variantes[0], "lycéen")
         self.assertIn("lyceen", variantes)
 
+    def test_double_accent_pour_ete(self):
+        variantes = variantes_hashtag("ete", avec_accents=True)
+        self.assertIn("été", variantes)
+        self.assertLessEqual(len(variantes), 8)
+
     def test_recherches_bornees_avec_deux_hashtags(self):
         reglages = StartRequest(hashtag="lyceen", second_hashtag="manifestation",
                                variantes_accents=True)
