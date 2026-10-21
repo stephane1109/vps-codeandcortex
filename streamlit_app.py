@@ -339,17 +339,21 @@ with onglet_collecte:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
                             st.caption(" · ".join(indices))
             if actuel.get("apercu_engagement"):
-                st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres. Le tableau inclut aussi les publications non retenues dans le TXT.")
+                st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres.")
+
                 def compteur(mesure):
-                    if mesure.get("valeur") is None: return "Indisponible"
+                    if mesure.get("valeur") is None:
+                        return "Indisponible"
                     return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
-                                lignes = []
+
+                lignes = []
                 for publication in actuel["apercu_engagement"]:
                     ligne = {
                         "Auteur": "@" + publication["author"],
                         "Publication": publication["url"],
                         "URL TikTok": publication["url"]
                     }
+
                     for cle, titre in (
                         ("likes", "Likes"),
                         ("vues", "Vues"),
@@ -370,6 +374,18 @@ with onglet_collecte:
                         "unknown": "Indéterminée",
                         None: "Non évaluée"
                     }.get(publication.get("langue_detection"), "Non évaluée")
+
+                    lignes.append(ligne)
+
+                st.dataframe(
+                    lignes,
+                    hide_index=True,
+                    column_config={
+                        "Publication": st.column_config.LinkColumn(
+                            "Publication", display_text="Ouvrir"
+                        )
+                    }
+                )
 
                     lignes.append(ligne)
                 st.dataframe(lignes, hide_index=True, column_config={"Publication": st.column_config.LinkColumn("Publication", display_text="Ouvrir")})
