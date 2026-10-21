@@ -78,6 +78,7 @@ class TestsPresentationDesordre(unittest.TestCase):
             {'regression':'y','on':'x','method':'linear'}
         ])
         self.assertEqual(graphique['layer'][0]['mark']['type'],'line')
+        self.assertEqual(graphique['layer'][0]['mark']['stroke'],'#FFFFFF')
         self.assertEqual(graphique['layer'][1]['mark'],original['mark'])
         self.assertEqual(graphique['layer'][1]['encoding'],original['encoding'])
         self.assertEqual(graphique['height'],380)
