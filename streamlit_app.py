@@ -94,6 +94,7 @@ if "initialise" not in st.session_state:
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
+        "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
@@ -134,6 +135,7 @@ for variable in VARIABLES_TXT:
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
 # rester lançable sans ce widget.
 st.session_state.setdefault("operator", "AND")
+st.session_state.setdefault("rechercher_dans_texte", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
@@ -187,10 +189,10 @@ with onglet_collecte:
             c1,c2 = st.columns(2)
             aide_hashtag = (
                 "Saisissez un hashtag sans espace, avec ou sans #. Exemple : #17octobre ou 17octobre. "
-                "Pour ce cas, le filtre accepte aussi l’expression « 17 octobre » présente dans le texte "
-                "de la légende, même sans #. Les autres hashtags sont recherchés comme hashtags dans "
-                "la légende. Le moteur découvre d’abord les vidéos proposées par TikTok, puis vérifie "
-                "le texte avant l’export TXT."
+                "Par défaut, la sélection finale porte uniquement sur les hashtags précédés de #. "
+                "Si vous cochez « Rechercher aussi dans le texte », #17octobre peut aussi "
+                "correspondre à « 17 octobre » et #lyceen à « lycéen » dans la légende. "
+                "TikTok fournit d’abord des vidéos candidates, puis la légende est vérifiée avant l’export TXT."
             )
             c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité",
                           help=aide_hashtag, disabled=occupe)
@@ -199,6 +201,13 @@ with onglet_collecte:
                           help=aide_hashtag, disabled=occupe)
             c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
             st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
+            st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
+                key="rechercher_dans_texte", disabled=occupe,
+                help="Décoché (par défaut) : seuls les #hashtags exacts de la légende comptent. "
+                     "Coché : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
+                     "Par exemple, #lyceen peut correspondre à « lycéen » et #17octobre à « 17 octobre ». "
+                     "La règle ET/OU s’applique aux deux sources de correspondance. "
+                     "Le choix agit après la découverte des vidéos TikTok, lors de la sélection pour le TXT.")
         st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
             help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag. En mode Presse/médias ou Profils : limite par compte, tous hashtags confondus, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
@@ -242,6 +251,9 @@ with onglet_collecte:
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4")}
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
+                valeurs["rechercher_dans_texte"] = (
+                    bool(st.session_state.get("rechercher_dans_texte", False)) if source != "presse" else False
+                )
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
@@ -314,10 +326,15 @@ with onglet_collecte:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
-                st.caption("Filtre appliqué : " + combinaison)
+                st.caption("Filtre appliqué : " + combinaison
+                           + (" (hashtags et texte)" if actuel.get("rechercher_dans_texte")
+                              else " (hashtags uniquement)"))
                 if "bilan_hashtags" in actuel and actuel.get("processed", 0):
                     with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
-                        st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. Un hashtag doit être précédé de # dans la légende.")
+                        st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. "
+                                   + ("Hashtags ou mots entiers du texte, sans distinction d’accents."
+                                      if actuel.get("rechercher_dans_texte") else
+                                      "Seuls les hashtags précédés de # sont pris en compte."))
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
                             st.write(f"#{hashtag} : {nombre} légende(s)")
                         st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
