@@ -126,15 +126,24 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
             rapport["discovery_stop"] = "connexion_profil"
             raise RuntimeError("TikTok demande une connexion pour afficher le profil.")
         try:
-            WebDriverWait(navigateur, arguments.timeout).until(lambda _: scanner())
+            # Ne pas ouvrir une première fenêtre de confirmation pour une page
+            # vide : seul un véritable CAPTCHA justifie une intervention.
+            WebDriverWait(navigateur, min(arguments.timeout, 10.0),
+                          poll_frequency=0.5).until(lambda _: scanner())
         except TimeoutException:
-            if arguments.interactive and validation_initiale:
-                interact("Aucune publication visible sur le profil. Vérifiez la page ou un CAPTCHA, puis cliquez sur Continuer.")
+            if moteur.type_intervention_tiktok(navigateur) == "captcha":
+                if not arguments.interactive:
+                    moteur.diagnostiquer_page(navigateur, rapport, code="verification_tiktok")
+                    raise RuntimeError("Vérification TikTok nécessaire.")
+                interact("Terminez le CAPTCHA TikTok, puis cliquez sur Continuer.")
                 scanner()
         if not liens:
             moteur.diagnostiquer_page(navigateur, rapport)
             rapport["discovery_stop"] = "grille_profil_vide"
-            raise RuntimeError("Le profil public ne fournit aucun lien de publication lisible.")
+            raise RuntimeError(
+                "Profil public sans publication lisible : lancement de la recherche "
+                "ciblée sur ce compte, sans exiger de seconde validation manuelle."
+            )
 
         inactif = 0
         # Les premières publications doivent être lues dès que la pagination
