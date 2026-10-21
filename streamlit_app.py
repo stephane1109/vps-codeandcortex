@@ -656,7 +656,14 @@ with onglet_desordre:
             activation=st.checkbox("Activer l’analyse du désordre visuel",key='activer_desordre',value=False)
             with st.expander("Paramètres de cette analyse"):
                 frequence=st.number_input("Images analysées par seconde",min_value=1.,max_value=60.,value=10.,step=1.,key='frequence_desordre')
-                duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=60.,step=60.,key='duree_desordre')
+                duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=60.,step=60.,key='duree_desordre',
+                    help="Cette valeur limite la portion analysée, et non la durée totale autorisée d’une vidéo TikTok. "
+                         "Avec 60 s : une vidéo de 15 s est analysée entièrement ; pour une vidéo de 2 min, "
+                         "seules les 60 premières secondes sont étudiées. À 10 images/s, cela représente environ "
+                         "600 images pour une vidéo d’au moins 60 s. Conséquence méthodologique : les indicateurs "
+                         "d’une vidéo longue décrivent uniquement son début, tandis que les vidéos courtes sont "
+                         "analysées entièrement. Pour étudier une portion plus longue, augmentez cette limite "
+                         "(jusqu’à 3 600 s).")
             indisponible=not activation or not donnees.get('disponible') or not (donnees.get('mp4_locaux') or (telecharger and donnees.get('mp4_telechargeables'))) or actuel.get('busy') or actuel.get('video_busy')
             if st.button("Lancer l’analyse du désordre",disabled=bool(indisponible),key='lancer_desordre'):
                 lancer(f"/api/jobs/{tache_desordre['id']}/desordre",{'frequence':frequence,'duree_max':duree,'telecharger_manquants':telecharger})
