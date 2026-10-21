@@ -9,6 +9,54 @@ AIDE_INDICE=(
     "Ce n’est ni un pourcentage, ni une probabilité, ni une mesure validée de violence ou de désordre social. "
     "Les échelles et les poids sont des choix exploratoires ; la couverture indique la part réellement mesurée."
 )
+# Aide méthodologique de l'onglet Aide, cohérente avec le moteur.
+AIDE_PREPARATION_DESORDRE=(
+    "Le moteur compare des images successives avec le **flux optique dense de Farnebäck**. "
+    "Une estimation robuste (RANSAC) distingue le mouvement global dominant de l’image "
+    "(translation, rotation, zoom) des mouvements **résiduels**. "
+    "Les changements de plans et les comparaisons peu fiables sont écartés. "
+    "Par défaut, l’analyse porte sur les **10 premières secondes**, à **10 images/s** ; "
+    "ces deux réglages restent modifiables."
+)
+PROCESSUS_DESORDRE=(
+    ("1. Instabilité du mouvement global (caméra)",
+     "On estime le déplacement dominant de l’image entre deux images successives, "
+     "puis **la variation de sa vitesse** d’un intervalle à l’autre (une accélération), "
+     "normalisée par la diagonale de l’image. **Exemple :** un travelling fluide "
+     "peut obtenir une faible instabilité malgré un déplacement important ; "
+     "des secousses ou un changement brusque de direction donnent une valeur plus élevée. "
+     "**Unité :** diagonales d’image par seconde au carré. "
+     "Le mouvement dominant est une approximation de celui de la caméra, "
+     "pas une mesure physique certaine de la caméra."),
+    ("2. Diversité des directions (entropie directionnelle)",
+     "Après soustraction du mouvement global, le moteur examine les directions "
+     "des **mouvements résiduels** des pixels suffisamment mobiles. "
+     "Il les répartit en **12 secteurs angulaires**, pondérés par l’amplitude du mouvement, "
+     "puis calcule une entropie de Shannon normalisée entre **0 et 1**. "
+     "**Exemple :** des déplacements dans une même direction donnent une valeur proche de 0 ; "
+     "des mouvements dans de nombreuses directions donnent une valeur plus élevée. "
+     "Une image presque immobile vaut 0. Dans l’indice final, cette entropie est "
+     "atténuée si la **vitesse résiduelle** des mouvements est très faible."),
+    ("3. Irrégularité temporelle de l’intensité du mouvement",
+     "Le moteur compare, **à l’intérieur d’un même plan**, l’amplitude moyenne "
+     "des mouvements résiduels entre deux intervalles successifs. "
+     "Il calcule leur différence absolue rapportée à la somme des amplitudes. "
+     "**Exemple :** un mouvement d’intensité stable donne une valeur proche de 0 ; "
+     "des alternances de calme et de mouvement brusque augmentent la valeur vers 1. "
+     "Cette mesure ne correspond ni à une détection de montage ni à une classification de violence.")
+)
+AIDE_AGREGATION_DESORDRE=(
+    "Pour chaque intervalle exploitable, l’indice (0–100) combine **trois composantes "
+    "à poids égaux** : instabilité normalisée I / (I + 0,05), entropie directionnelle "
+    "pondérée par la vitesse résiduelle H × V / (V + 0,01), et irrégularité temporelle T. "
+    "Soit **indice = 100 × (I/(I+0,05) + H×V/(V+0,01) + T) / 3**. "
+    "L’indice vidéo est ensuite la moyenne des intervalles mesurables, pondérée "
+    "par leur durée. Les constantes **0,05** et **0,01** sont des choix exploratoires, "
+    "non des seuils scientifiques validés. Un score élevé décrit une **agitation visuelle** : "
+    "il ne signifie pas « violence », ni « désordre social », ni une probabilité. "
+    "La violence physique visible est une **annotation humaine distincte (0/1)**."
+)
+
 AIDES_INDICATEURS={
     'indice_desordre':AIDE_INDICE,
     'violence_visible':"Codage manuel réalisé après visionnage de la portion de vidéo analysée : 1 = violence physique visible ; 0 = absence de violence physique visible ; valeur manquante = vidéo non évaluée. Ce codage humain ne se déduit pas de l’indice automatique de désordre. La variable binaire permet des comparaisons exploratoires, sans prouver de lien causal.",
