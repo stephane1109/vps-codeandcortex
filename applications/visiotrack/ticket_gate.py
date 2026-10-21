@@ -470,6 +470,9 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
     existing_ticket = client.get(session_key)
 
     if existing_ticket and client.exists(_ticket_key(existing_ticket)):
+        # Le dashboard contrôle updated_at, pas seulement les TTL Redis.
+        # Un ticket prolongé sans nouvel horodatage serait supprimé comme inactif.
+        client.hset(_ticket_key(existing_ticket), "updated_at", int(time.time()))
         client.expire(session_key, cfg["ttl_seconds"])
         client.expire(_ticket_key(existing_ticket), cfg["ttl_seconds"])
         _promote_waiting(client, cfg)
@@ -734,8 +737,20 @@ def renouveler_acces_analyse(ticket_id: str | None) -> bool:
                 or ticket.get("application_id") != cfg["app_id"]
                 or ticket.get("session_id") != session_id):
             return False
-        return bool(client.expire(_ticket_key(ticket_id), cfg["ttl_seconds"])
-                    and client.expire(cle_session, cfg["ttl_seconds"]))
+        # Le nettoyage du dashboard se fonde sur updated_at, tandis que Redis
+        # se fonde sur EXPIRE : les deux doivent être renouvelés ensemble.
+        cle_ticket = _ticket_key(ticket_id)
+        with client.pipeline(transaction=True) as transaction:
+            transaction.hset(cle_ticket, "updated_at", int(time.time()))
+            transaction.expire(cle_ticket, cfg["ttl_seconds"])
+            transaction.expire(cle_session, cfg["ttl_seconds"])
+            _mise_a_jour, ticket_prolonge, session_prolongee = transaction.execute()
+        if not (ticket_prolonge and session_prolongee):
+            return False
+        # Sans republication périodique, la configuration visible du dashboard
+        # expire après 24 h même si une session est encore active.
+        _publish_runtime_config(client, cfg)
+        return True
     except Exception:
         return False
 
@@ -827,8 +842,10 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         @st.fragment(run_every=snapshot["heartbeat_ms"] / 1000)
         def renouveler_session():
             if not renouveler_acces_analyse(snapshot["ticket_id"]):
-                st.session_state[RELEASED_STATE_KEY] = True
-                st.rerun()
+                # Une coupure Redis ou un ticket expiré n'est pas une libération
+                # volontaire : refaire le contrôle complet et réadmettre la
+                # session uniquement selon les limites de capacité du serveur.
+                st.rerun(scope="app")
 
         renouveler_session()
         return snapshot
