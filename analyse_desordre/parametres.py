@@ -7,7 +7,7 @@ import math
 class Parametres:
     frequence: float = 10.0
     dimension: int = 320
-    duree_max: float = 600.0
+    duree_max: float = 60.0
     seuil_coupure_histogramme: float = .65
     seuil_coupure_photometrique: float = .22
     seuil_rupture_structure: float = .2
