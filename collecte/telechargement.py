@@ -45,8 +45,17 @@ def telecharger_video(publication, dossier, parametres):
     dossier=Path(dossier); dossier.mkdir(parents=True,exist_ok=True)
     if shutil.disk_usage(dossier).free < parametres['espace_libre_min_mo']*1024**2: raise OSError('Espace disque insuffisant.')
     cible=dossier/(identite[0]+'.mp4')
+    # duree_max_s borne la portion analysee, pas la duree TOTALE de la video.
+    # --match-filter rejetait toutes les videos de plus de 60 s avant leur analyse.
+    # yt-dlp s'appuie sur ffmpeg (deja present pour l'analyse) pour ne garder
+    # que la section initiale. Les limites de taille/temps restent surveillees.
+    duree_section = float(parametres['duree_max_s'])
+    if not 0 < duree_section <= 3600: raise ValueError('Durée maximale invalide.')
+    if shutil.which('ffmpeg') is None:
+        raise ErreurTelechargement('dependance_absente',
+            'ffmpeg est nécessaire pour extraire les premières secondes des vidéos.')
     commande=[sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--no-progress','--no-warnings','--socket-timeout','20','--retries','1',
-        '--max-filesize',str(parametres['taille_max_mo'])+'M','--match-filter',f"duration <= {parametres['duree_max_s']}",
+        '--download-sections',f"*0-{duree_section:g}",
         '-f','best[ext=mp4]/best','--no-part','-o',str(cible),'--',identite[1]]
     try:
         resultat=subprocess.run(commande,capture_output=True,timeout=180,check=False)
