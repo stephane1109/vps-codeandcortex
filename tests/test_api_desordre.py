@@ -10,10 +10,10 @@ from analyse_desordre.service import ecrire_etat
 
 
 class TestsApiDesordre(unittest.TestCase):
-    def test_duree_analyse_defaut_30_secondes_et_20_personnalisable(self):
+    def test_duree_analyse_defaut_10_secondes_et_20_personnalisable(self):
         from analyse_desordre.parametres import Parametres
-        self.assertEqual(web.OptionsDesordre().duree_max, 30)
-        self.assertEqual(Parametres().duree_max, 30)
+        self.assertEqual(web.OptionsDesordre().duree_max, 10)
+        self.assertEqual(Parametres().duree_max, 10)
         self.assertEqual(web.OptionsDesordre(duree_max=20).duree_max, 20)
         self.assertEqual(Parametres(duree_max=20).duree_max, 20)
         self.assertEqual(web.OptionsDesordre(duree_max=3600).duree_max, 3600)
