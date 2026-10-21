@@ -173,8 +173,10 @@ def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False)
     # #17octobre -> "17 octobre" ou #lyceens_en_colere -> "lycéens en colère".
     parties = re.findall(r"\d+|[^\W\d_]+", terme)
     separateur = bool("_" in terme or (len(parties) > 1 and any(p.isdecimal() for p in parties)))
-    motif = (r"[\s_]+".join(map(re.escape, parties))
-             if separateur and len(parties) > 1 else re.escape(terme))
+    motif = re.escape(terme)
+    if separateur and len(parties) > 1:
+        # Accepter également la graphie compacte (« 17octobre »).
+        motif = "(?:" + motif + "|" + r"[\s_]+".join(map(re.escape, parties)) + ")"
     return re.search(r"(?<!\w)" + motif + r"(?!\w)", texte) is not None
 
 
@@ -875,7 +877,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message = "Aucun texte retenu par le filtre français parmi les légendes consultées."
             final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée conservés."
         if job.settings.hashtags and job.processed:
-            final_message += f" {job.filtered} texte(s) écarté(s) par le filtre de hashtags."
+            nom_filtre = "hashtags et texte" if job.settings.rechercher_dans_texte else "hashtags"
+            final_message += f" {job.filtered} texte(s) écarté(s) par le filtre {nom_filtre}."
             if job.settings.source_collecte != "hashtags":
                 final_message += " Combinaison ET/OU vérifiée sur les légendes des comptes sélectionnés."
         if job.settings.source_collecte != "hashtags":
