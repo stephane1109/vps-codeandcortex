@@ -26,6 +26,11 @@ def variantes_hashtag(hashtag, *, avec_accents=False, maximum=8):
 
     base = sans_accents(original)
     variantes = list(dict.fromkeys([original, base]))
+    # Prendre aussi la graphie courante avec plusieurs « é » : ete -> été.
+    if sum(c.casefold() == "e" for c in base) > 1:
+        tout_aigu = "".join("É" if c == "E" else "é" if c == "e" else c for c in base)
+        if tout_aigu.casefold() not in {mot.casefold() for mot in variantes}:
+            variantes.append(tout_aigu)
     # Déjà accentué : garder en priorité le terme saisi et sa forme non accentuée.
     # Sans accent : explorer les positions accentuables par ordre de lecture.
     for i, lettre in enumerate(base):
