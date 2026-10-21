@@ -306,21 +306,69 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(self.job.search_errors, 1)
         self.assertEqual(len(self.job.records), 1)
 
+    def test_presse_sans_hashtag_et_sans_filtre_sur_les_legendes(self):
+        params = web.StartRequest(source_collecte="presse", medias=["lemonde"], limit=2)
+        self.assertEqual(params.hashtags, [])
+        self.assertTrue(web.matches_hashtags("Une légende de presse sans aucun hashtag", params))
+        self.assertEqual(params.hashtag, "")
+        self.assertEqual(params.second_hashtag, "")
+
+        # Une ancienne requête ne doit pas réintroduire de hashtags en mode médias.
+        stale = web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                                 hashtag="#actualité", second_hashtag="#politique")
+        self.assertEqual(stale.hashtags, [])
+        self.assertTrue(web.matches_hashtags("Une légende indépendante", stale))
+        with self.assertRaises(ValueError):
+            web.StartRequest(source_collecte="comptes", comptes=["lemondefr"])
+        with self.assertRaises(ValueError):
+            web.StartRequest(source_collecte="hashtags")
+
+    def test_presse_ne_lit_et_n_exporte_que_les_comptes_selectionnes(self):
+        params = web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                                  limit=2, french_only=False)
+        job = web.Job("presse", params, self.job.directory)
+        job.base = None
+        bon = "https://www.tiktok.com/@lemondefr/video/123456"
+        autre = "https://www.tiktok.com/@autre/video/987654"
+        texte = "Une légende journalistique sans hashtag."
+        publication = dict(RECORD, id="123456", url=bon, author="lemondefr",
+                           description=texte, created_at="2026-10-20T14:00:00+00:00")
+        with patch("connect_presse.ConnexionPresse.decouvrir", return_value=[bon, autre]), \
+             patch.object(web.scraper, "read_post", return_value=publication) as lecture, \
+             patch.object(job, "pause"):
+            web.execute_job(job, driver_factory=lambda args: Mock())
+        self.assertEqual(lecture.call_count, 1)
+        self.assertEqual(job.processed, 1)
+        self.assertEqual(len(job.records), 1)
+        self.assertIn(texte, job.path.read_text(encoding="utf-8"))
+        self.assertEqual(job.filtered, 0)
+
     def test_une_validation_partagee_entre_sources(self):
         for reglages in (web.StartRequest(hashtag='été', second_hashtag='voyage'),
-                        web.StartRequest(hashtag="test", source_collecte='presse', medias=['lemonde','franceinfo'])):
+                        web.StartRequest(source_collecte='presse', medias=['lemonde','franceinfo'])):
             job = web.Job('test', reglages, self.job.directory)
             pilote = Mock()
             validations = []
+
             def decouvrir(navigateur, arguments, rapport, **options):
                 self.assertIs(navigateur, pilote)
                 validations.append(options['validation_initiale'])
-                if options['validation_initiale']: options['interact']('Première vérification')
+                if options['validation_initiale']:
+                    options['interact']('Première vérification')
                 return [RECORD['url']]
+
+            def decouvrir_profil(navigateur, arguments, compte, rapport, **options):
+                self.assertIs(navigateur, pilote)
+                validations.append(options['validation_initiale'])
+                if options['validation_initiale']:
+                    options['interact']('Première vérification')
+                return [f"https://www.tiktok.com/@{compte}/video/123"]
+
             with patch.object(web.scraper, 'collect_links', side_effect=decouvrir), \
+                 patch('collecte.comptes.collecter_profil_public', side_effect=decouvrir_profil), \
                  patch.object(web, 'wait_for_user') as intervention, \
-                 patch('collecte.verification_comptes.observer_profil', return_value={}), \
-                 patch.object(web.scraper, 'read_post', return_value=RECORD), patch.object(job, 'pause'):
+                 patch.object(web.scraper, 'read_post', return_value=RECORD), \
+                 patch.object(job, 'pause'):
                 web.execute_job(job, driver_factory=lambda args: pilote)
             self.assertEqual(validations, [True, False])
             intervention.assert_called_once()
