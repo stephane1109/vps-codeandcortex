@@ -74,6 +74,50 @@ def fusionner(lignes, annotations):
             for ligne in lignes]
 
 
+def modifications_depuis_tableau(original, modifie, colonne="annotation_violence"):
+    """Différences par identifiant TikTok, et non par numéro de ligne ni index pandas.
+
+    Entrée issue du tableau éditable : sélectionner « Non évaluée » supprime
+    l'annotation au lieu d'enregistrer zéro.
+    """
+    modalites = {"Non évaluée": None, "Non (0)": 0, "Oui (1)": 1}
+    depart = {}
+    for ligne in original.to_dict("records"):
+        identifiant = str(ligne["publication_id"])
+        if identifiant in depart:
+            raise ValueError("Identifiant TikTok dupliqué dans le tableau.")
+        depart[identifiant] = ligne[colonne]
+    resultat = []
+    deja_vus = set()
+    for ligne in modifie.to_dict("records"):
+        identifiant = str(ligne["publication_id"])
+        valeur = ligne[colonne]
+        if identifiant in deja_vus or identifiant not in depart:
+            raise ValueError("L'identité des vidéos du tableau a changé.")
+        deja_vus.add(identifiant)
+        if valeur not in modalites:
+            raise ValueError("Choisissez Non évaluée, Non (0) ou Oui (1).")
+        if valeur != depart[identifiant]:
+            resultat.append({"publication_id": identifiant,
+                             "violence_visible": modalites[valeur]})
+    if deja_vus != set(depart):
+        raise ValueError("Certaines vidéos manquent dans le tableau modifié.")
+    return resultat
+
+
+def publications_annotables(publications, lignes):
+    """Conserver les vidéos visibles même si une MP4 manque des métadonnées de collecte."""
+    resultat = []
+    presents = set()
+    for item in [*publications, *lignes]:
+        identifiant = str(item.get("id") or item.get("publication_id") or "")
+        if not re.fullmatch(r"[0-9]+", identifiant) or identifiant in presents:
+            continue
+        presents.add(identifiant)
+        resultat.append({"id": identifiant, "url": item.get("url")})
+    return resultat
+
+
 def statistiques_codage(annotations, total):
     oui = sum(valeur == 1 for valeur in annotations.values())
     non = sum(valeur == 0 for valeur in annotations.values())
