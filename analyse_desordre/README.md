@@ -52,7 +52,7 @@ Le dossier de sortie doit être nouveau : aucun fichier existant n'est écrasé.
 Les sources ne sont ni modifiées ni supprimées. Une erreur de lecture d'une vidéo
 n'interrompt pas les autres. Les erreurs de programmation ne sont pas masquées.
 
-Réglages CLI : `--frequence 10`, `--dimension 320`, `--duree-max 600`,
+Réglages CLI : `--frequence 10`, `--dimension 320`, `--duree-max 60`,
 `--permutations 1999`. Une limite atteinte produit un résultat **partiel**.
 Les paramètres avancés sont disponibles dans `Parametres` pour les appels Python.
 Farnebäck doit comparer des images assez proches : 10 Hz est un compromis initial,
