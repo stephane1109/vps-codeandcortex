@@ -74,6 +74,35 @@ def preparer_graphique(tableau,axe_x,axe_y,libelle_x,libelle_y):
         'superposees':sum(len(n) for n in groupes.values() if len(n)>1)}
 
 
+def superposer_droite_regression(points, specification):
+    """Ajouter une droite MCO dans Vega-Lite, sans modifier les points originaux.
+
+    C'est une régression linéaire sur les valeurs brutes, distincte de la
+    corrélation de rangs (Spearman). Aucun tracé pour un nuage inexploitable.
+    """
+    if len(points) < 3:
+        return specification, "Il faut au moins trois vidéos ayant les deux mesures."
+    if points["x"].nunique() < 2 or points["y"].nunique() < 2:
+        return specification, "Une des deux variables est constante ; aucune tendance linéaire informative ne peut être tracée."
+
+    # Les données sont transmises à st.vega_lite_chart comme source commune.
+    # Tracer la droite en premier laisse chaque point et son infobulle visibles.
+    graphique = {cle: valeur for cle, valeur in specification.items()
+                 if cle not in ("mark", "encoding")}
+    graphique["layer"] = [
+        {
+            "transform": [{"regression": "y", "on": "x", "method": "linear"}],
+            "mark": {"type": "line", "strokeDash": [6, 4], "strokeWidth": 2.5},
+            "encoding": {
+                "x": {"field": "x", "type": "quantitative"},
+                "y": {"field": "y", "type": "quantitative"},
+            },
+        },
+        {"mark": specification["mark"], "encoding": specification["encoding"]},
+    ]
+    return graphique, None
+
+
 AIDES_STATISTIQUES={
     'rho':"Rho (ρ) est le coefficient de Spearman, entre −1 et +1. Proche de +1 : les deux variables tendent à augmenter ensemble. Proche de −1 : l’une tend à diminuer quand l’autre augmente. Proche de 0 : aucune tendance monotone nette, mais une autre forme de relation peut exister. Ce n’est ni un pourcentage ni une preuve de causalité.",
     'n':"Nombre de vidéos ayant une valeur valide pour les deux variables comparées. Les vidéos avec une mesure manquante sont exclues de ce calcul. Ce nombre peut être inférieur au nombre de publications collectées.",
