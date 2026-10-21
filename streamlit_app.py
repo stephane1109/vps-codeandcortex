@@ -185,7 +185,7 @@ with onglet_collecte:
             help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag. En mode Presse/médias ou Profils : limite par compte, tous hashtags confondus, avant les autres filtres.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source != "hashtags":
-            st.caption("Chaque compte sélectionné est recherché avec chaque hashtag. Seules ses publications sont conservées, dans la limite demandée par compte. Résultats non exhaustifs.")
+            st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
@@ -244,7 +244,7 @@ with onglet_collecte:
                 st.rerun()
             if actuel.get("comptes_filtres"):
                 st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
-                st.caption("La recherche cible successivement chaque profil ci-dessus avec les hashtags saisis. Les résultats d’autres auteurs sont exclus.")
+                st.caption("Chaque profil est parcouru directement. Si sa grille est inaccessible, la recherche vidéo utilise son identifiant seul. Les hashtags sont vérifiés ensuite dans les légendes ; les autres auteurs sont exclus.")
             if actuel.get("source_collecte") == "presse":
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
@@ -277,7 +277,7 @@ with onglet_collecte:
                         ("decouvertes", "retenues", "traitees", "exportees"),
                         ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
                     colonne.metric(titre, compteurs[cle])
-                st.caption(("Découvertes : résultats des recherches compte + hashtag. Retenues pour lecture : auteur conforme au compte ciblé. L’auteur est à nouveau contrôlé avant les exports. " if actuel.get("source_collecte") != "hashtags" else "")
+                st.caption(("Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues pour lecture : auteur conforme au compte ciblé. Les hashtags sont filtrés après la lecture des légendes. " if actuel.get("source_collecte") != "hashtags" else "")
                            + "Les filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
