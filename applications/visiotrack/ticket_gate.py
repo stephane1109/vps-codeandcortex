@@ -318,7 +318,9 @@ def _publish_runtime_config(client, cfg: dict[str, Any]) -> None:
             "updated_at": now,
         },
     )
-    client.expire(_config_key(cfg["app_id"]), max(86400, int(cfg["ttl_seconds"]), max(30, int(cfg["heartbeat_ms"]) // 1000) * 6))
+    # Une configuration ne doit pas annoncer une application vivante pendant
+    # 24 heures après l'arrêt de son conteneur.
+    client.expire(_config_key(cfg["app_id"]), max(900, max(30, int(cfg["heartbeat_ms"]) // 1000) * 3))
 
 
 def _list_members(client, key: str) -> list[str]:
