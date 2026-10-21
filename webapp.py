@@ -1134,7 +1134,7 @@ class OptionsDesordre(BaseModel):
     telecharger_manquants: bool = False
     frequence: float = Field(default=10., ge=1, le=60)
     dimension: int = Field(default=320, ge=64, le=1280)
-    duree_max: float = Field(default=600., gt=0, le=3600)
+    duree_max: float = Field(default=60., gt=0, le=3600)
 
 
 def executer_desordre(job, options, dossier):
