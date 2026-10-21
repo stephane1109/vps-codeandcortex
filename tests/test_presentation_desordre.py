@@ -1,7 +1,7 @@
 """Numérotation, effectifs et unités lisibles sans changer les coordonnées."""
 import unittest
 import pandas as pd
-from analyse_desordre.presentation import formater_nombre,preparer_graphique,AIDE_INDICE
+from analyse_desordre.presentation import formater_nombre,preparer_graphique,superposer_droite_regression,AIDE_INDICE
 
 
 class TestsPresentationDesordre(unittest.TestCase):
@@ -25,3 +25,39 @@ class TestsPresentationDesordre(unittest.TestCase):
         self.assertEqual(specification['encoding']['y']['axis']['tickMinStep'],1)
         self.assertTrue(any(t['field']=='numero_video' for t in specification['encoding']['tooltip']))
         self.assertIn('replace',specification['encoding']['y']['axis']['labelExpr'])
+
+    def test_droite_disponible_et_superposee_sans_modifier_les_points(self):
+        tableau=pd.DataFrame({
+            'numero_video':[1,2,3,4],
+            'publication_id':['10','11','12','13'],
+            'indice_desordre':[10,20,30,40],
+            'likes':[4,9,7,15],
+        })
+        points,specification,_=preparer_graphique(tableau,'indice_desordre','likes','Indice','Likes')
+        original=specification.copy()
+        graphique,raison=superposer_droite_regression(points,specification)
+        self.assertIsNone(raison)
+        self.assertEqual(len(graphique['layer']),2)
+        self.assertEqual(graphique['layer'][0]['transform'],[
+            {'regression':'y','on':'x','method':'linear'}
+        ])
+        self.assertEqual(graphique['layer'][0]['mark']['type'],'line')
+        self.assertEqual(graphique['layer'][1]['mark'],original['mark'])
+        self.assertEqual(graphique['layer'][1]['encoding'],original['encoding'])
+        self.assertEqual(graphique['height'],380)
+        self.assertEqual(specification,original)
+        self.assertEqual(points['x'].tolist(),[10.,20.,30.,40.])
+
+    def test_droite_impossible_avec_peu_de_points_ou_variable_constante(self):
+        cas=[
+            ([10.,20.],[10.,30.],"trois vidéos"),
+            ([10.,10.,10.],[1.,3.,5.],"constante"),
+            ([10.,20.,30.],[7.,7.,7.],"constante"),
+        ]
+        for x,y,motif in cas:
+            points=pd.DataFrame({'x':x,'y':y})
+            spec={'mark':{'type':'circle'},'encoding':{'x':{'field':'x'},'y':{'field':'y'}},'height':380}
+            graphique,raison=superposer_droite_regression(points,spec)
+            self.assertIs(graphique,spec)
+            self.assertIn(motif,raison)
+            self.assertNotIn('layer',graphique)
