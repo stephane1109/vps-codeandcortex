@@ -126,7 +126,7 @@ niveau **publication**, jamais en traitant les images comme observations
 indépendantes. Ex aequo : rangs moyens. Valeurs absentes : exclusion paire par
 paire. Moins de trois publications ou variable constante : résultat indisponible.
 Test bilatéral exact jusqu'à sept publications, sinon permutations Monte-Carlo
-(graine fixée, correction +1). Les 35 tests disponibles sont aussi corrigés par
+(graine fixée, correction +1). Les 40 tests disponibles sont aussi corrigés par
 Benjamini–Hochberg ; `p_ajustee_bh` accompagne les p brutes.
 
 Il s'agit d'associations exploratoires, non causales : compte, audience, date,
@@ -176,7 +176,7 @@ variable est constante. Cette droite linéaire ne représente pas le rho de Spea
 calculé sur les rangs, et ne démontre pas de causalité ; elle est sensible aux
 valeurs extrêmes. Le tableau de Spearman indique rho, n, p et p ajustée pour
 chaque couple disponible. Les PNG autonomes restent consacrés aux trois taux ;
-le graphique interactif couvre les sept variables.
+le graphique interactif couvre les huit variables.
 
 L'import du paquet seul ne charge ni OpenCV ni modèle. L'appel Python est synchrone ;
 l’interface utilise `service.py` dans un processus séparé, réservé au propriétaire
