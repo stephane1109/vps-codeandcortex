@@ -201,6 +201,15 @@ def matches_hashtags(description, settings):
     return all(resultats) if settings.operator == "AND" else any(resultats)
 
 
+class CodageViolence(BaseModel):
+    publication_id: str = Field(min_length=1, max_length=32, pattern=r"^[0-9]+$")
+    violence_visible: Literal[0, 1] | None
+
+
+class AnnotationsViolence(BaseModel):
+    annotations: list[CodageViolence] = Field(min_length=1, max_length=1000)
+
+
 class Point(BaseModel):
     x: float = Field(ge=0, le=1, allow_inf_nan=False)
     y: float = Field(ge=0, le=1, allow_inf_nan=False)
@@ -1335,11 +1344,74 @@ def create_app(manager=None):
         disponibles=dossier is not None
         from analyse_desordre.sources import inventaire_sources, publications_sans_resultat
         lignes=lire_tableau(dossier/'indicateurs_engagement.csv') if disponibles else []
+        from analyse_desordre.annotation import (
+            lire_annotations, fusionner, statistiques_codage, correlations_violence
+        )
+        with job.lock:
+            codages=lire_annotations(job.directory)
+        sans_resultat=publications_sans_resultat(job.directory,lignes,etat)
+        base=lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []
+        annotations_corr=(correlations_violence(
+            dossier/'indicateurs_engagement.csv',codages)
+            if disponibles and etat.get('statut') in ('termine','partiel') else [])
+        inventaire=inventaire_sources(job.directory)
         return {'etat':etat,'disponible':dependances_disponibles(),
-            **inventaire_sources(job.directory),
-            'indicateurs':lignes,
-            'sans_resultat':publications_sans_resultat(job.directory,lignes,etat),
-            'correlations':lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []}
+            **inventaire,
+            'indicateurs':fusionner(lignes,codages),
+            'sans_resultat':fusionner(sans_resultat,codages),
+            'annotations_violence':statistiques_codage(codages,inventaire['publications_collectees']),
+            'correlations':base+annotations_corr}
+
+    @app.post("/api/jobs/{job_id}/desordre/annotations")
+    def sauver_annotations_desordre(job_id: str, modifications: AnnotationsViolence, request: Request):
+        """Sauvegarder les codages explicites de l'utilisateur, pas de classification automatique."""
+        exiger_ticket(request)
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.service import lire_etat
+        from analyse_desordre.sources import lire_publications
+        from analyse_desordre.annotation import enregistrer_annotations, statistiques_codage
+        etat=lire_etat(job.directory)
+        dossier=dossier_desordre(job,etat)
+        if dossier is None or etat.get('statut') not in ('termine','partiel'):
+            raise HTTPException(409, "Terminez d’abord l’analyse du désordre visuel.")
+        publications=lire_publications(job.directory)
+        identifiants={str(p.get('id') or p.get('publication_id')) for p in publications}
+        changements=[p.model_dump() for p in modifications.annotations]
+        with job.lock:
+            try:
+                codes=enregistrer_annotations(job.directory,changements,identifiants)
+            except (ValueError, OSError) as erreur:
+                raise HTTPException(422, str(erreur)) from erreur
+        return {'ok':True,'annotations_violence':statistiques_codage(codes,len(identifiants))}
+
+    @app.get("/api/jobs/{job_id}/desordre/annotations.csv")
+    def export_annotations_desordre(job_id: str, request: Request):
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.sources import lire_publications
+        from analyse_desordre.annotation import lire_annotations, exporter_annotations_csv
+        with job.lock:
+            codes=lire_annotations(job.directory)
+        texte=exporter_annotations_csv(lire_publications(job.directory),codes)
+        return Response(texte,media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition":'attachment; filename="annotations_violence.csv"'})
+
+    @app.get("/api/jobs/{job_id}/desordre/correlations_violence.csv")
+    def export_correlations_violence(job_id: str, request: Request):
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.service import lire_etat
+        from analyse_desordre.annotation import (
+            lire_annotations, correlations_violence, exporter_correlations_csv
+        )
+        etat=lire_etat(job.directory)
+        dossier=dossier_desordre(job,etat)
+        if dossier is None or etat.get('statut') not in ('termine','partiel'):
+            raise HTTPException(404, "Analyse indisponible.")
+        with job.lock:
+            codes=lire_annotations(job.directory)
+        correlations=correlations_violence(dossier/'indicateurs_engagement.csv',codes)
+        return Response(exporter_correlations_csv(correlations),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition":'attachment; filename="correlations_violence.csv"'})
 
     @app.get("/api/jobs/{job_id}/desordre/export/{nom}")
     def exporter_desordre(job_id: str, nom: str, request: Request):
