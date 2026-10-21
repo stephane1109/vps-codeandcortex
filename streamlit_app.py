@@ -95,6 +95,7 @@ if "initialise" not in st.session_state:
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
+        "variantes_accents": ancienne.get("variantes_accents", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
@@ -136,6 +137,7 @@ for variable in VARIABLES_TXT:
 # rester lançable sans ce widget.
 st.session_state.setdefault("operator", "AND")
 st.session_state.setdefault("rechercher_dans_texte", False)
+st.session_state.setdefault("variantes_accents", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
@@ -201,6 +203,14 @@ with onglet_collecte:
                           help=aide_hashtag, disabled=occupe)
             c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
             st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
+            if source == "hashtags":
+                st.checkbox("Inclure les variantes accentuées des hashtags",
+                    key="variantes_accents", disabled=occupe,
+                    help="Décoché : seul le hashtag exact est accepté (#lyceen différent de #lycéen). "
+                         "Coché : les variantes avec ou sans accents sont prises en compte ; "
+                         "ScrapTikTok explore également un nombre limité de pages de variantes (#lyceen, #lycéen…). "
+                         "Les variantes proposées sont heuristiques et ne garantissent pas une collecte exhaustive. "
+                         "Les hashtags doivent toujours correspondre à des mots entiers.")
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
                 help="Décoché (par défaut) : seuls les #hashtags exacts de la légende comptent. "
@@ -253,6 +263,9 @@ with onglet_collecte:
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["rechercher_dans_texte"] = (
                     bool(st.session_state.get("rechercher_dans_texte", False)) if source != "presse" else False
+                )
+                valeurs["variantes_accents"] = (
+                    bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
                 )
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
@@ -328,13 +341,16 @@ with onglet_collecte:
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
                 st.caption("Filtre appliqué : " + combinaison
                            + (" (hashtags et texte)" if actuel.get("rechercher_dans_texte")
-                              else " (hashtags uniquement)"))
+                              else " (hashtags uniquement)")
+                           + (" · variantes accentuées incluses" if actuel.get("variantes_accents") else ""))
                 if "bilan_hashtags" in actuel and actuel.get("processed", 0):
                     with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
                         st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. "
                                    + ("Hashtags ou mots entiers du texte, sans distinction d’accents."
                                       if actuel.get("rechercher_dans_texte") else
-                                      "Seuls les hashtags précédés de # sont pris en compte."))
+                                      "Seuls les hashtags précédés de # sont pris en compte.")
+                                   + (" Comparaison des hashtags avec et sans accents."
+                                      if actuel.get("variantes_accents") else ""))
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
                             st.write(f"#{hashtag} : {nombre} légende(s)")
                         st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
@@ -658,7 +674,7 @@ with onglet_multimodale:
 
 with onglet_desordre:
     st.subheader("Désordre visuel et engagement")
-    st.caption("Analyse facultative des vidéos de la collecte : les MP4 présents sont réutilisés et les manquants peuvent être téléchargés. L’indice est exploratoire ; une corrélation n’établit pas une causalité.")
+    st.caption("Mesurer l’agitation visuelle des vidéos (mouvements, instabilité et irrégularité) et explorer ses liens avec l’engagement sur TikTok.")
     tache_desordre=st.session_state.get('collecte') or {}
     if not tache_desordre.get('archive_prete'):
         st.info("Effectuez une collecte enrichie pour utiliser cette analyse.")
