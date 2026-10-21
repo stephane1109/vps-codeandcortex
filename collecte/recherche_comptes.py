@@ -31,7 +31,8 @@ def adresse_recherche(compte, hashtag=None):
     return "https://www.tiktok.com/search/video?q=" + quote(construire_requete_compte(compte, hashtag), safe="")
 
 
-def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None, intervention_si_vide=True):
+def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None,
+                              intervention_si_vide=True, liens_precedents=()):
     """Parcourir les résultats successifs et conserver uniquement l'auteur exact."""
     import scraptiktok as moteur
     compte = normaliser_compte(rapport["compte_attendu"])
@@ -42,6 +43,14 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
                    pagination_recherche=[], observation_reseau={})
     observation = ObservationRecherche(navigateur, compte, rapport["observation_reseau"], arguments.timeout)
     candidats, identites, liens = {}, {}, {}
+    # Les liens déjà obtenus sur la grille occupent des places dans le quota.
+    # Sans cela, une recherche affichant les mêmes vidéos s'arrêterait à tort.
+    precedents = {}
+    for adresse in liens_precedents:
+        identite = moteur.canonical_post(adresse)
+        if identite and identite[2].casefold() == compte:
+            precedents.setdefault(identite[0], identite[1])
+    liens.update(list(precedents.items())[:arguments.limit])
     donnees_confirmees = set()
     tentatives_vides = max(3, arguments.idle_rounds)
     # Les profils ont déjà fait l'objet d'un premier parcours. Éviter qu'une
@@ -101,10 +110,11 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
                 if donnee_auteur:
                     donnees_confirmees.add(identifiant)
         liens.clear()
+        liens.update(list(precedents.items())[:arguments.limit])
         for identifiant in candidats:
             url, auteur = identites[identifiant]
             if auteur.casefold() == compte and len(liens) < arguments.limit:
-                liens[identifiant] = url
+                liens.setdefault(identifiant, url)
         publier_compteurs()
         return avant != (len(candidats), tuple(liens))
 
@@ -177,7 +187,7 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
             rapport["discovery_stop"] = "budget_defilements"
         if len(liens) >= arguments.limit:
             rapport["discovery_stop"] = "limit"
-        if not candidats:
+        if not candidats and not precedents:
             moteur.diagnostiquer_page(navigateur, rapport)
             if not sur_la_recherche():
                 rapport["diagnostic"]["code"] = "recherche_redirigee"
