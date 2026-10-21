@@ -26,7 +26,7 @@ st.html("""<style>
 components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
                 height=0, scrolling=False)
 st.title("ScrapTikTok")
-st.caption("Appli en cours de dév - modifiée 11-10-2026")
+st.caption("Appli en cours de dév - modifiée 21-10-2026")
 st.caption("Collecter les textes des publications TikTok.")
 
 session = st.context.cookies.get("scraptiktok_session", "")
@@ -103,7 +103,14 @@ if "initialise" not in st.session_state:
 
     variables = ancienne.get("variables_txt")
     if variables is None:
-        variables = ["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt") else ["profil", "id"] if ancienne.get("include_sources", True) else []
+        # Nouveau formulaire : toutes les variables TXT sont cochées, sauf le
+        # déplacement des hashtags. Une collecte active sans sélection explicite
+        # conserve en revanche son ancien réglage de compatibilité.
+        variables = (
+            (["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt")
+             else ["profil", "id"] if ancienne.get("include_sources", True) else [])
+            if ancienne else [v for v in VARIABLES_TXT if v != "hashtags"]
+        )
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
@@ -120,14 +127,8 @@ st.session_state.setdefault("telecharger_mp4", False)
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
-    valeur_initiale = (variable in ("date", "profil", "id") and
-        (st.session_state.get("inclure_metadonnees_txt", False) or
-         (variable in ("profil", "id") and st.session_state.get("include_sources", True))))
-    if variable == "id":
-        valeur_initiale = st.session_state.get("txt_url", valeur_initiale)
-    if variable == "partages":
-        valeur_initiale = st.session_state.get("txt_republications", valeur_initiale)
-    st.session_state.setdefault("txt_" + variable, valeur_initiale)
+    # Initialiser seulement si absent : préserver les choix manuels déjà faits.
+    st.session_state.setdefault("txt_" + variable, variable != "hashtags")
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 # Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
