@@ -1346,7 +1346,8 @@ def create_app(manager=None):
         from analyse_desordre.sources import inventaire_sources, publications_sans_resultat
         lignes=lire_tableau(dossier/'indicateurs_engagement.csv') if disponibles else []
         from analyse_desordre.annotation import (
-            lire_annotations, fusionner, statistiques_codage, correlations_violence
+            lire_annotations, fusionner, statistiques_codage, correlations_violence,
+            publications_annotables
         )
         with job.lock:
             codages=lire_annotations(job.directory)
@@ -1360,11 +1361,14 @@ def create_app(manager=None):
             dossier/'indicateurs_engagement.csv',codages)
             if disponibles and etat.get('statut') in ('termine','partiel') else [])
         inventaire=inventaire_sources(job.directory)
+        from analyse_desordre.sources import lire_publications
+        anotables=publications_annotables(
+            lire_publications(job.directory), [*lignes,*sans_resultat])
         return {'etat':etat,'disponible':dependances_disponibles(),
             **inventaire,
             'indicateurs':fusionner(lignes,codages),
             'sans_resultat':fusionner(sans_resultat,codages),
-            'annotations_violence':statistiques_codage(codages,inventaire['publications_collectees']),
+            'annotations_violence':statistiques_codage(codages,len(anotables)),
             'annotation_version':revision,
             'correlations':base+annotations_corr}
 
