@@ -137,7 +137,10 @@ for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comp
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
             "date_debut", "date_fin", "comptes"):
-    st.session_state[cle] = st.session_state[cle]
+    # Streamlit peut effacer les clés des widgets masqués au changement de mode.
+    # Ne pas provoquer de KeyError avant même d'afficher le formulaire Médias.
+    if cle in st.session_state:
+        st.session_state[cle] = st.session_state[cle]
 
 collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
