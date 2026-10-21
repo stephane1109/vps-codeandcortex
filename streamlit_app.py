@@ -185,9 +185,18 @@ with onglet_collecte:
     with st.form("filtres_collecte", border=False, enter_to_submit=False):
         if source != "presse":
             c1,c2 = st.columns(2)
-            c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité", disabled=occupe)
+            aide_hashtag = (
+                "Saisissez un hashtag sans espace, avec ou sans #. Exemple : #17octobre ou 17octobre. "
+                "Pour ce cas, le filtre accepte aussi l’expression « 17 octobre » présente dans le texte "
+                "de la légende, même sans #. Les autres hashtags sont recherchés comme hashtags dans "
+                "la légende. Le moteur découvre d’abord les vidéos proposées par TikTok, puis vérifie "
+                "le texte avant l’export TXT."
+            )
+            c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité",
+                          help=aide_hashtag, disabled=occupe)
             c1.caption("Avec ou sans # : #actualité ou actualité. Un seul hashtag, sans espace.")
-            c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique", disabled=occupe)
+            c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique",
+                          help=aide_hashtag, disabled=occupe)
             c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
             st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
         st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
