@@ -151,7 +151,7 @@ def matches_hashtags(description, settings):
     presents = set(re.findall(r"#(\w+)", tag_key(description)))
     matches = [tag_key(tag) in presents for tag in settings.hashtags]
 
-    return all(matches) if settings.operator == "AND" else any(matches
+    return all(matches) if settings.operator == "AND" else any(matches)
 
 
 class Point(BaseModel):
