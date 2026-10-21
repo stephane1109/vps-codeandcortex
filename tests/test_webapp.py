@@ -338,6 +338,50 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(web.matches_hashtags("Des lycéens manifestent", settings))
         self.assertFalse(web.matches_hashtags("Un ancien lyceenisme", settings))
 
+    def test_texte_sans_hashtag_est_retenu_et_exporte_si_option_active(self):
+        """Le mot dans la légende doit produire réellement une ligne dans le TXT."""
+        liens=[f"https://www.tiktok.com/@test/video/{i}" for i in (101,102,103)]
+        publications={
+            liens[0]:dict(RECORD,id="101",url=liens[0],
+                description="Un lycéen participe au rassemblement"),
+            liens[1]:dict(RECORD,id="102",url=liens[1],
+                description="Une manifestation est organisée"),
+            liens[2]:dict(RECORD,id="103",url=liens[2],
+                description="Promenade sur la plage")
+        }
+        for option,compte in ((False,0),(True,2)):
+            params=web.StartRequest(hashtag="lyceen",second_hashtag="manifestation",
+                                    operator="OR",rechercher_dans_texte=option,
+                                    french_only=False)
+            job=web.Job("test",params,self.job.directory)
+            job.base=None
+            with patch("collecte.hashtags.collecter_hashtag",side_effect=[liens,liens]), \
+                 patch.object(web.scraper,"read_post",
+                    side_effect=lambda _driver,url,*args,**kw: dict(publications[url])), \
+                 patch.object(job,"pause"):
+                web.execute_job(job,driver_factory=lambda args: Mock())
+            texte=job.path.read_text(encoding="utf-8")
+            self.assertEqual(job.exportees,compte)
+            self.assertEqual(len(job.records),compte)
+            self.assertEqual("Un lycéen participe" in texte,option)
+            self.assertEqual("Une manifestation est organisée" in texte,option)
+            self.assertNotIn("Promenade sur la plage",texte)
+
+        # Avec ET, les deux occurrences peuvent être des mots du texte sans aucun #.
+        params=web.StartRequest(hashtag="lyceen",second_hashtag="manifestation",
+                                operator="AND",rechercher_dans_texte=True,
+                                french_only=False)
+        job=web.Job("test",params,self.job.directory)
+        job.base=None
+        publication=dict(RECORD,id="104",url="https://www.tiktok.com/@test/video/104",
+                         description="Un lycéen décrit la manifestation")
+        with patch("collecte.hashtags.collecter_hashtag",return_value=[publication["url"]]), \
+             patch.object(web.scraper,"read_post",return_value=publication), \
+             patch.object(job,"pause"):
+            web.execute_job(job,driver_factory=lambda args: Mock())
+        self.assertEqual(job.exportees,1)
+        self.assertIn("Un lycéen décrit la manifestation",job.path.read_text(encoding="utf-8"))
+
     def test_hashtag_et_texte_mixte_avec_operateur_et_ou(self):
         settings = web.StartRequest(hashtag="lyceen", second_hashtag="manifestation",
                                     operator="AND", rechercher_dans_texte=True)
