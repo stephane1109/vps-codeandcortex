@@ -211,6 +211,15 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
+CAUSES_ARRET = {
+    'utilisateur': 'Bouton Arrêter la collecte utilisé.',
+    'acces_inactif': 'Accès libéré, expiré ou devenu inactif.',
+    'inactivite': 'Délai sans contact avec l’interface dépassé.',
+    'duree_maximale': 'Durée maximale autorisée pour la collecte atteinte.',
+    'arret_serveur': 'Arrêt ou redémarrage du serveur.',
+}
+
+
 class Job:
     def __init__(self, owner: str, settings: StartRequest, data_dir: Path):
         self.id = uuid.uuid4().hex
@@ -226,6 +235,10 @@ class Job:
         self.path = self.directory / "textes.txt"
         self.lock = threading.RLock()
         self.stop = threading.Event()
+        self.cause_arret = None
+        self.evenements_debug = []
+        self.publication_en_cours = None
+        self.limites_debug = {}
         self.commands = queue.Queue(maxsize=8)
         self.created = self.last_seen = time.monotonic()
         self.finished = None
@@ -265,8 +278,40 @@ class Job:
             self.base = BaseDonnees(data_dir / "scraptiktok.sqlite")
             self.base.creer_session(self.id, owner, scraper.utc_now(), settings.model_dump())
 
+    def demander_arret(self, cause):
+        """Conserver la première cause, même si plusieurs contrôles demandent l’arrêt."""
+        with self.lock:
+            if not self.stop.is_set():
+                self.cause_arret = {'code':cause,'explication':CAUSES_ARRET[cause],
+                    'date':scraper.utc_now(),'traitees':self.processed,
+                    'publication':self.publication_en_cours}
+            self.stop.set()
+
+    def diagnostic_collecte(self):
+        """Exporter des champs techniques choisis, sans cookies ni réponses du navigateur."""
+        with self.lock:
+            return {'date':scraper.utc_now(),'statut':self.status,
+                'cause_arret':self.cause_arret,
+                'arret_demande':self.stop.is_set(),
+                'publication_en_cours_ou_derniere':self.publication_en_cours,
+                'duree_ecoulee_s':round((self.finished or time.monotonic())-self.created),
+                'limites':dict(self.limites_debug),
+                'compteurs':{'decouvertes':len(self.decouvertes_ids) if hasattr(self,'decouvertes_ids') else None,'retenues_lecture':self.discovered,
+                    'traitees':self.processed,'restantes':max(0,self.discovered-self.processed),
+                    'publications_enregistrees':len(self.publications),'exportees_txt':sum(bool(r.get('description')) for r in self.records),
+                    'hors_hashtags':self.filtered,'autre_langue':self.non_french,
+                    'hors_periode':self.hors_periode,'date_inconnue':self.dates_indeterminees,
+                    'sans_legende':self.legendes_vides,'erreurs_lecture':self.errors},
+                'evenements_recents':list(self.evenements_debug)}
+
     def update(self, **values):
         with self.lock:
+            if any(cle in values and values[cle]!=getattr(self,cle,None) for cle in ('status','processed','publication_en_cours')):
+                self.evenements_debug.append({'date':scraper.utc_now(),
+                    'statut':values.get('status',self.status),
+                    'traitees':values.get('processed',self.processed),
+                    'publication':values.get('publication_en_cours',self.publication_en_cours)})
+                self.evenements_debug=self.evenements_debug[-100:]
             for key, value in values.items():
                 setattr(self, key, value)
 
@@ -278,7 +323,7 @@ class Job:
                     etat = json.loads((self.directory / "traitement_video.json").read_text())
                     progression = {cle:etat.get(cle) for cle in ("etape","videos_analysees","comparaisons")}
                 except (OSError, ValueError): pass
-            return {"id": self.id, "hashtag": self.settings.hashtag,
+            return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "filtered": self.filtered, "search_errors": self.search_errors,
@@ -544,7 +589,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         job.update(status="collecting", discovered=len(links))
         for index, url in enumerate(links, 1):
             job.pause(args.delay)
-            job.update(message=f"Lecture de la publication {index} sur {len(links)}…")
+            job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
             try:
                 record = scraper.read_post(driver, url, args, interact=interact, check=job.check,
                     **({"sans_connexion": True} if job.settings.source_collecte != "hashtags" else {}))
@@ -643,7 +688,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         elif len(links) < args.limit and not job.settings.second_hashtag:
             final_message += f" La recherche a fourni {len(links)} lien(s), pour un objectif de {args.limit}."
     except Stopped:
-        final_status, final_message = "stopped", "Collecte arrêtée. Les textes déjà obtenus restent téléchargeables."
+        final_status, final_message = "stopped", "Collecte arrêtée. " + ((job.cause_arret or {}).get("explication") or "Cause de l’arrêt non renseignée.") + " Les textes déjà obtenus restent téléchargeables."
     except RuntimeError:
         final_message = "Aucune publication accessible pour la source choisie. Consultez le détail des sources et vérifiez que les publications sont visibles dans TikTok avant de continuer."
         if len(job.journal) == 1 and job.journal[0].get("rapport", {}).get("diagnostic", {}).get("code") == "erreur_tiktok":
@@ -704,6 +749,7 @@ class Manager:
             if len(active) >= self.max_jobs:
                 raise HTTPException(429, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
             job = Job(owner, settings, self.data_dir)
+            job.limites_debug={"inactivite_max_s":self.idle_timeout,"duree_max_s":self.max_duration}
             self.jobs[job.id] = job
             job.thread = threading.Thread(target=self.runner, args=(job,), daemon=True)
             job.thread.start()
@@ -733,10 +779,14 @@ class Manager:
                 if job.busy or job.video_busy:
                     from ticket_gate import verifier_session_active
                     if not verifier_session_active(job.owner):
-                        job.stop.set()
+                        job.demander_arret("acces_inactif")
                         job.video_stop.set()
-                if job.busy and (now - job.last_seen > self.idle_timeout or now - job.created > self.max_duration):
-                    job.stop.set()
+                if job.busy:
+                    job.limites_debug={'inactivite_max_s':self.idle_timeout,'duree_max_s':self.max_duration}
+                    if now-job.created > self.max_duration:
+                        job.demander_arret('duree_maximale')
+                    elif now-job.last_seen > self.idle_timeout:
+                        job.demander_arret('inactivite')
                 if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
                     job.video_stop.set()
                 if not job.busy and not job.video_busy and job.finished is not None and now - job.finished > self.retention:
@@ -767,7 +817,7 @@ class Manager:
         with self.lock:
             jobs = list(self.jobs.values())
             for job in jobs:
-                job.stop.set()
+                job.demander_arret("arret_serveur")
                 job.video_stop.set()
         deadline = time.monotonic() + 25
         for job in jobs:
@@ -1189,7 +1239,7 @@ def create_app(manager=None):
     @app.post("/api/jobs/{job_id}/stop")
     def stop(job_id: str, request: Request):
         job = manager.get(owner(request), job_id)
-        job.stop.set()
+        job.demander_arret("utilisateur")
         return {"ok": True}
 
     def enqueue(job, command):

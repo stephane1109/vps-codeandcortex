@@ -1,4 +1,5 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
+import json
 from datetime import date
 import re
 
@@ -226,6 +227,19 @@ with onglet_collecte:
                 st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
             else:
                 st.write(actuel["message"])
+            if st.checkbox("Mode debug — diagnostic de la collecte",key="debug_collecte_active",
+                    help="Affiche les causes d’arrêt, les limites et les 100 derniers événements. Le diagnostic technique est enregistré automatiquement pour cette session, même si cette case était décochée."):
+                diagnostic=actuel.get('debug_collecte')
+                if diagnostic:
+                    cause=diagnostic.get('cause_arret')
+                    if cause: st.warning(cause['explication'])
+                    elif actuel.get('status')=='stopped': st.warning('Cause non enregistrée pour cette ancienne collecte.')
+                    st.json(diagnostic,expanded=True)
+                    st.download_button('Télécharger le diagnostic debug (JSON)',
+                        json.dumps(diagnostic,ensure_ascii=False,indent=2),
+                        file_name='diagnostic_collecte.json',mime='application/json',
+                        key='telecharger_debug_collecte')
+                else: st.info('Diagnostic indisponible pour cette ancienne session. Relancez une collecte après le déploiement.')
             st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
             if actuel.get("hashtags") and (actuel["source_collecte"] != "hashtags" or actuel["second_hashtag"]):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
