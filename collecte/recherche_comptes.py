@@ -31,7 +31,7 @@ def adresse_recherche(compte, hashtag=None):
     return "https://www.tiktok.com/search/video?q=" + quote(construire_requete_compte(compte, hashtag), safe="")
 
 
-def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None):
+def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, progress=None, check=None, intervention_si_vide=True):
     """Parcourir les résultats successifs et conserver uniquement l'auteur exact."""
     import scraptiktok as moteur
     compte = normaliser_compte(rapport["compte_attendu"])
@@ -44,7 +44,9 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
     candidats, identites, liens = {}, {}, {}
     donnees_confirmees = set()
     tentatives_vides = max(3, arguments.idle_rounds)
-    budget = max(arguments.max_scrolls, arguments.limit * 4)
+    # Les profils ont déjà fait l'objet d'un premier parcours. Éviter qu'une
+    # recherche de secours ne monopolise plusieurs minutes par média.
+    budget = max(8, arguments.max_scrolls)
     rapport.update(tentatives_sans_nouveaute=tentatives_vides, budget_defilements=budget)
 
     def publier_compteurs():
@@ -139,7 +141,8 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
                 return False
 
             try:
-                WebDriverWait(navigateur, arguments.timeout).until(attendre_suite)
+                WebDriverWait(navigateur, min(arguments.timeout, 10.0),
+                              poll_frequency=0.5).until(attendre_suite)
                 inactif = 0
             except TimeoutException:
                 inactif += 1
@@ -149,7 +152,7 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
             if len(liens) >= arguments.limit:
                 rapport["discovery_stop"] = "limit"
                 break
-            if not candidats and arguments.interactive and not aide_vide:
+            if not candidats and arguments.interactive and intervention_si_vide and not aide_vide:
                 aide_vide = True
                 afficher("recherche_sans_liens", f"La recherche vidéo de @{compte} n’affiche pas encore de publication lisible. "
                          "La fenêtre s’ouvre automatiquement. Traitez une éventuelle vérification, puis cliquez sur Continuer.")
@@ -159,7 +162,7 @@ def collecter_recherche_compte(navigateur, arguments, rapport, *, interact, prog
             if inactif >= tentatives_vides:
                 page = observation.derniere_page or {}
                 connexion = moteur.type_intervention_tiktok(navigateur) == "connexion"
-                if arguments.interactive and not aide_blocage and (connexion or page.get("suite") is not False):
+                if arguments.interactive and intervention_si_vide and not aide_blocage and (connexion or page.get("suite") is not False):
                     aide_blocage = True
                     afficher("recherche_bloquee", "La recherche TikTok ne charge plus de nouvelles publications. "
                              "Traitez une éventuelle vérification dans la fenêtre, puis cliquez sur Continuer pour réessayer. "
