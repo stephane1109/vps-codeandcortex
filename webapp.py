@@ -1349,6 +1349,10 @@ def create_app(manager=None):
         )
         with job.lock:
             codages=lire_annotations(job.directory)
+        # L'identité de l'éditeur change après sauvegarde pour éliminer ses
+        # anciennes modifications locales (et ne pas les réappliquer au nouveau CSV).
+        revision=__import__('hashlib').sha256(
+            json.dumps(codages,sort_keys=True).encode('utf-8')).hexdigest()[:12]
         sans_resultat=publications_sans_resultat(job.directory,lignes,etat)
         base=lire_tableau(dossier/'correlations_spearman.csv') if disponibles else []
         annotations_corr=(correlations_violence(
@@ -1360,6 +1364,7 @@ def create_app(manager=None):
             'indicateurs':fusionner(lignes,codages),
             'sans_resultat':fusionner(sans_resultat,codages),
             'annotations_violence':statistiques_codage(codages,inventaire['publications_collectees']),
+            'annotation_version':revision,
             'correlations':base+annotations_corr}
 
     @app.post("/api/jobs/{job_id}/desordre/annotations")
