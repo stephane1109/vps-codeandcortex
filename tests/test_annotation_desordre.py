@@ -43,6 +43,32 @@ class TestsAnnotations(unittest.TestCase):
             self.assertIn("123;https://www.tiktok.com/@x/video/123;\r\n",csv)
             self.assertIn("456;https://www.tiktok.com/@x/video/456;1",csv)
 
+    def test_codage_reste_visible_apres_une_sauvegarde_et_relecture(self):
+        from analyse_desordre.annotation import fusionner
+        with tempfile.TemporaryDirectory() as d:
+            identifiant="7697829530844663072"
+            lignes=[
+                {"publication_id":identifiant,"indice_desordre":45.0},
+                {"publication_id":"101","indice_desordre":20.0},
+            ]
+            formulaire=pd.DataFrame([
+                {"publication_id":identifiant,"annotation_violence":"Non évaluée"},
+                {"publication_id":"101","annotation_violence":"Non évaluée"},
+            ])
+            edition=formulaire.copy()
+            edition.loc[0,"annotation_violence"]="Oui (1)"
+            edition.loc[1,"annotation_violence"]="Non (0)"
+            changements=modifications_depuis_tableau(formulaire,edition)
+            enregistrer_annotations(Path(d),changements,{identifiant,"101"})
+            nouveaux=fusionner(lignes,lire_annotations(Path(d)))
+            self.assertEqual([r["violence_visible"] for r in nouveaux],[1,0])
+            self.assertEqual(
+                ["Non évaluée" if v is None else "Oui (1)" if v==1 else "Non (0)"
+                 for v in [r["violence_visible"] for r in nouveaux]],
+                edition["annotation_violence"].tolist())
+            # Le « Non » ne devient jamais une valeur manquante lors d'un rafraîchissement.
+            self.assertEqual(lire_annotations(Path(d)),{identifiant:1,"101":0})
+
     def test_menus_deroulants_dans_tableau_principal_codes_et_identifiants(self):
         avant=pd.DataFrame({
             "publication_id":["7697829530844663072","101","102"],
