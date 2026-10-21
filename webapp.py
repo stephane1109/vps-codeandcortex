@@ -744,9 +744,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     job.bilan_hashtags[hashtag] += 1
                             if matches:
                                 job.correspondances_hashtags += 1
-                        language = (classify_description(record["description"])
-                                    if matches and job.settings.french_only else None)
+                        # Évaluer la langue indépendamment du filtre des hashtags.
+                        language = (
+                            classify_description(record["description"])
+                            if job.settings.french_only else None
+                        )
                         record["langue_detection"] = language
+                        
                         with job.lock:
                             if not matches:
                                 job.filtered += 1
