@@ -98,12 +98,13 @@ def _calculs_violence(chemin, signature, valeurs):
     from .service import lire_tableau
     from .statistiques import correlation_spearman
     from .engagement import VARIABLES_ENGAGEMENT
+    from .indice import INDICATEURS
     import numpy as np
 
     lignes = lire_tableau(Path(chemin))
     codages = dict(valeurs)
     resultat = []
-    for engagement in VARIABLES_ENGAGEMENT:
+    for engagement in (*VARIABLES_ENGAGEMENT, *INDICATEURS):
         x, y = [], []
         for ligne in lignes:
             code = codages.get(str(ligne.get("publication_id")))
