@@ -37,7 +37,7 @@ class PaginationPresseRegression(unittest.TestCase):
         self.assertEqual(resultat["avant"]["liens_visibles"], 6)
         self.assertEqual(resultat["apres"]["liens_visibles"], 12)
         navigateur.execute_script.assert_any_call(
-            RECUPERATION_DEFILEMENT_JS, "lemondefr", "conteneur-grille", 455
+            RECUPERATION_DEFILEMENT_JS, "lemondefr", "conteneur-grille", int(650 * 0.7)
         )
         gestes.assert_called_once()
 
