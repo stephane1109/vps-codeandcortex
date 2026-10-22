@@ -4,11 +4,48 @@ import json
 import re
 
 
+def construire_sources_visuelles(liens, publications):
+    """Vidéos découvertes sur comptes/presse, même sans légende lisible.
+
+    Les URL proviennent du contrôle d'auteur réalisé pendant la découverte.
+    Ne jamais fabriquer du texte, une date ou des valeurs d'engagement.
+    """
+    from scraptiktok import canonical_post
+
+    existants={str(p.get('id') or p.get('publication_id')) for p in publications}
+    ajouts={}
+    for adresse in liens:
+        identite=canonical_post(adresse)
+        if not identite:
+            continue
+        identifiant,url,auteur=identite
+        if '/video/' not in url or identifiant in existants:
+            continue
+        ajouts.setdefault(identifiant,{
+            'id':identifiant,'url':url,'author':auteur,
+            'description':'','engagement':{},'retenue':False,
+            'source':'decouverte_compte_presse','status':'legende_non_extraite',
+        })
+    return list(ajouts.values())
+
+
 def lire_publications(session):
-    fichier=Path(session)/'publications.json'
+    """Métadonnées textuelles et vidéos découvertes sans texte, sans doublon."""
+    session=Path(session)
+    fichier=session/'publications.json'
     if not fichier.is_file(): return []
     donnees=json.loads(fichier.read_text(encoding='utf-8-sig'))
-    return donnees if isinstance(donnees,list) else []
+    publications=donnees if isinstance(donnees,list) else []
+    complement=session/'sources_visuelles.json'
+    if complement.is_file():
+        visuelles=json.loads(complement.read_text(encoding='utf-8-sig'))
+        if isinstance(visuelles,list):
+            deja={str(p.get('id') or p.get('publication_id')) for p in publications}
+            publications=[*publications,*(
+                item for item in visuelles if isinstance(item,dict)
+                and str(item.get('id') or '') not in deja
+            )]
+    return publications
 
 
 def fichier_local(session,chemin):
