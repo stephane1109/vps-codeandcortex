@@ -174,6 +174,9 @@
     if (note) {
       if (payload.global && payload.global.serverState === "degraded") {
         note.textContent = payload.global.message || "Synchronisation Redis temporairement indisponible : la page conserve le dernier état connu et met à jour la pastille d'une application que vous venez d'ouvrir.";
+      } else if (Array.isArray(payload.global?.capacityMismatches) && payload.global.capacityMismatches.length > 0) {
+        const noms = payload.global.capacityMismatches.map((item) => item.applicationId).join(", ");
+        note.textContent = `Attention : CAPACITE_SERVEUR incohérente entre le dashboard et les applications suivantes : ${noms}. Vérifiez leurs variables Coolify. Les statuts individuels restent fondés sur leurs propres tickets.`;
       } else {
         note.textContent = "Les indicateurs sont synchronisés avec Redis et se mettent à jour automatiquement.";
       }

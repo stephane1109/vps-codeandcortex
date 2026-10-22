@@ -14,7 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - dépend de l'environnement loc
     redis = None
 
 
-CAPACITE_SERVEUR_DEFAUT = 6
+CAPACITE_SERVEUR_DEFAUT = 10
 DUREE_TICKET_DEFAUT = 3600
 MAX_ACTIVE_DEFAUT = 3
 MAX_FILE_ATTENTE_DEFAUT = 20
@@ -432,6 +432,7 @@ def calculer_position_attente(client_redis, identifiant_ticket: str, application
 
 
 def _statut_application_depuis_compteurs(active: int, max_active: int, queued: int) -> tuple[str, str]:
+    """Déterminer l'état propre à une application, jamais depuis la charge globale."""
     if queued > 0:
         return "queued", "File d'attente"
     if active <= 0:
@@ -643,6 +644,27 @@ def lire_statut_application(client_redis, application_id: str) -> dict[str, Any]
     }
 
 
+def relever_ecarts_capacite_serveur(client_redis, application_ids: list[str], capacite_dashboard: int) -> list[dict[str, Any]]:
+    """Signaler les différences entre la capacité du dashboard et celle déclarée par les applications."""
+    ecarts: list[dict[str, Any]] = []
+    for application_id in application_ids:
+        for cle in cles_redis_configuration_application(application_id):
+            donnees = client_redis.hgetall(cle) or {}
+            if not donnees:
+                continue
+            capacite_application = _extraire_entier_mapping(
+                donnees, "global_capacity", "capacite_serveur", minimum=1
+            )
+            if capacite_application is not None and capacite_application != capacite_dashboard:
+                ecarts.append({
+                    "applicationId": application_id,
+                    "applicationCapacity": capacite_application,
+                    "dashboardCapacity": capacite_dashboard,
+                })
+            break
+    return ecarts
+
+
 def construire_tableau_de_bord(client_redis, application_ids: list[str] | None = None) -> dict[str, Any]:
     nettoyer_tickets_expires(client_redis)
     configuration_globale = _configuration_globale()
@@ -650,6 +672,7 @@ def construire_tableau_de_bord(client_redis, application_ids: list[str] | None =
 
     ids = [normaliser_identifiant_application(item) for item in application_ids] if application_ids else _application_ids_connues(client_redis)
     applications = {application_id: lire_statut_application(client_redis, application_id) for application_id in ids}
+    ecarts_capacite = relever_ecarts_capacite_serveur(client_redis, ids, configuration_globale["capacite_serveur"])
 
     active_users = compter_tickets_actifs_total(client_redis)
     total_queued = compter_tickets_attente_total(client_redis)
@@ -672,6 +695,7 @@ def construire_tableau_de_bord(client_redis, application_ids: list[str] | None =
             "activeLoad": active_load,
             "maxLoad": configuration_globale["capacite_serveur"],
             "totalQueued": total_queued,
+            "capacityMismatches": ecarts_capacite,
             "serverState": server_state,
             "serverLabel": server_label,
             "updatedAt": int(time.time()),

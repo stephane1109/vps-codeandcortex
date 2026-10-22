@@ -188,7 +188,7 @@ FastAPI et une seule réplique du conteneur.
 Le contrôle d’accès reprend celui d’Europresse vers IRaMuTeQ. Les variables
 `REDIS_URL`, `APP_TICKET_*` et `CAPACITE_SERVEUR` sont lues à l’exécution depuis
 Coolify. Conserver les valeurs configurées, notamment `APP_TICKET_ID=scraptiktok`,
-`APP_TICKET_MAX_ACTIVE=8`, `APP_TICKET_COST=1` et `CAPACITE_SERVEUR=10`.
+`APP_TICKET_MAX_ACTIVE=3`, `APP_TICKET_COST=2` et `CAPACITE_SERVEUR=10`.
 Ne pas enregistrer le mot de passe Redis dans Git.
 
 La barre latérale affiche le ticket actif, la file d’attente et la libération/reprise
