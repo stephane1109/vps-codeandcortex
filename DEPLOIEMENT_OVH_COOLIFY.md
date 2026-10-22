@@ -37,6 +37,7 @@ MAX_CONCURRENT_JOBS=1
 RESULT_TTL_SECONDS=3600
 IDLE_TIMEOUT_SECONDS=300
 JOB_TIMEOUT_SECONDS=1800
+CHECKPOINT_TTL_SECONDS=604800
 ```
 
 Pour un accès réservé, définir également `APP_ACCESS_USER` et
@@ -51,7 +52,9 @@ Une collecte simultanée est autorisée par défaut ; les autres utilisateurs
 reçoivent un message indiquant que le serveur est occupé. Ne pas augmenter
 `MAX_CONCURRENT_JOBS` sans augmenter les ressources disponibles.
 
-Un volume persistant sur `/app/data` est facultatif. Les textes sont supprimés
+Un volume persistant sur `/app/data` est nécessaire pour les sauvegardes progressives facultatives. Il conserve les ZIP de récupération dans `sauvegardes_collectes/`, indépendamment des sessions temporaires, pendant 7 jours par défaut (variable `CHECKPOINT_TTL_SECONDS`). Sans ce volume, un redéploiement peut effacer ces sauvegardes.
+
+Un volume persistant sur `/app/data` est facultatif pour une collecte sans sauvegarde progressive. Les textes sont supprimés
 automatiquement après une heure par défaut. Après un redémarrage de l'application,
 les sessions précédentes ne sont plus accessibles et les fichiers orphelins sont
 nettoyés à l'expiration. Les sessions TikTok sont temporaires, sans profil partagé.
