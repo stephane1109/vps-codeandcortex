@@ -106,8 +106,10 @@ class IntegrationProfilsVisuels(unittest.TestCase):
                                  {"100.mp4","101.mp4","102.mp4"})
                 return {"statuts":{"mesure":3}}
 
+            # Tester l'orchestration sans importer OpenCV / les modèles visuels.
+            module_moteur=SimpleNamespace(analyser_lot=analyser)
             with patch("collecte.telechargement.telecharger_video",side_effect=telecharger), \
-                 patch("analyse_desordre.lancement.analyser_lot",side_effect=analyser):
+                 patch.dict("sys.modules",{"analyse_desordre.lancement":module_moteur}):
                 executer(session,"desordre_0123456789abcdef",10,320,10,True)
             self.assertEqual([p["id"] for p in analysees],["100","101","102"])
             self.assertEqual(lire_etat(session)["statut"],"termine")
