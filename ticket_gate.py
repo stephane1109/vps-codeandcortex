@@ -471,6 +471,9 @@ def _claim_or_refresh(client, cfg: dict[str, Any], session_id: str) -> dict[str,
     existing_ticket = client.get(session_key)
 
     if existing_ticket and client.exists(_ticket_key(existing_ticket)):
+        # La Home utilise updated_at pour detecter les tickets abandonnes :
+        # prolonger uniquement les TTL Redis laissait un heartbeat stale.
+        client.hset(_ticket_key(existing_ticket), mapping={"updated_at": int(time.time())})
         client.expire(session_key, cfg["ttl_seconds"])
         client.expire(_ticket_key(existing_ticket), cfg["ttl_seconds"])
         _promote_waiting(client, cfg)
