@@ -55,154 +55,33 @@ def collecter_requete_compte(navigateur, arguments, compte, hashtag, rapport=Non
 def collecter_profil_public(navigateur, arguments, compte, rapport, *,
                            interact, progress=None, check=None,
                            validation_initiale=True):
-    """Découvrir les publications d'un profil, sans recherche par hashtag."""
-    import time
-    from selenium.common.exceptions import TimeoutException, WebDriverException
-    from selenium.webdriver.support.ui import WebDriverWait
-    import scraptiktok as moteur
-    from .pagination_profils import defiler_grille_profil
-    from .reseau_profils import ObservationProfil
+    """Découvrir les vidéos d'un compte par sa grille réellement paginée.
+
+    L'ancien parcours cessait parfois après la première grille (environ six
+    vignettes). Le module dédié sélectionne l'onglet Publications lorsqu'il
+    existe, observe les réponses publiques successives et signale les limites
+    d'accès sans contourner la connexion ou un CAPTCHA.
+    """
+    from .profil_selenium import collecter_grille_profil
 
     compte = normaliser_compte(compte)
-    check = check or (lambda: None)
-    url_profil = f"https://www.tiktok.com/@{compte}"
-    rapport.update(mode_decouverte="profil_direct", hashtag_url=url_profil,
-                   requete_recherche=f"@{compte} (profil public)",
-                   compte_attendu=compte, discovered_urls=[],
-                   candidats_ids=[], candidats_examines=0,
-                   auteurs_ecartes=0, defilements_effectues=0,
-                   pagination_profil=[], observation_reseau={},
-                   exhaustif=False)
-    observation = ObservationProfil(navigateur, compte, rapport["observation_reseau"], arguments.timeout)
-    liens, candidats, exclus = {}, set(), set()
-    tentatives_vides = max(2, arguments.idle_rounds)
-
-    def publier():
-        rapport.update(discovered_urls=list(liens.values()),
-                       candidats_ids=sorted(candidats),
-                       candidats_examines=len(candidats),
-                       auteurs_ecartes_ids=sorted(exclus),
-                       auteurs_ecartes=len(exclus),
-                       retenues_par_compte={compte: len(liens)})
-        if progress:
-            progress(len(liens))
-
-    def scanner():
-        check()
-        if not moteur.meme_page_tiktok(navigateur.current_url, url_profil):
-            rapport["redirection_profil"] = True
-            return False
-        adresses = list(navigateur.execute_script(moteur.DISCOVER_JS) or [])
-        adresses.extend(moteur.liens_donnees_publications(
-            navigateur.execute_script(moteur.DONNEES_PUBLICATIONS_JS)))
-        adresses.extend(observation.lire())
-        avant = len(liens)
-        for adresse in adresses:
-            identite = moteur.canonical_post(adresse)
-            if not identite:
-                continue
-            identifiant, canonique, auteur = identite
-            candidats.add(identifiant)
-            if auteur.casefold() != compte:
-                exclus.add(identifiant)
-            elif len(liens) < arguments.limit:
-                liens.setdefault(identifiant, canonique)
-        publier()
-        return len(liens) > avant
-
-    check()
-    observation.demarrer()
-    try:
-        moteur.open_page(navigateur, url_profil)
-        if moteur.diagnostiquer_page(navigateur, rapport)["code"] == "erreur_tiktok":
-            rapport["discovery_stop"] = "erreur_profil"
-            raise RuntimeError("TikTok affiche une erreur sur le profil public.")
-        if moteur.type_intervention_tiktok(navigateur) == "captcha":
-            if not arguments.interactive:
-                moteur.diagnostiquer_page(navigateur, rapport, code="verification_tiktok")
-                raise RuntimeError("Vérification TikTok nécessaire.")
-            interact("Terminez le CAPTCHA du profil, puis cliquez sur Continuer.")
-        if moteur.type_intervention_tiktok(navigateur) == "connexion":
-            rapport["discovery_stop"] = "connexion_profil"
-            raise RuntimeError("TikTok demande une connexion pour afficher le profil.")
-        try:
-            # Ne pas ouvrir une première fenêtre de confirmation pour une page
-            # vide : seul un véritable CAPTCHA justifie une intervention.
-            WebDriverWait(navigateur, min(arguments.timeout, 10.0),
-                          poll_frequency=0.5).until(lambda _: scanner())
-        except TimeoutException:
-            if moteur.type_intervention_tiktok(navigateur) == "captcha":
-                if not arguments.interactive:
-                    moteur.diagnostiquer_page(navigateur, rapport, code="verification_tiktok")
-                    raise RuntimeError("Vérification TikTok nécessaire.")
-                interact("Terminez le CAPTCHA TikTok, puis cliquez sur Continuer.")
-                scanner()
-        if not liens:
-            moteur.diagnostiquer_page(navigateur, rapport)
-            rapport["discovery_stop"] = "grille_profil_vide"
-            raise RuntimeError(
-                "Profil public sans publication lisible : lancement de la recherche "
-                "ciblée sur ce compte, sans exiger de seconde validation manuelle."
-            )
-
-        inactif = 0
-        # Les premières publications doivent être lues dès que la pagination
-        # ne progresse plus : attendre 20 s x plusieurs scrolls gardait le TXT
-        # vide malgré des liens déjà retenus.
-        attente_suite = min(6.0, max(2.0, arguments.timeout / 4))
-        for _ in range(arguments.max_scrolls):
-            check()
-            if len(liens) >= arguments.limit:
-                rapport["discovery_stop"] = "limit"
-                break
-            nature = moteur.type_intervention_tiktok(navigateur)
-            if nature == "captcha":
-                if not arguments.interactive:
-                    rapport["discovery_stop"] = "verification_tiktok"
-                    break
-                interact("Terminez le CAPTCHA pour charger la suite des vidéos du profil.")
-            elif nature == "connexion":
-                rapport["discovery_stop"] = "connexion_apres_resultats"
-                break
-            if not moteur.meme_page_tiktok(navigateur.current_url, url_profil):
-                rapport["discovery_stop"] = "profil_redirige"
-                break
-            etape = None
-            try:
-                etape = defiler_grille_profil(navigateur, compte, reprendre=inactif > 0, check=check)
-                rapport["pagination_profil"].append(etape)
-                rapport["defilements_effectues"] += 1
-                time.sleep(min(arguments.delay, 1.5))
-                WebDriverWait(navigateur, attente_suite, poll_frequency=0.5).until(
-                    lambda _: scanner())
-                inactif = 0
-            except TimeoutException:
-                inactif += 1
-                # Grille déjà en bas et immobile : conserver les liens existants,
-                # arrêter la découverte et passer à read_post().
-                immobile = (etape is not None and etape["avant"]["fin"] and etape["apres"]["fin"]
-                           and etape["avant"]["position"] == etape["apres"]["position"])
-                if immobile or inactif >= min(tentatives_vides, 2):
-                    rapport["discovery_stop"] = "pagination_epuisee"
-                    break
-        else:
-            rapport["discovery_stop"] = "max_scrolls"
-        if len(liens) >= arguments.limit:
-            rapport["discovery_stop"] = "limit"
-        return list(liens.values())
-    except WebDriverException as erreur:
-        moteur.diagnostiquer_page(navigateur, rapport, erreur)
-        if moteur.est_erreur_session(erreur):
-            raise
-        if liens:
-            rapport["discovery_stop"] = "erreur_navigation_apres_resultats"
-            return list(liens.values())
-        raise
-    finally:
-        observation.fermer()
-        publier()
-        rapport["collecte_partielle"] = len(liens) < arguments.limit
-
+    rapport.update(
+        mode_decouverte="profil_direct",
+        hashtag_url=f"https://www.tiktok.com/@{compte}",
+        requete_recherche=f"@{compte} (profil public)",
+        compte_attendu=compte,
+        exhaustif=False,
+    )
+    liens = collecter_grille_profil(
+        navigateur, arguments, rapport,
+        interact=interact, progress=progress, check=check,
+    )
+    rapport.update(
+        candidats_examines=len(liens),
+        retenues_par_compte={compte: len(liens)},
+        collecte_partielle=len(liens) < arguments.limit,
+    )
+    return liens
 
 def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), **options):
     """Collecter exclusivement l'auteur sélectionné, sans pages générales de hashtags.

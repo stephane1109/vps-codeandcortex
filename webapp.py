@@ -763,6 +763,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     )
     driver = None
     connexion = None
+    unique_links = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     try:
         job.check()
@@ -782,7 +783,6 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
         sources = connexion.preparer_sources(job.settings)
         driver = connexion.ouvrir()
-        unique_links = {}
         hors_selection = 0
         medias_par_compte = {s["compte"]: s for s in sources if "compte" in s}
         links = []
@@ -1034,6 +1034,17 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
                      "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal,
                      "diagnostics": job.diagnostics}, texte_source=job.path)
+                # Les collectes comptes/presse peuvent découvrir un lien vidéo
+                # sans pouvoir en lire la légende. Le conserver pour l'analyse
+                # visuelle, sans le transformer en texte ou en mesure d'engagement.
+                if job.settings.source_collecte in {"comptes", "presse"}:
+                    from analyse_desordre.sources import construire_sources_visuelles
+                    complement = construire_sources_visuelles(
+                        unique_links.values(), job.publications
+                    )
+                    (job.directory / "sources_visuelles.json").write_text(
+                        json.dumps(complement, ensure_ascii=False), encoding="utf-8"
+                    )
                 exporter_zip(job.directory, job.directory / "archive.zip", inclure_mp4=job.settings.telecharger_mp4)
                 job.archive_prete = True
             except Exception:

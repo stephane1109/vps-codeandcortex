@@ -90,7 +90,17 @@ def executer(session,dossier,frequence,dimension,duree_max,telecharger_manquants
                 cible=Path(temporaire)/(identifiant+'.mp4')
                 try: os.link(chemin,cible)
                 except OSError: shutil.copy2(chemin,cible)
-            bilan=analyser_lot(temporaire,session/'publications.json',session/dossier,
+            # L'export texte peut omettre des vidéos publiques découvertes
+            # sur les comptes/presse si leur légende n'a pas pu être lue.
+            # Fournir au moteur le lot visuel consolidé sans modifier
+            # publications.json ni inventer des données d'engagement.
+            metadonnees=session/'publications.json'
+            if (session/'sources_visuelles.json').is_file():
+                metadonnees=Path(temporaire)/'publications_visuelles.json'
+                metadonnees.write_text(
+                    json.dumps(publications,ensure_ascii=False),encoding='utf-8'
+                )
+            bilan=analyser_lot(temporaire,metadonnees,session/dossier,
                 Parametres(frequence=frequence,dimension=dimension,duree_max=duree_max),progression)
         etat.update(statut='termine' if set(bilan['statuts'])=={'mesure'} else 'partiel',
                     etape='Analyse terminée',bilan=bilan['statuts'])
