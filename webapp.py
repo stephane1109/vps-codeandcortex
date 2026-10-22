@@ -48,6 +48,7 @@ class StartRequest(BaseModel):
     medias: list[str] = Field(default_factory=list, max_length=29)
     enrichir: bool = False
     telecharger_mp4: bool = False
+    sauvegarde_progressive: bool = False
     collecter_commentaires: bool = False
     collecter_reponses: bool = False
     limite_commentaires: int = Field(default=50, ge=1, le=500)
@@ -374,6 +375,7 @@ class Job:
         self.dates_indeterminees = 0
         self.search_errors = 0
         self.records = []
+        self.dernier_point_sauvegarde = None
         self.frame = b""
         self.action_error = ""
         self.type_intervention = ""
@@ -477,6 +479,8 @@ class Job:
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "diagnostics": list(self.diagnostics),
                     "telecharger_mp4": self.settings.telecharger_mp4,
+                    "sauvegarde_progressive": self.settings.sauvegarde_progressive,
+                    "dernier_point_sauvegarde": self.dernier_point_sauvegarde,
                     "bilan_mp4": [{"video_id": r.get("video_id"), "video_statut": r.get("video_statut", "en_attente"),
                         "video_message": r.get("video_message", "En attente du téléchargement."),
                         "video_fichier": r.get("video_fichier")} for r in self.records if r.get("video_id")],
@@ -529,6 +533,21 @@ class Job:
                 self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
                 self.commentaires if self.settings.collecter_commentaires else None,
                 supprimer_arobase_profil=supprimer_arobase_profil)
+
+    def sauvegarder_point(self, statut="en_cours"):
+        """Point de récupération indépendant du TTL des dossiers de session."""
+        if not self.settings.sauvegarde_progressive:
+            return None
+        from stockage.sauvegarde_progressive import enregistrer_point
+        with self.lock:
+            etat={"traitees":self.processed, "statut":statut,
+                  "source":self.settings.libelle}
+            point=enregistrer_point(
+                self.racine, self.id, self.owner, etat,
+                self.texte_a_exporter(), self.publications, self.records,
+                self.commentaires)
+            self.dernier_point_sauvegarde=point
+            return point
 
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
@@ -753,6 +772,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         job.journal.append({"publication_id": record.get("id"),
                             "auteur": record.get("author"), "filtre_auteur": "hors_selection"})
                         job.update(processed=index)
+                        if job.settings.sauvegarde_progressive and index % 10 == 0:
+                            job.sauvegarder_point()
                         continue
                     periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
                     if periode in {"hors_periode", "date_indeterminee"}:
@@ -826,6 +847,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.save()
                 if job.base:
                     job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
+                if job.settings.sauvegarde_progressive and index % 10 == 0:
+                    job.sauvegarder_point()
 
         for numero_source, source in enumerate(sources, 1):
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
@@ -981,6 +1004,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += " L’archive enrichie n’a pas pu être finalisée ; le TXT reste disponible."
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
+        if job.settings.sauvegarde_progressive:
+            try:
+                job.sauvegarder_point(final_status)
+            except (OSError, ValueError, TypeError):
+                LOG.exception("Sauvegarde de récupération finale impossible pour %s",job.id)
 
 
 def telecharger_mp4_collecte(job, contexte_anonyme=None):
@@ -1025,6 +1053,7 @@ class Manager:
         self.data_dir = Path(data_dir or os.getenv("DATA_DIR", str(scraper.BASE_DIR / "data")))
         self.max_jobs = max_jobs or max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "1")))
         self.retention = max(60, int(os.getenv("RESULT_TTL_SECONDS", "3600")))
+        self.retention_points = max(3600, int(os.getenv("CHECKPOINT_TTL_SECONDS", "604800")))
         self.idle_timeout = max(60, int(os.getenv("IDLE_TIMEOUT_SECONDS", "300")))
         self.max_duration = max(60, int(os.getenv("JOB_TIMEOUT_SECONDS", "1800")))
         self.runner = runner
@@ -1094,6 +1123,10 @@ class Manager:
                 nettoyer_sessions(self.data_dir, base, self.retention, self.jobs)
                 from stockage.cache_video import purger_cache
                 purger_cache(base,self.retention)
+            # Les sauvegardes optionnelles ont une durée de vie indépendante
+            # des sessions temporaires, y compris après redémarrage.
+            from stockage.sauvegarde_progressive import purger_points
+            purger_points(self.data_dir, self.retention_points)
             # Retire également les exports orphelins après un redémarrage.
             if self.data_dir.exists():
                 for directory in self.data_dir.iterdir():
@@ -1602,6 +1635,23 @@ def create_app(manager=None):
                 for c in job.commentaires if c["publication_id"] in retenues]
         return Response("\n\n".join(blocs) + ("\n" if blocs else ""), media_type="text/plain",
             headers={"Content-Disposition": 'attachment; filename="commentaires.txt"'})
+
+    @app.get("/api/sauvegardes")
+    def sauvegardes_disponibles(request: Request):
+        from stockage.sauvegarde_progressive import lister_points
+        return {"sauvegardes": lister_points(manager.data_dir, owner(request))}
+
+    @app.get("/api/sauvegardes/{identifiant}/telecharger")
+    def telecharger_sauvegarde(identifiant: str, request: Request):
+        from stockage.sauvegarde_progressive import fichier_point
+        try:
+            chemin=fichier_point(manager.data_dir, identifiant, owner(request))
+        except ValueError:
+            raise HTTPException(404, "Sauvegarde introuvable.")
+        if chemin is None:
+            raise HTTPException(404, "Sauvegarde introuvable.")
+        return FileResponse(chemin, media_type="application/zip",
+            filename=f"scraptiktok_sauvegarde_{identifiant}.zip")
 
     @app.get("/api/session")
     def session(request: Request):
