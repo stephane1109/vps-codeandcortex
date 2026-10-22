@@ -25,7 +25,7 @@ Variables d'environnement a regler dans Coolify si besoin :
   Exemple : redis://:motdepasse@redis:6379/0
 
 - APP_TICKET_ID
-  Identifiant Redis de l'application. Utiliser "iramuteq-lab" pour isoler ses tickets de IRaMuTeQ Lite.
+  Identifiant Redis de l'application. Utiliser "iramuteqlite_autochd" pour isoler ses tickets de IRaMuTeQ Lite.
 
 - APP_TICKET_MAX_ACTIVE
   Nombre maximal d'utilisateurs actifs en meme temps.
@@ -59,7 +59,7 @@ Variables d'environnement a regler dans Coolify si besoin :
 """
 
 
-SESSION_COOKIE_NAME = os.getenv("APP_TICKET_SESSION_COOKIE", "iramuteq_lab_ticket_session")
+SESSION_COOKIE_NAME = os.getenv("APP_TICKET_SESSION_COOKIE", "iramuteq_autochd_ticket_session")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -76,7 +76,7 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _config(default_app_id: str = "iramuteq-lab", app_label: str = "IRaMuTeQ Lab") -> dict[str, Any]:
+def _config(default_app_id: str = "iramuteqlite_autochd", app_label: str = "IRaMuTeQ Lab") -> dict[str, Any]:
     return {
         "enabled": _env_bool("APP_TICKET_ENFORCED", True),
         "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
