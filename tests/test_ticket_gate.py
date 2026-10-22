@@ -18,6 +18,22 @@ class TestsTickets(unittest.TestCase):
         self.assertEqual((cfg['app_id'],cfg['max_active'],cfg['cost'],cfg['global_capacity'],cfg['ttl_seconds']),
                          ('scraptiktok',8,1,10,3600))
 
+    def test_heartbeat_rafraichit_horodatage_du_ticket_existant(self):
+        cfg = tickets._config("scraptiktok", "ScrapTikTok")
+        client = Mock()
+        client.get.return_value = "ticket-existant"
+        client.exists.return_value = True
+        client.zcard.return_value = 1
+        client.zrange.return_value = []
+        client.hgetall.return_value = {"status": "actif", "application_id": "scraptiktok"}
+
+        with patch.object(tickets, "_cleanup_expired"), patch.object(tickets, "_promote_waiting"), patch.object(tickets.time, "time", return_value=123456):
+            tickets._claim_or_refresh(client, cfg, "session-existante")
+
+        client.hset.assert_called_once_with("ticket:ticket-existant", mapping={"updated_at": 123456})
+        client.expire.assert_any_call("ticket:ticket-existant", cfg["ttl_seconds"])
+        client.expire.assert_any_call("session:scraptiktok:session-existante:ticket", cfg["ttl_seconds"])
+
     def test_ticket_actif_uniquement_pour_la_bonne_session_et_application(self):
         client = Mock(); client.get.return_value = 'ticket-test'
         with patch.dict(os.environ, {'APP_TICKET_ENFORCED':'1','APP_TICKET_ID':'scraptiktok'}), patch.object(tickets,'_redis_client',return_value=(client,None)):
