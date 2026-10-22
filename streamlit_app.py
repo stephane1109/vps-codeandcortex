@@ -313,6 +313,8 @@ with onglet_collecte:
                            + ("Aucun hashtag n'est imposé aux médias ; les autres auteurs sont exclus."
                               if actuel.get("source_collecte") == "presse" else
                               "Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus."))
+            if actuel.get("sauvegarde_progressive") and actuel.get("erreur_sauvegarde"):
+                st.warning(actuel["erreur_sauvegarde"])
             if actuel.get("sauvegarde_progressive"):
                 point=actuel.get("dernier_point_sauvegarde") or {}
                 if point:
