@@ -39,6 +39,7 @@ from collecte.dates import normaliser_date, evaluer_periode
 LOG = logging.getLogger("scraptiktok.web")
 TERMINAL = {"completed", "partial", "failed", "stopped"}
 COOKIE = "scraptiktok_session"
+HISTORIQUE_COOKIE = "scraptiktok_historique"
 
 
 class StartRequest(BaseModel):
@@ -348,12 +349,17 @@ CAUSES_ARRET = {
 
 
 class Job:
-    def __init__(self, owner: str, settings: StartRequest, data_dir: Path):
-        self.id = uuid.uuid4().hex
+    def __init__(self, owner: str, settings: StartRequest, data_dir: Path, *,
+                 identifiant=None, archive_directory=None, owner_historique=""):
+        self.id = identifiant or uuid.uuid4().hex
         self.owner = owner
+        self.owner_historique = owner_historique
+        self.historique = archive_directory is not None
         self.settings = settings
         self.racine = data_dir
-        if settings.enrichie:
+        if archive_directory is not None:
+            self.directory = Path(archive_directory)
+        elif settings.enrichie:
             from stockage.sessions import creer_dossier_session
             self.directory = creer_dossier_session(data_dir, self.id)
         else:
@@ -406,7 +412,7 @@ class Job:
         self.video_thread = None
         self.video_debut = None
         self.base = None
-        if settings.enrichie:
+        if settings.enrichie and not self.historique:
             from stockage.base_donnees import BaseDonnees
             self.base = BaseDonnees(data_dir / "scraptiktok.sqlite")
             self.base.creer_session(self.id, owner, scraper.utc_now(), settings.model_dump())
@@ -549,6 +555,15 @@ class Job:
                 self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
                 self.commentaires if self.settings.collecter_commentaires else None,
                 supprimer_arobase_profil=supprimer_arobase_profil)
+
+    def sauvegarder_historique(self):
+        if self.historique or not self.owner_historique or not self.archive_prete:
+            return
+        try:
+            from stockage.historique_analyses import enregistrer
+            enregistrer(self, self.owner_historique)
+        except Exception:
+            LOG.exception("Archivage historique impossible pour %s",self.id)
 
     def sauvegarder_point(self, statut="en_cours"):
         """Point de récupération indépendant du TTL des dossiers de session."""
@@ -1026,6 +1041,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += " L’archive enrichie n’a pas pu être finalisée ; le TXT reste disponible."
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
+        job.sauvegarder_historique()
         if job.settings.sauvegarde_progressive:
             try:
                 job.sauvegarder_point(final_status)
@@ -1084,7 +1100,7 @@ class Manager:
         self.closed = threading.Event()
         self.reaper = None
 
-    def start(self, owner, settings):
+    def start(self, owner, settings, owner_historique=""):
         with self.lock:
             if any(j.video_busy for j in self.jobs.values()):
                 raise HTTPException(429, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
@@ -1093,11 +1109,39 @@ class Manager:
                 raise HTTPException(409, "Une collecte est déjà en cours dans votre session.")
             if len(active) >= self.max_jobs:
                 raise HTTPException(429, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
-            job = Job(owner, settings, self.data_dir)
+            job = Job(owner, settings, self.data_dir, owner_historique=owner_historique)
             job.limites_debug={"inactivite_max_s":self.idle_timeout,"duree_max_s":self.max_duration}
             self.jobs[job.id] = job
             job.thread = threading.Thread(target=self.runner, args=(job,), daemon=True)
             job.thread.start()
+            return job
+
+    def reouvrir_historique(self, owner, identifiant, cookie):
+        from stockage.historique_analyses import retrouver
+        recupere = retrouver(self.data_dir, identifiant, cookie)
+        if recupere is None:
+            raise HTTPException(404, "Analyse introuvable ou expirée.")
+        ligne, dossier, manifeste = recupere
+        with self.lock:
+            job = self.jobs.get(identifiant)
+            if job is not None and job.owner == owner and not job.historique:
+                return job
+            params = StartRequest.model_validate(manifeste["parametres"])
+            job = Job(owner, params, self.data_dir, identifiant=identifiant,
+                      archive_directory=dossier, owner_historique=cookie)
+            def charger(nom):
+                chemin = dossier / nom
+                return json.loads(chemin.read_text(encoding="utf-8")) if chemin.is_file() else []
+            job.publications=charger("publications.json")
+            job.records=[p for p in job.publications if p.get("retenue")]
+            job.commentaires=charger("commentaires.json")
+            job.processed=int(manifeste.get("traites",0))
+            job.busy=False
+            job.status=ligne["statut"]
+            job.archive_prete=True
+            job.finished=time.monotonic()
+            job.video_statut="historique"
+            self.jobs[identifiant]=job
             return job
 
     def get(self, owner, job_id):
@@ -1136,7 +1180,8 @@ class Manager:
                     job.video_stop.set()
                 if not job.busy and not job.video_busy and job.finished is not None and now - job.finished > self.retention:
                     self.jobs.pop(job.id)
-                    shutil.rmtree(job.directory, ignore_errors=True)
+                    if not job.historique:
+                        shutil.rmtree(job.directory, ignore_errors=True)
                     if job.base: job.base.supprimer_session(job.id)
             if (self.data_dir / "scraptiktok.sqlite").exists():
                 from stockage.nettoyage import nettoyer_sessions
@@ -1149,6 +1194,8 @@ class Manager:
             # des sessions temporaires, y compris après redémarrage.
             from stockage.sauvegarde_progressive import purger_points
             purger_points(self.data_dir, self.retention_points)
+            from stockage.historique_analyses import purger as purger_historique
+            purger_historique(self.data_dir)
             # Retire également les exports orphelins après un redémarrage.
             if self.data_dir.exists():
                 for directory in self.data_dir.iterdir():
@@ -1222,6 +1269,7 @@ def executer_video(job, options):
         job.update(video_statut="echec")
     finally:
         job.update(video_busy=False, video_process=None, finished=time.monotonic())
+        job.sauvegarder_historique()
 
 
 class OptionsDesordre(BaseModel):
@@ -1268,6 +1316,7 @@ def executer_desordre(job, options, dossier):
         for temporaire in job.directory.glob('desordre_sources_*'):
             if temporaire.is_dir() and not temporaire.is_symlink(): shutil.rmtree(temporaire,ignore_errors=True)
         job.update(video_busy=False,video_process=None,finished=time.monotonic())
+        job.sauvegarder_historique()
 
 
 def create_app(manager=None):
@@ -1324,6 +1373,12 @@ def create_app(manager=None):
             raise HTTPException(401, "Rechargez la page pour ouvrir une session.")
         return session
 
+    def owner_historique(request):
+        cookie=request.cookies.get(HISTORIQUE_COOKIE,"")
+        if not re.fullmatch(r"[a-f0-9]{64}",cookie):
+            raise HTTPException(401,"Historique inaccessible : rechargez la page d’accueil.")
+        return cookie
+
     @app.get("/healthz")
     def health():
         import urllib.request
@@ -1342,6 +1397,10 @@ def create_app(manager=None):
         if not request.cookies.get(COOKIE):
             response.set_cookie(COOKIE, secrets.token_hex(32), httponly=True, samesite="strict",
                                 secure=os.getenv("COOKIE_SECURE", "0") == "1", max_age=86400)
+        if not re.fullmatch(r"[a-f0-9]{64}",request.cookies.get(HISTORIQUE_COOKIE,"")):
+            response.set_cookie(HISTORIQUE_COOKIE, secrets.token_hex(32), httponly=True,
+                                samesite="strict", secure=os.getenv("COOKIE_SECURE","0")=="1",
+                                max_age=90*86400)
         return response
 
     @app.post("/api/jobs/{job_id}/video", status_code=202)
@@ -1666,6 +1725,12 @@ def create_app(manager=None):
         job = manager.get(owner(request), job_id)
         if job.busy or job.video_busy or not job.archive_prete:
             raise HTTPException(409, "L’archive enrichie n’est pas encore disponible.")
+        if job.historique:
+            from stockage.historique_analyses import exporter_zip
+            flux=exporter_zip(job.directory)
+            return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
+                headers={"Content-Disposition":f'attachment; filename="scraptiktok_{job.id}_historique.zip"'},
+                background=BackgroundTask(flux.close))
         if supprimer_arobase_profil:
             from corpus.export_zip import archive_avec_texte
             contenu = job.texte_a_exporter(supprimer_arobase_profil=True).encode("utf-8")
@@ -1706,6 +1771,29 @@ def create_app(manager=None):
         return Response("\n\n".join(blocs) + ("\n" if blocs else ""), media_type="text/plain",
             headers={"Content-Disposition": 'attachment; filename="commentaires.txt"'})
 
+    @app.get("/api/historique")
+    def historique_analyses(request: Request):
+        from stockage.historique_analyses import lister, retention_jours
+        return {"analyses":lister(manager.data_dir, owner_historique(request)),
+                "retention_jours":retention_jours()}
+
+    @app.post("/api/historique/{identifiant}/ouvrir")
+    def ouvrir_historique(identifiant: str, request: Request):
+        exiger_ticket(request)
+        return manager.reouvrir_historique(owner(request), identifiant,
+                                          owner_historique(request)).snapshot()
+
+    @app.get("/api/historique/{identifiant}/archive")
+    def exporter_historique(identifiant: str, request: Request):
+        from stockage.historique_analyses import retrouver, exporter_zip
+        archive=retrouver(manager.data_dir, identifiant, owner_historique(request))
+        if archive is None:
+            raise HTTPException(404, "Analyse introuvable.")
+        flux=exporter_zip(archive[1])
+        return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="scraptiktok_analyse_{identifiant}.zip"'},
+            background=BackgroundTask(flux.close))
+
     @app.get("/api/sauvegardes")
     def sauvegardes_disponibles(request: Request):
         from stockage.sauvegarde_progressive import lister_points
@@ -1736,7 +1824,9 @@ def create_app(manager=None):
     @app.post("/api/jobs", status_code=202)
     def start(payload: StartRequest, request: Request):
         exiger_ticket(request)
-        return manager.start(owner(request), payload).snapshot()
+        cookie = request.cookies.get(HISTORIQUE_COOKIE,"")
+        return manager.start(owner(request), payload,
+            cookie if re.fullmatch(r"[a-f0-9]{64}",cookie) else "").snapshot()
 
     @app.get("/api/jobs/{job_id}")
     def status(job_id: str, request: Request):
