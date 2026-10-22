@@ -432,6 +432,7 @@ def calculer_position_attente(client_redis, identifiant_ticket: str, application
 
 
 def _statut_application_depuis_compteurs(active: int, max_active: int, queued: int) -> tuple[str, str]:
+    """Déterminer l'état propre à une application, jamais depuis la charge globale."""
     if queued > 0:
         return "queued", "File d'attente"
     if active <= 0:
