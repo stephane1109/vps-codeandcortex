@@ -548,7 +548,7 @@ class Job:
                 point=enregistrer_point(
                     self.racine, self.id, self.owner, etat,
                     self.texte_a_exporter(), self.publications, self.records,
-                    self.commentaires)
+                    self.commentaires, self.settings.model_dump())
             except (OSError, ValueError, TypeError) as erreur:
                 LOG.exception("Échec de la sauvegarde progressive %s", self.id)
                 self.erreur_sauvegarde="Impossible d’écrire la sauvegarde sur le VPS : "+str(erreur)[:250]
