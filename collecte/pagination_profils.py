@@ -61,7 +61,7 @@ const liens = Array.from(document.querySelectorAll('a[href*="/video/"],a[href*="
         catch (_) { return false; }
     });
 const dernier = liens.at(-1);
-if (dernier) dernier.scrollIntoView({block:'end',inline:'nearest',behavior:'instant'});
+if (dernier) dernier.scrollIntoView({block:'end',inline:'nearest',behavior:'auto'});
 if (conteneur && conteneur !== document.documentElement && conteneur !== document.body
         && conteneur !== document.scrollingElement
         && conteneur.scrollHeight > conteneur.clientHeight + 2) {
