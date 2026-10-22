@@ -99,6 +99,7 @@ if "initialise" not in st.session_state:
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
+        "sauvegarde_progressive":ancienne.get("sauvegarde_progressive",False),
         "collecter_commentaires":ancienne.get("collecter_commentaires",False),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
@@ -126,6 +127,7 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 st.session_state.setdefault("telecharger_mp4", False)
+st.session_state.setdefault("sauvegarde_progressive", False)
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
@@ -234,6 +236,14 @@ with onglet_collecte:
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
             help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
+        st.checkbox("Sauvegarde progressive des collectes (toutes les 10 publications)",
+            key="sauvegarde_progressive", disabled=occupe,
+            help="Facultatif, désactivé par défaut. Conserve sur le VPS un ZIP de récupération "
+                 "avec les légendes, publications, commentaires et données de sélection. "
+                 "Le ZIP est remplacé toutes les 10 publications traitées et à la fin de la collecte, "
+                 "même partielle. Il reste disponible après redémarrage pendant 7 jours par défaut, "
+                 "si /app/data est un volume persistant. Les MP4 ne sont pas copiés. "
+                 "Cela ne permet pas de reprendre automatiquement Selenium.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
             help="Sur les publications retenues, dans la limite indiquée sous Options des commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
         with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
@@ -264,7 +274,7 @@ with onglet_collecte:
                 st.error("Sélectionnez au moins un média.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4")}
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive")}
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["rechercher_dans_texte"] = (
                     bool(st.session_state.get("rechercher_dans_texte", False)) if source != "presse" else False
@@ -303,6 +313,12 @@ with onglet_collecte:
                            + ("Aucun hashtag n'est imposé aux médias ; les autres auteurs sont exclus."
                               if actuel.get("source_collecte") == "presse" else
                               "Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus."))
+            if actuel.get("sauvegarde_progressive"):
+                point=actuel.get("dernier_point_sauvegarde") or {}
+                if point:
+                    st.caption(f"Sauvegarde progressive : {point.get('traitees',0)} publication(s) traitée(s) sauvegardée(s) · {point.get('sauvegarde_le','')}.")
+                else:
+                    st.caption("Sauvegarde progressive activée : premier point après 10 publications traitées.")
             if actuel.get("source_collecte") == "presse":
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
@@ -516,6 +532,29 @@ with onglet_collecte:
             for publication in st.session_state["collecte"].get("preview",[]):
                 st.text("@" + publication["author"])
                 st.text(publication["description"])
+
+with onglet_collecte:
+    with st.expander("Sauvegardes progressives — récupérer un corpus", expanded=False):
+        st.caption("Les sauvegardes optionnelles sont conservées séparément des sessions temporaires "
+                   "pendant 7 jours par défaut. Elles contiennent TXT et JSON, sans MP4 ni possibilité "
+                   "de reprise automatique de la collecte.")
+        if st.button("Actualiser la liste des sauvegardes",key="actualiser_sauvegardes"):
+            st.session_state.pop("sauvegardes_collectes",None)
+        if "sauvegardes_collectes" not in st.session_state:
+            try:
+                st.session_state["sauvegardes_collectes"]=api("/api/sauvegardes")["sauvegardes"]
+            except RuntimeError as erreur:
+                st.warning("Liste indisponible : "+str(erreur))
+                st.session_state["sauvegardes_collectes"]=[]
+        for point in st.session_state["sauvegardes_collectes"]:
+            st.write(f"{point.get('source','Collecte')} — {point.get('traitees',0)} traitée(s) · "
+                     f"{point.get('retenues',0)} retenue(s) · {point.get('statut','')} · "
+                     f"{point.get('sauvegarde_le','')}")
+            st.link_button("Télécharger le ZIP — "+point['id'][:8],
+                f"/api/sauvegardes/{point['id']}/telecharger")
+        if not st.session_state["sauvegardes_collectes"]:
+            st.info("Aucune sauvegarde disponible pour cette session.")
+
 
 with onglet_aide:
     st.subheader("Comment utiliser l’application")
