@@ -368,6 +368,16 @@ def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
                     continue
 
                 donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
+
+                # Un ticket indexé sous une autre application ne lui appartient pas.
+                # Corriger uniquement les index locaux : le ticket, la session et
+                # l'index global sont conservés pour l'application propriétaire.
+                proprietaire = str(donnees.get("application_id") or "").strip()
+                if proprietaire != identifiant_application:
+                    client_redis.zrem(cles["tickets_actifs"], identifiant_ticket)
+                    client_redis.zrem(cles["tickets_attente"], identifiant_ticket)
+                    continue
+
                 statut = _statut_ticket(donnees)
                 heartbeat = _heartbeat_ticket(donnees, maintenant)
                 session_id = _session_ticket(donnees)
@@ -401,13 +411,31 @@ def calculer_charge_active(client_redis):
 
 
 def compter_tickets_actifs_application(client_redis, application_id: str) -> int:
-    nettoyer_tickets_expires(client_redis, application_id)
-    return client_redis.zcard(cles_redis_application(application_id)["tickets_actifs"])
+    """Ne comptabiliser que les tickets appartenant à cette application."""
+    identifiant_application = normaliser_identifiant_application(application_id)
+    nettoyer_tickets_expires(client_redis, identifiant_application)
+    return sum(
+        1
+        for identifiant_ticket in _lister_tickets(
+            client_redis, cles_redis_application(identifiant_application)["tickets_actifs"]
+        )
+        if str(_lire_donnees_ticket(client_redis, identifiant_ticket).get("application_id") or "").strip()
+        == identifiant_application
+    )
 
 
 def compter_tickets_attente_application(client_redis, application_id: str) -> int:
-    nettoyer_tickets_expires(client_redis, application_id)
-    return client_redis.zcard(cles_redis_application(application_id)["tickets_attente"])
+    """Ne comptabiliser que les tickets d'attente de cette application."""
+    identifiant_application = normaliser_identifiant_application(application_id)
+    nettoyer_tickets_expires(client_redis, identifiant_application)
+    return sum(
+        1
+        for identifiant_ticket in _lister_tickets(
+            client_redis, cles_redis_application(identifiant_application)["tickets_attente"]
+        )
+        if str(_lire_donnees_ticket(client_redis, identifiant_ticket).get("application_id") or "").strip()
+        == identifiant_application
+    )
 
 
 def compter_tickets_actifs_total(client_redis) -> int:

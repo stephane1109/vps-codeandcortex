@@ -102,6 +102,36 @@
     return "Libre";
   }
 
+  function normaliserStatutIndividuel(payload) {
+    // Le statut d'une carte dépend exclusivement de ses compteurs propres.
+    // La charge globale ne doit jamais la faire apparaître comme occupée.
+    if (!payload || isUnavailableState(payload.state)) return payload;
+
+    const actifs = Number(payload.active);
+    const attente = Number(payload.queued);
+    const maximum = Number(payload.maxActive);
+    if (!Number.isFinite(actifs) || actifs < 0 || !Number.isFinite(attente) || attente < 0) {
+      return {
+        ...payload,
+        state: "unavailable",
+        stateLabel: "Synchronisation indisponible",
+        metaText: "Compteurs individuels manquants",
+      };
+    }
+
+    if (attente > 0) {
+      return { ...payload, state: "queued", stateLabel: "File d'attente" };
+    }
+    if (actifs <= 0) {
+      return { ...payload, state: "available", stateLabel: "Libre" };
+    }
+    return {
+      ...payload,
+      state: "busy",
+      stateLabel: Number.isFinite(maximum) && actifs >= maximum ? "Occupée" : "En cours",
+    };
+  }
+
   function buildLocalPayload(card) {
     return {
       state: "busy",
@@ -164,7 +194,7 @@
 
     cards.forEach((card) => {
       const appId = card.dataset.appId;
-      const appPayload = payload.apps && payload.apps[appId];
+      const appPayload = normaliserStatutIndividuel(payload.apps && payload.apps[appId]);
       const resolvedPayload = resolvePayload(card, appPayload);
       if (resolvedPayload) {
         decorateCard(card, resolvedPayload);
