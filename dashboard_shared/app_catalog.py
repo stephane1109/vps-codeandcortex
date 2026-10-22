@@ -134,6 +134,13 @@ UI_OVERRIDES: dict[str, dict[str, Any]] = {
         "order": 130,
         "visible": True,
     },
+    "iramuteqlite_autochd": {
+        "href": "https://iramuteqliteautochd.codeandcortex.fr/",
+        "familyId": "calculer",
+        "iconClass": "fas fa-chart-pie",
+        "description": "Analyse textuelle par CHD avec discrimination automatique.",
+        "order": 145, "visible": True,
+    },
     "iramuteq-lite": {
         "href": "https://iramuteqlite.codeandcortex.fr",
         "familyId": "calculer",
