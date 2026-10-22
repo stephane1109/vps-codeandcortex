@@ -60,7 +60,8 @@ Un seul ZIP est conservé par collecte, mis à jour à chaque point : les fichie
 précédents ne s'accumulent pas.
 
 Le ZIP contient `textes.txt`, `publications.json`, `retenues.json`,
-`commentaires.json` et `etat.json` (progression et statut). Il ne contient
+`commentaires.json`, `etat.json` (progression et statut) et `parametres.json`
+(réglages et filtres). Il ne contient
 ni les MP4, ni les cookies, ni les captures Selenium. L'option est désactivée
 par défaut et **ne reprend pas automatiquement la collecte**.
 
