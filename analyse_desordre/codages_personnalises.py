@@ -44,21 +44,88 @@ def _ecrire(session, donnees):
         temp.unlink(missing_ok=True)
 
 
-def creer_variable(session, nom):
+def _normaliser_nom(nom):
     nom = " ".join(str(nom).strip().split())
     if not 2 <= len(nom) <= 70 or any(ord(c) < 32 for c in nom):
         raise ValueError("Le nom de la variable doit contenir 2 à 70 caractères.")
+    return nom
+
+
+def _cle_nom(nom):
+    return unicodedata.normalize("NFKC", nom).casefold()
+
+
+def creer_variable(session, nom):
+    nom = _normaliser_nom(nom)
     donnees = lire(session)
     if len(donnees["variables"]) >= MAX_VARIABLES:
         raise ValueError("20 variables maximum par corpus.")
-    cle = unicodedata.normalize("NFKC", nom).casefold()
-    if any(unicodedata.normalize("NFKC", str(v["nom"])).casefold() == cle for v in donnees["variables"]):
+    cle = _cle_nom(nom)
+    if any(_cle_nom(v["nom"]) == cle for v in donnees["variables"]):
         raise ValueError("Une variable porte déjà ce nom.")
     nouvelle = {"id": "codage_" + uuid.uuid4().hex[:12], "nom": nom}
     donnees["variables"].append(nouvelle)
     donnees["valeurs"][nouvelle["id"]] = {}
     _ecrire(session, donnees)
     return nouvelle
+
+
+def renommer_variable(session, variable_id, nom):
+    """Modifier seulement le libellé : ID stable, annotations intégralement conservées."""
+    if not re.fullmatch(r"codage_[a-f0-9]{12}", variable_id):
+        raise ValueError("Identifiant de variable invalide.")
+    nom = _normaliser_nom(nom)
+    donnees = lire(session)
+    variable = next((v for v in donnees["variables"] if v["id"] == variable_id), None)
+    if variable is None:
+        raise ValueError("Variable absente de cette analyse.")
+    if any(v["id"] != variable_id and _cle_nom(v["nom"]) == _cle_nom(nom)
+           for v in donnees["variables"]):
+        raise ValueError("Une autre variable porte déjà ce nom.")
+    variable["nom"] = nom
+    _ecrire(session, donnees)
+    return dict(variable)
+
+
+MODALITES_ANNOTATION = {"Non évaluée": None, "Non (0)": 0, "Oui (1)": 1}
+
+
+def modifications_depuis_tableau(original, modifie, variables):
+    """Calculer les changements par ID de vidéo, indépendamment du tri des lignes.
+
+    Vérifier aussi l'identité des colonnes : seule une variable créée dans
+    cette analyse peut être codée.
+    """
+    colonnes = [v["id"] for v in variables]
+    depart = {}
+    for ligne in original.to_dict("records"):
+        identifiant = str(ligne["publication_id"])
+        if identifiant in depart:
+            raise ValueError("Identifiant TikTok dupliqué.")
+        depart[identifiant] = ligne
+    mutations = []
+    presents = set()
+    for ligne in modifie.to_dict("records"):
+        identifiant = str(ligne["publication_id"])
+        if identifiant in presents or identifiant not in depart:
+            raise ValueError("L'identité des vidéos du tableau a changé.")
+        presents.add(identifiant)
+        for variable_id in colonnes:
+            if variable_id not in ligne or variable_id not in depart[identifiant]:
+                raise ValueError("Une colonne d'annotation a disparu.")
+            ancienne = depart[identifiant][variable_id]
+            nouvelle = ligne[variable_id]
+            if nouvelle not in MODALITES_ANNOTATION:
+                raise ValueError("Choisissez Non évaluée, Non (0) ou Oui (1).")
+            if nouvelle != ancienne:
+                mutations.append({
+                    "publication_id": identifiant,
+                    "variable_id": variable_id,
+                    "valeur": MODALITES_ANNOTATION[nouvelle],
+                })
+    if presents != set(depart):
+        raise ValueError("Certaines vidéos manquent dans le tableau.")
+    return mutations
 
 
 def enregistrer(session, modifications, ids_autorises):

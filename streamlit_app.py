@@ -811,7 +811,71 @@ with onglet_desordre:
             lignes=resultats+absentes
             if absentes and etat.get('statut') in ('termine','partiel','echec','interrompu'):
                 st.warning(f"Analyse incomplète : {len(absentes)} publication(s) du corpus n’ont aucun résultat enregistré. Consultez les lignes sans résultat et relancez l’analyse pour les traiter.")
-            if not lignes: return
+            personnalises=donnees.get("codages_personnalises") or {"variables":[],"valeurs":{}}
+            variables_personnalisees=personnalises.get("variables") or []
+            valeurs_personnalisees=personnalises.get("valeurs") or {}
+            traitement_termine=not actuel.get("busy") and not actuel.get("video_busy")
+            with st.expander("Variables de codage personnalisées",expanded=not variables_personnalisees):
+                st.caption("Créez jusqu'à 20 variables binaires (ex. Symbole de l'État, Présence policière). "
+                           "Le nom reste modifiable ; les valeurs enregistrées restent associées aux mêmes vidéos.")
+                with st.form(f"desordre_creer_variable_{tache_desordre['id']}"):
+                    nom_creation=st.text_input(
+                        "Nom de la nouvelle variable",
+                        placeholder="Ex. Symbole de l'État",
+                        max_chars=70,
+                    )
+                    creer=st.form_submit_button(
+                        "Ajouter une colonne au tableau",
+                        disabled=not traitement_termine or len(variables_personnalisees)>=20,
+                    )
+                if creer:
+                    try:
+                        reponse=api(f"/api/jobs/{tache_desordre['id']}/desordre/variables",
+                                    {"nom":nom_creation})
+                        if not reponse.get("ok"):
+                            raise RuntimeError("La variable n'a pas été créée.")
+                        st.session_state['desordre_confirmation_variable']="Variable créée."
+                        st.rerun()
+                    except RuntimeError as erreur:
+                        st.error("Création impossible : "+str(erreur))
+                if variables_personnalisees:
+                    with st.form(f"desordre_renommer_variable_{tache_desordre['id']}"):
+                        choix_variable=st.selectbox(
+                            "Variable à renommer",
+                            [v["id"] for v in variables_personnalisees],
+                            format_func=lambda identifiant:next(
+                                (v["nom"] for v in variables_personnalisees if v["id"]==identifiant),
+                                identifiant),
+                        )
+                        nom_courant=next(
+                            v["nom"] for v in variables_personnalisees if v["id"]==choix_variable
+                        )
+                        nouveau_nom=st.text_input(
+                            "Nouveau nom",value=nom_courant,max_chars=70,
+                            key=f"desordre_renommer_nom_{tache_desordre['id']}_{choix_variable}",
+                        )
+                        renommer=st.form_submit_button("Renommer la variable",disabled=not traitement_termine)
+                    if renommer:
+                        try:
+                            reponse=api(
+                                f"/api/jobs/{tache_desordre['id']}/desordre/variables/{choix_variable}/renommer",
+                                {"nom":nouveau_nom},
+                            )
+                            if not reponse.get("ok"):
+                                raise RuntimeError("Le nom de la variable n'a pas été enregistré.")
+                            st.session_state['desordre_confirmation_variable']="Variable renommée ; codages conservés."
+                            st.rerun()
+                        except RuntimeError as erreur:
+                            st.error("Renommage impossible : "+str(erreur))
+                confirmation_variable=st.session_state.pop('desordre_confirmation_variable',None)
+                if confirmation_variable: st.success(confirmation_variable)
+                st.link_button(
+                    "Exporter les variables et leurs annotations (CSV)",
+                    f"/api/jobs/{tache_desordre['id']}/desordre/codages.csv",
+                )
+            if not lignes:
+                st.info("Les colonnes créées seront éditables dès que le tableau d'analyse sera disponible.")
+                return
             total_collecte=max(donnees.get('publications_collectees',0),len(lignes))
             st.caption(f"{len(resultats)} publication(s) avec un résultat enregistré sur {total_collecte} · {max(0,total_collecte-len(resultats))} sans résultat enregistré. Un résultat peut lui-même signaler une erreur.")
             if etat.get('statut') not in ('termine','partiel'):
@@ -827,6 +891,7 @@ with onglet_desordre:
             # Une seule grille : menus déroulants directement dans la colonne
             # de chaque vidéo ; toutes les mesures automatiques restent protégées.
             from analyse_desordre.annotation import modifications_depuis_tableau
+            from analyse_desordre.codages_personnalises import modifications_depuis_tableau as modifications_personnalisees
             options_violence=('Non évaluée','Non (0)','Oui (1)')
             etiquette_violence={None:'Non évaluée',0:'Non (0)',1:'Oui (1)'}
             tableau_editable=tableau.copy()
@@ -835,22 +900,33 @@ with onglet_desordre:
                     None if pd.isna(valeur) else int(valeur),'Non évaluée')
                 for valeur in tableau['violence_visible']
             ])
+            for position, variable in enumerate(variables_personnalisees,2):
+                valeurs=valeurs_personnalisees.get(variable["id"]) or {}
+                tableau_editable.insert(position,variable["id"],[
+                    etiquette_violence.get(valeurs.get(identifiant),"Non évaluée")
+                    for identifiant in tableau_editable['publication_id']
+                ])
             colonnes_visibles=[nom for nom in tableau_editable.columns
                               if nom!='violence_visible']
+            colonnes_annotations={"annotation_violence",*[v["id"] for v in variables_personnalisees]}
             etat_finalise=etat.get('statut') in ('termine','partiel')
-            st.caption("Dans la colonne « Violence physique visible », cliquez sur une cellule et "
-                       "choisissez Non évaluée, Non (0) ou Oui (1), puis enregistrez. "
-                       "Les vidéos non évaluées ne sont pas codées 0.")
+            st.caption("Annotez directement les colonnes « Violence physique visible » et vos variables personnalisées. "
+                       "Choisissez Non évaluée, Non (0) ou Oui (1), puis enregistrez. "
+                       "Non évaluée reste une valeur manquante, jamais un zéro.")
             # Un formulaire empêche chaque sélection de provoquer un rerun
             # de Streamlit et de remettre la colonne à « Non évaluée ».
             # Les cellules et la ligne restent affichées jusqu'à la sauvegarde.
             with st.form(f"desordre_annotations_{tache_desordre['id']}",clear_on_submit=False):
                 tableau_modifie=st.data_editor(
                     tableau_editable,hide_index=True,use_container_width=True,num_rows='fixed',
-                    disabled=[nom for nom in tableau_editable.columns if nom!='annotation_violence']
+                    disabled=[nom for nom in tableau_editable.columns if nom not in colonnes_annotations]
                              if etat_finalise else True,
                     column_order=colonnes_visibles,
                     column_config={
+                        **{v["id"]:st.column_config.SelectboxColumn(
+                            v["nom"],options=list(options_violence),required=True,width="medium",
+                            help="Codage manuel : Non évaluée (manquant), Non (0), Oui (1).")
+                           for v in variables_personnalisees},
                         **{nom:st.column_config.Column(help=aide)
                            for nom,aide in AIDES_COLONNES.items() if nom in tableau_editable},
                         'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',
@@ -870,26 +946,36 @@ with onglet_desordre:
                     "Enregistrer les annotations",disabled=not etat_finalise)
             if bouton_enregistrement:
                 try:
-                    changements=modifications_depuis_tableau(
+                    changements_violence=modifications_depuis_tableau(
                         tableau_editable,tableau_modifie,colonne='annotation_violence')
-                    if changements:
-                        resultat_sauvegarde=api(
-                            f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
-                            {'annotations':changements})
-                        if not resultat_sauvegarde.get('ok'):
-                            raise RuntimeError("L’API n’a pas confirmé la sauvegarde.")
-                        # Vérifier la lecture persistante après l'écriture.
+                    changements_personnalises=modifications_personnalisees(
+                        tableau_editable,tableau_modifie,variables_personnalisees)
+                    if changements_violence:
+                        retour=api(f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
+                                   {'annotations':changements_violence})
+                        if not retour.get("ok"):
+                            raise RuntimeError("Le serveur n'a pas confirmé le codage de violence.")
+                    if changements_personnalises:
+                        retour=api(f"/api/jobs/{tache_desordre['id']}/desordre/codages",
+                                   {'annotations':changements_personnalises})
+                        if not retour.get("ok"):
+                            raise RuntimeError("Le serveur n'a pas confirmé les codages personnalisés.")
+                    if changements_violence or changements_personnalises:
                         nouvelles_donnees=api(f"/api/jobs/{tache_desordre['id']}/desordre")
-                        lignes_confirmees={
+                        confirmees={
                             str(ligne['publication_id']):ligne.get('violence_visible')
                             for ligne in nouvelles_donnees.get('indicateurs',[])+
                                          nouvelles_donnees.get('sans_resultat',[])
                         }
-                        if any(lignes_confirmees.get(c['publication_id'],'absent') !=
-                               c['violence_visible'] for c in changements):
-                            raise RuntimeError("La lecture après sauvegarde ne confirme pas toutes les annotations.")
+                        if any(confirmees.get(ch['publication_id'],'absent') !=
+                               ch['violence_visible'] for ch in changements_violence):
+                            raise RuntimeError("La relecture ne confirme pas les annotations de violence.")
+                        nouveaux_codages=(nouvelles_donnees.get("codages_personnalises") or {}).get("valeurs",{})
+                        if any(nouveaux_codages.get(ch["variable_id"],{}).get(ch["publication_id"]) != ch["valeur"]
+                               for ch in changements_personnalises):
+                            raise RuntimeError("La relecture ne confirme pas les codages personnalisés.")
                         st.session_state['desordre_dernier_enregistrement']=(
-                            tache_desordre['id'],len(changements))
+                            tache_desordre['id'],len(changements_violence)+len(changements_personnalises))
                         st.rerun()
                     else:
                         st.info("Aucune annotation modifiée.")
