@@ -1543,6 +1543,22 @@ def create_app(manager=None):
                 raise HTTPException(422,str(erreur)) from erreur
         return {'ok':True,'variable':variable}
 
+    @app.post("/api/jobs/{job_id}/desordre/variables/{variable_id}/renommer")
+    def renommer_variable_desordre(
+        job_id: str, variable_id: str, payload: NomVariableCodage, request: Request
+    ):
+        exiger_ticket(request)
+        job=manager.get(owner(request),job_id)
+        if job.busy or job.video_busy:
+            raise HTTPException(409, "Terminez d'abord la collecte ou le calcul en cours.")
+        from analyse_desordre.codages_personnalises import renommer_variable
+        with job.lock:
+            try:
+                variable=renommer_variable(job.directory,variable_id,payload.nom)
+            except (ValueError,OSError) as erreur:
+                raise HTTPException(422,str(erreur)) from erreur
+        return {'ok':True,'variable':variable}
+
     @app.post("/api/jobs/{job_id}/desordre/codages")
     def sauver_codages_personnalises(job_id: str, payload: ModificationsCodages, request: Request):
         exiger_ticket(request)
