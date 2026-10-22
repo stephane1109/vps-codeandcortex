@@ -523,6 +523,13 @@ def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
                     continue
 
                 donnees = _lire_donnees_ticket(client_redis, identifiant_ticket)
+                proprietaire = str(donnees.get("application_id") or "").strip()
+                if proprietaire != identifiant_application:
+                    # Référence croisée : retirer uniquement l'index incorrect,
+                    # sans supprimer le ticket de son véritable propriétaire.
+                    client_redis.zrem(cles["tickets_actifs"], identifiant_ticket)
+                    client_redis.zrem(cles["tickets_attente"], identifiant_ticket)
+                    continue
                 statut = _statut_ticket(donnees)
                 heartbeat = _heartbeat_ticket(donnees, maintenant)
                 session_id = _session_ticket(donnees)
@@ -543,11 +550,25 @@ def nettoyer_tickets_expires(client_redis, application_id: str | None = None):
 
 
 def _compter_tickets_actifs_application_brut(client_redis, application_id: str) -> int:
-    return client_redis.zcard(cles_redis_application(application_id)["tickets_actifs"])
+    """Compter uniquement les tickets du propriétaire demandé."""
+    return sum(
+        1 for ticket_id in _lister_tickets(
+            client_redis, cles_redis_application(application_id)["tickets_actifs"]
+        )
+        if str(_lire_donnees_ticket(client_redis, ticket_id).get("application_id") or "").strip()
+        == application_id
+    )
 
 
 def _compter_tickets_attente_application_brut(client_redis, application_id: str) -> int:
-    return client_redis.zcard(cles_redis_application(application_id)["tickets_attente"])
+    """Éviter qu'une référence d'une autre application pollue la file."""
+    return sum(
+        1 for ticket_id in _lister_tickets(
+            client_redis, cles_redis_application(application_id)["tickets_attente"]
+        )
+        if str(_lire_donnees_ticket(client_redis, ticket_id).get("application_id") or "").strip()
+        == application_id
+    )
 
 
 def _calculer_charge_active_brut(
@@ -629,8 +650,9 @@ def _statut_application_depuis_compteurs(
     if queued > 0:
         return "queued", "File d'attente"
     if active <= 0:
-        if capacity_blocked:
-            return "capacity_full", "Serveur occupé"
+        # Un serveur sans capacité résiduelle n'implique pas que
+        # cette application soit utilisée. Afficher le blocage de
+        # capacité dans les métadonnées, pas dans son statut individuel.
         return "available", "Libre"
     if active >= max_active:
         return "busy", "Occupée"
@@ -910,8 +932,8 @@ def lire_statut_application(
     meta_text = None
     if capacity_blocked:
         meta_text = (
-            f"Charge serveur {active_load}/{capacite_serveur} · "
-            f"coût appli {configuration['cout']}"
+            f"Libre · capacité globale insuffisante pour un nouvel accès "
+            f"(charge {active_load}/{capacite_serveur}, coût {configuration['cout']})"
         )
 
     return {
