@@ -1,0 +1,28 @@
+name: Vérification heartbeat ScrapTikTok
+
+on:
+  push:
+    paths:
+      - ticket_gate.py
+      - tests/test_ticket_gate.py
+      - .github/workflows/tickets-heartbeat.yml
+  pull_request:
+    paths:
+      - ticket_gate.py
+      - tests/test_ticket_gate.py
+      - .github/workflows/tickets-heartbeat.yml
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Installer les dépendances de test
+        run: python -m pip install -r requirements-dev.txt
+      - name: Syntaxe
+        run: python -m compileall -q ticket_gate.py tests/test_ticket_gate.py
+      - name: Test du renouvellement
+        run: python -m unittest discover -s tests -p test_ticket_gate.py -k heartbeat -v
