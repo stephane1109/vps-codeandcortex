@@ -432,6 +432,28 @@ with onglet_collecte:
                             if auteurs:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
+                            details_pagination=recherche.get("pagination_bilan") or {}
+                            if details_pagination:
+                                st.caption(
+                                    f"Pagination du profil : {details_pagination.get('defilements',0)} "
+                                    f"défilement(s), {details_pagination.get('sans_progres',0)} sans déplacement "
+                                    f"de grille · {details_pagination.get('pages_reseau',0)} page(s) "
+                                    "de publications reçue(s) par le navigateur."
+                                )
+                                if details_pagination.get("connexion_exigee"):
+                                    st.warning(
+                                        "TikTok interrompt la pagination anonyme de ce média en demandant "
+                                        "une connexion. Les premières vidéos restent conservées ; "
+                                        "la recherche complémentaire tente d'en trouver d'autres."
+                                    )
+                                elif details_pagination.get("sans_progres",0):
+                                    st.info(
+                                        "La grille du profil n'a pas progressé à certains défilements. "
+                                        "Cela peut provenir du conteneur TikTok ou d'une limite "
+                                        "d'accès aux publications suivantes."
+                                    )
+                                if not details_pagination.get("reseau_disponible",True):
+                                    st.caption("Observation des pages réseau indisponible ; liens HTML uniquement.")
                             motifs = {"limit": "limite demandée atteinte", "no_new_links": "plus de nouveaux liens après plusieurs attentes",
                                       "max_scrolls": "budget de défilement atteint", "blocked": "vérification TikTok en attente",
                                       "tiktok_error": "erreur de chargement TikTok", "no_accessible_links": "aucun lien lisible",

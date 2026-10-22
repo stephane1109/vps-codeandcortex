@@ -1,0 +1,36 @@
+name: ScrapTikTok - Pagination Presse
+
+on:
+  push:
+    paths:
+      - "collecte/pagination_profils.py"
+      - "collecte/profil_selenium.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_pagination_presse_regression.py"
+      - ".github/workflows/presse-pagination.yml"
+  pull_request:
+    paths:
+      - "collecte/pagination_profils.py"
+      - "collecte/profil_selenium.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_pagination_presse_regression.py"
+      - ".github/workflows/presse-pagination.yml"
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Syntaxe
+        run: python -m compileall -q collecte/pagination_profils.py collecte/profil_selenium.py webapp.py streamlit_app.py tests/test_pagination_presse_regression.py
+      - name: Tests pagination et comptes
+        run: |
+          python -m unittest discover -s tests -p test_pagination_presse_regression.py -v
+          python -m unittest discover -s tests -p test_pagination_profils.py -v
