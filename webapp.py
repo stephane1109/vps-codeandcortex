@@ -212,6 +212,20 @@ class AnnotationsViolence(BaseModel):
     annotations: list[CodageViolence] = Field(min_length=1, max_length=1000)
 
 
+class NomVariableCodage(BaseModel):
+    nom: str = Field(min_length=2, max_length=70)
+
+
+class ModificationCodage(BaseModel):
+    variable_id: str = Field(pattern=r"^codage_[a-f0-9]{12}$")
+    publication_id: str = Field(min_length=1,max_length=32,pattern=r"^[0-9]+$")
+    valeur: Literal[0, 1] | None
+
+
+class ModificationsCodages(BaseModel):
+    annotations: list[ModificationCodage] = Field(min_length=1, max_length=2000)
+
+
 class Point(BaseModel):
     x: float = Field(ge=0, le=1, allow_inf_nan=False)
     y: float = Field(ge=0, le=1, allow_inf_nan=False)
@@ -1405,12 +1419,18 @@ def create_app(manager=None):
         from analyse_desordre.sources import lire_publications
         anotables=publications_annotables(
             lire_publications(job.directory), [*lignes,*sans_resultat])
+        from analyse_desordre.codages_personnalises import lire as lire_codages_personnalises
+        with job.lock:
+            personnalises=lire_codages_personnalises(job.directory)
+        revision=hashlib.sha256((revision+json.dumps(personnalises,ensure_ascii=False,sort_keys=True)).encode('utf-8')).hexdigest()[:12]
         return {'etat':etat,'disponible':dependances_disponibles(),
             **inventaire,
             'indicateurs':fusionner(lignes,codages),
             'sans_resultat':fusionner(sans_resultat,codages),
             'annotations_violence':statistiques_codage(codages,len(anotables)),
             'annotation_version':revision,
+            'publications_annotables':anotables,
+            'codages_personnalises':personnalises,
             'correlations':base+annotations_corr}
 
     @app.post("/api/jobs/{job_id}/desordre/annotations")
@@ -1423,8 +1443,8 @@ def create_app(manager=None):
         from analyse_desordre.annotation import enregistrer_annotations, statistiques_codage
         etat=lire_etat(job.directory)
         dossier=dossier_desordre(job,etat)
-        if dossier is None or etat.get('statut') not in ('termine','partiel'):
-            raise HTTPException(409, "Terminez d’abord l’analyse du désordre visuel.")
+        if job.busy or job.video_busy:
+            raise HTTPException(409, "Terminez d’abord la collecte ou le calcul en cours.")
         from analyse_desordre.service import lire_tableau
         from analyse_desordre.annotation import publications_annotables
         publications=publications_annotables(
@@ -1438,6 +1458,48 @@ def create_app(manager=None):
             except (ValueError, OSError) as erreur:
                 raise HTTPException(422, str(erreur)) from erreur
         return {'ok':True,'annotations_violence':statistiques_codage(codes,len(identifiants))}
+
+    @app.post("/api/jobs/{job_id}/desordre/variables")
+    def ajouter_variable_desordre(job_id: str, payload: NomVariableCodage, request: Request):
+        exiger_ticket(request)
+        job=manager.get(owner(request),job_id)
+        if job.busy or job.video_busy:
+            raise HTTPException(409, "Traitement en cours.")
+        from analyse_desordre.codages_personnalises import creer_variable
+        with job.lock:
+            try:
+                variable=creer_variable(job.directory,payload.nom)
+            except (ValueError,OSError) as erreur:
+                raise HTTPException(422,str(erreur)) from erreur
+        return {'ok':True,'variable':variable}
+
+    @app.post("/api/jobs/{job_id}/desordre/codages")
+    def sauver_codages_personnalises(job_id: str, payload: ModificationsCodages, request: Request):
+        exiger_ticket(request)
+        job=manager.get(owner(request),job_id)
+        if job.busy or job.video_busy:
+            raise HTTPException(409, "Traitement en cours.")
+        from analyse_desordre.sources import lire_publications
+        from analyse_desordre.codages_personnalises import enregistrer
+        ids={str(p.get('id')) for p in lire_publications(job.directory)}
+        with job.lock:
+            try:
+                valeurs=enregistrer(job.directory,[p.model_dump() for p in payload.annotations],ids)
+            except (ValueError,OSError) as erreur:
+                raise HTTPException(422,str(erreur)) from erreur
+        return {'ok':True,'nombre_variables':len(valeurs['variables'])}
+
+    @app.get("/api/jobs/{job_id}/desordre/codages.csv")
+    def exporter_codages_personnalises(job_id: str, request: Request):
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.sources import lire_publications
+        from analyse_desordre.annotation import lire_annotations, publications_annotables
+        from analyse_desordre.codages_personnalises import lire, export_csv
+        with job.lock:
+            publications=publications_annotables(lire_publications(job.directory),[])
+            texte=export_csv(publications,lire(job.directory),lire_annotations(job.directory))
+        return Response(texte,media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition":'attachment; filename="codages_videos.csv"'})
 
     @app.get("/api/jobs/{job_id}/desordre/annotations.csv")
     def export_annotations_desordre(job_id: str, request: Request):
