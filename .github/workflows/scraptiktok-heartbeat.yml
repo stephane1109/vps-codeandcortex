@@ -1,0 +1,29 @@
+name: ScrapTikTok / Heartbeat tickets
+
+on:
+  pull_request:
+    paths:
+      - "applications/scraptiktok/ticket_gate.py"
+      - "applications/scraptiktok/tests/test_ticket_gate.py"
+      - ".github/workflows/scraptiktok-heartbeat.yml"
+  push:
+    paths:
+      - "applications/scraptiktok/ticket_gate.py"
+      - "applications/scraptiktok/tests/test_ticket_gate.py"
+      - ".github/workflows/scraptiktok-heartbeat.yml"
+
+jobs:
+  verifier-heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r applications/scraptiktok/requirements-dev.txt
+      - name: Vérifier la syntaxe
+        run: python -m compileall -q applications/scraptiktok/ticket_gate.py applications/scraptiktok/tests/test_ticket_gate.py
+      - name: Tester le renouvellement des tickets
+        working-directory: applications/scraptiktok
+        run: python -m unittest discover -s tests -p test_ticket_gate.py -v
