@@ -108,7 +108,7 @@ def test_ticket_scraptiktok_dans_index_etranger_ne_bloque_pas_autres_application
     )
     client_redis.get.side_effect = lambda cle: (
         identifiant_ticket
-        if cle == f"session:scraptiktok:{identifiant_session}" else None
+        if cle == f"session:scraptiktok:{identifiant_session}:ticket" else None
     )
 
     configuration = {
