@@ -31,4 +31,6 @@ jobs:
       - name: Syntaxe
         run: python -m compileall -q collecte/pagination_profils.py collecte/profil_selenium.py webapp.py streamlit_app.py tests/test_pagination_presse_regression.py
       - name: Tests pagination et comptes
-        run: python -m unittest discover -s tests -p test_pagination_presse_regression.py -v
+        run: |
+          python -m unittest discover -s tests -p test_pagination_presse_regression.py -v
+          python -m unittest discover -s tests -p test_pagination_profils.py -v
