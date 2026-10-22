@@ -57,6 +57,7 @@ class TestsSauvegardeProgressive(unittest.TestCase):
             with ZipFile(cible) as archive:
                 self.assertIn("Deuxième texte",archive.read("textes.txt").decode())
                 self.assertEqual(len(json.loads(archive.read("publications.json"))),2)
+                self.assertTrue(json.loads(archive.read("parametres.json"))["sauvegarde_progressive"])
                 self.assertEqual(json.loads(archive.read("commentaires.json"))[0]["texte"],"Réponse")
                 self.assertNotIn("videos/", "\n".join(archive.namelist()))
             self.assertIsNone(fichier_point(d,job.id,"b"*64))
@@ -66,6 +67,7 @@ class TestsSauvegardeProgressive(unittest.TestCase):
             app=web.create_app(web.Manager(data_dir=d))
             with TestClient(app) as client:
                 client.get("/")
+                client.cookies.clear()
                 client.cookies.set(web.COOKIE,owner)
                 liste=client.get("/api/sauvegardes")
                 self.assertEqual(liste.status_code,200)
@@ -79,6 +81,28 @@ class TestsSauvegardeProgressive(unittest.TestCase):
                 etranger.get("/")
                 self.assertEqual(etranger.get("/api/sauvegardes").json()["sauvegardes"],[])
                 self.assertEqual(etranger.get(f"/api/sauvegardes/{job.id}/telecharger").status_code,404)
+
+    def test_worker_sauvegarde_aux_10_posts_et_a_la_fin(self):
+        with tempfile.TemporaryDirectory() as d:
+            job=web.Job("a"*64,web.StartRequest(
+                hashtag="été",enrichir=True,sauvegarde_progressive=True),Path(d))
+            urls=[f"https://www.tiktok.com/@test/video/{i}" for i in range(100,112)]
+            def lire(_driver,url,*args,**kwargs):
+                return {"id":url.rsplit("/",1)[-1],"url":url,
+                        "author":"test","description":"Vidéo #été"}
+            with patch.object(web.scraper,"collect_links",return_value=urls), \\
+                 patch.object(web.scraper,"read_post",side_effect=lire), \\
+                 patch.object(job,"pause"), \\
+                 patch.object(job,"sauvegarder_point",wraps=job.sauvegarder_point) as sauvegardes:
+                web.execute_job(job,driver_factory=lambda args:__import__("unittest.mock",fromlist=["Mock"]).Mock())
+            self.assertEqual(job.processed,12)
+            self.assertEqual(sauvegardes.call_count,2)
+            self.assertEqual(sauvegardes.call_args_list[0].args,())
+            self.assertEqual(sauvegardes.call_args_list[1].args,("completed",))
+            self.assertEqual(job.dernier_point_sauvegarde["traitees"],12)
+            self.assertEqual(job.dernier_point_sauvegarde["retenues"],12)
+            with ZipFile(Path(d)/DOSSIER/(job.id+".zip")) as archive:
+                self.assertEqual(len(json.loads(archive.read("retenues.json"))),12)
 
     def test_erreur_de_disque_ne_stoppe_pas_la_collecte(self):
         with tempfile.TemporaryDirectory() as d:
