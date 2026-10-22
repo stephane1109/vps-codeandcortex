@@ -376,6 +376,7 @@ class Job:
         self.search_errors = 0
         self.records = []
         self.dernier_point_sauvegarde = None
+        self.erreur_sauvegarde = None
         self.frame = b""
         self.action_error = ""
         self.type_intervention = ""
@@ -481,6 +482,7 @@ class Job:
                     "telecharger_mp4": self.settings.telecharger_mp4,
                     "sauvegarde_progressive": self.settings.sauvegarde_progressive,
                     "dernier_point_sauvegarde": self.dernier_point_sauvegarde,
+                    "erreur_sauvegarde": self.erreur_sauvegarde,
                     "bilan_mp4": [{"video_id": r.get("video_id"), "video_statut": r.get("video_statut", "en_attente"),
                         "video_message": r.get("video_message", "En attente du téléchargement."),
                         "video_fichier": r.get("video_fichier")} for r in self.records if r.get("video_id")],
@@ -542,10 +544,16 @@ class Job:
         with self.lock:
             etat={"traitees":self.processed, "statut":statut,
                   "source":self.settings.libelle}
-            point=enregistrer_point(
-                self.racine, self.id, self.owner, etat,
-                self.texte_a_exporter(), self.publications, self.records,
-                self.commentaires)
+            try:
+                point=enregistrer_point(
+                    self.racine, self.id, self.owner, etat,
+                    self.texte_a_exporter(), self.publications, self.records,
+                    self.commentaires)
+            except (OSError, ValueError, TypeError) as erreur:
+                LOG.exception("Échec de la sauvegarde progressive %s", self.id)
+                self.erreur_sauvegarde="Impossible d’écrire la sauvegarde sur le VPS : "+str(erreur)[:250]
+                return None
+            self.erreur_sauvegarde=None
             self.dernier_point_sauvegarde=point
             return point
 
