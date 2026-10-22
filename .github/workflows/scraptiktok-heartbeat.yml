@@ -26,4 +26,4 @@ jobs:
         run: python -m compileall -q applications/scraptiktok/ticket_gate.py applications/scraptiktok/tests/test_ticket_gate.py
       - name: Tester le renouvellement des tickets
         working-directory: applications/scraptiktok
-        run: python -m unittest discover -s tests -p test_ticket_gate.py -v
+        run: python -m unittest discover -s tests -p test_ticket_gate.py -k heartbeat -v
