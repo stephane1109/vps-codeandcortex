@@ -602,6 +602,26 @@
                 };
             }
 
+            function normaliserStatutIndividuel(payload) {
+                if (!payload || isUnavailableState(payload.state)) return payload;
+
+                const actifs = Number(payload.active);
+                const attente = Number(payload.queued);
+                if (actifs === 0 && attente === 0) {
+                    // Le statut "capacity_full" de l'ancienne API décrivait
+                    // la capacité globale et non l'occupation de l'application.
+                    return {
+                        ...payload,
+                        state: "available",
+                        stateLabel: "Libre",
+                        metaText: payload.state === "capacity_full"
+                            ? (payload.metaText || "Libre · capacité globale insuffisante pour un nouvel accès")
+                            : payload.metaText,
+                    };
+                }
+                return payload;
+            }
+
             function resolvePayload(card, payload) {
                 const appId = card.dataset.appId;
                 const localTicket = appId ? getLocalTicket(appId) : null;
@@ -680,7 +700,7 @@
 
                 cards.forEach((card) => {
                     const appId = card.dataset.appId;
-                    const appPayload = payload.apps && payload.apps[appId];
+                    const appPayload = normaliserStatutIndividuel(payload.apps && payload.apps[appId]);
                     const resolvedPayload = resolvePayload(card, appPayload);
                     if (resolvedPayload) {
                         decorateCard(card, resolvedPayload);
