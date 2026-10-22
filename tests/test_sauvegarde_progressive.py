@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
@@ -90,11 +90,13 @@ class TestsSauvegardeProgressive(unittest.TestCase):
             def lire(_driver,url,*args,**kwargs):
                 return {"id":url.rsplit("/",1)[-1],"url":url,
                         "author":"test","description":"Vidéo #été"}
-            with patch.object(web.scraper,"collect_links",return_value=urls), \\
-                 patch.object(web.scraper,"read_post",side_effect=lire), \\
-                 patch.object(job,"pause"), \\
-                 patch.object(job,"sauvegarder_point",wraps=job.sauvegarder_point) as sauvegardes:
-                web.execute_job(job,driver_factory=lambda args:__import__("unittest.mock",fromlist=["Mock"]).Mock())
+            with (
+                patch.object(web.scraper,"collect_links",return_value=urls),
+                patch.object(web.scraper,"read_post",side_effect=lire),
+                patch.object(job,"pause"),
+                patch.object(job,"sauvegarder_point",wraps=job.sauvegarder_point) as sauvegardes,
+            ):
+                web.execute_job(job,driver_factory=lambda args:Mock())
             self.assertEqual(job.processed,12)
             self.assertEqual(sauvegardes.call_count,2)
             self.assertEqual(sauvegardes.call_args_list[0].args,())
