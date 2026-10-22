@@ -3,8 +3,11 @@ import os
 import httpx
 
 
-def appeler_api(chemin, session, autorisation="", donnees=None):
-    entetes = {"Cookie":"scraptiktok_session=" + session, "X-ScrapTikTok":"1"}
+def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historique=""):
+    cookies = "scraptiktok_session=" + session
+    if cookie_historique:
+        cookies += "; scraptiktok_historique=" + cookie_historique
+    entetes = {"Cookie":cookies, "X-ScrapTikTok":"1"}
     if autorisation: entetes["Authorization"] = autorisation
     adresse = os.getenv("SCRAPTIKTOK_API_URL", "http://127.0.0.1:8501")
     try:
