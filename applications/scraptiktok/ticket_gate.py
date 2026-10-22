@@ -245,7 +245,7 @@ def _config(default_app_id: str, app_label: str) -> dict[str, Any]:
         "app_id": os.getenv("APP_TICKET_ID", default_app_id).strip() or default_app_id,
         "app_label": app_label,
         "max_active": max(1, _env_int("APP_TICKET_MAX_ACTIVE", 1)),
-        "cost": max(0, _env_int("APP_TICKET_COST", 4)),
+        "cost": max(0, _env_int("APP_TICKET_COST", 1)),
         "global_capacity": max(1, _env_int("CAPACITE_SERVEUR", 6)),
         "ttl_seconds": max(60, _env_int("APP_TICKET_TTL_SECONDS", 1800)),
         "max_waiting": max(0, _env_int("APP_TICKET_MAX_WAITING", 20)),
