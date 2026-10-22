@@ -481,6 +481,12 @@ class Job:
                             "auteurs_dans_liens": r.get("auteurs_dans_liens", {}),
                             "defilements": r.get("defilements_effectues", 0),
                             "arret": r.get("discovery_stop", ""),
+                            "pagination_bilan": r.get("pagination_bilan", {}),
+                            "observation_reseau": {
+                                "actif": bool(r.get("observation_reseau", {}).get("actif")),
+                                "pages": len(r.get("observation_reseau", {}).get("pages", [])),
+                                "indisponibilite": r.get("observation_reseau", {}).get("indisponibilite"),
+                            },
                             "liens": len(r.get("discovered_urls", [])),
                             "auteurs_ecartes": r.get("auteurs_ecartes", 0),
                             "diagnostic": r.get("diagnostic", {})}
