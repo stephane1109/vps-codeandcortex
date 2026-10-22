@@ -141,7 +141,10 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 defilement["liens_avant"] = len(liens)
                 rapport["pagination_profil"].append(defilement)
                 rapport["defilements_effectues"] += 1
-                if (defilement["avant"]["position"] == defilement["apres"]["position"]
+                if ("position" in defilement["avant"] and "position" in defilement["apres"]
+                        and "liens_visibles" in defilement["avant"]
+                        and "liens_visibles" in defilement["apres"]
+                        and defilement["avant"]["position"] == defilement["apres"]["position"]
                         and defilement["avant"]["liens_visibles"] == defilement["apres"]["liens_visibles"]):
                     rapport["pagination_sans_progres"] += 1
             time.sleep(arguments.delay)
