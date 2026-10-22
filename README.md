@@ -50,6 +50,34 @@ VNC ni terminal utilisateur n'est nécessaire.
 Les réglages, variables et diagnostics sont dans
 [DEPLOIEMENT_OVH_COOLIFY.md](DEPLOIEMENT_OVH_COOLIFY.md).
 
+## Sauvegarde progressive (facultative)
+
+Dans l'onglet **Collecte**, cocher **Sauvegarde progressive des collectes**
+avant de lancer la recherche. Tous les **10 posts traités**, et à la fin (même
+après un arrêt ou une collecte partielle), ScrapTikTok écrit un ZIP de
+récupération atomique dans `/app/data/sauvegardes_collectes/<id>.zip`.
+Un seul ZIP est conservé par collecte, mis à jour à chaque point : les fichiers
+précédents ne s'accumulent pas.
+
+Le ZIP contient `textes.txt`, `publications.json`, `retenues.json`,
+`commentaires.json` et `etat.json` (progression et statut). Il ne contient
+ni les MP4, ni les cookies, ni les captures Selenium. L'option est désactivée
+par défaut et **ne reprend pas automatiquement la collecte**.
+
+Les archives peuvent être téléchargées dans **Collecte → Sauvegardes
+progressives — récupérer un corpus**, y compris après un redémarrage du
+serveur, tant que le navigateur possède le **cookie privé d'origine**.
+Ce cookie a une durée de vie de 24 heures : après son expiration, les ZIP
+restent récupérables sur le volume VPS, mais ne sont plus accessibles via
+une nouvelle session Web. Télécharger donc le ZIP le lendemain matin.
+
+La conservation des ZIP est indépendante de celle des sessions :
+`CHECKPOINT_TTL_SECONDS=604800` (7 jours) par défaut. Ce paramètre est
+configurable dans Coolify. **Un volume persistant sur `/app/data` est
+nécessaire** pour survivre à un redéploiement ; il est déclaré dans
+`compose.yaml`. Les sauvegardes sont purgées après expiration du délai.
+Un échec de sauvegarde est signalé dans l'interface sans stopper la collecte.
+
 Le code source reste aussi dans `applications/scraptiktok` sur `main`.
 Si vous choisissez volontairement `main` dans Coolify, utilisez alors
 `/applications/scraptiktok` comme Base directory. La branche de déploiement doit
