@@ -6,7 +6,6 @@ cookie privé ; le cookie lui-même n'est jamais enregistré.
 """
 from datetime import datetime, timezone
 from hashlib import sha256
-from io import BytesIO
 from pathlib import Path
 import hmac
 import json
@@ -31,7 +30,7 @@ def _nom_fichier(dossier_donnees, identifiant):
 
 
 def enregistrer_point(dossier_donnees, identifiant, proprietaire, etat, textes,
-                     publications, retenues, commentaires):
+                     publications, retenues, commentaires, parametres=None):
     """Sauvegarder TXT, données enrichies et métadonnées en un ZIP atomique.
 
     Les MP4 ne sont pas copiés ; la sauvegarde ne constitue pas une reprise
@@ -57,6 +56,7 @@ def enregistrer_point(dossier_donnees, identifiant, proprietaire, etat, textes,
         "commentaires.json": json.dumps(commentaires, ensure_ascii=False, allow_nan=False),
         "etat.json": json.dumps({k:v for k,v in manifeste.items() if k!="proprietaire_empreinte"},
                               ensure_ascii=False),
+        "parametres.json": json.dumps(parametres or {}, ensure_ascii=False, allow_nan=False),
     }
     # La création se déroule dans le même dossier, évitant tout ZIP tronqué visible.
     with tempfile.NamedTemporaryFile(dir=cible.parent, prefix=".sauvegarde_",
