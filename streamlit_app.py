@@ -537,9 +537,10 @@ with onglet_collecte:
 
 with onglet_collecte:
     with st.expander("Sauvegardes progressives — récupérer un corpus", expanded=False):
-        st.caption("Les sauvegardes optionnelles sont conservées séparément des sessions temporaires "
-                   "pendant 7 jours par défaut. Elles contiennent TXT et JSON, sans MP4 ni possibilité "
-                   "de reprise automatique de la collecte.")
+        st.caption("Les ZIP sont conservés sur le volume VPS pendant 7 jours par défaut, "
+                   "mais leur téléchargement depuis cette interface nécessite le cookie privé "
+                   "d’origine (valable 24 h). Ils contiennent TXT et JSON, sans MP4 ni "
+                   "reprise automatique de la collecte.")
         if st.button("Actualiser la liste des sauvegardes",key="actualiser_sauvegardes"):
             st.session_state.pop("sauvegardes_collectes",None)
         if "sauvegardes_collectes" not in st.session_state:
