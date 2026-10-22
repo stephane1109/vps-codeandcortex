@@ -201,14 +201,14 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
             rapport["discovery_stop"] = "limit"
         elif rapport.get("discovery_stop") != "connexion_apres_resultats":
             rapport["diagnostic"] = {"code": rapport["discovery_stop"],
-                "pages_reseau_lues": len(rapport["observation_reseau"]["pages"]),
+                "pages_reseau_lues": len(rapport["observation_reseau"].get("pages", [])),
                 "suite_annoncee": (observation.derniere_page or {}).get("suite")}
         rapport["pagination_bilan"] = {
             "liens": len(liens),
             "objectif": arguments.limit,
             "defilements": rapport["defilements_effectues"],
             "sans_progres": rapport["pagination_sans_progres"],
-            "pages_reseau": len(rapport["observation_reseau"]["pages"]),
+            "pages_reseau": len(rapport["observation_reseau"].get("pages", [])),
             "reseau_disponible": observation.rapport.get("actif", False),
             "arret": rapport.get("discovery_stop", ""),
             "connexion_exigee": rapport.get("discovery_stop") == "connexion_apres_resultats",
