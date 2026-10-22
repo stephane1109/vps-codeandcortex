@@ -36,7 +36,8 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
     compte = rapport["compte_attendu"]
     liens = {}
     rapport.update(technique="selenium_profil_pagination", pagination_profil=[],
-                   observation_reseau={}, exhaustif=False)
+                   observation_reseau={}, exhaustif=False, defilements_effectues=0,
+                   pagination_sans_progres=0)
     observation = ObservationProfil(navigateur, compte, rapport["observation_reseau"], arguments.timeout)
     onglet_active = False
 
@@ -139,6 +140,10 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 defilement = defiler_grille_profil(navigateur, compte, reprendre=inactif > 0, check=check)
                 defilement["liens_avant"] = len(liens)
                 rapport["pagination_profil"].append(defilement)
+                rapport["defilements_effectues"] += 1
+                if (defilement["avant"]["position"] == defilement["apres"]["position"]
+                        and defilement["avant"]["liens_visibles"] == defilement["apres"]["liens_visibles"]):
+                    rapport["pagination_sans_progres"] += 1
             time.sleep(arguments.delay)
 
             def attendre_suite(_):
@@ -195,6 +200,16 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
             rapport["diagnostic"] = {"code": rapport["discovery_stop"],
                 "pages_reseau_lues": len(rapport["observation_reseau"]["pages"]),
                 "suite_annoncee": (observation.derniere_page or {}).get("suite")}
+        rapport["pagination_bilan"] = {
+            "liens": len(liens),
+            "objectif": arguments.limit,
+            "defilements": rapport["defilements_effectues"],
+            "sans_progres": rapport["pagination_sans_progres"],
+            "pages_reseau": len(rapport["observation_reseau"]["pages"]),
+            "reseau_disponible": observation.rapport.get("actif", False),
+            "arret": rapport.get("discovery_stop", ""),
+            "connexion_exigee": rapport.get("discovery_stop") == "connexion_apres_resultats",
+        }
         return list(liens.values())
     except WebDriverException as erreur:
         moteur.diagnostiquer_page(navigateur, rapport, erreur)
