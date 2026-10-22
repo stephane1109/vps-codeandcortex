@@ -1,0 +1,30 @@
+name: Tests Home - états individuels
+
+on:
+  push:
+    paths:
+      - gestion_tickets.py
+      - index.html
+      - tests/**
+      - .github/workflows/home-states.yml
+  pull_request:
+    paths:
+      - gestion_tickets.py
+      - index.html
+      - tests/**
+      - .github/workflows/home-states.yml
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements.txt
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q dashboard_api.py gestion_tickets.py tests
+      - name: Tester la Home
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
