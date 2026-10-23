@@ -42,6 +42,56 @@ return onglets.find(e =>
 ) || null;
 """
 
+ETAT_ONGLET_VIDEOS_JS = """
+// Cibler les publications du profil, pas les recommandations ni les onglets
+// Favoris / Republis. L'onglet Vidéos peut déjà être sélectionné par défaut.
+const visible = e => !!e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+const titre = e => [
+    e.innerText || '', e.getAttribute('aria-label') || '',
+    e.getAttribute('title') || ''
+].map(v => v.trim()).filter(Boolean);
+const onglets = Array.from(document.querySelectorAll(
+    '[data-e2e="user-post-tab"],[data-e2e="videos-tab"],[role="tab"]'
+)).filter(visible);
+const onglet = onglets.find(e =>
+    ['user-post-tab', 'videos-tab'].includes(e.getAttribute('data-e2e')) ||
+    titre(e).some(t => /^(vidéos|videos|publications|posts)(?:\\s*\\(\\d+\\))?$/i.test(t))
+);
+const grille = Array.from(document.querySelectorAll(
+    '[data-e2e="user-post-item-list"],[data-e2e^="user-post-item-list"]'
+)).find(visible);
+if (onglet) {
+    const selection = onglet.getAttribute('aria-selected');
+    if (selection === 'true') return {etat:'selectionne',element:null,grille:!!grille};
+    if (selection !== 'false' && grille) return {etat:'selectionne',element:null,grille:true};
+    return {etat:'a_ouvrir',element:onglet,grille:!!grille};
+}
+if (grille) return {etat:'grille_videos',element:null,grille:true};
+return {etat:'indisponible',element:null,grille:false};
+"""
+
+LIENS_ONGLET_VIDEOS_JS = """
+// En mode Presse, ne compter QUE les vidéos de la grille du média. Les
+// recommandations, photos et résultats de recherche ne sont pas des sources.
+const auteur = '@' + arguments[0].toLowerCase();
+const conteneurs = document.querySelectorAll(
+    '[data-e2e="user-post-item-list"],[data-e2e^="user-post-item-list"]'
+);
+const liens = [];
+for (const conteneur of conteneurs) {
+    for (const e of conteneur.querySelectorAll('a[href*="/video/"]')) {
+        try {
+            const url = new URL(e.href);
+            if ((url.hostname === 'www.tiktok.com' || url.hostname === 'tiktok.com')
+                && decodeURIComponent(url.pathname.split('/')[1]).toLowerCase() === auteur
+                && /\\/video\\/\\d+\\/?$/.test(url.pathname)) liens.push(e.href);
+        } catch (_) {}
+    }
+}
+return Array.from(new Set(liens));
+"""
+
+
 LIENS_PROFIL_JS = """
 // La grille peut être montée hors de <main> après le chargement initial.
 const auteur = '@' + arguments[0].toLowerCase();
@@ -53,7 +103,8 @@ return Array.from(document.querySelectorAll('a[href*="/video/"], a[href*="/photo
 """
 
 
-def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=None, progress=None):
+def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=None,
+                          progress=None, cibler_onglet_videos=False):
     """Suivre la grille et ses réponses de pagination dans une seule session Chrome."""
     import scraptiktok as moteur
     check = check or (lambda: None)
@@ -72,10 +123,38 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         check()
 
     def activer_publications():
-        """Attendre que l'onglet existe avant de tenter de le sélectionner."""
+        """Sélectionner explicitement la vue Vidéos en mode Presse.
+
+        Retourne True juste après un clic : il faut attendre un nouveau rendu
+        avant de scanner la grille, sinon on compte l'aperçu d'accueil.
+        """
         nonlocal onglet_active
         if onglet_active or moteur.type_intervention_tiktok(navigateur) == "connexion":
-            return
+            return False
+        if cibler_onglet_videos:
+            situation = navigateur.execute_script(ETAT_ONGLET_VIDEOS_JS) or {}
+            etat = situation.get("etat", "indisponible")
+            if etat in ("selectionne", "grille_videos"):
+                onglet_active = True
+                rapport["navigation_publications"] = (
+                    "onglet_videos_selectionne" if etat == "selectionne"
+                    else "grille_videos_sans_onglet_distinct"
+                )
+                rapport["onglet_publications_active"] = True
+                return False
+            if etat == "a_ouvrir":
+                try:
+                    situation["element"].click()
+                    onglet_active = True
+                    rapport["onglet_publications_active"] = True
+                    rapport["navigation_publications"] = "onglet_videos_clique"
+                    return True
+                except WebDriverException:
+                    rapport["navigation_publications"] = "clic_onglet_videos_impossible"
+            else:
+                rapport["navigation_publications"] = "onglet_videos_indisponible"
+            return False
+
         onglet = navigateur.execute_script(ONGLET_PUBLICATIONS_JS, compte)
         if onglet:
             try:
@@ -83,13 +162,12 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 onglet_active = True
                 rapport["onglet_publications_active"] = True
                 rapport["navigation_publications"] = "rubrique_selectionnee"
-                # Après clic, les vignettes d'aperçu peuvent encore être montées
-                # pendant le changement de vue ; la boucle relira la nouvelle liste.
             except WebDriverException:
                 rapport["onglet_publications_active"] = False
                 rapport["navigation_publications"] = "clic_impossible"
         else:
             rapport.setdefault("navigation_publications", "pas_de_rubrique_distincte_detectee")
+        return False
 
     def surveiller():
         check()
@@ -106,14 +184,31 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         surveiller()
         # Les données initiales peuvent déjà contenir des liens alors que
         # l'onglet et la grille ne sont pas encore montés dans la page.
-        activer_publications()
+        transition = activer_publications()
+        if transition:
+            return False
         avant = len(liens)
-        candidats = list(navigateur.execute_script(LIENS_PROFIL_JS, compte) or [])
-        candidats.extend(moteur.liens_donnees_publications(navigateur.execute_script(moteur.DONNEES_PUBLICATIONS_JS)))
-        candidats.extend(observation.lire())
+        if cibler_onglet_videos:
+            candidats = list(navigateur.execute_script(LIENS_ONGLET_VIDEOS_JS, compte) or [])
+            # Uniquement les listes du profil chargé : aucune exploration des
+            # recommandations, de la rubrique Photos ou de /search/video.
+            if onglet_active:
+                candidats.extend(
+                    url for url in observation.lire() if "/video/" in url
+                )
+            rapport["ciblage_videos"] = (
+                "grille_du_profil" if onglet_active else "onglet_indisponible"
+            )
+        else:
+            candidats = list(navigateur.execute_script(LIENS_PROFIL_JS, compte) or [])
+            candidats.extend(moteur.liens_donnees_publications(navigateur.execute_script(moteur.DONNEES_PUBLICATIONS_JS)))
+            candidats.extend(observation.lire())
         for url in candidats:
             identite = moteur.canonical_post(url)
-            if identite and identite[2].casefold() == compte.casefold() and len(liens) < arguments.limit:
+            if (identite and identite[2].casefold() == compte.casefold()
+                    and (not cibler_onglet_videos or "/video/" in identite[1])
+                    and (not cibler_onglet_videos or onglet_active)
+                    and len(liens) < arguments.limit):
                 liens.setdefault(identite[0], identite[1])
         rapport["discovered_urls"] = list(liens.values())
         adresse = getattr(navigateur, "current_url", "")
