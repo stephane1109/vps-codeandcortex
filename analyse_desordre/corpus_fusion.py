@@ -115,7 +115,7 @@ def construire_tableau_complet(session, dossier):
             lignes[identifiant]["url"] = publication.get("url") or ""
 
     colonnes = list(dict.fromkeys([
-        "publication_id", "url", *colonnes_source, "violence_visible",
+        "publication_id", "url", "statut", *colonnes_source, "violence_visible",
         *noms, *CHAMPS_PROVENANCE,
     ]))
     for identifiant, ligne in lignes.items():
