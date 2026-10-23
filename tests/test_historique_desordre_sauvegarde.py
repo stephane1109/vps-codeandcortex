@@ -106,7 +106,10 @@ class HistoriqueDesordreTests(unittest.TestCase):
                                        json={},headers=headers)
                 self.assertEqual(ouvert.status_code, 200, ouvert.text)
                 self.assertEqual(ouvert.json()["id"], job.id)
-                resultat=client.get(f"/api/jobs/{job.id}/desordre").json()
+                # Les corrélations SciPy sont hors du périmètre de ce test
+                # d'archivage, et ne sont pas installées dans la CI standard.
+                with patch("analyse_desordre.annotation.correlations_violence", return_value=[]):
+                    resultat=client.get(f"/api/jobs/{job.id}/desordre").json()
                 self.assertEqual(resultat["codages_personnalises"]["valeurs"][cle]
                                  ["1234567890123"], 0)
                 self.assertEqual(resultat["annotations_violence"]["oui"], 1)
