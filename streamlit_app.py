@@ -210,7 +210,9 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_multimodale, onglet_desordre, onglet_aide = st.tabs(["Collecte", "Multimodale", "Désordre visuel", "Aide"])
+onglet_collecte, onglet_multimodale, onglet_desordre, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Multimodale", "Désordre visuel", "Corpus fusionné", "Aide"]
+)
 
 with onglet_collecte:
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
@@ -1153,7 +1155,136 @@ with onglet_desordre:
             if etat.get('statut') in ('termine','partiel'):
                 st.link_button("Corrélations avec violence (CSV)",
                     f"/api/jobs/{tache_desordre['id']}/desordre/correlations_violence.csv")
+            st.link_button("Exporter le tableau complet (CSV réimportable)",
+                f"/api/jobs/{tache_desordre['id']}/desordre/tableau-complet.csv",
+                help="URL TikTok, indice de désordre, mouvements, engagement, "
+                     "violence, variables personnalisées et provenance du lot.")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
                 if etat.get('statut') in ('termine','partiel') or nom=='indicateurs_engagement.csv':
                     st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
         afficher_desordre()
+
+
+with onglet_corpus:
+    st.subheader("Fusionner plusieurs analyses de Désordre visuel")
+    st.caption("Importez les CSV « Tableau complet » des collectes ou des archives "
+               "de l'historique. Toutes les URLs, mesures, annotations et provenances "
+               "sont conservées. Aucune vidéo n'est téléchargée.")
+    st.info("La fusion permet de recalculer les comparaisons statistiques. "
+            "L'indice de désordre et les mesures de mouvement ne sont pas recalculés : "
+            "ils proviennent des MP4 examinés dans chaque analyse d'origine.")
+    fichiers_corpus = st.file_uploader(
+        "Importer les tableaux complets CSV (20 fichiers maximum, 10 Mo chacun)",
+        type=["csv"], accept_multiple_files=True, key="fichiers_corpus_fusion",
+    )
+    choix_doublons = st.radio(
+        "Si le même ID TikTok apparaît dans plusieurs tableaux",
+        ("premier", "dernier"), horizontal=True,
+        format_func=lambda v: {"premier":"Conserver le premier",
+                                "dernier":"Conserver le dernier"}[v],
+        key="choix_doublons_corpus",
+        help="Une même vidéo compte une seule fois dans les effectifs et corrélations.")
+    if fichiers_corpus:
+        from analyse_desordre.corpus_fusion import fusionner_tableaux
+        try:
+            fusion = fusionner_tableaux([
+                (fichier.name, fichier.getvalue()) for fichier in fichiers_corpus
+            ], priorite=choix_doublons)
+        except ValueError as erreur:
+            st.error("Import impossible : " + str(erreur))
+        else:
+            c1,c2,c3 = st.columns(3)
+            c1.metric("Publications uniques",fusion["nombre_unique"])
+            c2.metric("Lignes importées",fusion["total_initial"])
+            c3.metric("Doublons écartés",fusion["doublons"])
+            if fusion["doublons_divergents"]:
+                st.warning(
+                    f"{fusion['doublons_divergents']} doublon(s) présentent des "
+                    "valeurs différentes entre les lots. Le choix de priorité "
+                    "ci-dessus détermine quelles valeurs sont conservées."
+                )
+            st.download_button(
+                "Télécharger le corpus fusionné (CSV)",
+                fusion["csv"].encode("utf-8"),
+                file_name="scraptiktok_corpus_fusionne.csv", mime="text/csv",
+            )
+            import pandas as pd
+            tableau_fusionne = pd.DataFrame(fusion["lignes"])
+            st.dataframe(
+                tableau_fusionne, hide_index=True, use_container_width=True,
+                column_config={
+                    "publication_id":st.column_config.TextColumn("ID TikTok"),
+                    "url":st.column_config.LinkColumn("URL TikTok"),
+                }
+            )
+            exclues = {
+                "publication_id","url","analyse_source","statut","erreur",
+                "metadonnees_presentes","parametres_frequence",
+                "parametres_dimension","parametres_duree_max",
+            }
+            numeriques = {}
+            for nom in tableau_fusionne.columns:
+                if nom in exclues:
+                    continue
+                valeurs = pd.to_numeric(
+                    tableau_fusionne[nom].replace("",None),errors="coerce")
+                if valeurs.notna().sum() >= 3:
+                    numeriques[nom] = valeurs
+            if len(numeriques) >= 2:
+                st.subheader("Nouvelles comparaisons statistiques")
+                choix_x = st.selectbox("Variable horizontale",list(numeriques),
+                    index=list(numeriques).index("indice_desordre")
+                    if "indice_desordre" in numeriques else 0,
+                    key="comparaison_corpus_x")
+                variables_y = [cle for cle in numeriques if cle != choix_x]
+                choix_y = st.selectbox("Variable verticale",variables_y,
+                    index=variables_y.index("likes") if "likes" in variables_y else 0,
+                    key="comparaison_corpus_y")
+                observations = pd.DataFrame({
+                    "publication_id":tableau_fusionne["publication_id"].astype(str),
+                    choix_x:numeriques[choix_x],
+                    choix_y:numeriques[choix_y],
+                }).dropna(subset=[choix_x,choix_y])
+                st.caption(f"{len(observations)} vidéo(s) avec deux mesures valides "
+                           f"sur {len(tableau_fusionne)} publications uniques. "
+                           "Les valeurs manquantes ne sont jamais remplacées par zéro.")
+                if not observations.empty:
+                    st.scatter_chart(observations.head(3000),x=choix_x,y=choix_y)
+                    if len(observations)>3000:
+                        st.caption("Le graphique affiche 3 000 observations au maximum ; "
+                                   "les statistiques utilisent les données complètes.")
+                if st.button("Calculer Spearman sur le corpus fusionné",
+                             key="calcul_spearman_corpus"):
+                    if len(observations)<3:
+                        st.warning("Au moins trois vidéos sont nécessaires.")
+                    else:
+                        try:
+                            if len(observations)<=2000:
+                                from analyse_desordre.statistiques import correlation_spearman
+                                statistique = correlation_spearman(
+                                    observations[choix_x],observations[choix_y],
+                                    permutations=999,graine=42)
+                            else:
+                                from scipy.stats import spearmanr
+                                import math
+                                mesure = spearmanr(observations[choix_x],
+                                                  observations[choix_y])
+                                rho,p = float(mesure.statistic),float(mesure.pvalue)
+                                statistique = {"n":len(observations),
+                                    "rho":rho if math.isfinite(rho) else None,
+                                    "p":p if math.isfinite(p) else None,
+                                    "methode":"approximation_asymptotique"}
+                            st.write({
+                                "n":statistique["n"],
+                                "ρ Spearman":statistique["rho"],
+                                "p-value":statistique["p"],
+                                "Méthode":statistique["methode"],
+                            })
+                            st.caption("Analyse exploratoire : p-value bilatérale "
+                                       "non corrigée pour les comparaisons multiples. "
+                                       "Vérifiez l'homogénéité des lots et des paramètres d'analyse.")
+                        except ImportError:
+                            st.warning("SciPy est requis pour le calcul de la corrélation.")
+            elif len(tableau_fusionne):
+                st.info("Choisissez des tableaux possédant au moins deux variables "
+                        "avec trois mesures numériques valides.")
