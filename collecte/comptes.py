@@ -136,7 +136,9 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         finally:
             suivre(len(liens))
 
-    executer(f"@{compte} : profil", lambda etat, suivi: collecter_profil_public(
+    intitulé = (f"@{compte} : onglet Vidéos" if presse_videos_uniquement
+                else f"@{compte} : profil")
+    executer(intitulé, lambda etat, suivi: collecter_profil_public(
         navigateur, arguments, compte, etat,
         interact=intervenir, progress=suivi, check=verifier,
         validation_initiale=options.get("validation_initiale", True),
