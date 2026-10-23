@@ -432,6 +432,13 @@ with onglet_collecte:
                             if auteurs:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
+                            navigation=recherche.get("navigation_publications")
+                            if navigation=="rubrique_selectionnee":
+                                st.caption("Rubrique Vidéos/Publications ouverte avant la pagination.")
+                            elif navigation=="pas_de_rubrique_distincte_detectee":
+                                st.caption("Aucun accès distinct à « Toutes les vidéos » détecté : collecte sur la grille visible du profil.")
+                            elif navigation=="clic_impossible":
+                                st.warning("TikTok a refusé l'ouverture de la rubrique Vidéos/Publications.")
                             details_pagination=recherche.get("pagination_bilan") or {}
                             if details_pagination:
                                 st.caption(
