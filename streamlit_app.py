@@ -130,6 +130,7 @@ if "initialise" not in st.session_state:
 
 st.session_state.setdefault("telecharger_mp4", False)
 st.session_state.setdefault("sauvegarde_progressive", False)
+st.session_state.setdefault("presse_moteur", "api")
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
@@ -236,6 +237,19 @@ with onglet_collecte:
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
         st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Collecte des légendes sans filtre de hashtag ; seules les publications des comptes cochés sont retenues.")
+        st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
+            ["api", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
+            format_func=lambda v: "API du créateur (secUid)" if v=="api" else "Grille du profil (Selenium)",
+            help="L'API utilise les pages de publications du média. Le navigateur inspecte l'onglet Vidéos. "
+                 "Les deux moteurs ne sont jamais enchaînés pendant une même collecte.")
+        try:
+            version_presse=api("/healthz").get("version_presse")
+            if version_presse:
+                st.caption("Version active du serveur Presse : "+version_presse)
+            else:
+                st.error("Ancienne version du serveur : numéro de version Presse absent. Vérifier le déploiement Coolify.")
+        except RuntimeError as erreur:
+            st.warning("Version du serveur non vérifiable : "+str(erreur))
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
         st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
@@ -331,6 +345,7 @@ with onglet_collecte:
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive")}
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
+                valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
                 valeurs["rechercher_dans_texte"] = (
                     bool(st.session_state.get("rechercher_dans_texte", False)) if source != "presse" else False
                 )
@@ -473,6 +488,14 @@ with onglet_collecte:
                 with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
                     for bilan in actuel["bilan_sources"]:
                         st.write(f"{bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        if actuel.get("source_collecte") == "presse":
+                            version_source=bilan.get("version_collecteur")
+                            if version_source:
+                                st.caption("Méthode enregistrée : "+str(bilan.get("presse_moteur") or "?")+
+                                           " · version "+version_source)
+                            else:
+                                st.warning("Diagnostic issu d'une ancienne collecte, sans version enregistrée : "
+                                           "relancez une collecte pour tester le nouveau moteur.")
                         if bilan.get("retenues_par_compte"):
                             st.caption("Liens retenus cumulés : " + " · ".join(
                                 f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
