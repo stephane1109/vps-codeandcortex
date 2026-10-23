@@ -565,13 +565,19 @@ class Job:
                 supprimer_arobase_profil=supprimer_arobase_profil)
 
     def sauvegarder_historique(self):
-        if self.historique or not self.owner_historique or not self.archive_prete:
-            return
+        """Synchroniser les résultats et codages dans l'historique privé de 30 jours."""
+        if self.historique:
+            # Les analyses rouvertes pointent déjà sur leur dossier d'archive.
+            return True
+        if not self.owner_historique or not self.archive_prete:
+            return False
         try:
             from stockage.historique_analyses import enregistrer
             enregistrer(self, self.owner_historique)
+            return True
         except Exception:
-            LOG.exception("Archivage historique impossible pour %s",self.id)
+            LOG.exception("Archivage historique impossible pour %s", self.id)
+            return False
 
     def sauvegarder_point(self, statut="en_cours"):
         """Point de récupération indépendant du TTL des dossiers de session."""
@@ -1511,6 +1517,24 @@ def create_app(manager=None):
             'codages_personnalises':personnalises,
             'correlations':base+annotations_corr}
 
+    @app.post("/api/jobs/{job_id}/desordre/sauvegarder")
+    def enregistrer_analyse_desordre(job_id: str, request: Request):
+        """Sauvegarder explicitement les mesures et les codages sur 30 jours."""
+        exiger_ticket(request)
+        job=manager.get(owner(request), job_id)
+        cookie=owner_historique(request)
+        if job.busy or job.video_busy or not job.archive_prete:
+            raise HTTPException(409, "Attendez la fin des traitements pour enregistrer l'analyse.")
+        if job.owner_historique and job.owner_historique != cookie:
+            raise HTTPException(403, "Cette analyse est liée à un autre historique privé.")
+        from stockage.historique_analyses import retention_jours
+        with job.lock:
+            if not job.historique:
+                job.owner_historique=cookie
+            if not job.sauvegarder_historique():
+                raise HTTPException(500, "L'historique n'a pas pu être enregistré.")
+        return {"ok":True,"id":job.id,"retention_jours":retention_jours()}
+
     @app.post("/api/jobs/{job_id}/desordre/annotations")
     def sauver_annotations_desordre(job_id: str, modifications: AnnotationsViolence, request: Request):
         """Sauvegarder les codages explicites de l'utilisateur, pas de classification automatique."""
@@ -1535,7 +1559,9 @@ def create_app(manager=None):
                 codes=enregistrer_annotations(job.directory,changements,identifiants)
             except (ValueError, OSError) as erreur:
                 raise HTTPException(422, str(erreur)) from erreur
-        return {'ok':True,'annotations_violence':statistiques_codage(codes,len(identifiants))}
+            historique_ok=job.sauvegarder_historique()
+        return {'ok':True,'annotations_violence':statistiques_codage(codes,len(identifiants)),
+                'historique_synchronise':historique_ok}
 
     @app.post("/api/jobs/{job_id}/desordre/variables")
     def ajouter_variable_desordre(job_id: str, payload: NomVariableCodage, request: Request):
@@ -1549,7 +1575,8 @@ def create_app(manager=None):
                 variable=creer_variable(job.directory,payload.nom)
             except (ValueError,OSError) as erreur:
                 raise HTTPException(422,str(erreur)) from erreur
-        return {'ok':True,'variable':variable}
+            historique_ok=job.sauvegarder_historique()
+        return {'ok':True,'variable':variable,'historique_synchronise':historique_ok}
 
     @app.post("/api/jobs/{job_id}/desordre/variables/{variable_id}/renommer")
     def renommer_variable_desordre(
@@ -1565,7 +1592,8 @@ def create_app(manager=None):
                 variable=renommer_variable(job.directory,variable_id,payload.nom)
             except (ValueError,OSError) as erreur:
                 raise HTTPException(422,str(erreur)) from erreur
-        return {'ok':True,'variable':variable}
+            historique_ok=job.sauvegarder_historique()
+        return {'ok':True,'variable':variable,'historique_synchronise':historique_ok}
 
     @app.post("/api/jobs/{job_id}/desordre/codages")
     def sauver_codages_personnalises(job_id: str, payload: ModificationsCodages, request: Request):
@@ -1581,7 +1609,9 @@ def create_app(manager=None):
                 valeurs=enregistrer(job.directory,[p.model_dump() for p in payload.annotations],ids)
             except (ValueError,OSError) as erreur:
                 raise HTTPException(422,str(erreur)) from erreur
-        return {'ok':True,'nombre_variables':len(valeurs['variables'])}
+            historique_ok=job.sauvegarder_historique()
+        return {'ok':True,'nombre_variables':len(valeurs['variables']),
+                'historique_synchronise':historique_ok}
 
     @app.get("/api/jobs/{job_id}/desordre/codages.csv")
     def exporter_codages_personnalises(job_id: str, request: Request):
