@@ -61,7 +61,13 @@ def construire_tableau_complet(session, dossier):
     if not source.is_file():
         raise ValueError("Aucune mesure de Désordre visuel n'a été enregistrée.")
     with source.open(encoding="utf-8-sig", newline="") as flux:
-        lecteur = csv.DictReader(flux)
+        apercu=flux.read(4096)
+        flux.seek(0)
+        try:
+            dialecte=csv.Sniffer().sniff(apercu, delimiters=",;")
+        except csv.Error:
+            dialecte=csv.excel
+        lecteur = csv.DictReader(flux, dialect=dialecte)
         colonnes_source = list(lecteur.fieldnames or [])
         mesures = list(lecteur)
     if "publication_id" not in colonnes_source:
