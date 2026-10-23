@@ -132,18 +132,38 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             erreur_finale = erreur
             etat["echec"] = type(erreur).__name__
             etat["message_erreur"] = str(erreur)
+            if presse_videos_uniquement:
+                etat.setdefault("diagnostic", {
+                    "code": "acces_tiktok_indisponible",
+                    "detail": str(erreur),
+                })
             if est_erreur_session(erreur):
                 raise
         finally:
             suivre(len(liens))
 
-    intitulé = (f"@{compte} : onglet Vidéos" if presse_videos_uniquement
-                else f"@{compte} : profil")
-    executer(intitulé, lambda etat, suivi: collecter_profil_public(
-        navigateur, arguments, compte, etat,
-        interact=intervenir, progress=suivi, check=verifier,
-        validation_initiale=options.get("validation_initiale", True),
-        cibler_onglet_videos=presse_videos_uniquement))
+    if presse_videos_uniquement:
+        # Priorité à la liste paginée du créateur par secUid : aucune dépendance
+        # aux sélecteurs HTML de l'onglet Vidéos (qui changent selon le compte).
+        from .presse_api import collecter_videos_presse_api
+        executer(f"@{compte} : liste vidéos paginée (secUid)",
+            lambda etat, suivi: collecter_videos_presse_api(
+                compte, arguments.limit, etat, check=verifier, progress=suivi))
+        if len(liens) < arguments.limit:
+            # Repli sur la grille du profil si l'API refuse une partie des posts.
+            # Toujours pas de recherche TikTok mélangeant d'autres auteurs.
+            executer(f"@{compte} : grille Vidéos (repli)",
+                lambda etat, suivi: collecter_profil_public(
+                    navigateur, arguments, compte, etat,
+                    interact=intervenir, progress=suivi, check=verifier,
+                    validation_initiale=options.get("validation_initiale", True),
+                    cibler_onglet_videos=True))
+    else:
+        executer(f"@{compte} : profil", lambda etat, suivi: collecter_profil_public(
+            navigateur, arguments, compte, etat,
+            interact=intervenir, progress=suivi, check=verifier,
+            validation_initiale=options.get("validation_initiale", True),
+            cibler_onglet_videos=False))
 
     # Compléter jusqu'au nombre demandé pour CHAQUE compte, même si la
     # grille a déjà fourni quelques vidéos (ex. 6/50 ou 8/50).
@@ -169,9 +189,9 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    exhaustif=False,
                    bilan_recherche=(
                        f"@{compte} : {len(liens)}/{arguments.limit} vidéo(s) découvertes "
-                       "dans l'onglet Vidéos du profil. Aucune recherche @compte "
-                       "n'est utilisée en mode Presse ; résultats partiels "
-                       "si TikTok ne charge pas les pages suivantes."
+                       "via la liste paginée secUid puis, si nécessaire, la grille "
+                       "du profil. Aucune recherche générale @compte. "
+                       "La pagination peut rester partielle si TikTok refuse l'accès."
                        if presse_videos_uniquement else
                        f"@{compte} : {len(liens)}/{arguments.limit} publication(s) "
                        "publiques accessibles. Grille du profil, puis recherche par "
