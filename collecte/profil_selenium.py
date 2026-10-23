@@ -88,6 +88,8 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
             except WebDriverException:
                 rapport["onglet_publications_active"] = False
                 rapport["navigation_publications"] = "clic_impossible"
+        else:
+            rapport.setdefault("navigation_publications", "pas_de_rubrique_distincte_detectee")
 
     def surveiller():
         check()
