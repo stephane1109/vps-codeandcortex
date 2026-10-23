@@ -488,7 +488,14 @@ with onglet_collecte:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
                             navigation=recherche.get("navigation_publications")
-                            if navigation=="onglet_videos_selectionne":
+                            if navigation=="api_liste_createur":
+                                st.caption(
+                                    f"Liste vidéo TikTok par secUid : "
+                                    f"{recherche.get('pages_api',0)} page(s) reçue(s), "
+                                    f"{recherche.get('liens',0)} vidéo(s) retenue(s) "
+                                    "du média, sans utiliser les onglets HTML."
+                                )
+                            elif navigation=="onglet_videos_selectionne":
                                 st.caption("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")
                             elif navigation=="grille_videos_sans_onglet_distinct":
                                 st.caption("Grille de vidéos du média reconnue ; aucun onglet distinct n'était nécessaire.")
@@ -535,7 +542,12 @@ with onglet_collecte:
                             if recherche.get("arret"):
                                 st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
                             if recherche.get("diagnostic"):
-                                st.caption("Diagnostic : " + recherche["diagnostic"].get("code", "indéterminé"))
+                                diagnostic_recherche=recherche["diagnostic"]
+                                st.caption("Diagnostic : " + diagnostic_recherche.get("code", "indéterminé"))
+                                if diagnostic_recherche.get("detail"):
+                                    st.warning("Accès TikTok : " + diagnostic_recherche["detail"])
+                            elif recherche.get("message_erreur"):
+                                st.warning("Accès TikTok : "+recherche["message_erreur"])
                         diagnostic = bilan.get("diagnostic", {})
                         if diagnostic:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
