@@ -26,8 +26,14 @@ def _identifiant(ligne):
 
 def _texte_csv(value):
     valeur = "" if value is None else str(value)
-    # Neutraliser les formules lors de l'ouverture dans un tableur.
-    return "'" + valeur if valeur.lstrip().startswith(("=", "+", "-", "@")) else valeur
+    # Les mesures scientifiques négatives restent numériques dans le CSV.
+    # Neutraliser les formules uniquement lorsqu'il s'agit d'un texte.
+    if valeur.lstrip().startswith(("=", "+", "-", "@")):
+        try:
+            float(valeur)
+        except ValueError:
+            return "'" + valeur
+    return valeur
 
 
 def _csv_texte(colonnes, lignes):
