@@ -90,23 +90,21 @@ class PresseVideoTests(unittest.TestCase):
     def test_presse_ne_bascule_pas_vers_la_recherche_video_generale(self):
         args=SimpleNamespace(limit=50)
         urls=[lien(i) for i in range(100,112)]
-        with patch("collecte.presse_api.collecter_videos_presse_api",return_value=[]) as api, \
+        with patch("collecte.presse_api.collecter_videos_presse_api") as api, \
              patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls) as grille, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
             rapport={}
             resultat=collecter_compte(
                 Mock(),args,"lemondefr",rapport,interact=Mock(),
-                presse_videos_uniquement=True,
+                presse_videos_uniquement=True, presse_moteur="navigateur",
             )
         self.assertEqual(resultat,urls)
         self.assertEqual(rapport["retenues_par_compte"],{"lemondefr":12})
         self.assertEqual(rapport["recherches_compte"][0]["requete_recherche"],
-                         "@lemondefr : liste vidéos paginée (secUid)")
-        self.assertEqual(rapport["recherches_compte"][1]["requete_recherche"],
                          "@lemondefr : onglet Vidéos")
-        self.assertEqual(len(rapport["recherches_compte"]),2)
+        self.assertEqual(len(rapport["recherches_compte"]),1)
         self.assertTrue(rapport["collecte_partielle"])
-        api.assert_called_once()
+        api.assert_not_called()
         grille.assert_called_once()
         self.assertTrue(grille.call_args.kwargs["cibler_onglet_videos"])
         recherche.assert_not_called()
@@ -114,12 +112,14 @@ class PresseVideoTests(unittest.TestCase):
     def test_connecteur_presse_active_uniquement_le_parcours_videos(self):
         connecteur=object.__new__(ConnexionPresse)
         connecteur.arguments=SimpleNamespace(limit=50)
+        connecteur.moteur_collecte="navigateur"
         connecteur.medias_selectionnes={"lemonde":{"id":"lemonde","compte":"lemondefr"}}
         connecteur.obtenir_navigateur=Mock(return_value=Mock())
         connecteur.options_decouverte=Mock(return_value={"interact":Mock()})
         with patch("collecte.comptes.collecter_compte",return_value=[]) as collecte:
             connecteur.decouvrir({"id":"lemonde","compte":"lemondefr"},{})
         self.assertTrue(collecte.call_args.kwargs["presse_videos_uniquement"])
+        self.assertEqual(collecte.call_args.kwargs["presse_moteur"],"navigateur")
 
 
 if __name__=="__main__":

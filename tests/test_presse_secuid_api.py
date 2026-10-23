@@ -218,28 +218,32 @@ class PresseSecUidTests(unittest.TestCase):
              patch("collecte.profil_selenium.collecter_grille_profil") as grille, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
             resultat=collecter_compte(Mock(),SimpleNamespace(limit=50),
-                            COMPTE,rapport,presse_videos_uniquement=True)
+                            COMPTE,rapport,presse_videos_uniquement=True,
+                            presse_moteur="api")
         self.assertEqual(resultat,urls)
         grille.assert_not_called()
         recherche.assert_not_called()
         self.assertEqual(rapport["retenues_par_compte"],{COMPTE:50})
 
-    def test_presse_replie_sur_profil_si_api_refuse_l_acces(self):
+    def test_presse_ne_lance_pas_navigateur_apres_echec_api(self):
         urls=[f"https://www.tiktok.com/@lemondefr/video/{7000000000000000000+i}"
               for i in range(6)]
         rapport={}
         with patch("collecte.presse_api.collecter_videos_presse_api",
                    side_effect=PresseApiError("TikTok HTTP 403")), \
-             patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls), \
+             patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls) as grille, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
-            resultat=collecter_compte(Mock(),SimpleNamespace(limit=50),
-                            COMPTE,rapport,presse_videos_uniquement=True)
-        self.assertEqual(resultat,urls)
+            with self.assertRaisesRegex(PresseApiError,"TikTok HTTP 403"):
+                collecter_compte(Mock(),SimpleNamespace(limit=50),
+                                COMPTE,rapport,presse_videos_uniquement=True,
+                                presse_moteur="api")
         self.assertEqual(rapport["recherches_compte"][0]["echec"],"PresseApiError")
         self.assertEqual(rapport["recherches_compte"][0]["diagnostic"]["code"],
                          "acces_tiktok_indisponible")
-        self.assertEqual(len(rapport["recherches_compte"]),2)
+        self.assertEqual(len(rapport["recherches_compte"]),1)
         recherche.assert_not_called()
+        # Ne pas masquer l'échec de l'API derrière une autre méthode.
+        grille.assert_not_called()
 
 
 if __name__=="__main__":
