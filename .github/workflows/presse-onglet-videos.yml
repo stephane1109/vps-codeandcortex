@@ -1,0 +1,46 @@
+name: ScrapTikTok - Presse onglet Vidéos
+
+on:
+  push:
+    paths:
+      - "collecte/profil_selenium.py"
+      - "collecte/comptes.py"
+      - "connect_presse.py"
+      - "streamlit_app.py"
+      - "tests/test_presse_onglet_videos.py"
+      - ".github/workflows/presse-onglet-videos.yml"
+  pull_request:
+    paths:
+      - "collecte/profil_selenium.py"
+      - "collecte/comptes.py"
+      - "connect_presse.py"
+      - "streamlit_app.py"
+      - "tests/test_presse_onglet_videos.py"
+      - ".github/workflows/presse-onglet-videos.yml"
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Syntaxe Python et JavaScript
+        run: |
+          python -m compileall -q collecte/profil_selenium.py collecte/comptes.py connect_presse.py streamlit_app.py tests/test_presse_onglet_videos.py
+          python - <<'PY'
+          from pathlib import Path
+          from collecte.profil_selenium import ETAT_ONGLET_VIDEOS_JS, LIENS_ONGLET_VIDEOS_JS
+          Path('/tmp/presse-onglet-videos.js').write_text(
+              'function onglet() {\n' + ETAT_ONGLET_VIDEOS_JS + '\n}\n'
+              + 'function videos() {\n' + LIENS_ONGLET_VIDEOS_JS + '\n}\n'
+          )
+          PY
+          node --check /tmp/presse-onglet-videos.js
+      - name: Test du ciblage strict Presse
+        run: python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
+      - name: Tests de pagination profils préexistants
+        run: python -m unittest discover -s tests -p test_pagination_profils.py -v
