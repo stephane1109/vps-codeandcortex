@@ -94,7 +94,7 @@ class PresseSecUidTests(unittest.TestCase):
         self.assertEqual(extraire_identite_embed(embed(),COMPTE),SECUID)
         with self.assertRaisesRegex(PresseApiError,"autre média"):
             extraire_identite_embed(embed(auteur="autremedia"),COMPTE)
-        with self.assertRaisesRegex(PresseApiError,"secUid"):
+        with self.assertRaisesRegex(PresseApiError,"données de profil"):
             extraire_identite_embed(b"<html>6 videos</html>",COMPTE)
 
     def test_secuid_absent_du_profil_recupere_dans_embed_video_du_meme_media(self):
@@ -139,9 +139,14 @@ class PresseSecUidTests(unittest.TestCase):
         with self.assertRaisesRegex(PresseApiError,"autre média"):
             extraire_identite_video_embed(
                 embed_video(auteur="autremedia"),COMPTE,"7000000000000000001")
+        identifiant="7000000000000000001"
+        contenu=embed_video(identifiant).decode()
+        prefixe,texte=contenu.split(">",1)
+        document=json.loads(texte.split("</script>",1)[0])
+        document["source"]["data"][f"/embed/v2/{identifiant}"]["videoData"]["itemInfos"]["id"]="7000000000000000002"
+        faux=(prefixe+">"+json.dumps(document)+"</script>").encode()
         with self.assertRaisesRegex(PresseApiError,"ne correspond"):
-            extraire_identite_video_embed(
-                embed_video(),COMPTE,"7000000000000000002")
+            extraire_identite_video_embed(faux,COMPTE,identifiant)
 
     def test_aucun_secuid_et_aucune_video_amorcage_donne_une_cause_precise(self):
         client=Client([],embed_content=embed_sans_secuid(identifiants=()))
