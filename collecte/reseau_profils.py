@@ -24,25 +24,40 @@ class ReponseRecue:
 
 def extraire_page_publications(donnees, compte):
     """Conserver les publications du compte et les indicateurs bruts de pagination."""
-    from scraptiktok import canonical_post, liens_donnees_publications
+    from scraptiktok import canonical_post
     if not isinstance(donnees, dict):
         return None
-    elements = donnees.get("itemList")
-    code = donnees.get("statusCode")
+    corps = donnees.get("data") if isinstance(donnees.get("data"), dict) else donnees
+    elements = corps.get("itemList")
+    code = donnees.get("statusCode", corps.get("statusCode"))
     code = code if isinstance(code, (int, str)) and re.fullmatch(r"\d{1,10}", str(code)) else None
     valide = isinstance(elements, list) and code in (None, 0, "0")
     liens = []
     if valide:
-        for url in liens_donnees_publications([json.dumps(elements)]):
-            identite = canonical_post(url)
+        for publication in elements:
+            if not isinstance(publication, dict):
+                continue
+            identifiant = str(publication.get("id") or "")
+            auteur = publication.get("author")
+            auteur = auteur.get("uniqueId") if isinstance(auteur, dict) else auteur
+            # Le texte (desc) est facultatif : une publication sans légende
+            # reste une source visuelle valable pour un corpus de presse.
+            if (not identifiant.isdecimal() or not isinstance(auteur, str)
+                    or auteur.casefold() != compte.casefold()
+                    or not (publication.get("video") or publication.get("imagePost"))):
+                continue
+            type_post = "photo" if publication.get("imagePost") else "video"
+            identite = canonical_post(
+                f"https://www.tiktok.com/@{auteur}/{type_post}/{identifiant}"
+            )
             if identite and identite[2].casefold() == compte.casefold():
                 liens.append(identite[1])
     # Une liste concernant un autre auteur ne renseigne pas la fin de ce profil.
     concordante = valide and (not elements or bool(liens))
-    suite_brute = donnees.get("hasMore")
+    suite_brute = corps.get("hasMore", donnees.get("hasMore"))
     suite = (True if suite_brute in (True, 1, "1", "true") else
              False if suite_brute in (False, 0, "0", "false") else None) if concordante else None
-    curseur = donnees.get("cursor")
+    curseur = corps.get("cursor", donnees.get("cursor"))
     curseur = str(curseur) if isinstance(curseur, (str, int)) and re.fullmatch(r"\d{1,32}", str(curseur)) else None
     return {"liens": liens, "code_tiktok": code, "suite": suite,
             "curseur": curseur if concordante else None, "liste_valide": bool(concordante)}
@@ -147,9 +162,14 @@ class ObservationProfil:
         return liens
 
     def accepter_reponse(self, url):
-        """Limiter l'observation aux listes de publications du profil."""
+        """Observer les deux chemins de pagination publique des profils TikTok.
+
+        Selon le compte et la version du site, la grille charge ses vidéos
+        depuis /api/post/item_list ou /api/creator/item_list. Ne pas inventer
+        une requête : lire uniquement les réponses reçues par Chrome.
+        """
         return (url.scheme == "https" and url.hostname in {"www.tiktok.com", "tiktok.com"}
-                and url.path.rstrip("/") == "/api/post/item_list")
+                and url.path.rstrip("/") in {"/api/post/item_list", "/api/creator/item_list"})
 
     def analyser_page(self, donnees):
         """Décoder la réponse correspondant au parcours observé."""

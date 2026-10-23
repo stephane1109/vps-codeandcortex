@@ -9,13 +9,37 @@ from .reseau_profils import ObservationProfil
 
 
 ONGLET_PUBLICATIONS_JS = """
+// Chercher d'abord l'accès à la liste de TOUTES les vidéos, quand TikTok
+// présente un aperçu du profil limité à quelques vignettes. Ne jamais
+// construire une URL supposée : ne suivre que les éléments du DOM observé.
+const compte = '@' + arguments[0].toLowerCase();
 const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+const libelles = e => [e.innerText, e.getAttribute('aria-label'), e.getAttribute('title')]
+    .filter(Boolean).map(t => t.trim().replace(/\\s+/g, ' '));
+const memeProfil = e => {
+    if (e.tagName !== 'A' || !e.href) return true;
+    try {
+        const url = new URL(e.href, location.href);
+        return (url.hostname === 'www.tiktok.com' || url.hostname === 'tiktok.com')
+            && decodeURIComponent(url.pathname.split('/')[1] || '').toLowerCase() === compte;
+    } catch (_) { return false; }
+};
 const candidats = Array.from(document.querySelectorAll(
-    '[data-e2e="videos-tab"], [data-e2e="user-post-tab"], [role="tab"]'));
-return candidats.find(e => visible(e) &&
-    (/^(vidéos|videos|publications|posts)$/i.test(e.innerText.trim()) ||
+    'a, button, [role="button"], [role="tab"], [data-e2e="user-post-tab"], [data-e2e="videos-tab"]'
+)).filter(e => visible(e) && memeProfil(e));
+const tout = /(?:voir|afficher|voir toutes?|see|view|show)\\s+(?:toutes?\\s+les\\s+|all\\s+)?(?:vidéos|videos|publications|posts)|(?:all\\s+(?:videos|posts)|toutes?\\s+les\\s+(?:vidéos|publications))/i;
+const lienComplet = candidats.find(e => libelles(e).some(texte => tout.test(texte)) &&
+    (e.tagName !== 'A' || new URL(e.href, location.href).href !== location.href));
+if (lienComplet) return lienComplet;
+const onglets = candidats.filter(e => (
+    ['videos-tab','user-post-tab'].includes(e.getAttribute('data-e2e')) ||
+    e.getAttribute('role') === 'tab'
+));
+return onglets.find(e =>
+    (libelles(e).some(texte => /^(vidéos|videos|publications|posts)(?:\\s*\\(\\d+\\))?$/i.test(texte)) ||
     ['videos-tab','user-post-tab'].includes(e.getAttribute('data-e2e'))) &&
-    e.getAttribute('aria-selected') !== 'true') || null;
+    e.getAttribute('aria-selected') !== 'true'
+) || null;
 """
 
 LIENS_PROFIL_JS = """
@@ -52,14 +76,20 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         nonlocal onglet_active
         if onglet_active or moteur.type_intervention_tiktok(navigateur) == "connexion":
             return
-        onglet = navigateur.execute_script(ONGLET_PUBLICATIONS_JS)
+        onglet = navigateur.execute_script(ONGLET_PUBLICATIONS_JS, compte)
         if onglet:
             try:
                 onglet.click()
                 onglet_active = True
                 rapport["onglet_publications_active"] = True
+                rapport["navigation_publications"] = "rubrique_selectionnee"
+                # Après clic, les vignettes d'aperçu peuvent encore être montées
+                # pendant le changement de vue ; la boucle relira la nouvelle liste.
             except WebDriverException:
                 rapport["onglet_publications_active"] = False
+                rapport["navigation_publications"] = "clic_impossible"
+        else:
+            rapport.setdefault("navigation_publications", "pas_de_rubrique_distincte_detectee")
 
     def surveiller():
         check()
@@ -86,6 +116,9 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
             if identite and identite[2].casefold() == compte.casefold() and len(liens) < arguments.limit:
                 liens.setdefault(identite[0], identite[1])
         rapport["discovered_urls"] = list(liens.values())
+        adresse = getattr(navigateur, "current_url", "")
+        if isinstance(adresse, str) and adresse.startswith("https://www.tiktok.com/@"):
+            rapport["url_rubrique_publications"] = adresse.split("?")[0]
         if progress:
             progress(len(liens))
         return len(liens) > avant
