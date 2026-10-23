@@ -101,6 +101,9 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     progression = options.get("progress")
     intervenir = options.get("interact")
     presse_videos_uniquement = bool(options.get("presse_videos_uniquement"))
+    presse_moteur = options.get("presse_moteur", "api")
+    if presse_videos_uniquement and presse_moteur not in {"api", "navigateur"}:
+        raise ValueError("Moteur de collecte Presse inconnu.")
     etapes, liens = [], {}
     erreur_finale = None
 
@@ -143,16 +146,15 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             suivre(len(liens))
 
     if presse_videos_uniquement:
-        # Priorité à la liste paginée du créateur par secUid : aucune dépendance
-        # aux sélecteurs HTML de l'onglet Vidéos (qui changent selon le compte).
-        from .presse_api import collecter_videos_presse_api
-        executer(f"@{compte} : liste vidéos paginée (secUid)",
-            lambda etat, suivi: collecter_videos_presse_api(
-                compte, arguments.limit, etat, check=verifier, progress=suivi))
-        if len(liens) < arguments.limit:
-            # Repli sur la grille du profil si l'API refuse une partie des posts.
-            # Toujours pas de recherche TikTok mélangeant d'autres auteurs.
-            executer(f"@{compte} : grille Vidéos (repli)",
+        # Un seul moteur par collecte : les erreurs et les compteurs de l'API
+        # ne sont pas mélangés aux résultats de la grille Selenium.
+        if presse_moteur == "api":
+            from .presse_api import collecter_videos_presse_api
+            executer(f"@{compte} : liste vidéos paginée (secUid)",
+                lambda etat, suivi: collecter_videos_presse_api(
+                    compte, arguments.limit, etat, check=verifier, progress=suivi))
+        else:
+            executer(f"@{compte} : grille Vidéos (navigateur)",
                 lambda etat, suivi: collecter_profil_public(
                     navigateur, arguments, compte, etat,
                     interact=intervenir, progress=suivi, check=verifier,
@@ -189,9 +191,10 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    exhaustif=False,
                    bilan_recherche=(
                        f"@{compte} : {len(liens)}/{arguments.limit} vidéo(s) découvertes "
-                       "via la liste paginée secUid puis, si nécessaire, la grille "
-                       "du profil. Aucune recherche générale @compte. "
-                       "La pagination peut rester partielle si TikTok refuse l'accès."
+                       f"via le seul moteur {presse_moteur!r}. "
+                       "Aucune recherche générale ni autre méthode n'est exécutée "
+                       "automatiquement. Si TikTok bloque ce moteur, consulter le "
+                       "diagnostic de la source."
                        if presse_videos_uniquement else
                        f"@{compte} : {len(liens)}/{arguments.limit} publication(s) "
                        "publiques accessibles. Grille du profil, puis recherche par "
