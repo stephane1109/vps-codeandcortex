@@ -47,6 +47,7 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
+    presse_moteur: Literal["api", "navigateur"] = "api"
     enrichir: bool = False
     telecharger_mp4: bool = False
     sauvegarde_progressive: bool = False
@@ -473,6 +474,8 @@ class Job:
                     "legendes_vides": self.legendes_vides,
                     "bilan_sources": [{"source": entree["source"],
                         "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
+                        "version_collecteur": entree.get("rapport", {}).get("version_collecteur"),
+                        "presse_moteur": entree.get("rapport", {}).get("presse_moteur"),
                         "message": entree.get("message", "Recherche terminée."),
                         "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
                         "recherches": [{"requete": r.get("requete_recherche"),
@@ -508,7 +511,8 @@ class Job:
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
-                    "source_collecte": self.settings.source_collecte, "comptes": self.settings.comptes,
+                    "source_collecte": self.settings.source_collecte,
+                    "presse_moteur": self.settings.presse_moteur, "comptes": self.settings.comptes,
                     "comptes_filtres": ([source["compte"] for source in self.settings.sources]
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
@@ -1420,7 +1424,8 @@ def create_app(manager=None):
         try:
             with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/_stcore/health",timeout=2): pass
         except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
-        return {"status": "ok"}
+        from collecte.presse_api import VERSION_PRESSE
+        return {"status": "ok", "version_presse": VERSION_PRESSE}
 
     @app.get("/")
     @app.get("/controle")
