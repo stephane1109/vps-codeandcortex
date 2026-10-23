@@ -1,0 +1,42 @@
+name: ScrapTikTok - Recherche médias au-delà de 12
+on:
+  push:
+    paths:
+      - "collecte/pagination_recherche.py"
+      - "collecte/reseau_recherche.py"
+      - "tests/test_recherche_presse_12.py"
+      - "tests/test_recherche_comptes.py"
+      - ".github/workflows/recherche-media-pagination.yml"
+  pull_request:
+    paths:
+      - "collecte/pagination_recherche.py"
+      - "collecte/reseau_recherche.py"
+      - "tests/test_recherche_presse_12.py"
+      - "tests/test_recherche_comptes.py"
+      - ".github/workflows/recherche-media-pagination.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer dépendances de test
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier syntaxe Python et JS
+        run: |
+          python -m compileall -q collecte/pagination_recherche.py collecte/reseau_recherche.py tests/test_recherche_presse_12.py
+          python - <<'PY'
+          from pathlib import Path
+          from collecte.pagination_recherche import ETAT_RECHERCHE_JS, SECOURS_DEFILEMENT_JS
+          Path("/tmp/grille-recherche.js").write_text(
+            "function grille() {\n" + ETAT_RECHERCHE_JS + "\n}\n"
+            + "function secours() {\n" + SECOURS_DEFILEMENT_JS + "\n}\n"
+          )
+          PY
+          node --check /tmp/grille-recherche.js
+      - name: Tests recherche comptes et presse
+        run: |
+          python -m unittest discover -s tests -p test_recherche_presse_12.py -v
+          python -m unittest discover -s tests -p test_recherche_comptes.py -v
