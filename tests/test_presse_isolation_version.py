@@ -1,5 +1,6 @@
 """Isolation des méthodes Presse et preuve de version côté serveur."""
 import unittest
+import tempfile
 from unittest.mock import Mock,patch
 from fastapi.testclient import TestClient
 
@@ -10,9 +11,10 @@ from connect_presse import ConnexionPresse
 
 class TestIsolationPresse(unittest.TestCase):
     def test_version_serveur_est_exposee_sur_healthz(self):
-        with patch("urllib.request.urlopen") as controle:
+        with tempfile.TemporaryDirectory() as dossier, \
+             patch("urllib.request.urlopen") as controle:
             controle.return_value.__enter__.return_value = Mock()
-            with TestClient(create_app(Manager())) as client:
+            with TestClient(create_app(Manager(data_dir=dossier))) as client:
                 response = client.get("/healthz")
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(response.json()["version_presse"],VERSION_PRESSE)
