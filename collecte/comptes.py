@@ -68,7 +68,8 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
     rapport.update(
         mode_decouverte="profil_direct",
         hashtag_url=f"https://www.tiktok.com/@{compte}",
-        requete_recherche=f"@{compte} (profil public)",
+        requete_recherche=(f"@{compte} : onglet Vidéos" if cibler_onglet_videos
+                           else f"@{compte} (profil public)"),
         compte_attendu=compte,
         exhaustif=False,
     )
