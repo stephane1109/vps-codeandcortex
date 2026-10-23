@@ -12,10 +12,13 @@ const racine = document.querySelector('[data-e2e="search-video-container"]') || 
 const lister = zone => Array.from(zone.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]')).filter(visible);
 const locaux = racine ? lister(racine) : [];
 const liens = locaux.length ? locaux : lister(document);
-const ancre = liens.find(e => {
+// Le premier résultat demeure souvent visible quand la suite de la recherche
+// est affichée plus bas. S'ancrer sur le DERNIER résultat visible pour faire
+// défiler le conteneur de la liste, et non son bandeau supérieur.
+const ancre = liens.filter(e => {
     const r = e.getBoundingClientRect();
     return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
-}) || liens[0] || racine;
+}).at(-1) || liens.at(-1) || racine;
 let conteneur = null;
 for (let e = ancre; e; e = e.parentElement) {
     if (/auto|scroll|overlay/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 2) {
@@ -34,6 +37,25 @@ return {element:conteneur,
     position:Math.round(conteneur.scrollTop), hauteur:conteneur.scrollHeight, fenetre:conteneur.clientHeight,
     fin:conteneur.scrollTop+conteneur.clientHeight >= conteneur.scrollHeight-4};
 """
+
+SECOURS_DEFILEMENT_JS = """
+// Dernière carte présente dans les résultats vidéo : déclenche son rendu
+// progressif lorsque la molette du navigateur n'a rien déplacé.
+const racine = document.querySelector('[data-e2e="search-video-container"]') || document.querySelector('main') || document;
+const liens = Array.from(racine.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]'));
+const dernier = liens.at(-1);
+if (dernier) dernier.scrollIntoView({block:'end',inline:'nearest',behavior:'auto'});
+const zone = arguments[0], pas = arguments[1];
+if (zone && zone.scrollHeight > zone.clientHeight + 2
+    && zone !== document.documentElement && zone !== document.body
+    && zone !== document.scrollingElement) {
+    zone.scrollBy(0,pas);
+} else {
+    window.scrollBy(0,pas);
+}
+return !!dernier;
+"""
+
 
 PAGE_SUIVANTE_JS = r"""
 const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
@@ -86,6 +108,19 @@ def defiler_resultats(navigateur, *, reprendre=False, check=None):
             navigateur.execute_script(DEFILER_PUBLICATIONS_JS, "progressif", avant["element"], pas * (2 if reprendre else 1))
     check()
     apres = etat_resultats(navigateur)
+    secours = False
+    if (methode != "page_suivante"
+            and apres["position"] <= avant["position"] + 2
+            and apres["hauteur"] <= avant["hauteur"] + 2):
+        # Une recherche qui affiche 12 résultats sans jamais déplacer sa grille
+        # ne doit pas être considérée comme totalement parcourue.
+        check()
+        navigateur.execute_script(SECOURS_DEFILEMENT_JS, avant["element"],
+                                  max(120, min(700, int(avant["fenetre"] * .7))))
+        secours = True
+        methode += "+dernier_resultat"
+        check()
+        apres = etat_resultats(navigateur)
     champs = ("position", "hauteur", "fenetre", "fin")
     return {"avant": {c: avant[c] for c in champs}, "apres": {c: apres[c] for c in champs},
-            "methode": methode, "relance": reprendre}
+            "methode": methode, "relance": reprendre, "secours": secours}
