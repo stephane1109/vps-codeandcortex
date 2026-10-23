@@ -21,6 +21,8 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 from .verification_comptes import normaliser_compte
 
+# Identifiant affiché pour vérifier que le serveur exécute cette version.
+VERSION_PRESSE = "presse-methodes-isolees-20261023-v3"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
