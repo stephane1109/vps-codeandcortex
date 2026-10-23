@@ -14,8 +14,8 @@ ONGLET_PUBLICATIONS_JS = """
 // construire une URL supposée : ne suivre que les éléments du DOM observé.
 const compte = '@' + arguments[0].toLowerCase();
 const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
-const libelle = e => [e.innerText, e.getAttribute('aria-label'), e.getAttribute('title')]
-    .filter(Boolean).join(' ').trim().replace(/\\s+/g, ' ');
+const libelles = e => [e.innerText, e.getAttribute('aria-label'), e.getAttribute('title')]
+    .filter(Boolean).map(t => t.trim().replace(/\\s+/g, ' '));
 const memeProfil = e => {
     if (e.tagName !== 'A' || !e.href) return true;
     try {
@@ -28,7 +28,7 @@ const candidats = Array.from(document.querySelectorAll(
     'a, button, [role="button"], [role="tab"], [data-e2e="user-post-tab"], [data-e2e="videos-tab"]'
 )).filter(e => visible(e) && memeProfil(e));
 const tout = /(?:voir|afficher|voir toutes?|see|view|show)\\s+(?:toutes?\\s+les\\s+|all\\s+)?(?:vidéos|videos|publications|posts)|(?:all\\s+(?:videos|posts)|toutes?\\s+les\\s+(?:vidéos|publications))/i;
-const lienComplet = candidats.find(e => tout.test(libelle(e)) &&
+const lienComplet = candidats.find(e => libelles(e).some(texte => tout.test(texte)) &&
     (e.tagName !== 'A' || new URL(e.href, location.href).href !== location.href));
 if (lienComplet) return lienComplet;
 const onglets = candidats.filter(e => (
@@ -36,7 +36,7 @@ const onglets = candidats.filter(e => (
     e.getAttribute('role') === 'tab'
 ));
 return onglets.find(e =>
-    (/^(vidéos|videos|publications|posts)(?:\\s*\\(\\d+\\))?$/i.test(libelle(e)) ||
+    (libelles(e).some(texte => /^(vidéos|videos|publications|posts)(?:\\s*\\(\\d+\\))?$/i.test(texte)) ||
     ['videos-tab','user-post-tab'].includes(e.getAttribute('data-e2e'))) &&
     e.getAttribute('aria-selected') !== 'true'
 ) || null;
