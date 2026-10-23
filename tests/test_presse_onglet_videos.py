@@ -90,7 +90,8 @@ class PresseVideoTests(unittest.TestCase):
     def test_presse_ne_bascule_pas_vers_la_recherche_video_generale(self):
         args=SimpleNamespace(limit=50)
         urls=[lien(i) for i in range(100,112)]
-        with patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls) as grille, \
+        with patch("collecte.presse_api.collecter_videos_presse_api",return_value=[]) as api, \
+             patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls) as grille, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
             rapport={}
             resultat=collecter_compte(
@@ -103,6 +104,7 @@ class PresseVideoTests(unittest.TestCase):
                          "@lemondefr : onglet Vidéos")
         self.assertEqual(len(rapport["recherches_compte"]),1)
         self.assertTrue(rapport["collecte_partielle"])
+        api.assert_called_once()
         grille.assert_called_once()
         self.assertTrue(grille.call_args.kwargs["cibler_onglet_videos"])
         recherche.assert_not_called()
