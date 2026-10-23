@@ -231,7 +231,7 @@ class PresseSecUidTests(unittest.TestCase):
         rapport={}
         with patch("collecte.presse_api.collecter_videos_presse_api",
                    side_effect=PresseApiError("TikTok HTTP 403")), \
-             patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls), \
+             patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls) as grille, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
             with self.assertRaisesRegex(PresseApiError,"TikTok HTTP 403"):
                 collecter_compte(Mock(),SimpleNamespace(limit=50),
