@@ -5,12 +5,14 @@ on:
       - "collecte/pagination_recherche.py"
       - "collecte/reseau_recherche.py"
       - "tests/test_recherche_presse_12.py"
+      - "tests/test_recherche_comptes.py"
       - ".github/workflows/recherche-media-pagination.yml"
   pull_request:
     paths:
       - "collecte/pagination_recherche.py"
       - "collecte/reseau_recherche.py"
       - "tests/test_recherche_presse_12.py"
+      - "tests/test_recherche_comptes.py"
       - ".github/workflows/recherche-media-pagination.yml"
 jobs:
   test:
