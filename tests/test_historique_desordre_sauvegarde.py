@@ -29,6 +29,9 @@ class HistoriqueDesordreTests(unittest.TestCase):
                 manager.jobs[job.id] = job
                 publication = {"id": "1234567890123",
                                "url": "https://www.tiktok.com/@media/video/1234567890123",
+                               "author": "media",
+                               "engagement": {},
+                               "retenue": True,
                                "description": "Une légende"}
                 job.publications = [publication]
                 (job.directory / "publications.json").write_text(
