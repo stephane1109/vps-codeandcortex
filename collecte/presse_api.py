@@ -14,7 +14,7 @@ from pathlib import Path
 import random
 import re
 import time
-from http.cookiejar import MozillaCookieJar
+from http.cookiejar import CookieJar, MozillaCookieJar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, Request, build_opener
@@ -44,7 +44,9 @@ def _client():
     """Ouvrir exclusivement tiktok.com ; les cookies restent optionnels et secrets."""
     cookies = os.getenv("SCRAPTIKTOK_COOKIES_FILE", "").strip()
     if not cookies:
-        return build_opener()
+        # Conserver les cookies de première visite entre l'embed et les pages
+        # de la liste publique, comme le client de référence tt-dlp.
+        return build_opener(HTTPCookieProcessor(CookieJar()))
     chemin = Path(cookies)
     if not chemin.is_file():
         raise PresseApiError("Fichier de cookies TikTok configuré mais introuvable.")
