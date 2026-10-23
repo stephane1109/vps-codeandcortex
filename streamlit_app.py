@@ -1,6 +1,6 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 import re
 
 from pathlib import Path
@@ -30,6 +30,7 @@ st.caption("Appli en cours de dév - modifiée 21-10-2026")
 st.caption("Collecter les textes des publications TikTok.")
 
 session = st.context.cookies.get("scraptiktok_session", "")
+cookie_historique = st.context.cookies.get("scraptiktok_historique", "")
 autorisation = st.context.headers.get("Authorization", "")
 if not re.fullmatch(r"[a-f0-9]{64}", session):
     st.info("Ouvrez l’application depuis sa page d’accueil pour initialiser votre session privée.")
@@ -38,7 +39,8 @@ if not re.fullmatch(r"[a-f0-9]{64}", session):
 
 
 def api(chemin, donnees=None):
-    return appeler_api(chemin, session, autorisation, donnees)
+    return appeler_api(chemin, session, autorisation, donnees,
+                      cookie_historique=cookie_historique)
 
 
 def lancer(chemin, donnees):
@@ -151,6 +153,57 @@ for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comp
 
 collecte = st.session_state["collecte"] or {}
 occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
+
+# L'historique est identifié par un cookie privé distinct de la session de
+# collecte ; la session peut expirer sans effacer les analyses des 30 jours.
+with st.sidebar:
+    st.subheader("Historique des analyses")
+    if not cookie_historique:
+        st.caption("Rechargez la page d'accueil pour activer l'historique privé.")
+    else:
+        try:
+            historique_reponse = api("/api/historique")
+        except RuntimeError as erreur:
+            st.warning("Historique indisponible : " + str(erreur))
+        else:
+            analyses_passees = historique_reponse.get("analyses", [])
+            duree_historique = historique_reponse.get("retention_jours", 30)
+            st.caption(f"Collectes et analyses conservées {duree_historique} jours, "
+                       "sans duplication des vidéos MP4.")
+            if not analyses_passees:
+                st.caption("Aucune analyse enregistrée.")
+            else:
+                index_analyses = {ligne["id"]:ligne for ligne in analyses_passees}
+                def afficher_entree_historique(identifiant):
+                    ligne = index_analyses[identifiant]
+                    date_ = datetime.fromtimestamp(
+                        ligne.get("actualise_le", 0), tz=timezone.utc
+                    ).strftime("%d/%m/%Y")
+                    return f"{date_} · {ligne.get('titre') or identifiant[:8]}"
+
+                choix_historique = st.selectbox(
+                    "Retrouver une analyse",
+                    list(index_analyses),
+                    format_func=afficher_entree_historique,
+                    key="choix_historique_scraptiktok",
+                )
+                entree = index_analyses[choix_historique]
+                st.caption("Statut : " + entree.get("statut","indéterminé"))
+                if st.button("Rouvrir l'analyse",key="ouvrir_historique_scraptiktok",
+                             disabled=occupe,use_container_width=True):
+                    try:
+                        analyse_reouverte=api(
+                            f"/api/historique/{choix_historique}/ouvrir", {}
+                        )
+                        st.session_state["collecte"] = analyse_reouverte
+                        st.rerun()
+                    except RuntimeError as erreur:
+                        st.error("Réouverture impossible : " + str(erreur))
+                st.link_button(
+                    "Télécharger les résultats (ZIP sans MP4)",
+                    f"/api/historique/{choix_historique}/archive",
+                    use_container_width=True,
+                )
 
 # Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
 try:
@@ -786,6 +839,21 @@ with onglet_desordre:
     if not tache_desordre.get('archive_prete'):
         st.info("Effectuez une collecte enrichie pour utiliser cette analyse.")
     else:
+        st.caption("Les résultats et annotations peuvent être conservés dans votre historique privé "
+                   "pendant 30 jours, sans dupliquer les fichiers MP4.")
+        if st.button("Enregistrer cette analyse (30 jours)",
+                     key=f"sauvegarder_desordre_{tache_desordre['id']}",
+                     disabled=bool(tache_desordre.get('busy') or tache_desordre.get('video_busy'))):
+            try:
+                confirmation_analyse=api(
+                    f"/api/jobs/{tache_desordre['id']}/desordre/sauvegarder",{}
+                )
+                if confirmation_analyse.get("ok"):
+                    st.success("Analyse et codages enregistrés dans l'historique privé.")
+                else:
+                    st.error("L'archive n'a pas été confirmée par le serveur.")
+            except RuntimeError as erreur:
+                st.error("Enregistrement de l'analyse impossible : " + str(erreur))
         # Ne pas rafraîchir automatiquement le formulaire d'annotation une fois
         # l'analyse terminée : l'édition des cellules doit rester stable.
         @st.fragment(run_every='3s' if tache_desordre.get('video_busy') or tache_desordre.get('busy') else None)
