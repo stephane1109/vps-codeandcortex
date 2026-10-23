@@ -147,9 +147,14 @@ class ObservationProfil:
         return liens
 
     def accepter_reponse(self, url):
-        """Limiter l'observation aux listes de publications du profil."""
+        """Observer les deux chemins de pagination publique des profils TikTok.
+
+        Selon le compte et la version du site, la grille charge ses vidéos
+        depuis /api/post/item_list ou /api/creator/item_list. Ne pas inventer
+        une requête : lire uniquement les réponses reçues par Chrome.
+        """
         return (url.scheme == "https" and url.hostname in {"www.tiktok.com", "tiktok.com"}
-                and url.path.rstrip("/") == "/api/post/item_list")
+                and url.path.rstrip("/") in {"/api/post/item_list", "/api/creator/item_list"})
 
     def analyser_page(self, donnees):
         """Décoder la réponse correspondant au parcours observé."""
