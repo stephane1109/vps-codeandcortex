@@ -489,11 +489,19 @@ with onglet_collecte:
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
                             navigation=recherche.get("navigation_publications")
                             if navigation=="api_liste_createur":
+                                provenance=recherche.get("source_secuid")
+                                resolution=(
+                                    "identifiant confirmé via l'embed d'une vidéo"
+                                    if provenance=="embed_video" else
+                                    "identifiant fourni par l'embed du créateur"
+                                    if provenance=="embed_createur" else
+                                    "identifiant non encore confirmé"
+                                )
                                 st.caption(
                                     f"Liste vidéo TikTok par secUid : "
                                     f"{recherche.get('pages_api',0)} page(s) reçue(s), "
                                     f"{recherche.get('liens',0)} vidéo(s) retenue(s) "
-                                    "du média, sans utiliser les onglets HTML."
+                                    f"du média ; {resolution}."
                                 )
                             elif navigation=="onglet_videos_selectionne":
                                 st.caption("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")

@@ -26,7 +26,7 @@ SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
     re.I | re.S,
 )
-SECUid = re.compile(r"^[A-Za-z0-9_+=.-]{15,256}$")
+SECUid = re.compile(r"^[A-Za-z0-9_-]{20,200}$")
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -78,13 +78,18 @@ def _obtenir(client, url, *, referer=None, timeout=20):
         raise PresseApiError("TikTok inaccessible : échec réseau ou délai dépassé.") from erreur
 
 
-def extraire_identite_embed(page, compte):
-    """Résoudre l'identifiant stable (secUid) depuis l'embed public du média."""
+def _profil_depuis_embed(page, compte):
+    """Lire l'embed créateur : secUid FACULTATIF, vidéos récentes disponibles.
+
+    tt-dlp (bajaam, client.py / downloader.py) précise que l'embed créateur
+    fournit souvent un ID numérique et la liste des vidéos, mais pas secUid.
+    Ce dernier est alors résolu via /embed/v2/<id> et authorInfos.
+    """
     if isinstance(page, bytes):
         page = page.decode("utf-8", "replace")
     match = SCRIPT_EMBED.search(page)
     if not match:
-        raise PresseApiError("TikTok ne fournit pas l'identité secUid sur son embed public.")
+        raise PresseApiError("L'embed créateur TikTok ne fournit pas ses données de profil.")
     try:
         etat = json.loads(html.unescape(match.group(1)))
         racine = etat["source"]["data"]
@@ -104,9 +109,95 @@ def extraire_identite_embed(page, compte):
     if info.get("privateAccount"):
         raise PresseApiError("Le compte TikTok est privé.")
     secuid = str(info.get("secUid") or info.get("sec_uid") or "")
+    if secuid and not SECUid.fullmatch(secuid):
+        raise PresseApiError("L'embed créateur renvoie un secUid mal formé.")
+    videos = infos.get("videoList") or []
+    if not isinstance(videos, list):
+        raise PresseApiError("La liste des vidéos récentes de l'embed est mal formée.")
+    amorces = []
+    for video in videos:
+        if not isinstance(video, dict):
+            continue
+        identifiant = str(video.get("id") or "")
+        if re.fullmatch(r"\d{5,30}", identifiant):
+            amorces.append(identifiant)
+    return {"secuid": secuid, "video_ids": list(dict.fromkeys(amorces))}
+
+
+def extraire_identite_embed(page, compte):
+    """Ancien contrat : retourne seulement un secUid présent dans l'embed."""
+    identite = _profil_depuis_embed(page, compte)
+    if not identite["secuid"]:
+        raise PresseApiError("secUid absent de l'embed créateur ; il faut lire l'embed d'une vidéo.")
+    return identite["secuid"]
+
+
+def extraire_identite_video_embed(page, compte, video_id):
+    """Vérifier que l'embed d'une vidéo récente donne le secUid du BON média."""
+    if isinstance(page, bytes):
+        page = page.decode("utf-8", "replace")
+    match = SCRIPT_EMBED.search(page)
+    if not match:
+        raise PresseApiError("Embed vidéo sans données d'identité TikTok.")
+    try:
+        etat = json.loads(html.unescape(match.group(1)))
+        racine = etat["source"]["data"]
+        infos = racine.get(f"/embed/v2/{video_id}") or racine.get(f"/embed/v2/{video_id}/")
+        video = infos["videoData"]
+        auteur = video["authorInfos"]
+    except (ValueError, KeyError, TypeError) as erreur:
+        raise PresseApiError("Embed vidéo sans métadonnées d'auteur structurées.") from erreur
+    if not isinstance(video, dict) or not isinstance(auteur, dict):
+        raise PresseApiError("Métadonnées d'auteur vidéo mal formées.")
+    item = video.get("itemInfos")
+    if not isinstance(item, dict) or str(item.get("id") or "") != str(video_id):
+        raise PresseApiError("L'embed ne correspond pas à la vidéo demandée.")
+    try:
+        identifiant_auteur = normaliser_compte(
+            auteur.get("uniqueId") or auteur.get("unique_id"))
+    except (TypeError, ValueError) as erreur:
+        raise PresseApiError("L'embed de la vidéo ne précise pas son auteur.") from erreur
+    if identifiant_auteur != compte:
+        raise PresseApiError("La vidéo d'amorçage appartient à un autre média.")
+    secuid = str(auteur.get("secUid") or auteur.get("sec_uid") or "")
     if not SECUid.fullmatch(secuid):
-        raise PresseApiError("secUid du média introuvable ou invalide.")
+        raise PresseApiError("L'embed vidéo ne fournit pas de secUid exploitable.")
     return secuid
+
+
+def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None):
+    """Résoudre via l'embed créateur, sinon via 1 à 3 vidéos récentes.
+
+    Aucun secUid inventé, aucun mélange de médias. Conserve la même session
+    HTTP et les cookies publics reçus par le client.
+    """
+    if profil["secuid"]:
+        rapport["source_secuid"] = "embed_createur"
+        return profil["secuid"]
+    erreurs = []
+    videos = profil["video_ids"][:3]
+    rapport["videos_amorcage_disponibles"] = len(profil["video_ids"])
+    for numero, video_id in enumerate(videos, 1):
+        if check:
+            check()
+        rapport["tentatives_embed_video"] = numero
+        try:
+            page = _obtenir(client, f"{HOTE}/embed/v2/{video_id}", referer=referer)
+            secuid = extraire_identite_video_embed(page, compte, video_id)
+        except PresseApiError as erreur:
+            erreurs.append(str(erreur))
+            continue
+        rapport["source_secuid"] = "embed_video"
+        return secuid
+    if not videos:
+        raise PresseApiError(
+            "TikTok ne fournit pas de secUid dans l'embed créateur, "
+            "ni de vidéo récente permettant de le résoudre."
+        )
+    raise PresseApiError(
+        f"secUid absent de l'embed créateur ; {len(videos)} embed(s) vidéo "
+        f"essayé(s), sans identifiant valide. Dernier diagnostic : {erreurs[-1]}"
+    )
 
 
 def extraire_page_createur(donnees, compte, secuid):
@@ -180,7 +271,9 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     )
     check()
     page_embed = _obtenir(client, f"{HOTE}/embed/@{compte}", referer=referer)
-    secuid = extraire_identite_embed(page_embed, compte)
+    profil = _profil_depuis_embed(page_embed, compte)
+    secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
+                            referer=referer)
     rapport["secuid_resolu"] = True  # jamais afficher la valeur dans les logs
     cursor = int(clock()) * 1000
     liens = {}
