@@ -17,7 +17,7 @@ def lien(numero, auteur="media"):
 
 
 class AttenteSimulee:
-    def __init__(self, navigateur, delai):
+    def __init__(self, navigateur, delai, **options):
         self.navigateur = navigateur
 
     def until(self, fonction):
@@ -58,7 +58,8 @@ class RechercheProgressive(unittest.TestCase):
              patch("collecte.recherche_comptes.WebDriverWait", AttenteSimulee), \
              patch("collecte.recherche_comptes.defiler_resultats", side_effect=defiler), \
              patch("collecte.recherche_comptes.etat_resultats", return_value=bas):
-            resultat = collecter_recherche_compte(pilote, arguments, rapport, progress=progression.append)
+            resultat = collecter_recherche_compte(pilote, arguments, rapport,
+                                             interact=Mock(), progress=progression.append)
         pilote.get.assert_called_once_with("https://www.tiktok.com/search/video?q=%40media")
         observation.fermer.assert_called_once()
         return resultat, rapport, etat, progression
@@ -153,7 +154,7 @@ class RechercheProgressive(unittest.TestCase):
         with patch("collecte.recherche_comptes.ObservationRecherche") as observation, \
              patch("collecte.recherche_comptes.WebDriverWait", AttenteSimulee):
             with self.assertRaises(RuntimeError):
-                collecter_recherche_compte(pilote, args, rapport)
+                collecter_recherche_compte(pilote, args, rapport, interact=Mock())
         pilote.get.assert_called_once_with("https://www.tiktok.com/search/video?q=%40media")
         observation.return_value.lire.assert_not_called()
         self.assertFalse(any(c.args[0] == LIENS_RECHERCHE_JS for c in pilote.execute_script.call_args_list))
