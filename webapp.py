@@ -482,6 +482,9 @@ class Job:
                             "defilements": r.get("defilements_effectues", 0),
                             "arret": r.get("discovery_stop", ""),
                             "pagination_bilan": r.get("pagination_bilan", {}),
+                            "pages_api": r.get("pages_api", 0),
+                            "secuid_resolu": bool(r.get("secuid_resolu", False)),
+                            "message_erreur": r.get("message_erreur"),
                             "navigation_publications": r.get("navigation_publications"),
                             "url_rubrique_publications": r.get("url_rubrique_publications"),
                             "observation_reseau": {
