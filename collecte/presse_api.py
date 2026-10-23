@@ -66,7 +66,10 @@ def _obtenir(client, url, *, referer=None, timeout=20):
         entetes["Referer"] = referer
     try:
         with client.open(Request(url, headers=entetes), timeout=timeout) as reponse:
-            return reponse.read(MAX_BYTES + 1)
+            contenu = reponse.read(MAX_BYTES + 1)
+            if len(contenu) > MAX_BYTES:
+                raise PresseApiError("Réponse TikTok trop volumineuse pour une page.")
+            return contenu
     except HTTPError as erreur:
         raise PresseApiError(f"TikTok HTTP {erreur.code} : accès aux publications refusé.") from erreur
     except (URLError, OSError, TimeoutError) as erreur:
@@ -183,15 +186,42 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     device_id = str(random.randint(7250000000000000000, 7325099899999994577))
     for numero in range(1, min(MAX_PAGES, (limite // 15) + 15) + 1):
         check()
+        # Paramètres de client web inspirés du client MIT tt-dlp v1.4.
+        # Les champs de contexte du navigateur font partie de la requête
+        # ordinaire observée, sans forger de signature anti-bot.
         params = {
-            "aid": "1988", "app_name": "tiktok_web",
-            "browser_language": "fr-FR", "browser_name": "Mozilla",
-            "browser_platform": "Win32", "channel": "tiktok_web",
-            "cookie_enabled": "true", "count": "15",
-            "cursor": str(cursor), "device_id": device_id,
-            "device_platform": "web_pc", "from_page": "user",
-            "language": "fr", "os": "windows", "region": "FR",
-            "secUid": secuid, "type": "1",
+            "aid": "1988",
+            "app_language": "en",
+            "app_name": "tiktok_web",
+            "browser_language": "en-US",
+            "browser_name": "Mozilla",
+            "browser_online": "true",
+            "browser_platform": "Win32",
+            "browser_version": "5.0 (Windows)",
+            "channel": "tiktok_web",
+            "cookie_enabled": "true",
+            "count": "15",
+            "cursor": str(cursor),
+            "device_id": device_id,
+            "device_platform": "web_pc",
+            "focus_state": "true",
+            "from_page": "user",
+            "history_len": "2",
+            "is_fullscreen": "false",
+            "is_page_visible": "true",
+            "language": "en",
+            "os": "windows",
+            "priority_region": "",
+            "referer": "",
+            "region": "US",
+            "screen_height": "1080",
+            "screen_width": "1920",
+            "secUid": secuid,
+            "type": "1",
+            "tz_name": "UTC",
+            "verifyFp": "verify_" + "".join(
+                random.choices("0123456789abcdef", k=7)),
+            "webcast_language": "en",
         }
         url = f"{HOTE}/api/creator/item_list/?{urlencode(params)}"
         try:
