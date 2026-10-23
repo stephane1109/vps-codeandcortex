@@ -115,6 +115,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                    pagination_sans_progres=0)
     observation = ObservationProfil(navigateur, compte, rapport["observation_reseau"], arguments.timeout)
     onglet_active = False
+    clic_videos_tente = False
 
     def afficher_page(motif, message):
         """Ouvrir automatiquement la fenêtre existante, sans nouvelle session."""
@@ -128,13 +129,13 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         Retourne True juste après un clic : il faut attendre un nouveau rendu
         avant de scanner la grille, sinon on compte l'aperçu d'accueil.
         """
-        nonlocal onglet_active
+        nonlocal onglet_active, clic_videos_tente
         if onglet_active or moteur.type_intervention_tiktok(navigateur) == "connexion":
             return False
         if cibler_onglet_videos:
             situation = navigateur.execute_script(ETAT_ONGLET_VIDEOS_JS) or {}
             etat = situation.get("etat", "indisponible")
-            if etat in ("selectionne", "grille_videos"):
+            if etat in ("selectionne", "grille_videos") and situation.get("grille"):
                 onglet_active = True
                 rapport["navigation_publications"] = (
                     "onglet_videos_selectionne" if etat == "selectionne"
@@ -143,11 +144,13 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 rapport["onglet_publications_active"] = True
                 return False
             if etat == "a_ouvrir":
+                if clic_videos_tente:
+                    # Le DOM n'a pas encore confirmé la nouvelle vue.
+                    return False
                 try:
                     situation["element"].click()
-                    onglet_active = True
-                    rapport["onglet_publications_active"] = True
-                    rapport["navigation_publications"] = "onglet_videos_clique"
+                    clic_videos_tente = True
+                    rapport["navigation_publications"] = "ouverture_onglet_videos_en_cours"
                     return True
                 except WebDriverException:
                     rapport["navigation_publications"] = "clic_onglet_videos_impossible"
@@ -185,7 +188,9 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         # Les données initiales peuvent déjà contenir des liens alors que
         # l'onglet et la grille ne sont pas encore montés dans la page.
         transition = activer_publications()
-        if transition:
+        if transition or (cibler_onglet_videos and not onglet_active):
+            # Aucun lien de l'aperçu n'est compté tant que l'onglet Vidéos
+            # et sa grille n'ont pas été confirmés.
             return False
         avant = len(liens)
         if cibler_onglet_videos:
@@ -245,6 +250,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                         "Terminez une éventuelle vérification ou fermez l’invitation à vous connecter si possible, "
                         "puis cliquez sur Continuer pour relire cette même page. Aucune connexion n’est imposée.")
                     onglet_active = False
+                    clic_videos_tente = False
                     continue
                 if diagnostic["code"] == "erreur_tiktok" and not recharge_effectuee:
                     recharge_effectuee = True
@@ -252,6 +258,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                     check()
                     moteur.open_page(navigateur, rapport["hashtag_url"])
                     onglet_active = False
+                    clic_videos_tente = False
                     continue
                 rapport["discovery_stop"] = "no_accessible_links"
                 raise RuntimeError("Le profil ne fournit aucune publication publique lisible dans cette session.")
