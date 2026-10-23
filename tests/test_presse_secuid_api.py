@@ -217,10 +217,10 @@ class PresseSecUidTests(unittest.TestCase):
                        or urls)), \
              patch("collecte.profil_selenium.collecter_grille_profil") as grille, \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
-            with self.assertRaisesRegex(PresseApiError,"TikTok HTTP 403"):
-                collecter_compte(Mock(),SimpleNamespace(limit=50),
-                                COMPTE,rapport,presse_videos_uniquement=True,
-                                presse_moteur="api")
+            resultat=collecter_compte(Mock(),SimpleNamespace(limit=50),
+                            COMPTE,rapport,presse_videos_uniquement=True,
+                            presse_moteur="api")
+        self.assertEqual(resultat,urls)
         grille.assert_not_called()
         recherche.assert_not_called()
         self.assertEqual(rapport["retenues_par_compte"],{COMPTE:50})
@@ -233,9 +233,10 @@ class PresseSecUidTests(unittest.TestCase):
                    side_effect=PresseApiError("TikTok HTTP 403")), \
              patch("collecte.profil_selenium.collecter_grille_profil",return_value=urls), \
              patch("collecte.recherche_comptes.collecter_recherche_compte") as recherche:
-            resultat=collecter_compte(Mock(),SimpleNamespace(limit=50),
-                            COMPTE,rapport,presse_videos_uniquement=True)
-        self.assertEqual(resultat,urls)
+            with self.assertRaisesRegex(PresseApiError,"TikTok HTTP 403"):
+                collecter_compte(Mock(),SimpleNamespace(limit=50),
+                                COMPTE,rapport,presse_videos_uniquement=True,
+                                presse_moteur="api")
         self.assertEqual(rapport["recherches_compte"][0]["echec"],"PresseApiError")
         self.assertEqual(rapport["recherches_compte"][0]["diagnostic"]["code"],
                          "acces_tiktok_indisponible")
