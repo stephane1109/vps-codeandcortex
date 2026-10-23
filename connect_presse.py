@@ -13,6 +13,7 @@ class ConnexionPresse(SessionNavigateur):
         if not medias:
             raise ValueError("Sélectionnez au moins un média.")
         self.medias_selectionnes = {media["id"]: dict(media) for media in medias}
+        self.moteur_collecte = parametres.presse_moteur
         return [dict(media) for media in medias]
 
     def decouvrir(self, source, rapport, *, contexte="", progression=None):
@@ -22,8 +23,12 @@ class ConnexionPresse(SessionNavigateur):
         media = getattr(self, "medias_selectionnes", {}).get(source.get("id"))
         if media is None or normaliser_compte(source["compte"]) != media["compte"]:
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
-        rapport.update(media_id=media["id"], compte_selectionne=media["compte"])
+        from collecte.presse_api import VERSION_PRESSE
+        rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
+                       version_collecteur=VERSION_PRESSE,
+                       presse_moteur=self.moteur_collecte)
         return collecter_compte(self.obtenir_navigateur(), self.arguments, media["compte"],
             rapport=rapport, hashtags=(),
             presse_videos_uniquement=True,
+            presse_moteur=self.moteur_collecte,
             **self.options_decouverte(rapport, contexte, progression))
