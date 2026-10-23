@@ -33,7 +33,7 @@ def extraire_page_recherche(donnees):
                 # Les cartes de recherche ne fournissent pas nécessairement de
                 # légende : ne pas exiger le champ "desc" pour trouver une vidéo.
                 if (identifiant.isdecimal() and isinstance(auteur, str)
-                        and re.fullmatch(r"[\\w.]+", auteur, flags=re.ASCII)
+                        and re.fullmatch(r"[\w.]+", auteur, flags=re.ASCII)
                         and (element.get("video") or element.get("imagePost"))):
                     genre = "photo" if element.get("imagePost") else "video"
                     identite = canonical_post(
