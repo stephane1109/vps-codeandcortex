@@ -572,6 +572,10 @@ class Job:
         if not self.owner_historique or not self.archive_prete:
             return False
         try:
+            # L'historique contient directement un tableau prêt à être réimporté,
+            # avec toutes les mesures et annotations regroupées par publication.
+            from analyse_desordre.corpus_fusion import sauvegarder_tableau_complet
+            sauvegarder_tableau_complet(self.directory)
             from stockage.historique_analyses import enregistrer
             enregistrer(self, self.owner_historique)
             return True
@@ -1516,6 +1520,23 @@ def create_app(manager=None):
             'publications_annotables':anotables,
             'codages_personnalises':personnalises,
             'correlations':base+annotations_corr}
+
+    @app.get("/api/jobs/{job_id}/desordre/tableau-complet.csv")
+    def exporter_tableau_complet_desordre(job_id: str, request: Request):
+        """Exporter toutes les mesures et codages, sans MP4 ni recalcul vidéo."""
+        job=manager.get(owner(request),job_id)
+        from analyse_desordre.corpus_fusion import sauvegarder_tableau_complet
+        with job.lock:
+            try:
+                fichier=sauvegarder_tableau_complet(job.directory)
+            except (ValueError, OSError, KeyError, TypeError) as erreur:
+                raise HTTPException(422, str(erreur)) from erreur
+            if fichier is None:
+                raise HTTPException(404, "Aucun tableau d'analyse disponible pour cette collecte.")
+            texte=fichier.read_text(encoding="utf-8")
+        return Response(texte,media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition":
+                     f'attachment; filename="scraptiktok_tableau_complet_{job.id}.csv"'})
 
     @app.post("/api/jobs/{job_id}/desordre/sauvegarder")
     def enregistrer_analyse_desordre(job_id: str, request: Request):
