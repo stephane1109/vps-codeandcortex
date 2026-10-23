@@ -64,6 +64,24 @@ class NavigationVideosPresse(unittest.TestCase):
             urlsplit("https://example.org/api/creator/item_list/")
         ))
 
+    def test_publication_sans_legende_sur_page_createur_est_conservee(self):
+        # Le mode Presse doit indexer les vidéos indépendamment du succès
+        # ultérieur de l'extraction de leur légende.
+        page = extraire_page_publications({
+            "statusCode":0,
+            "data":{
+                "itemList":[{
+                    "id":"1201","author":{"uniqueId":"lemondefr"},
+                    "video":{"id":"1201"},
+                }],
+                "cursor":"2345","hasMore":True,
+            },
+        }, "lemondefr")
+        self.assertEqual(page["liens"],
+                         ["https://www.tiktok.com/@lemondefr/video/1201"])
+        self.assertEqual(page["curseur"],"2345")
+        self.assertTrue(page["suite"])
+
     def test_creators_pages_enchainees_sont_filtres_sur_le_bon_media(self):
         page = extraire_page_publications({
             "statusCode":0,"cursor":"1234","hasMore":True,
