@@ -25,4 +25,5 @@ class ConnexionPresse(SessionNavigateur):
         rapport.update(media_id=media["id"], compte_selectionne=media["compte"])
         return collecter_compte(self.obtenir_navigateur(), self.arguments, media["compte"],
             rapport=rapport, hashtags=(),
+            presse_videos_uniquement=True,
             **self.options_decouverte(rapport, contexte, progression))

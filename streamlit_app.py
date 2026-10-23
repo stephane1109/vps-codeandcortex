@@ -488,7 +488,17 @@ with onglet_collecte:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
                             navigation=recherche.get("navigation_publications")
-                            if navigation=="rubrique_selectionnee":
+                            if navigation=="onglet_videos_selectionne":
+                                st.caption("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")
+                            elif navigation=="grille_videos_sans_onglet_distinct":
+                                st.caption("Grille de vidéos du média reconnue ; aucun onglet distinct n'était nécessaire.")
+                            elif navigation=="onglet_videos_indisponible":
+                                st.warning("Onglet Vidéos introuvable sur ce profil : aucune recherche générale n'est substituée.")
+                            elif navigation=="clic_onglet_videos_impossible":
+                                st.warning("Impossible d'ouvrir l'onglet Vidéos du média.")
+                            elif navigation=="ouverture_onglet_videos_en_cours":
+                                st.caption("Ouverture de l'onglet Vidéos demandée, mais le chargement n'a pas été confirmé.")
+                            elif navigation=="rubrique_selectionnee":
                                 st.caption("Rubrique Vidéos/Publications ouverte avant la pagination.")
                             elif navigation=="pas_de_rubrique_distincte_detectee":
                                 st.caption("Aucun accès distinct à « Toutes les vidéos » détecté : collecte sur la grille visible du profil.")

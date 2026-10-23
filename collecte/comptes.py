@@ -54,7 +54,7 @@ def collecter_requete_compte(navigateur, arguments, compte, hashtag, rapport=Non
       
 def collecter_profil_public(navigateur, arguments, compte, rapport, *,
                            interact, progress=None, check=None,
-                           validation_initiale=True):
+                           validation_initiale=True, cibler_onglet_videos=False):
     """Découvrir les vidéos d'un compte par sa grille réellement paginée.
 
     L'ancien parcours cessait parfois après la première grille (environ six
@@ -68,13 +68,15 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
     rapport.update(
         mode_decouverte="profil_direct",
         hashtag_url=f"https://www.tiktok.com/@{compte}",
-        requete_recherche=f"@{compte} (profil public)",
+        requete_recherche=(f"@{compte} : onglet Vidéos" if cibler_onglet_videos
+                           else f"@{compte} (profil public)"),
         compte_attendu=compte,
         exhaustif=False,
     )
     liens = collecter_grille_profil(
         navigateur, arguments, rapport,
         interact=interact, progress=progress, check=check,
+        cibler_onglet_videos=cibler_onglet_videos,
     )
     rapport.update(
         candidats_examines=len(liens),
@@ -98,6 +100,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     verifier = options.get("check")
     progression = options.get("progress")
     intervenir = options.get("interact")
+    presse_videos_uniquement = bool(options.get("presse_videos_uniquement"))
     etapes, liens = [], {}
     erreur_finale = None
 
@@ -134,14 +137,17 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         finally:
             suivre(len(liens))
 
-    executer(f"@{compte} : profil", lambda etat, suivi: collecter_profil_public(
+    intitulé = (f"@{compte} : onglet Vidéos" if presse_videos_uniquement
+                else f"@{compte} : profil")
+    executer(intitulé, lambda etat, suivi: collecter_profil_public(
         navigateur, arguments, compte, etat,
         interact=intervenir, progress=suivi, check=verifier,
-        validation_initiale=options.get("validation_initiale", True)))
+        validation_initiale=options.get("validation_initiale", True),
+        cibler_onglet_videos=presse_videos_uniquement))
 
     # Compléter jusqu'au nombre demandé pour CHAQUE compte, même si la
     # grille a déjà fourni quelques vidéos (ex. 6/50 ou 8/50).
-    if len(liens) < arguments.limit:
+    if len(liens) < arguments.limit and not presse_videos_uniquement:
         def recherche_ciblee(etat, suivi):
             etat["compte_attendu"] = compte
             return collecter_recherche_compte(
@@ -161,11 +167,18 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    candidats_examines=sum(e.get("candidats_examines", 0) for e in etapes),
                    collecte_partielle=len(liens) < arguments.limit or any(e.get("echec") for e in etapes),
                    exhaustif=False,
-                   bilan_recherche=(f"@{compte} : {len(liens)}/{arguments.limit} publication(s) "
-                                    "publiques accessibles. Grille du profil, puis recherche par "
-                                    "@identifiant pour compléter les résultats manquants. "
-                                    "Seul l'auteur sélectionné est conservé ; le nombre demandé "
-                                    "est un objectif, non une garantie d'accès."))
+                   bilan_recherche=(
+                       f"@{compte} : {len(liens)}/{arguments.limit} vidéo(s) découvertes "
+                       "dans l'onglet Vidéos du profil. Aucune recherche @compte "
+                       "n'est utilisée en mode Presse ; résultats partiels "
+                       "si TikTok ne charge pas les pages suivantes."
+                       if presse_videos_uniquement else
+                       f"@{compte} : {len(liens)}/{arguments.limit} publication(s) "
+                       "publiques accessibles. Grille du profil, puis recherche par "
+                       "@identifiant pour compléter les résultats manquants. "
+                       "Seul l'auteur sélectionné est conservé ; le nombre demandé "
+                       "est un objectif, non une garantie d'accès."
+                   ))
     if not liens and erreur_finale is not None:
         raise erreur_finale
     return list(liens.values())
