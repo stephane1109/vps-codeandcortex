@@ -101,8 +101,10 @@ class PresseVideoTests(unittest.TestCase):
         self.assertEqual(resultat,urls)
         self.assertEqual(rapport["retenues_par_compte"],{"lemondefr":12})
         self.assertEqual(rapport["recherches_compte"][0]["requete_recherche"],
+                         "@lemondefr : liste vidéos paginée (secUid)")
+        self.assertEqual(rapport["recherches_compte"][1]["requete_recherche"],
                          "@lemondefr : onglet Vidéos")
-        self.assertEqual(len(rapport["recherches_compte"]),1)
+        self.assertEqual(len(rapport["recherches_compte"]),2)
         self.assertTrue(rapport["collecte_partielle"])
         api.assert_called_once()
         grille.assert_called_once()
