@@ -139,6 +139,69 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(job.search_errors,1)
 
 
+    def test_plusieurs_medias_compte_requetes_par_source(self):
+        """Deux appels sur le deuxième média ne signifient pas deux au total."""
+        medias = charger_inventaire()[:2]
+        comptes = [m["compte"] for m in medias]
+
+        class ConnexionDeuxMedias:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def preparer_sources(self, settings):
+                return [{"id": m["id"], "compte": m["compte"]} for m in medias]
+
+            def ouvrir(self):
+                return Mock()
+
+            def decouvrir(self, source, rapport, *, contexte="", progression=None):
+                if source["compte"] == comptes[0]:
+                    rapport["recherches_compte"] = [{
+                        "compte_attendu": comptes[0],
+                        "requetes_tentees": 21,
+                        "pages_api": 19,
+                        "discovered_urls": [],
+                    }]
+                    return []
+                rapport["recherches_compte"] = [{
+                    "compte_attendu": comptes[1],
+                    "requetes_tentees": 2,
+                    "pages_api": 0,
+                    "diagnostic": {
+                        "code": "tiktok_limitation_429",
+                        "etape_api": "identification_video",
+                        "requetes_tentees": 2,
+                        "pages_api": 0,
+                    },
+                }]
+                raise PresseRateLimitError()
+
+            def fermer(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as repertoire:
+            job = Job(
+                "a" * 64,
+                StartRequest(source_collecte="presse", medias=[m["id"] for m in medias]),
+                Path(repertoire),
+            )
+            job.base = None
+            with (
+                patch("connect_presse.ConnexionPresse", ConnexionDeuxMedias),
+                patch.object(job, "save"),
+                patch.object(job, "sauvegarder_historique"),
+            ):
+                execute_job(job)
+            donnees = job.snapshot()["bilan_sources"]
+            self.assertEqual(len(donnees), 2)
+            self.assertEqual(donnees[0]["recherches"][0]["requetes_tentees"], 21)
+            self.assertEqual(donnees[1]["recherches"][0]["requetes_tentees"], 2)
+            self.assertEqual(sum(
+                r["requetes_tentees"]
+                for source in donnees for r in source["recherches"]
+            ), 23)
+            self.assertIn("HTTP 429", job.message)
+
     def test_429_conserve_les_urls_deja_decouvertes_pour_multimodale(self):
         """Une pagination interrompue ne doit pas perdre les vidéos déjà vues."""
         from analyse_desordre.sources import inventaire_sources, lire_publications
