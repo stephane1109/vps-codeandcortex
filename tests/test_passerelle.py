@@ -60,6 +60,54 @@ class TestsPasserelle(unittest.TestCase):
                     self.assertEqual(client.get('/static/controle.js').status_code,200)
                     self.assertEqual(client.get('/static/navigateur.js').status_code,200)
 
+    def test_controle_detecte_cookie_different_sans_donner_acces_a_la_collecte(self):
+        """Le navigateur CAPTCHA ne doit jamais obtenir la collecte d'une autre session."""
+        import hashlib
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            manager = webapp.Manager(data_dir=d)
+            with TestClient(webapp.create_app(manager)) as client:
+                self.assertEqual(client.get("/controle").status_code, 200)
+                cookie_original = client.cookies.get(webapp.COOKIE)
+                job = webapp.Job(cookie_original, webapp.StartRequest(
+                    hashtag="manifestation"), Path(d))
+                manager.jobs[job.id] = job
+
+                api = client.get("/api/session")
+                self.assertEqual(api.status_code, 200)
+                self.assertEqual(api.json()["job"]["id"], job.id)
+                self.assertEqual(
+                    api.json()["empreinte_session"],
+                    hashlib.sha256(cookie_original.encode()).hexdigest()[:16],
+                )
+                instance = api.json()["instance"]
+                self.assertEqual(len(instance), 24)
+                self.assertEqual(client.get("/api/jobs/" + job.id).status_code, 200)
+
+                client.cookies.clear()
+                client.cookies.set(webapp.COOKIE, "b" * 64)
+                refus = client.get("/api/jobs/" + job.id)
+                self.assertEqual(refus.status_code, 404)
+                autre = client.get("/api/session").json()
+                self.assertIsNone(autre["job"])
+                self.assertEqual(autre["instance"], instance)
+                self.assertNotEqual(
+                    autre["empreinte_session"], api.json()["empreinte_session"],
+                )
+
+    def test_controle_affiche_un_diagnostic_de_session_et_un_lien_direct(self):
+        from pathlib import Path
+        racine = Path(__file__).resolve().parents[1]
+        controle = (racine / "static" / "controle.js").read_text(encoding="utf-8")
+        client = (racine / "static" / "navigateur.js").read_text(encoding="utf-8")
+        streamlit = (racine / "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn("instanceAttendue", controle)
+        self.assertIn("sessionAttendue", controle)
+        self.assertIn("autre instance du serveur", controle)
+        self.assertIn("même session privée", controle)
+        self.assertIn("erreur.status = response.status", client)
+        self.assertIn("Ouvrir le navigateur TikTok dans un onglet séparé", streamlit)
+
     def test_ancien_drapeau_ne_reactive_aucune_interface_html(self):
         with tempfile.TemporaryDirectory() as d,patch.dict(webapp.os.environ,{'UI_STREAMLIT':'0','STREAMLIT_PORT':'65431'}):
             with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
