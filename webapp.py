@@ -484,6 +484,13 @@ class Job:
                             "tentatives_embed_video": r.get("tentatives_embed_video", 0),
                             "videos_amorcage_disponibles": r.get("videos_amorcage_disponibles", 0),
                             "urls_embed_non_verifiees": r.get("urls_embed_non_verifiees", 0),
+                            # Liens déjà présents dans la réponse reçue AVANT le 429.
+                            # Exposés au seul propriétaire de la collecte pour export
+                            # et référencement, sans les compter comme textes lus.
+                            "urls_embed_references": (
+                                list(r.get("discovered_urls", []))
+                                if r.get("urls_embed_non_verifiees") else []
+                            ),
                             "message_erreur": r.get("message_erreur"),
                             "navigation_publications": r.get("navigation_publications"),
                             "url_rubrique_publications": r.get("url_rubrique_publications"),
