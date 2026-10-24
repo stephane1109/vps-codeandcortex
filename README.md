@@ -165,9 +165,28 @@ aucun intervalle de 8 secondes n'est imposé. Les plafonds restent cumulatifs.
 Le compteur journalier ScrapTikTok est réinitialisé à minuit UTC,
 comme le quota quotidien publié pour la Research API.
 
+Les anciennes variables d'environnement
+`SCRAPTIKTOK_MAX_POSTS_PER_SOURCE`,
+`SCRAPTIKTOK_MAX_SOURCES_PER_JOB`,
+`SCRAPTIKTOK_MAX_COMMENTS_PER_VIDEO`,
+`SCRAPTIKTOK_MAX_SCROLLS` et
+`SCRAPTIKTOK_API_MAX_PAGES_PER_SOURCE`
+ne sont plus utilisées par le code : les valeurs 25, 2, 20, 10 et 4
+ne bloquent plus les collectes. Elles n'ont pas d'équivalent chiffré dans
+les quotas officiels de TikTok et ne peuvent donc pas être recalculées
+avec une remise de 20 %.
+
+Le moteur conserve uniquement ses bornes techniques de fonctionnement :
+1 000 publications par source demandée (modèle de requête), 29 médias
+sélectionnés au maximum, 500 commentaires demandés par publication et
+une pagination adaptée au lot demandé. La recherche Selenium conserve
+une borne de secours élevée et s'arrête aussi à la fin du travail ou
+à la durée maximale d'exécution (`JOB_TIMEOUT_SECONDS`).
+Ces bornes sont techniques et ne constituent pas des quotas TikTok.
+
 L'onglet **Aide** de l'application affiche les références officielles,
-leur réduction indicative de 20 %, et les limites réellement chargées
-depuis l'environnement Coolify. L'historique de requêtes de l'API
+leur réduction indicative de 20 %, les bornes techniques
+et les quotas globaux réellement chargés depuis Coolify. L'historique de requêtes de l'API
 Presse est partagé entre les sessions ; le trafic Selenium n'est
 pas inclus dans ses compteurs. Le compteur local de 80 000
 objets par jour UTC prend en compte les objets renvoyés par les pages du
