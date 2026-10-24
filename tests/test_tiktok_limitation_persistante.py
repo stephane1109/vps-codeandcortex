@@ -32,6 +32,7 @@ class TestTemporisation429(unittest.TestCase):
             etat=enregistrer_limitation(None,maintenant=1000)
             self.assertFalse(etat["actif"])
             self.assertTrue(etat["ancien_429_sans_delai"])
+            self.assertEqual(etat["dernier_429"], 1000)
             self.assertEqual(etat["origine"],"sans_retry_after")
             self.assertFalse(etat["quota_officiel_applicable"])
             encore=enregistrer_limitation(120,maintenant=1010)
@@ -56,6 +57,7 @@ class TestTemporisation429(unittest.TestCase):
             apres=consulter_limitation(maintenant=1001)
             self.assertFalse(apres["actif"])
             self.assertTrue(apres["ancien_429_sans_delai"])
+            self.assertIsNone(apres["dernier_429"])
 
     def test_429_enregistre_et_bloque_requêtes_suivantes_sans_envoyer_de_requete(self):
         with tempfile.TemporaryDirectory() as root, patch.dict(os.environ,{
