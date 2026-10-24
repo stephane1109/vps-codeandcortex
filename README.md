@@ -667,7 +667,7 @@ Les dates, ET/OU, les commentaires, les exports et le filtre français sont cons
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
 ne charge pas OpenCV ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
-Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : DINOv2/FAISS sur CPU, SHA-256/pHash/ORB et CLIP facultatif. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR/Whisper. La disponibilité est vérifiée à partir des outils réellement installés.
+Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : DINOv2/FAISS sur CPU, SHA-256/pHash/ORB et CLIP facultatif. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR (la transcription Whisper est supprimée). La disponibilité est vérifiée à partir des outils réellement installés.
 En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
 drapeau supplémentaire n’est nécessaire.
 La CI teste les trois profils Docker, le contrôleur dédié et le
@@ -769,9 +769,10 @@ La collecte accepte désormais 1 000 publications par source. Une interruption
 ou la limite de temps du processus peut demander de cliquer sur **Lancer /
 reprendre l’analyse**. Une vidéo en erreur ne bloque pas les lots suivants.
 
-Le profil Docker `INSTALL_VIDEO=base` suffit : OpenCV sur CPU, sans PyTorch,
-CUDA ni téléchargement de modèle. Les options audio, OCR et
-embeddings restent disponibles avec le profil facultatif `1` et ses outils.
+Le profil Docker `INSTALL_VIDEO=base` suffit pour le réemploi de séquences : OpenCV sur CPU, sans PyTorch,
+CUDA ni téléchargement de modèle. Les mesures énergétiques audio sont disponibles dans ce profil.
+Les comparaisons CLIP/DINOv2 nécessitent `INSTALL_VIDEO=semantique` ou `1` ;
+le profil `1` ajoute OCR, mais aucune fonction de transcription vocale.
 Conserver un volume local persistant monté sur **`/app/data`** dans Coolify
 (le fichier Compose le fait déjà). Aucun nouveau service n’est nécessaire.
 
