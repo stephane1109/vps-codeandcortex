@@ -817,6 +817,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     unique_links = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
+    limite_locale = False
     try:
         job.check()
         # Chaque mode possède son point d’entrée ; aucun repli implicite vers un autre mode.
@@ -976,11 +977,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     rapport["diagnostic"] = {"exception": type(erreur).__name__}
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
-                from collecte.presse_api import PresseRateLimitError, PresseCooldownError
-                if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
-                    # 429 peut concerner les autres comptes du même serveur :
-                    # interrompre la découverte de cette collecte entière.
-                    limitation_tiktok = True
+                from collecte.presse_api import (
+                    PresseRateLimitError, PresseCooldownError, PresseBudgetError
+                )
+                if isinstance(erreur, (PresseRateLimitError, PresseCooldownError, PresseBudgetError)):
+                    # Dès une limitation (externe ou locale), n'envoyer aucune
+                    # nouvelle requête sur les autres comptes.
+                    limite_locale = isinstance(erreur, PresseBudgetError)
+                    limitation_tiktok = not limite_locale
                     job.update(search_errors=job.search_errors + 1)
                     break
                 if len(sources) == 1 or scraper.est_erreur_session(erreur): raise
@@ -1040,6 +1044,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
                               "Les autres médias de cette collecte n'ont pas été sollicités ; "
                               "consultez l'éventuel délai Retry-After dans le diagnostic.")
+            final_status = "partial" if links else "failed"
+        if limite_locale:
+            final_message += (" Plafond de précaution des requêtes TikTok atteint "
+                              "sur le VPS ; aucune nouvelle requête envoyée aux autres médias.")
             final_status = "partial" if links else "failed"
         if not links and job.search_errors:
             final_status = "failed"
