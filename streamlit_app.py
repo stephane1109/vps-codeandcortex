@@ -897,7 +897,6 @@ with onglet_multimodale:
                 "hashtags": "Hashtags",
             }.get(tache_desordre.get("source_collecte"), "Collecte")
         )
-    else:
         st.caption("Les résultats et annotations peuvent être conservés dans votre historique privé "
                    "pendant 30 jours, sans dupliquer les fichiers MP4.")
         if st.button("Enregistrer cette analyse (30 jours)",
