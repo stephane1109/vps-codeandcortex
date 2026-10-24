@@ -2,8 +2,6 @@ services:
   scraptiktok:
     build:
       context: .
-      args:
-        INSTALL_VIDEO: "${INSTALL_VIDEO:-semantique}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${PORT:-8501}:8501"
