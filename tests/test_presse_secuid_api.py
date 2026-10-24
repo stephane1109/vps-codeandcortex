@@ -97,6 +97,49 @@ class PresseSecUidTests(unittest.TestCase):
         with self.assertRaisesRegex(PresseApiError,"données de profil"):
             extraire_identite_embed(b"<html>6 videos</html>",COMPTE)
 
+    def test_itemlist_fournit_legende_et_metriques_sans_reouvrir_video(self):
+        avec_texte = item(1)
+        avec_texte["desc"] = "Manifestation lycéenne #lyceens"
+        avec_texte["stats"] = {
+            "playCount": 1200, "diggCount": 42,
+            "commentCount": 0, "shareCount": "9",
+        }
+        sans_metrique = item(2)
+        sans_metrique["desc"] = "Cortège pacifique"
+        resultat = extraire_page_createur({
+            "statusCode": 0, "itemList": [avec_texte, sans_metrique],
+            "hasMorePrevious": False,
+        }, COMPTE, SECUID)
+        premier = resultat["metadonnees"][avec_texte["id"]]
+        second = resultat["metadonnees"][sans_metrique["id"]]
+        self.assertEqual(premier["description"], "Manifestation lycéenne #lyceens")
+        self.assertEqual(premier["hashtags"], ["lyceens"])
+        self.assertEqual(premier["source"], "api_createur")
+        self.assertEqual(premier["engagement"]["vues"]["valeur"], 1200)
+        self.assertEqual(premier["engagement"]["likes"]["valeur"], 42)
+        self.assertEqual(premier["engagement"]["commentaires"]["valeur"], 0)
+        self.assertEqual(premier["engagement"]["partages"]["valeur"], 9)
+        self.assertNotIn("favoris", premier["engagement"])
+        self.assertEqual(second["engagement"], {})
+        self.assertTrue(premier["created_at"])
+        self.assertEqual(len(resultat["urls"]), 2)
+
+    def test_itemlist_exclut_un_autre_media_et_un_faux_compteur(self):
+        bon = item(1)
+        bon["desc"] = "Test"
+        bon["stats"] = {"playCount": "erreur", "diggCount": -1,
+                        "shareCount": 7.5, "commentCount": "0"}
+        autre = item(2, auteur="autre")
+        resultat = extraire_page_createur({
+            "statusCode": 0, "itemList": [bon, autre],
+            "hasMorePrevious": False,
+        }, COMPTE, SECUID)
+        self.assertEqual(len(resultat["urls"]), 1)
+        self.assertEqual(
+            resultat["metadonnees"][bon["id"]]["engagement"],
+            {"commentaires": {"valeur": 0, "brut": "0"}},
+        )
+
     def test_secuid_absent_du_profil_recupere_dans_embed_video_du_meme_media(self):
         identifiant="7000000000000000001"
         client=Client([{"statusCode":0,"itemList":[item(1)],
