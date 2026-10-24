@@ -572,8 +572,9 @@ with onglet_collecte:
                                  (" · publication " + diagnostic["publication_id"] if diagnostic.get("publication_id") else ""))
             if actuel.get("bilan_sources"):
                 with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
-                    for bilan in actuel["bilan_sources"]:
-                        st.write(f"{bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                    requetes_api_lot = 0
+                    for numero_source, bilan in enumerate(actuel["bilan_sources"], 1):
+                        st.write(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
                         if actuel.get("source_collecte") == "presse":
                             version_source=bilan.get("version_collecteur")
                             if version_source:
@@ -673,12 +674,17 @@ with onglet_collecte:
                                     }
                                     phase=diagnostic_recherche.get("etape_api")
                                     if phase:
+                                        appels_media = int(recherche.get("requetes_tentees") or
+                                                            diagnostic_recherche.get("requetes_tentees") or 0)
                                         st.caption(
-                                            "Étape du refus : " + etapes_429.get(phase,phase)
-                                            + f" · {diagnostic_recherche.get('requetes_tentees',0)} "
-                                              "requête(s) tentée(s) pour ce média "
+                                            "Média en échec : " + str(compte or bilan["source"])
+                                            + f" · source {numero_source} de la sélection. "
+                                            + "Étape du refus : " + etapes_429.get(phase,phase)
+                                            + f" · {appels_media} requête(s) tentée(s) pour ce média "
+                                            + f"· {requetes_api_lot + appels_media} "
+                                              "requête(s) tentée(s) depuis le début de cette collecte "
                                             + f"· {diagnostic_recherche.get('pages_api',0)} "
-                                              "page(s) de publications reçue(s)."
+                                              "page(s) reçue(s) pour ce média."
                                         )
                                 elif code_recherche=="budget_interne_epuise":
                                     st.warning("Budget administrateur des requêtes API Presse épuisé. "
@@ -693,6 +699,7 @@ with onglet_collecte:
                                     st.warning("Accès TikTok : " + diagnostic_recherche["detail"])
                             elif recherche.get("message_erreur"):
                                 st.warning("Accès TikTok : "+recherche["message_erreur"])
+                            requetes_api_lot += int(recherche.get("requetes_tentees") or 0)
                         diagnostic = bilan.get("diagnostic", {})
                         if diagnostic:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
