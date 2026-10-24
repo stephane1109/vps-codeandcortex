@@ -173,6 +173,10 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertIn("HTTP 429",job.message)
         self.assertIn("autres médias",job.message)
         self.assertEqual(job.search_errors,1)
+        self.assertIn("Accès API Presse refusé par TikTok (HTTP 429)",
+                      job.snapshot()["bilan_sources"][0]["message"])
+        self.assertNotIn("Aucun lien de publication lisible",
+                         job.snapshot()["bilan_sources"][0]["message"])
 
 
     def test_plusieurs_medias_compte_requetes_par_source(self):
