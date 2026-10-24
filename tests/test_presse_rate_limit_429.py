@@ -70,6 +70,12 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(rapport["pages_api"],0)
         self.assertEqual(rapport["etape_api"],"identification_video")
         self.assertEqual(rapport["requetes_tentees"],2)
+        self.assertEqual(rapport["urls_embed_non_verifiees"], 3)
+        self.assertEqual(
+            rapport["discovered_urls"],
+            [f"https://www.tiktok.com/@lemondefr/video/700000000000000000{i}"
+             for i in (1, 2, 3)],
+        )
 
     def test_429_sur_la_premiere_requete_identifie_le_blocage_initial(self):
         client = Mock()
@@ -101,6 +107,36 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(rapport["recherches_compte"][0]["diagnostic"]["retry_after_seconds"],50)
         self.assertEqual(len(rapport["recherches_compte"]),1)
         grille.assert_not_called()
+
+    def test_urls_embed_conservees_ne_poursuivent_pas_les_appels_apres_429(self):
+        """Les URL retrouvées ne doivent pas relancer l'API ni Selenium."""
+        adresse = "https://www.tiktok.com/@lemondefr/video/7000000000000000001"
+        rapport = {}
+
+        def simuler_collecte(compte, limite, etat, **options):
+            etat["discovered_urls"] = [adresse]
+            etat["urls_embed_non_verifiees"] = 1
+            etat["etape_api"] = "identification_video"
+            etat["requetes_tentees"] = 2
+            raise PresseRateLimitError()
+
+        with (
+            patch("collecte.presse_api.collecter_videos_presse_api",
+                  side_effect=simuler_collecte),
+            patch("collecte.profil_selenium.collecter_grille_profil") as grille,
+        ):
+            with self.assertRaises(PresseRateLimitError):
+                collecter_compte(
+                    Mock(), SimpleNamespace(limit=50), "lemondefr", rapport,
+                    presse_videos_uniquement=True, presse_moteur="api",
+                )
+        grille.assert_not_called()
+        self.assertEqual(rapport["discovered_urls"], [adresse])
+        self.assertEqual(rapport["recherches_compte"][0]["urls_embed_non_verifiees"], 1)
+        self.assertEqual(
+            rapport["recherches_compte"][0]["diagnostic"]["code"],
+            "tiktok_limitation_429",
+        )
 
     def test_le_lot_de_quatre_medias_ne_continue_pas_apres_429(self):
         medias=charger_inventaire()[:4]
