@@ -793,6 +793,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     connexion = None
     unique_links = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
+    limitation_tiktok = False
     try:
         job.check()
         # Chaque mode possède son point d’entrée ; aucun repli implicite vers un autre mode.
@@ -949,6 +950,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     rapport["diagnostic"] = {"exception": type(erreur).__name__}
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
+                from collecte.presse_api import PresseRateLimitError
+                if isinstance(erreur, PresseRateLimitError):
+                    # 429 peut concerner les autres comptes du même serveur :
+                    # interrompre la découverte de cette collecte entière.
+                    limitation_tiktok = True
+                    job.update(search_errors=job.search_errors + 1)
+                    break
                 if len(sources) == 1 or scraper.est_erreur_session(erreur): raise
                 job.update(search_errors=job.search_errors + 1)
             finally:
@@ -1002,6 +1010,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.settings.source_collecte != "hashtags":
             final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
                               if recherche_partielle else " Collecte limitée au nombre demandé par compte ; historique complet non garanti.")
+        if limitation_tiktok:
+            final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
+                              "Les autres médias de cette collecte n'ont pas été sollicités ; "
+                              "consultez l'éventuel délai Retry-After dans le diagnostic.")
+            final_status = "partial" if links else "failed"
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:
