@@ -11,8 +11,6 @@ import time
 from corpus.export_json import exporter_json
 from corpus.export_csv import exporter_csv
 from corpus.construction import construire_exports
-from corpus.export_iramuteq import exporter_iramuteq
-from corpus.corpus_transcriptions import construire_transcriptions
 from corpus.export_zip import exporter_zip
 from telechargement_videos import correspondance_video
 from stockage.base_donnees import BaseDonnees
@@ -135,16 +133,12 @@ def traiter_lot(dossier, parametres, seuils):
                         verifier()
                         try: embedding=calculer_embeddings(extraction["images"],parametres)
                         except Exception as erreur: embedding={"statut":"indetermine","raison":type(erreur).__name__,"vecteur":None}
-                        if parametres["audio"] or parametres["transcription"]:
+                        if parametres["audio"]:
                             from audio.extraction import extraire_audio
                             from audio.indicateurs import mesurer_audio
-                            from audio.transcription import transcrire_audio
                             try:
                                 piste=extraire_audio(chemin,dossier / "audio" / (identifiant+".wav"),parametres["duree_max_s"],parametres["threads"])
                                 indicateurs["audio"]=mesurer_audio(piste["chemin"]) if piste["presence"] else piste
-                                if piste["presence"]:
-                                    try: indicateurs["transcription"]=transcrire_audio(piste["chemin"],parametres)
-                                    except Exception as erreur: indicateurs["transcription"]={"statut":"indetermine","raison":type(erreur).__name__,"segments":[],"parole":None}
                             except Exception as erreur: indicateurs["audio"]={"statut":"indetermine","raison":type(erreur).__name__,"presence":None}
                         resultat={"sha256":sha,"duree_s":extraction["duree_s"],"pas_s":extraction["pas_s"],"tronque":extraction["tronque"],
                             "images":[],
@@ -253,7 +247,7 @@ def traiter_lot(dossier, parametres, seuils):
         diagnostic['dinov2']={'active':parametres.get('dinov2',True),'modele':'facebook/dinov2-small',
             'statuts':statuts_dino,'images_analysees':sum(a.get('dinov2',{}).get('images',0) for a in analyses),
             'seuil_groupes':parametres.get('seuil_groupes_dino'),'erreurs':[]}
-        diagnostic['traitements']={cle:('active' if parametres.get(cle) else 'desactive') for cle in ('dinov2','embeddings','comparer_sha256','comparer_sequences','ocr','audio','transcription')}
+        diagnostic['traitements']={cle:('active' if parametres.get(cle) else 'desactive') for cle in ('dinov2','embeddings','comparer_sha256','comparer_sequences','ocr','audio')}
         resultats_dino=[]
         try:
             if index_dino and index_dino.base.execute('SELECT count(*) FROM images').fetchone()[0]:
@@ -306,9 +300,6 @@ def traiter_lot(dossier, parametres, seuils):
         exporter_json(dossier / "reseau_similarite.json",construire_reseau(publications_reseau,comparaisons))
         exporter_json(dossier / "circulation_visuelle.json",analyser_circulation(publications_reseau,comparaisons))
         exporter_csv(dossier / "comparaison_medias.csv",comparer_medias(publications))
-        transcriptions={identifiant:i.get("transcription",{}) for identifiant,i in mesures.items()}
-        exporter_json(dossier / "transcriptions.json",transcriptions)
-        exporter_iramuteq(dossier / "corpus_transcriptions_iramuteq.txt",construire_transcriptions(transcriptions,variables))
         journal["audiovisuel"]={"statut":"termine" if complet else "partiel","videos_analysees":len(analyses),"videos_restantes":max(0,len(publications)-len(analyses)),"paires_en_attente":attente,"erreurs":erreurs,"parametres":parametres,"seuils":seuils,"confiance":"heuristique_non_calibree"}
         construire_exports(dossier,publications,commentaires,journal,variables)
         etat("termine" if complet else "partiel","exports disponibles")
