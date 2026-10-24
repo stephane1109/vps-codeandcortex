@@ -832,7 +832,6 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
                 url = links[index - 1]
-                job.pause(args.delay)
                 job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
                 try:
                     identifiant_publication = scraper.canonical_post(url)[0]
@@ -846,6 +845,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         # visite Selenium pour la même vidéo.
                         record = dict(record_api)
                     else:
+                        # La pause entre publications n'est utile que lorsqu'une
+                        # consultation TikTok / Selenium est réellement nécessaire.
+                        job.pause(args.delay)
                         record = connexion.lire_publication(url)
                     record["retenue"] = False
                     if job.settings.telecharger_mp4:
