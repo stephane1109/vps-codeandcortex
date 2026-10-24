@@ -1182,12 +1182,12 @@ class Manager:
                 f"Plafond administrateur : {max_sources()} sources par collecte.")
         with self.lock:
             if any(j.video_busy for j in self.jobs.values()):
-                raise HTTPException(429, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
+                raise HTTPException(409, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
             active = [job for job in self.jobs.values() if job.busy]
             if any(job.owner == owner for job in active):
                 raise HTTPException(409, "Une collecte est déjà en cours dans votre session.")
             if len(active) >= self.max_jobs:
-                raise HTTPException(429, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
+                raise HTTPException(409, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
             job = Job(owner, settings, self.data_dir, owner_historique=owner_historique)
             job.limites_debug={"inactivite_max_s":self.idle_timeout,"duree_max_s":self.max_duration}
             self.jobs[job.id] = job
@@ -2005,7 +2005,7 @@ def create_app(manager=None):
             try:
                 job.commands.put_nowait(command)
             except queue.Full:
-                raise HTTPException(429, "Patientez un instant avant le prochain geste.")
+                raise HTTPException(409, "Patientez un instant avant le prochain geste.")
 
     @app.post("/api/jobs/{job_id}/continue")
     def resume(job_id: str, request: Request):
