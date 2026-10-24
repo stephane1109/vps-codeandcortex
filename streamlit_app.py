@@ -798,8 +798,9 @@ with onglet_aide:
         "Ces quotas officiels concernent des API distinctes : ils ne s'appliquent "
         "ni à l'API web interne /api/creator/item_list/, ni à Selenium. "
         "Les valeurs -20 % sont des références de comparaison et non des "
-        "seuils officiellement autorisés pour le scraping. La limite de "
-        "80 000 enregistrements n'est pas un quota implémenté dans ScrapTikTok."
+        "seuils officiellement autorisés pour le scraping. "
+        "Le plafond de 80 000 enregistrements est désormais appliqué localement "
+        "aux objets des pages API Presse ; il ne comptabilise pas Selenium."
     )
     st.subheader("Limites effectives de ScrapTikTok (variables d'environnement)")
     budget_aide = limites_admin.get("budget_api_presse", {})
@@ -831,12 +832,16 @@ with onglet_aide:
         {"Variable": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY",
          "Valeur active": budget_aide.get("maximum_24h", "?"),
          "Effet": "Requêtes API Presse sur 24 heures glissantes (toutes sessions)"},
+        {"Variable": "SCRAPTIKTOK_API_MAX_RECORDS_PER_DAY",
+         "Valeur active": budget_aide.get("maximum_enregistrements_24h", "?"),
+         "Effet": "Objets de pages API Presse sur 24 heures glissantes (toutes sessions)"},
     ])
     st.caption(
         f"Consommation actuelle du moteur API Presse : "
         f"{budget_aide.get('requete_minute', 0)} sur 1 minute, "
         f"{budget_aide.get('requete_heure', 0)} sur 1 heure et "
-        f"{budget_aide.get('requete_24h', 0)} sur 24 heures. "
+        f"{budget_aide.get('requete_24h', 0)} requêtes sur 24 heures ; "
+        f"{budget_aide.get('enregistrements_24h', 0)} enregistrements sur 24 heures. "
         "Le plafond le plus contraignant s'applique. "
         "Ces compteurs ne mesurent pas les requêtes de Selenium. "
         "Les valeurs proviennent de l'environnement réellement chargé par le serveur (Coolify)."
