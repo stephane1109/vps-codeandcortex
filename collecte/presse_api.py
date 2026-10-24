@@ -22,7 +22,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-stop-429-20261024-v4"
+VERSION_PRESSE = "presse-cooldown-20261024-v5"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -40,6 +40,17 @@ MAX_BYTES = 4_000_000
 
 class PresseApiError(RuntimeError):
     """Erreur de pagination TikTok, à rapporter sans annoncer de faux total."""
+
+
+class PresseCooldownError(PresseApiError):
+    """La pause locale est encore active : aucune requête TikTok envoyée."""
+
+    def __init__(self, restant_secondes):
+        self.retry_after = int(restant_secondes)
+        super().__init__(
+            f"Collecte API suspendue localement encore {self.retry_after} seconde(s) "
+            "après un HTTP 429 TikTok. Aucune nouvelle requête n'a été envoyée."
+        )
 
 
 class PresseRateLimitError(PresseApiError):
@@ -281,6 +292,18 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     check = check or (lambda: None)
     clock = clock or time.time
     pause = pause or time.sleep
+    # Les tests peuvent fournir un client simulé sans modifier le volume
+    # d'exploitation. En production le verrou partagé s'applique à tous.
+    client_reel = client is None
+    if client_reel:
+        from .tiktok_limitation import consulter_limitation
+        etat_limitation = consulter_limitation()
+        if etat_limitation["actif"]:
+            rapport.update(navigation_publications="pause_http_429",
+                           discovery_stop="cooldown_429",
+                           limitation_tiktok=etat_limitation,
+                           pages_api=0, discovered_urls=[])
+            raise PresseCooldownError(etat_limitation["restant_secondes"])
     client = client if client is not None else _client()
     limite = max(1, min(int(limite), 1000))
     referer = f"{HOTE}/@{compte}"
@@ -292,11 +315,21 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         pages_api=0, discovered_urls=[], collecte_partielle=True,
         exhaustif=False,
     )
-    check()
-    page_embed = _obtenir(client, f"{HOTE}/embed/@{compte}", referer=referer)
-    profil = _profil_depuis_embed(page_embed, compte)
-    secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
-                            referer=referer)
+    try:
+        check()
+        page_embed = _obtenir(client, f"{HOTE}/embed/@{compte}", referer=referer)
+        profil = _profil_depuis_embed(page_embed, compte)
+        secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
+                                referer=referer)
+    except PresseRateLimitError as erreur:
+        if client_reel:
+            from .tiktok_limitation import enregistrer_limitation
+            try:
+                rapport["limitation_tiktok"] = enregistrer_limitation(erreur.retry_after)
+            except OSError:
+                rapport["limitation_tiktok"] = {"actif":True,
+                    "enregistrement_impossible":True}
+        raise
     rapport["secuid_resolu"] = True  # jamais afficher la valeur dans les logs
     cursor = int(clock()) * 1000
     liens = {}
@@ -345,6 +378,15 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         try:
             contenu = _obtenir(client, url, referer=referer)
             donnees = json.loads(contenu)
+        except PresseRateLimitError as erreur:
+            if client_reel:
+                from .tiktok_limitation import enregistrer_limitation
+                try:
+                    rapport["limitation_tiktok"] = enregistrer_limitation(erreur.retry_after)
+                except OSError:
+                    rapport["limitation_tiktok"] = {"actif":True,
+                        "enregistrement_impossible":True}
+            raise
         except (ValueError, TypeError) as erreur:
             raise PresseApiError("Liste de vidéos TikTok : réponse JSON invalide.") from erreur
         page = extraire_page_createur(donnees, compte, secuid)
