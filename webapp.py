@@ -963,7 +963,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     # 429 peut concerner les autres comptes du même serveur :
                     # interrompre la découverte de cette collecte entière.
                     limitation_tiktok = True
-                    job.update(search_errors=job.search_errors + 1)
+                    job.update(
+                        search_errors=job.search_errors + 1,
+                        status="finalizing",
+                        message="TikTok HTTP 429 : collecte interrompue, sauvegarde des résultats sans nouveau téléchargement.",
+                    )
                     break
                 if len(sources) == 1 or scraper.est_erreur_session(erreur): raise
                 job.update(search_errors=job.search_errors + 1)
@@ -1048,7 +1052,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
     finally:
         contexte_mp4 = {}
-        if job.settings.telecharger_mp4 and job.records and connexion is not None:
+        if (job.settings.telecharger_mp4 and job.records and connexion is not None
+                and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
             try:
                 from telechargement_videos import capturer_contexte_anonyme
                 contexte_mp4 = capturer_contexte_anonyme(connexion.obtenir_navigateur())
@@ -1064,7 +1069,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         except OSError:
             LOG.exception("Écriture de l’export impossible")
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
-        if job.settings.telecharger_mp4 and job.records:
+        if (job.settings.telecharger_mp4 and job.records
+                and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
             try:
                 final_message += " " + telecharger_mp4_collecte(job, contexte_mp4)
                 if job.stop.is_set():
@@ -1994,8 +2000,9 @@ def create_app(manager=None):
     @app.post("/api/jobs/{job_id}/stop")
     def stop(job_id: str, request: Request):
         job = manager.get(owner(request), job_id)
-        job.demander_arret("utilisateur")
-        return {"ok": True}
+        if job.busy:
+            job.demander_arret("utilisateur")
+        return {"ok": True, "arret_demande": job.stop.is_set(), "busy": job.busy}
 
     def enqueue(job, command):
         with job.lock:
