@@ -214,6 +214,9 @@ except RuntimeError as erreur:
     st.stop()
 max_posts_admin = int(limites_admin["maximum_publications_par_source"])
 max_sources_admin = int(limites_admin["maximum_sources_par_collecte"])
+max_commentaires_admin = int(limites_admin["maximum_commentaires_par_video"])
+st.session_state["limite_commentaires"] = min(
+    max(1,int(st.session_state.get("limite_commentaires",50))),max_commentaires_admin)
 st.session_state["limit"] = min(max(1,int(st.session_state.get("limit",50))),max_posts_admin)
 
 # Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
@@ -383,7 +386,10 @@ with onglet_collecte:
             def respecter_choix_commentaires():
                 if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
-            st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
+            st.number_input("Commentaires maximum par publication", min_value=1,
+                max_value=max_commentaires_admin, step=1,
+                key="limite_commentaires", disabled=occupe,
+                help="Plafond administrateur contrôlé également côté serveur.")
         if st.form_submit_button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
