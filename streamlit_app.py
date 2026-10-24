@@ -930,7 +930,6 @@ with onglet_multimodale:
             sha = st.checkbox("Comparer les fichiers identiques", value=True)
             sequences = st.checkbox("Vérifier aussi les séquences avec pHash/ORB", value=True)
             audio = st.checkbox("Mesurer les indicateurs audio")
-            transcription = st.checkbox("Transcrire la parole")
             ocr = st.checkbox("Lire les textes incrustés (OCR)")
             embeddings = st.checkbox("Comparer aussi le contenu global avec CLIP",
                 help="Compare le contenu visuel même sans images identiques : décors, objets, types de scènes. Ne prouve pas un même événement et ne compare pas les paroles.")
@@ -947,7 +946,7 @@ with onglet_multimodale:
         st.caption("Traitement séquentiel par lots de 20, reprise automatique. Relancer reprend les éléments en attente après une interruption.")
         if st.button("Lancer / reprendre l’analyse", disabled=occupe or (groupes_dino and seuil_dino is None)):
             lancer(f"/api/jobs/{tache['id']}/video", {"dinov2":dinov2,"seuil_groupes_dino":seuil_dino if groupes_dino else None,"pas_images_s":pas,"comparer_sha256":sha,
-                "comparer_sequences":sequences,"audio":audio,"transcription":transcription,
+                "comparer_sequences":sequences,"audio":audio,
                 "ocr":ocr,"embeddings":embeddings,"seuil_semantique":seuil_semantique,"telecharger_modeles":modeles,"nettoyer_videos":nettoyer})
         @st.fragment(run_every="3s")
         def afficher_similarites():
