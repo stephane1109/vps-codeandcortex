@@ -11,16 +11,15 @@ def coder_variables(publication, indicateurs=None, reemploi=None, parametres=Non
         "plans":discretiser(i.get("plans",{}).get("coupes"),[1,3],["sans_coupe_detectee","quelques_coupes","multiplans"]),
         "personnes":presence(i.get("personnes",{}).get("presence")),"visages":presence(i.get("visages",{}).get("presence")),
         "texte":presence(i.get("texte",{}).get("presence")),"audio":presence(i.get("audio",{}).get("presence")),
-        "parole":presence(i.get("transcription",{}).get("parole")),"reemploi":presence(reemploi)}
+        "reemploi":presence(reemploi)}
     if parametres is not None:
         # « no » signifie désactivé ; une mesure activée mais échouée reste indéterminée.
-        for option in ('dinov2','ocr','transcription','embeddings','comparer_sha256','comparer_sequences',
+        for option in ('dinov2','ocr','embeddings','comparer_sha256','comparer_sequences',
                        'telecharger_modeles','telecharger_videos','conserver_images','nettoyer_videos'):
             if option in parametres:
                 variables[option]='yes' if parametres[option] else 'no'
-        for option,champ in (('ocr','texte'),('transcription','parole')):
-            if parametres.get(option) is False: variables[champ]='no'
-        if not (parametres.get('audio',False) or parametres.get('transcription',False)):
+        if parametres.get('ocr') is False: variables['texte']='no'
+        if not parametres.get('audio',False):
             variables['audio']='no'
         if not (parametres.get('comparer_sha256',True) or parametres.get('comparer_sequences',True)):
             variables['reemploi']='no'
