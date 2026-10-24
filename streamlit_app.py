@@ -217,6 +217,35 @@ onglet_collecte, onglet_multimodale, onglet_desordre, onglet_corpus, onglet_aide
 
 with onglet_collecte:
     api_tiktok_suspendue = False
+    from collecte.garde_fous import reglages
+    limites_publiques = reglages()
+    try:
+        limites_publiques = api("/api/usage")
+    except RuntimeError:
+        pass
+    max_par_source = limites_publiques["max_posts_source"]
+    max_commentaires = limites_publiques["max_comments_post"]
+    st.caption(
+        f"Garde-fous ScrapTikTok : {limites_publiques['max_sources_job']} sources maximum, "
+        f"{max_par_source} posts/source, {limites_publiques['max_posts_job']} posts/collecte, "
+        f"{limites_publiques['max_job_seconds']//60} min par collecte. "
+        f"{limites_publiques['jobs_last_24h'] if 'jobs_last_24h' in limites_publiques else '?'}"
+        f"/{limites_publiques['max_jobs_day']} collectes démarrées sur 24 h."
+    )
+    if 'api_last_hour' in limites_publiques:
+        st.caption(
+            f"API TikTok web : {limites_publiques['api_last_hour']}/"
+            f"{limites_publiques['api_hour']} requêtes réservées sur 1 h, "
+            f"{limites_publiques['api_last_24h']}/{limites_publiques['api_day']} sur 24 h. "
+            "Ces valeurs sont des plafonds de précaution configurés sur le VPS."
+        )
+    # Les anciennes analyses peuvent avoir été configurées avec des valeurs
+    # supérieures aux nouveaux plafonds : ajuster l'interface avant le formulaire.
+    if not occupe:
+        st.session_state["limit"] = min(int(st.session_state.get("limit",50)), max_par_source)
+        st.session_state["limite_commentaires"] = min(
+            int(st.session_state.get("limite_commentaires",20)), max_commentaires
+        )
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
@@ -237,7 +266,12 @@ with onglet_collecte:
                 key=cle, disabled=occupe, on_change=memoriser_medias)
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
-        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Collecte des légendes sans filtre de hashtag ; seules les publications des comptes cochés sont retenues.")
+        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
+                   "Collecte des légendes sans filtre de hashtag ; seules les publications des comptes cochés sont retenues.")
+        if len(selection)>limites_publiques["max_sources_job"]:
+            st.warning(f"Vous avez sélectionné {len(selection)} médias ; "
+                       f"la limite serveur est de {limites_publiques['max_sources_job']} "
+                       "médias par collecte.")
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
             ["api", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: "API du créateur (secUid)" if v=="api" else "Grille du profil (Selenium)",
@@ -318,8 +352,12 @@ with onglet_collecte:
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
                      "et les autres filtres (langue et période). "
                      "Ce choix agit après la découverte des vidéos TikTok.")
-        st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
-            help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag saisi, variantes accentuées incluses si activées. En mode Presse/médias ou Profils : limite par compte, avant les autres filtres.")
+        st.number_input("Nombre de posts TikTok à collecter par source",
+            min_value=1, max_value=max_par_source, step=1, key="limit",
+            disabled=occupe,
+            help=f"Limite serveur : {max_par_source} publications par source. "
+                 "Ce plafond protège le serveur et ne garantit pas que TikTok "
+                 "autorise autant de publications.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source == "presse":
             st.caption("Parcours des profils publics des médias sélectionnés. Seuls leurs auteurs sont admis ; les filtres de langue et de période restent disponibles. Couverture potentiellement incomplète.")
@@ -355,12 +393,33 @@ with onglet_collecte:
         st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
         with st.expander("Options des commentaires"):
+            st.caption(f"Limite serveur : {max_commentaires} commentaires maximum par publication.")
             def respecter_choix_commentaires():
                 if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
-            st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
+            st.number_input("Commentaires maximum par publication", min_value=1,
+                            max_value=max_commentaires, step=1,
+                            key="limite_commentaires", disabled=occupe)
+        places = len(st.session_state.get("medias",[])) if source=="presse" else (
+            len(re.split(r"[\s,;]+",st.session_state.get("comptes","").strip()))
+            if source=="comptes" and st.session_state.get("comptes","").strip()
+            else 1 + bool(st.session_state.get("second_hashtag","")) if source=="hashtags"
+            else 1
+        )
+        quota_lot_depasse = (places > limites_publiques["max_sources_job"] or
+                            places * st.session_state.get("limit",max_par_source)
+                            > limites_publiques["max_posts_job"])
+        quota_journalier = (
+            limites_publiques.get("jobs_last_24h",0) >= limites_publiques["max_jobs_day"]
+        )
+        if quota_lot_depasse:
+            st.warning("Nombre de sources ou volume total supérieur au plafond de sécurité. "
+                       "Réduisez la sélection ou les publications par source.")
+        if quota_journalier:
+            st.warning("Quota global de collectes des 24 dernières heures atteint.")
         if st.form_submit_button("Lancer la collecte", type="primary",
-                                 disabled=occupe or api_tiktok_suspendue,
+                                 disabled=occupe or api_tiktok_suspendue
+                                 or quota_lot_depasse or quota_journalier,
                                  on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if source != "presse" and not st.session_state.get(cle_hashtag, "").strip():
