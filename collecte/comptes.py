@@ -150,6 +150,9 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                     "detail": str(erreur),
                 })
                 if limitation or attente or budget_atteint:
+                    etat["diagnostic"]["etape_api"] = etat.get("etape_api", "non_commencee")
+                    etat["diagnostic"]["requetes_tentees"] = etat.get("requetes_tentees", 0)
+                    etat["diagnostic"]["pages_api"] = etat.get("pages_api", 0)
                     etat["discovery_stop"] = ("budget_interne" if budget_atteint else
                                                 "cooldown_429" if attente else "rate_limit_429")
                     if (limitation or attente) and erreur.retry_after is not None:
