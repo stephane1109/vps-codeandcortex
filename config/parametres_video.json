@@ -16,8 +16,6 @@
   "modele_embeddings": "ViT-B-32",
   "poids_embeddings": "laion2b_s34b_b79k",
   "audio": false,
-  "transcription": false,
-  "modele_whisper": "tiny",
   "telecharger_modeles": false,
   "telecharger_videos": false,
   "conserver_images": true,
