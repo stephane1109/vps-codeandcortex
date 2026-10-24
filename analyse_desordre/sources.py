@@ -33,8 +33,7 @@ def lire_publications(session):
     """Métadonnées textuelles et vidéos découvertes sans texte, sans doublon."""
     session=Path(session)
     fichier=session/'publications.json'
-    if not fichier.is_file(): return []
-    donnees=json.loads(fichier.read_text(encoding='utf-8-sig'))
+    donnees=json.loads(fichier.read_text(encoding='utf-8-sig')) if fichier.is_file() else []
     publications=donnees if isinstance(donnees,list) else []
     complement=session/'sources_visuelles.json'
     if complement.is_file():
