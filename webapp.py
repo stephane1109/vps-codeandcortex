@@ -1165,7 +1165,12 @@ class Manager:
         self.reaper = None
 
     def start(self, owner, settings, owner_historique=""):
-        from collecte.quotas_exploitation import max_publications, max_sources
+        from collecte.quotas_exploitation import (
+            max_publications, max_sources, max_commentaires
+        )
+        if settings.collecter_commentaires and settings.limite_commentaires > max_commentaires():
+            raise HTTPException(422, f"Plafond administrateur : "
+                f"{max_commentaires()} commentaires par publication.")
         if settings.limit > max_publications():
             raise HTTPException(422,
                 f"Plafond administrateur : {max_publications()} publications par source.")
@@ -1457,11 +1462,13 @@ def create_app(manager=None):
     def lire_limites_exploitation(request: Request):
         owner(request)
         from collecte.quotas_exploitation import (
-            max_publications, max_sources, max_defilements, max_pages_api, etat_budget
+            max_publications, max_sources, max_commentaires,
+            max_defilements, max_pages_api, etat_budget
         )
         return {
             "maximum_publications_par_source": max_publications(),
             "maximum_sources_par_collecte": max_sources(),
+            "maximum_commentaires_par_video": max_commentaires(),
             "maximum_defilements": max_defilements(),
             "maximum_pages_api_par_source": max_pages_api(),
             "budget_api_presse": etat_budget(),
