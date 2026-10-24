@@ -243,6 +243,22 @@ with onglet_collecte:
             help="L'API utilise les pages de publications du média. Le navigateur inspecte l'onglet Vidéos. "
                  "Les deux moteurs ne sont jamais enchaînés pendant une même collecte.")
         try:
+            limitation_presse=api("/api/presse/limitation")
+            if limitation_presse.get("actif"):
+                restant=limitation_presse.get("restant_secondes",0)
+                st.error(
+                    f"API TikTok en pause après HTTP 429 : encore {restant//60} min "
+                    f"{restant%60} s. Aucun nouvel appel API ne sera envoyé avant la fin."
+                )
+                st.caption("Délai provenant du Retry-After TikTok lorsqu'il est fourni ; "
+                           "sinon, pause de précaution propre à ScrapTikTok.")
+            else:
+                st.caption("API TikTok : aucune pause HTTP 429 active enregistrée.")
+            st.caption("Limite chiffrée officielle : non publiée pour cette API web interne. "
+                       "La limite de 600 requêtes/minute de l'API officielle v2 ne s'y applique pas.")
+        except RuntimeError as erreur:
+            st.warning("État de limitation TikTok indisponible : "+str(erreur))
+        try:
             version_presse=api("/healthz").get("version_presse")
             if version_presse:
                 st.caption("Version active du serveur Presse : "+version_presse)
@@ -579,6 +595,9 @@ with onglet_collecte:
                                 if code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
+                                elif code_recherche=="tiktok_pause_429":
+                                    st.warning("Moteur API suspendu par la pause de protection après HTTP 429. "
+                                               "Aucune requête TikTok n'a été envoyée pour cette nouvelle collecte.")
                                 if diagnostic_recherche.get("retry_after_seconds"):
                                     st.caption(f"Délai indicatif transmis par TikTok (Retry-After) : "
                                                f"{diagnostic_recherche['retry_after_seconds']} secondes.")
