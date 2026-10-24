@@ -95,7 +95,7 @@ def executer(session,dossier,frequence,dimension,duree_max,telecharger_manquants
             # Fournir au moteur le lot visuel consolidé sans modifier
             # publications.json ni inventer des données d'engagement.
             metadonnees=session/'publications.json'
-            if (session/'sources_visuelles.json').is_file():
+            if (session/'sources_visuelles.json').is_file() or not metadonnees.is_file():
                 metadonnees=Path(temporaire)/'publications_visuelles.json'
                 metadonnees.write_text(
                     json.dumps(publications,ensure_ascii=False),encoding='utf-8'
