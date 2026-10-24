@@ -310,12 +310,24 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     limite = max(1, min(int(limite), 1000))
     referer = f"{HOTE}/@{compte}"
     def obtenir_avec_quota(url):
+        # Diagnostic du refus, sans journaliser URL signée, cookies, secUid,
+        # identifiant de session ni contenu de la réponse TikTok.
+        if "/api/creator/item_list/" in url:
+            rapport["etape_api"] = "pagination_videos"
+        elif "/embed/v2/" in url:
+            rapport["etape_api"] = "identification_video"
+        else:
+            rapport["etape_api"] = "identification_media"
         if client_reel:
             from .quotas_exploitation import reserver_requete
             reserver_requete(check=check)
+        # Une réservation réussie est distinguée d'un plafond interne atteint.
+        rapport["requetes_tentees"] = rapport.get("requetes_tentees", 0) + 1
         return _obtenir(client, url, referer=referer)
 
     rapport.update(
+        requetes_tentees=0,
+        etape_api="non_commencee",
         mode_decouverte="api_profil_secuid", compte_attendu=compte,
         requete_recherche=f"@{compte} : liste vidéos paginée (secUid)",
         url_rubrique_publications=referer,
