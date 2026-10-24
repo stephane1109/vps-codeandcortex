@@ -796,8 +796,28 @@ with onglet_collecte:
         afficher_resultats()
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
-            adresse_controle = f"/controle?collecte={st.session_state['collecte']['id']}"
-            st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
+            # Le WebSocket Streamlit et l'iframe peuvent arriver sur des
+            # instances différentes lors d'un déploiement Coolify. Transmettre
+            # seulement leurs empreintes pour diagnostiquer ce cas, sans
+            # divulguer le cookie privé.
+            try:
+                contexte_controle = api("/api/session")
+            except RuntimeError as erreur:
+                st.warning("Impossible de vérifier la session du navigateur : " + str(erreur))
+            else:
+                instance_controle = contexte_controle.get("instance", "")
+                empreinte_controle = contexte_controle.get("empreinte_session", "")
+                identifiant_controle = st.session_state["collecte"]["id"]
+                adresse_controle = (
+                    f"/controle?collecte={identifiant_controle}"
+                    f"&instance={instance_controle}&session={empreinte_controle}"
+                )
+                st.link_button(
+                    "Ouvrir le navigateur TikTok dans un onglet séparé",
+                    adresse_controle,
+                    help="Alternative si le navigateur intégré n'affiche pas le CAPTCHA."
+                )
+                st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
         with st.expander("Aperçu des textes"):
             for publication in st.session_state["collecte"].get("preview",[]):
                 st.text("@" + publication["author"])
