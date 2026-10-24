@@ -9,7 +9,7 @@ from collecte.presse_api import (
     PresseRateLimitError, PresseCooldownError, collecter_videos_presse_api,
 )
 from collecte.tiktok_limitation import (
-    consulter_limitation, enregistrer_limitation, pause_par_defaut,
+    consulter_limitation, enregistrer_limitation,
 )
 
 
