@@ -141,11 +141,14 @@ TikTok peuvent changer. Adapter l'usage aux règles d'accès et aux droits sur l
 Les valeurs publiées pour les API officielles TikTok ne s'appliquent pas
 à l'API web interne ni à Selenium utilisés par ScrapTikTok.
 
-L'application impose des **plafonds locaux à 50 % des valeurs de référence** :
-300 requêtes API Presse/minute, 500/heure, 500/jour UTC et 50 000
-objets API Presse/jour UTC. Ces budgets sont communs à toutes les sessions
-et ne comptent pas Selenium. Un ancien plafond Coolify supérieur est
-automatiquement ramené à ces maxima ; les valeurs inférieures sont conservées.
+Les **cinq variables d'environnement Coolify** `SCRAPTIKTOK_API_*`
+définissent les seuils de sécurité du moteur API Presse, sans minoration ni
+plafond supérieur imposés par le code. Exemple de réglage volontaire à 50 % :
+300 requêtes/minute, 500 requêtes/heure, 500 requêtes/jour UTC,
+50 000 objets API Presse/jour UTC, intervalle minimal de 0 seconde.
+Ces budgets sont communs à toutes les sessions et ne comptent pas Selenium.
+Si les variables sont absentes, le moteur utilise des valeurs de secours ;
+pour une configuration de production explicite, définir les cinq variables.
 Un refus TikTok HTTP 429 interrompt la recherche API Presse : aucune autre
 vidéo ni aucun autre média n'est alors contacté.
 
