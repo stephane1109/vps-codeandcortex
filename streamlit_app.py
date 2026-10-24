@@ -225,8 +225,8 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_multimodale, onglet_desordre, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Multimodale", "Désordre visuel", "Corpus fusionné", "Aide"]
+onglet_collecte, onglet_desordre, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Désordre visuel", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
@@ -918,174 +918,6 @@ with onglet_aide:
 
 
 
-with onglet_multimodale:
-    st.subheader("Vidéos similaires")
-    st.caption("Recherche de séquences visuelles communes, y compris entre lots et collectes du même utilisateur. Le son seul ne constitue pas une preuve visuelle.")
-    tache = st.session_state.get("collecte") or {}
-    if not tache.get("archive_prete"):
-        st.info("Effectuez une collecte enrichie avant de lancer l’analyse multimodale.")
-    elif not tache.get("video_disponible"):
-        st.info("Le serveur doit utiliser INSTALL_VIDEO=semantique ou 1 pour DINOv2 (base pour les copies seules) pour activer l’analyse vidéo.")
-    else:
-        pas = st.number_input("Intervalle entre les images (secondes)", min_value=0.25, max_value=30.0, value=3.0, step=0.25)
-        dinov2 = st.checkbox("Rechercher les vidéos similaires avec DINOv2", value=True)
-        groupes_dino = st.checkbox("Créer des groupes de similarité DINOv2", value=False)
-        seuil_dino = st.number_input("Seuil de regroupement DINOv2 (−1 à 1)", min_value=-1.0, max_value=1.0,
-            value=None, step=0.01, disabled=not groupes_dino,
-            help="Choisissez ce seuil après examen des scores. Aucun seuil ne filtre les dix voisins affichés.")
-        with st.expander("Options multimodales"):
-            sha = st.checkbox("Comparer les fichiers identiques", value=True)
-            sequences = st.checkbox("Vérifier aussi les séquences avec pHash/ORB", value=True)
-            audio = st.checkbox("Mesurer les indicateurs audio")
-            ocr = st.checkbox("Lire les textes incrustés (OCR)")
-            embeddings = st.checkbox("Comparer aussi le contenu global avec CLIP",
-                help="Compare le contenu visuel même sans images identiques : décors, objets, types de scènes. Ne prouve pas un même événement et ne compare pas les paroles.")
-            seuil_semantique = st.slider("Similarité de contenu minimale", min_value=0.5, max_value=0.99,
-                value=0.75, step=0.01, disabled=not embeddings,
-                help="Un seuil bas propose davantage de rapprochements à vérifier. Le score n'est pas une probabilité.")
-            modeles = st.checkbox("Autoriser le téléchargement des modèles facultatifs", value=True)
-            if dinov2:
-                st.caption("DINOv2 nécessite ses poids : téléchargement au premier usage si autorisé, sinon utilisation du cache local uniquement.")
-            if embeddings and not modeles:
-                st.info("La similarité de contenu utilise CLIP. Autorisez le téléchargement des modèles, sauf si des poids locaux ont été configurés sur le serveur.")
-            nettoyer = st.checkbox("Supprimer les MP4 après indexation", value=False,
-                help="Les empreintes et vignettes sont conservées pour les comparaisons futures. Les MP4 supprimés ne figureront plus dans le ZIP.")
-        st.caption("Traitement séquentiel par lots de 20, reprise automatique. Relancer reprend les éléments en attente après une interruption.")
-        if st.button("Lancer / reprendre l’analyse", disabled=occupe or (groupes_dino and seuil_dino is None)):
-            lancer(f"/api/jobs/{tache['id']}/video", {"dinov2":dinov2,"seuil_groupes_dino":seuil_dino if groupes_dino else None,"pas_images_s":pas,"comparer_sha256":sha,
-                "comparer_sequences":sequences,"audio":audio,
-                "ocr":ocr,"embeddings":embeddings,"seuil_semantique":seuil_semantique,"telecharger_modeles":modeles,"nettoyer_videos":nettoyer})
-        @st.fragment(run_every="3s")
-        def afficher_similarites():
-            try:
-                actuel=api(f"/api/jobs/{tache['id']}")
-                donnees=api(f"/api/jobs/{tache['id']}/videos-similaires")
-            except RuntimeError as erreur:
-                st.error(str(erreur)); return
-            etat=donnees['etat']
-            st.write(etat.get('etape','Analyse non lancée'))
-            st.progress(min(1.0,etat.get('videos_analysees',0)/max(1,etat.get('videos_total',1))))
-            st.caption(f"{etat.get('videos_analysees',0)} vidéo(s) analysée(s) — {actuel.get('video_statut','non_lance')}")
-            if etat.get('erreurs'):
-                st.warning(f"Analyse partielle : {len(etat['erreurs'])} erreur(s). Consultez les causes ci-dessous ; les résultats des vidéos analysées restent disponibles.")
-                with st.expander("Détail des erreurs par vidéo", expanded=True):
-                    st.dataframe([{"Vidéo":e.get('id','Lot'),"Cause":e.get('statut',e.get('type','Erreur')),
-                                   "Détail":e.get('raison','Erreur')} for e in etat['erreurs']],hide_index=True)
-            st.caption("Un groupe relie des publications par des correspondances directes ; toutes les vidéos du groupe ne sont pas nécessairement identiques. Le score est heuristique, pas une probabilité calibrée.")
-            st.subheader("Vidéos similaires")
-            st.caption("Chaque vidéo est interrogée. Jusqu'à 50 vidéos : toutes les paires du lot sont calculées. Au-delà : dix voisins indexés par vidéo. Le score DINOv2 porte sur les images ; CLIP compare le contenu global.")
-            couverture=donnees.get('diagnostic',{}).get('dinov2',{})
-            if 'paires_uniques_du_lot' in couverture:
-                st.caption(f"Lot courant : {couverture['paires_uniques_du_lot']} paires avec résultat sur {couverture['paires_possibles_du_lot']} combinaisons possibles. Les voisins inter-lots peuvent s'ajouter au tableau.")
-            paires=donnees.get('paires_dino',[])
-            cible=None
-            if paires:
-                st.write(f"{len(donnees['videos_dino'])} vidéos avec résultats · {len(paires)} paires distinctes, sans doubler A/B et B/A")
-                st.dataframe([{"Vidéo A":r['a'],"Vidéo B":r['b'],"URL A":r.get('url_a'),"URL B":r.get('url_b'),
-                    "DINOv2":round(r['score'],3),"CLIP (contenu global)":round(r['score_clip'],3) if r.get('score_clip') is not None else None,
-                    "Moment A (s)":r.get('temps_a'),"Moment B (s)":r.get('temps_b'),"Temporalité":r.get('nature')} for r in paires],hide_index=True)
-                source,cible=st.selectbox("Paire à examiner",[(r['a'],r['b']) for r in paires],
-                    format_func=lambda paire:paire[0]+" ↔ "+paire[1],key='paire_dino_'+tache['id'])
-            elif donnees.get('videos_dino'):
-                source=st.selectbox("Vidéo à comparer",donnees['videos_dino'],key='source_dino_'+tache['id'])
-            if donnees.get('videos_dino'):
-                selection=api(f"/api/jobs/{tache['id']}/videos-similaires?video={source}")
-                for rang,r in enumerate(selection['dinov2'],1):
-                    if cible is not None and r['b']!=cible:continue
-                    with st.expander(f"{r['a']} ↔ {r['b']} — DINOv2 {r['score']:.3f} — {r['nature']}",expanded=cible is not None):
-                        if r.get('score_clip') is not None: st.write(f"CLIP — contenu global : {r['score_clip']:.3f}")
-                        st.caption("Les régions de même couleur et de même numéro indiquent des rapprochements locaux. Elles ne disent pas s’il s’agit du même objet, d’une texture ou d’une couleur proche, et n’expliquent pas à elles seules le score global. Même des images sans rapport peuvent avoir des régions proches.")
-                        exemples=r.get('correspondances') or [r['meilleure']]
-                        for m in exemples[:3]:
-                            st.write(f"Images à {m['temps_a']:.1f} s et {m['temps_b']:.1f} s — score {m.get('score',r['score']):.3f}")
-                            colonnes=st.columns(2)
-                            for colonne,cote in zip(colonnes,('a','b')):
-                                with colonne:
-                                    st.markdown(f"![Image à {m['temps_'+cote]:.1f} s](/api/jobs/{tache['id']}/miniatures-dino/{m['image_'+cote]})")
-                            chemin_regions = f"/api/jobs/{tache['id']}/regions-dino/{m['image_a']}/{m['image_b']}"
-                            cle_regions = chemin_regions
-                            if st.button("Localiser les régions proches", key=cle_regions, disabled=actuel.get('video_busy',False)):
-                                try:
-                                    api(chemin_regions, {})
-                                except RuntimeError as erreur:
-                                    st.error(str(erreur))
-                            try:
-                                localisation = api(chemin_regions)
-                            except RuntimeError:
-                                localisation = {'statut':'non_calcule'}
-                            if localisation.get('statut') == 'en_cours':
-                                st.info("Comparaison des régions en cours sur CPU…")
-                            elif localisation.get('statut') == 'erreur':
-                                st.warning(localisation.get('raison'))
-                            elif localisation.get('statut') == 'termine':
-                                if not localisation.get('regions'):
-                                    st.info("Aucune région informative à rapprocher après exclusion des bandes noires et des zones uniformes.")
-                                    continue
-                                for colonne,cote in zip(st.columns(2),('a','b')):
-                                    with colonne:
-                                        st.markdown(f"![Régions correspondantes — {cote.upper()}]({chemin_regions}/{cote})")
-                                st.caption("Bandes noires et zones uniformes exclues. Localisation approximative sur miniatures ; meilleurs voisins réciproques, sans seuil de validation. Le score cosinus local n’est pas une probabilité.")
-                                st.dataframe([{"Région":z['numero'], "Score local":round(z['score'],3)}
-                                              for z in localisation['regions']],hide_index=True)
-                        for cote in ('a','b'):
-                            if r.get('url_'+cote): st.link_button("Ouvrir la vidéo "+cote.upper()+" sur TikTok",r['url_'+cote])
-                        if r['segments']:
-                            st.dataframe([{"Début A (s)":seg['debut_a_s'],"Fin A (s)":seg['fin_a_s'],
-                                "Début B (s)":seg['debut_b_s'],"Fin B (s)":seg['fin_b_s'],"Images concordantes":seg['images']} for seg in r['segments']],hide_index=True)
-                if selection.get('groupes_dino'):
-                    with st.expander("Groupes DINOv2 — liens directs, pas identité de tous les membres"):
-                        st.json(selection['groupes_dino'])
-            else:
-                st.info("Analyse DINOv2 en cours ; les résultats apparaîtront à la fin du lot." if actuel.get("video_busy") else "Aucun voisin DINOv2 disponible. Consultez ci-dessous les statuts du modèle et le nombre d'images analysées.")
-            st.subheader("Copies et séquences — vérification complémentaire")
-            for groupe in donnees['groupes']:
-                with st.expander(groupe['id']+" — "+str(len(groupe['publications']))+" publications",expanded=True):
-                    lignes=[]
-                    for c in donnees['correspondances']:
-                        if c['a'] not in groupe['publications'] or c['b'] not in groupe['publications']: continue
-                        for segment in c['segments']:
-                            lignes.append({"TikTok A":c['a'],"URL A":c.get('url_a'),"Média A":c.get('media_a'),
-                                "TikTok B":c['b'],"URL B":c.get('url_b'),"Média B":c.get('media_b'),
-                                "Début A (s)":segment['debut_a_s'],"Fin A (s)":segment['fin_a_s'],
-                                "Début B (s)":segment['debut_b_s'],"Fin B (s)":segment['fin_b_s'],
-                                "Type":c['type'],"Confiance":c['confiance']})
-                    st.dataframe(lignes,hide_index=True,column_config={"URL A":st.column_config.LinkColumn(),"URL B":st.column_config.LinkColumn()})
-            diagnostic=donnees.get('diagnostic',{})
-            if diagnostic:
-                dino=diagnostic.get('dinov2',{})
-                st.write({"MP4 présents":diagnostic.get('videos_mp4_disponibles'),"Vidéos décodées":diagnostic.get('videos_decodees'),
-                          "Images décodées":diagnostic.get('images_decodees'),"DINOv2":dino})
-                st.caption(f"{diagnostic['paires_candidates']} paire(s) candidate(s) · {diagnostic['paires_orb_testees']} vérification(s) ORB · {diagnostic['images_confirmees']} image(s) confirmée(s)")
-                with st.expander('Diagnostic de la recherche'):
-                    st.json(diagnostic)
-            if donnees['etat'] and not donnees['groupes'] and not actuel.get('video_busy'):
-                if not etat.get('videos_analysees'):
-                    st.warning('Aucune vidéo analysée : vérifiez les erreurs de téléchargement ci-dessus.')
-                elif diagnostic and not diagnostic['paires_candidates']:
-                    st.info('Aucun candidat visuel trouvé dans les images échantillonnées. Cela ne prouve pas que les vidéos sont différentes.')
-                else:
-                    st.info('Des candidats ont été examinés, sans séquence commune confirmée. Le diagnostic indique les étapes de rejet.')
-            st.subheader("Scènes et contenus similaires")
-            st.caption("Proximité visuelle calculée par CLIP, même sans séquence commune. Le score cosinus n'est pas une probabilité ; il ne confirme ni un même événement, ni un même lieu. Les paroles ne sont pas comparées.")
-            similaires=donnees.get('similarites_semantiques',[])
-            if similaires:
-                st.dataframe([{"TikTok A":c['a'],"URL A":c.get('url_a'),"Média A":c.get('media_a'),
-                               "TikTok B":c['b'],"URL B":c.get('url_b'),"Média B":c.get('media_b'),
-                               "Similarité visuelle (cosinus)":round(c['score_cosinus'],3)} for c in similaires],
-                             hide_index=True)
-            semantique=diagnostic.get('semantique',{})
-            statuts=semantique.get('statuts',{})
-            if not semantique.get('activee'):
-                st.info("Cochez « Comparer aussi le contenu global avec CLIP » puis lancez l'analyse.")
-            elif sum(n for statut,n in statuts.items() if statut!='mesure'):
-                st.warning("Comparaison de contenu incomplète : certains modèles ou dépendances sont indisponibles. Vérifiez le diagnostic et l'autorisation de téléchargement des modèles.")
-            elif not similaires:
-                st.info("Aucune proximité de contenu au-dessus du seuil parmi les candidats examinés. Cela ne prouve pas que les sujets sont différents.")
-            if not actuel.get('video_busy'):
-                st.link_button("Exporter les résultats (CSV, JSON, IRaMuTeQ dans le ZIP)",f"/api/jobs/{tache['id']}/archive")
-        afficher_similarites()
-
-
 with onglet_desordre:
     st.subheader("Désordre visuel et engagement")
     st.caption("Mesurer l’agitation visuelle des vidéos (mouvements, instabilité et irrégularité) et explorer ses liens avec l’engagement sur TikTok.")
@@ -1125,7 +957,7 @@ with onglet_desordre:
             en_cours=etat.get('statut')=='en_cours' and actuel.get('video_busy',False)
             st.write(f"{donnees.get('publications_collectees',0)} publication(s) collectée(s) · {donnees.get('mp4_locaux',0)} MP4 présent(s) · {donnees.get('mp4_manquants',0)} MP4 manquant(s).")
             if not donnees.get('disponible'):
-                st.warning("Le serveur doit être redéployé avec les dépendances de cette analyse (INSTALL_VIDEO=base, semantique ou 1).")
+                st.warning("Le serveur doit être redéployé avec les dépendances OpenCV de Désordre visuel.")
             elif not donnees.get('mp4_locaux') and not donnees.get('mp4_telechargeables'):
                 st.warning("Aucun MP4 associé ni URL TikTok exploitable dans cette collecte. Consultez les publications collectées.")
             telecharger=st.checkbox("Télécharger les MP4 manquants avant l’analyse",value=True,key='desordre_telecharger',
