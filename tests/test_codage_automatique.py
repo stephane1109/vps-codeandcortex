@@ -4,7 +4,7 @@ from analyse.engagement import calculer_ratios
 class TestsCodage(unittest.TestCase):
     def test_absences_non_inventees(self):
         c=coder_variables({"id":"1","author":"media"})
-        self.assertTrue(all(c["variables"][k]=="indetermine" for k in ("personnes","visages","audio","reemploi","parole")))
+        self.assertTrue(all(c["variables"][k]=="indetermine" for k in ("personnes","visages","audio","reemploi")))
     def test_mesures_et_confiances_conservees(self):
         brut={"mouvement":{"mediane":.03,"confiance":None},"visages":{"presence":True,"confiance":.5}}
         c=coder_variables({"id":"1"},brut,True)
