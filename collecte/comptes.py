@@ -137,18 +137,22 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             etat["message_erreur"] = str(erreur)
             if presse_videos_uniquement:
                 from .presse_api import PresseRateLimitError, PresseCooldownError
+                from .quotas_exploitation import QuotaScrapingAtteint
+                budget_atteint = isinstance(erreur, QuotaScrapingAtteint)
                 limitation = isinstance(erreur, PresseRateLimitError)
                 attente = isinstance(erreur, PresseCooldownError)
-                code = ("tiktok_pause_429" if attente else
+                code = ("budget_interne_epuise" if budget_atteint else
+                        "tiktok_pause_429" if attente else
                         "tiktok_limitation_429" if limitation else
                         "acces_tiktok_indisponible")
                 etat.setdefault("diagnostic", {
                     "code": code,
                     "detail": str(erreur),
                 })
-                if limitation or attente:
-                    etat["discovery_stop"] = "cooldown_429" if attente else "rate_limit_429"
-                    if erreur.retry_after is not None:
+                if limitation or attente or budget_atteint:
+                    etat["discovery_stop"] = ("budget_interne" if budget_atteint else
+                                                "cooldown_429" if attente else "rate_limit_429")
+                    if (limitation or attente) and erreur.retry_after is not None:
                         etat["diagnostic"]["retry_after_seconds"] = erreur.retry_after
             if est_erreur_session(erreur):
                 raise
