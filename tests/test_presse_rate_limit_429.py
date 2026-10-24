@@ -158,10 +158,12 @@ class LimitationPresseTests(unittest.TestCase):
                 "url": "https://www.tiktok.com/@compte/video/1234567890123456789",
                 "description": "Déjà collecté",
             })
-            with patch("connect_presse.ConnexionPresse", Connexion429), \\
-                 patch.object(job, "save"), \\
-                 patch.object(job, "sauvegarder_historique"), \\
-                 patch("webapp.telecharger_mp4_collecte") as telecharger:
+            with (
+                patch("connect_presse.ConnexionPresse", Connexion429),
+                patch.object(job, "save"),
+                patch.object(job, "sauvegarder_historique"),
+                patch("webapp.telecharger_mp4_collecte") as telecharger,
+            ):
                 execute_job(job)
             telecharger.assert_not_called()
             self.assertFalse(job.busy)
