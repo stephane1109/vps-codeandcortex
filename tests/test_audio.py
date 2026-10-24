@@ -1,5 +1,6 @@
 """Mesures énergétiques sans modèle et activation indépendante des options."""
 import array
+import json
 import tempfile
 import unittest
 import wave
@@ -19,6 +20,15 @@ class TestsAudio(unittest.TestCase):
             self.assertEqual(mesure["duree_s"],1)
             self.assertEqual(mesure["fraction_silence"],1)
             self.assertNotIn("parole", mesure)
+    def test_anciens_parametres_whisper_ignores(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = Path(dossier) / "ancienne_configuration.json"
+            chemin.write_text(json.dumps({"transcription": True, "modele_whisper": "large"}))
+            parametres = charger_parametres(chemin)
+            self.assertNotIn("transcription", parametres)
+            self.assertNotIn("modele_whisper", parametres)
+            self.assertFalse(parametres["audio"])
+
     def test_modeles_desactives_sans_import_lourd(self):
         parametres=charger_parametres()
         self.assertNotIn("transcription", parametres)
