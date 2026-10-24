@@ -136,6 +136,40 @@ intégrées à chaque page en vérifiant l'ID de la publication, puis son texte 
 si nécessaire. Ce second mode peut restituer une légende tronquée. Les sélecteurs
 TikTok peuvent changer. Adapter l'usage aux règles d'accès et aux droits sur les textes.
 
+### Plafonds API et prévention HTTP 429
+
+L'API officielle v2 de TikTok publie 600 requêtes par minute, séparément
+pour `/v2/user/info/`, `/v2/video/query/` et `/v2/video/list/`.
+Avec une marge de 20 %, cela correspond à 480 requêtes/minute
+([documentation officielle](https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit)).
+
+La Research API annonce 1 000 requêtes par jour et jusqu'à 100 000
+enregistrements par jour. Avec une marge de 20 %, ces références deviennent
+800 requêtes/jour et 80 000 enregistrements/jour
+([FAQ officielle](https://developers.tiktok.com/docs/en/research-api-faq)).
+Les quotas Research API sont réinitialisés à minuit UTC.
+
+**Ces plafonds officiels ne concernent pas l'API web interne ni Selenium**
+utilisés par ScrapTikTok. La marge de 20 % ne garantit donc jamais
+l'absence d'un refus HTTP 429. Les plafonds de l'application sont
+configurés séparément et appliqués aux appels du moteur API Presse.
+
+Configuration locale par défaut (modifiable dans Coolify) :
+`SCRAPTIKTOK_API_MAX_REQUESTS_PER_MINUTE=480`,
+`SCRAPTIKTOK_API_MAX_REQUESTS_PER_HOUR=20`,
+`SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY=800`,
+`SCRAPTIKTOK_API_MIN_INTERVAL_SECONDS=8`.
+Les plafonds simultanés sont cumulatifs : le plus restrictif intervient.
+Le compteur journalier ScrapTikTok repose sur 24 heures glissantes,
+contrairement à la Research API officielle.
+
+L'onglet **Aide** de l'application affiche les références officielles,
+leur réduction indicative de 20 %, et les limites réellement chargées
+depuis l'environnement Coolify. L'historique de requêtes de l'API
+Presse est partagé entre les sessions ; le trafic Selenium n'est
+pas inclus dans ses compteurs. La limite comparative de 80 000
+enregistrements ne constitue pas un plafond technique du scraper.
+
 ## Script en ligne de commande (facultatif)
 
 L'interface utilise le même moteur que le script d'origine, qui reste disponible :
