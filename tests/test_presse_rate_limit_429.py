@@ -121,6 +121,49 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(job.search_errors,1)
 
 
+    def test_429_conserve_les_urls_deja_decouvertes_pour_multimodale(self):
+        """Une pagination interrompue ne doit pas perdre les vidéos déjà vues."""
+        from analyse_desordre.sources import inventaire_sources, lire_publications
+
+        media = charger_inventaire()[0]
+        adresse = f'https://www.tiktok.com/@{media["compte"]}/video/7000000000000000001'
+
+        class Connexion429Partielle:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def preparer_sources(self, settings):
+                return [{"id": media["id"], "compte": media["compte"]}]
+
+            def ouvrir(self):
+                return Mock()
+
+            def decouvrir(self, source, rapport, *, contexte="", progression=None):
+                rapport["discovered_urls"] = [adresse]
+                raise PresseRateLimitError(180)
+
+            def lire_publication(self, adresse):
+                raise AssertionError("Aucune lecture supplémentaire après HTTP 429")
+
+            def fermer(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as dossier:
+            job = Job("a" * 64, StartRequest(
+                source_collecte="presse", medias=[media["id"]],
+                telecharger_mp4=True,
+            ), Path(dossier))
+            with (
+                patch("connect_presse.ConnexionPresse", Connexion429Partielle),
+                patch("webapp.telecharger_mp4_collecte") as telecharger,
+            ):
+                execute_job(job)
+            telecharger.assert_not_called()
+            self.assertEqual(job.status, "partial")
+            self.assertTrue(job.archive_prete, job.message)
+            self.assertEqual(lire_publications(job.directory)[0]["url"], adresse)
+            self.assertEqual(inventaire_sources(job.directory)["mp4_telechargeables"], 1)
+
     def test_429_interrompt_aussi_les_mp4_pendant_la_finalisation(self):
         """Même si des textes existent, 429 ne doit plus déclencher yt-dlp."""
         media = charger_inventaire()[0]
