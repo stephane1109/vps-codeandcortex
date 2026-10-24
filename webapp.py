@@ -1169,17 +1169,17 @@ class Manager:
             max_publications, max_sources, max_commentaires
         )
         if settings.collecter_commentaires and settings.limite_commentaires > max_commentaires():
-            raise HTTPException(422, f"Plafond administrateur : "
+            raise HTTPException(422, f"Borne technique du moteur : "
                 f"{max_commentaires()} commentaires par publication.")
         if settings.limit > max_publications():
             raise HTTPException(422,
-                f"Plafond administrateur : {max_publications()} publications par source.")
+                f"Borne technique du moteur : {max_publications()} publications par source.")
         nombre_sources = (len(settings.medias) if settings.source_collecte=="presse"
                           else len(settings.comptes) if settings.source_collecte=="comptes"
                           else len(settings.hashtags))
         if nombre_sources > max_sources():
             raise HTTPException(422,
-                f"Plafond administrateur : {max_sources()} sources par collecte.")
+                f"Borne technique du moteur : {max_sources()} sources par collecte.")
         with self.lock:
             if any(j.video_busy for j in self.jobs.values()):
                 raise HTTPException(409, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
