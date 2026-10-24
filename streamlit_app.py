@@ -787,10 +787,11 @@ with onglet_aide:
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
     st.subheader("Protection contre les erreurs TikTok 429")
     st.write(
-        "ScrapTikTok limite les appels de son moteur **API Presse** pour réduire "
-        "la charge et les refus d'accès. Ces limites sont des règles locales "
-        "inspirées de valeurs publiées pour d'autres API TikTok, réduites de 50 %. "
-        "Elles ne sont pas des autorisations de scraping et ne garantissent pas l'absence de HTTP 429."
+        "Les limites de l'API Presse sont définies **uniquement par les variables "
+        "d'environnement Coolify** affichées ci-dessous. Aucun coefficient ni "
+        "plafond supplémentaire n'est appliqué par le code. "
+        "Ces limites ne sont pas des quotas officiels du scraping TikTok "
+        "et n'empêchent pas nécessairement les erreurs HTTP 429."
     )
     budget_aide = limites_admin.get("budget_api_presse", {})
     st.table([
@@ -812,7 +813,7 @@ with onglet_aide:
         "Les limites sont communes à toutes les sessions. "
         "Le navigateur Selenium n'est pas comptabilisé ; son exécution reste limitée "
         "par la durée des collectes, les bornes techniques et les blocages TikTok. "
-        "Le plafond le plus strict s'applique, y compris si Coolify prévoit un seuil inférieur."
+        "Chaque plafond vient de sa variable Coolify ; une collecte s'arrête dès que l'un est atteint."
     )
     st.caption(
         "Les cinq anciennes variables de limitation par source sont ignorées. "
