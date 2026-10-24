@@ -1312,7 +1312,6 @@ class OptionsVideo(BaseModel):
     comparer_sequences: bool = True
     audio: bool = False
     ocr: bool = False
-    transcription: bool = False
     embeddings: bool = False
     telecharger_modeles: bool = False
 
@@ -1322,7 +1321,7 @@ def executer_video(job, options):
     from corpus.export_json import exporter_json
     try:
         parametres = charger_parametres()
-        parametres.update(options.model_dump(), telecharger_videos=True, audio=options.audio or options.transcription)
+        parametres.update(options.model_dump(), telecharger_videos=True)
         chemin = job.directory / "parametres_traitement.json"
         exporter_json(chemin, parametres)
         with (job.directory / "traitement.log").open("w") as journal:
