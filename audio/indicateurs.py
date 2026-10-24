@@ -15,4 +15,4 @@ def mesurer_audio(chemin, seuil_db=-40):
             energie=math.sqrt(sum(float(x)*x for x in echantillons)/len(echantillons))/32768
             if energie>10**(seuil_db/20): avec_son+=len(echantillons)
             total+=len(echantillons)
-    return {"presence":True,"duree_s":duree,"fraction_silence":1-avec_son/total if total else None,"seuil_db":seuil_db,"parole":None,"confiance":None}
+    return {"presence":True,"duree_s":duree,"fraction_silence":1-avec_son/total if total else None,"seuil_db":seuil_db}
