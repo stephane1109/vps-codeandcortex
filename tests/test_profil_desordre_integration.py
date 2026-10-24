@@ -120,8 +120,10 @@ class IntegrationProfilsVisuels(unittest.TestCase):
             job = Job("a" * 64, StartRequest(
                 source_collecte="presse", medias=[media["id"]], limit=2,
             ), Path(d))
-            with patch("connect_presse.ConnexionPresse", ConnexionPresseSimulee), \\
-                 patch.object(job, "pause", return_value=None):
+            with (
+                patch("connect_presse.ConnexionPresse", ConnexionPresseSimulee),
+                patch.object(job, "pause", return_value=None),
+            ):
                 execute_job(job)
             self.assertTrue(job.archive_prete, job.message)
             self.assertTrue((job.directory / "archive.zip").is_file())
