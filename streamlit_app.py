@@ -284,11 +284,19 @@ with onglet_collecte:
                     "Seul le moteur API Presse est temporairement désactivé."
                 )
             elif limitation_presse.get("ancien_429_sans_delai"):
-                st.warning(
-                    "TikTok a renvoyé HTTP 429 sans préciser de délai. "
-                    "L'ancienne pause locale d'une heure est annulée. "
-                    "Un nouvel essai reste susceptible d'être refusé ; "
-                    "ScrapTikTok ne déclenche aucun nouvel essai automatiquement."
+                # Il s'agit du dernier refus enregistré, pas nécessairement
+                # de la collecte affichée actuellement.
+                dernier_429=limitation_presse.get("dernier_429")
+                date_429=(
+                    datetime.fromtimestamp(dernier_429,tz=timezone.utc).strftime("%d/%m/%Y à %H:%M UTC")
+                    if isinstance(dernier_429,(int,float)) and dernier_429>0 else None
+                )
+                st.caption(
+                    ("Dernier refus HTTP 429 enregistré le "+date_429+". " if date_429 else
+                     "Un ancien refus HTTP 429 est enregistré. ")
+                    + "TikTok n'a transmis aucun délai Retry-After. "
+                    "Ce message est informatif : aucune pause locale n'est active "
+                    "et aucune relance automatique n'est effectuée."
                 )
             else:
                 st.caption("API TikTok : aucune attente Retry-After active.")
@@ -352,6 +360,15 @@ with onglet_collecte:
             min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
             help=f"Borne technique du moteur : {max_posts_admin} posts par source. "
                  "Il est vérifié aussi sur les requêtes API directes.")
+        if source == "presse":
+            nombre_medias=len(st.session_state.get("medias",[]))
+            if nombre_medias:
+                st.caption(
+                    f"Objectif demandé : {st.session_state.get('limit',50)} vidéos "
+                    f"PAR média, pour {nombre_medias} média(s) sélectionné(s) "
+                    f"(jusqu'à {st.session_state.get('limit',50)*nombre_medias} vidéos au total, "
+                    "si elles sont accessibles)."
+                )
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source == "presse":
             st.caption("Parcours des profils publics des médias sélectionnés. Seuls leurs auteurs sont admis ; les filtres de langue et de période restent disponibles. Couverture potentiellement incomplète.")
