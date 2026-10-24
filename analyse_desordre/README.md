@@ -55,8 +55,7 @@ n'interrompt pas les autres. Les erreurs de programmation ne sont pas masquées.
 Réglages CLI : `--frequence 10`, `--dimension 320`, `--duree-max 10`,
 `--permutations 1999`. Une limite atteinte produit un résultat **partiel**.
 Les paramètres avancés sont disponibles dans `Parametres` pour les appels Python.
-Farnebäck doit comparer des images assez proches : 10 Hz est un compromis initial,
-et non la fréquence de 1 image/s du moteur de similarité. Un mouvement très rapide
+Farnebäck doit comparer des images assez proches : 10 Hz est un compromis initial. Un mouvement très rapide
 peut dépasser sa capacité de mesure. Toutes les vidéos doivent être analysées
 avec les mêmes réglages pour être comparables.
 
@@ -218,13 +217,11 @@ le graphique interactif couvre les huit variables.
 L'import du paquet seul ne charge ni OpenCV ni modèle. L'appel Python est synchrone ;
 l’interface utilise `service.py` dans un processus séparé, réservé au propriétaire
 de la collecte. Les exports et l’état sont privés. La réservation CPU empêche un
-calcul simultané avec la collecte ou l’analyse multimodale. Arrêt explicite,
+calcul simultané avec la collecte ou une autre analyse de désordre. Arrêt explicite,
 libération d’accès et limite de deux heures interrompent le processus. Chaque
 lancement écrit dans un nouveau sous-dossier ; les MP4 ne sont jamais supprimés.
 
-Le Dockerfile installe les dépendances du module avec les profils
-`INSTALL_VIDEO=base`, `semantique` ou `1`. Un redéploiement est nécessaire après
-cette intégration. Le profil `0` reste limité aux textes. L’analyse ne démarre
+Le Dockerfile installe directement les dépendances du module, sans aucun profil `INSTALL_VIDEO`. Un redéploiement est nécessaire après cette modification. L’analyse ne démarre
 jamais automatiquement. Calcul CPU séquentiel, OpenCV limité à un thread ; seules
 les mesures scalaires d'une vidéo et le tableau des publications sont conservés.
 
@@ -256,7 +253,7 @@ sont accessibles ; les liens symboliques et les références externes sont refus
 L’option **Télécharger les MP4 manquants avant l’analyse** est cochée initialement
 mais ne fait rien avant le lancement explicite. Avec des URL TikTok valides, le
 lancement est possible même si aucun MP4 n’est encore présent. Le service réutilise
-le téléchargeur existant sans modifier les algorithmes de collecte ni de similarité.
+le téléchargeur existant sans modifier les algorithmes de collecte ni les mesures de désordre.
 Il indique chaque téléchargement et les causes d’échec, conserve les MP4 récupérés
 et poursuit avec les fichiers disponibles. Limites de préparation : 150 Mo par
 vidéo, 512 Mo de disque libre minimum et limite de durée choisie pour l’analyse.
