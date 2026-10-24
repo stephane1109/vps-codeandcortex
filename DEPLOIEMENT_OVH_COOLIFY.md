@@ -130,10 +130,12 @@ Conserver **REDIS_URL**, les autres variables du ticket applicatif et le volume
 persistant **`/app/data`**. Les MP4 et les analyses existantes ne sont pas
 effacés par la modification du code. Redéployer la branche `deploy-scraptiktok`.
 
-Les budgets de requêtes API Presse sont plafonnés dans le code à 50 % des
-valeurs de référence (300/min, 500/heure, 500/jour, 50 000 enregistrements
-par jour UTC). Une ancienne valeur Coolify plus élevée est automatiquement
-réduite. Les requêtes Selenium ne sont pas couvertes par ces compteurs.
+Les budgets de requêtes API Presse sont **entièrement définis dans
+Coolify** par les cinq variables `SCRAPTIKTOK_API_*` : aucune borne haute
+additionnelle ni réduction automatique de 50 % n'est imposée.
+Un exemple prudent : 300/minute, 500/heure, 500/jour UTC,
+50 000 enregistrements/jour UTC, intervalle minimal 0 seconde.
+Les requêtes Selenium ne sont pas couvertes par ces compteurs.
 
 ## Accueil Streamlit minimaliste
 
