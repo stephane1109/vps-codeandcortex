@@ -79,6 +79,64 @@ class IntegrationProfilsVisuels(unittest.TestCase):
                 (session/"publications.json").read_text(encoding="utf-8")
             ),corpus)
 
+    def test_collecte_presse_prepare_multimodale_meme_si_une_legende_manque(self):
+        """La collecte Presse exporte les métadonnées et les URL utilisables."""
+        from webapp import Job, StartRequest, execute_job
+        from collecte.presse import charger_inventaire
+        from scraptiktok import WebDriverException
+
+        media = charger_inventaire()[0]
+        compte = media["compte"]
+        urls = liens(compte, 100000, 100002)
+
+        class ConnexionPresseSimulee:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def preparer_sources(self, reglages):
+                return [{"id": media["id"], "compte": compte}]
+
+            def ouvrir(self):
+                return Mock()
+
+            def decouvrir(self, source, rapport, *, contexte="", progression=None):
+                rapport.update(discovered_urls=urls, collecte_partielle=False)
+                return urls
+
+            def lire_publication(self, url):
+                if url == urls[1]:
+                    raise WebDriverException("Légende inaccessible")
+                return {
+                    "id": "100000", "url": urls[0], "author": compte,
+                    "description": "Manifestation lycéenne",
+                    "engagement": {"likes": {"valeur": 10, "brut": "10"},
+                                    "vues": {"valeur": 100, "brut": "100"}},
+                }
+
+            def fermer(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as d:
+            job = Job("a" * 64, StartRequest(
+                source_collecte="presse", medias=[media["id"]], limit=2,
+            ), Path(d))
+            with patch("connect_presse.ConnexionPresse", ConnexionPresseSimulee), \\
+                 patch.object(job, "pause", return_value=None):
+                execute_job(job)
+            self.assertTrue(job.archive_prete, job.message)
+            self.assertTrue((job.directory / "archive.zip").is_file())
+            self.assertEqual(len(json.loads(
+                (job.directory / "publications.json").read_text())), 1)
+            donnees = lire_publications(job.directory)
+            self.assertEqual({p["id"] for p in donnees}, {"100000", "100001"})
+            self.assertEqual(inventaire_sources(job.directory), {
+                "publications_collectees": 2,
+                "mp4_locaux": 0, "mp4_manquants": 2,
+                "mp4_telechargeables": 2,
+            })
+            self.assertEqual(donnees[0]["engagement"]["likes"]["valeur"], 10)
+            self.assertEqual(donnees[1]["engagement"], {})
+
     def test_desordre_analyse_les_mp4_sans_legende(self):
         with tempfile.TemporaryDirectory() as d:
             session=Path(d)
