@@ -349,6 +349,23 @@ catégorie sociologique. Les catégories non vérifiées restent indéterminées
 identifiants sont conservés exactement, notamment leurs traits de soulignement.
 Une collecte peut sélectionner jusqu’à 29 médias ; les limites par source et les
 traitements séquentiels restent inchangés.
+
+En **mode API Presse**, la légende et les compteurs déjà présents dans la
+réponse `itemList` de chaque média sont directement repris dans le corpus,
+sans rouvrir chaque vidéo avec Selenium. Si la légende manque, la lecture
+habituelle de la vidéo reste possible. La collecte explicite des commentaires
+continue d'utiliser le navigateur. Les compteurs absents restent inconnus :
+ils ne sont pas remplacés par zéro. Une collecte de 50 posts sur trois médias
+vise jusqu'à 150 posts, avec un objectif **par média**.
+
+Comme dans le projet de référence `bajaam/tt-dlp`, un `secUid` public
+confirmé par les publications du média est mémorisé dans
+`/app/data/presse_identites.json` lorsque `DATA_DIR=/app/data`.
+Le cache reste valable 30 jours et évite certaines nouvelles requêtes
+d'identification, mais ni les budgets Coolify ni les refus TikTok HTTP 429
+ne sont contournés. Après un HTTP 429, le lot s'arrête et exporte les
+résultats déjà acquis ; aucun autre média n'est sollicité.
+
 Dans Streamlit, choisir **Presse et médias** dans **Rechercher par** : les comptes
 s’affichent directement sous forme de cases à cocher, sans liste déroulante cachée.
 Le bouton **Tout cocher** sélectionne tous les médias ; chaque case reste modifiable.
