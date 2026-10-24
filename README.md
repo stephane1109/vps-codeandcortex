@@ -162,15 +162,15 @@ Configuration locale par défaut (modifiable dans Coolify) :
 `SCRAPTIKTOK_API_MIN_INTERVAL_SECONDS=0`.
 Le plafond horaire ne réduit plus arbitrairement celui sur 24 h et
 aucun intervalle de 8 secondes n'est imposé. Les plafonds restent cumulatifs.
-Le compteur journalier ScrapTikTok repose sur 24 heures glissantes,
-contrairement à la Research API officielle.
+Le compteur journalier ScrapTikTok est réinitialisé à minuit UTC,
+comme le quota quotidien publié pour la Research API.
 
 L'onglet **Aide** de l'application affiche les références officielles,
 leur réduction indicative de 20 %, et les limites réellement chargées
 depuis l'environnement Coolify. L'historique de requêtes de l'API
 Presse est partagé entre les sessions ; le trafic Selenium n'est
 pas inclus dans ses compteurs. Le compteur local de 80 000
-objets sur 24 heures prend en compte les objets renvoyés par les pages du
+objets par jour UTC prend en compte les objets renvoyés par les pages du
 moteur API Presse uniquement ; il ne correspond pas à un quota TikTok
 applicable au scraping. Les anciennes variables définies dans Coolify
 doivent être mises à jour : elles prévalent sur les valeurs par défaut.
