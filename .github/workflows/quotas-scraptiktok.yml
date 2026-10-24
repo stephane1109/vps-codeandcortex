@@ -1,0 +1,38 @@
+name: ScrapTikTok - Plafonds anti-scraping
+on:
+  push:
+    paths:
+      - "collecte/quotas_exploitation.py"
+      - "collecte/presse_api.py"
+      - "collecte/comptes.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_quotas_exploitation.py"
+      - ".github/workflows/quotas-scraptiktok.yml"
+  pull_request:
+    paths:
+      - "collecte/quotas_exploitation.py"
+      - "collecte/presse_api.py"
+      - "collecte/comptes.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_quotas_exploitation.py"
+      - ".github/workflows/quotas-scraptiktok.yml"
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Syntaxe
+        run: python -m compileall -q collecte/quotas_exploitation.py collecte/presse_api.py collecte/comptes.py webapp.py streamlit_app.py tests/test_quotas_exploitation.py
+      - name: Plafonds, budgets API et régressions
+        run: |
+          python -m unittest discover -s tests -p test_quotas_exploitation.py -v
+          python -m unittest discover -s tests -p test_presse_secuid_api.py -v
+          python -m unittest discover -s tests -p test_presse_rate_limit_429.py -v
+          python -m unittest discover -s tests -p test_presse_isolation_version.py -v
