@@ -752,6 +752,18 @@ def wait_for_user(driver, job: Job, message: str):
 
 def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
+    from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+    from collecte.quotas_exploitation import QuotaScrapingAtteint
+    if isinstance(erreur, PresseRateLimitError):
+        conservees = len(rapport.get("discovered_urls", []))
+        return ("Accès API Presse refusé par TikTok (HTTP 429) : collecte arrêtée. "
+                + (f"{conservees} URL déjà reçue(s) conservée(s), sans vérification de vidéo ou de métriques. "
+                   if conservees else "Aucune URL de vidéo utilisable n'a pu être conservée. ")
+                + "Aucun nouvel appel n'est lancé par cette collecte.")
+    if isinstance(erreur, PresseCooldownError):
+        return "Pause TikTok Retry-After encore active : aucune requête API Presse envoyée."
+    if isinstance(erreur, QuotaScrapingAtteint):
+        return "Quota de sécurité ScrapTikTok atteint : arrêt avant la requête TikTok suivante."
     diagnostic = rapport.get("diagnostic", {})
     code = diagnostic.get("code")
     if code == "erreur_session":
