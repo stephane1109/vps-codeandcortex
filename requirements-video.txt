@@ -1,9 +1,0 @@
-# Couche audiovisuelle facultative. Les modèles sont chargés uniquement sur activation.
--r requirements-video-base.txt
-pytesseract>=0.3.13,<0.4
-open-clip-torch>=2.30,<4
-# Installer torch/torchvision CPU avant ce fichier sur Linux (voir documentation).
-
-# DINOv2 par image et index FAISS CPU.
-transformers>=4.48,<5
-faiss-cpu>=1.9,<2
