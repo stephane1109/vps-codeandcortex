@@ -195,7 +195,8 @@ def extraire_identite_video_embed(page, compte, video_id):
     return secuid
 
 
-def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None):
+def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None,
+                    obtenir=None):
     """Résoudre via l'embed créateur, sinon via 1 à 3 vidéos récentes.
 
     Aucun secUid inventé, aucun mélange de médias. Conserve la même session
@@ -212,7 +213,8 @@ def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None
             check()
         rapport["tentatives_embed_video"] = numero
         try:
-            page = _obtenir(client, f"{HOTE}/embed/v2/{video_id}", referer=referer)
+            page = (obtenir(f"{HOTE}/embed/v2/{video_id}") if obtenir
+                    else _obtenir(client, f"{HOTE}/embed/v2/{video_id}", referer=referer))
             secuid = extraire_identite_video_embed(page, compte, video_id)
         except PresseRateLimitError:
             # Ne pas passer à l'embed suivant : 429 est un refus temporaire
@@ -307,6 +309,12 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     client = client if client is not None else _client()
     limite = max(1, min(int(limite), 1000))
     referer = f"{HOTE}/@{compte}"
+    def obtenir_avec_quota(url):
+        if client_reel:
+            from .quotas_exploitation import reserver_requete
+            reserver_requete(check=check)
+        return _obtenir(client, url, referer=referer)
+
     rapport.update(
         mode_decouverte="api_profil_secuid", compte_attendu=compte,
         requete_recherche=f"@{compte} : liste vidéos paginée (secUid)",
@@ -317,10 +325,10 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     )
     try:
         check()
-        page_embed = _obtenir(client, f"{HOTE}/embed/@{compte}", referer=referer)
+        page_embed = obtenir_avec_quota(f"{HOTE}/embed/@{compte}")
         profil = _profil_depuis_embed(page_embed, compte)
         secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
-                                referer=referer)
+                                referer=referer, obtenir=obtenir_avec_quota)
     except PresseRateLimitError as erreur:
         if client_reel:
             from .tiktok_limitation import enregistrer_limitation
@@ -335,7 +343,8 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
     liens = {}
     pages_vides = 0
     device_id = str(random.randint(7250000000000000000, 7325099899999994577))
-    for numero in range(1, min(MAX_PAGES, (limite // 15) + 15) + 1):
+    from .quotas_exploitation import max_pages_api
+    for numero in range(1, min(MAX_PAGES, max_pages_api(), (limite // 15) + 15) + 1):
         check()
         # Paramètres de client web inspirés du client MIT tt-dlp v1.4.
         # Les champs de contexte du navigateur font partie de la requête
@@ -376,7 +385,7 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         }
         url = f"{HOTE}/api/creator/item_list/?{urlencode(params)}"
         try:
-            contenu = _obtenir(client, url, referer=referer)
+            contenu = obtenir_avec_quota(url)
             donnees = json.loads(contenu)
         except PresseRateLimitError as erreur:
             if client_reel:

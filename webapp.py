@@ -782,8 +782,10 @@ def expliquer_echec_source(rapport, erreur):
 
 
 def execute_job(job: Job, driver_factory=scraper.create_driver):
+    from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
-        hashtag=job.settings.hashtag, limit=job.settings.limit, max_scrolls=40,
+        hashtag=job.settings.hashtag, limit=job.settings.limit,
+        max_scrolls=max_defilements(),
         idle_rounds=3, delay=3.0, timeout=20.0, interactive=True,
         headless=os.getenv("SCRAPTIKTOK_HEADLESS", "1") == "1",
         chrome_binary=Path(os.environ["CHROME_BINARY"]) if os.getenv("CHROME_BINARY") else None,
@@ -794,6 +796,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     unique_links = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
+    limitation_budget = False
     try:
         job.check()
         # Chaque mode possède son point d’entrée ; aucun repli implicite vers un autre mode.
@@ -951,6 +954,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
                 from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+                from collecte.quotas_exploitation import QuotaScrapingAtteint
+                if isinstance(erreur, QuotaScrapingAtteint):
+                    limitation_budget = True
+                    job.update(search_errors=job.search_errors + 1)
+                    break
                 if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
                     # 429 peut concerner les autres comptes du même serveur :
                     # interrompre la découverte de cette collecte entière.
@@ -1010,6 +1018,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.settings.source_collecte != "hashtags":
             final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
                               if recherche_partielle else " Collecte limitée au nombre demandé par compte ; historique complet non garanti.")
+        if limitation_budget:
+            final_message += (" Plafond interne de requêtes API Presse atteint : "
+                              "collecte arrêtée sans demander davantage de données à TikTok.")
+            final_status = "partial" if links else "failed"
         if limitation_tiktok:
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
                               "Les autres médias de cette collecte n'ont pas été sollicités ; "
@@ -1153,14 +1165,29 @@ class Manager:
         self.reaper = None
 
     def start(self, owner, settings, owner_historique=""):
+        from collecte.quotas_exploitation import (
+            max_publications, max_sources, max_commentaires
+        )
+        if settings.collecter_commentaires and settings.limite_commentaires > max_commentaires():
+            raise HTTPException(422, f"Plafond administrateur : "
+                f"{max_commentaires()} commentaires par publication.")
+        if settings.limit > max_publications():
+            raise HTTPException(422,
+                f"Plafond administrateur : {max_publications()} publications par source.")
+        nombre_sources = (len(settings.medias) if settings.source_collecte=="presse"
+                          else len(settings.comptes) if settings.source_collecte=="comptes"
+                          else len(settings.hashtags))
+        if nombre_sources > max_sources():
+            raise HTTPException(422,
+                f"Plafond administrateur : {max_sources()} sources par collecte.")
         with self.lock:
             if any(j.video_busy for j in self.jobs.values()):
-                raise HTTPException(429, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
+                raise HTTPException(409, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
             active = [job for job in self.jobs.values() if job.busy]
             if any(job.owner == owner for job in active):
                 raise HTTPException(409, "Une collecte est déjà en cours dans votre session.")
             if len(active) >= self.max_jobs:
-                raise HTTPException(429, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
+                raise HTTPException(409, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
             job = Job(owner, settings, self.data_dir, owner_historique=owner_historique)
             job.limites_debug={"inactivite_max_s":self.idle_timeout,"duree_max_s":self.max_duration}
             self.jobs[job.id] = job
@@ -1430,6 +1457,22 @@ def create_app(manager=None):
         if not re.fullmatch(r"[a-f0-9]{64}",cookie):
             raise HTTPException(401,"Historique inaccessible : rechargez la page d’accueil.")
         return cookie
+
+    @app.get("/api/collecte/limites")
+    def lire_limites_exploitation(request: Request):
+        owner(request)
+        from collecte.quotas_exploitation import (
+            max_publications, max_sources, max_commentaires,
+            max_defilements, max_pages_api, etat_budget
+        )
+        return {
+            "maximum_publications_par_source": max_publications(),
+            "maximum_sources_par_collecte": max_sources(),
+            "maximum_commentaires_par_video": max_commentaires(),
+            "maximum_defilements": max_defilements(),
+            "maximum_pages_api_par_source": max_pages_api(),
+            "budget_api_presse": etat_budget(),
+        }
 
     @app.get("/api/presse/limitation")
     def statut_limitation_presse(request: Request):
@@ -1962,7 +2005,7 @@ def create_app(manager=None):
             try:
                 job.commands.put_nowait(command)
             except queue.Full:
-                raise HTTPException(429, "Patientez un instant avant le prochain geste.")
+                raise HTTPException(409, "Patientez un instant avant le prochain geste.")
 
     @app.post("/api/jobs/{job_id}/continue")
     def resume(job_id: str, request: Request):
