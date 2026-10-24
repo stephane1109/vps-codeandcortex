@@ -68,6 +68,24 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(len(demandes),2)
         self.assertTrue(demandes[1].endswith("/embed/v2/7000000000000000001"))
         self.assertEqual(rapport["pages_api"],0)
+        self.assertEqual(rapport["etape_api"],"identification_video")
+        self.assertEqual(rapport["requetes_tentees"],2)
+
+    def test_429_sur_la_premiere_requete_identifie_le_blocage_initial(self):
+        client = Mock()
+        client.open.side_effect = HTTPError(
+            "https://www.tiktok.com/embed/@lemondefr",
+            429, "Too Many Requests", {}, None,
+        )
+        rapport = {}
+        with self.assertRaises(PresseRateLimitError):
+            collecter_videos_presse_api("lemondefr", 300, rapport,
+                                       client=client, pause=lambda _: None)
+        self.assertEqual(client.open.call_count, 1)
+        self.assertEqual(rapport["etape_api"], "identification_media")
+        self.assertEqual(rapport["requetes_tentees"], 1)
+        self.assertEqual(rapport["pages_api"], 0)
+        self.assertEqual(rapport["discovered_urls"], [])
 
     def test_un_seul_moteur_et_diagnostic_429(self):
         rapport={}
