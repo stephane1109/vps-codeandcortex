@@ -953,8 +953,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     job.update(search_errors=job.search_errors + 1)
                     break
                 if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
-                    # 429 peut concerner les autres comptes du même serveur :
-                    # interrompre la découverte de cette collecte entière.
+                    # Conserver les URL déjà découvertes avant le HTTP 429,
+                    # sans nouvelle lecture de page, embed ou téléchargement.
+                    for url in rapport.get("discovered_urls", []):
+                        identite = scraper.canonical_post(url)
+                        if identite and (
+                            job.settings.source_collecte == "hashtags"
+                            or identite[2].casefold() in medias_par_compte
+                        ):
+                            unique_links.setdefault(identite[0], identite[1])
+                    links = list(unique_links.values())
                     limitation_tiktok = True
                     job.update(
                         search_errors=job.search_errors + 1,
