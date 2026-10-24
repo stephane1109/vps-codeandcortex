@@ -136,63 +136,24 @@ intégrées à chaque page en vérifiant l'ID de la publication, puis son texte 
 si nécessaire. Ce second mode peut restituer une légende tronquée. Les sélecteurs
 TikTok peuvent changer. Adapter l'usage aux règles d'accès et aux droits sur les textes.
 
-### Plafonds API et prévention HTTP 429
+### Protection locale contre HTTP 429
 
-L'API officielle v2 de TikTok publie 600 requêtes par minute, séparément
-pour `/v2/user/info/`, `/v2/video/query/` et `/v2/video/list/`.
-Avec une marge de 20 %, cela correspond à 480 requêtes/minute
-([documentation officielle](https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit)).
+Les valeurs publiées pour les API officielles TikTok ne s'appliquent pas
+à l'API web interne ni à Selenium utilisés par ScrapTikTok.
 
-La Research API annonce 1 000 requêtes par jour et jusqu'à 100 000
-enregistrements par jour. Avec une marge de 20 %, ces références deviennent
-800 requêtes/jour et 80 000 enregistrements/jour
-([FAQ officielle](https://developers.tiktok.com/docs/en/research-api-faq)).
-Les quotas Research API sont réinitialisés à minuit UTC.
+L'application impose des **plafonds locaux à 50 % des valeurs de référence** :
+300 requêtes API Presse/minute, 500/heure, 500/jour UTC et 50 000
+objets API Presse/jour UTC. Ces budgets sont communs à toutes les sessions
+et ne comptent pas Selenium. Un ancien plafond Coolify supérieur est
+automatiquement ramené à ces maxima ; les valeurs inférieures sont conservées.
+Un refus TikTok HTTP 429 interrompt la recherche API Presse : aucune autre
+vidéo ni aucun autre média n'est alors contacté.
 
-**Ces plafonds officiels ne concernent pas l'API web interne ni Selenium**
-utilisés par ScrapTikTok. La marge de 20 % ne garantit donc jamais
-l'absence d'un refus HTTP 429. Les plafonds de l'application sont
-configurés séparément et appliqués aux appels du moteur API Presse.
-
-Configuration locale par défaut (modifiable dans Coolify) :
-`SCRAPTIKTOK_API_MAX_REQUESTS_PER_MINUTE=480`,
-`SCRAPTIKTOK_API_MAX_REQUESTS_PER_HOUR=800`,
-`SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY=800`,
-`SCRAPTIKTOK_API_MAX_RECORDS_PER_DAY=80000`,
-`SCRAPTIKTOK_API_MIN_INTERVAL_SECONDS=0`.
-Le plafond horaire ne réduit plus arbitrairement celui sur 24 h et
-aucun intervalle de 8 secondes n'est imposé. Les plafonds restent cumulatifs.
-Le compteur journalier ScrapTikTok est réinitialisé à minuit UTC,
-comme le quota quotidien publié pour la Research API.
-
-Les anciennes variables d'environnement
-`SCRAPTIKTOK_MAX_POSTS_PER_SOURCE`,
-`SCRAPTIKTOK_MAX_SOURCES_PER_JOB`,
-`SCRAPTIKTOK_MAX_COMMENTS_PER_VIDEO`,
-`SCRAPTIKTOK_MAX_SCROLLS` et
-`SCRAPTIKTOK_API_MAX_PAGES_PER_SOURCE`
-ne sont plus utilisées par le code : les valeurs 25, 2, 20, 10 et 4
-ne bloquent plus les collectes. Elles n'ont pas d'équivalent chiffré dans
-les quotas officiels de TikTok et ne peuvent donc pas être recalculées
-avec une remise de 20 %.
-
-Le moteur conserve uniquement ses bornes techniques de fonctionnement :
-1 000 publications par source demandée (modèle de requête), 29 médias
-sélectionnés au maximum, 500 commentaires demandés par publication et
-une pagination adaptée au lot demandé. La recherche Selenium conserve
-une borne de secours élevée et s'arrête aussi à la fin du travail ou
-à la durée maximale d'exécution (`JOB_TIMEOUT_SECONDS`).
-Ces bornes sont techniques et ne constituent pas des quotas TikTok.
-
-L'onglet **Aide** de l'application affiche les références officielles,
-leur réduction indicative de 20 %, les bornes techniques
-et les quotas globaux réellement chargés depuis Coolify. L'historique de requêtes de l'API
-Presse est partagé entre les sessions ; le trafic Selenium n'est
-pas inclus dans ses compteurs. Le compteur local de 80 000
-objets par jour UTC prend en compte les objets renvoyés par les pages du
-moteur API Presse uniquement ; il ne correspond pas à un quota TikTok
-applicable au scraping. Les anciennes variables définies dans Coolify
-doivent être mises à jour : elles prévalent sur les valeurs par défaut.
+Les anciennes variables par source
+`SCRAPTIKTOK_MAX_POSTS_PER_SOURCE`, `SCRAPTIKTOK_MAX_SOURCES_PER_JOB`,
+`SCRAPTIKTOK_MAX_COMMENTS_PER_VIDEO`, `SCRAPTIKTOK_MAX_SCROLLS`
+et `SCRAPTIKTOK_API_MAX_PAGES_PER_SOURCE` sont ignorées.
+Les limites techniques du formulaire et les durées maximales restent actives.
 
 ## Script en ligne de commande (facultatif)
 
@@ -454,94 +415,15 @@ Les commentaires sont collectés pour les publications retenues. Leurs exports s
 restent disponibles.
 Les astérisques sont neutralisés uniquement dans le corps IRaMuTeQ, sans modifier le brut.
 
-## Traitement audiovisuel facultatif
+## Analyse vidéo conservée : Désordre visuel
 
-Les options vidéo ont été retirées de l’interface. Les modules restent accessibles
-par l’API ou le traitement par lots, avec le profil vidéo décrit dans le guide de déploiement et une collecte enrichie. La détection de réemploi
-s’exécute sans annotation manuelle. OCR, mesure énergétique audio et embeddings sont des options
-indépendantes ; aucun modèle n’est téléchargé sans activer l’autorisation correspondante.
-Le téléchargement vidéo se fait avec yt-dlp sur les URL publiques validées, sans exporter
-les cookies du navigateur. Une vidéo inaccessible reste indéterminée, même si sa légende
-a été collectée dans une session connectée. Les carrousels photo ne sont pas traités comme
-vidéos et peuvent apparaître comme non analysables.
-
-Les résultats distinguent :
-
-- **Fichier identique** : même SHA-256 du fichier complet.
-- **Réemploi de séquence** : présélection pHash, ORB + homographie RANSAC, puis alignement
-  temporel monotone d’au moins trois images sur deux secondes, à vitesse et lacunes bornées.
-  Deux pHash distincts sont requis pour écarter les images fixes répétées.
-- **Vidéos visuellement quasi identiques** : une séquence validée couvre au moins 85 %
-  des deux durées intégrales et les extractions ne sont pas tronquées.
-- **Similarité sémantique** : cosinus des embeddings CLIP, enregistré séparément. Elle
-  ne crée jamais une arête de réemploi ni un groupe de séquences communes.
-- **Indéterminé** : médias ou indices exploitables insuffisants. « Non détecté » ne
-  signifie pas « absent » ; échantillonnage, recadrage, logos, surimpressions et montage
-  peuvent produire des erreurs. Les seuils doivent être évalués sur le corpus étudié.
-
-Les groupes sont des composantes connexes de réemplois : A partageant un plan avec B
-et B un autre plan avec C ne prouve pas que A et C soient identiques. La circulation
-inter-médias indique la publication la plus ancienne parmi celles observées, jamais
-une origine ou une relation de copie prouvée. Aucun jugement de plagiat n’est produit.
-
-Les caractéristiques sont calculées automatiquement : coupes par histogrammes,
-mouvement Farnebäck, silhouettes HOG, visages frontaux Haar, texte OCR, présence de
-piste audio et silence énergétique. Un visage frontal est un indice
-visuel ; il ne prouve pas une adresse au spectateur. Aucun âge, genre, identité,
-origine, émotion ou orientation politique n’est inféré. Les formats sont des règles
-observables (`visage_frontal`, `texte_incruste`, `montage_multiplans`, `indetermine`),
-pas une classification validée des genres journalistiques.
-
-`variables_shs.json/csv` conservent mesures, confiances et règles. Les variables
-illustratives sont ajoutées sous la forme `**** *media_... *format_... *reemploi_...`
-aux corpus IRaMuTeQ. Les modalités inconnues valent `indetermine`.
-La nomenclature est documentée dans `config/variables_shs.json`, les règles numériques
-et leurs seuils dans `analyse/codage_automatique.py` et les configurations vidéo.
-
-## Lots, cache et ressources
-
-Par défaut : un traitement audiovisuel à la fois, sans collecte concurrente, CPU sur
-un thread, 20 vidéos, 190 paires, 120 images/vidéo, dimension maximale 384 pixels,
-1 image/seconde, 180 secondes/vidéo, 150 Mo/fichier, 30 minutes/lot. Les vidéos sont
-alternées entre médias pour couvrir plusieurs comptes même dans un petit lot. Les
-comparaisons chargent seulement deux jeux d’empreintes à la fois ; les vidéos décodées
-sont traitées successivement. Les images ORB candidates sont bornées à 400 par paire ;
-la troncature est signalée. Les limites ne permettent pas de conclure à l’absence de
-réemploi sur tout un corpus. OCR examine au plus 12 images, silhouettes/visages 20.
-
-`config/parametres_video.json` définit les ressources et options ;
-`config/seuils_similarite.json` définit les seuils de comparaison. L’interface lance
-un sous-processus interrompable, y compris ses téléchargements et commandes ffmpeg.
-Le serveur arrête un traitement abandonné selon `IDLE_TIMEOUT_SECONDS` : garder la
-page ouverte pendant l’analyse. Le CLI est adapté aux traitements administrateur :
-
-```bash
-python -m video.lots --session data/sessions/IDENTIFIANT
-python -m video.lots --session data/sessions/IDENTIFIANT --parametres mon_lot.json --debut 20
-```
-
-Le JSON de surcharge accepte seulement les bornes prévues. Pour des vidéos déjà
-présentes, déposer `videos/ID_TIKTOK.mp4` ; le téléchargement est désactivé par défaut
-en CLI (`telecharger_videos: true` pour l’autoriser). `--debut` décale la sélection
-alternée par médias. Chaque exécution réécrit les résultats analytiques du lot courant ;
-exporter son archive avant le lot suivant. Les comparaisons portent sur les vidéos du
-lot courant, pas automatiquement entre lots. Augmenter les limites dans leurs bornes
-pour inclure les publications à comparer ensemble. Code de sortie 0 : lot complet ;
-2 : partiel. Un module facultatif indisponible conserve un statut détaillé indéterminé.
-
-Le cache SQLite associe SHA-256, paramètres et version de l’algorithme. Il est borné à
-100 vidéos, purgé avec `RESULT_TTL_SECONDS` par le serveur, et n’enregistre pas un résultat
-avec module activé en échec. `stockage/historique.py` donne accès à l’historique par
-propriétaire depuis Python ; il n’ajoute pas d’accès public à la base. Les résultats
-web restent accessibles seulement durant la session en mémoire ; un redémarrage
-conserve les fichiers du volume, mais ne restaure pas leur accès dans l’interface.
-
-Les sessions enrichies sont dans `data/sessions/<id>/` : `publications.json`,
-`engagement.csv`, `commentaires.csv`, `videos/`, `images/`, `empreintes/`,
-`groupes_visuels.json`, `comparaisons.json`, `variables_shs.csv/json`, corpus,
-`journal.json`, `traitement_video.json` et `archive.zip`. L’archive contient les
-exports et empreintes JSON ; les fichiers vidéo/audio/images, profils, logs et base
-globale sont exclus. Tout `data/` reste hors Git et hors contexte Docker.
+**Vidéos similaires** (CLIP, DINOv2, FAISS et les comparateurs ORB/pHash)
+a été retiré avec son API et ses dépendances. Le téléchargement MP4
+et l'analyse **Désordre visuel** restent disponibles : mouvement,
+instabilité, irrégularité, annotations, engagement et exports.
+Ce module s'appuie sur OpenCV, NumPy, SciPy, Pandas et Matplotlib,
+sans installer PyTorch ni télécharger de modèle sémantique.
+Garder le volume `/app/data` persistant pour les analyses existantes.
 
 ## Architecture et validation
 
@@ -580,10 +462,9 @@ L'interface Streamlit et le moteur FastAPI sont deux processus liés d'un même
 lancement ; ce couple ne constitue pas deux collectes ou deux interfaces distinctes.
 
 `collecte/` gère les sources et observations ; `stockage/` les sessions SQLite ;
-`video/` et `audio/` les traitements différés ; `analyse/` les mesures dérivées ;
+`analyse_desordre/` le calcul vidéo différé ;
 `corpus/` les exports. Aucun import lourd n’est requis pour démarrer FastAPI ou collecter
-les textes. `requirements.txt` reste le profil texte ; `requirements-video.txt` est
-facultatif. Les points d’entrée et fonctions antérieures restent en place.
+les textes. `requirements.txt` et `analyse_desordre/requirements.txt` définissent les dépendances nécessaires. Les points d’entrée et fonctions antérieures restent en place.
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -591,8 +472,7 @@ python -m unittest discover -s tests -v
 python tests/smoke_controle.py
 ```
 
-Les tests vidéo sont ignorés dans le profil texte et exécutés dans le profil vidéo.
-La CI construit les deux images Linux. Les fixtures contrôlent compression, recadrage,
+Les tests Désordre visuel restent exécutables indépendamment du moteur de collecte. Les fixtures contrôlent compression, recadrage,
 images différentes, ordre temporel, images fixes, séparation sémantique/réemploi,
 valeurs indéterminées, exports, isolation des sessions et gestes navigateur existants.
 Voir `AUDIT_EVOLUTION.md`. Ces tests ne mesurent pas la précision sur de vraies vidéos
@@ -600,7 +480,7 @@ journalistiques et ne valident pas l’accès actuel de TikTok depuis votre VPS.
 
 Références techniques : [OpenCV et homographies](https://docs.opencv.org/4.12.0/d9/d0c/group__calib3d.html),
 [yt-dlp](https://github.com/yt-dlp/yt-dlp),
-[OpenCLIP](https://github.com/mlfoundations/open_clip).
+[OpenCV](https://opencv.org/).
 
 
 ## Période de publication facultative
@@ -666,11 +546,10 @@ Démarrer l’application avec **`python lancer_interface.py`** ; Docker utilise
 Les dates, ET/OU, les commentaires, les exports et le filtre français sont conservés.
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
-ne charge pas OpenCV ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
-Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : DINOv2/FAISS sur CPU, SHA-256/pHash/ORB et CLIP facultatif. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR (la transcription Whisper est supprimée). La disponibilité est vérifiée à partir des outils réellement installés.
-En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
-drapeau supplémentaire n’est nécessaire.
-La CI teste les trois profils Docker, le contrôleur dédié et le
+ne charge pas OpenCV au démarrage de la collecte. CLIP a été supprimé.
+Le Dockerfile installe directement les dépendances OpenCV nécessaires à Désordre visuel ; `INSTALL_VIDEO` n'est plus utilisé comme argument de construction.
+En local : `pip install -r analyse_desordre/requirements.txt` et installer ffmpeg.
+La CI vérifie les traitements de collecte, le contrôle d'accès et le
 parcours Streamlit, avec une source synthétique hors TikTok. L’[audit des interfaces](AUDIT_INTERFACES.md)
 décrit leur séparation et les limites de cette validation.
 
@@ -760,248 +639,3 @@ Seuls les formats MP4 accessibles via yt-dlp sont récupérés. Une restriction 
 un diaporama, un délai dépassé ou une limite de ressources est signalé et n’annule
 pas la collecte textuelle. Le téléchargement ne garantit pas l’accès à chaque vidéo.
 
-## Multimodale — Vidéos similaires
-
-L’onglet **Multimodale** lance le moteur existant après une collecte enrichie.
-L’intervalle vaut une seconde par défaut. Le processus enchaîne des lots de
-20 publications et reprend les vidéos déjà indexées et les paires en attente.
-La collecte accepte désormais 1 000 publications par source. Une interruption
-ou la limite de temps du processus peut demander de cliquer sur **Lancer /
-reprendre l’analyse**. Une vidéo en erreur ne bloque pas les lots suivants.
-
-Le profil Docker `INSTALL_VIDEO=base` suffit pour le réemploi de séquences : OpenCV sur CPU, sans PyTorch,
-CUDA ni téléchargement de modèle. Les mesures énergétiques audio sont disponibles dans ce profil.
-Les comparaisons CLIP/DINOv2 nécessitent `INSTALL_VIDEO=semantique` ou `1` ;
-le profil `1` ajoute OCR, mais aucune fonction de transcription vocale.
-Conserver un volume local persistant monté sur **`/app/data`** dans Coolify
-(le fichier Compose le fait déjà). Aucun nouveau service n’est nécessaire.
-
-### Index, preuves et limites
-
-- L’index SQLite et ses vignettes sont enregistrés sous `data/index_visuel/`,
-  séparés par propriétaire et profil de traitement. Ils survivent à la purge
-  des sessions et des MP4. Les collectes doivent partager la même identité
-  privée du navigateur pour être comparées ; une nouvelle identité ne donne
-  pas accès aux anciens corpus. La perte du volume supprime l’index.
-- Chaque image fournit un pHash global et dix fenêtres à 80 % ou 60 % des
-  dimensions. Quatre bandes de 16 bits, sondées à un bit près, proposent les
-  candidats. Jusqu’à sept bits de distance, ce sondage retrouve les voisins
-  **hors plafonnement** ; au-delà, la recherche est approximative. Elle ne
-  compare pas exhaustivement toutes les vidéos.
-- Une première cohérence temporelle élimine les paires isolées. ORB est calculé
-  seulement sur les images candidates, puis conservé compressé dans SQLite.
-  RANSAC confirme la géométrie et la couverture spatiale ; une seconde
-  vérification temporelle exige plusieurs images et une diversité de la zone
-  appariée, pour limiter les logos, bandeaux et images fixes.
-- Les options d’embeddings utilisent aussi des candidats indexés par projections
-  aléatoires déterministes. Leurs liens sémantiques restent séparés dans le
-  réseau et ne suffisent jamais à établir un réemploi visuel.
-- Les budgets sont explicites : 256 voisins par interrogation de bande,
-  64 candidats par image, 400 confirmations ORB par paire et 2 000 paires par
-  lot par défaut. Un dépassement est signalé comme recherche partielle.
-  Le traitement conserve au plus les images d’une vidéo en mémoire, avec
-  180 images / 180 secondes / 384 pixels par défaut. Une vidéo plus longue
-  est signalée comme tronquée. Les limites sont réglables dans le JSON existant.
-- Les passages sont mesurés à la résolution de l’échantillonnage. Les scores
-  sont heuristiques, non calibrés. Une absence de preuve reste `indetermine`,
-  particulièrement pour les vidéos très courtes, peu texturées ou fortement
-  transformées. Il ne s’agit pas d’une reconnaissance de l’audio seul.
-
-**Supprimer les MP4 après indexation** est facultatif et désactivé par défaut.
-Les vignettes conservées permettent de confirmer de futures correspondances
-sans le fichier original. L’index n’a pas de purge automatique : sa taille est
-à surveiller sur le volume du VPS. Les exports n’incluent pas la base privée.
-
-Le résultat **Vidéos similaires** affiche les URL, médias, deux intervalles et
-la confiance pour chaque lien direct. Un groupe est une composante connexe,
-jamais une preuve d’identité de tous ses membres. Son identifiant est
-reproductible pour les mêmes membres et change si le groupe fusionne/s’agrandit.
-Les fichiers `comparaisons.json`, `groupes_visuels.json` et
-`correspondances_visuelles.csv` conservent ces preuves dans le ZIP.
-`groupe_visuel` et `reemploi_visuel` enrichissent les publications JSON, les
-compteurs CSV et les corpus IRaMuTeQ. Le texte source est conservé ; les en-têtes
-identifiés sont enrichis, et `corpus_visuel_iramuteq.txt` fournit un corpus avec
-identifiants si les en-têtes du TXT avaient été désactivés.
-
-### Vérification locale
-
-```sh
-PYTHONPATH=.:tests python -m unittest test_index_visuel test_empreintes test_comparaison_temporelle test_groupes_visuels test_extraction_video
-```
-
-Les tests couvrent la compression JPEG, le réencodage MP4, les copies binaires,
-un recadrage ne conservant que 36 % de la surface, un extrait décalé, des
-contenus différents avec bandeau commun, les images fixes, le cache ORB,
-la persistance entre collectes et le nettoyage des MP4. Le test de charge
-porte sur **1 000 publications à empreintes synthétiques** ; il ne constitue
-pas une mesure de durée de traitement de 1 000 téléchargements TikTok réels
-sur le VPS. Les API externes et les temps de téléchargement ne sont pas simulés
-comme des garanties de performances.
-
-### Complément CLIP : scènes et contenus similaires
-
-Dans Multimodale, cocher **Rechercher des scènes et contenus similaires (IA)** et
-**Autoriser le téléchargement des modèles facultatifs**, puis lancer l'analyse.
-Les modèles sont réutilisés pendant le traitement ; le cache Hugging Face réside
-dans `/app/data/modeles/huggingface` (à conserver dans le volume de données).
-Un chemin de poids locaux peut remplacer le téléchargement dans la configuration.
-Si Coolify impose déjà `INSTALL_VIDEO=base` comme argument de construction,
-le remplacer par `semantique` et reconstruire l'image. Le profil `1` convient aussi.
-
-Cette seconde recherche compare la représentation CLIP du contenu visuel, même
-sans images identiques. Elle reste distincte des séquences réutilisées et ne
-prouve ni un même événement, ni un même lieu. Elle ne compare pas les paroles.
-La moyenne d'au plus 12 images réparties dans la vidéo représente le contenu ;
-les candidats sont recherchés dans l'index persistant par projections, sans
-comparaison exhaustive. Un passage court ou une transformation importante peut
-être manqué. Le seuil cosinus est réglable dans l'interface (0,75 par défaut) ;
-il s'agit d'un seuil heuristique, pas d'une probabilité calibrée.
-
-Les résultats ont leur propre tableau avec URL et score, ainsi que les fichiers
-`similarites_semantiques.csv` et `similarites_semantiques.json` dans le ZIP.
-Ils ne créent pas de groupe de réemploi. Le diagnostic distingue les modèles
-indisponibles de l'absence de correspondance. CLIP augmente la mémoire requise
-et le temps CPU ; sa sélection reste facultative.
-
-## Moteur principal DINOv2 — 20 octobre 2026
-
-`facebook/dinov2-small` produit un vecteur CLS normalisé de 384 composantes pour
-chaque image (3 secondes par défaut, intervalle configurable). Aucune moyenne
-vidéo n'est calculée par DINOv2. CLIP reste facultatif, dans sa section distincte.
-Le téléchargement du modèle est proposé par défaut dans l'interface ; le cache
-local fonctionne sans réseau lorsque l'autorisation est désactivée.
-
-L'index FAISS HNSW à produit scalaire est persistant et privé par propriétaire et
-profil d'échantillonnage. SQLite conserve les vecteurs, horodatages et JPEG ;
-FAISS est reconstruit par blocs après modification et réutilisé sinon. Un verrou
-empêche deux écrivains concurrents. Les MP4 peuvent être nettoyés après succès.
-Une analyse incomplète conserve ses fichiers pour permettre une reprise.
-Les images d'une même publication sont exclues des voisins ; chaque vidéo
-a au plus dix autres publications, classées par le meilleur score d'une paire
-d'images. Les voisins affichés ne sont jamais filtrés par seuil. HNSW est une
-recherche approchée, pas une comparaison exhaustive de toutes les vidéos.
-
-Le regroupement est désactivé par défaut : choisir un seuil après inspection des
-scores. Les groupes sont des composantes de liens directs, pas une preuve que
-tous leurs membres sont identiques. La progression monotone des horodatages
-et la diversité des images distinguent une ressemblance ponctuelle d'une
-séquence temporellement cohérente. Cette cohérence seule ne prouve pas un
-réemploi. SHA-256, pHash/ORB et RANSAC restent des contrôles complémentaires ;
-aucun résultat DINOv2 ne dépend de leur validation.
-
-Le tableau « Vidéos similaires » permet de sélectionner une publication puis
-de consulter ses dix voisins, les miniatures, les positions et les URL TikTok.
-Exports : `similarites_dino.json`, `similarites_dino.csv`, `groupes_dino.json`,
-`miniatures_dino/`, `audit_video.json` et `diagnostic_visuel.json` dans le ZIP.
-Le diagnostic distingue MP4 présents, téléchargements effectués, vidéos
-décodées, images décodées, embeddings calculés, traitements désactivés et
-modèles indisponibles. Les fichiers déjà présents ne sont pas comptés comme de
-nouveaux téléchargements. Les compteurs historiques survivent au nettoyage.
-
-### Référence mesurée sur CPU
-
-Le test `tests/reference_dinov2.py` crée six vidéos depuis deux MP4 locaux :
-source Brut 7697829530844663072 (24–42 s), réencodage H.264 CRF32, extrait
-30–39 s, recadrage central à 70 %, autre magasin filmé entre 70 et 88 s,
-et vidéo de rue 7697724586003057953 (0–6 s). Les médias ne sont pas redistribués.
-
-| Rang | Comparaison avec la référence | Cosinus maximal | Temporalité |
-|---|---|---|---|
-| 1 | Extrait raccourci | 0,9963 | Cohérente |
-| 2 | Copie réencodée | 0,9916 | Cohérente |
-| 3 | Recadrage | 0,8669 | Cohérente |
-| 4 | Autre magasin, type de scène comparable | 0,4735 | Ponctuelle |
-| 5 | Rue sans rapport avec le magasin | 0,1326 | Ponctuelle |
-
-Les trois copies connues sont les trois premiers résultats. Les cinq voisins
-sont affichés, y compris le score faible. Ce petit jeu ne calibre pas un seuil
-universel ; aucun seuil de regroupement n'est imposé. Résultats bruts :
-`tests/reference_dinov2_scores.json`. L'essai complet de lot a décodé six vidéos,
-calculé 29 embeddings et exporté 30 liens orientés (cinq voisins par vidéo),
-sans ORB. La référence a pris environ 38 secondes sur le poste local, ce qui
-ne prédit pas la durée sur le VPS.
-
-Validation locale : tests d'index à 1 000 publications (vecteurs de test),
-reprise inter-sessions, absence de modèle, désactivation, cohérence temporelle,
-interface et accès privé aux miniatures. Pas de traitement neuronal de 1 000
-vidéos réelles réalisé. Docker absent localement : aucune construction Docker
-ni exécution Coolify revendiquée. La CI Linux inclut le profil `semantique`.
-
-### Déploiement
-
-Reconstruire `deploy-scraptiktok` avec `INSTALL_VIDEO=semantique` (défaut) ou `1`.
-`base` conserve les contrôles de copie mais n'installe pas DINOv2. Conserver
-`/app/data` pour les modèles Hugging Face et les index inter-lots. PyTorch,
-Transformers et FAISS sont utilisés sur CPU ; CUDA n'est pas nécessaire.
-
-Sources techniques : [fiche DINOv2-small](https://huggingface.co/facebook/dinov2-small),
-[index FAISS](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes).
-
-### Vue globale des paires et rapprochement avec CLIP
-
-Chaque vidéo est une source de recherche. Pour les lots de 50 publications au
-maximum, toutes les paires du lot sont désormais calculées à partir des
-embeddings normalisés (matrice d'une paire vidéo à la fois). Dix vidéos donnent
-45 paires distinctes si toutes ont des embeddings ; les voisins inter-lots
-peuvent s'ajouter. Pour les grands lots, FAISS conserve dix voisins par vidéo.
-Le tableau global élimine les doublons A/B et B/A et indique la couverture du lot.
-Une paire sélectionnée présente jusqu'à trois couples d'images, leurs temps et
-la cohérence temporelle. Les miniatures supplémentaires nécessitent une reprise
-de l'analyse sur les anciens résultats.
-
-Le score CLIP global est ajouté à chaque paire DINOv2 lorsque les embeddings
-CLIP sont disponibles pour les deux vidéos, sans appliquer le seuil de la
-section CLIP à ce score. Sinon il reste absent, jamais remplacé par zéro.
-DINOv2 n'explique pas en mots le détail responsable. La localisation décrite ci-dessous compare des régions ; elle ne détecte pas automatiquement des objets.
-Exports supplémentaires : `paires_dino.json` et `paires_dino.csv`.
-
-
-## Localiser les régions proches
-
-Dans Multimodale → Vidéos similaires, sélectionner une paire puis cliquer sur
-**Localiser les régions proches** sous un couple d'images. Jusqu'à six régions
-portent le même numéro et la même couleur dans les deux images. Le tableau
-indique leur cosinus local, distinct du score global et d'une probabilité.
-
-Les tokens spatiaux de `facebook/dinov2-small` sont normalisés puis comparés
-par voisinage réciproque ; les marqueurs sont espacés pour éviter les amas.
-Aucun seuil ne transforme ces rapprochements en preuve. Les tokens incorporent
-le contexte de l'image : ce n'est ni une segmentation d'objet, ni une carte
-expliquant causalement le score CLS. Textes, textures et couleurs peuvent se
-rapprocher même entre scènes différentes.
-
-Le calcul couvre l'ensemble de la miniature, sans recadrage central. Le grand
-côté est redimensionné à 336 pixels, les dimensions arrondies au multiple de
-14, et les coordonnées sont rapportées à l'image affichée. La précision reste
-limitée par la miniature conservée (224 pixels au plus à l'origine).
-
-Le calcul est à la demande, dans un sous-processus CPU à un thread, limité à
-120 secondes, sans téléchargement supplémentaire de modèle. Les poids doivent
-être présents dans le cache utilisé par l'analyse DINOv2. Un seul traitement
-vidéo peut s'exécuter à la fois ; arrêt et libération de session l'interrompent.
-Les descripteurs sont conservés dans `cache_regions_dino/` et les images et
-rapports dans `regions_dino/`, privés à la collecte et invalidés par le contenu
-des miniatures. La mémoire du modèle est libérée à la sortie du processus.
-Les résultats locaux calculés après l'archive initiale ne sont pas ajoutés à
-cette archive ; ils restent consultables dans l'interface pendant la session.
-
-Référence reproductible avec les MP4 du test DINOv2 :
-`python tests/reference_regions_dino.py --reference /private/tmp/reference-dinov2 --sortie /tmp/regions_scores.json`.
-Les mesures de `tests/reference_regions_dino_scores.json` portent sur un
-recadrage connu et une scène différente ; elles ne définissent aucun seuil
-universel. Les tests unitaires couvrent aussi les coordonnées, l'invalidation
-du cache, la confidentialité et l'indisponibilité du modèle.
-
-
-### Exclusion des bandes et aplats dans la localisation
-
-La version `regions-dino-v2-contenu` invalide automatiquement les anciens caches.
-Avant de rechercher les voisins, elle exclut les régions qui chevauchent une
-bande noire continue au bord, sont majoritairement noires ou ne présentent pas
-assez de variation de luminance. Les seuils de texture (contraste 5–95 % de
-18/255, écart-type de 6/255) éliminent aussi le faible bruit de compression.
-Ils ne constituent pas des seuils de validation de similarité et peuvent
-écarter des détails sombres ou peu contrastés. Aucun remplissage à six cadres
-n'est forcé : si aucun rapprochement exploitable ne reste, l'interface le dit.
-Le classement global des vidéos reste inchangé ; cette correction concerne
-les correspondances locales et leur affichage.
