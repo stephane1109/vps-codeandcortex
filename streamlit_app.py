@@ -785,76 +785,40 @@ with onglet_aide:
                 "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une recherche ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
                 "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
-    st.subheader("Limites officielles TikTok et marge de 20 %")
-    st.table([
-        {"Interface officielle": "API v2 : /v2/user/info/, /v2/video/list/, /v2/video/query/",
-         "Limite TikTok": "600 requêtes/min par endpoint", "Référence -20 %": "480 requêtes/min"},
-        {"Interface officielle": "Research API : vidéos/commentaires",
-         "Limite TikTok": "1 000 requêtes/jour", "Référence -20 %": "800 requêtes/jour"},
-        {"Interface officielle": "Research API : enregistrements",
-         "Limite TikTok": "100 000 enregistrements/jour", "Référence -20 %": "80 000 enregistrements/jour"},
-    ])
-    st.caption(
-        "Sources officielles TikTok : "
-        "[API v2 - limites de requêtes](https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit) ; "
-        "[Research API - FAQ sur les quotas](https://developers.tiktok.com/docs/en/research-api-faq). "
-        "La Research API réinitialise son quota quotidien à minuit UTC ; "
-        "ScrapTikTok suit ce calendrier pour ses budgets quotidiens, "
-        "tout en conservant les fenêtres glissantes d'une minute et d'une heure."
+    st.subheader("Protection contre les erreurs TikTok 429")
+    st.write(
+        "ScrapTikTok limite les appels de son moteur **API Presse** pour réduire "
+        "la charge et les refus d'accès. Ces limites sont des règles locales "
+        "inspirées de valeurs publiées pour d'autres API TikTok, réduites de 50 %. "
+        "Elles ne sont pas des autorisations de scraping et ne garantissent pas l'absence de HTTP 429."
     )
-    st.warning(
-        "Ces quotas officiels concernent des API distinctes : ils ne s'appliquent "
-        "ni à l'API web interne /api/creator/item_list/, ni à Selenium. "
-        "Les valeurs -20 % sont des références de comparaison et non des "
-        "seuils officiellement autorisés pour le scraping. "
-        "Le plafond de 80 000 enregistrements est désormais appliqué localement "
-        "aux objets des pages API Presse ; il ne comptabilise pas Selenium."
-    )
-    st.subheader("Bornes techniques et quotas globaux de ScrapTikTok")
-    st.caption("Les cinq anciennes variables de limitation par source sont ignorées. Le moteur conserve ses bornes techniques et le délai maximal des collectes.")
     budget_aide = limites_admin.get("budget_api_presse", {})
     st.table([
-        {"Paramètre": "Publications par source (borne technique)",
-         "Valeur active": limites_admin.get("maximum_publications_par_source", "?"),
-         "Effet": "Publications maximum par source et par collecte"},
-        {"Paramètre": "Sources par collecte (borne technique)",
-         "Valeur active": limites_admin.get("maximum_sources_par_collecte", "?"),
-         "Effet": "Sources maximum dans une collecte"},
-        {"Paramètre": "Commentaires par vidéo (borne technique)",
-         "Valeur active": limites_admin.get("maximum_commentaires_par_video", "?"),
-         "Effet": "Commentaires maximum par vidéo"},
-        {"Paramètre": "Défilements Selenium (borne technique)",
-         "Valeur active": limites_admin.get("maximum_defilements", "?"),
-         "Effet": "Défilements automatiques maximum du navigateur"},
-        {"Paramètre": "Pages de l'API Presse (borne technique)",
-         "Valeur active": limites_admin.get("maximum_pages_api_par_source", "?"),
-         "Effet": "Pages maximum de l'API Presse par source"},
-        {"Paramètre": "SCRAPTIKTOK_API_MIN_INTERVAL_SECONDS",
-         "Valeur active": budget_aide.get("intervalle_min_s", "?"),
-         "Effet": "Secondes minimum entre deux appels API Presse"},
-        {"Paramètre": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_MINUTE",
-         "Valeur active": budget_aide.get("maximum_minute", "?"),
-         "Effet": "Requêtes API Presse sur une minute glissante (toutes sessions)"},
-        {"Paramètre": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_HOUR",
-         "Valeur active": budget_aide.get("maximum_heure", "?"),
-         "Effet": "Requêtes API Presse sur une heure glissante (toutes sessions)"},
-        {"Paramètre": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY",
-         "Valeur active": budget_aide.get("maximum_24h", "?"),
-         "Effet": "Requêtes API Presse depuis minuit UTC (toutes sessions)"},
-        {"Paramètre": "SCRAPTIKTOK_API_MAX_RECORDS_PER_DAY",
-         "Valeur active": budget_aide.get("maximum_enregistrements_24h", "?"),
-         "Effet": "Objets de pages API Presse depuis minuit UTC (toutes sessions)"},
+        {"Limite locale (API Presse)": "Requêtes par minute",
+         "Maximum actif": budget_aide.get("maximum_minute", "?")},
+        {"Limite locale (API Presse)": "Requêtes par heure",
+         "Maximum actif": budget_aide.get("maximum_heure", "?")},
+        {"Limite locale (API Presse)": "Requêtes par jour UTC",
+         "Maximum actif": budget_aide.get("maximum_24h", "?")},
+        {"Limite locale (API Presse)": "Enregistrements par jour UTC",
+         "Maximum actif": budget_aide.get("maximum_enregistrements_24h", "?")},
+        {"Limite locale (API Presse)": "Intervalle minimal entre appels (s)",
+         "Maximum actif": budget_aide.get("intervalle_min_s", "?")},
     ])
     st.caption(
-        f"Consommation actuelle du moteur API Presse : "
-        f"{budget_aide.get('requete_minute', 0)} sur 1 minute, "
-        f"{budget_aide.get('requete_heure', 0)} sur 1 heure et "
-        f"{budget_aide.get('requete_24h', 0)} requêtes depuis minuit UTC ; "
-        f"{budget_aide.get('enregistrements_24h', 0)} enregistrements depuis minuit UTC. "
-        "Le plafond le plus contraignant s'applique. "
-        "Ces compteurs ne mesurent pas les requêtes de Selenium. "
-        "Les quotas globaux proviennent de l'environnement réellement chargé dans Coolify. "
-        "Les cinq plafonds par source ne sont plus lus depuis les variables d'environnement."
+        "Consommation : "
+        f"{budget_aide.get('requete_24h', 0)} appels et "
+        f"{budget_aide.get('enregistrements_24h', 0)} enregistrements aujourd'hui (UTC). "
+        "Les limites sont communes à toutes les sessions. "
+        "Le navigateur Selenium n'est pas comptabilisé ; son exécution reste limitée "
+        "par la durée des collectes, les bornes techniques et les blocages TikTok. "
+        "Le plafond le plus strict s'applique, y compris si Coolify prévoit un seuil inférieur."
+    )
+    st.caption(
+        "Les cinq anciennes variables de limitation par source sont ignorées. "
+        "Références documentaires uniquement : "
+        "[API officielle TikTok v2](https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit) "
+        "et [Research API](https://developers.tiktok.com/docs/en/research-api-faq)."
     )
     st.subheader("Limites de durée, de concurrence et de tickets Redis")
     st.table([
