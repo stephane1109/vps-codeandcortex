@@ -84,11 +84,12 @@ if "initialise" not in st.session_state:
         st.error(str(erreur))
         st.stop()
 
-    # Restaurer uniquement une collecte ou une analyse en cours.
-    # Ne pas réafficher automatiquement les résultats terminés.
+    # Préserver les collectes enrichies terminées (notamment Presse et médias)
+    # pour les exploiter dans Multimodale après rechargement de l'interface.
     if ancienne and not (
         ancienne.get("busy", False)
         or ancienne.get("video_busy", False)
+        or ancienne.get("archive_prete", False)
     ):
         ancienne = None
 
@@ -225,8 +226,8 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_desordre, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Désordre visuel", "Corpus fusionné", "Aide"]
+onglet_collecte, onglet_multimodale, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Multimodale", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
@@ -883,12 +884,19 @@ with onglet_aide:
 
 
 
-with onglet_desordre:
+with onglet_multimodale:
     st.subheader("Désordre visuel et engagement")
     st.caption("Mesurer l’agitation visuelle des vidéos (mouvements, instabilité et irrégularité) et explorer ses liens avec l’engagement sur TikTok.")
     tache_desordre=st.session_state.get('collecte') or {}
     if not tache_desordre.get('archive_prete'):
-        st.info("Effectuez une collecte enrichie pour utiliser cette analyse.")
+        st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags). Les liens de vidéos découverts sont également exploitables lorsque leur légende est inaccessible.")
+    else:
+        st.caption(
+            "Source : " + {
+                "presse": "Presse et médias", "comptes": "Profils",
+                "hashtags": "Hashtags",
+            }.get(tache_desordre.get("source_collecte"), "Collecte")
+        )
     else:
         st.caption("Les résultats et annotations peuvent être conservés dans votre historique privé "
                    "pendant 30 jours, sans dupliquer les fichiers MP4.")
