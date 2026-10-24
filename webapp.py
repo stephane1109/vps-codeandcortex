@@ -800,6 +800,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     driver = None
     connexion = None
     unique_links = {}
+    metadonnees_api = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
     limitation_budget = False
@@ -834,7 +835,18 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.pause(args.delay)
                 job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
                 try:
-                    record = connexion.lire_publication(url)
+                    identifiant_publication = scraper.canonical_post(url)[0]
+                    record_api = metadonnees_api.get(identifiant_publication)
+                    if (job.settings.source_collecte == "presse"
+                            and job.settings.presse_moteur == "api"
+                            and not job.settings.collecter_commentaires
+                            and record_api and record_api.get("description")):
+                        # TikTok a déjà fourni une légende et éventuellement les
+                        # compteurs dans itemList : ne pas faire une nouvelle
+                        # visite Selenium pour la même vidéo.
+                        record = dict(record_api)
+                    else:
+                        record = connexion.lire_publication(url)
                     record["retenue"] = False
                     if job.settings.telecharger_mp4:
                         from telechargement_videos import correspondance_video
@@ -942,6 +954,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
+                if job.settings.source_collecte == "presse" and job.settings.presse_moteur == "api":
+                    for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
+                        if isinstance(donnees, dict):
+                            metadonnees_api.setdefault(str(identifiant), donnees)
                 if rapport.get("recherches_en_echec"):
                     job.update(search_errors=job.search_errors + 1)
                 message_source = rapport.get("bilan_recherche") or ("Recherche partielle : une recherche TikTok a échoué."
