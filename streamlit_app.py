@@ -435,6 +435,12 @@ with onglet_collecte:
             except RuntimeError as erreur:
                 st.warning(str(erreur)); return
             st.session_state["collecte"] = actuel
+            if actuel.get("busy"):
+                if (actuel.get("debug_collecte") or {}).get("arret_demande"):
+                    st.warning("Arrêt demandé : le moteur termine l'opération en cours et sauvegarde les résultats déjà obtenus.")
+                elif st.button("Arrêter immédiatement la collecte", type="primary",
+                               key="interrompre_collecte_active", use_container_width=True):
+                    lancer(f"/api/jobs/{actuel['id']}/stop", {})
             # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
             if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
                 st.rerun()
@@ -537,7 +543,6 @@ with onglet_collecte:
                 st.progress(min(1.0,actuel["processed"]/max(1,actuel["discovered"])))
                 if actuel.get("status") != "attention":
                     st.caption("La fenêtre TikTok s’ouvre automatiquement en cas de vérification. Pour les profils et médias, elle s’ouvre aussi si aucune publication n’est lisible ou si la pagination se bloque.")
-                if st.button("Arrêter la collecte"): lancer(f"/api/jobs/{actuel['id']}/stop",{})
             if actuel.get("diagnostics"):
                 with st.expander("Diagnostics de collecte"):
                     libelles = {"erreur_session": "Session Selenium perdue", "erreur_extraction_video": "Erreur d’extraction d’une publication",
