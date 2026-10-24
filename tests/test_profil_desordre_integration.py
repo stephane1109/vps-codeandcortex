@@ -79,6 +79,74 @@ class IntegrationProfilsVisuels(unittest.TestCase):
                 (session/"publications.json").read_text(encoding="utf-8")
             ),corpus)
 
+    def test_deux_medias_api_emploient_textes_et_metriques_sans_selenium(self):
+        """Une collecte Presse n'ouvre plus chaque vidéo si itemList est complet."""
+        from webapp import Job, StartRequest, execute_job
+        from collecte.presse import charger_inventaire
+
+        medias = charger_inventaire()[:2]
+        medias_par_compte = {m["compte"]: m for m in medias}
+        numero_video = {
+            medias[0]["compte"]: "7000000000000000001",
+            medias[1]["compte"]: "7000000000000000002",
+        }
+        appels_selenium = []
+
+        class ConnexionDeuxMedias:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def preparer_sources(self, _settings):
+                return [dict(m) for m in medias]
+
+            def ouvrir(self):
+                return Mock()
+
+            def decouvrir(self, source, rapport, *, contexte="", progression=None):
+                compte = source["compte"]
+                identifiant = numero_video[compte]
+                url = f"https://www.tiktok.com/@{compte}/video/{identifiant}"
+                rapport["discovered_urls"] = [url]
+                rapport["metadonnees_api"] = {
+                    identifiant: {
+                        "id": identifiant, "url": url, "author": compte,
+                        "description": "Manifestation lycéenne",
+                        "hashtags": [], "created_at": "2026-01-01T10:00:00+00:00",
+                        "collected_at": "2026-10-24T10:00:00+00:00",
+                        "source": "api_createur", "status": "ok",
+                        "engagement": {"vues": {"valeur": 100, "brut": "100"},
+                                       "likes": {"valeur": 10, "brut": "10"}},
+                    }
+                }
+                return [url]
+
+            def lire_publication(self, url):
+                appels_selenium.append(url)
+                raise AssertionError("itemList fournit déjà les informations")
+
+            def fermer(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as dossier:
+            job = Job("a" * 64, StartRequest(
+                source_collecte="presse",
+                medias=[m["id"] for m in medias],
+                limit=1,
+            ), Path(dossier))
+            with (
+                patch("connect_presse.ConnexionPresse", ConnexionDeuxMedias),
+                patch.object(job, "pause", return_value=None),
+            ):
+                execute_job(job)
+            self.assertEqual(job.status, "completed", job.message)
+            self.assertEqual(len(job.records), 2, job.message)
+            self.assertEqual(len(job.publications), 2)
+            self.assertEqual({r["author"] for r in job.records},
+                             set(medias_par_compte))
+            self.assertEqual([r["engagement"]["vues"]["valeur"]
+                              for r in job.records], [100, 100])
+            self.assertEqual(appels_selenium, [])
+
     def test_collecte_presse_prepare_multimodale_meme_si_une_legende_manque(self):
         """La collecte Presse exporte les métadonnées et les URL utilisables."""
         from webapp import Job, StartRequest, execute_job
