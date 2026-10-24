@@ -300,7 +300,14 @@ class TestsInterface(unittest.TestCase):
             instantane=job.snapshot()
             def repondre(chemin, session, autorisation, donnees=None):
                 if chemin=='/api/session': return {'job':instantane}
+                if chemin=='/api/collecte/limites':
+                    return {'maximum_publications_par_source':1000,
+                            'maximum_sources_par_collecte':29,
+                            'maximum_commentaires_par_video':500,
+                            'budget_api_presse':{}}
                 if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin=='/api/presse/limitation': return {'actif':False}
+                if chemin=='/healthz': return {'version_presse':'test'}
                 if chemin==f'/api/jobs/{job.id}': return instantane
                 if chemin==f'/api/jobs/{job.id}/desordre':
                     return {'disponible':True,'publications_collectees':2,
