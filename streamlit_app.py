@@ -216,6 +216,7 @@ onglet_collecte, onglet_multimodale, onglet_desordre, onglet_corpus, onglet_aide
 )
 
 with onglet_collecte:
+    api_tiktok_suspendue = False
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
@@ -245,6 +246,7 @@ with onglet_collecte:
         try:
             limitation_presse=api("/api/presse/limitation")
             if limitation_presse.get("actif"):
+                api_tiktok_suspendue = st.session_state.get("presse_moteur","api") == "api"
                 restant=limitation_presse.get("restant_secondes",0)
                 st.error(
                     f"API TikTok en pause après HTTP 429 : encore {restant//60} min "
@@ -351,7 +353,9 @@ with onglet_collecte:
                 if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-        if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=respecter_choix_commentaires):
+        if st.form_submit_button("Lancer la collecte", type="primary",
+                                 disabled=occupe or api_tiktok_suspendue,
+                                 on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if source != "presse" and not st.session_state.get(cle_hashtag, "").strip():
                 st.error("Le premier hashtag est obligatoire pour la collecte par hashtags ou profils.")
