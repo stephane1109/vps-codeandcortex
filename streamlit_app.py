@@ -792,7 +792,8 @@ with onglet_aide:
         "[API v2 - limites de requêtes](https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit) ; "
         "[Research API - FAQ sur les quotas](https://developers.tiktok.com/docs/en/research-api-faq). "
         "La Research API réinitialise son quota quotidien à minuit UTC ; "
-        "les compteurs de ScrapTikTok utilisent, eux, des fenêtres glissantes."
+        "ScrapTikTok suit ce calendrier pour ses budgets quotidiens, "
+        "tout en conservant les fenêtres glissantes d'une minute et d'une heure."
     )
     st.warning(
         "Ces quotas officiels concernent des API distinctes : ils ne s'appliquent "
@@ -831,17 +832,17 @@ with onglet_aide:
          "Effet": "Requêtes API Presse sur une heure glissante (toutes sessions)"},
         {"Variable": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY",
          "Valeur active": budget_aide.get("maximum_24h", "?"),
-         "Effet": "Requêtes API Presse sur 24 heures glissantes (toutes sessions)"},
+         "Effet": "Requêtes API Presse depuis minuit UTC (toutes sessions)"},
         {"Variable": "SCRAPTIKTOK_API_MAX_RECORDS_PER_DAY",
          "Valeur active": budget_aide.get("maximum_enregistrements_24h", "?"),
-         "Effet": "Objets de pages API Presse sur 24 heures glissantes (toutes sessions)"},
+         "Effet": "Objets de pages API Presse depuis minuit UTC (toutes sessions)"},
     ])
     st.caption(
         f"Consommation actuelle du moteur API Presse : "
         f"{budget_aide.get('requete_minute', 0)} sur 1 minute, "
         f"{budget_aide.get('requete_heure', 0)} sur 1 heure et "
-        f"{budget_aide.get('requete_24h', 0)} requêtes sur 24 heures ; "
-        f"{budget_aide.get('enregistrements_24h', 0)} enregistrements sur 24 heures. "
+        f"{budget_aide.get('requete_24h', 0)} requêtes depuis minuit UTC ; "
+        f"{budget_aide.get('enregistrements_24h', 0)} enregistrements depuis minuit UTC. "
         "Le plafond le plus contraignant s'applique. "
         "Ces compteurs ne mesurent pas les requêtes de Selenium. "
         "Les valeurs proviennent de l'environnement réellement chargé par le serveur (Coolify)."
