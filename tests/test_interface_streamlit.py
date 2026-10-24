@@ -287,7 +287,7 @@ class TestsInterface(unittest.TestCase):
 
     def test_aucun_onglet_de_similarite_video(self):
         source = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(encoding="utf-8")
-        self.assertNotIn("with onglet_multimodale:", source)
+        self.assertNotIn('st.subheader("Vidéos similaires")', source)
         self.assertNotIn("videos-similaires", source)
         self.assertNotIn("miniatures-dino", source)
         self.assertIn('with onglet_multimodale:', source)
@@ -309,9 +309,11 @@ class TestsInterface(unittest.TestCase):
                             'indicateurs':[],'sans_resultat':[],
                             'annotations_violence':{},'correlations':[]}
                 raise AssertionError(chemin)
-            with patch('streamlit.context',SimpleNamespace(
-                    cookies={'scraptiktok_session':'a'*64},headers={})), \\
-                 patch('interface.client.appeler_api',side_effect=repondre):
+            with (
+                patch('streamlit.context',SimpleNamespace(
+                    cookies={'scraptiktok_session':'a'*64},headers={})),
+                patch('interface.client.appeler_api',side_effect=repondre),
+            ):
                 page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/
                                            'streamlit_app.py')).run()
             self.assertFalse(page.exception)
