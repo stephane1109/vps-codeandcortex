@@ -121,5 +121,53 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(job.search_errors,1)
 
 
+    def test_429_interrompt_aussi_les_mp4_pendant_la_finalisation(self):
+        """Même si des textes existent, 429 ne doit plus déclencher yt-dlp."""
+        media = charger_inventaire()[0]
+
+        class Connexion429:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def preparer_sources(self, settings):
+                return [{"id": media["id"], "compte": media["compte"]}]
+
+            def ouvrir(self):
+                return Mock()
+
+            def decouvrir(self, source, rapport, *, contexte="", progression=None):
+                rapport["recherches_compte"] = [{
+                    "diagnostic": {"code": "tiktok_limitation_429"}
+                }]
+                raise PresseRateLimitError(120)
+
+            def fermer(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as repertoire:
+            job = Job(
+                "a" * 64,
+                StartRequest(source_collecte="presse", medias=[media["id"]],
+                             telecharger_mp4=True),
+                Path(repertoire),
+            )
+            job.base = None
+            job.records.append({
+                "id": "1234567890123456789",
+                "author": media["compte"],
+                "url": "https://www.tiktok.com/@compte/video/1234567890123456789",
+                "description": "Déjà collecté",
+            })
+            with patch("connect_presse.ConnexionPresse", Connexion429), \\
+                 patch.object(job, "save"), \\
+                 patch.object(job, "sauvegarder_historique"), \\
+                 patch("webapp.telecharger_mp4_collecte") as telecharger:
+                execute_job(job)
+            telecharger.assert_not_called()
+            self.assertFalse(job.busy)
+            self.assertEqual(job.status, "failed")
+            self.assertIn("HTTP 429", job.message)
+
+
 if __name__=="__main__":
     unittest.main()
