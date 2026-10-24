@@ -2,7 +2,7 @@
 
 Ce module est **facultatif**. Il lit uniquement des MP4 locaux et les engagements
 collectés par ScrapTikTok. Il n'importe aucun moteur de collecte, ORB, pHash,
-DINOv2 ou comparaison vidéo. L’onglet **Désordre visuel** le lance uniquement après activation explicite et clic sur le bouton de lancement.
+DINOv2 ou comparaison vidéo. L’onglet **Multimodale** le lance uniquement après activation explicite et clic sur le bouton de lancement.
 Le moteur autonome n’a besoin d’aucun accès réseau, GPU ou téléchargement de poids.
 Dans l’interface, une préparation facultative peut récupérer les MP4 manquants depuis leurs URL TikTok.
 
@@ -199,7 +199,7 @@ resultat = analyser_lot(
 )
 ```
 
-Dans l’onglet **Désordre visuel**, cocher l’activation puis lancer le calcul.
+Dans l’onglet **Multimodale**, cocher l’activation puis lancer le calcul.
 L’interface présente le nombre de MP4 locaux, une progression, un bouton d’arrêt,
 les mesures par vidéo, un graphique interactif et les exports CSV. Le menu
 « Variable à croiser » propose le nombre de likes par défaut, mais aussi les
