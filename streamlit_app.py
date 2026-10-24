@@ -590,7 +590,7 @@ with onglet_collecte:
                             st.write(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
                             auteurs = recherche.get("auteurs_dans_liens", {})
                             compte = recherche.get("compte")
-                            if compte:
+                            if compte and not recherche.get("urls_embed_non_verifiees"):
                                 st.caption(f"@{compte} : {auteurs.get(compte, 0)} publication(s) dans les liens reçus de TikTok, sur {recherche.get('candidats_examines', 0)} publication(s) repérée(s).")
                                 if recherche.get("candidats_examines") and not auteurs.get(compte, 0):
                                     st.info("Le compte ciblé est absent des liens reçus pour cette recherche. Le filtre l’a cherché ; cela ne prouve pas que ses vidéos n’existent pas.")
@@ -609,12 +609,20 @@ with onglet_collecte:
                                     if provenance=="embed_createur" else
                                     "identifiant non encore confirmé"
                                 )
-                                st.caption(
-                                    f"Liste vidéo TikTok par secUid : "
-                                    f"{recherche.get('pages_api',0)} page(s) reçue(s), "
-                                    f"{recherche.get('liens',0)} vidéo(s) retenue(s) "
-                                    f"du média ; {resolution}."
-                                )
+                                if recherche.get("urls_embed_non_verifiees"):
+                                    st.caption(
+                                        "Pagination : 0 page reçue. "
+                                        f"{recherche['urls_embed_non_verifiees']} référence(s) de vidéos "
+                                        "présente(s) dans l'embed du compte ; "
+                                        "identité individuelle, légendes et métriques non vérifiées."
+                                    )
+                                else:
+                                    st.caption(
+                                        f"Liste vidéo TikTok par secUid : "
+                                        f"{recherche.get('pages_api',0)} page(s) reçue(s), "
+                                        f"{recherche.get('liens',0)} vidéo(s) retenue(s) "
+                                        f"du média ; {resolution}."
+                                    )
                             elif navigation=="onglet_videos_selectionne":
                                 st.caption("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")
                             elif navigation=="grille_videos_sans_onglet_distinct":
@@ -663,12 +671,21 @@ with onglet_collecte:
                                 st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
                             if recherche.get("urls_embed_non_verifiees"):
                                 st.info(
-                                    f"{recherche['urls_embed_non_verifiees']} URL de vidéo déjà "
-                                    "présente(s) dans l'embed du média ont été conservées "
-                                    "avant le refus. Elles sont utilisables comme références "
-                                    "dans Multimodale, mais leur contenu et leurs métriques "
-                                    "n'ont pas été vérifiés ni collectés."
+                                    f"{recherche['urls_embed_non_verifiees']} URL de vidéo "
+                                    "déjà présente(s) dans l'embed du média ont été conservées "
+                                    "avant le refus. Ce sont des références pour Multimodale, "
+                                    "pas des textes, vidéos MP4 ou métriques collectés."
                                 )
+                                references = recherche.get("urls_embed_references") or []
+                                if references:
+                                    st.download_button(
+                                        "Télécharger ces références vidéo (TXT)",
+                                        data="\n".join(references) + "\n",
+                                        file_name=f"references_tiktok_{compte or numero_source}.txt",
+                                        mime="text/plain",
+                                        key=f"urls_embed_{numero_source}_{compte or 'inconnu'}",
+                                        help="Liste d'URL issue du premier embed, sans lecture supplémentaire de TikTok.",
+                                    )
                             if recherche.get("diagnostic"):
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
