@@ -247,7 +247,11 @@ class LimitationPresseTests(unittest.TestCase):
         from analyse_desordre.sources import inventaire_sources, lire_publications
 
         media = charger_inventaire()[0]
-        adresse = f'https://www.tiktok.com/@{media["compte"]}/video/7000000000000000001'
+        adresses = [
+            f'https://www.tiktok.com/@{media["compte"]}/video/{7000000000000000000+i}'
+            for i in range(1, 11)
+        ]
+        adresse = adresses[0]
 
         class Connexion429Partielle:
             def __init__(self, *args, **kwargs):
@@ -260,7 +264,22 @@ class LimitationPresseTests(unittest.TestCase):
                 return Mock()
 
             def decouvrir(self, source, rapport, *, contexte="", progression=None):
-                rapport["discovered_urls"] = [adresse]
+                rapport["discovered_urls"] = list(adresses)
+                rapport["recherches_compte"] = [{
+                    "requete_recherche": "liste vidéos du média",
+                    "compte_attendu": media["compte"],
+                    "navigation_publications": "api_liste_createur",
+                    "discovered_urls": list(adresses),
+                    "urls_embed_non_verifiees": 10,
+                    "pages_api": 0,
+                    "candidats_examines": 0,
+                    "diagnostic": {
+                        "code": "tiktok_limitation_429",
+                        "etape_api": "identification_video",
+                        "requetes_tentees": 2,
+                        "pages_api": 0,
+                    },
+                }]
                 raise PresseRateLimitError(180)
 
             def lire_publication(self, adresse):
@@ -283,7 +302,16 @@ class LimitationPresseTests(unittest.TestCase):
             self.assertEqual(job.status, "partial")
             self.assertTrue(job.archive_prete, job.message)
             self.assertEqual(lire_publications(job.directory)[0]["url"], adresse)
-            self.assertEqual(inventaire_sources(job.directory)["mp4_telechargeables"], 1)
+            self.assertEqual(inventaire_sources(job.directory)["mp4_telechargeables"], 10)
+            self.assertEqual(len(lire_publications(job.directory)), 10)
+            self.assertEqual(len(job.records), 0)
+            bilan = job.snapshot()["bilan_sources"][0]["recherches"][0]
+            self.assertEqual(bilan["urls_embed_non_verifiees"], 10)
+            self.assertEqual(bilan["urls_embed_references"], adresses)
+            self.assertEqual(bilan["pages_api"], 0)
+            self.assertEqual(bilan["candidats_examines"], 0)
+            self.assertTrue(job.archive_prete)
+            self.assertFalse(job.busy)
 
     def test_429_interrompt_aussi_les_mp4_pendant_la_finalisation(self):
         """Même si des textes existent, 429 ne doit plus déclencher yt-dlp."""
