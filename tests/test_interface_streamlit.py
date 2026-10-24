@@ -1,5 +1,6 @@
 """Formulaire Streamlit, sélection des médias et conservation des filtres."""
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -49,7 +50,7 @@ class TestsInterface(unittest.TestCase):
         with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
             page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.exception)
-            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Désordre visuel','Corpus fusionné','Aide'])
+            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Multimodale','Corpus fusionné','Aide'])
             self.assertFalse(any('vidéo' in e.label.lower() for e in page.expander))
             self.assertFalse(any(c.key in {'comparer_sha256','comparer_sequences'} for c in page.checkbox))
             self.assertFalse(any(b.label=='Comparer les vidéos' for b in page.button))
@@ -289,7 +290,33 @@ class TestsInterface(unittest.TestCase):
         self.assertNotIn("with onglet_multimodale:", source)
         self.assertNotIn("videos-similaires", source)
         self.assertNotIn("miniatures-dino", source)
-        self.assertIn('with onglet_desordre:', source)
+        self.assertIn('with onglet_multimodale:', source)
+
+    def test_collecte_presse_terminee_reste_accessible_apres_rechargement(self):
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as d:
+            job=Job('a'*64,StartRequest(source_collecte='presse',medias=['lemonde']),Path(d))
+            job.update(busy=False,status='completed',archive_prete=True)
+            instantane=job.snapshot()
+            def repondre(chemin, session, autorisation, donnees=None):
+                if chemin=='/api/session': return {'job':instantane}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin==f'/api/jobs/{job.id}': return instantane
+                if chemin==f'/api/jobs/{job.id}/desordre':
+                    return {'disponible':True,'publications_collectees':2,
+                            'mp4_locaux':0,'mp4_manquants':2,
+                            'mp4_telechargeables':2,'etat':{'statut':'non_lance'},
+                            'indicateurs':[],'sans_resultat':[],
+                            'annotations_violence':{},'correlations':[]}
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(
+                    cookies={'scraptiktok_session':'a'*64},headers={})), \\
+                 patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/
+                                           'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.session_state['collecte']['source_collecte'],'presse')
+            self.assertIn('Multimodale',[t.label for t in page.tabs])
 
     def test_onglet_desordre_et_croisement_likes(self):
         import tempfile
@@ -313,7 +340,7 @@ class TestsInterface(unittest.TestCase):
             with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
                 page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
                 self.assertFalse(page.exception)
-                self.assertIn('Désordre visuel',[t.label for t in page.tabs])
+                self.assertIn('Multimodale',[t.label for t in page.tabs])
                 page.checkbox(key='debug_collecte_active').check().run()
                 self.assertFalse(page.exception)
                 self.assertTrue(any('cause_arret' in element.value for element in page.json))
