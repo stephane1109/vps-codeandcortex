@@ -252,7 +252,7 @@ with onglet_collecte:
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
         st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
-                   f"Plafond administrateur : {max_sources_admin} source(s) par collecte. "
+                   f"Borne technique : {max_sources_admin} source(s) par collecte. "
                    "Seules les publications des comptes cochés sont retenues.")
         if len(selection)>max_sources_admin:
             st.warning("Trop de médias sélectionnés pour une même collecte : "
@@ -349,7 +349,7 @@ with onglet_collecte:
                      "Ce choix agit après la découverte des vidéos TikTok.")
         st.number_input("Nombre de posts TikTok à collecter par source",
             min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
-            help=f"Plafond administrateur serveur : {max_posts_admin} posts par source. "
+            help=f"Borne technique du moteur : {max_posts_admin} posts par source. "
                  "Il est vérifié aussi sur les requêtes API directes.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source == "presse":
@@ -392,7 +392,7 @@ with onglet_collecte:
             st.number_input("Commentaires maximum par publication", min_value=1,
                 max_value=max_commentaires_admin, step=1,
                 key="limite_commentaires", disabled=occupe,
-                help="Plafond administrateur contrôlé également côté serveur.")
+                help="Borne technique contrôlée également côté serveur.")
         if st.form_submit_button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
@@ -803,37 +803,38 @@ with onglet_aide:
         "Le plafond de 80 000 enregistrements est désormais appliqué localement "
         "aux objets des pages API Presse ; il ne comptabilise pas Selenium."
     )
-    st.subheader("Limites effectives de ScrapTikTok (variables d'environnement)")
+    st.subheader("Bornes techniques et quotas globaux de ScrapTikTok")
+    st.caption("Les cinq anciennes variables de limitation par source sont ignorées. Le moteur conserve ses bornes techniques et le délai maximal des collectes.")
     budget_aide = limites_admin.get("budget_api_presse", {})
     st.table([
-        {"Variable": "SCRAPTIKTOK_MAX_POSTS_PER_SOURCE",
+        {"Paramètre": "Publications par source (borne technique)",
          "Valeur active": limites_admin.get("maximum_publications_par_source", "?"),
          "Effet": "Publications maximum par source et par collecte"},
-        {"Variable": "SCRAPTIKTOK_MAX_SOURCES_PER_JOB",
+        {"Paramètre": "Sources par collecte (borne technique)",
          "Valeur active": limites_admin.get("maximum_sources_par_collecte", "?"),
          "Effet": "Sources maximum dans une collecte"},
-        {"Variable": "SCRAPTIKTOK_MAX_COMMENTS_PER_VIDEO",
+        {"Paramètre": "Commentaires par vidéo (borne technique)",
          "Valeur active": limites_admin.get("maximum_commentaires_par_video", "?"),
          "Effet": "Commentaires maximum par vidéo"},
-        {"Variable": "SCRAPTIKTOK_MAX_SCROLLS",
+        {"Paramètre": "Défilements Selenium (borne technique)",
          "Valeur active": limites_admin.get("maximum_defilements", "?"),
          "Effet": "Défilements automatiques maximum du navigateur"},
-        {"Variable": "SCRAPTIKTOK_API_MAX_PAGES_PER_SOURCE",
+        {"Paramètre": "Pages de l'API Presse (borne technique)",
          "Valeur active": limites_admin.get("maximum_pages_api_par_source", "?"),
          "Effet": "Pages maximum de l'API Presse par source"},
-        {"Variable": "SCRAPTIKTOK_API_MIN_INTERVAL_SECONDS",
+        {"Paramètre": "SCRAPTIKTOK_API_MIN_INTERVAL_SECONDS",
          "Valeur active": budget_aide.get("intervalle_min_s", "?"),
          "Effet": "Secondes minimum entre deux appels API Presse"},
-        {"Variable": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_MINUTE",
+        {"Paramètre": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_MINUTE",
          "Valeur active": budget_aide.get("maximum_minute", "?"),
          "Effet": "Requêtes API Presse sur une minute glissante (toutes sessions)"},
-        {"Variable": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_HOUR",
+        {"Paramètre": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_HOUR",
          "Valeur active": budget_aide.get("maximum_heure", "?"),
          "Effet": "Requêtes API Presse sur une heure glissante (toutes sessions)"},
-        {"Variable": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY",
+        {"Paramètre": "SCRAPTIKTOK_API_MAX_REQUESTS_PER_DAY",
          "Valeur active": budget_aide.get("maximum_24h", "?"),
          "Effet": "Requêtes API Presse depuis minuit UTC (toutes sessions)"},
-        {"Variable": "SCRAPTIKTOK_API_MAX_RECORDS_PER_DAY",
+        {"Paramètre": "SCRAPTIKTOK_API_MAX_RECORDS_PER_DAY",
          "Valeur active": budget_aide.get("maximum_enregistrements_24h", "?"),
          "Effet": "Objets de pages API Presse depuis minuit UTC (toutes sessions)"},
     ])
@@ -845,7 +846,8 @@ with onglet_aide:
         f"{budget_aide.get('enregistrements_24h', 0)} enregistrements depuis minuit UTC. "
         "Le plafond le plus contraignant s'applique. "
         "Ces compteurs ne mesurent pas les requêtes de Selenium. "
-        "Les valeurs proviennent de l'environnement réellement chargé par le serveur (Coolify)."
+        "Les quotas globaux proviennent de l'environnement réellement chargé dans Coolify. "
+        "Les cinq plafonds par source ne sont plus lus depuis les variables d'environnement."
     )
     st.subheader("Limites de durée, de concurrence et de tickets Redis")
     st.table([
