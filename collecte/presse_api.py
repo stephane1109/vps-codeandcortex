@@ -23,7 +23,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-metadonnees-api-20261024-v8"
+VERSION_PRESSE = "presse-metadonnees-identites-20261024-v9"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -393,12 +393,20 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         exhaustif=False,
     )
     profil = None
+    from .presse_identites import lire_identite, enregistrer_identite
+    secuid_memoire = lire_identite(compte) if client_reel else None
     try:
         check()
-        page_embed = obtenir_avec_quota(f"{HOTE}/embed/@{compte}")
-        profil = _profil_depuis_embed(page_embed, compte)
-        secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
-                                referer=referer, obtenir=obtenir_avec_quota)
+        if secuid_memoire:
+            # Identité publique déjà corroborée par au moins une réponse itemList.
+            # Reste soumise aux mêmes budgets, cookies et refus HTTP 429.
+            secuid = secuid_memoire
+            rapport["source_secuid"] = "cache_verifie"
+        else:
+            page_embed = obtenir_avec_quota(f"{HOTE}/embed/@{compte}")
+            profil = _profil_depuis_embed(page_embed, compte)
+            secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
+                                    referer=referer, obtenir=obtenir_avec_quota)
     except PresseRateLimitError as erreur:
         # L'embed du créateur a parfois déjà fourni des ID de vidéos avant
         # le refus sur /embed/v2/. Les conserver SANS requête supplémentaire.
@@ -485,6 +493,13 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         if client_reel:
             from .quotas_exploitation import reserver_enregistrements
             reserver_enregistrements(page["nombre_brut"])
+            if page["urls"] and not rapport.get("identite_memoire"):
+                # On attend une publication dont le vrai auteur est validé.
+                try:
+                    enregistrer_identite(compte, secuid)
+                    rapport["identite_memoire"] = "validee"
+                except (OSError, ValueError):
+                    rapport["identite_memoire"] = "indisponible"
         rapport["pages_api"] = numero
         ancien = len(liens)
         for video in page["urls"]:
