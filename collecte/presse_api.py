@@ -399,6 +399,9 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         except (ValueError, TypeError) as erreur:
             raise PresseApiError("Liste de vidéos TikTok : réponse JSON invalide.") from erreur
         page = extraire_page_createur(donnees, compte, secuid)
+        if client_reel:
+            from .quotas_exploitation import reserver_enregistrements
+            reserver_enregistrements(page["nombre_brut"])
         rapport["pages_api"] = numero
         ancien = len(liens)
         for video in page["urls"]:
