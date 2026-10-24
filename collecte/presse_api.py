@@ -22,7 +22,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-only-retry-after-20261024-v6"
+VERSION_PRESSE = "presse-diagnostic-429-embed-partiel-20261024-v7"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -335,6 +335,7 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         pages_api=0, discovered_urls=[], collecte_partielle=True,
         exhaustif=False,
     )
+    profil = None
     try:
         check()
         page_embed = obtenir_avec_quota(f"{HOTE}/embed/@{compte}")
@@ -342,6 +343,19 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
                                 referer=referer, obtenir=obtenir_avec_quota)
     except PresseRateLimitError as erreur:
+        # L'embed du créateur a parfois déjà fourni des ID de vidéos avant
+        # le refus sur /embed/v2/. Les conserver SANS requête supplémentaire.
+        # Le média est identifié, mais chaque vidéo n'est pas authentifiée
+        # individuellement et aucune métrique n'a été extraite.
+        if profil is not None:
+            identifiants = profil.get("video_ids") or []
+            premiers = identifiants[:limite]
+            rapport["discovered_urls"] = [
+                f"{HOTE}/@{compte}/video/{identifiant}" for identifiant in premiers
+            ]
+            rapport["urls_embed_non_verifiees"] = len(premiers)
+            rapport["collecte_partielle"] = True
+            rapport["discovery_stop"] = "rate_limit_429"
         if client_reel:
             from .tiktok_limitation import enregistrer_limitation
             try:
