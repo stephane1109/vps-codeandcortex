@@ -601,6 +601,8 @@ with onglet_collecte:
                             if navigation=="api_liste_createur":
                                 provenance=recherche.get("source_secuid")
                                 resolution=(
+                                    "identifiant public vérifié lors d'une collecte précédente"
+                                    if provenance=="cache_verifie" else
                                     "identifiant confirmé via l'embed d'une vidéo"
                                     if provenance=="embed_video" else
                                     "identifiant fourni par l'embed du créateur"
