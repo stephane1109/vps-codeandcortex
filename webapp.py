@@ -950,8 +950,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     rapport["diagnostic"] = {"exception": type(erreur).__name__}
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
-                from collecte.presse_api import PresseRateLimitError
-                if isinstance(erreur, PresseRateLimitError):
+                from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+                if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
                     # 429 peut concerner les autres comptes du même serveur :
                     # interrompre la découverte de cette collecte entière.
                     limitation_tiktok = True
@@ -1430,6 +1430,13 @@ def create_app(manager=None):
         if not re.fullmatch(r"[a-f0-9]{64}",cookie):
             raise HTTPException(401,"Historique inaccessible : rechargez la page d’accueil.")
         return cookie
+
+    @app.get("/api/presse/limitation")
+    def statut_limitation_presse(request: Request):
+        """État partagé de la pause 429, sans cookie TikTok ni identifiant."""
+        owner(request)
+        from collecte.tiktok_limitation import consulter_limitation
+        return consulter_limitation()
 
     @app.get("/healthz")
     def health():
