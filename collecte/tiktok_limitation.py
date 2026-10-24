@@ -1,7 +1,9 @@
-"""Verrou de précaution HTTP 429 partagé via le volume persistant ScrapTikTok.
+"""Gestion des refus HTTP 429 de l'API web TikTok.
 
-Ne modifie ni les tickets Redis de la Home ni les cookies TikTok. Le quota
-officiel TikTok v2 ne s'applique PAS à l'API interne /api/creator/item_list.
+Un délai de blocage n'est appliqué QUE lorsqu'un Retry-After explicite a
+été envoyé par TikTok. Sinon, afficher l'échec sans fabriquer une heure de
+restriction. Les anciennes pauses locales sont ignorées en lecture.
+Ne modifie ni les tickets Redis Home ni les cookies TikTok.
 """
 import fcntl
 import json
@@ -15,13 +17,20 @@ def _chemins():
     return repertoire / "tiktok_api_429.json", repertoire / "tiktok_api_429.lock"
 
 
-def pause_par_defaut():
-    """Politique locale : une heure par défaut, PAS une restriction TikTok connue."""
-    try:
-        secondes = int(os.getenv("SCRAPTIKTOK_API_429_PAUSE_SECONDS", "3600"))
-    except (TypeError, ValueError):
-        secondes = 3600
-    return max(60, min(86400, secondes))
+def _etat_inactif(*, ancien_429=False, origine=None):
+    resultat = {
+        "actif": False,
+        "quota_officiel_applicable": False,
+        "retry_after_explicite": False,
+    }
+    if ancien_429:
+        resultat.update(
+            ancien_429_sans_delai=True,
+            origine=origine or "sans_retry_after",
+            message="TikTok a renvoyé HTTP 429 sans indiquer de durée. "
+                    "Aucune pause d'une heure n'est imposée par ScrapTikTok.",
+        )
+    return resultat
 
 
 def _lire(fichier, maintenant):
@@ -31,19 +40,23 @@ def _lire(fichier, maintenant):
         return None
     if not isinstance(contenu, dict):
         return None
+    origine = str(contenu.get("origine") or "pause_locale")
+    # La version v5 créait une pause locale d'une heure sans preuve de durée
+    # côté TikTok. Elle ne doit pas bloquer les utilisateurs après correction.
+    if origine != "retry_after_tiktok":
+        return _etat_inactif(ancien_429=True, origine=origine)
     try:
         fin = float(contenu.get("jusqua", 0))
     except (TypeError, ValueError):
         return None
     if fin <= maintenant:
-        return None
-    reste = max(1, int(fin - maintenant + 0.999))
+        return _etat_inactif()
     return {
         "actif": True,
-        "restant_secondes": reste,
+        "restant_secondes": max(1, int(fin - maintenant + 0.999)),
         "jusqua": int(fin),
-        "origine": str(contenu.get("origine") or "pause_locale"),
-        "pause_defaut_secondes": pause_par_defaut(),
+        "origine": origine,
+        "retry_after_explicite": True,
         "quota_officiel_applicable": False,
     }
 
@@ -52,23 +65,22 @@ def consulter_limitation(*, maintenant=None):
     maintenant = time.time() if maintenant is None else maintenant
     fichier, verrou = _chemins()
     if not fichier.parent.exists():
-        return {"actif": False, "pause_defaut_secondes": pause_par_defaut(),
-                "quota_officiel_applicable": False}
+        return _etat_inactif()
     try:
-        with verrou.open("a+") as f:
-            fcntl.flock(f, fcntl.LOCK_SH)
+        with verrou.open("a+") as flux:
+            fcntl.flock(flux, fcntl.LOCK_SH)
             etat = _lire(fichier, maintenant)
     except OSError:
         etat = None
-    return etat or {"actif": False, "pause_defaut_secondes": pause_par_defaut(),
-                    "quota_officiel_applicable": False}
+    return etat or _etat_inactif()
 
 
 def enregistrer_limitation(retry_after=None, *, maintenant=None):
-    """Respecter Retry-After en secondes ou la politique locale de précaution.
+    """Enregistrer le 429, ne bloquer que sur Retry-After explicite.
 
-    Ne jamais réduire une pause en cours à la suite d'un nouveau refus.
-    Aucun essai automatique pendant la période de repos.
+    Sans Retry-After, l'application interrompt la collecte qui a échoué,
+    mais ne planifie aucune relance ni ne crée un blocage arbitraire.
+    Un Retry-After déjà actif ne peut pas être raccourci.
     """
     maintenant = time.time() if maintenant is None else maintenant
     try:
@@ -76,19 +88,28 @@ def enregistrer_limitation(retry_after=None, *, maintenant=None):
     except (TypeError, ValueError):
         delai = None
     valable = delai is not None and 0 < delai <= 86400
-    attente = delai if valable else pause_par_defaut()
     fichier, verrou = _chemins()
     fichier.parent.mkdir(parents=True, exist_ok=True)
-    with verrou.open("a+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    with verrou.open("a+") as flux:
+        fcntl.flock(flux, fcntl.LOCK_EX)
         precedent = _lire(fichier, maintenant)
-        fin = max(maintenant + attente, precedent["jusqua"] if precedent else 0)
-        origine = "retry_after_tiktok" if valable else "pause_locale"
-        if precedent and precedent["jusqua"] > maintenant + attente:
-            origine = precedent["origine"]
+        if precedent and precedent.get("actif"):
+            fin_precedente = precedent["jusqua"]
+        else:
+            fin_precedente = 0
+        if valable:
+            fin = max(maintenant + delai, fin_precedente)
+            origine = "retry_after_tiktok"
+        elif fin_precedente > maintenant:
+            fin = fin_precedente
+            origine = "retry_after_tiktok"
+        else:
+            fin = maintenant
+            origine = "sans_retry_after"
         temporaire = fichier.with_suffix(".tmp")
         temporaire.write_text(
-            json.dumps({"jusqua": int(fin), "origine": origine}),
+            json.dumps({"jusqua": int(fin), "origine": origine,
+                        "dernier_429": int(maintenant)}),
             encoding="utf-8",
         )
         temporaire.replace(fichier)

@@ -9,7 +9,7 @@ from collecte.presse_api import (
     PresseRateLimitError, PresseCooldownError, collecter_videos_presse_api,
 )
 from collecte.tiktok_limitation import (
-    consulter_limitation, enregistrer_limitation, pause_par_defaut,
+    consulter_limitation, enregistrer_limitation,
 )
 
 
@@ -24,21 +24,38 @@ def embed_sans_secuid():
 
 
 class TestTemporisation429(unittest.TestCase):
-    def test_pause_locale_et_retry_after_sont_distincts_du_quota_officiel(self):
+    def test_sans_retry_after_pas_de_pause_locale_une_heure(self):
         with tempfile.TemporaryDirectory() as root, patch.dict(os.environ,{
             "DATA_DIR":root,"SCRAPTIKTOK_API_429_PAUSE_SECONDS":"3600"
         }):
             self.assertFalse(consulter_limitation(maintenant=1000)["actif"])
             etat=enregistrer_limitation(None,maintenant=1000)
-            self.assertEqual(etat["restant_secondes"],3600)
-            self.assertEqual(etat["origine"],"pause_locale")
+            self.assertFalse(etat["actif"])
+            self.assertTrue(etat["ancien_429_sans_delai"])
+            self.assertEqual(etat["origine"],"sans_retry_after")
             self.assertFalse(etat["quota_officiel_applicable"])
             encore=enregistrer_limitation(120,maintenant=1010)
-            self.assertEqual(encore["jusqua"],4600)  # ne pas écourter
-            self.assertEqual(consulter_limitation(maintenant=4601)["actif"],False)
+            self.assertEqual(encore["jusqua"],1130)
+            self.assertEqual(encore["origine"],"retry_after_tiktok")
+            # Les refus suivants sans Retry-After ne raccourcissent pas un
+            # délai explicite TikTok déjà en cours.
+            pas_plus_court=enregistrer_limitation(None,maintenant=1020)
+            self.assertEqual(pas_plus_court["jusqua"],1130)
+            self.assertFalse(consulter_limitation(maintenant=1131)["actif"])
             autre=enregistrer_limitation(120,maintenant=4700)
             self.assertEqual(autre["origine"],"retry_after_tiktok")
             self.assertEqual(autre["restant_secondes"],120)
+
+    def test_ancienne_pause_artificielle_est_ignoree_automatiquement(self):
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ,{
+            "DATA_DIR":root
+        }):
+            chemin=os.path.join(root,"tiktok_api_429.json")
+            with open(chemin,"w",encoding="utf-8") as f:
+                json.dump({"origine":"pause_locale","jusqua":4600},f)
+            apres=consulter_limitation(maintenant=1001)
+            self.assertFalse(apres["actif"])
+            self.assertTrue(apres["ancien_429_sans_delai"])
 
     def test_429_enregistre_et_bloque_requêtes_suivantes_sans_envoyer_de_requete(self):
         with tempfile.TemporaryDirectory() as root, patch.dict(os.environ,{

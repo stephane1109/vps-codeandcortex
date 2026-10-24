@@ -249,13 +249,19 @@ with onglet_collecte:
                 api_tiktok_suspendue = st.session_state.get("presse_moteur","api") == "api"
                 restant=limitation_presse.get("restant_secondes",0)
                 st.error(
-                    f"API TikTok en pause après HTTP 429 : encore {restant//60} min "
-                    f"{restant%60} s. Aucun nouvel appel API ne sera envoyé avant la fin."
+                    f"TikTok a demandé une attente explicite (Retry-After) : "
+                    f"encore {restant//60} min {restant%60} s. "
+                    "Seul le moteur API Presse est temporairement désactivé."
                 )
-                st.caption("Délai provenant du Retry-After TikTok lorsqu'il est fourni ; "
-                           "sinon, pause de précaution propre à ScrapTikTok.")
+            elif limitation_presse.get("ancien_429_sans_delai"):
+                st.warning(
+                    "TikTok a renvoyé HTTP 429 sans préciser de délai. "
+                    "L'ancienne pause locale d'une heure est annulée. "
+                    "Un nouvel essai reste susceptible d'être refusé ; "
+                    "ScrapTikTok ne déclenche aucun nouvel essai automatiquement."
+                )
             else:
-                st.caption("API TikTok : aucune pause HTTP 429 active enregistrée.")
+                st.caption("API TikTok : aucune attente Retry-After active.")
             st.caption("Limite chiffrée officielle : non publiée pour cette API web interne. "
                        "La limite de 600 requêtes/minute de l'API officielle v2 ne s'y applique pas.")
         except RuntimeError as erreur:
