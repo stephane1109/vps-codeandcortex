@@ -22,7 +22,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-cooldown-20261024-v5"
+VERSION_PRESSE = "presse-only-retry-after-20261024-v6"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
