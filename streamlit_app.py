@@ -682,7 +682,7 @@ with onglet_collecte:
                                             + "Étape du refus : " + etapes_429.get(phase,phase)
                                             + f" · {appels_media} requête(s) tentée(s) pour ce média "
                                             + f"· {requetes_api_lot + appels_media} "
-                                              "requête(s) tentée(s) depuis le début de cette collecte "
+                                              "requête(s) API Presse tentée(s) depuis le début de cette collecte (hors Selenium) "
                                             + f"· {diagnostic_recherche.get('pages_api',0)} "
                                               "page(s) reçue(s) pour ce média."
                                         )
