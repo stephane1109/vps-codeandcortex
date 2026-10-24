@@ -102,6 +102,22 @@ class StartRequest(BaseModel):
 
     @model_validator(mode="after")
     def valider_sources(self):
+        from collecte.garde_fous import (
+            plafond_par_source, plafond_sources, plafond_total, plafond_commentaires
+        )
+        if self.limit > plafond_par_source():
+            raise ValueError(f"Limite ScrapTikTok : maximum {plafond_par_source()} publications par source.")
+        if self.limite_commentaires > plafond_commentaires() and self.collecter_commentaires:
+            raise ValueError(f"Limite ScrapTikTok : maximum {plafond_commentaires()} commentaires par publication.")
+        nombre_sources = (len(self.medias) if self.source_collecte == "presse"
+                          else len(self.comptes) if self.source_collecte == "comptes"
+                          else 1 + bool(self.second_hashtag))
+        if nombre_sources > plafond_sources():
+            raise ValueError(f"Limite ScrapTikTok : maximum {plafond_sources()} sources par collecte.")
+        if self.limit * nombre_sources > plafond_total():
+            raise ValueError(
+                f"Limite ScrapTikTok : {plafond_total()} publications maximum par collecte. "
+                "Réduisez le nombre de sources ou la limite par source.")
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
         if self.source_collecte == "presse":
@@ -376,6 +392,8 @@ class Job:
         self.limites_debug = {}
         self.commands = queue.Queue(maxsize=8)
         self.created = self.last_seen = time.monotonic()
+        from collecte.garde_fous import duree_job
+        self.duree_limite = duree_job()
         self.finished = None
         self.busy = True
         self.status = "starting"
@@ -549,6 +567,8 @@ class Job:
                                 for r in self.records[:5]]}
 
     def check(self):
+        if time.monotonic() - self.created > self.duree_limite:
+            self.demander_arret("duree_maximale")
         if self.stop.is_set():
             raise Stopped()
 
@@ -783,8 +803,11 @@ def expliquer_echec_source(rapport, erreur):
 
 def execute_job(job: Job, driver_factory=scraper.create_driver):
     args = argparse.Namespace(
-        hashtag=job.settings.hashtag, limit=job.settings.limit, max_scrolls=40,
-        idle_rounds=3, delay=3.0, timeout=20.0, interactive=True,
+        hashtag=job.settings.hashtag, limit=job.settings.limit,
+        max_scrolls=int(os.getenv("SCRAPTIKTOK_MAX_SCROLLS", "12")),
+        idle_rounds=3,
+        delay=max(3.0, float(os.getenv("SCRAPTIKTOK_PAGE_DELAY_SECONDS", "5"))),
+        timeout=20.0, interactive=True,
         headless=os.getenv("SCRAPTIKTOK_HEADLESS", "1") == "1",
         chrome_binary=Path(os.environ["CHROME_BINARY"]) if os.getenv("CHROME_BINARY") else None,
         driver=Path(os.environ["CHROMEDRIVER"]) if os.getenv("CHROMEDRIVER") else None,
@@ -939,7 +962,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
                     "message": message_source if found or rapport.get("bilan_recherche") else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
                         if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")})
+                from collecte.garde_fous import plafond_total
                 for url in found:
+                    if len(unique_links) >= plafond_total():
+                        break
                     identity = scraper.canonical_post(url)
                     if identity and (job.settings.source_collecte == "hashtags"
                                      or identity[2].casefold() in medias_par_compte):
@@ -1094,6 +1120,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
         job.sauvegarder_historique()
+        try:
+            from collecte.garde_fous import terminer_job
+            terminer_job(job.racine, job.id, final_status, job.processed)
+        except (OSError, ValueError):
+            LOG.warning("Audit de fin de collecte indisponible pour %s",job.id)
         if job.settings.sauvegarde_progressive:
             try:
                 job.sauvegarder_point(final_status)
@@ -1145,7 +1176,7 @@ class Manager:
         self.retention = max(60, int(os.getenv("RESULT_TTL_SECONDS", "3600")))
         self.retention_points = max(3600, int(os.getenv("CHECKPOINT_TTL_SECONDS", "604800")))
         self.idle_timeout = max(60, int(os.getenv("IDLE_TIMEOUT_SECONDS", "300")))
-        self.max_duration = max(60, int(os.getenv("JOB_TIMEOUT_SECONDS", "1800")))
+        self.max_duration = max(60, int(os.getenv("JOB_TIMEOUT_SECONDS", "900")))
         self.runner = runner
         self.jobs = {}
         self.lock = threading.RLock()
@@ -1161,8 +1192,24 @@ class Manager:
                 raise HTTPException(409, "Une collecte est déjà en cours dans votre session.")
             if len(active) >= self.max_jobs:
                 raise HTTPException(429, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
-            job = Job(owner, settings, self.data_dir, owner_historique=owner_historique)
-            job.limites_debug={"inactivite_max_s":self.idle_timeout,"duree_max_s":self.max_duration}
+            from collecte.garde_fous import demarrer_job, QuotaLocalDepasse, reglages
+            identifiant=uuid.uuid4().hex
+            try:
+                demarrer_job(self.data_dir,identifiant,owner,
+                             settings.source_collecte,
+                             len(settings.sources) if settings.source_collecte!="hashtags"
+                             else 1 + bool(settings.second_hashtag),settings.limit)
+            except QuotaLocalDepasse as erreur:
+                raise HTTPException(429,str(erreur)) from erreur
+            job = Job(owner, settings, self.data_dir, identifiant=identifiant,
+                      owner_historique=owner_historique)
+            job.duree_limite=self.max_duration
+            job.limites_debug={"inactivite_max_s":self.idle_timeout,
+                              "duree_max_s":self.max_duration,**reglages()}
+            LOG.info("Collecte lancee id=%s mode=%s sources=%s quota=%s",
+                     job.id,settings.source_collecte,len(settings.sources)
+                     if settings.source_collecte!="hashtags" else 1 + bool(settings.second_hashtag),
+                     settings.limit)
             self.jobs[job.id] = job
             job.thread = threading.Thread(target=self.runner, args=(job,), daemon=True)
             job.thread.start()
@@ -1430,6 +1477,12 @@ def create_app(manager=None):
         if not re.fullmatch(r"[a-f0-9]{64}",cookie):
             raise HTTPException(401,"Historique inaccessible : rechargez la page d’accueil.")
         return cookie
+
+    @app.get("/api/usage")
+    def vue_utilisation(request: Request):
+        owner(request)
+        from collecte.garde_fous import utilisation
+        return utilisation(manager.data_dir)
 
     @app.get("/api/presse/limitation")
     def statut_limitation_presse(request: Request):
