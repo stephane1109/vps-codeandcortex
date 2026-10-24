@@ -22,7 +22,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-methodes-isolees-20261023-v3"
+VERSION_PRESSE = "presse-stop-429-20261024-v4"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -40,6 +40,20 @@ MAX_BYTES = 4_000_000
 
 class PresseApiError(RuntimeError):
     """Erreur de pagination TikTok, à rapporter sans annoncer de faux total."""
+
+
+class PresseRateLimitError(PresseApiError):
+    """429 : arrêt immédiat, sans tentative suivante sur la même collecte."""
+
+    def __init__(self, retry_after=None):
+        # L'en-tête est informatif : on ne planifie aucune relance automatique.
+        valeur = str(retry_after or "").strip()
+        self.retry_after = int(valeur) if valeur.isdecimal() and 0 < int(valeur) <= 86400 else None
+        message = ("TikTok HTTP 429 : limitation du nombre de requêtes. "
+                   "Collecte API arrêtée, sans nouveaux embeds ni autres médias.")
+        if self.retry_after is not None:
+            message += f" Retry-After annoncé : {self.retry_after} seconde(s)."
+        super().__init__(message)
 
 
 def _client():
@@ -75,6 +89,9 @@ def _obtenir(client, url, *, referer=None, timeout=20):
                 raise PresseApiError("Réponse TikTok trop volumineuse pour une page.")
             return contenu
     except HTTPError as erreur:
+        if erreur.code == 429:
+            delai = erreur.headers.get("Retry-After") if erreur.headers else None
+            raise PresseRateLimitError(delai) from erreur
         raise PresseApiError(f"TikTok HTTP {erreur.code} : accès aux publications refusé.") from erreur
     except (URLError, OSError, TimeoutError) as erreur:
         raise PresseApiError("TikTok inaccessible : échec réseau ou délai dépassé.") from erreur
@@ -186,6 +203,10 @@ def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None
         try:
             page = _obtenir(client, f"{HOTE}/embed/v2/{video_id}", referer=referer)
             secuid = extraire_identite_video_embed(page, compte, video_id)
+        except PresseRateLimitError:
+            # Ne pas passer à l'embed suivant : 429 est un refus temporaire
+            # qui ne peut pas être résolu par une rafale de requêtes.
+            raise
         except PresseApiError as erreur:
             erreurs.append(str(erreur))
             continue

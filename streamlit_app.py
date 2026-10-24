@@ -574,7 +574,14 @@ with onglet_collecte:
                                 st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
                             if recherche.get("diagnostic"):
                                 diagnostic_recherche=recherche["diagnostic"]
-                                st.caption("Diagnostic : " + diagnostic_recherche.get("code", "indéterminé"))
+                                code_recherche=diagnostic_recherche.get("code", "indéterminé")
+                                st.caption("Diagnostic : " + code_recherche)
+                                if code_recherche=="tiktok_limitation_429":
+                                    st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
+                                             "essayer les autres vidéos ni les autres médias.")
+                                if diagnostic_recherche.get("retry_after_seconds"):
+                                    st.caption(f"Délai indicatif transmis par TikTok (Retry-After) : "
+                                               f"{diagnostic_recherche['retry_after_seconds']} secondes.")
                                 if diagnostic_recherche.get("detail"):
                                     st.warning("Accès TikTok : " + diagnostic_recherche["detail"])
                             elif recherche.get("message_erreur"):
