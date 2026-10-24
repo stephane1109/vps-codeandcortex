@@ -273,6 +273,28 @@ with onglet_collecte:
             f"{budget_api.get('maximum_24h','?')} sur 24 h. "
             "Ces plafonds locaux ne sont pas des limites officielles applicables au scraping."
         )
+        # Ne jamais donner l'échéance du compteur Coolify comme date de fin
+        # d'une restriction TikTok, dont la durée peut être inconnue.
+        echeances = (
+            ("par minute", budget_api.get("reprise_locale_minute_utc")),
+            ("par heure", budget_api.get("reprise_locale_heure_utc")),
+            ("par jour UTC", budget_api.get("reprise_locale_jour_utc")),
+            ("d'enregistrements par jour UTC",
+             budget_api.get("reprise_locale_enregistrements_utc")),
+        )
+        plafonds_epuises = [
+            f"{libelle} : réinitialisation locale le "
+            + datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%d/%m/%Y à %H:%M:%S UTC")
+            for libelle, epoch in echeances if isinstance(epoch, (int, float)) and epoch > 0
+        ]
+        if plafonds_epuises:
+            st.warning("Compteur(s) ScrapTikTok épuisé(s), distinct(s) du HTTP 429 TikTok : "
+                       + " ; ".join(plafonds_epuises) + ".")
+        else:
+            st.caption(
+                "Aucun quota local de requêtes ou d'enregistrements API Presse "
+                "n'est actuellement épuisé. Cela ne signifie pas que TikTok accepte les requêtes."
+            )
         try:
             limitation_presse=api("/api/presse/limitation")
             if limitation_presse.get("actif"):
