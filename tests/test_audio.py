@@ -5,7 +5,6 @@ import unittest
 import wave
 from pathlib import Path
 from audio.indicateurs import mesurer_audio
-from audio.transcription import transcrire_audio
 from video.embeddings import calculer_embeddings
 from video.parametres import charger_parametres
 
@@ -19,8 +18,9 @@ class TestsAudio(unittest.TestCase):
             mesure=mesurer_audio(p)
             self.assertEqual(mesure["duree_s"],1)
             self.assertEqual(mesure["fraction_silence"],1)
-            self.assertIsNone(mesure["parole"])
+            self.assertNotIn("parole", mesure)
     def test_modeles_desactives_sans_import_lourd(self):
         parametres=charger_parametres()
-        self.assertEqual(transcrire_audio("inexistant.wav",parametres)["statut"],"desactive")
+        self.assertNotIn("transcription", parametres)
+        self.assertNotIn("modele_whisper", parametres)
         self.assertEqual(calculer_embeddings([],parametres)["statut"],"desactive")
