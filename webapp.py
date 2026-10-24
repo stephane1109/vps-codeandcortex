@@ -1462,7 +1462,7 @@ def create_app(manager=None):
         job = manager.get(owner(request), job_id)
         from analyse_desordre.service import dependances_disponibles, ecrire_etat
         if not dependances_disponibles():
-            raise HTTPException(409, 'Dépendances OpenCV absentes : vérifiez l'installation des dépendances de Désordre visuel.')
+            raise HTTPException(409, "Dépendances OpenCV absentes : vérifiez les dépendances de Désordre visuel.")
         with manager.lock:
             if any(j.busy or j.video_busy for j in manager.jobs.values()):
                 raise HTTPException(409, 'Une collecte ou une analyse est déjà en cours.')
