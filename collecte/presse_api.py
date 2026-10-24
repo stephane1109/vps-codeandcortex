@@ -22,7 +22,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-only-retry-after-20261024-v6"
+VERSION_PRESSE = "presse-limites-20261024-v7"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -40,6 +40,10 @@ MAX_BYTES = 4_000_000
 
 class PresseApiError(RuntimeError):
     """Erreur de pagination TikTok, à rapporter sans annoncer de faux total."""
+
+
+class PresseBudgetError(PresseApiError):
+    """Plafond local atteint, indépendamment des refus TikTok HTTP 429."""
 
 
 class PresseCooldownError(PresseApiError):
@@ -67,13 +71,31 @@ class PresseRateLimitError(PresseApiError):
         super().__init__(message)
 
 
+class ClientAvecQuota:
+    """Facturer chaque appel HTTP API (y compris ceux qui reçoivent 429)."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def open(self, request, timeout=20):
+        from .garde_fous import reserver_requete_api, QuotaLocalDepasse
+        data_dir = os.getenv("DATA_DIR", "/app/data")
+        try:
+            attente = reserver_requete_api(data_dir)
+        except QuotaLocalDepasse as erreur:
+            raise PresseBudgetError(str(erreur)) from erreur
+        if attente:
+            time.sleep(attente)
+        return self.client.open(request, timeout=timeout)
+
+
 def _client():
     """Ouvrir exclusivement tiktok.com ; les cookies restent optionnels et secrets."""
     cookies = os.getenv("SCRAPTIKTOK_COOKIES_FILE", "").strip()
     if not cookies:
         # Conserver les cookies de première visite entre l'embed et les pages
         # de la liste publique, comme le client de référence tt-dlp.
-        return build_opener(HTTPCookieProcessor(CookieJar()))
+        return ClientAvecQuota(build_opener(HTTPCookieProcessor(CookieJar())))
     chemin = Path(cookies)
     if not chemin.is_file():
         raise PresseApiError("Fichier de cookies TikTok configuré mais introuvable.")
@@ -82,7 +104,7 @@ def _client():
         jar.load(ignore_discard=True, ignore_expires=False)
     except (OSError, ValueError) as erreur:
         raise PresseApiError("Fichier de cookies TikTok illisible ou invalide.") from erreur
-    return build_opener(HTTPCookieProcessor(jar))
+    return ClientAvecQuota(build_opener(HTTPCookieProcessor(jar)))
 
 
 def _obtenir(client, url, *, referer=None, timeout=20):
