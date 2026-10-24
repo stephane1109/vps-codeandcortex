@@ -236,6 +236,9 @@ def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None
         try:
             page = _obtenir(client, f"{HOTE}/embed/v2/{video_id}", referer=referer)
             secuid = extraire_identite_video_embed(page, compte, video_id)
+        except PresseBudgetError:
+            # Quota local partagé atteint : ne pas multiplier les tentatives.
+            raise
         except PresseRateLimitError:
             # Ne pas passer à l'embed suivant : 429 est un refus temporaire
             # qui ne peut pas être résolu par une rafale de requêtes.
