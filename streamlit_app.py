@@ -216,6 +216,7 @@ onglet_collecte, onglet_multimodale, onglet_desordre, onglet_corpus, onglet_aide
 )
 
 with onglet_collecte:
+    api_tiktok_suspendue = False
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
@@ -242,6 +243,23 @@ with onglet_collecte:
             format_func=lambda v: "API du créateur (secUid)" if v=="api" else "Grille du profil (Selenium)",
             help="L'API utilise les pages de publications du média. Le navigateur inspecte l'onglet Vidéos. "
                  "Les deux moteurs ne sont jamais enchaînés pendant une même collecte.")
+        try:
+            limitation_presse=api("/api/presse/limitation")
+            if limitation_presse.get("actif"):
+                api_tiktok_suspendue = st.session_state.get("presse_moteur","api") == "api"
+                restant=limitation_presse.get("restant_secondes",0)
+                st.error(
+                    f"API TikTok en pause après HTTP 429 : encore {restant//60} min "
+                    f"{restant%60} s. Aucun nouvel appel API ne sera envoyé avant la fin."
+                )
+                st.caption("Délai provenant du Retry-After TikTok lorsqu'il est fourni ; "
+                           "sinon, pause de précaution propre à ScrapTikTok.")
+            else:
+                st.caption("API TikTok : aucune pause HTTP 429 active enregistrée.")
+            st.caption("Limite chiffrée officielle : non publiée pour cette API web interne. "
+                       "La limite de 600 requêtes/minute de l'API officielle v2 ne s'y applique pas.")
+        except RuntimeError as erreur:
+            st.warning("État de limitation TikTok indisponible : "+str(erreur))
         try:
             version_presse=api("/healthz").get("version_presse")
             if version_presse:
@@ -335,7 +353,9 @@ with onglet_collecte:
                 if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
-        if st.form_submit_button("Lancer la collecte", type="primary", disabled=occupe, on_click=respecter_choix_commentaires):
+        if st.form_submit_button("Lancer la collecte", type="primary",
+                                 disabled=occupe or api_tiktok_suspendue,
+                                 on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if source != "presse" and not st.session_state.get(cle_hashtag, "").strip():
                 st.error("Le premier hashtag est obligatoire pour la collecte par hashtags ou profils.")
@@ -579,6 +599,9 @@ with onglet_collecte:
                                 if code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
+                                elif code_recherche=="tiktok_pause_429":
+                                    st.warning("Moteur API suspendu par la pause de protection après HTTP 429. "
+                                               "Aucune requête TikTok n'a été envoyée pour cette nouvelle collecte.")
                                 if diagnostic_recherche.get("retry_after_seconds"):
                                     st.caption(f"Délai indicatif transmis par TikTok (Retry-After) : "
                                                f"{diagnostic_recherche['retry_after_seconds']} secondes.")
