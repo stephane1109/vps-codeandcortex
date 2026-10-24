@@ -59,7 +59,7 @@ class TestQuotas(unittest.TestCase):
                                    "WHERE job_id='job_a'").fetchall()
             self.assertEqual(len(lignes[0][0]),16)
             self.assertNotEqual(lignes[0][0],"session-abc")
-            self.assertEqual(lignes[0][1:],["completed",38])
+            self.assertEqual(lignes[0][1:],("completed",38))
             demarrer_job(d,"job_c","session-ghi","presse",1,10,maintenant=1000+86401)
 
     def test_quota_et_intervalle_api_commun_toutes_sessions(self):
