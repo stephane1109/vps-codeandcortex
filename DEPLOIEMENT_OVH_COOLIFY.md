@@ -118,50 +118,22 @@ Uvicorn et une réplique**. Une architecture à plusieurs répliques nécessiter
 un registre de sessions partagé.
 
 
-## Activer les modules vidéo (facultatif)
+## Vidéos : téléchargement MP4 et Désordre visuel uniquement
 
-Le déploiement standard inclut désormais la comparaison SHA-256, pHash, ORB et
-temporelle : l’argument de construction par défaut est **`INSTALL_VIDEO=base`**.
-Il installe ffmpeg et `requirements-video-base.txt`, sans PyTorch, Whisper ou CLIP.
-Le port, Chromium/Xvfb, le volume et la commande restent inchangés. Un redéploiement
-de la branche à jour installe ces outils ; si Coolify contient une valeur explicite
-`INSTALL_VIDEO=0`, la retirer ou la remplacer par `base` avant de reconstruire.
+L'onglet **Vidéos similaires** et ses dépendances lourdes ont été supprimés.
+Le Dockerfile installe directement FFmpeg, OpenCV et les dépendances du module
+**Désordre visuel**, sans PyTorch, CLIP, DINOv2, FAISS, Whisper ou OCR.
+`INSTALL_VIDEO` n'est plus un argument de construction et peut être retiré
+de Coolify. Aucun paramètre vidéo ne doit être nécessaire pour déployer.
 
-Trois profils restent disponibles à la construction :
-- `base` (défaut) : collecte textuelle et comparaison des fichiers/séquences ;
-- `0` : textes uniquement, sans dépendances vidéo ;
-- `1` : profil audiovisuel avancé, avec OCR, Whisper et OpenCLIP, utilisable via l’API
-  et la commande de traitement par lots.
+Conserver **REDIS_URL**, les autres variables du ticket applicatif et le volume
+persistant **`/app/data`**. Les MP4 et les analyses existantes ne sont pas
+effacés par la modification du code. Redéployer la branche `deploy-scraptiktok`.
 
-La disponibilité affichée dépend des dépendances réellement présentes. Ajouter une
-variable à l’exécution n’installe aucune bibliothèque. Les options d’administration
-ne sont pas présentées dans l’interface utilisateur.
-
-Avec Compose, le profil standard est obtenu par `docker compose up -d --build`.
-Les lots restent bornés, avec une seule analyse à la fois. Pour le profil avancé,
-prévoir au moins 4 Go de RAM et 2 vCPU comme point de départ, puis mesurer la
-consommation ; les modèles et les fichiers demandent également de l’espace disque.
-`INSTALL_VIDEO=1 MEM_LIMIT=4g docker compose up -d --build` conserve ce profil avancé.
-
-Conserver un volume sur `/app/data`. Pour garder les poids entre déploiements, un volume
-supplémentaire sur `/home/app/.cache` peut être monté avec des droits d’écriture pour
-l’utilisateur `app`. Les modèles sont facultatifs et ne sont pas téléchargés au build.
-Whisper utilise le cache local si le téléchargement n’est pas autorisé. Pour OpenCLIP,
-indiquer un fichier de poids local dans `config/parametres_video.json` lorsque les
-réseaux externes sont interdits ; le nom d’un modèle distant nécessite l’option de
- téléchargement, même si la bibliothèque possède déjà une copie en cache.
-
-`RESULT_TTL_SECONDS` s’applique également aux sessions enrichies et au cache analysé.
-Pour un corpus de recherche à conserver sept jours, définir `604800` et dimensionner
-le disque en conséquence. Après redémarrage, récupérer les anciens dossiers depuis
-le volume si nécessaire : l’interface ne restaure pas les sessions précédentes.
-La base SQLite n’est jamais exposée par HTTP et reste exclue des archives.
-
-Les archives détaillent les échecs de téléchargement, les traitements tronqués et les
-modalités indéterminées. L’accès yt-dlp est indépendant de la session Selenium ; les
-vidéos nécessitant une connexion peuvent rester indisponibles. Le traitement des textes
-continue de fonctionner sans les dépendances audiovisuelles.
-
+Les budgets de requêtes API Presse sont plafonnés dans le code à 50 % des
+valeurs de référence (300/min, 500/heure, 500/jour, 50 000 enregistrements
+par jour UTC). Une ancienne valeur Coolify plus élevée est automatiquement
+réduite. Les requêtes Selenium ne sont pas couvertes par ces compteurs.
 
 ## Accueil Streamlit minimaliste
 
