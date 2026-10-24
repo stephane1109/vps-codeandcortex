@@ -136,10 +136,14 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             etat["echec"] = type(erreur).__name__
             etat["message_erreur"] = str(erreur)
             if presse_videos_uniquement:
-                from .presse_api import PresseRateLimitError, PresseCooldownError
+                from .presse_api import (
+                    PresseRateLimitError, PresseCooldownError, PresseBudgetError
+                )
                 limitation = isinstance(erreur, PresseRateLimitError)
                 attente = isinstance(erreur, PresseCooldownError)
-                code = ("tiktok_pause_429" if attente else
+                budget = isinstance(erreur, PresseBudgetError)
+                code = ("quota_api_local" if budget else
+                        "tiktok_pause_429" if attente else
                         "tiktok_limitation_429" if limitation else
                         "acces_tiktok_indisponible")
                 etat.setdefault("diagnostic", {
