@@ -478,6 +478,7 @@ class Job:
                             "arret": r.get("discovery_stop", ""),
                             "pagination_bilan": r.get("pagination_bilan", {}),
                             "pages_api": r.get("pages_api", 0),
+                            "requetes_tentees": r.get("requetes_tentees", 0),
                             "secuid_resolu": bool(r.get("secuid_resolu", False)),
                             "source_secuid": r.get("source_secuid"),
                             "tentatives_embed_video": r.get("tentatives_embed_video", 0),
