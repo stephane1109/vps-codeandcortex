@@ -6,9 +6,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 from collecte.presse import charger_inventaire
-from video.recherche_similaires import comparer_videos
-from video.parametres import charger_seuils
-from webapp import OptionsVideo, StartRequest
+from webapp import StartRequest
 
 class TestsInterface(unittest.TestCase):
     def test_partages_commentaires_et_hashtags_transmis_independamment(self):
@@ -51,7 +49,7 @@ class TestsInterface(unittest.TestCase):
         with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
             page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.exception)
-            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Multimodale','Aide'])
+            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Désordre visuel','Corpus fusionné','Aide'])
             self.assertFalse(any('vidéo' in e.label.lower() for e in page.expander))
             self.assertFalse(any(c.key in {'comparer_sha256','comparer_sequences'} for c in page.checkbox))
             self.assertFalse(any(b.label=='Comparer les vidéos' for b in page.button))
@@ -286,43 +284,12 @@ class TestsInterface(unittest.TestCase):
                 self.assertTrue(any(b.label == "Reprendre l'accès" for b in page.sidebar.button))
                 self.assertTrue(any('Accès libéré' in message.value for message in page.sidebar.info))
 
-    def test_onglet_multimodale_options_et_resultats(self):
-        import tempfile
-        from webapp import Job
-        with tempfile.TemporaryDirectory() as d:
-            tache=Job('a'*64,StartRequest(hashtag='test',enrichir=True),Path(d))
-            tache.update(busy=False,status='completed',archive_prete=True)
-            instantane={**tache.snapshot(),'video_disponible':True}
-            envois=[]
-            def repondre(chemin, session, autorisation, donnees=None):
-                if chemin=='/api/session': return {'job':instantane}
-                if chemin=='/api/presse': return {'medias':charger_inventaire()}
-                if '/regions-dino/' in chemin:
-                    return {'statut':'termine','regions':[{'numero':1,'score':.87}]}
-                if '/videos-similaires' in chemin:
-                    return {'groupes':[], 'correspondances':[], 'etat':{}, 'videos_dino':['1'],
-                        'paires_dino':[{'a':'1','b':'2','score':.1,'score_clip':.8,'temps_a':0,'temps_b':3}],
-                        'dinov2':[{'a':'1','b':'2','score':.1,'nature':'ressemblance_ponctuelle','segments':[],
-                                  'meilleure':{'image_a':1,'image_b':2,'temps_a':0,'temps_b':3},
-                                  'url_a':'https://www.tiktok.com/@a/video/1','url_b':'https://www.tiktok.com/@b/video/2'}]}
-                if chemin.endswith('/video'):
-                    envois.append(donnees); return instantane
-                if chemin.startswith('/api/jobs/'): return instantane
-                raise AssertionError(chemin)
-            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
-                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
-                self.assertFalse(page.exception)
-                next(n for n in page.number_input if n.label.startswith('Intervalle')).set_value(2.0)
-                next(b for b in page.button if b.label=='Lancer / reprendre l’analyse').click().run()
-                self.assertFalse(page.exception)
-                self.assertEqual(envois[-1]['pas_images_s'],2)
-                self.assertTrue(envois[-1]['dinov2'])
-                self.assertIsNone(envois[-1]['seuil_groupes_dino'])
-                self.assertTrue(any('miniatures-dino' in m.value for m in page.markdown))
-                self.assertTrue(any('regions-dino' in m.value for m in page.markdown))
-                self.assertTrue(any(b.label=='Localiser les régions proches' for b in page.button))
-                self.assertTrue(envois[-1]['comparer_sequences'])
-                self.assertFalse(envois[-1]['nettoyer_videos'])
+    def test_aucun_onglet_de_similarite_video(self):
+        source = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertNotIn("with onglet_multimodale:", source)
+        self.assertNotIn("videos-similaires", source)
+        self.assertNotIn("miniatures-dino", source)
+        self.assertIn('with onglet_desordre:', source)
 
     def test_onglet_desordre_et_croisement_likes(self):
         import tempfile
