@@ -14,7 +14,6 @@ class BaseDonnees:
             CREATE TABLE IF NOT EXISTS publications(session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE, id TEXT, donnees TEXT NOT NULL, PRIMARY KEY(session_id,id));
             CREATE TABLE IF NOT EXISTS commentaires(session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE, id TEXT, publication_id TEXT, donnees TEXT NOT NULL, PRIMARY KEY(session_id,id));
             CREATE TABLE IF NOT EXISTS evenements(numero INTEGER PRIMARY KEY, session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE, date TEXT, donnees TEXT);
-            CREATE TABLE IF NOT EXISTS cache_video(cle TEXT PRIMARY KEY, donnees TEXT NOT NULL, cree_le TEXT NOT NULL);
             PRAGMA user_version=1;
             """)
 
