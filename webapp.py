@@ -573,8 +573,10 @@ class Job:
             raise Stopped()
 
     def pause(self, seconds):
+        self.check()
         if self.stop.wait(seconds):
             raise Stopped()
+        self.check()
 
     def actualiser_decouverte(self, rapport):
         """Compter les IDs distincts, y compris les résultats d'autres auteurs."""
