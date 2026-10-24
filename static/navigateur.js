@@ -8,7 +8,9 @@ export async function appelerApi(path, body) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof data.detail === "string" ? data.detail : "Vérifiez le hashtag et le nombre de publications (1 à 300).";
-    throw new Error(detail);
+    const erreur = new Error(detail);
+    erreur.status = response.status;
+    throw erreur;
   }
   return data;
 }
