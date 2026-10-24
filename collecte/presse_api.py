@@ -11,6 +11,7 @@ import html
 import json
 import os
 from pathlib import Path
+from datetime import datetime, timezone
 import random
 import re
 import time
@@ -22,7 +23,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-diagnostic-429-embed-partiel-20261024-v7"
+VERSION_PRESSE = "presse-metadonnees-api-20261024-v8"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -236,6 +237,57 @@ def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None
     )
 
 
+def _metadonnees_publication_api(item, compte, identifiant):
+    """Préserver UNIQUEMENT les valeurs effectivement fournies dans itemList.
+
+    Les nombres inconnus ne sont jamais remplacés par zéro ; le texte n'est
+    pas inventé. Les auteurs sont vérifiés avant l'appel à cette fonction.
+    """
+    description = item.get("desc")
+    if not isinstance(description, str):
+        description = ""
+    description = description.strip()
+    stats = item.get("stats")
+    stats = stats if isinstance(stats, dict) else {}
+    cles = {
+        "vues": "playCount",
+        "likes": "diggCount",
+        "commentaires": "commentCount",
+        "partages": "shareCount",
+        "favoris": "collectCount",
+    }
+    engagement = {}
+    for nom, cle in cles.items():
+        valeur = stats.get(cle)
+        if isinstance(valeur, bool) or valeur is None:
+            continue
+        if isinstance(valeur, int):
+            nombre = valeur
+        elif isinstance(valeur, str) and valeur.strip().isdecimal():
+            nombre = int(valeur.strip())
+        else:
+            continue
+        if nombre >= 0:
+            engagement[nom] = {"valeur": nombre, "brut": str(valeur)}
+    try:
+        cree = datetime.fromtimestamp(int(item.get("createTime")), timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError, OverflowError):
+        cree = ""
+    return {
+        "id": identifiant,
+        "url": f"{HOTE}/@{compte}/video/{identifiant}",
+        "author": compte,
+        "description": description,
+        "created_at": cree,
+        "collected_at": datetime.now(timezone.utc).isoformat(),
+        "hashtags": list(dict.fromkeys(re.findall(r"#(\\w+)", description))),
+        "engagement": engagement,
+        "source": "api_createur",
+        "status": "ok" if description else "empty_caption",
+        "error": "",
+    }
+
+
 def extraire_page_createur(donnees, compte, secuid):
     """Valider l'auteur de chaque vidéo, même sans légende, et le curseur."""
     if not isinstance(donnees, dict):
@@ -247,6 +299,7 @@ def extraire_page_createur(donnees, compte, secuid):
     if not isinstance(objets, list):
         raise PresseApiError("Réponse TikTok sans liste de publications exploitable.")
     nouveaux, temps = [], []
+    metadonnees = {}
     for item in objets:
         if not isinstance(item, dict):
             continue
@@ -267,6 +320,9 @@ def extraire_page_createur(donnees, compte, secuid):
         if not identifiant.isdecimal() or not isinstance(item.get("video"), dict):
             continue
         nouveaux.append(f"{HOTE}/@{compte}/video/{identifiant}")
+        metadonnees.setdefault(
+            identifiant, _metadonnees_publication_api(item, compte, identifiant)
+        )
         try:
             horodatage = int(item.get("createTime") or 0)
         except (TypeError, ValueError):
@@ -278,6 +334,7 @@ def extraire_page_createur(donnees, compte, secuid):
     suite = donnees.get("hasMorePrevious", donnees.get("hasMore"))
     return {
         "urls": list(dict.fromkeys(nouveaux)),
+        "metadonnees": metadonnees,
         "suite": suite in (True, 1, "1", "true"),
         "plus_ancienne": min(temps) * 1000 if temps else None,
         "nombre_brut": len(objets),
@@ -332,7 +389,7 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
         requete_recherche=f"@{compte} : liste vidéos paginée (secUid)",
         url_rubrique_publications=referer,
         navigation_publications="api_liste_createur",
-        pages_api=0, discovered_urls=[], collecte_partielle=True,
+        pages_api=0, discovered_urls=[], metadonnees_api={}, collecte_partielle=True,
         exhaustif=False,
     )
     profil = None
@@ -435,6 +492,12 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
                 break
             identifiant = video.rsplit("/", 1)[-1]
             liens.setdefault(identifiant, video)
+        # Les métriques et descriptions font partie des réponses déjà reçues :
+        # ne pas rouvrir systématiquement chaque vidéo dans Selenium.
+        metadonnees = rapport["metadonnees_api"]
+        for identifiant in liens:
+            if identifiant in page["metadonnees"]:
+                metadonnees.setdefault(identifiant, page["metadonnees"][identifiant])
         rapport["discovered_urls"] = list(liens.values())
         rapport["candidats_examines"] = len(liens)
         rapport["retenues_par_compte"] = {compte: len(liens)}
