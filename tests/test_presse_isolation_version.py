@@ -35,7 +35,7 @@ class TestIsolationPresse(unittest.TestCase):
     def test_methode_api_par_defaut_et_numero_version_explicite(self):
         requete=StartRequest(source_collecte="presse",medias=["lemonde"])
         self.assertEqual(requete.presse_moteur,"api")
-        self.assertEqual(VERSION_PRESSE,"presse-diagnostic-429-embed-partiel-20261024-v7")
+        self.assertEqual(VERSION_PRESSE,"presse-metadonnees-api-20261024-v8")
         from pathlib import Path
         code=Path(__file__).resolve().parents[1].joinpath(
             "collecte/presse_api.py").read_text(encoding="utf-8")
