@@ -920,6 +920,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     job.sauvegarder_point()
 
         for numero_source, source in enumerate(sources, 1):
+            job.check()
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
             rapport = {}
@@ -977,7 +978,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             # Exporter chaque compte aussitôt sa découverte terminée.
             if job.settings.source_collecte != "hashtags" and len(unique_links) > job.processed:
                 lire_decouvertes()
-        if job.settings.source_collecte == "hashtags":
+        # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
+        if (job.settings.source_collecte == "hashtags" and not limitation_tiktok
+                and not limitation_budget and not job.stop.is_set()):
             lire_decouvertes()
         exclus_decouverte = set().union(*(set(e.get("rapport", {}).get("auteurs_ecartes_ids", [])) for e in job.journal))
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
