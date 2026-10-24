@@ -11,7 +11,6 @@
     "visages": "Présence de visages frontaux détectés",
     "texte": "Texte détecté par OCR",
     "audio": "Présence d’une piste audio",
-    "parole": "Parole transcrite automatiquement",
     "reemploi": "Réemploi de séquence détecté dans le lot"
   },
   "exclusions": [
