@@ -1474,7 +1474,10 @@ def create_app(manager=None):
         with manager.lock:
             if any(j.busy or j.video_busy for j in manager.jobs.values()):
                 raise HTTPException(409, 'Une collecte ou une analyse est déjà en cours.')
-            if not job.archive_prete or not (job.directory/'publications.json').is_file():
+            if not job.archive_prete or not (
+                (job.directory/'publications.json').is_file()
+                or (job.directory/'sources_visuelles.json').is_file()
+            ):
                 raise HTTPException(409, 'Effectuez d’abord une collecte enrichie.')
             from analyse_desordre.sources import inventaire_sources
             sources=inventaire_sources(job.directory)
