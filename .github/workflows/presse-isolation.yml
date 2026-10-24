@@ -8,6 +8,11 @@ on:
       - "connect_presse.py"
       - "streamlit_app.py"
       - "webapp.py"
+      - "interface/passerelle.py"
+      - "static/controle.js"
+      - "static/navigateur.js"
+      - "static/controle.html"
+      - "tests/test_passerelle.py"
       - "tests/test_presse_secuid_api.py"
       - "tests/test_presse_onglet_videos.py"
       - "tests/test_presse_isolation_version.py"
@@ -19,6 +24,11 @@ on:
       - "connect_presse.py"
       - "streamlit_app.py"
       - "webapp.py"
+      - "interface/passerelle.py"
+      - "static/controle.js"
+      - "static/navigateur.js"
+      - "static/controle.html"
+      - "tests/test_passerelle.py"
       - "tests/test_presse_secuid_api.py"
       - "tests/test_presse_onglet_videos.py"
       - "tests/test_presse_isolation_version.py"
@@ -35,9 +45,10 @@ jobs:
       - name: Dépendances
         run: python -m pip install -r requirements-dev.txt
       - name: Syntaxe des sources
-        run: python -m compileall -q collecte/comptes.py collecte/presse_api.py connect_presse.py streamlit_app.py webapp.py tests/test_presse_isolation_version.py
+        run: python -m compileall -q collecte/comptes.py collecte/presse_api.py connect_presse.py streamlit_app.py webapp.py interface/passerelle.py tests/test_passerelle.py tests/test_presse_isolation_version.py
       - name: Tester deux méthodes indépendantes et traçabilité version
         run: |
           python -m unittest discover -s tests -p test_presse_isolation_version.py -v
           python -m unittest discover -s tests -p test_presse_secuid_api.py -v
           python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
+          python -m unittest discover -s tests -p test_passerelle.py -v
