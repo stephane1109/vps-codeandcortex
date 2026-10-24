@@ -438,9 +438,11 @@ with onglet_collecte:
             if actuel.get("busy"):
                 if (actuel.get("debug_collecte") or {}).get("arret_demande"):
                     st.warning("Arrêt demandé : le moteur termine l'opération en cours et sauvegarde les résultats déjà obtenus.")
-                elif st.button("Arrêter immédiatement la collecte", type="primary",
+                elif st.button("Arrêter la collecte", type="primary",
                                key="interrompre_collecte_active", use_container_width=True):
                     lancer(f"/api/jobs/{actuel['id']}/stop", {})
+            elif "TikTok HTTP 429" in actuel.get("message", ""):
+                st.info("Collecte terminée après HTTP 429 : aucun nouvel appel TikTok n'est lancé par ce traitement.")
             # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
             if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
                 st.rerun()
