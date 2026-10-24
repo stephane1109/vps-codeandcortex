@@ -17,7 +17,7 @@ def _chemins():
     return repertoire / "tiktok_api_429.json", repertoire / "tiktok_api_429.lock"
 
 
-def _etat_inactif(*, ancien_429=False, origine=None):
+def _etat_inactif(*, ancien_429=False, origine=None, dernier_429=None):
     resultat = {
         "actif": False,
         "quota_officiel_applicable": False,
@@ -27,8 +27,9 @@ def _etat_inactif(*, ancien_429=False, origine=None):
         resultat.update(
             ancien_429_sans_delai=True,
             origine=origine or "sans_retry_after",
-            message="TikTok a renvoyé HTTP 429 sans indiquer de durée. "
-                    "Aucune pause d'une heure n'est imposée par ScrapTikTok.",
+            dernier_429=dernier_429,
+            message="Dernier HTTP 429 enregistré sans délai Retry-After. "
+                    "Il s'agit d'un historique, pas d'un blocage actif.",
         )
     return resultat
 
@@ -44,7 +45,12 @@ def _lire(fichier, maintenant):
     # La version v5 créait une pause locale d'une heure sans preuve de durée
     # côté TikTok. Elle ne doit pas bloquer les utilisateurs après correction.
     if origine != "retry_after_tiktok":
-        return _etat_inactif(ancien_429=True, origine=origine)
+        horodatage = contenu.get("dernier_429")
+        try:
+            horodatage = int(horodatage) if horodatage is not None else None
+        except (TypeError, ValueError):
+            horodatage = None
+        return _etat_inactif(ancien_429=True, origine=origine, dernier_429=horodatage)
     try:
         fin = float(contenu.get("jusqua", 0))
     except (TypeError, ValueError):
