@@ -151,8 +151,8 @@ class TestsEnrichis(unittest.TestCase):
                 client.get("/"); headers={"X-ScrapTikTok":"1"}
                 r=client.post("/api/jobs",headers=headers,json={"hashtag":"test", "source_collecte":"presse","medias":["lemonde"]})
                 self.assertEqual(r.status_code,202,r.text); identifiant=r.json()["id"]
-                with patch.dict(web.os.environ,{"INSTALL_VIDEO":"0"}):
-                    self.assertEqual(client.post(f"/api/jobs/{identifiant}/video",headers=headers,json={}).status_code,409)
+                # La fonctionnalité Vidéos similaires et son API ont été supprimées.
+                self.assertEqual(client.post(f"/api/jobs/{identifiant}/video",headers=headers,json={}).status_code,404)
                 with TestClient(web.create_app(manager)) as autre:
                     autre.get("/")
                     self.assertEqual(autre.get(f"/api/jobs/{identifiant}/archive").status_code,404)
