@@ -139,6 +139,18 @@ class IntegrationProfilsVisuels(unittest.TestCase):
             self.assertEqual(donnees[0]["engagement"]["likes"]["valeur"], 10)
             self.assertEqual(donnees[1]["engagement"], {})
 
+    def test_sources_presse_sans_fichier_publications_restent_exploitables(self):
+        with tempfile.TemporaryDirectory() as d:
+            session = Path(d)
+            urls = liens("lemondefr", 200000, 200002)
+            sources = construire_sources_visuelles(urls, [])
+            (session / "sources_visuelles.json").write_text(
+                json.dumps(sources), encoding="utf-8",
+            )
+            self.assertEqual([p["id"] for p in lire_publications(session)],
+                             ["200000", "200001"])
+            self.assertEqual(inventaire_sources(session)["mp4_telechargeables"], 2)
+
     def test_desordre_analyse_les_mp4_sans_legende(self):
         with tempfile.TemporaryDirectory() as d:
             session=Path(d)
