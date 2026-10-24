@@ -204,8 +204,14 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         # collecter_recherche_compte fournit des liens filtrés par auteur exact.
         # Un résultat d'autres comptes ne doit jamais entrer dans le corpus.
 
+    metadonnees_api = {}
+    for etape in etapes:
+        for identifiant, donnees in (etape.get("metadonnees_api") or {}).items():
+            if isinstance(donnees, dict):
+                metadonnees_api.setdefault(identifiant, donnees)
     rapport.update(recherches_compte=etapes,
                    discovered_urls=list(liens.values()),
+                   metadonnees_api=metadonnees_api,
                    retenues_par_compte={compte: len(liens)},
                    recherches_en_echec=sum(bool(e.get("echec")) for e in etapes),
                    candidats_examines=sum(e.get("candidats_examines", 0) for e in etapes),
