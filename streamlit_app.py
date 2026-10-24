@@ -659,6 +659,14 @@ with onglet_collecte:
                                       "recherche_redirigee": "redirection vers une autre page"}
                             if recherche.get("arret"):
                                 st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
+                            if recherche.get("urls_embed_non_verifiees"):
+                                st.info(
+                                    f"{recherche['urls_embed_non_verifiees']} URL de vidéo déjà "
+                                    "présente(s) dans l'embed du média ont été conservées "
+                                    "avant le refus. Elles sont utilisables comme références "
+                                    "dans Multimodale, mais leur contenu et leurs métriques "
+                                    "n'ont pas été vérifiés ni collectés."
+                                )
                             if recherche.get("diagnostic"):
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
