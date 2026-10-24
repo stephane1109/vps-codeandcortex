@@ -35,11 +35,11 @@ RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "semantique" ] || [
       && rm -rf /var/lib/apt/lists/* \
       && pip install -r requirements-video-base.txt \
       && pip install -r /tmp/requirements-desordre.txt; fi
-# La comparaison de contenu utilise CLIP sur CPU, sans installer Whisper/OCR.
+# La comparaison de contenu utilise CLIP sur CPU ; aucune transcription Whisper.
 RUN if [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
       pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
       && pip install 'open-clip-torch>=2.30,<4' 'transformers>=4.48,<5' 'faiss-cpu>=1.9,<2'; fi
-# Les fonctions audiovisuelles avancées restent facultatives.
+# OCR avancé facultatif ; Whisper et ses dépendances sont supprimés.
 RUN if [ "$INSTALL_VIDEO" = "1" ]; then \
       apt-get update \
       && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
