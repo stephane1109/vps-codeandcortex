@@ -33,7 +33,6 @@ from selenium.webdriver.common.keys import Keys
 
 import scraptiktok as scraper
 from language_filter import classify_description
-from video.disponibilite import video_disponible
 from collecte.dates import normaliser_date, evaluer_periode
 
 LOG = logging.getLogger("scraptiktok.web")
@@ -407,7 +406,6 @@ class Job:
         self.journal = []
         self.archive_prete = False
         self.video_busy = False
-        self.video_statut = "non_lance"
         self.video_stop = threading.Event()
         self.video_process = None
         self.video_thread = None
@@ -457,12 +455,6 @@ class Job:
 
     def snapshot(self):
         with self.lock:
-            progression = None
-            if self.video_busy:
-                try:
-                    etat = json.loads((self.directory / "traitement_video.json").read_text())
-                    progression = {cle:etat.get(cle) for cle in ("etape","videos_analysees","comparaisons")}
-                except (OSError, ValueError): pass
             return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
@@ -533,7 +525,7 @@ class Job:
                     "bilan_commentaires": [{"publication_id": r["id"], **r["collecte_commentaires"]}
                         for r in self.records if "collecte_commentaires" in r],
                     "limite_commentaires":self.settings.limite_commentaires,
-                    "archive_prete": self.archive_prete, "video_progression":progression, "video_busy": self.video_busy, "video_statut": self.video_statut, "video_disponible": video_disponible(),
+                    "archive_prete": self.archive_prete, "video_busy": self.video_busy,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
                     "processed": self.processed, "captions": len(self.records),
@@ -1228,7 +1220,6 @@ class Manager:
             job.status=ligne["statut"]
             job.archive_prete=True
             job.finished=time.monotonic()
-            job.video_statut="historique"
             self.jobs[identifiant]=job
             return job
 
@@ -1276,8 +1267,6 @@ class Manager:
                 from stockage.base_donnees import BaseDonnees
                 base = BaseDonnees(self.data_dir / "scraptiktok.sqlite")
                 nettoyer_sessions(self.data_dir, base, self.retention, self.jobs)
-                from stockage.cache_video import purger_cache
-                purger_cache(base,self.retention)
             # Les sauvegardes optionnelles ont une durée de vie indépendante
             # des sessions temporaires, y compris après redémarrage.
             from stockage.sauvegarde_progressive import purger_points
@@ -1309,54 +1298,6 @@ class Manager:
                 job.video_thread.join(timeout=5)
             if job.thread:
                 job.thread.join(timeout=max(0, deadline - time.monotonic()))
-
-
-class OptionsVideo(BaseModel):
-    dinov2: bool = True
-    seuil_groupes_dino: float | None = Field(default=None, ge=-1, le=1)
-    seuil_semantique: float = Field(default=0.75, ge=0.5, le=0.99)
-    pas_images_s: float = Field(default=3.0, ge=0.25, le=30)
-    nettoyer_videos: bool = False
-    comparer_sha256: bool = True
-    comparer_sequences: bool = True
-    audio: bool = False
-    ocr: bool = False
-    embeddings: bool = False
-    telecharger_modeles: bool = False
-
-
-def executer_video(job, options):
-    from video.parametres import charger_parametres
-    from corpus.export_json import exporter_json
-    try:
-        parametres = charger_parametres()
-        parametres.update(options.model_dump(), telecharger_videos=True)
-        chemin = job.directory / "parametres_traitement.json"
-        exporter_json(chemin, parametres)
-        with (job.directory / "traitement.log").open("w") as journal:
-            processus = subprocess.Popen([sys.executable, "-m", "video.lots", "--session", str(job.directory), "--parametres", str(chemin)],
-                cwd=scraper.BASE_DIR, stdout=journal, stderr=subprocess.STDOUT, start_new_session=True)
-            job.video_process = processus
-            limite = time.monotonic() + parametres["duree_lot_max_s"] + 60
-            while processus.poll() is None:
-                if job.video_stop.wait(0.5) or time.monotonic() > limite:
-                    os.killpg(processus.pid, signal.SIGTERM)
-                    try: processus.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        os.killpg(processus.pid, signal.SIGKILL); processus.wait()
-                    # Le téléchargement et ffmpeg appartiennent au même groupe.
-                    try: os.killpg(processus.pid, signal.SIGKILL)
-                    except ProcessLookupError: pass
-                    job.update(video_statut="interrompu")
-                    break
-            else:
-                job.update(video_statut="termine" if processus.returncode == 0 else "partiel" if processus.returncode == 2 else "echec")
-    except Exception:
-        LOG.exception("Traitement vidéo interrompu")
-        job.update(video_statut="echec")
-    finally:
-        job.update(video_busy=False, video_process=None, finished=time.monotonic())
-        job.sauvegarder_historique()
 
 
 class OptionsDesordre(BaseModel):
@@ -1514,23 +1455,6 @@ def create_app(manager=None):
                                 max_age=90*86400)
         return response
 
-    @app.post("/api/jobs/{job_id}/video", status_code=202)
-    def lancer_analyse_video(job_id: str, options: OptionsVideo, request: Request):
-        exiger_ticket(request)
-        job = manager.get(owner(request), job_id)
-        if not video_disponible():
-            raise HTTPException(409, "Le traitement vidéo n’est pas activé sur ce serveur.")
-        with manager.lock:
-            if any(j.busy or j.video_busy for j in manager.jobs.values()):
-                raise HTTPException(409, "Une collecte ou analyse est déjà en cours.")
-            if not job.archive_prete or not job.publications:
-                raise HTTPException(409, "Effectuez d’abord une collecte enrichie.")
-            job.video_stop.clear()
-            job.update(video_busy=True, video_statut="en_cours", video_debut=time.monotonic())
-            job.video_thread = threading.Thread(target=executer_video, args=(job, options), daemon=True)
-            job.video_thread.start()
-        return job.snapshot()
-
     @app.post("/api/jobs/{job_id}/desordre", status_code=202)
     def lancer_desordre(job_id: str, options: OptionsDesordre, request: Request):
         """Lancement explicite réservé au propriétaire et au détenteur de l'accès actif."""
@@ -1538,7 +1462,7 @@ def create_app(manager=None):
         job = manager.get(owner(request), job_id)
         from analyse_desordre.service import dependances_disponibles, ecrire_etat
         if not dependances_disponibles():
-            raise HTTPException(409, 'Dépendances absentes : redéployez avec INSTALL_VIDEO=base, semantique ou 1.')
+            raise HTTPException(409, 'Dépendances OpenCV absentes : vérifiez l'installation des dépendances de Désordre visuel.')
         with manager.lock:
             if any(j.busy or j.video_busy for j in manager.jobs.values()):
                 raise HTTPException(409, 'Une collecte ou une analyse est déjà en cours.')
@@ -1775,108 +1699,6 @@ def create_app(manager=None):
         if not chemin.is_file() or chemin.is_symlink(): raise HTTPException(404, 'Export indisponible')
         return FileResponse(chemin,filename=nom)
 
-    @app.get("/api/jobs/{job_id}/videos-similaires")
-    def resultats_visuels(job_id: str, request: Request, video: str | None = None):
-        """Le propriétaire de la collecte peut consulter ses preuves directes."""
-        job = manager.get(owner(request), job_id)
-        def lire(nom, defaut):
-            chemin = job.directory / nom
-            return json.loads(chemin.read_text()) if chemin.is_file() else defaut
-        dino=lire('similarites_dino.json',[])
-        from video.recherche_similaires import synthetiser_paires
-        return {"paires_dino":synthetiser_paires(dino),"videos_dino":sorted({r['a'] for r in dino}),
-                "dinov2":[{**r,'correspondances':[c for c in r.get('correspondances',[]) if all(
-                    (job.directory/'miniatures_dino'/(str(c.get('image_'+cote))+'.jpg')).is_file() for cote in ('a','b'))]}
-                    for r in dino if r['a']==video],
-                "groupes_dino":lire('groupes_dino.json',[]),
-                "similarites_semantiques":lire("similarites_semantiques.json",[]),
-                "groupes":lire("groupes_visuels.json",[]),
-                "correspondances":lire("comparaisons.json",[]),
-                "etat":lire("traitement_video.json",{}),"diagnostic":lire("diagnostic_visuel.json",{})}
-
-    @app.get("/api/jobs/{job_id}/miniatures-dino/{numero}")
-    def miniature_dino(job_id: str, numero: int, request: Request):
-        """Miniatures accessibles uniquement au propriétaire de la collecte."""
-        job=manager.get(owner(request),job_id)
-        chemin=job.directory/'miniatures_dino'/(str(numero)+'.jpg')
-        if not chemin.is_file(): raise HTTPException(404,'Miniature indisponible')
-        return FileResponse(chemin,media_type='image/jpeg',headers={'Cache-Control':'private, no-store'})
-
-    def dossier_regions(job, image_a, image_b):
-        """N'accepter que des images effectivement rapprochées dans cette collecte."""
-        fichier = job.directory/'similarites_dino.json'
-        resultats = json.loads(fichier.read_text()) if fichier.is_file() else []
-        autorise = any(c.get('image_a') == image_a and c.get('image_b') == image_b
-            for r in resultats for c in (r.get('correspondances') or [r.get('meilleure', {})]))
-        if not autorise: raise HTTPException(404, 'Paire d’images indisponible')
-        from video.localisation import cle_localisation
-        try: cle = cle_localisation(job.directory, image_a, image_b)
-        except FileNotFoundError: raise HTTPException(404, 'Miniature indisponible')
-        return job.directory/'regions_dino'/cle
-
-    @app.get("/api/jobs/{job_id}/regions-dino/{image_a}/{image_b}")
-    def lire_regions(job_id: str, image_a: int, image_b: int, request: Request):
-        job = manager.get(owner(request), job_id)
-        dossier = dossier_regions(job, image_a, image_b)
-        fichier = dossier/'resultat.json'
-        return json.loads(fichier.read_text()) if fichier.is_file() else {'statut':'non_calcule'}
-
-    @app.get("/api/jobs/{job_id}/regions-dino/{image_a}/{image_b}/{cote}")
-    def image_regions(job_id: str, image_a: int, image_b: int, cote: str, request: Request):
-        job = manager.get(owner(request), job_id)
-        dossier = dossier_regions(job, image_a, image_b)
-        if cote not in ('a','b') or not (dossier/f'{cote}.jpg').is_file():
-            raise HTTPException(404, 'Localisation indisponible')
-        return FileResponse(dossier/f'{cote}.jpg', media_type='image/jpeg', headers={'Cache-Control':'private, no-store'})
-
-    @app.post("/api/jobs/{job_id}/regions-dino/{image_a}/{image_b}", status_code=202)
-    def lancer_regions(job_id: str, image_a: int, image_b: int, request: Request):
-        """Isoler le modèle dans un processus borné et libérer sa mémoire après calcul."""
-        exiger_ticket(request)
-        job = manager.get(owner(request), job_id)
-        dossier = dossier_regions(job, image_a, image_b)
-        with manager.lock:
-            if any(j.busy or j.video_busy for j in manager.jobs.values()):
-                raise HTTPException(409, 'Attendez la fin du traitement en cours.')
-            dossier.mkdir(parents=True, exist_ok=True)
-            fichier = dossier/'resultat.json'
-            if fichier.is_file() and json.loads(fichier.read_text()).get('statut') == 'termine':
-                return json.loads(fichier.read_text())
-            temporaire = dossier/'attente.tmp'
-            temporaire.write_text(json.dumps({'statut':'en_cours'})); temporaire.replace(fichier)
-            job.video_stop.clear()
-            job.update(video_busy=True, video_debut=time.monotonic())
-            def calculer():
-                resultat = None
-                processus = None
-                try:
-                    environnement = {**os.environ, 'USE_TF':'0', 'USE_FLAX':'0', 'OMP_NUM_THREADS':'1'}
-                    with (dossier/'calcul.log').open('w') as journal:
-                        processus = subprocess.Popen([sys.executable, '-m', 'video.localisation',
-                            str(job.directory), str(image_a), str(image_b)], cwd=scraper.BASE_DIR,
-                            env=environnement, stdout=journal, stderr=subprocess.STDOUT)
-                        debut = time.monotonic()
-                        while processus.poll() is None:
-                            if job.video_stop.is_set() or time.monotonic()-debut > 120:
-                                processus.kill(); processus.wait()
-                                resultat = {'statut':'erreur','raison':'Localisation arrêtée ou délai de 120 secondes dépassé.'}
-                                break
-                            time.sleep(.2)
-                        if resultat is None and processus.returncode != 0:
-                            resultat = {'statut':'erreur','raison':'Localisation indisponible : vérifiez les dépendances et les poids DINOv2 dans le cache du serveur. Détail dans regions_dino/*/calcul.log.'}
-                except Exception:
-                    resultat = {'statut':'erreur','raison':'Impossible de démarrer la localisation sur le serveur.'}
-                finally:
-                    if processus is not None and processus.poll() is None:
-                        processus.kill(); processus.wait()
-                    if resultat:
-                        temporaire = dossier/'erreur.tmp'
-                        temporaire.write_text(json.dumps(resultat)); temporaire.replace(fichier)
-                    job.update(video_busy=False, finished=time.monotonic())
-            job.video_thread = threading.Thread(target=calculer, daemon=True)
-            job.video_thread.start()
-        return {'statut':'en_cours'}
-
     @app.post("/api/jobs/{job_id}/video/stop")
     def arreter_analyse_video(job_id: str, request: Request):
         manager.get(owner(request), job_id).video_stop.set()
@@ -1907,11 +1729,6 @@ def create_app(manager=None):
                 headers={"Content-Disposition": f'attachment; filename="scraptiktok_{job.id}.zip"'},
                 background=BackgroundTask(flux.close))
         return FileResponse(job.directory / "archive.zip", filename=f"scraptiktok_{job.id}.zip", media_type="application/zip")
-
-    @app.get("/api/configuration")
-    def configuration_interface(request: Request):
-        owner(request)
-        return {"video_disponible":video_disponible()}
 
     @app.get("/api/jobs/{job_id}/engagement.csv")
     def telecharger_engagement(job_id: str, request: Request):
