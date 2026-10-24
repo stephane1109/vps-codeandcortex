@@ -294,7 +294,7 @@ TXT téléchargeable `textes.txt`** : mêmes publications retenues, mêmes varia
 cochées, même ordre, mêmes hashtags et mêmes commentaires inclus. Aucun nouvel
 en-tête ni normalisation ne sont ajoutés lors de la création du ZIP. Une
 régénération de l’archive après traitement vidéo conserve également ce TXT.
-Les CSV, JSON et corpus séparés des commentaires/transcriptions restent disponibles.
+Les CSV, JSON et corpus séparés des commentaires restent disponibles.
 Pour un lot autonome sans fichier `textes.txt`, le générateur de corpus historique
 reste utilisé.
 
@@ -451,14 +451,14 @@ enrichie** fournit JSON brut, CSV (UTF-8 BOM, séparateur `;`), corpus IRaMuTeQ 
 Les filtres ET/OU et français s’appliquent aux légendes retenues dans TXT/IRaMuTeQ.
 Les publications brutes et mesures restent séparées ; `retenue` identifie la sélection.
 Les commentaires sont collectés pour les publications retenues. Leurs exports séparés
-et les corpus de transcriptions restent disponibles.
+restent disponibles.
 Les astérisques sont neutralisés uniquement dans le corps IRaMuTeQ, sans modifier le brut.
 
 ## Traitement audiovisuel facultatif
 
 Les options vidéo ont été retirées de l’interface. Les modules restent accessibles
 par l’API ou le traitement par lots, avec le profil vidéo décrit dans le guide de déploiement et une collecte enrichie. La détection de réemploi
-s’exécute sans annotation manuelle. OCR, audio, Whisper et embeddings sont des options
+s’exécute sans annotation manuelle. OCR, mesure énergétique audio et embeddings sont des options
 indépendantes ; aucun modèle n’est téléchargé sans activer l’autorisation correspondante.
 Le téléchargement vidéo se fait avec yt-dlp sur les URL publiques validées, sans exporter
 les cookies du navigateur. Une vidéo inaccessible reste indéterminée, même si sa légende
@@ -486,7 +486,7 @@ une origine ou une relation de copie prouvée. Aucun jugement de plagiat n’est
 
 Les caractéristiques sont calculées automatiquement : coupes par histogrammes,
 mouvement Farnebäck, silhouettes HOG, visages frontaux Haar, texte OCR, présence de
-piste audio, silence énergétique, segments Whisper. Un visage frontal est un indice
+piste audio et silence énergétique. Un visage frontal est un indice
 visuel ; il ne prouve pas une adresse au spectateur. Aucun âge, genre, identité,
 origine, émotion ou orientation politique n’est inféré. Les formats sont des règles
 observables (`visage_frontal`, `texte_incruste`, `montage_multiplans`, `indetermine`),
@@ -599,7 +599,7 @@ Voir `AUDIT_EVOLUTION.md`. Ces tests ne mesurent pas la précision sur de vraies
 journalistiques et ne valident pas l’accès actuel de TikTok depuis votre VPS.
 
 Références techniques : [OpenCV et homographies](https://docs.opencv.org/4.12.0/d9/d0c/group__calib3d.html),
-[yt-dlp](https://github.com/yt-dlp/yt-dlp), [faster-whisper](https://github.com/SYSTRAN/faster-whisper),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp),
 [OpenCLIP](https://github.com/mlfoundations/open_clip).
 
 
@@ -666,7 +666,7 @@ Démarrer l’application avec **`python lancer_interface.py`** ; Docker utilise
 Les dates, ET/OU, les commentaires, les exports et le filtre français sont conservés.
 
 Streamlit apporte ses dépendances d’affichage (dont NumPy/Pillow), mais la collecte
-ne charge pas OpenCV, Whisper ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
+ne charge pas OpenCV ou CLIP. `INSTALL_VIDEO=0` garde ces moteurs absents.
 Le déploiement Docker standard utilise `INSTALL_VIDEO=semantique` : DINOv2/FAISS sur CPU, SHA-256/pHash/ORB et CLIP facultatif. Le profil `base` conserve uniquement la recherche de réemploi, sans PyTorch ; le profil `1` ajoute OCR/Whisper. La disponibilité est vérifiée à partir des outils réellement installés.
 En local : `pip install -r requirements-video-base.txt` et installer ffmpeg ; aucun
 drapeau supplémentaire n’est nécessaire.
@@ -770,7 +770,7 @@ ou la limite de temps du processus peut demander de cliquer sur **Lancer /
 reprendre l’analyse**. Une vidéo en erreur ne bloque pas les lots suivants.
 
 Le profil Docker `INSTALL_VIDEO=base` suffit : OpenCV sur CPU, sans PyTorch,
-CUDA ni téléchargement de modèle. Les options audio, transcription, OCR et
+CUDA ni téléchargement de modèle. Les options audio, OCR et
 embeddings restent disponibles avec le profil facultatif `1` et ses outils.
 Conserver un volume local persistant monté sur **`/app/data`** dans Coolify
 (le fichier Compose le fait déjà). Aucun nouveau service n’est nécessaire.
