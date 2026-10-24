@@ -665,8 +665,11 @@ with onglet_collecte:
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
                                 elif code_recherche=="tiktok_pause_429":
-                                    st.warning("Moteur API suspendu par la pause de protection après HTTP 429. "
-                                               "Aucune requête TikTok n'a été envoyée pour cette nouvelle collecte.")
+                                    st.warning("Moteur API suspendu par le délai Retry-After demandé par TikTok. "
+                                               "Aucune requête n'a été envoyée.")
+                                elif code_recherche=="quota_api_local":
+                                    st.warning("Plafond de sécurité API de ScrapTikTok atteint : "
+                                               "ce n'est pas un refus HTTP 429 de TikTok.")
                                 if diagnostic_recherche.get("retry_after_seconds"):
                                     st.caption(f"Délai indicatif transmis par TikTok (Retry-After) : "
                                                f"{diagnostic_recherche['retry_after_seconds']} secondes.")
