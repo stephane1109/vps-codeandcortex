@@ -1,7 +1,4 @@
 FROM python:3.11-slim-bookworm
-ARG INSTALL_VIDEO=semantique
-ENV INSTALL_VIDEO=${INSTALL_VIDEO}
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -11,40 +8,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CHROME_NO_SANDBOX=1 \
     SCRAPTIKTOK_HEADLESS=0 \
     SE_AVOID_STATS=true \
-    HF_HOME=/app/data/modeles/huggingface \
     DATA_DIR=/app/data
 
-# Navigateur et pilote proviennent du même dépôt Debian : versions compatibles.
-# Xvfb fournit l'écran du navigateur sur le VPS, sans bureau ni accès VNC public.
+# Selenium, MP4 et Désordre visuel : aucune dépendance PyTorch, CLIP, DINOv2 ou FAISS.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium chromium-driver \
-       xvfb xauth tini fonts-noto-color-emoji fonts-liberation ca-certificates \
+    && apt-get install -y --no-install-recommends \
+       chromium chromium-driver xvfb xauth tini ffmpeg \
+       fonts-noto-color-emoji fonts-liberation ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
     && useradd --system --gid app --create-home --home-dir /home/app app
 
 WORKDIR /app
-COPY requirements.txt requirements-video-base.txt requirements-video.txt ./
+COPY requirements.txt ./
 COPY analyse_desordre/requirements.txt /tmp/requirements-desordre.txt
-RUN pip install -r requirements.txt
-# Les profils vidéo partagent le moteur de détection des séquences.
-# INSTALL_VIDEO=0 conserve un profil limité aux textes.
-RUN if [ "$INSTALL_VIDEO" = "base" ] || [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
-      apt-get update \
-      && apt-get install -y --no-install-recommends ffmpeg \
-      && rm -rf /var/lib/apt/lists/* \
-      && pip install -r requirements-video-base.txt \
-      && pip install -r /tmp/requirements-desordre.txt; fi
-# La comparaison de contenu utilise CLIP sur CPU ; aucune transcription Whisper.
-RUN if [ "$INSTALL_VIDEO" = "semantique" ] || [ "$INSTALL_VIDEO" = "1" ]; then \
-      pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-      && pip install 'open-clip-torch>=2.30,<4' 'transformers>=4.48,<5' 'faiss-cpu>=1.9,<2'; fi
-# OCR avancé facultatif ; Whisper et ses dépendances sont supprimés.
-RUN if [ "$INSTALL_VIDEO" = "1" ]; then \
-      apt-get update \
-      && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
-      && rm -rf /var/lib/apt/lists/* \
-      && pip install -r requirements-video.txt; fi
+RUN pip install --no-cache-dir -r requirements.txt -r /tmp/requirements-desordre.txt
+
 COPY . .
 RUN mkdir -p /app/data /app/.selenium-cache \
     && chmod +x /app/docker-entrypoint.sh \
