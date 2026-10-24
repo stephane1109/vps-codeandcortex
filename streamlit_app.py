@@ -206,6 +206,16 @@ with st.sidebar:
                     use_container_width=True,
                 )
 
+# Recharger les limites serveur, identiques pour tous les utilisateurs.
+try:
+    limites_admin = api("/api/collecte/limites")
+except RuntimeError as erreur:
+    st.error("Limites administrateur indisponibles : "+str(erreur))
+    st.stop()
+max_posts_admin = int(limites_admin["maximum_publications_par_source"])
+max_sources_admin = int(limites_admin["maximum_sources_par_collecte"])
+st.session_state["limit"] = min(max(1,int(st.session_state.get("limit",50))),max_posts_admin)
+
 # Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
 try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
@@ -237,12 +247,25 @@ with onglet_collecte:
                 key=cle, disabled=occupe, on_change=memoriser_medias)
         selection = [m for m in medias if st.session_state.get("media_" + m, False)]
         st.session_state["medias"] = selection
-        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. Collecte des légendes sans filtre de hashtag ; seules les publications des comptes cochés sont retenues.")
+        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
+                   f"Plafond administrateur : {max_sources_admin} source(s) par collecte. "
+                   "Seules les publications des comptes cochés sont retenues.")
+        if len(selection)>max_sources_admin:
+            st.warning("Trop de médias sélectionnés pour une même collecte : "
+                       f"maximum {max_sources_admin}.")
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
             ["api", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: "API du créateur (secUid)" if v=="api" else "Grille du profil (Selenium)",
             help="L'API utilise les pages de publications du média. Le navigateur inspecte l'onglet Vidéos. "
                  "Les deux moteurs ne sont jamais enchaînés pendant une même collecte.")
+        budget_api=limites_admin.get("budget_api_presse",{})
+        st.caption(
+            f"Budget API Presse partagé : {budget_api.get('requete_heure',0)}/"
+            f"{budget_api.get('maximum_heure','?')} requêtes sur 1 h ; "
+            f"{budget_api.get('requete_24h',0)}/"
+            f"{budget_api.get('maximum_24h','?')} sur 24 h. "
+            "Ces plafonds sont propres à ScrapTikTok, pas officiels TikTok."
+        )
         try:
             limitation_presse=api("/api/presse/limitation")
             if limitation_presse.get("actif"):
@@ -318,8 +341,10 @@ with onglet_collecte:
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
                      "et les autres filtres (langue et période). "
                      "Ce choix agit après la découverte des vidéos TikTok.")
-        st.number_input("Nombre de posts TikTok à collecter par source", min_value=1, max_value=1000, step=1, key="limit", disabled=occupe,
-            help="Saisissez un nombre entre 1 et 1 000. En mode Hashtags : limite par hashtag saisi, variantes accentuées incluses si activées. En mode Presse/médias ou Profils : limite par compte, avant les autres filtres.")
+        st.number_input("Nombre de posts TikTok à collecter par source",
+            min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
+            help=f"Plafond administrateur serveur : {max_posts_admin} posts par source. "
+                 "Il est vérifié aussi sur les requêtes API directes.")
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source == "presse":
             st.caption("Parcours des profils publics des médias sélectionnés. Seuls leurs auteurs sont admis ; les filtres de langue et de période restent disponibles. Couverture potentiellement incomplète.")
@@ -360,7 +385,8 @@ with onglet_collecte:
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
             st.number_input("Commentaires maximum par publication", min_value=1, max_value=500, step=1, key="limite_commentaires", disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary",
-                                 disabled=occupe or api_tiktok_suspendue,
+                                 disabled=occupe or api_tiktok_suspendue
+                                          or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
                                  on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if source != "presse" and not st.session_state.get(cle_hashtag, "").strip():
@@ -605,6 +631,9 @@ with onglet_collecte:
                                 if code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
+                                elif code_recherche=="budget_interne_epuise":
+                                    st.warning("Budget administrateur des requêtes API Presse épuisé. "
+                                               "La collecte a été arrêtée avant de solliciter TikTok.")
                                 elif code_recherche=="tiktok_pause_429":
                                     st.warning("Moteur API suspendu par la pause de protection après HTTP 429. "
                                                "Aucune requête TikTok n'a été envoyée pour cette nouvelle collecte.")
