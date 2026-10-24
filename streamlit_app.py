@@ -665,6 +665,21 @@ with onglet_collecte:
                                 if code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
+                                    etapes_429={
+                                        "identification_media": "Identification du compte média",
+                                        "identification_video": "Identification via une vidéo du média",
+                                        "pagination_videos": "Pagination des publications",
+                                        "non_commencee": "Avant le premier appel",
+                                    }
+                                    phase=diagnostic_recherche.get("etape_api")
+                                    if phase:
+                                        st.caption(
+                                            "Étape du refus : " + etapes_429.get(phase,phase)
+                                            + f" · {diagnostic_recherche.get('requetes_tentees',0)} "
+                                              "requête(s) tentée(s) pour ce média "
+                                            + f"· {diagnostic_recherche.get('pages_api',0)} "
+                                              "page(s) de publications reçue(s)."
+                                        )
                                 elif code_recherche=="budget_interne_epuise":
                                     st.warning("Budget administrateur des requêtes API Presse épuisé. "
                                                "La collecte a été arrêtée avant de solliciter TikTok.")
