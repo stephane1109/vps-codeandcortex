@@ -1,5 +1,6 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
 import json
+import os
 from datetime import date, datetime, timezone
 import re
 
@@ -839,6 +840,54 @@ with onglet_aide:
         "Le plafond le plus contraignant s'applique. "
         "Ces compteurs ne mesurent pas les requêtes de Selenium. "
         "Les valeurs proviennent de l'environnement réellement chargé par le serveur (Coolify)."
+    )
+    st.subheader("Limites de durée, de concurrence et de tickets Redis")
+    st.table([
+        {"Variable": "APP_TICKET_MAX_ACTIVE",
+         "Valeur active": os.getenv("APP_TICKET_MAX_ACTIVE", "1"),
+         "Effet": "Tickets actifs simultanés pour ScrapTikTok"},
+        {"Variable": "APP_TICKET_MAX_WAITING",
+         "Valeur active": os.getenv("APP_TICKET_MAX_WAITING", "20"),
+         "Effet": "Places maximum dans la file d'attente"},
+        {"Variable": "APP_TICKET_COST",
+         "Valeur active": os.getenv("APP_TICKET_COST", "4"),
+         "Effet": "Unités de capacité serveur prises par un ticket"},
+        {"Variable": "CAPACITE_SERVEUR",
+         "Valeur active": os.getenv("CAPACITE_SERVEUR", "6"),
+         "Effet": "Capacité globale partagée du VPS"},
+        {"Variable": "APP_TICKET_TTL_SECONDS",
+         "Valeur active": os.getenv("APP_TICKET_TTL_SECONDS", "1800"),
+         "Effet": "Secondes avant expiration d'un ticket non renouvelé"},
+        {"Variable": "APP_TICKET_HEARTBEAT_MS",
+         "Valeur active": os.getenv("APP_TICKET_HEARTBEAT_MS", "300000"),
+         "Effet": "Intervalle de renouvellement du ticket (millisecondes)"},
+        {"Variable": "APP_TICKET_HIDDEN_RELEASE_SECONDS",
+         "Valeur active": os.getenv("APP_TICKET_HIDDEN_RELEASE_SECONDS", "300"),
+         "Effet": "Délai de libération après masquage de l'onglet (0 : désactivé)"},
+        {"Variable": "APP_TICKET_WAIT_REFRESH_MS",
+         "Valeur active": os.getenv("APP_TICKET_WAIT_REFRESH_MS", "10000"),
+         "Effet": "Rafraîchissement de la file d'attente (millisecondes)"},
+        {"Variable": "MAX_CONCURRENT_JOBS",
+         "Valeur active": os.getenv("MAX_CONCURRENT_JOBS", "1"),
+         "Effet": "Collectes simultanées maximum sur le serveur"},
+        {"Variable": "JOB_TIMEOUT_SECONDS",
+         "Valeur active": os.getenv("JOB_TIMEOUT_SECONDS", "1800"),
+         "Effet": "Durée maximale d'une collecte (secondes)"},
+        {"Variable": "IDLE_TIMEOUT_SECONDS",
+         "Valeur active": os.getenv("IDLE_TIMEOUT_SECONDS", "300"),
+         "Effet": "Inactivité maximale pendant une collecte (secondes)"},
+        {"Variable": "RESULT_TTL_SECONDS",
+         "Valeur active": os.getenv("RESULT_TTL_SECONDS", "3600"),
+         "Effet": "Rétention des résultats temporaires (secondes)"},
+        {"Variable": "CHECKPOINT_TTL_SECONDS",
+         "Valeur active": os.getenv("CHECKPOINT_TTL_SECONDS", "604800"),
+         "Effet": "Rétention des sauvegardes progressives (secondes)"},
+    ])
+    st.caption(
+        "Le ticket Redis peut être renouvelé à chaque heartbeat : son TTL n'est "
+        "pas une limite absolue de présence. Le délai maximal d'une collecte "
+        "est gouverné par JOB_TIMEOUT_SECONDS. Les valeurs affichées proviennent "
+        "de l'environnement du conteneur ; aucun secret Redis n'est exposé."
     )
     st.subheader("Comprendre l’analyse du désordre visuel")
     from analyse_desordre.presentation import (
