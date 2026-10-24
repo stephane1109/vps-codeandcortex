@@ -280,7 +280,7 @@ def _metadonnees_publication_api(item, compte, identifiant):
         "description": description,
         "created_at": cree,
         "collected_at": datetime.now(timezone.utc).isoformat(),
-        "hashtags": list(dict.fromkeys(re.findall(r"#(\\w+)", description))),
+        "hashtags": list(dict.fromkeys(re.findall(r"#(\w+)", description))),
         "engagement": engagement,
         "source": "api_createur",
         "status": "ok" if description else "empty_caption",
