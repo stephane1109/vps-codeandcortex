@@ -1201,6 +1201,9 @@ class Manager:
         self.max_duration = max(60, int(os.getenv("JOB_TIMEOUT_SECONDS", "1800")))
         self.runner = runner
         self.jobs = {}
+        # Un identifiant éphémère permet de détecter une autre instance
+        # Coolify derrière le proxy, ou le redémarrage du moteur.
+        self.instance_id = secrets.token_hex(12)
         self.lock = threading.RLock()
         self.closed = threading.Event()
         self.reaper = None
@@ -1841,8 +1844,14 @@ def create_app(manager=None):
 
     @app.get("/api/session")
     def session(request: Request):
-        job = manager.latest(owner(request))
-        return {"job": job.snapshot() if job else None}
+        proprietaire = owner(request)
+        job = manager.latest(proprietaire)
+        return {
+            "job": job.snapshot() if job else None,
+            # Empreinte non authentifiante : jamais le cookie ou son contenu.
+            "empreinte_session": hashlib.sha256(proprietaire.encode()).hexdigest()[:16],
+            "instance": manager.instance_id,
+        }
 
     def exiger_ticket(request):
         from ticket_gate import verifier_session_active
