@@ -23,7 +23,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from .verification_comptes import normaliser_compte
 
 # Identifiant affiché pour vérifier que le serveur exécute cette version.
-VERSION_PRESSE = "presse-metadonnees-identites-20261024-v9"
+VERSION_PRESSE = "presse-secuid-depuis-embed-createur-v10"
 HOTE = "https://www.tiktok.com"
 SCRIPT_EMBED = re.compile(
     r'<script[^>]*id=["\']__FRONTITY_CONNECT_STATE__["\'][^>]*>(.*?)</script>',
@@ -146,13 +146,45 @@ def _profil_depuis_embed(page, compte):
     if not isinstance(videos, list):
         raise PresseApiError("La liste des vidéos récentes de l'embed est mal formée.")
     amorces = []
+    secuids_recents = set()
     for video in videos:
         if not isinstance(video, dict):
             continue
-        identifiant = str(video.get("id") or "")
+        # Certaines réponses exposent déjà les métadonnées d'auteur de
+        # videoList. Leur secUid est réutilisé uniquement si le bon média
+        # est identifié sans ambiguïté, plutôt que d'appeler /embed/v2/.
+        item = video.get("itemInfos")
+        item = item if isinstance(item, dict) else {}
+        identifiant = str(video.get("id") or item.get("id") or "")
         if re.fullmatch(r"\d{5,30}", identifiant):
             amorces.append(identifiant)
-    return {"secuid": secuid, "video_ids": list(dict.fromkeys(amorces))}
+        for candidat in (video.get("authorInfos"), video.get("authorInfo"),
+                         video.get("author"), item.get("author")):
+            if not isinstance(candidat, dict):
+                continue
+            try:
+                auteur_video = normaliser_compte(
+                    candidat.get("uniqueId") or candidat.get("unique_id"))
+            except (TypeError, ValueError):
+                continue
+            if auteur_video != compte:
+                continue
+            secuid_video = str(candidat.get("secUid") or candidat.get("sec_uid") or "")
+            if secuid_video and SECUid.fullmatch(secuid_video):
+                secuids_recents.add(secuid_video)
+    # Une identité portée par des médias récents n'est acceptée que si tous
+    # leurs auteurs vérifiés s'accordent. Ne pas déduire de secUid d'un
+    # identifiant numérique du compte ni d'un identifiant de vidéo.
+    if secuids_recents:
+        if len(secuids_recents) != 1 or (secuid and secuid not in secuids_recents):
+            raise PresseApiError("secUid contradictoires dans l'embed créateur TikTok.")
+        if not secuid:
+            secuid = next(iter(secuids_recents))
+    return {
+        "secuid": secuid,
+        "secuid_depuis_videos": bool(secuids_recents),
+        "video_ids": list(dict.fromkeys(amorces)),
+    }
 
 
 def extraire_identite_embed(page, compte):
@@ -204,7 +236,11 @@ def resoudre_secuid(client, compte, profil, rapport, *, check=None, referer=None
     HTTP et les cookies publics reçus par le client.
     """
     if profil["secuid"]:
-        rapport["source_secuid"] = "embed_createur"
+        rapport["source_secuid"] = (
+            "embed_createur_videos"
+            if profil.get("secuid_depuis_videos") else "embed_createur"
+        )
+        rapport["requete_embed_video_evitee"] = True
         return profil["secuid"]
     erreurs = []
     videos = profil["video_ids"][:3]
