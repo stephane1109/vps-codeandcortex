@@ -140,6 +140,82 @@ class PresseSecUidTests(unittest.TestCase):
             {"commentaires": {"valeur": 0, "brut": "0"}},
         )
 
+    def test_secuid_dans_video_list_evite_embed_video_refuse_429(self):
+        """Première réponse TikTok suffisante : aucune requête /embed/v2."""
+        source = {
+            "source": {"data": {f"/embed/@{COMPTE}": {
+                "userInfo": {"uniqueId": COMPTE, "privateAccount": False},
+                "videoList": [{
+                    "id": "7000000000000000001",
+                    "authorInfos": {"uniqueId": COMPTE, "secUid": SECUID},
+                }],
+            }}}
+        }
+        contenu = ('<script id="__FRONTITY_CONNECT_STATE__">'
+                   + json.dumps(source) + '</script>').encode()
+        client = Client([{
+            "statusCode": 0, "itemList": [item(1)],
+            "hasMorePrevious": False,
+        }], embed_content=contenu)
+        rapport = {}
+        urls = collecter_videos_presse_api(
+            COMPTE, 50, rapport, client=client, pause=lambda _: None
+        )
+        self.assertEqual(len(urls), 1)
+        self.assertEqual(rapport["source_secuid"], "embed_createur_videos")
+        self.assertTrue(rapport["requete_embed_video_evitee"])
+        self.assertEqual(rapport["pages_api"], 1)
+        self.assertEqual(len(client.vues), 2)
+        self.assertFalse(any("/embed/v2/" in url for url in client.vues))
+
+    def test_secuid_video_list_non_confirme_ne_suffit_pas(self):
+        """Aucun secUid d'un autre média ne peut servir à paginer le premier."""
+        source = {
+            "source": {"data": {f"/embed/@{COMPTE}": {
+                "userInfo": {"uniqueId": COMPTE, "privateAccount": False},
+                "videoList": [{
+                    "id": "7000000000000000001",
+                    "authorInfos": {"uniqueId": "autremedia", "secUid": SECUID},
+                }],
+            }}}
+        }
+        contenu = ('<script id="__FRONTITY_CONNECT_STATE__">'
+                   + json.dumps(source) + '</script>').encode()
+        client = Client([{
+            "statusCode": 0, "itemList": [item(1)],
+            "hasMorePrevious": False,
+        }], embed_content=contenu,
+            video_embeds={"7000000000000000001": embed_video()})
+        rapport = {}
+        collecter_videos_presse_api(
+            COMPTE, 50, rapport, client=client, pause=lambda _: None
+        )
+        self.assertEqual(rapport["source_secuid"], "embed_video")
+        self.assertEqual(rapport["tentatives_embed_video"], 1)
+
+    def test_secuid_contradictoires_dans_video_list_refuses(self):
+        """Ne pas choisir arbitrairement une identité parmi deux."""
+        source = {
+            "source": {"data": {f"/embed/@{COMPTE}": {
+                "userInfo": {"uniqueId": COMPTE, "privateAccount": False},
+                "videoList": [
+                    {"id": "7000000000000000001",
+                     "authorInfos": {"uniqueId": COMPTE, "secUid": SECUID}},
+                    {"id": "7000000000000000002",
+                     "authorInfos": {"uniqueId": COMPTE,
+                                     "secUid": "MS4wLjABAAAAAConflictingUid0123456789"}},
+                ],
+            }}}
+        }
+        contenu = ('<script id="__FRONTITY_CONNECT_STATE__">'
+                   + json.dumps(source) + '</script>').encode()
+        client = Client([], embed_content=contenu)
+        with self.assertRaisesRegex(PresseApiError, "contradictoires"):
+            collecter_videos_presse_api(
+                COMPTE, 50, {}, client=client, pause=lambda _: None
+            )
+        self.assertEqual(len(client.vues), 1)
+
     def test_secuid_absent_du_profil_recupere_dans_embed_video_du_meme_media(self):
         identifiant="7000000000000000001"
         client=Client([{"statusCode":0,"itemList":[item(1)],
