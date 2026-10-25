@@ -21,6 +21,16 @@ class ConnexionHashtag(SessionNavigateur):
         sources = []
         vus = set()
         self._ids_par_hashtag = {demande: set() for demande in demandes}
+        self._ids_globaux = set()
+        # Le nombre demandé concerne l'ensemble du corpus. Deux hashtags
+        # se partagent ce budget en ET comme en OU (la règle intervient après
+        # lecture des légendes). Les variantes utilisent le quota de leur tag.
+        nombre_demandes = len(demandes)
+        self._quota_hashtag = {
+            demande: parametres.limit // nombre_demandes
+                    + int(rang < parametres.limit % nombre_demandes)
+            for rang, demande in enumerate(demandes)
+        }
         for hashtag in demandes:
             variantes = variantes_hashtag(
                 hashtag, avec_accents=parametres.variantes_accents)
@@ -50,10 +60,14 @@ class ConnexionHashtag(SessionNavigateur):
         rapport["hashtag_url"] = "https://www.tiktok.com/tag/" + quote(hashtag)
         demande = source.get("hashtag_demande", hashtag)
         retenus = self._ids_par_hashtag.setdefault(demande, set())
-        restant = max(0, self.arguments.limit - len(retenus))
+        objectif_tag = self._quota_hashtag.get(demande, self.arguments.limit)
+        restant = max(0, min(objectif_tag - len(retenus),
+                             self.arguments.limit - len(self._ids_globaux)))
         if not restant:
             rapport.update(discovered_urls=[], discovery_stop="objectif_hashtag_atteint",
-                           bilan_recherche="Objectif déjà atteint pour le hashtag initial.")
+                           objectif_hashtag_initial=objectif_tag,
+                           retenues_hashtag_initial=len(retenus),
+                           bilan_recherche="Objectif global ou quota du hashtag déjà atteint.")
             return []
 
         # Partager l'objectif du hashtag saisi entre les variantes ; l'option
@@ -66,10 +80,14 @@ class ConnexionHashtag(SessionNavigateur):
         nouveaux = []
         for adresse in trouves:
             identite = canonical_post(adresse)
-            if identite and identite[0] not in retenus and len(retenus) < self.arguments.limit:
+            if (identite and identite[0] not in self._ids_globaux
+                    and len(retenus) < objectif_tag
+                    and len(self._ids_globaux) < self.arguments.limit):
                 retenus.add(identite[0])
+                self._ids_globaux.add(identite[0])
                 nouveaux.append(identite[1])
         rapport["discovered_urls"] = nouveaux
-        rapport["objectif_hashtag_initial"] = self.arguments.limit
+        rapport["objectif_hashtag_initial"] = objectif_tag
+        rapport["objectif_total_collecte"] = self.arguments.limit
         rapport["retenues_hashtag_initial"] = len(retenus)
         return nouveaux
