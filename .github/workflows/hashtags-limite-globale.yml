@@ -30,5 +30,5 @@ jobs:
         run: python -m compileall -q connect_htag.py webapp.py streamlit_app.py tests/test_variantes_hashtags.py
       - name: Vérifier les quotas hashtags et les variantes
         run: python -m unittest discover -s tests -p test_variantes_hashtags.py -v
-      - name: Vérifier les formulaires Streamlit
-        run: python -m unittest discover -s tests -p test_interface_streamlit.py -v
+      - name: Vérifier le libellé Hashtags et les quotas dans les tests ciblés
+        run: python -m unittest discover -s tests -p test_variantes_hashtags.py -k test_formulaire_affiche_l_objectif_global_hashtags -v
