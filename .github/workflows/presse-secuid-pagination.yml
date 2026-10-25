@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - "collecte/presse_api.py"
+      - "collecte/presse_tikwm.py"
+      - "connect_presse.py"
+      - "tests/test_presse_tikwm.py"
       - "collecte/comptes.py"
       - "webapp.py"
       - "streamlit_app.py"
@@ -13,6 +16,9 @@ on:
   pull_request:
     paths:
       - "collecte/presse_api.py"
+      - "collecte/presse_tikwm.py"
+      - "connect_presse.py"
+      - "tests/test_presse_tikwm.py"
       - "collecte/comptes.py"
       - "webapp.py"
       - "streamlit_app.py"
@@ -31,10 +37,11 @@ jobs:
       - name: Installer les dépendances
         run: python -m pip install -r requirements-dev.txt
       - name: Syntaxe des fichiers modifiés
-        run: python -m compileall -q collecte/presse_api.py collecte/comptes.py webapp.py streamlit_app.py tests/test_presse_secuid_api.py
+        run: python -m compileall -q collecte/presse_api.py collecte/presse_tikwm.py collecte/comptes.py connect_presse.py webapp.py streamlit_app.py tests/test_presse_secuid_api.py tests/test_presse_tikwm.py
       - name: Test de pagination API et de repli navigateur
         run: |
           python -m unittest discover -s tests -p test_presse_secuid_api.py -v
+          python -m unittest discover -s tests -p test_presse_tikwm.py -v
           python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
           python -m unittest discover -s tests -p test_rubrique_videos_medias.py -v
           python -m unittest discover -s tests -p test_pagination_profils.py -v
