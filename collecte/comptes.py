@@ -140,14 +140,16 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             etat["message_erreur"] = str(erreur)
             if presse_videos_uniquement:
                 from .presse_api import PresseRateLimitError, PresseCooldownError
-                from .presse_tikwm import TikwmErreur, TikwmRefus429
+                from .presse_tikwm import TikwmErreur, TikwmRefus429, TikwmAccesRefuse403
                 from .quotas_exploitation import QuotaScrapingAtteint
                 budget_atteint = isinstance(erreur, QuotaScrapingAtteint)
                 limitation = isinstance(erreur, PresseRateLimitError)
                 attente = isinstance(erreur, PresseCooldownError)
                 limitation_tikwm = isinstance(erreur, TikwmRefus429)
+                refus_403_tikwm = isinstance(erreur, TikwmAccesRefuse403)
                 erreur_tikwm = isinstance(erreur, TikwmErreur)
-                code = ("tikwm_limitation_429" if limitation_tikwm else
+                code = ("tikwm_acces_refuse_403" if refus_403_tikwm else
+                        "tikwm_limitation_429" if limitation_tikwm else
                         "tikwm_indisponible" if erreur_tikwm else
                         "budget_interne_epuise" if budget_atteint else
                         "tiktok_pause_429" if attente else
@@ -157,12 +159,13 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                     "code": code,
                     "detail": str(erreur),
                 })
-                if limitation or attente or budget_atteint or limitation_tikwm:
+                if limitation or attente or budget_atteint or limitation_tikwm or refus_403_tikwm:
                     etat["diagnostic"]["etape_api"] = etat.get("etape_api", "non_commencee")
                     etat["diagnostic"]["requetes_tentees"] = etat.get("requetes_tentees", 0)
                     etat["diagnostic"]["pages_api"] = etat.get("pages_api", 0)
                     etat["discovery_stop"] = ("budget_interne" if budget_atteint else
                                                 "cooldown_429" if attente else
+                                                 "tikwm_http_403" if refus_403_tikwm else
                                                  "tikwm_http_429" if limitation_tikwm else "rate_limit_429")
                     if (limitation or attente) and erreur.retry_after is not None:
                         etat["diagnostic"]["retry_after_seconds"] = erreur.retry_after

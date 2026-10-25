@@ -762,7 +762,14 @@ def wait_for_user(driver, job: Job, message: str):
 def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
     from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+    from collecte.presse_tikwm import TikwmErreur, TikwmAccesRefuse403
     from collecte.quotas_exploitation import QuotaScrapingAtteint
+    if isinstance(erreur, TikwmAccesRefuse403):
+        return ("Le prestataire TikWM a refusé l’accès HTTP 403, avec protection Cloudflare "
+                "si elle est signalée dans le diagnostic. Arrêt du lot Presse ; les autres "
+                "médias n’ont pas été sollicités. Consultez le diagnostic de cette source.")
+    if isinstance(erreur, TikwmErreur):
+        return "Échec du prestataire externe TikWM : " + str(erreur)
     if isinstance(erreur, PresseRateLimitError):
         conservees = len(rapport.get("discovered_urls", []))
         return ("Accès API Presse refusé par TikTok (HTTP 429) : collecte arrêtée. "
@@ -813,6 +820,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
     limitation_tikwm = False
+    refus_403_tikwm = False
     limitation_budget = False
     try:
         job.check()
@@ -998,13 +1006,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
                 from collecte.presse_api import PresseRateLimitError, PresseCooldownError
-                from collecte.presse_tikwm import TikwmRefus429
+                from collecte.presse_tikwm import TikwmRefus429, TikwmAccesRefuse403
                 from collecte.quotas_exploitation import QuotaScrapingAtteint
                 if isinstance(erreur, QuotaScrapingAtteint):
                     limitation_budget = True
                     job.update(search_errors=job.search_errors + 1)
                     break
-                if isinstance(erreur, TikwmRefus429):
+                if isinstance(erreur, (TikwmRefus429, TikwmAccesRefuse403)):
                     # Garder les vidéos dont les données ont été vérifiées avant le refus.
                     for identifiant, fiche in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(fiche, dict):
@@ -1014,9 +1022,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         if identite and identite[2].casefold() in medias_par_compte:
                             unique_links.setdefault(identite[0], identite[1])
                     limitation_tikwm = True
+                    refus_403_tikwm = isinstance(erreur, TikwmAccesRefuse403)
                     job.update(search_errors=job.search_errors + 1,
                         status="finalizing",
-                        message="TikWM HTTP 429 : arrêt du prestataire externe ; données reçues conservées.")
+                        message=("TikWM HTTP 403 : accès bloqué, lot Presse interrompu."
+                                 if refus_403_tikwm else
+                                 "TikWM HTTP 429 : arrêt du prestataire externe ; données reçues conservées."))
                     break
                 if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
                     # Conserver les URL déjà découvertes avant le HTTP 429,
@@ -1092,15 +1103,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.errors:
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if job.settings.source_collecte != "hashtags":
-            final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
+            source_donnees = "TikWM" if (job.settings.source_collecte == "presse"
+                                       and job.settings.presse_moteur == "tikwm") else "TikTok"
+            final_message += (f" Collecte partielle : {source_donnees} n’a pas fourni la limite demandée ; résultats non exhaustifs."
                               if recherche_partielle else " Collecte limitée au nombre demandé par compte ; historique complet non garanti.")
         if limitation_budget:
             final_message += (" Plafond interne de requêtes API Presse atteint : "
                               "collecte arrêtée sans demander davantage de données à TikTok.")
             final_status = "partial" if links else "failed"
         if limitation_tikwm:
-            final_message += (" TikWM HTTP 429 : le prestataire externe a arrêté la pagination. "
-                              "Les autres médias du lot ne sont pas sollicités.")
+            if refus_403_tikwm:
+                final_message += (" TikWM HTTP 403 : accès refusé par le prestataire, "
+                                  "protection Cloudflare observée le cas échéant. "
+                                  "Lot interrompu après le premier refus : aucun autre média sollicité.")
+            else:
+                final_message += (" TikWM HTTP 429 : le prestataire externe a arrêté la pagination. "
+                                  "Les autres médias du lot ne sont pas sollicités.")
             final_status = "partial" if links else "failed"
         if limitation_tiktok:
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "

@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 from .verification_comptes import normaliser_compte
 
-VERSION_TIKWM = "presse-tikwm-post-profil-v2"
+VERSION_TIKWM = "presse-tikwm-stop-cloudflare-v3"
 URL_TIKWM = "https://www.tikwm.com/api/user/posts"
 LIMITE_PAGES = 60
 TAILLE_PAGE = 34
@@ -29,6 +29,10 @@ class TikwmErreur(RuntimeError):
 
 class TikwmRefus429(TikwmErreur):
     """Refus HTTP 429 provenant de TikWM : interrompre le lot."""
+
+
+class TikwmAccesRefuse403(TikwmErreur):
+    """Accès TikWM refusé : arrêter ce lot plutôt que répéter le refus par média."""
 
 
 def _obtenir(url):
@@ -93,8 +97,8 @@ def _obtenir(url):
             if str(en_tetes.get("cf-mitigated", "")).lower() == "challenge":
                 indices.append("challenge Cloudflare signalé")
             detail = (" ; " + ", ".join(indices)) if indices else ""
-            raise TikwmErreur(
-                "TikWM HTTP 403 sur POST /api/user/posts : accès refusé par "
+            raise TikwmAccesRefuse403(
+                "TikWM HTTP 403 sur POST /api/user/posts : accès refusé par 
                 "le fournisseur" + detail +
                 ". Aucun nouvel essai automatique n'est lancé."
             ) from erreur
@@ -116,6 +120,8 @@ def _page(donnees):
     code = objet.get("code")
     if str(code) == "429":
         raise TikwmRefus429("TikWM : code 429 dans la réponse du service.")
+    if str(code) == "403":
+        raise TikwmAccesRefuse403("TikWM : code 403 dans la réponse du fournisseur.")
     if code not in (0, "0"):
         raise TikwmErreur(f"TikWM : code de réponse non réussi ({code}).")
     page = objet.get("data")
@@ -228,8 +234,11 @@ def collecter_videos_presse_tikwm(compte, limite, rapport, *,
         rapport["requetes_tentees"] += 1
         try:
             donnees = _page(obtenir(adresse))
-        except TikwmRefus429:
-            rapport["discovery_stop"] = "tikwm_http_429"
+        except (TikwmRefus429, TikwmAccesRefuse403) as erreur:
+            rapport["discovery_stop"] = (
+                "tikwm_http_403" if isinstance(erreur, TikwmAccesRefuse403)
+                else "tikwm_http_429"
+            )
             raise
         videos = donnees["videos"]
         rapport["pages_api"] = numero

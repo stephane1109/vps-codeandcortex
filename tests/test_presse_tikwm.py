@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from collecte.presse_tikwm import (
-    _fiche, _obtenir, _page, TikwmErreur, TikwmRefus429,
+    _fiche, _obtenir, _page, TikwmErreur, TikwmRefus429, TikwmAccesRefuse403,
     collecter_videos_presse_tikwm,
 )
 from connect_presse import ConnexionPresse
@@ -122,6 +122,8 @@ class TestsTikwm(unittest.TestCase):
                     _page(contenu)
         with self.assertRaises(TikwmRefus429):
             _page(b'{"code":429}')
+        with self.assertRaises(TikwmAccesRefuse403):
+            _page(b'{"code":403}')
 
     def test_curseur_identique_ne_cree_pas_de_boucle(self):
         appels = []
@@ -168,12 +170,38 @@ class TestsTikwm(unittest.TestCase):
             "https://www.tikwm.com/api/user/posts", 403, "Forbidden",
             {"Server": "cloudflare", "cf-mitigated": "challenge"}, None))
         with patch("collecte.presse_tikwm.urlopen", compteur):
-            with self.assertRaises(TikwmErreur) as erreur:
+            with self.assertRaises(TikwmAccesRefuse403) as erreur:
                 from collecte.presse_tikwm import URL_TIKWM
                 _obtenir(URL_TIKWM + "?unique_id=lemondefr&count=12&cursor=0")
         compteur.assert_called_once()
         self.assertIn("HTTP 403 sur POST", str(erreur.exception))
         self.assertIn("challenge Cloudflare", str(erreur.exception))
+
+    def test_403_interrompt_les_medias_sans_relancer_tikwm(self):
+        from collecte.presse import charger_inventaire
+        inventaire = charger_inventaire()
+        self.assertGreaterEqual(len(inventaire), 2)
+        medias = [m["id"] for m in inventaire[:2]]
+        with tempfile.TemporaryDirectory() as repertoire:
+            job = Job("b" * 64, StartRequest(
+                source_collecte="presse", medias=medias,
+                presse_moteur="tikwm", limit=5,
+            ), Path(repertoire))
+            pilote = Mock(side_effect=AssertionError("Selenium ne doit pas démarrer"))
+            with patch("collecte.presse_tikwm._obtenir",
+                       side_effect=TikwmAccesRefuse403(
+                           "TikWM HTTP 403, challenge Cloudflare")) as obtenir, \
+                 patch.object(job, "sauvegarder_historique"):
+                execute_job(job, driver_factory=pilote)
+            self.assertEqual(obtenir.call_count, 1)
+            pilote.assert_not_called()
+            self.assertEqual(len(job.journal), 1)
+            self.assertEqual(job.journal[0]["rapport"]["recherches_compte"][0]
+                             ["diagnostic"]["code"], "tikwm_acces_refuse_403")
+            self.assertEqual(job.status, "failed")
+            self.assertIn("TikWM HTTP 403", job.message)
+            self.assertNotIn("aucun lien lisible dans la page TikTok",
+                             job.journal[0]["message"].lower())
 
     def test_http_429_provient_de_tikwm_pas_de_tiktok(self):
         client = Mock()

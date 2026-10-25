@@ -534,6 +534,9 @@ with onglet_collecte:
                 elif st.button("Arrêter la collecte", type="primary",
                                key="interrompre_collecte_active", use_container_width=True):
                     lancer(f"/api/jobs/{actuel['id']}/stop", {})
+            elif "TikWM HTTP 403" in actuel.get("message", ""):
+                st.error("TikWM a refusé la collecte (HTTP 403). Ne relancez pas ce moteur "
+                         "depuis ce serveur tant que le fournisseur n’autorise pas l’accès.")
             elif "TikWM HTTP 429" in actuel.get("message", ""):
                 st.info("Collecte TikWM arrêtée après HTTP 429 du prestataire externe.")
             elif "TikTok HTTP 429" in actuel.get("message", ""):
@@ -668,7 +671,8 @@ with onglet_collecte:
                             st.write(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
                             auteurs = recherche.get("auteurs_dans_liens", {})
                             compte = recherche.get("compte")
-                            if compte and not recherche.get("urls_embed_non_verifiees"):
+                            if (compte and not recherche.get("urls_embed_non_verifiees")
+                    and recherche.get("navigation_publications") != "tikwm_profil"):
                                 st.caption(f"@{compte} : {auteurs.get(compte, 0)} publication(s) dans les liens reçus de TikTok, sur {recherche.get('candidats_examines', 0)} publication(s) repérée(s).")
                                 if recherche.get("candidats_examines") and not auteurs.get(compte, 0):
                                     st.info("Le compte ciblé est absent des liens reçus pour cette recherche. Le filtre l’a cherché ; cela ne prouve pas que ses vidéos n’existent pas.")
@@ -774,7 +778,11 @@ with onglet_collecte:
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
                                 st.caption("Diagnostic : " + code_recherche)
-                                if code_recherche=="tikwm_limitation_429":
+                                if code_recherche=="tikwm_acces_refuse_403":
+                                    st.error("HTTP 403 : le prestataire TikWM refuse l’accès. "
+                                             "Cloudflare a signalé un challenge si cela figure ci-dessous ; "
+                                             "lot interrompu dès le premier refus, sans recherche sur les autres médias.")
+                                elif code_recherche=="tikwm_limitation_429":
                                     st.error("HTTP 429 du fournisseur TikWM, distinct du refus de l’API TikTok.")
                                     st.caption(f"Pages TikWM : {recherche.get('pages_tikwm',0)} ; "
                                                f"requêtes TikWM : {recherche.get('requetes_tentees',0)}.")
