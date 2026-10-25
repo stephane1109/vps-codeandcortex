@@ -171,7 +171,6 @@ class TestsTikwm(unittest.TestCase):
                 source_collecte="presse", medias=["lemonde"],
                 presse_moteur="tikwm", limit=3,
             ), Path(repertoire))
-            job.base = None
             navigateur = Mock(side_effect=AssertionError("Chrome ne doit pas être ouvert"))
             with patch("collecte.presse_tikwm._obtenir",
                        return_value=page([video(1)], "0", False)), \
