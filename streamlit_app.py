@@ -659,6 +659,8 @@ with onglet_collecte:
                                 resolution=(
                                     "identifiant public vérifié lors d'une collecte précédente"
                                     if provenance=="cache_verifie" else
+                                    "identifiant vérifié dans les vidéos du premier embed (sans embed vidéo supplémentaire)"
+                                    if provenance=="embed_createur_videos" else
                                     "identifiant confirmé via l'embed d'une vidéo"
                                     if provenance=="embed_video" else
                                     "identifiant fourni par l'embed du créateur"
