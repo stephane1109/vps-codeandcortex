@@ -41,6 +41,17 @@ class TestsInterface(unittest.TestCase):
             self.assertFalse(envois[-1]['collecter_reponses'])
             self.assertEqual(StartRequest(**envois[-1]).variables_txt, ['partages', 'commentaires', 'favoris', 'hashtags'])
 
+    def test_interface_distingue_les_deux_moteurs_et_ne_bascule_pas_apres_429(self):
+        """La méthode Presse reste un choix explicite : un 429 ne change pas le moteur."""
+        source = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("API web TikTok (secUid)", source)
+        self.assertIn("Grille du profil (Selenium, comme les hashtags)", source)
+        self.assertIn("Les hashtags utilisent le navigateur", source)
+        self.assertIn("ScrapTikTok n'enchaîne pas automatiquement", source)
+        self.assertIn('key="presse_moteur"', source)
+
     def test_formulaire_et_selection_complete_des_medias(self):
         def repondre(chemin,*a,**kw):
             if chemin=='/api/session': return {'job':None}
