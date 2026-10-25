@@ -260,9 +260,17 @@ with onglet_collecte:
                        f"maximum {max_sources_admin}.")
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
             ["api", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
-            format_func=lambda v: "API du créateur (secUid)" if v=="api" else "Grille du profil (Selenium)",
-            help="L'API utilise les pages de publications du média. Le navigateur inspecte l'onglet Vidéos. "
-                 "Les deux moteurs ne sont jamais enchaînés pendant une même collecte.")
+            format_func=lambda v: "API web TikTok (secUid)" if v=="api" else "Grille du profil (Selenium, comme les hashtags)",
+            help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
+                 "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
+                 "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
+        if st.session_state.get("presse_moteur") == "api":
+            st.caption(
+                "Moteur API web sélectionné : distinct du navigateur utilisé pour les hashtags. "
+                "En cas de HTTP 429 sur ce moteur, sélectionnez manuellement "
+                "« Grille du profil (Selenium, comme les hashtags) » pour une nouvelle collecte. "
+                "Le changement ne supprime pas les restrictions éventuelles de TikTok."
+            )
         budget_api=limites_admin.get("budget_api_presse",{})
         st.caption(
             f"Budget API Presse partagé : {budget_api.get('requete_minute',0)}/"
@@ -320,6 +328,14 @@ with onglet_collecte:
                     "Ce message est informatif : aucune pause locale n'est active "
                     "et aucune relance automatique n'est effectuée."
                 )
+                if st.session_state.get("presse_moteur") == "api":
+                    st.warning(
+                        "Le dernier HTTP 429 concerne l'API web Presse. "
+                        "Les hashtags utilisent le navigateur : ce sont deux méthodes différentes. "
+                        "Pour une nouvelle collecte Presse, sélectionnez manuellement "
+                        "« Grille du profil (Selenium, comme les hashtags) » ci-dessus. "
+                        "Ne relancez pas automatiquement l'endpoint API refusé."
+                    )
             else:
                 st.caption("API TikTok : aucune attente Retry-After active.")
             st.caption("Limite chiffrée officielle : non publiée pour cette API web interne. "
@@ -715,6 +731,14 @@ with onglet_collecte:
                                 if code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
+                                    st.info(
+                                        "Ce refus concerne l'API web Presse, et non nécessairement "
+                                        "la collecte par hashtags. Pour une nouvelle collecte, "
+                                        "vous pouvez choisir manuellement le moteur "
+                                        "« Grille du profil (Selenium, comme les hashtags) ». "
+                                        "ScrapTikTok n'enchaîne pas automatiquement un autre "
+                                        "moteur après un HTTP 429."
+                                    )
                                     etapes_429={
                                         "identification_media": "Identification du compte média",
                                         "identification_video": "Identification via une vidéo du média",
