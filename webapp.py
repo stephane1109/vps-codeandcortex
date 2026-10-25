@@ -46,7 +46,7 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
-    presse_moteur: Literal["api", "navigateur"] = "api"
+    presse_moteur: Literal["api", "navigateur", "tikwm"] = "api"
     enrichir: bool = False
     telecharger_mp4: bool = False
     sauvegarde_progressive: bool = False
@@ -482,6 +482,8 @@ class Job:
                             "secuid_resolu": bool(r.get("secuid_resolu", False)),
                             "source_secuid": r.get("source_secuid"),
                             "tentatives_embed_video": r.get("tentatives_embed_video", 0),
+                            "pages_tikwm": r.get("pages_tikwm", 0),
+                            "fournisseur_donnees": r.get("fournisseur_donnees"),
                             "videos_amorcage_disponibles": r.get("videos_amorcage_disponibles", 0),
                             "urls_embed_non_verifiees": r.get("urls_embed_non_verifiees", 0),
                             # Liens déjà présents dans la réponse reçue AVANT le 429.
@@ -810,6 +812,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     metadonnees_api = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
+    limitation_tikwm = False
     limitation_budget = False
     try:
         job.check()
@@ -844,9 +847,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     identifiant_publication = scraper.canonical_post(url)[0]
                     record_api = metadonnees_api.get(identifiant_publication)
                     if (job.settings.source_collecte == "presse"
-                            and job.settings.presse_moteur == "api"
-                            and not job.settings.collecter_commentaires
-                            and record_api and record_api.get("description")):
+                            and record_api is not None
+                            and (job.settings.presse_moteur == "tikwm"
+                                 or (job.settings.presse_moteur == "api"
+                                     and not job.settings.collecter_commentaires
+                                     and record_api.get("description")))):
                         # TikTok a déjà fourni une légende et éventuellement les
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
@@ -967,7 +972,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
-                if job.settings.source_collecte == "presse" and job.settings.presse_moteur == "api":
+                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "tikwm"}:
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(donnees, dict):
                             metadonnees_api.setdefault(str(identifiant), donnees)
@@ -993,10 +998,25 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
                 from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+                from collecte.presse_tikwm import TikwmRefus429
                 from collecte.quotas_exploitation import QuotaScrapingAtteint
                 if isinstance(erreur, QuotaScrapingAtteint):
                     limitation_budget = True
                     job.update(search_errors=job.search_errors + 1)
+                    break
+                if isinstance(erreur, TikwmRefus429):
+                    # Garder les vidéos dont les données ont été vérifiées avant le refus.
+                    for identifiant, fiche in (rapport.get("metadonnees_api") or {}).items():
+                        if isinstance(fiche, dict):
+                            metadonnees_api.setdefault(str(identifiant), fiche)
+                    for adresse in rapport.get("discovered_urls", []):
+                        identite = scraper.canonical_post(adresse)
+                        if identite and identite[2].casefold() in medias_par_compte:
+                            unique_links.setdefault(identite[0], identite[1])
+                    limitation_tikwm = True
+                    job.update(search_errors=job.search_errors + 1,
+                        status="finalizing",
+                        message="TikWM HTTP 429 : arrêt du prestataire externe ; données reçues conservées.")
                     break
                 if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
                     # Conserver les URL déjà découvertes avant le HTTP 429,
@@ -1024,7 +1044,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             # Exporter chaque compte aussitôt sa découverte terminée.
             if job.settings.source_collecte != "hashtags" and len(unique_links) > job.processed:
                 lire_decouvertes()
-        # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
+        # Exporter les métadonnées TikWM reçues avant le refus, sans nouvelle requête.
+        if limitation_tikwm and len(unique_links) > job.processed:
+            lire_decouvertes()
+        # Un 429 TikTok interdit la lecture différée des vidéos déjà découvertes.
         if (job.settings.source_collecte == "hashtags" and not limitation_tiktok
                 and not limitation_budget and not job.stop.is_set()):
             lire_decouvertes()
@@ -1075,6 +1098,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += (" Plafond interne de requêtes API Presse atteint : "
                               "collecte arrêtée sans demander davantage de données à TikTok.")
             final_status = "partial" if links else "failed"
+        if limitation_tikwm:
+            final_message += (" TikWM HTTP 429 : le prestataire externe a arrêté la pagination. "
+                              "Les autres médias du lot ne sont pas sollicités.")
+            final_status = "partial" if links else "failed"
         if limitation_tiktok:
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
                               "Les autres médias de cette collecte n'ont pas été sollicités ; "
@@ -1102,7 +1129,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     finally:
         contexte_mp4 = {}
         if (job.settings.telecharger_mp4 and job.records and connexion is not None
-                and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
+                and not limitation_tiktok and not limitation_tikwm
+                and not limitation_budget and not job.stop.is_set()):
             try:
                 from telechargement_videos import capturer_contexte_anonyme
                 contexte_mp4 = capturer_contexte_anonyme(connexion.obtenir_navigateur())
@@ -1119,7 +1147,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             LOG.exception("Écriture de l’export impossible")
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
         if (job.settings.telecharger_mp4 and job.records
-                and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
+                and not limitation_tiktok and not limitation_tikwm
+                and not limitation_budget and not job.stop.is_set()):
             try:
                 final_message += " " + telecharger_mp4_collecte(job, contexte_mp4)
                 if job.stop.is_set():
