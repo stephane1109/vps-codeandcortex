@@ -384,7 +384,7 @@ with onglet_collecte:
                          "ScrapTikTok explore également un nombre limité de pages de variantes (#lyceen, #lycéen…). "
                          "Les variantes proposées sont heuristiques (huit graphies au maximum par hashtag) : "
                          "la recherche peut être plus longue sans garantir un résultat exhaustif. "
-                         "Le nombre de vidéos demandé reste commun à toutes les variantes du même hashtag.")
+                         "Le nombre de vidéos demandé est global et les variantes partagent le quota du hashtag initial.")
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
                 help="Décoché (par défaut) : seuls les #hashtags exacts de la légende comptent. "
@@ -394,10 +394,31 @@ with onglet_collecte:
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
                      "et les autres filtres (langue et période). "
                      "Ce choix agit après la découverte des vidéos TikTok.")
-        st.number_input("Nombre de posts TikTok à collecter par source",
+        st.number_input(
+            "Nombre TOTAL de posts à lire (tous hashtags confondus)"
+            if source == "hashtags" else "Nombre de posts TikTok à collecter par source",
             min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
-            help=f"Borne technique du moteur : {max_posts_admin} posts par source. "
-                 "Il est vérifié aussi sur les requêtes API directes.")
+            help=(
+                "Objectif maximal sur l'ensemble des hashtags saisis, en ET comme en OU. "
+                "Le budget est partagé entre les hashtags, y compris leurs variantes. "
+                "Les légendes, les langues et les dates sont filtrées après lecture."
+                if source == "hashtags" else
+                f"Borne technique du moteur : {max_posts_admin} posts par source. "
+                "Il est vérifié aussi sur les requêtes API directes."
+            ),
+        )
+        if source == "hashtags":
+            nombre_tags = 2 if st.session_state.get("second_hashtag", "").strip() else 1
+            st.caption(
+                f"Objectif global : au plus {st.session_state.get('limit', 50)} "
+                "publications distinctes lues sur l'ensemble de la collecte. "
+                + (
+                    "Deux hashtags : le budget est réparti entre eux, y compris en mode ET. "
+                    if nombre_tags == 2 else
+                    "Un seul hashtag : le budget entier lui est attribué. "
+                )
+                + "Le nombre de textes exportés peut être inférieur après filtrage."
+            )
         if source == "presse":
             nombre_medias=len(st.session_state.get("medias",[]))
             if nombre_medias:
@@ -546,10 +567,11 @@ with onglet_collecte:
                 aides_retenues = {
                     "hashtags": (
                         "Nombre de publications TikTok distinctes retenues pour lecture, avant vérification "
-                        "des hashtags dans les légendes et avant les autres filtres. La limite est PAR HASHTAG "
-                        "saisi : avec 20 posts et deux hashtags, jusqu’à 40 vidéos différentes peuvent être "
-                        "retenues, en mode OU comme en mode ET. Les doublons sont dédupliqués ; les variantes "
-                        "accentuées partagent le quota du hashtag initial. Le choix ET/OU s’applique ensuite "
+                        "des hashtags dans les légendes et avant les autres filtres. La limite est GLOBALE : "
+                        "avec 50 posts et deux hashtags, au plus 50 vidéos distinctes peuvent être retenues, "
+                        "en mode OU comme en mode ET. La collecte répartit ce budget entre les hashtags. "
+                        "Les variantes accentuées partagent le quota du hashtag initial ; les doublons "
+                        "entre hashtags ne sont lus qu'une fois. Le choix ET/OU s'applique ensuite "
                         "aux légendes pour déterminer les textes exportés."
                     ),
                     "comptes": (
