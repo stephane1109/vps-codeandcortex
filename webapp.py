@@ -948,6 +948,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
 
         for numero_source, source in enumerate(sources, 1):
             job.check()
+            # Double garde-fou : même si un connecteur de hashtags renvoie
+            # trop d'URL, ne jamais retenir plus que la limite globale saisie.
+            if job.settings.source_collecte == "hashtags" and len(unique_links) >= args.limit:
+                break
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
             rapport = {}
@@ -978,6 +982,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     identity = scraper.canonical_post(url)
                     if identity and (job.settings.source_collecte == "hashtags"
                                      or identity[2].casefold() in medias_par_compte):
+                        if (job.settings.source_collecte == "hashtags"
+                                and len(unique_links) >= args.limit):
+                            break
                         unique_links.setdefault(identity[0], identity[1])
             except (RuntimeError, scraper.WebDriverException) as erreur:
                 LOG.warning("Source %s : %s", etiquette, type(erreur).__name__)
