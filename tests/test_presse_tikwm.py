@@ -3,6 +3,8 @@ import json
 import unittest
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from collecte.presse_tikwm import (
@@ -10,7 +12,7 @@ from collecte.presse_tikwm import (
     collecter_videos_presse_tikwm,
 )
 from connect_presse import ConnexionPresse
-from webapp import StartRequest
+from webapp import StartRequest, Job, execute_job
 
 
 def video(numero, compte="lemondefr", **autres):
@@ -161,6 +163,27 @@ class TestsTikwm(unittest.TestCase):
                     fabrique.assert_not_called()
                     self.assertIsNone(navigateur)
                 session.fermer()
+
+    def test_worker_presse_utilise_les_metadonnees_sans_chrome(self):
+        # Le moteur TikWM doit pouvoir créer le corpus sans navigateur.
+        with tempfile.TemporaryDirectory() as repertoire:
+            job = Job("a" * 64, StartRequest(
+                source_collecte="presse", medias=["lemonde"],
+                presse_moteur="tikwm", limit=3,
+            ), Path(repertoire))
+            job.base = None
+            navigateur = Mock(side_effect=AssertionError("Chrome ne doit pas être ouvert"))
+            with patch("collecte.presse_tikwm._obtenir",
+                       return_value=page([video(1)], "0", False)), \
+                 patch.object(job, "sauvegarder_historique"):
+                execute_job(job, driver_factory=navigateur)
+            navigateur.assert_not_called()
+            self.assertEqual(job.processed, 1)
+            self.assertEqual(len(job.records), 1)
+            self.assertEqual(job.records[0]["source"], "tikwm_tiers")
+            self.assertEqual(job.records[0]["engagement"]["likes"]["valeur"], 20)
+            self.assertEqual(job.status, "partial")
+            self.assertTrue(job.archive_prete)
 
     def test_compte_presse_oriente_uniquement_vers_tikwm(self):
         from collecte.comptes import collecter_compte

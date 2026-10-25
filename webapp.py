@@ -1523,7 +1523,9 @@ def create_app(manager=None):
             with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/_stcore/health",timeout=2): pass
         except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
         from collecte.presse_api import VERSION_PRESSE
-        return {"status": "ok", "version_presse": VERSION_PRESSE}
+        from collecte.presse_tikwm import VERSION_TIKWM
+        return {"status": "ok", "version_presse": VERSION_PRESSE,
+                "version_tikwm": VERSION_TIKWM}
 
     @app.get("/")
     @app.get("/controle")

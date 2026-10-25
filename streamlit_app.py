@@ -350,9 +350,12 @@ with onglet_collecte:
         elif st.session_state.get("presse_moteur") == "tikwm":
             informations_presse.append("Quotas internes API Presse et Retry-After TikTok : non applicables à TikWM.")
             try:
-                version_presse = api("/healthz").get("version_presse")
-                if version_presse:
-                    informations_presse.append("Version serveur API Presse : " + version_presse)
+                version_tikwm = api("/healthz").get("version_tikwm")
+                if version_tikwm:
+                    informations_presse.append("Version TikWM : " + version_tikwm)
+                else:
+                    alerte_presse = True
+                    informations_presse.append("Version TikWM absente : redéployer Coolify.")
             except RuntimeError:
                 alerte_presse = True
                 informations_presse.append("Version serveur indisponible : vérifier Coolify.")
