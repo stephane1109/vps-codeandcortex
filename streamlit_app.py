@@ -779,7 +779,8 @@ with onglet_collecte:
                                     st.caption(f"Pages TikWM : {recherche.get('pages_tikwm',0)} ; "
                                                f"requêtes TikWM : {recherche.get('requetes_tentees',0)}.")
                                 elif code_recherche=="tikwm_indisponible":
-                                    st.warning("TikWM indisponible ou réponse non exploitable.")
+                                    st.warning("TikWM a refusé la requête ou sa réponse est inexploitable. "
+                                               "Consultez le code HTTP dans le diagnostic ci-dessous.")
                                 elif code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
@@ -821,7 +822,8 @@ with onglet_collecte:
                                     st.caption(f"Délai indicatif transmis par TikTok (Retry-After) : "
                                                f"{diagnostic_recherche['retry_after_seconds']} secondes.")
                                 if diagnostic_recherche.get("detail"):
-                                    st.warning("Accès TikTok : " + diagnostic_recherche["detail"])
+                                    nom_service = "TikWM" if str(code_recherche).startswith("tikwm_") else "TikTok"
+                                    st.warning("Accès " + nom_service + " : " + diagnostic_recherche["detail"])
                             elif recherche.get("message_erreur"):
                                 st.warning("Accès TikTok : "+recherche["message_erreur"])
                             requetes_api_lot += int(recherche.get("requetes_tentees") or 0)

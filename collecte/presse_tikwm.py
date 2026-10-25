@@ -1,6 +1,8 @@
 """Troisième moteur Presse : TikWM, service tiers, sans Selenium et sans secUid.
 
-Contrat public : https://github.com/mehanon/tikwm (GET /api/user/posts).
+Contrat : https://github.com/mhmdwldn/tiktok-end-to-end-crawler
+(POST /api/user/posts, formulaire unique_id, count, cursor, web, hd).
+L'ancien GET documenté par mehanon/tikwm peut recevoir HTTP 403.
 Les données publiques sont reçues d'un intermédiaire non officiel : elles
 peuvent être absentes, incomplètes ou différentes de celles de TikTok.
 """
@@ -9,13 +11,13 @@ import json
 import re
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
 from .verification_comptes import normaliser_compte
 
-VERSION_TIKWM = "presse-tikwm-profil-v1"
-URL_TIKWM = "https://tikwm.com/api/user/posts"
+VERSION_TIKWM = "presse-tikwm-post-profil-v2"
+URL_TIKWM = "https://www.tikwm.com/api/user/posts"
 LIMITE_PAGES = 60
 TAILLE_PAGE = 34
 LIMITE_OCTETS = 4_000_000
@@ -30,12 +32,47 @@ class TikwmRefus429(TikwmErreur):
 
 
 def _obtenir(url):
-    """Lire une réponse JSON de l'adresse TikWM fixée dans ce module."""
+    """Interroger TikWM par POST, sans recherche de secUid ni navigateur.
+
+    Le paramètre url reste injectable et conserve le contrat des tests du
+    collecteur. Son hôte et son chemin doivent correspondre à l'endpoint fixe.
+    Aucune relance n'est effectuée en cas de refus HTTP.
+    """
+    decoupe = urlsplit(url)
+    if decoupe.scheme != "https" or (
+        decoupe.scheme + "://" + decoupe.netloc + decoupe.path != URL_TIKWM
+    ):
+        raise TikwmErreur("TikWM : adresse de requête non autorisée.")
+    variables = parse_qs(decoupe.query, keep_blank_values=True)
+    compte = normaliser_compte((variables.get("unique_id") or [""])[0])
     try:
-        requete = Request(url, headers={
-            "User-Agent": "ScrapTikTok/1.0",
-            "Accept": "application/json",
-        })
+        quantite = min(34, max(1, int((variables.get("count") or ["12"])[0])))
+        curseur = int((variables.get("cursor") or ["0"])[0])
+        if curseur < 0:
+            raise ValueError("Curseur négatif")
+    except (ValueError, TypeError) as erreur:
+        raise TikwmErreur("TikWM : paramètres de pagination invalides.") from erreur
+    # Contrat POST utilisé par le projet tiktok-end-to-end-crawler.
+    corps = urlencode({
+        "unique_id": "@" + compte,
+        "count": str(quantite),
+        "cursor": str(curseur),
+        "web": "1",
+        "hd": "1",
+    }).encode("utf-8")
+    entetes = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/149.0.0.0 Safari/537.36"),
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Origin": "https://www.tikwm.com",
+        "Referer": "https://www.tikwm.com/",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    requete = Request(URL_TIKWM, data=corps, headers=entetes, method="POST")
+    try:
         with urlopen(requete, timeout=25) as reponse:
             if reponse.geturl().split("?", 1)[0] != URL_TIKWM:
                 raise TikwmErreur("TikWM a redirigé la requête vers un autre endpoint.")
@@ -45,8 +82,25 @@ def _obtenir(url):
             return contenu
     except HTTPError as erreur:
         if erreur.code == 429:
-            raise TikwmRefus429("TikWM HTTP 429 : le fournisseur externe refuse la requête.") from erreur
-        raise TikwmErreur(f"TikWM HTTP {erreur.code} : accès refusé ou service indisponible.") from erreur
+            raise TikwmRefus429(
+                "TikWM HTTP 429 : le fournisseur externe refuse la requête POST."
+            ) from erreur
+        if erreur.code == 403:
+            en_tetes = erreur.headers or {}
+            indices = []
+            if str(en_tetes.get("Server", "")).lower().find("cloudflare") >= 0:
+                indices.append("réponse servie par Cloudflare")
+            if str(en_tetes.get("cf-mitigated", "")).lower() == "challenge":
+                indices.append("challenge Cloudflare signalé")
+            detail = (" ; " + ", ".join(indices)) if indices else ""
+            raise TikwmErreur(
+                "TikWM HTTP 403 sur POST /api/user/posts : accès refusé par "
+                "le fournisseur" + detail +
+                ". Aucun nouvel essai automatique n'est lancé."
+            ) from erreur
+        raise TikwmErreur(
+            f"TikWM HTTP {erreur.code} sur POST /api/user/posts."
+        ) from erreur
     except (URLError, OSError, TimeoutError) as erreur:
         raise TikwmErreur("TikWM : échec réseau ou délai dépassé.") from erreur
 
@@ -169,6 +223,7 @@ def collecter_videos_presse_tikwm(compte, limite, rapport, *,
         adresse = URL_TIKWM + "?" + urlencode({
             "unique_id": compte, "count": taille, "cursor": curseur,
         })
+        # _obtenir transforme ces paramètres en POST, sans seconde requête.
         rapport["etape_api"] = "pagination_tikwm"
         rapport["requetes_tentees"] += 1
         try:

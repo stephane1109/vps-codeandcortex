@@ -70,7 +70,7 @@ class TestsTikwm(unittest.TestCase):
         self.assertEqual(premier["hashtags"], ["France"])
         self.assertEqual(parse_qs(urlparse(demandes[0]).query)["unique_id"], ["lemondefr"])
         self.assertEqual(parse_qs(urlparse(demandes[1]).query)["cursor"], ["100"])
-        self.assertTrue(all(urlparse(url).netloc == "tikwm.com" for url in demandes))
+        self.assertTrue(all(urlparse(url).netloc == "www.tikwm.com" for url in demandes))
         self.assertFalse(any("secUid" in url or "tiktok.com" in url for url in demandes))
 
     def test_arret_exact_au_nombre_demande(self):
@@ -134,15 +134,56 @@ class TestsTikwm(unittest.TestCase):
         self.assertEqual(len(appels), 1)
         self.assertEqual(rapport["discovery_stop"], "curseur_tikwm_repetitif")
 
+    def test_envoi_post_formulaire_documente_sans_cookie(self):
+        appels = []
+        class Reponse:
+            def geturl(self):
+                return "https://www.tikwm.com/api/user/posts"
+            def read(self, nombre):
+                return page([video(1)])
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+        def ouvrir(requete, timeout):
+            appels.append(requete)
+            return Reponse()
+        with patch("collecte.presse_tikwm.urlopen", side_effect=ouvrir):
+            from collecte.presse_tikwm import URL_TIKWM
+            contenu = _obtenir(URL_TIKWM + "?unique_id=lemondefr&count=12&cursor=0")
+        self.assertEqual(_page(contenu)["videos"][0]["author"]["unique_id"], "lemondefr")
+        self.assertEqual(len(appels), 1)
+        requete = appels[0]
+        self.assertEqual(requete.get_method(), "POST")
+        self.assertEqual(requete.full_url, "https://www.tikwm.com/api/user/posts")
+        variables = parse_qs(requete.data.decode())
+        self.assertEqual(variables, {
+            "unique_id": ["@lemondefr"], "count": ["12"],
+            "cursor": ["0"], "web": ["1"], "hd": ["1"],
+        })
+        self.assertNotIn("Cookie", requete.headers)
+
+    def test_403_sans_reessai_documente_protection_eventuelle(self):
+        compteur = Mock(side_effect=HTTPError(
+            "https://www.tikwm.com/api/user/posts", 403, "Forbidden",
+            {"Server": "cloudflare", "cf-mitigated": "challenge"}, None))
+        with patch("collecte.presse_tikwm.urlopen", compteur):
+            with self.assertRaises(TikwmErreur) as erreur:
+                from collecte.presse_tikwm import URL_TIKWM
+                _obtenir(URL_TIKWM + "?unique_id=lemondefr&count=12&cursor=0")
+        compteur.assert_called_once()
+        self.assertIn("HTTP 403 sur POST", str(erreur.exception))
+        self.assertIn("challenge Cloudflare", str(erreur.exception))
+
     def test_http_429_provient_de_tikwm_pas_de_tiktok(self):
         client = Mock()
         client.__enter__ = Mock(return_value=client)
         client.__exit__ = Mock(return_value=False)
         with patch("collecte.presse_tikwm.urlopen", side_effect=HTTPError(
-            "https://tikwm.com/api/user/posts", 429, "Too Many Requests", {}, None,
+            "https://www.tikwm.com/api/user/posts", 429, "Too Many Requests", {}, None,
         )):
             with self.assertRaises(TikwmRefus429) as erreur:
-                _obtenir("https://tikwm.com/api/user/posts?unique_id=lemondefr")
+                _obtenir("https://www.tikwm.com/api/user/posts?unique_id=lemondefr")
         self.assertIn("TikWM HTTP 429", str(erreur.exception))
 
     def test_connecteur_sans_navigateur_sauf_commentaires(self):
