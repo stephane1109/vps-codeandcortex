@@ -98,7 +98,7 @@ def _obtenir(url):
                 indices.append("challenge Cloudflare signalé")
             detail = (" ; " + ", ".join(indices)) if indices else ""
             raise TikwmAccesRefuse403(
-                "TikWM HTTP 403 sur POST /api/user/posts : accès refusé par 
+                "TikWM HTTP 403 sur POST /api/user/posts : accès refusé par "
                 "le fournisseur" + detail +
                 ". Aucun nouvel essai automatique n'est lancé."
             ) from erreur
