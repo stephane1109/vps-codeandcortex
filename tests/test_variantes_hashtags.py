@@ -74,6 +74,59 @@ class TestVariantesHashtags(unittest.TestCase):
         self.assertEqual(connexion._ids_par_hashtag["lyceen"], {"123", "456", "789"})
         self.assertLessEqual(sum(quantite for _url, quantite in visités), 3)
 
+    def test_deux_hashtags_50_posts_signifie_50_au_total_et_ou(self):
+        for operateur in ("AND", "OR"):
+            with self.subTest(operateur=operateur):
+                reglages = StartRequest(
+                    hashtag="manifestation", second_hashtag="lyceen",
+                    limit=50, operator=operateur,
+                )
+                connexion = ConnexionHashtag(Mock(limit=50))
+                sources = connexion.preparer_sources(reglages)
+                self.assertEqual(connexion._quota_hashtag,
+                                 {"manifestation": 25, "lyceen": 25})
+                connexion.navigateur = Mock()
+                appels = []
+
+                def trouver(navigateur, arguments, rapport, **options):
+                    appels.append(arguments.limit)
+                    base = 1000 if "/manifestation" in rapport["hashtag_url"] else 2000
+                    return [
+                        f"https://www.tiktok.com/@journal/video/{base + i}"
+                        for i in range(arguments.limit)
+                    ]
+
+                with patch("collecte.hashtags.collecter_hashtag", side_effect=trouver):
+                    liens = [url for source in sources for url in connexion.decouvrir(source,{})]
+                self.assertEqual(appels, [25, 25])
+                self.assertEqual(len(liens), 50)
+                self.assertEqual(len(set(liens)), 50)
+                self.assertEqual(len(connexion._ids_globaux), 50)
+
+    def test_deux_hashtags_avec_doublons_et_variantes_ne_depassent_pas_limite(self):
+        reglages = StartRequest(
+            hashtag="lyceen", second_hashtag="manifestation",
+            variantes_accents=True, limit=11,
+        )
+        connexion = ConnexionHashtag(Mock(limit=11))
+        sources = connexion.preparer_sources(reglages)
+        connexion.navigateur = Mock()
+        compteur = [0]
+
+        def trouver(navigateur, arguments, rapport, **options):
+            compteur[0] += 1
+            return [
+                f"https://www.tiktok.com/@journal/video/{1000 + ((compteur[0] * 13 + i) % 50)}"
+                for i in range(arguments.limit)
+            ]
+
+        with patch("collecte.hashtags.collecter_hashtag", side_effect=trouver):
+            liens = [url for source in sources for url in connexion.decouvrir(source,{})]
+        self.assertLessEqual(len(liens), 11)
+        self.assertEqual(len(set(liens)), len(liens))
+        self.assertEqual(sum(connexion._quota_hashtag.values()), 11)
+        self.assertLessEqual(len(connexion._ids_globaux), 11)
+
     def test_presse_ne_lance_pas_de_variantes(self):
         reglages = StartRequest(source_collecte="presse", medias=["lemonde"],
                                variantes_accents=True)
