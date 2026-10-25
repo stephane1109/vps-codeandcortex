@@ -194,8 +194,11 @@ son environnement Linux ; il ne garantit pas l'accès à TikTok depuis une IP do
 
 Dans l’interface, renseigner le deuxième hashtag facultatif et choisir **ET**
 (les deux hashtags dans la description) ou **OU** (au moins un des deux), puis
-lancer la collecte. Chaque recherche examine jusqu’à la limite choisie
-par hashtag ; les publications communes sont dédoublonnées par identifiant.
+lancer la collecte. La limite saisie est **globale** pour l'ensemble des hashtags :
+avec 50 posts, au plus 50 publications distinctes sont retenues pour lecture,
+même si deux hashtags sont saisis (ET ou OU). Le budget est réparti entre les
+hashtags et leurs variantes ; les doublons sont dédupliqués par identifiant.
+Le nombre de textes exportés peut être inférieur après les filtres.
 Le filtre compare des hashtags entiers, sans distinction de casse, en conservant
 les accents. Les textes ne correspondant pas au filtre sont comptabilisés à part.
 L’export TXT indique les hashtags et ET/OU dans son nom. Une recherche inaccessible
