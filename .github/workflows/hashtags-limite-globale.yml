@@ -1,0 +1,34 @@
+name: ScrapTikTok - Limite globale hashtags
+on:
+  push:
+    paths:
+      - "connect_htag.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_variantes_hashtags.py"
+      - "tests/test_interface_streamlit.py"
+      - ".github/workflows/hashtags-limite-globale.yml"
+  pull_request:
+    paths:
+      - "connect_htag.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_variantes_hashtags.py"
+      - "tests/test_interface_streamlit.py"
+      - ".github/workflows/hashtags-limite-globale.yml"
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Syntaxe du connecteur et des interfaces
+        run: python -m compileall -q connect_htag.py webapp.py streamlit_app.py tests/test_variantes_hashtags.py
+      - name: Vérifier les quotas hashtags et les variantes
+        run: python -m unittest discover -s tests -p test_variantes_hashtags.py -v
+      - name: Vérifier les formulaires Streamlit
+        run: python -m unittest discover -s tests -p test_interface_streamlit.py -v
