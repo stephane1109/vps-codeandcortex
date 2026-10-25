@@ -102,7 +102,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     intervenir = options.get("interact")
     presse_videos_uniquement = bool(options.get("presse_videos_uniquement"))
     presse_moteur = options.get("presse_moteur", "api")
-    if presse_videos_uniquement and presse_moteur not in {"api", "navigateur"}:
+    if presse_videos_uniquement and presse_moteur not in {"api", "navigateur", "tikwm"}:
         raise ValueError("Moteur de collecte Presse inconnu.")
     etapes, liens = [], {}
     erreur_finale = None
@@ -121,6 +121,9 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                            recherches_compte=etapes,
                            candidats_examines=sum(r.get("candidats_examines", 0) for r in etapes),
                            discovered_urls=list(liens.values()),
+                           metadonnees_api={identifiant: fiche
+                               for recherche in etapes
+                               for identifiant, fiche in (recherche.get("metadonnees_api") or {}).items()},
                            retenues_par_compte={compte: len(liens)})
             if progression:
                 progression(len(liens))
@@ -137,11 +140,16 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             etat["message_erreur"] = str(erreur)
             if presse_videos_uniquement:
                 from .presse_api import PresseRateLimitError, PresseCooldownError
+                from .presse_tikwm import TikwmErreur, TikwmRefus429
                 from .quotas_exploitation import QuotaScrapingAtteint
                 budget_atteint = isinstance(erreur, QuotaScrapingAtteint)
                 limitation = isinstance(erreur, PresseRateLimitError)
                 attente = isinstance(erreur, PresseCooldownError)
-                code = ("budget_interne_epuise" if budget_atteint else
+                limitation_tikwm = isinstance(erreur, TikwmRefus429)
+                erreur_tikwm = isinstance(erreur, TikwmErreur)
+                code = ("tikwm_limitation_429" if limitation_tikwm else
+                        "tikwm_indisponible" if erreur_tikwm else
+                        "budget_interne_epuise" if budget_atteint else
                         "tiktok_pause_429" if attente else
                         "tiktok_limitation_429" if limitation else
                         "acces_tiktok_indisponible")
@@ -149,12 +157,13 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                     "code": code,
                     "detail": str(erreur),
                 })
-                if limitation or attente or budget_atteint:
+                if limitation or attente or budget_atteint or limitation_tikwm:
                     etat["diagnostic"]["etape_api"] = etat.get("etape_api", "non_commencee")
                     etat["diagnostic"]["requetes_tentees"] = etat.get("requetes_tentees", 0)
                     etat["diagnostic"]["pages_api"] = etat.get("pages_api", 0)
                     etat["discovery_stop"] = ("budget_interne" if budget_atteint else
-                                                "cooldown_429" if attente else "rate_limit_429")
+                                                "cooldown_429" if attente else
+                                                 "tikwm_http_429" if limitation_tikwm else "rate_limit_429")
                     if (limitation or attente) and erreur.retry_after is not None:
                         etat["diagnostic"]["retry_after_seconds"] = erreur.retry_after
                     # Même si des URL avaient été découvertes, un HTTP 429 ou
@@ -174,6 +183,11 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             from .presse_api import collecter_videos_presse_api
             executer(f"@{compte} : liste vidéos paginée (secUid)",
                 lambda etat, suivi: collecter_videos_presse_api(
+                    compte, arguments.limit, etat, check=verifier, progress=suivi))
+        elif presse_moteur == "tikwm":
+            from .presse_tikwm import collecter_videos_presse_tikwm
+            executer(f"@{compte} : vidéos paginées (TikWM)",
+                lambda etat, suivi: collecter_videos_presse_tikwm(
                     compte, arguments.limit, etat, check=verifier, progress=suivi))
         else:
             executer(f"@{compte} : grille Vidéos (navigateur)",
