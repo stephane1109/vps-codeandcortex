@@ -42,5 +42,22 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertNotIn("secUid du média introuvable ou invalide",code)
 
 
+    def test_choix_moteur_avant_selection_des_medias(self):
+        """Le sélecteur et les champs Research précèdent l'inventaire des médias."""
+        from pathlib import Path
+        texte=Path(__file__).resolve().parents[1].joinpath(
+            "streamlit_app.py").read_text(encoding="utf-8")
+        choix=texte.index('st.radio("Moteur de découverte Presse')
+        cle=texte.index('key="research_client_key"',choix)
+        secret=texte.index('key="research_client_secret"',cle)
+        medias=texte.index('st.write("Choisir les médias à collecter")',secret)
+        cases=texte.index('st.button("Tout cocher"',medias)
+        self.assertLess(choix,cle)
+        self.assertLess(cle,secret)
+        self.assertLess(secret,medias)
+        self.assertLess(medias,cases)
+        self.assertIn('["api", "research", "navigateur"]',texte[choix:medias])
+
+
 if __name__=="__main__":
     unittest.main()

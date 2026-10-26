@@ -243,6 +243,20 @@ with onglet_collecte:
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
+        st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
+            ["api", "research", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
+            format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
+                                   "navigateur":"Grille du profil (Selenium)"}[v],
+            help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
+                 "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
+                 "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
+        if st.session_state.get("presse_moteur") == "research":
+            st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
+                          type="password", disabled=occupe,
+                          help="Client key de l'application TikTok Research approuvée.")
+            st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
+                          type="password", disabled=occupe,
+                          help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
         st.write("Choisir les médias à collecter")
         st.caption("Cochez les médias dont vous souhaitez collecter les publications publiques. Aucun hashtag nécessaire.")
         def memoriser_medias():
@@ -266,20 +280,6 @@ with onglet_collecte:
         if len(selection)>max_sources_admin:
             st.warning("Trop de médias sélectionnés pour une même collecte : "
                        f"maximum {max_sources_admin}.")
-        st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
-            ["api", "research", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
-            format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
-                                   "navigateur":"Grille du profil (Selenium)"}[v],
-            help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
-                 "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
-                 "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
-        if st.session_state.get("presse_moteur") == "research":
-            st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
-                          type="password", disabled=occupe,
-                          help="Client key de l'application TikTok Research approuvée.")
-            st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
-                          type="password", disabled=occupe,
-                          help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
         # Une seule ligne d'information Streamlit : plusieurs st.caption,
         # st.warning ou st.error consécutifs créent des espaces vides inutiles.
         # Les messages sont assemblés sans saut de paragraphe ; une alerte
