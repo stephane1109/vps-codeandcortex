@@ -4,19 +4,23 @@ on:
   push:
     paths:
       - "collecte/presse_api.py"
+      - "collecte/presse_research.py"
       - "collecte/comptes.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_secuid_api.py"
+      - "tests/test_presse_research.py"
       - "tests/test_presse_onglet_videos.py"
       - ".github/workflows/presse-secuid-pagination.yml"
   pull_request:
     paths:
       - "collecte/presse_api.py"
+      - "collecte/presse_research.py"
       - "collecte/comptes.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_secuid_api.py"
+      - "tests/test_presse_research.py"
       - "tests/test_presse_onglet_videos.py"
       - ".github/workflows/presse-secuid-pagination.yml"
 
@@ -31,10 +35,11 @@ jobs:
       - name: Installer les dépendances
         run: python -m pip install -r requirements-dev.txt
       - name: Syntaxe des fichiers modifiés
-        run: python -m compileall -q collecte/presse_api.py collecte/comptes.py webapp.py streamlit_app.py tests/test_presse_secuid_api.py
+        run: python -m compileall -q collecte/presse_research.py tests/test_presse_research.py collecte/presse_api.py collecte/comptes.py webapp.py streamlit_app.py tests/test_presse_secuid_api.py
       - name: Test de pagination API et de repli navigateur
         run: |
           python -m unittest discover -s tests -p test_presse_secuid_api.py -v
+          python -m unittest discover -s tests -p test_presse_research.py -v
           python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
           python -m unittest discover -s tests -p test_rubrique_videos_medias.py -v
           python -m unittest discover -s tests -p test_pagination_profils.py -v
