@@ -559,10 +559,8 @@ with onglet_collecte:
                 st.rerun()
             if actuel.get("comptes_filtres"):
                 st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
-                st.caption("Les comptes sont parcourus directement, avec recherche par identifiant en secours. "
-                           + ("Aucun hashtag n'est imposé aux médias ; les autres auteurs sont exclus."
-                              if actuel.get("source_collecte") == "presse" else
-                              "Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus."))
+                if actuel.get("source_collecte") != "presse":
+                    st.caption("Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus.")
             if actuel.get("sauvegarde_progressive") and actuel.get("erreur_sauvegarde"):
                 st.warning(actuel["erreur_sauvegarde"])
             if actuel.get("sauvegarde_progressive"):
