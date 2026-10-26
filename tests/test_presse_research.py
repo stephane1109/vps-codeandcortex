@@ -126,6 +126,8 @@ class TestsResearch(unittest.TestCase):
         fiche = _fiche(publication, "lemondefr")
         def collecte(compte, limite, rapport, **kwargs):
             self.assertEqual(compte, "lemondefr")
+            self.assertEqual(kwargs.get("credentiels"),
+                             ("client_test_secret", "secret_test_secret"))
             rapport.update(discovered_urls=[fiche["url"]],
                            metadonnees_api={fiche["id"]:fiche},
                            candidats_examines=1, pages_research=1,
@@ -139,6 +141,8 @@ class TestsResearch(unittest.TestCase):
             job = Job("a" * 64, StartRequest(
                 source_collecte="presse", medias=["lemonde"],
                 presse_moteur="research", limit=5,
+                research_client_key="client_test_secret",
+                research_client_secret="secret_test_secret",
             ), Path(dossier))
             with patch("collecte.presse_research.collecter_videos_presse_research",
                        side_effect=collecte):
@@ -148,6 +152,50 @@ class TestsResearch(unittest.TestCase):
             self.assertEqual(len(job.records), 1)
             self.assertEqual(job.records[0]["source"], "research_api_officielle")
             self.assertIn("Manifestation", job.path.read_text(encoding="utf-8"))
+            self.assertIsNone(job.settings.research_client_key)
+            self.assertIsNone(job.settings.research_client_secret)
+            import json
+            for fichier in Path(dossier).rglob("*"):
+                if fichier.is_file() and fichier.suffix in {".txt", ".json", ".csv", ".sqlite"}:
+                    # Contrôler exports et SQLite (octets inclus).
+                    self.assertNotIn(b"secret_test_secret", fichier.read_bytes())
+                    self.assertNotIn(b"client_test_secret", fichier.read_bytes())
+
+
+    def test_identifiants_du_formulaire_sont_exclus_des_serialisations(self):
+        from webapp import StartRequest
+        with patch.dict(os.environ, {}, clear=True):
+            requete = StartRequest(source_collecte="presse", medias=["lemonde"],
+                presse_moteur="research", research_client_key="cle_privee_123",
+                research_client_secret="secret_prive_456")
+            self.assertEqual(requete.research_client_key.get_secret_value(),
+                             "cle_privee_123")
+            contenu = json.dumps(requete.model_dump())
+            self.assertNotIn("cle_privee_123", contenu)
+            self.assertNotIn("secret_prive_456", contenu)
+            self.assertNotIn("research_client_secret", contenu)
+            self.assertNotIn("research_client_key", contenu)
+            self.assertNotIn("secret_prive_456", repr(requete))
+            with self.assertRaisesRegex(ValueError, "les deux identifiants"):
+                StartRequest(source_collecte="presse", medias=["lemonde"],
+                    presse_moteur="research", research_client_key="une_cle")
+
+    def test_identifiants_saisis_sont_utilises_au_lieu_des_variables_serveur(self):
+        appels = []
+        def serveur(url, *, data, headers):
+            appels.append(parse_qs(data.decode()))
+            return {"access_token":"test_par_formulaire","expires_in":60}
+        _cache_token.update(valeur=None, expire=0.0, identite=None)
+        with patch.dict(os.environ, {
+            "TIKTOK_RESEARCH_CLIENT_KEY":"autre_cle",
+            "TIKTOK_RESEARCH_CLIENT_SECRET":"autre_secret",
+        }):
+            token = _jeton(requete=serveur, maintenant=lambda:200.,
+                           credentiels=("cle_formulaire", "secret_formulaire"))
+        self.assertEqual(token,"test_par_formulaire")
+        self.assertEqual(appels[0]["client_key"],["cle_formulaire"])
+        self.assertEqual(appels[0]["client_secret"],["secret_formulaire"])
+        self.assertNotIn("secret_formulaire", str(_cache_token))
 
     def test_research_cle_secrete_non_presente_en_sortie_health(self):
         from tempfile import TemporaryDirectory

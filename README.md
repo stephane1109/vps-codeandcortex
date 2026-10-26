@@ -23,21 +23,25 @@ Dans **Collecte → Presse et médias**, sélectionner une seule méthode par co
   par compte et par collecte.
 - **Grille du profil (Selenium)** : méthode navigateur indépendante.
 
-Activer Research dans les variables d'environnement du **backend** Coolify,
-uniquement après autorisation du projet :
+Après autorisation de la Research API, sélectionner cette méthode dans
+**Presse et médias**, puis saisir les deux champs masqués directement dans
+l'application : `TIKTOK_RESEARCH_CLIENT_KEY` et
+`TIKTOK_RESEARCH_CLIENT_SECRET`. Les identifiants ne sont transmis qu'au
+backend pour la collecte active, ne sont jamais exportés dans SQLite ou le ZIP,
+et sont nettoyés après l'exécution. La connexion au service doit utiliser HTTPS.
 
-```text
-TIKTOK_RESEARCH_CLIENT_KEY=...
-TIKTOK_RESEARCH_CLIENT_SECRET=...
-```
-
-Ne pas saisir ces secrets dans Streamlit, ni dans GitHub ou les logs.
+Pour un usage administrateur, les mêmes valeurs peuvent **facultativement**
+être placées dans les variables d'environnement Coolify. Les champs de
+l'interface ont priorité sur ces variables lorsqu'ils sont tous deux remplis.
+Ne jamais déposer les clés dans GitHub ou les logs.
 L'endpoint d'authentification officiel est
 `POST https://open.tiktokapis.com/v2/oauth/token/` (jeton client renouvelable),
 et la requête vidéo est
 `POST https://open.tiktokapis.com/v2/research/video/query/`.
-L'écran `/healthz` ne publie **que la présence des identifiants**, jamais
-leur valeur ; leur présence ne prouve pas que l'accès est autorisé.
+L'écran `/healthz` ne publie **que la présence des identifiants
+d'environnement**, jamais leur valeur ; l'absence de clés sur Coolify ne
+bloque pas les champs de saisie de l'application. Leur présence ne prouve
+pas que l'accès est autorisé.
 Le refus officiel interrompt le lot sans basculement vers les API non officielles.
 
 L'API développeur classique **Display API** n'est pas ajoutée : son accès

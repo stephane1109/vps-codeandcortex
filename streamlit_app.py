@@ -310,12 +310,18 @@ with onglet_collecte:
         else:
             budget_api = limites_admin.get("budget_api_presse", {})
             informations_presse.append(
-                f"Budget local Presse : {budget_api.get('requete_minute', 0)}/"
-                f"{budget_api.get('maximum_minute', '?')} sur 1 min ; "
-                f"{budget_api.get('requete_heure', 0)}/"
-                f"{budget_api.get('maximum_heure', '?')} sur 1 h ; "
-                f"{budget_api.get('requete_24h', 0)}/"
-                f"{budget_api.get('maximum_24h', '?')} sur 24 h."
+                "Plafonds API Presse configurés (Coolify) : "
+                + " ; ".join(
+                    f"{budget_api.get(compteur, 0)}/{budget_api[maximum]} sur {periode}"
+                    for compteur, maximum, periode in (
+                        ("requete_minute", "maximum_minute", "1 min"),
+                        ("requete_heure", "maximum_heure", "1 h"),
+                        ("requete_24h", "maximum_24h", "24 h"),
+                    )
+                    if budget_api.get(maximum) is not None
+                ) if any(budget_api.get(cle) is not None
+                         for cle in ("maximum_minute", "maximum_heure", "maximum_24h"))
+                else "API Presse : aucun plafond de requêtes configuré dans Coolify."
             )
             echeances = (
                 ("minute", budget_api.get("reprise_locale_minute_utc")),
@@ -334,7 +340,9 @@ with onglet_collecte:
                 informations_presse.append("Quotas locaux épuisés (réinitialisation) : "
                                             + " ; ".join(plafonds_epuises) + ".")
             else:
-                informations_presse.append("Quotas locaux disponibles.")
+                if any(budget_api.get(cle) is not None
+                       for cle in ("maximum_minute", "maximum_heure", "maximum_24h")):
+                    informations_presse.append("Plafonds configurés non atteints.")
             try:
                 limitation_presse = api("/api/presse/limitation")
                 if limitation_presse.get("actif"):
@@ -977,22 +985,23 @@ with onglet_aide:
     st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
     st.subheader("Protection contre les erreurs TikTok 429")
     st.write(
-        "Les limites de l'API Presse sont définies **uniquement par les variables "
-        "d'environnement Coolify** affichées ci-dessous. Aucun coefficient ni "
-        "plafond supplémentaire n'est appliqué par le code. "
+        "Les limites de l'API Presse viennent des variables d'environnement "
+        "Coolify API_MAX_* ou SCRAPTIKTOK_API_MAX_*. Si une limite n'est pas "
+        "configurée, le code n'en ajoute aucune. Deux alias renseignés pour "
+        "un même plafond : la valeur la plus restrictive est retenue. "
         "Ces limites ne sont pas des quotas officiels du scraping TikTok "
         "et n'empêchent pas nécessairement les erreurs HTTP 429."
     )
     budget_aide = limites_admin.get("budget_api_presse", {})
     st.table([
         {"Limite locale (API Presse)": "Requêtes par minute",
-         "Maximum actif": budget_aide.get("maximum_minute", "?")},
+         "Maximum actif": budget_aide.get("maximum_minute") or "Non configuré"},
         {"Limite locale (API Presse)": "Requêtes par heure",
-         "Maximum actif": budget_aide.get("maximum_heure", "?")},
+         "Maximum actif": budget_aide.get("maximum_heure") or "Non configuré"},
         {"Limite locale (API Presse)": "Requêtes par jour UTC",
-         "Maximum actif": budget_aide.get("maximum_24h", "?")},
+         "Maximum actif": budget_aide.get("maximum_24h") or "Non configuré"},
         {"Limite locale (API Presse)": "Enregistrements par jour UTC",
-         "Maximum actif": budget_aide.get("maximum_enregistrements_24h", "?")},
+         "Maximum actif": budget_aide.get("maximum_enregistrements_24h") or "Non configuré"},
         {"Limite locale (API Presse)": "Intervalle minimal entre appels (s)",
          "Maximum actif": budget_aide.get("intervalle_min_s", "?")},
     ])
@@ -1003,7 +1012,7 @@ with onglet_aide:
         "Les limites sont communes à toutes les sessions. "
         "Le navigateur Selenium n'est pas comptabilisé ; son exécution reste limitée "
         "par la durée des collectes, les bornes techniques et les blocages TikTok. "
-        "Chaque plafond vient de sa variable Coolify ; une collecte s'arrête dès que l'un est atteint."
+        "Chaque plafond configuré vient de Coolify ; une collecte s'arrête lorsqu'un plafond actif est atteint."
     )
     st.caption(
         "Les cinq anciennes variables de limitation par source sont ignorées. "
