@@ -381,7 +381,6 @@ with onglet_collecte:
             except RuntimeError as erreur:
                 alerte_presse = True
                 informations_presse.append("État du Retry-After indisponible : " + str(erreur))
-            informations_presse.append("Quota officiel de l'API web interne : non publié.")
             try:
                 version_presse = api("/healthz").get("version_presse")
                 if version_presse:
