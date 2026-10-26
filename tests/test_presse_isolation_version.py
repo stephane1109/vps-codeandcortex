@@ -59,5 +59,21 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertIn('["api", "research", "navigateur"]',texte[choix:medias])
 
 
+    def test_options_commentaires_sous_case_et_titre_periode(self):
+        """Les options commentaires suivent la case, avant le titre Période."""
+        from pathlib import Path
+        code=Path(__file__).resolve().parents[1].joinpath(
+            "streamlit_app.py").read_text(encoding="utf-8")
+        case=code.index('st.checkbox("Collecter les textes des commentaires"')
+        options=code.index('with st.expander("Options des commentaires")',case)
+        titre=code.index('st.subheader("Période")',options)
+        dates=code.index('with st.expander("Dates (facultatif)"',titre)
+        variables=code.index('st.write("Variables à inclure avant chaque post dans le TXT")',dates)
+        self.assertLess(case,options)
+        self.assertLess(options,titre)
+        self.assertLess(titre,dates)
+        self.assertLess(dates,variables)
+
+
 if __name__=="__main__":
     unittest.main()

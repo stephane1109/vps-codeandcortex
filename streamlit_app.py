@@ -490,7 +490,16 @@ with onglet_collecte:
                  "Cela ne permet pas de reprendre automatiquement Selenium.")
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
             help="Sur les publications retenues, dans la limite indiquée sous Options des commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
-        with st.expander("Période facultative", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
+        with st.expander("Options des commentaires"):
+            def respecter_choix_commentaires():
+                if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
+            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
+            st.number_input("Commentaires maximum par publication", min_value=1,
+                max_value=max_commentaires_admin, step=1,
+                key="limite_commentaires", disabled=occupe,
+                help="Borne technique contrôlée également côté serveur.")
+        st.subheader("Période")
+        with st.expander("Dates (facultatif)", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
             d1,d2 = st.columns(2)
             d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
             d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
@@ -505,14 +514,6 @@ with onglet_collecte:
                 colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
         st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
-        with st.expander("Options des commentaires"):
-            def respecter_choix_commentaires():
-                if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
-            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
-            st.number_input("Commentaires maximum par publication", min_value=1,
-                max_value=max_commentaires_admin, step=1,
-                key="limite_commentaires", disabled=occupe,
-                help="Borne technique contrôlée également côté serveur.")
         if st.form_submit_button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
