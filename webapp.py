@@ -923,6 +923,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             if record.get("retenue") and job.settings.collecter_commentaires:
                                 from collecte.commentaires import collecter_commentaires
                                 try:
+                                    if (job.settings.source_collecte == "presse"
+                                            and job.settings.presse_moteur == "research"):
+                                        # Les métadonnées sont fournies par Research.
+                                        # Les commentaires restent lus par Selenium :
+                                        # ouvrir explicitement la publication avant
+                                        # d'inspecter son panneau de commentaires.
+                                        driver.get(url)
                                     resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
                                         job.settings.collecter_reponses, verifier=job.check, pause=job.pause,
                                         interact=connexion.intervenir)
