@@ -258,7 +258,6 @@ with onglet_collecte:
                           type="password", disabled=occupe,
                           help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
         st.write("Choisir les médias à collecter")
-        st.caption("Cochez les médias dont vous souhaitez collecter les publications publiques. Aucun hashtag nécessaire.")
         def memoriser_medias():
             st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
         def cocher_tous_les_medias():
@@ -475,9 +474,7 @@ with onglet_collecte:
                     "si elles sont accessibles)."
                 )
         st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
-        if source == "presse":
-            st.caption("Parcours des profils publics des médias sélectionnés. Seuls leurs auteurs sont admis ; les filtres de langue et de période restent disponibles. Couverture potentiellement incomplète.")
-        elif source == "comptes":
+        if source == "comptes":
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
