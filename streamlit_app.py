@@ -452,18 +452,6 @@ with onglet_collecte:
                 "Il est vérifié aussi sur les requêtes API directes."
             ),
         )
-        if source == "hashtags":
-            nombre_tags = 2 if st.session_state.get("second_hashtag", "").strip() else 1
-            st.caption(
-                f"Objectif global : au plus {st.session_state.get('limit', 50)} "
-                "publications distinctes lues sur l'ensemble de la collecte. "
-                + (
-                    "Deux hashtags : le budget est réparti entre eux, y compris en mode ET. "
-                    if nombre_tags == 2 else
-                    "Un seul hashtag : le budget entier lui est attribué. "
-                )
-                + "Le nombre de textes exportés peut être inférieur après filtrage."
-            )
         if source == "presse":
             nombre_medias=len(st.session_state.get("medias",[]))
             if nombre_medias:
@@ -473,7 +461,6 @@ with onglet_collecte:
                     f"(jusqu'à {st.session_state.get('limit',50)*nombre_medias} vidéos au total, "
                     "si elles sont accessibles)."
                 )
-        st.caption("Le nombre de textes exportés peut être inférieur selon les filtres et les publications accessibles.")
         if source == "comptes":
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
