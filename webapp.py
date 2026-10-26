@@ -46,7 +46,7 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
-    presse_moteur: Literal["api", "navigateur"] = "api"
+    presse_moteur: Literal["api", "navigateur", "research"] = "api"
     enrichir: bool = False
     telecharger_mp4: bool = False
     sauvegarde_progressive: bool = False
@@ -478,6 +478,9 @@ class Job:
                             "arret": r.get("discovery_stop", ""),
                             "pagination_bilan": r.get("pagination_bilan", {}),
                             "pages_api": r.get("pages_api", 0),
+                            "pages_research": r.get("pages_research", 0),
+                            "plage_research": r.get("plage_research"),
+                            "fournisseur_donnees": r.get("fournisseur_donnees"),
                             "requetes_tentees": r.get("requetes_tentees", 0),
                             "secuid_resolu": bool(r.get("secuid_resolu", False)),
                             "source_secuid": r.get("source_secuid"),
@@ -760,7 +763,10 @@ def wait_for_user(driver, job: Job, message: str):
 def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
     from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+    from collecte.presse_research import ResearchErreur
     from collecte.quotas_exploitation import QuotaScrapingAtteint
+    if isinstance(erreur, ResearchErreur):
+        return "Research API officielle : " + str(erreur)
     if isinstance(erreur, PresseRateLimitError):
         conservees = len(rapport.get("discovered_urls", []))
         return ("Accès API Presse refusé par TikTok (HTTP 429) : collecte arrêtée. "
@@ -810,6 +816,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     metadonnees_api = {}
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
+    limitation_research = False
     limitation_budget = False
     try:
         job.check()
@@ -843,10 +850,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 try:
                     identifiant_publication = scraper.canonical_post(url)[0]
                     record_api = metadonnees_api.get(identifiant_publication)
-                    if (job.settings.source_collecte == "presse"
-                            and job.settings.presse_moteur == "api"
-                            and not job.settings.collecter_commentaires
-                            and record_api and record_api.get("description")):
+                    if (job.settings.source_collecte == "presse" and record_api
+                            and (job.settings.presse_moteur == "research"
+                                 or (job.settings.presse_moteur == "api"
+                                     and not job.settings.collecter_commentaires
+                                     and record_api.get("description")))):
                         # TikTok a déjà fourni une légende et éventuellement les
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
@@ -967,7 +975,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
-                if job.settings.source_collecte == "presse" and job.settings.presse_moteur == "api":
+                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research"}:
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(donnees, dict):
                             metadonnees_api.setdefault(str(identifiant), donnees)
@@ -993,7 +1001,21 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
                 from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+                from collecte.presse_research import ResearchErreur
                 from collecte.quotas_exploitation import QuotaScrapingAtteint
+                if isinstance(erreur, ResearchErreur):
+                    for identifiant, fiche in (rapport.get("metadonnees_api") or {}).items():
+                        if isinstance(fiche, dict):
+                            metadonnees_api.setdefault(str(identifiant), fiche)
+                    for url in rapport.get("discovered_urls", []):
+                        identite = scraper.canonical_post(url)
+                        if identite and identite[2].casefold() in medias_par_compte:
+                            unique_links.setdefault(identite[0], identite[1])
+                    limitation_research = True
+                    job.update(search_errors=job.search_errors + 1,
+                               status="finalizing",
+                               message="Research API : erreur ou accès refusé ; lot interrompu.")
+                    break
                 if isinstance(erreur, QuotaScrapingAtteint):
                     limitation_budget = True
                     job.update(search_errors=job.search_errors + 1)
@@ -1025,6 +1047,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if job.settings.source_collecte != "hashtags" and len(unique_links) > job.processed:
                 lire_decouvertes()
         # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
+        if limitation_research and len(unique_links) > job.processed:
+            lire_decouvertes()
         if (job.settings.source_collecte == "hashtags" and not limitation_tiktok
                 and not limitation_budget and not job.stop.is_set()):
             lire_decouvertes()
@@ -1074,6 +1098,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if limitation_budget:
             final_message += (" Plafond interne de requêtes API Presse atteint : "
                               "collecte arrêtée sans demander davantage de données à TikTok.")
+            final_status = "partial" if links else "failed"
+        if limitation_research:
+            final_message += (" Research API : lot arrêté dès le premier refus ; "
+                              "données déjà reçues conservées. Vérifier droits et quotas.")
             final_status = "partial" if links else "failed"
         if limitation_tiktok:
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
@@ -1494,7 +1522,10 @@ def create_app(manager=None):
             with urllib.request.urlopen("http://127.0.0.1:" + os.getenv("STREAMLIT_PORT", "8502") + "/_stcore/health",timeout=2): pass
         except OSError: raise HTTPException(503,"Interface Streamlit indisponible.")
         from collecte.presse_api import VERSION_PRESSE
-        return {"status": "ok", "version_presse": VERSION_PRESSE}
+        from collecte.presse_research import VERSION_RESEARCH, identifiants_disponibles
+        return {"status": "ok", "version_presse": VERSION_PRESSE,
+                "version_research": VERSION_RESEARCH,
+                "research_configuree": identifiants_disponibles()}
 
     @app.get("/")
     @app.get("/controle")
