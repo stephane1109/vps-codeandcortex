@@ -109,5 +109,55 @@ class TestsResearch(unittest.TestCase):
         self.assertIsNone(_fiche(v(1, "autre"), "lemondefr"))
 
 
+    def test_worker_presse_research_sans_chrome_et_export_txt(self):
+        """Les résultats Research utilisent le même pipeline et ne lancent pas Chrome."""
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from webapp import Job, StartRequest, execute_job
+        from connect_presse import ConnexionPresse
+        publication = v(1)
+        fiche = _fiche(publication, "lemondefr")
+        def collecte(compte, limite, rapport, **kwargs):
+            self.assertEqual(compte, "lemondefr")
+            rapport.update(discovered_urls=[fiche["url"]],
+                           metadonnees_api={fiche["id"]:fiche},
+                           candidats_examines=1, pages_research=1,
+                           navigation_publications="research_officielle",
+                           discovery_stop="fin_des_periodes")
+            if kwargs.get("progress"):
+                kwargs["progress"](1)
+            return [fiche["url"]]
+        navigateur = Mock(side_effect=AssertionError("Chrome ne doit pas démarrer"))
+        with TemporaryDirectory() as dossier:
+            job = Job("a" * 64, StartRequest(
+                source_collecte="presse", medias=["lemonde"],
+                presse_moteur="research", limit=5,
+            ), Path(dossier))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=collecte):
+                execute_job(job, driver_factory=navigateur)
+            navigateur.assert_not_called()
+            self.assertEqual(job.processed, 1)
+            self.assertEqual(len(job.records), 1)
+            self.assertEqual(job.records[0]["source"], "research_api_officielle")
+            self.assertIn("Manifestation", job.path.read_text(encoding="utf-8"))
+
+    def test_research_cle_secrete_non_presente_en_sortie_health(self):
+        from tempfile import TemporaryDirectory
+        from fastapi.testclient import TestClient
+        from webapp import create_app, Manager
+        with TemporaryDirectory() as dossier, \
+             patch.dict(os.environ, {"TIKTOK_RESEARCH_CLIENT_KEY": "cle_test",
+                                     "TIKTOK_RESEARCH_CLIENT_SECRET": "secret_test"}), \
+             patch("urllib.request.urlopen") as controle:
+            controle.return_value.__enter__.return_value = Mock()
+            with TestClient(create_app(Manager(data_dir=dossier))) as client:
+                rep = client.get("/healthz")
+        self.assertEqual(rep.status_code, 200)
+        self.assertTrue(rep.json()["research_configuree"])
+        self.assertNotIn("secret_test", rep.text)
+        self.assertNotIn("cle_test", rep.text)
+
+
 if __name__ == "__main__":
     unittest.main()
