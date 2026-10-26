@@ -27,7 +27,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
@@ -47,6 +47,10 @@ class StartRequest(BaseModel):
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
     presse_moteur: Literal["api", "navigateur", "research"] = "api"
+    # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
+    # ni exposés par snapshot(), model_dump() ou les diagnostics.
+    research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
     enrichir: bool = False
     telecharger_mp4: bool = False
     sauvegarde_progressive: bool = False
@@ -103,6 +107,15 @@ class StartRequest(BaseModel):
     def valider_sources(self):
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
+        if self.source_collecte == "presse" and self.presse_moteur == "research":
+            cle = self.research_client_key.get_secret_value().strip() if self.research_client_key else ""
+            secret = (self.research_client_secret.get_secret_value().strip()
+                      if self.research_client_secret else "")
+            if bool(cle) != bool(secret):
+                raise ValueError("Research API : saisir les deux identifiants ensemble.")
+            from collecte.presse_research import identifiants_disponibles
+            if not (cle and secret) and not identifiants_disponibles():
+                raise ValueError("Research API : renseigner Client key et Client secret dans l'application.")
         if self.source_collecte == "presse":
             # La collecte média dépend uniquement des comptes choisis ; ignorer
             # aussi les anciens hashtags présents dans une requête sauvegardée.
@@ -1144,10 +1157,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             except Exception:
                 pass
         if connexion is not None:
+            # Ne pas conserver les identifiants d'un utilisateur après la collecte.
+            if getattr(connexion, "moteur_collecte", None) == "research":
+                connexion.research_credentiels = None
             try:
                 connexion.fermer()
             except scraper.WebDriverException:
                 LOG.warning("Fermeture du navigateur impossible pour %s", job.id)
+        # Les valeurs restent en mémoire uniquement durant le job actif.
+        job.settings.research_client_key = None
+        job.settings.research_client_secret = None
         try:
             job.save()
         except OSError:

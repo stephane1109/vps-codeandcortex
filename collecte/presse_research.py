@@ -5,6 +5,7 @@ pas de secUid, pas de téléchargement vidéo, jamais de tentative sur l'API web
 Documentation : https://developers.tiktok.com/docs/en/research-api-specs-query-videos
 """
 from datetime import datetime, timedelta, timezone, date
+import hashlib
 import json
 import os
 import re
@@ -80,16 +81,21 @@ def _url_videos():
     return URL_VIDEOS + "?fields=" + CHAMPS
 
 
-def _jeton(requete=_requete, maintenant=time.monotonic):
-    cle = os.getenv("TIKTOK_RESEARCH_CLIENT_KEY", "").strip()
-    secret = os.getenv("TIKTOK_RESEARCH_CLIENT_SECRET", "").strip()
+def _jeton(requete=_requete, maintenant=time.monotonic, *, credentiels=None):
+    if credentiels is None:
+        cle = os.getenv("TIKTOK_RESEARCH_CLIENT_KEY", "").strip()
+        secret = os.getenv("TIKTOK_RESEARCH_CLIENT_SECRET", "").strip()
+    else:
+        cle, secret = (valeur.strip() for valeur in credentiels)
     if not cle or not secret:
         raise ResearchAccesRefuse(
             "Research API non configurée : renseigner TIKTOK_RESEARCH_CLIENT_KEY et "
             "TIKTOK_RESEARCH_CLIENT_SECRET après validation du projet."
         )
     with _verrou_token:
-        identité = (cle, secret)
+        # Empreinte seulement : ne jamais conserver le Client secret brut dans
+        # le cache partagé entre les sessions.
+        identité = hashlib.sha256((cle + "\0" + secret).encode("utf-8")).hexdigest()
         horloge = maintenant()
         if (_cache_token["identite"] == identité and _cache_token["valeur"]
                 and horloge + 90 < _cache_token["expire"]):
@@ -181,7 +187,8 @@ def _fiche(video, compte):
 
 def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin=None,
                                     check=None, progress=None, requete=_requete,
-                                    jeton=None, pause=time.sleep, aujourd_hui=None):
+                                    jeton=None, pause=time.sleep, aujourd_hui=None,
+                                    credentiels=None):
     """Un média par recherche, pages et périodes bornées ; aucune relance en 429."""
     compte = normaliser_compte(compte)
     verifier = check or (lambda: None)
@@ -195,7 +202,7 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
-    acces = jeton if jeton is not None else _jeton(requete=requete)
+    acces = jeton if jeton is not None else _jeton(requete=requete, credentiels=credentiels)
     if not isinstance(acces, str) or not acces:
         raise ResearchAccesRefuse("Research API : jeton absent.")
     contenus = {}

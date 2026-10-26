@@ -265,6 +265,13 @@ with onglet_collecte:
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
+        if st.session_state.get("presse_moteur") == "research":
+            st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
+                          type="password", disabled=occupe,
+                          help="Client key de l'application TikTok Research approuvée.")
+            st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
+                          type="password", disabled=occupe,
+                          help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
         # Une seule ligne d'information Streamlit : plusieurs st.caption,
         # st.warning ou st.error consécutifs créent des espaces vides inutiles.
         # Les messages sont assemblés sans saut de paragraphe ; une alerte
@@ -294,8 +301,8 @@ with onglet_collecte:
                 else:
                     alerte_presse = True
                     informations_presse.append(
-                        "Après approbation, définir TIKTOK_RESEARCH_CLIENT_KEY et "
-                        "TIKTOK_RESEARCH_CLIENT_SECRET dans Coolify."
+                        "Saisissez les deux identifiants Research dans le formulaire ci-dessous."
+                        " Un réglage permanent dans Coolify reste facultatif."
                     )
             except RuntimeError as erreur:
                 alerte_presse = True
@@ -503,6 +510,9 @@ with onglet_collecte:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive")}
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
+                if source == "presse" and valeurs["presse_moteur"] == "research":
+                    valeurs["research_client_key"] = st.session_state.get("research_client_key", "")
+                    valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
                 valeurs["rechercher_dans_texte"] = (
                     bool(st.session_state.get("rechercher_dans_texte", False)) if source != "presse" else False
                 )

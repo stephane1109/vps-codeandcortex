@@ -16,6 +16,14 @@ class ConnexionPresse(SessionNavigateur):
         self.research_debut = parametres.date_debut
         self.research_fin = parametres.date_fin
         self.commentaires_research = bool(parametres.collecter_commentaires)
+        self.research_credentiels = None
+        if self.moteur_collecte == "research":
+            cle = (parametres.research_client_key.get_secret_value().strip()
+                   if parametres.research_client_key else "")
+            secret = (parametres.research_client_secret.get_secret_value().strip()
+                      if parametres.research_client_secret else "")
+            if cle and secret:
+                self.research_credentiels = (cle, secret)
         return [dict(m) for m in medias]
 
     def ouvrir(self):
@@ -37,7 +45,8 @@ class ConnexionPresse(SessionNavigateur):
                                "navigateur_decouverte": False}
         return {"check": self.verifier, "progress": progression,
                 "research_debut": self.research_debut,
-                "research_fin": self.research_fin}
+                "research_fin": self.research_fin,
+                "research_credentiels": self.research_credentiels}
 
     def decouvrir(self, source, rapport, *, contexte="", progression=None):
         from collecte.comptes import collecter_compte
