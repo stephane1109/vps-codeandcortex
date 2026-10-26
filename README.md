@@ -5,6 +5,58 @@ puis télécharger un fichier **`.txt` en UTF-8**. L'interface fonctionne sur
 ordinateur et mobile. Le navigateur Selenium s'exécute sur le serveur :
 l'utilisateur n'a rien à installer.
 
+
+## Moteurs Presse et médias (octobre 2026)
+
+Dans **Collecte → Presse et médias**, sélectionner une seule méthode par collecte :
+
+- **API web TikTok (secUid)** : méthode historique non officielle, maintenue avec
+  récupération depuis l'embed du créateur, pagination sur
+  `/api/creator/item_list/`, contrôle de l'auteur et arrêt immédiat après
+  HTTP 429. Les restrictions TikTok ne sont pas contournées.
+- **Research API officielle** : exige l'approbation préalable de TikTok et le droit
+  `research.data.basic`. Collecte par `username`, jusqu'à 100 vidéos par
+  page, période de 30 jours maximum par requête, fenêtres successives pour les
+  intervalles plus longs, vérification stricte de l'auteur, export TXT/SQLite/ZIP.
+  Sans période saisie, interroge les **30 derniers jours UTC** ; le nombre demandé
+  est un objectif, pas une garantie d'exhaustivité. Recherche limitée à 60 pages
+  par compte et par collecte.
+- **Grille du profil (Selenium)** : méthode navigateur indépendante.
+
+Activer Research dans les variables d'environnement du **backend** Coolify,
+uniquement après autorisation du projet :
+
+```text
+TIKTOK_RESEARCH_CLIENT_KEY=...
+TIKTOK_RESEARCH_CLIENT_SECRET=...
+```
+
+Ne pas saisir ces secrets dans Streamlit, ni dans GitHub ou les logs.
+L'endpoint d'authentification officiel est
+`POST https://open.tiktokapis.com/v2/oauth/token/` (jeton client renouvelable),
+et la requête vidéo est
+`POST https://open.tiktokapis.com/v2/research/video/query/`.
+L'écran `/healthz` ne publie **que la présence des identifiants**, jamais
+leur valeur ; leur présence ne prouve pas que l'accès est autorisé.
+Le refus officiel interrompt le lot sans basculement vers les API non officielles.
+
+L'API développeur classique **Display API** n'est pas ajoutée : son accès
+`video.list` requiert l'autorisation OAuth **de chaque propriétaire de compte**.
+Une simple clé d'application ne permet pas de collecter tous les médias.
+
+Research transmet les descriptions et compteurs avec leur provenance ; les
+données absentes restent absentes. Les MP4 ne proviennent **pas** de la Research
+API et restent liés à l'outil de téléchargement séparé. Lorsque l'utilisateur
+demande les textes des commentaires, l'implémentation actuelle utilise encore
+Selenium ; ce n'est pas une collecte de commentaires par Research API.
+Les nouveaux posts et leurs compteurs peuvent être différés selon les règles
+de publication des données Research de TikTok.
+
+Documentation :
+- https://developers.tiktok.com/docs/en/research-api-get-started
+- https://developers.tiktok.com/docs/en/research-api-specs-query-videos
+- https://developers.tiktok.com/docs/en/display-api-overview
+
 ## Utilisation
 
 1. Saisir un hashtag, avec ou sans `#`, et choisir jusqu'à 300 publications.
