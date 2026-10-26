@@ -49,7 +49,12 @@ def lancer(chemin, donnees):
         resultat = api(chemin, donnees)
     except RuntimeError as erreur:
         st.error(str(erreur)); return
-    if "id" in resultat: st.session_state["collecte"] = resultat
+    if "id" in resultat:
+        st.session_state["collecte"] = resultat
+        if chemin == "/api/jobs" and donnees.get("presse_moteur") == "research":
+            # Effacer les champs sensibles avant le prochain affichage,
+            # sans écraser un widget déjà instancié pendant cette exécution.
+            st.session_state["_effacer_research_apres_requete"] = True
     st.rerun()
 
 
@@ -133,6 +138,9 @@ if "initialise" not in st.session_state:
 st.session_state.setdefault("telecharger_mp4", False)
 st.session_state.setdefault("sauvegarde_progressive", False)
 st.session_state.setdefault("presse_moteur", "api")
+if st.session_state.pop("_effacer_research_apres_requete", False):
+    st.session_state.pop("research_client_key", None)
+    st.session_state.pop("research_client_secret", None)
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
@@ -298,11 +306,16 @@ with onglet_collecte:
                     informations_presse.append(
                         "Identifiants serveur présents ; l'accès reste soumis à l'approbation TikTok."
                     )
+                elif (st.session_state.get("research_client_key", "").strip()
+                      and st.session_state.get("research_client_secret", "").strip()):
+                    informations_presse.append(
+                        "Identifiants saisis pour cette collecte ; ils ne seront pas stockés."
+                    )
                 else:
                     alerte_presse = True
                     informations_presse.append(
-                        "Saisissez les deux identifiants Research dans le formulaire ci-dessous."
-                        " Un réglage permanent dans Coolify reste facultatif."
+                        "Renseigner Client key et Client secret ci-dessus pour lancer Research. "
+                        "Les variables d'environnement Coolify restent facultatives."
                     )
             except RuntimeError as erreur:
                 alerte_presse = True
