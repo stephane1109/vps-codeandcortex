@@ -42,11 +42,8 @@ def identifiants_disponibles():
 
 def _requete(url, *, data, headers):
     """POST vers deux URL officielles fixes, sans redirection vers un tiers."""
-    if url not in (URL_TOKEN, URL_VIDEOS + "?fields=" + urlencode({"x": CHAMPS})[2:]):
-        # La chaîne fields exacte est construite par _url_videos, pas fournie
-        # par l'utilisateur ; vérifier en plus le chemin effectif.
-        if url != _url_videos():
-            raise ResearchErreur("Endpoint Research non autorisé.")
+    if url not in (URL_TOKEN, _url_videos()):
+        raise ResearchErreur("Endpoint Research non autorisé.")
     req = Request(url, data=data, headers=headers, method="POST")
     try:
         with urlopen(req, timeout=25) as resultat:
@@ -150,7 +147,7 @@ def _fiche(video, compte):
         return None
     if auteur != compte:
         return None
-    identifiant = str(video.get("id") or "")
+    identifiant = str(video.get("id") or video.get("video_id") or "")
     if not re.fullmatch(r"\d{5,30}", identifiant):
         return None
     description = video.get("video_description")
@@ -235,7 +232,7 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             videos = donnees["videos"]
             rapport["candidats_examines"] += len(videos)
             for video in videos:
-                identifiant = str(video.get("id") or "") if isinstance(video, dict) else ""
+                identifiant = str(video.get("id") or video.get("video_id") or "") if isinstance(video, dict) else ""
                 if identifiant in vus:
                     continue
                 vus.add(identifiant)

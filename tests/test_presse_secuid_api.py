@@ -274,6 +274,27 @@ class PresseSecUidTests(unittest.TestCase):
                 client=client,pause=lambda _:None)
         self.assertEqual(len(client.vues),1)
 
+    def test_secuid_conserve_la_route_originale_et_son_curseur(self):
+        """Conserver la méthode initiale secUid, sans recherche Selenium."""
+        from urllib.parse import urlsplit, parse_qs
+        client = Client([{
+            "statusCode":0, "itemList":[item(1)],
+            "hasMorePrevious":False,
+        }])
+        rapport = {}
+        urls = collecter_videos_presse_api(COMPTE, 10, rapport,
+            client=client, clock=lambda:1780000000,
+            pause=lambda _:None)
+        self.assertEqual(len(urls), 1)
+        self.assertIn("/embed/@" + COMPTE, client.vues[0])
+        appels = [url for url in client.vues if "/api/creator/item_list/" in url]
+        self.assertEqual(len(appels), 1)
+        parametres = parse_qs(urlsplit(appels[0]).query)
+        self.assertEqual(parametres["secUid"], [SECUID])
+        self.assertEqual(parametres["cursor"], [str(1780000000 * 1000)])
+        self.assertEqual(parametres["count"], ["15"])
+        self.assertEqual(rapport["navigation_publications"], "api_liste_createur")
+
     def test_collecte_50_videos_en_quatre_pages_de_15(self):
         pages=[]
         for debut in (0,15,30,45):

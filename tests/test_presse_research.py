@@ -105,6 +105,13 @@ class TestsResearch(unittest.TestCase):
         self.assertEqual(fiche["source"], "research_api_officielle")
         self.assertEqual(fiche["status"], "empty_caption")
 
+    def test_identifiant_video_id_officiel_est_accepte(self):
+        objet = v(4)
+        objet["video_id"] = objet.pop("id")
+        fiche = _fiche(objet, "lemondefr")
+        self.assertIsNotNone(fiche)
+        self.assertEqual(fiche["id"], str(7000000000000000004))
+
     def test_rejet_autres_auteurs(self):
         self.assertIsNone(_fiche(v(1, "autre"), "lemondefr"))
 
