@@ -259,8 +259,9 @@ with onglet_collecte:
             st.warning("Trop de médias sélectionnés pour une même collecte : "
                        f"maximum {max_sources_admin}.")
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
-            ["api", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
-            format_func=lambda v: "API web TikTok (secUid)" if v=="api" else "Grille du profil (Selenium, comme les hashtags)",
+            ["api", "research", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
+            format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
+                                   "navigateur":"Grille du profil (Selenium)"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -276,71 +277,93 @@ with onglet_collecte:
                 "Si HTTP 429, choisir manuellement « Grille du profil (Selenium) » "
                 "pour une nouvelle collecte."
             )
+        elif st.session_state.get("presse_moteur") == "research":
+            informations_presse.append("Research API officielle : projet approuvé nécessaire. Période par défaut : 30 jours UTC ; périodes longues découpées en tranches de 30 jours. Les MP4 ne sont pas fournis par cette API.")
         else:
             informations_presse.append("Moteur : Grille du profil (Selenium).")
-        budget_api = limites_admin.get("budget_api_presse", {})
-        informations_presse.append(
-            f"Budget local Presse : {budget_api.get('requete_minute', 0)}/"
-            f"{budget_api.get('maximum_minute', '?')} sur 1 min ; "
-            f"{budget_api.get('requete_heure', 0)}/"
-            f"{budget_api.get('maximum_heure', '?')} sur 1 h ; "
-            f"{budget_api.get('requete_24h', 0)}/"
-            f"{budget_api.get('maximum_24h', '?')} sur 24 h."
-        )
-        echeances = (
-            ("minute", budget_api.get("reprise_locale_minute_utc")),
-            ("heure", budget_api.get("reprise_locale_heure_utc")),
-            ("jour UTC", budget_api.get("reprise_locale_jour_utc")),
-            ("enregistrements UTC", budget_api.get("reprise_locale_enregistrements_utc")),
-        )
-        plafonds_epuises = [
-            libelle + " : " +
-            datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
-            for libelle, epoch in echeances
-            if isinstance(epoch, (int, float)) and epoch > 0
-        ]
-        if plafonds_epuises:
-            alerte_presse = True
-            informations_presse.append("Quotas locaux épuisés (réinitialisation) : "
-                                        + " ; ".join(plafonds_epuises) + ".")
+        if st.session_state.get("presse_moteur") == "research":
+            try:
+                statut_research = api("/healthz")
+                informations_presse.append(
+                    "Version : " + statut_research.get("version_research", "non renseignée")
+                )
+                if statut_research.get("research_configuree"):
+                    informations_presse.append(
+                        "Identifiants serveur présents ; l'accès reste soumis à l'approbation TikTok."
+                    )
+                else:
+                    alerte_presse = True
+                    informations_presse.append(
+                        "Après approbation, définir TIKTOK_RESEARCH_CLIENT_KEY et "
+                        "TIKTOK_RESEARCH_CLIENT_SECRET dans Coolify."
+                    )
+            except RuntimeError as erreur:
+                alerte_presse = True
+                informations_presse.append("Research API : serveur indisponible : " + str(erreur))
         else:
-            informations_presse.append("Quotas locaux disponibles.")
-        try:
-            limitation_presse = api("/api/presse/limitation")
-            if limitation_presse.get("actif"):
-                api_tiktok_suspendue = st.session_state.get("presse_moteur", "api") == "api"
-                restant = limitation_presse.get("restant_secondes", 0)
+            budget_api = limites_admin.get("budget_api_presse", {})
+            informations_presse.append(
+                f"Budget local Presse : {budget_api.get('requete_minute', 0)}/"
+                f"{budget_api.get('maximum_minute', '?')} sur 1 min ; "
+                f"{budget_api.get('requete_heure', 0)}/"
+                f"{budget_api.get('maximum_heure', '?')} sur 1 h ; "
+                f"{budget_api.get('requete_24h', 0)}/"
+                f"{budget_api.get('maximum_24h', '?')} sur 24 h."
+            )
+            echeances = (
+                ("minute", budget_api.get("reprise_locale_minute_utc")),
+                ("heure", budget_api.get("reprise_locale_heure_utc")),
+                ("jour UTC", budget_api.get("reprise_locale_jour_utc")),
+                ("enregistrements UTC", budget_api.get("reprise_locale_enregistrements_utc")),
+            )
+            plafonds_epuises = [
+                libelle + " : " +
+                datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+                for libelle, epoch in echeances
+                if isinstance(epoch, (int, float)) and epoch > 0
+            ]
+            if plafonds_epuises:
                 alerte_presse = True
-                informations_presse.append(
-                    f"TikTok : Retry-After actif, {restant//60} min {restant%60} s restantes."
-                )
-            elif limitation_presse.get("ancien_429_sans_delai"):
-                dernier_429 = limitation_presse.get("dernier_429")
-                date_429 = (
-                    datetime.fromtimestamp(dernier_429, tz=timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
-                    if isinstance(dernier_429, (int, float)) and dernier_429 > 0
-                    else "date inconnue"
-                )
-                informations_presse.append(
-                    "Dernier HTTP 429 : " + date_429 +
-                    " ; aucun Retry-After indiqué, reprise TikTok inconnue."
-                )
+                informations_presse.append("Quotas locaux épuisés (réinitialisation) : "
+                                            + " ; ".join(plafonds_epuises) + ".")
             else:
-                informations_presse.append("TikTok : aucun Retry-After actif.")
-        except RuntimeError as erreur:
-            alerte_presse = True
-            informations_presse.append("État du Retry-After indisponible : " + str(erreur))
-        informations_presse.append("Quota officiel de l'API web interne : non publié.")
-        try:
-            version_presse = api("/healthz").get("version_presse")
-            if version_presse:
-                informations_presse.append("Version : " + version_presse)
-            else:
+                informations_presse.append("Quotas locaux disponibles.")
+            try:
+                limitation_presse = api("/api/presse/limitation")
+                if limitation_presse.get("actif"):
+                    api_tiktok_suspendue = st.session_state.get("presse_moteur", "api") == "api"
+                    restant = limitation_presse.get("restant_secondes", 0)
+                    alerte_presse = True
+                    informations_presse.append(
+                        f"TikTok : Retry-After actif, {restant//60} min {restant%60} s restantes."
+                    )
+                elif limitation_presse.get("ancien_429_sans_delai"):
+                    dernier_429 = limitation_presse.get("dernier_429")
+                    date_429 = (
+                        datetime.fromtimestamp(dernier_429, tz=timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+                        if isinstance(dernier_429, (int, float)) and dernier_429 > 0
+                        else "date inconnue"
+                    )
+                    informations_presse.append(
+                        "Dernier HTTP 429 : " + date_429 +
+                        " ; aucun Retry-After indiqué, reprise TikTok inconnue."
+                    )
+                else:
+                    informations_presse.append("TikTok : aucun Retry-After actif.")
+            except RuntimeError as erreur:
                 alerte_presse = True
-                informations_presse.append("Version serveur Presse absente : vérifier Coolify.")
-        except RuntimeError as erreur:
-            alerte_presse = True
-            informations_presse.append("Version serveur indisponible : " + str(erreur))
+                informations_presse.append("État du Retry-After indisponible : " + str(erreur))
+            informations_presse.append("Quota officiel de l'API web interne : non publié.")
+            try:
+                version_presse = api("/healthz").get("version_presse")
+                if version_presse:
+                    informations_presse.append("Version : " + version_presse)
+                else:
+                    alerte_presse = True
+                    informations_presse.append("Version serveur Presse absente : vérifier Coolify.")
+            except RuntimeError as erreur:
+                alerte_presse = True
+                informations_presse.append("Version serveur indisponible : " + str(erreur))
         resume_presse = " · ".join(informations_presse)
         if alerte_presse:
             st.warning(resume_presse)
@@ -447,7 +470,7 @@ with onglet_collecte:
             d1,d2 = st.columns(2)
             d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
             d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
-            st.caption("Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
+            st.caption("Jours inclus en UTC. Research API : 30 derniers jours par défaut, fenêtres successives de 30 jours pour une période plus longue." if source=="presse" and st.session_state.get("presse_moteur")=="research" else "Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
@@ -654,7 +677,9 @@ with onglet_collecte:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
                             navigation=recherche.get("navigation_publications")
-                            if navigation=="api_liste_createur":
+                            if navigation=="research_officielle":
+                                st.caption(f"Research API : {recherche.get('pages_research',0)} page(s), {recherche.get('liens',0)} vidéo(s) retenue(s).")
+                            elif navigation=="api_liste_createur":
                                 provenance=recherche.get("source_secuid")
                                 resolution=(
                                     "identifiant public vérifié lors d'une collecte précédente"
@@ -748,7 +773,9 @@ with onglet_collecte:
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
                                 st.caption("Diagnostic : " + code_recherche)
-                                if code_recherche=="tiktok_limitation_429":
+                                if code_recherche in {"research_acces_refuse", "research_indisponible"}:
+                                    st.warning("Research API officielle : " + str(diagnostic_recherche.get("detail") or code_recherche))
+                                elif code_recherche=="tiktok_limitation_429":
                                     st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
                                     st.info(
