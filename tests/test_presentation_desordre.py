@@ -99,10 +99,39 @@ class TestsPresentationDesordre(unittest.TestCase):
         self.assertEqual(graphique['layer'][0]['mark']['type'],'line')
         self.assertEqual(graphique['layer'][0]['mark']['stroke'],'#FFFFFF')
         self.assertEqual(graphique['layer'][1]['mark'],original['mark'])
-        self.assertEqual(graphique['layer'][1]['encoding'],original['encoding'])
+        self.assertEqual(graphique['layer'][1]['encoding']['x'],original['encoding']['x'])
+        self.assertEqual(graphique['layer'][1]['encoding']['y'],original['encoding']['y'])
+        self.assertEqual(graphique['layer'][1]['encoding']['color']['field'],
+                         'segment_regression')
+        self.assertEqual(graphique['layer'][1]['transform'][0]['as'],'segment_regression')
+        self.assertEqual(graphique['layer'][1]['encoding']['color']['scale']['domain'],[
+            'Au-dessus de la droite','Sur la droite','En dessous de la droite'
+        ])
+        self.assertEqual(len(graphique['layer'][1]['encoding']['color']['scale']['range']),3)
+        self.assertTrue(any(t['field']=='segment_regression'
+                            for t in graphique['layer'][1]['encoding']['tooltip']))
         self.assertEqual(graphique['height'],380)
         self.assertEqual(specification,original)
         self.assertEqual(points['x'].tolist(),[10.,20.,30.,40.])
+
+    def test_segments_regression_sans_modifier_points_ni_axes(self):
+        import copy
+        tableau=pd.DataFrame({
+            'numero_video':[1,2,3,4,5],
+            'publication_id':['1','2','3','4','5'],
+            'indice_desordre':[1,2,3,4,5],
+            'likes':[1,2,3,4,100],
+        })
+        points,spec,_=preparer_graphique(tableau,'indice_desordre','likes','Indice','Likes')
+        spec_original=copy.deepcopy(spec)
+        points_originaux=points.copy(deep=True)
+        graphique,erreur=superposer_droite_regression(points,spec)
+        self.assertIsNone(erreur)
+        calcul=graphique['layer'][1]['transform'][0]['calculate']
+        for libelle in ('Au-dessus de la droite','En dessous de la droite','Sur la droite'):
+            self.assertIn(libelle,calcul)
+        pd.testing.assert_frame_equal(points,points_originaux)
+        self.assertEqual(spec,spec_original)
 
     def test_droite_impossible_avec_peu_de_points_ou_variable_constante(self):
         cas=[

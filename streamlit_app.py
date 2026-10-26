@@ -1276,9 +1276,9 @@ with onglet_multimodale:
                               if nom!='violence_visible']
             colonnes_annotations={"annotation_violence",*[v["id"] for v in variables_personnalisees]}
             etat_finalise=etat.get('statut') in ('termine','partiel')
-            st.caption("Annotez directement les colonnes « Violence physique visible » et vos variables personnalisées. "
-                       "Choisissez Non évaluée, Non (0) ou Oui (1), puis enregistrez. "
-                       "Non évaluée reste une valeur manquante, jamais un zéro.")
+            st.caption("Annotez « Mouvements dans l’image » et vos colonnes personnalisées : "
+                       "1 = mouvements visibles, 0 = aucun mouvement visible, Non évaluée = manquant. "
+                       "Les anciennes annotations de violence doivent être revérifiées avant de les interpréter comme des mouvements.")
             # Un formulaire empêche chaque sélection de provoquer un rerun
             # de Streamlit et de remettre la colonne à « Non évaluée ».
             # Les cellules et la ligne restent affichées jusqu'à la sauvegarde.
@@ -1299,7 +1299,7 @@ with onglet_multimodale:
                             help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
                         'publication_id':st.column_config.TextColumn('ID TikTok'),
                         'annotation_violence':st.column_config.SelectboxColumn(
-                            'Violence physique visible',options=list(options_violence),
+                            'Mouvements dans l’image',options=list(options_violence),
                             required=True,help=AIDES_INDICATEURS['violence_visible'],width='medium'),
                         'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
                         'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',
@@ -1320,7 +1320,7 @@ with onglet_multimodale:
                         retour=api(f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
                                    {'annotations':changements_violence})
                         if not retour.get("ok"):
-                            raise RuntimeError("Le serveur n'a pas confirmé le codage de violence.")
+                            raise RuntimeError("Le serveur n’a pas confirmé le codage des mouvements.")
                     if changements_personnalises:
                         retour=api(f"/api/jobs/{tache_desordre['id']}/desordre/codages",
                                    {'annotations':changements_personnalises})
@@ -1335,7 +1335,7 @@ with onglet_multimodale:
                         }
                         if any(confirmees.get(ch['publication_id'],'absent') !=
                                ch['violence_visible'] for ch in changements_violence):
-                            raise RuntimeError("La relecture ne confirme pas les annotations de violence.")
+                            raise RuntimeError("La relecture ne confirme pas les annotations des mouvements.")
                         nouveaux_codages=(nouvelles_donnees.get("codages_personnalises") or {}).get("valeurs",{})
                         if any(nouveaux_codages.get(ch["variable_id"],{}).get(ch["publication_id"]) != ch["valeur"]
                                for ch in changements_personnalises):
@@ -1360,10 +1360,10 @@ with onglet_multimodale:
             indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
                 'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
                 'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)',
-                'violence_visible':'Violence physique visible — codage manuel (0/1)'}
+                'violence_visible':'Mouvements dans l’image — codage manuel (0/1)'}
             engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','favoris':'Nombre de favoris','vues':'Nombre de vues',
                 'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
-            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur automatique ou le codage manuel de violence. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
+            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur automatique ou le codage manuel des mouvements dans l’image. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
             autres_mesures={cle:nom for cle,nom in indicateurs.items() if cle!='violence_visible'} if axe_x=='violence_visible' else {}
             variables_verticales={**engagements, **autres_mesures}
             # Une nouvelle option ne doit pas rendre invalide une ancienne sélection Streamlit.
@@ -1375,13 +1375,14 @@ with onglet_multimodale:
             if axe_y in engagements:
                 st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
             else:
-                st.caption("Comparer les deux groupes (violence oui/non) sur les valeurs de l’indicateur visuel automatique.")
+                st.caption("Comparer les deux groupes (mouvements visibles : oui/non) sur les valeurs de l’indicateur visuel automatique.")
             afficher_droite=st.checkbox("Afficher la droite de régression linéaire",
                 value=False, key="desordre_droite_regression",
                 help="Ajoute une droite de tendance en pointillés au nuage de points, quand au moins "
                      "trois vidéos ont deux mesures valides et qu'aucune variable n'est constante. "
-                     "Elle représente une régression linéaire (moindres carrés) sur les valeurs brutes, "
-                     "pas le coefficient de Spearman (ρ), qui compare les rangs. "
+                     "Les points sont colorés selon leur position au-dessus, au-dessous ou sur la droite. "
+                     "Il s’agit de moindres carrés sur les valeurs brutes, "
+                     "pas du coefficient de Spearman (ρ), qui compare les rangs. "
                      "Une droite ne prouve pas une causalité et peut être sensible aux valeurs extrêmes.")
             if axe_x not in tableau or axe_y not in tableau:
                 st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
@@ -1399,7 +1400,7 @@ with onglet_multimodale:
                         if raison_droite:
                             st.info("Droite non disponible : " + raison_droite)
                         else:
-                            st.caption("Droite en pointillés : régression linéaire descriptive sur les valeurs brutes, distincte de la corrélation de Spearman. Elle ne démontre pas de causalité.")
+                            st.caption("Droite en pointillés : régression linéaire descriptive. Points bleus = au-dessus, orange = au-dessous, gris = sur la droite (résidus). Ces couleurs ne représentent ni des classes statistiques ni une causalité.")
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
                 else:
                     st.vega_lite_chart(points,specification,use_container_width=True)
@@ -1411,21 +1412,21 @@ with onglet_multimodale:
                             ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée'),(3,0,6,6)):
                         colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
                 elif axe_x=='violence_visible':
-                    st.info("Pour le codage de violence, évaluez plusieurs vidéos dans les deux catégories (0 et 1).")
+                    st.info("Pour le codage des mouvements, évaluez plusieurs vidéos dans les deux catégories (0 et 1).")
             with st.expander("Toutes les corrélations"):
                 st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
                               for ligne in donnees.get('correlations',[])],hide_index=True,
                     column_config={nom:st.column_config.Column(help=aide) for nom,aide in AIDES_STATISTIQUES.items()})
             st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro. "
-                       "Les corrélations avec la violence sont exploratoires et calculées uniquement "
+                       "Les corrélations avec les mouvements annotés sont exploratoires et calculées uniquement "
                        "sur les annotations enregistrées, avec correction séparée pour les treize comparaisons possibles.")
             if etat.get('statut') in ('termine','partiel'):
-                st.link_button("Corrélations avec violence (CSV)",
+                st.link_button("Corrélations avec mouvements (CSV)",
                     f"/api/jobs/{tache_desordre['id']}/desordre/correlations_violence.csv")
             st.link_button("Exporter le tableau complet (CSV réimportable)",
                 f"/api/jobs/{tache_desordre['id']}/desordre/tableau-complet.csv",
-                help="URL TikTok, indice de désordre, mouvements, engagement, "
-                     "violence, variables personnalisées et provenance du lot.")
+                help="URL TikTok, indice de désordre, mouvements annotés, engagement, "
+                     "variables personnalisées et provenance du lot.")
             for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
                 if etat.get('statut') in ('termine','partiel') or nom=='indicateurs_engagement.csv':
                     st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")

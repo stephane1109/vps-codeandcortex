@@ -54,12 +54,12 @@ AIDE_AGREGATION_DESORDRE=(
     "par leur durée. Les constantes **0,05** et **0,01** sont des choix exploratoires, "
     "non des seuils scientifiques validés. Un score élevé décrit une **agitation visuelle** : "
     "il ne signifie pas « violence », ni « désordre social », ni une probabilité. "
-    "La violence physique visible est une **annotation humaine distincte (0/1)**."
+    "La présence de **mouvements dans l’image** est une annotation humaine distincte (0/1), et non un indicateur automatique de violence."
 )
 
 AIDES_INDICATEURS={
     'indice_desordre':AIDE_INDICE,
-    'violence_visible':"Codage manuel réalisé après visionnage de la portion de vidéo analysée : 1 = violence physique visible ; 0 = absence de violence physique visible ; valeur manquante = vidéo non évaluée. Ce codage humain ne se déduit pas de l’indice automatique de désordre. La variable binaire permet des comparaisons exploratoires, sans prouver de lien causal.",
+    'violence_visible':"Mouvements dans l’image : codage manuel binaire réalisé après visionnage. Oui (1) = mouvements visibles dans la séquence ; Non (0) = aucun mouvement visible ; Non évaluée = vidéo non annotée. Ce n’est ni une détection automatique ni une mesure de violence. Les annotations anciennes de violence physique doivent être revérifiées avant de les interpréter comme des mouvements.",
     'instabilite_camera':'Variation de la vitesse du mouvement global estimé, en diagonales d’image par seconde au carré. Un déplacement régulier peut avoir une faible instabilité.',
     'entropie_directionnelle':'Diversité des directions du mouvement résiduel, de 0 à 1 : proche de 0 pour une direction dominante ou aucun mouvement, proche de 1 pour des directions équilibrées.',
     'irregularite_temporelle':'Variation relative de l’amplitude du mouvement entre deux intervalles du même plan, de 0 à 1. Proche de 0 si elle reste stable.',
@@ -141,20 +141,61 @@ def superposer_droite_regression(points, specification):
     if points["x"].nunique() < 2 or points["y"].nunique() < 2:
         return specification, "Une des deux variables est constante ; aucune tendance linéaire informative ne peut être tracée."
 
-    # Les données sont transmises à st.vega_lite_chart comme source commune.
-    # Tracer la droite en premier laisse chaque point et son infobulle visibles.
+    # Classifier selon le signe du résidu y - y_prédit (moindres carrés),
+    # sans toucher aux coordonnées originales ni aux identifiants TikTok.
+    x = points["x"].astype(float)
+    y = points["y"].astype(float)
+    moyenne_x, moyenne_y = float(x.mean()), float(y.mean())
+    somme_carres_x = float(((x - moyenne_x) ** 2).sum())
+    if somme_carres_x <= 0:
+        return specification, "Variable horizontale constante : droite non calculable."
+    pente = float(((x - moyenne_x) * (y - moyenne_y)).sum()) / somme_carres_x
+    predit = moyenne_y + pente * (x - moyenne_x)
+    amplitude = max(float(y.abs().max()), float(predit.abs().max()), 1.0)
+    # Tolérance numérique uniquement, pas un seuil statistique arbitraire.
+    tolerance = max(1e-9, amplitude * 1e-12)
+    formule = (f"({moyenne_y!r} + ({pente!r}) * "
+               f"(datum.x - ({moyenne_x!r})))")
+    segment = (
+        f"datum.y > {formule} + {tolerance!r} "
+        "? 'Au-dessus de la droite' : "
+        f"datum.y < {formule} - {tolerance!r} "
+        "? 'En dessous de la droite' : 'Sur la droite'"
+    )
+    encodage_points = dict(specification["encoding"])
+    encodage_points["color"] = {
+        "field": "segment_regression", "type": "nominal",
+        "scale": {
+            "domain": ["Au-dessus de la droite", "Sur la droite",
+                       "En dessous de la droite"],
+            "range": ["#2563EB", "#888888", "#E76F51"],
+        },
+        "legend": {"title": "Position par rapport à la droite"},
+    }
+    encodage_points["tooltip"] = [
+        *specification["encoding"].get("tooltip", []),
+        {"field": "segment_regression", "type": "nominal",
+         "title": "Position / régression"},
+    ]
+    # Vega-Lite calcule la même régression sur la même source de points.
+    # Tracer la droite en premier pour conserver les infobulles des vidéos.
     graphique = {cle: valeur for cle, valeur in specification.items()
                  if cle not in ("mark", "encoding")}
     graphique["layer"] = [
         {
             "transform": [{"regression": "y", "on": "x", "method": "linear"}],
-            "mark": {"type": "line", "stroke": "#FFFFFF", "strokeDash": [6, 4], "strokeWidth": 2.5},
+            "mark": {"type": "line", "stroke": "#FFFFFF", "strokeDash": [6, 4],
+                     "strokeWidth": 2.5},
             "encoding": {
                 "x": {"field": "x", "type": "quantitative"},
                 "y": {"field": "y", "type": "quantitative"},
             },
         },
-        {"mark": specification["mark"], "encoding": specification["encoding"]},
+        {
+            "transform": [{"calculate": segment, "as": "segment_regression"}],
+            "mark": specification["mark"],
+            "encoding": encodage_points,
+        },
     ]
     return graphique, None
 
