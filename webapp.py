@@ -1857,8 +1857,14 @@ def create_app(manager=None):
             fichier=job.directory / 'publications.json'
             if fichier.is_file():
                 visuelles={str(p['id']):p for p in json.loads(fichier.read_text())}
-                publications=[{**p,**{k:visuelles.get(str(p['id']),{}).get(k)
-                                      for k in ('groupe_visuel','reemploi_visuel')}} for p in publications]
+                publications=[{
+                    **p,
+                    **{
+                        k: visuelles.get(str(p['id']), {}).get(k)
+                        if visuelles.get(str(p['id']), {}).get(k) is not None else p.get(k)
+                        for k in ('groupe_visuel', 'reemploi_visuel')
+                    },
+                } for p in publications]
             contenu = serialiser_csv(lignes_engagement(publications), COLONNES_ENGAGEMENT)
         return Response(contenu.encode("utf-8-sig"), media_type="text/csv",
             headers={"Content-Disposition": 'attachment; filename="engagement.csv"'})
