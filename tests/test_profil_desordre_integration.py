@@ -147,8 +147,8 @@ class IntegrationProfilsVisuels(unittest.TestCase):
                               for r in job.records], [100, 100])
             self.assertEqual(appels_selenium, [])
 
-    def test_collecte_presse_prepare_multimodale_meme_si_une_legende_manque(self):
-        """La collecte Presse exporte les métadonnées et les URL utilisables."""
+    def test_collecte_presse_prepare_multimodale_sans_references_non_lues(self):
+        """Seules les publications Presse effectivement récupérées sont exportées."""
         from webapp import Job, StartRequest, execute_job
         from collecte.presse import charger_inventaire
         from scraptiktok import WebDriverException
@@ -198,14 +198,14 @@ class IntegrationProfilsVisuels(unittest.TestCase):
             self.assertEqual(len(json.loads(
                 (job.directory / "publications.json").read_text())), 1)
             donnees = lire_publications(job.directory)
-            self.assertEqual({p["id"] for p in donnees}, {"100000", "100001"})
+            self.assertEqual({p["id"] for p in donnees}, {"100000"})
             self.assertEqual(inventaire_sources(job.directory), {
-                "publications_collectees": 2,
-                "mp4_locaux": 0, "mp4_manquants": 2,
-                "mp4_telechargeables": 2,
+                "publications_collectees": 1,
+                "mp4_locaux": 0, "mp4_manquants": 1,
+                "mp4_telechargeables": 1,
             })
             self.assertEqual(donnees[0]["engagement"]["likes"]["valeur"], 10)
-            self.assertEqual(donnees[1]["engagement"], {})
+            self.assertFalse((job.directory/"sources_visuelles.json").exists())
 
     def test_sources_presse_sans_fichier_publications_restent_exploitables(self):
         with tempfile.TemporaryDirectory() as d:

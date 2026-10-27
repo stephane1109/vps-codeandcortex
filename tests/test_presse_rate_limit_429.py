@@ -71,11 +71,7 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(rapport["etape_api"],"identification_video")
         self.assertEqual(rapport["requetes_tentees"],2)
         self.assertEqual(rapport["urls_embed_non_verifiees"], 3)
-        self.assertEqual(
-            rapport["discovered_urls"],
-            [f"https://www.tiktok.com/@lemondefr/video/700000000000000000{i}"
-             for i in (1, 2, 3)],
-        )
+        self.assertEqual(rapport["discovered_urls"], [])
 
     def test_429_sur_la_premiere_requete_identifie_le_blocage_initial(self):
         client = Mock()
@@ -108,8 +104,8 @@ class LimitationPresseTests(unittest.TestCase):
         self.assertEqual(len(rapport["recherches_compte"]),1)
         grille.assert_not_called()
 
-    def test_urls_embed_conservees_ne_poursuivent_pas_les_appels_apres_429(self):
-        """Les URL retrouvées ne doivent pas relancer l'API ni Selenium."""
+    def test_urls_embed_non_verifiees_ecartees_sans_nouvel_appel_429(self):
+        """Aucun faux résultat sauvegardé, aucun appel de repli TikTok."""
         adresse = "https://www.tiktok.com/@lemondefr/video/7000000000000000001"
         rapport = {}
 
@@ -131,7 +127,8 @@ class LimitationPresseTests(unittest.TestCase):
                     presse_videos_uniquement=True, presse_moteur="api",
                 )
         grille.assert_not_called()
-        self.assertEqual(rapport["discovered_urls"], [adresse])
+        self.assertEqual(rapport["discovered_urls"], [])
+        self.assertEqual(rapport["recherches_compte"][0]["discovered_urls"], [])
         self.assertEqual(rapport["recherches_compte"][0]["urls_embed_non_verifiees"], 1)
         self.assertEqual(
             rapport["recherches_compte"][0]["diagnostic"]["code"],
@@ -242,8 +239,8 @@ class LimitationPresseTests(unittest.TestCase):
             ), 23)
             self.assertIn("HTTP 429", job.message)
 
-    def test_429_conserve_les_urls_deja_decouvertes_pour_multimodale(self):
-        """Une pagination interrompue ne doit pas perdre les vidéos déjà vues."""
+    def test_429_ne_sauvegarde_pas_les_urls_incompletes_en_archive_vide(self):
+        """Une collecte refusée ne crée ni faux corpus ni archive vide."""
         from analyse_desordre.sources import inventaire_sources, lire_publications
 
         media = charger_inventaire()[0]
@@ -251,8 +248,6 @@ class LimitationPresseTests(unittest.TestCase):
             f'https://www.tiktok.com/@{media["compte"]}/video/{7000000000000000000+i}'
             for i in range(1, 11)
         ]
-        adresse = adresses[0]
-
         class Connexion429Partielle:
             def __init__(self, *args, **kwargs):
                 pass
@@ -299,19 +294,95 @@ class LimitationPresseTests(unittest.TestCase):
             ):
                 execute_job(job)
             telecharger.assert_not_called()
-            self.assertEqual(job.status, "partial")
-            self.assertTrue(job.archive_prete, job.message)
-            self.assertEqual(lire_publications(job.directory)[0]["url"], adresse)
-            self.assertEqual(inventaire_sources(job.directory)["mp4_telechargeables"], 10)
-            self.assertEqual(len(lire_publications(job.directory)), 10)
+            self.assertEqual(job.status, "failed")
+            self.assertFalse(job.archive_prete, job.message)
+            self.assertFalse((job.directory / "archive.zip").exists())
+            self.assertFalse((job.directory / "sources_visuelles.json").exists())
+            self.assertFalse((job.directory / "publications.json").exists())
+            self.assertFalse(job.path.exists())
+            self.assertEqual(lire_publications(job.directory), [])
+            self.assertEqual(inventaire_sources(job.directory)["mp4_telechargeables"], 0)
             self.assertEqual(len(job.records), 0)
             bilan = job.snapshot()["bilan_sources"][0]["recherches"][0]
             self.assertEqual(bilan["urls_embed_non_verifiees"], 10)
-            self.assertEqual(bilan["urls_embed_references"], adresses)
+            self.assertNotIn("urls_embed_references", bilan)
+            self.assertEqual(bilan["liens"], 0)
             self.assertEqual(bilan["pages_api"], 0)
             self.assertEqual(bilan["candidats_examines"], 0)
-            self.assertTrue(job.archive_prete)
             self.assertFalse(job.busy)
+
+
+    def test_429_apres_media_complet_archive_uniquement_donnees_validees(self):
+        """Un média terminé reste exporté, le média interrompu est exclu."""
+        from analyse_desordre.sources import inventaire_sources, lire_publications
+
+        medias = charger_inventaire()[:2]
+        premier, bloque = medias[0]["compte"], medias[1]["compte"]
+        identifiant = "7000000000000000001"
+        url_valide = f"https://www.tiktok.com/@{premier}/video/{identifiant}"
+        url_refusee = f"https://www.tiktok.com/@{bloque}/video/7000000000000000002"
+        appels = []
+
+        class ConnexionDeuxMedias:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def preparer_sources(self, settings):
+                return [{"id":m["id"],"compte":m["compte"]} for m in medias]
+
+            def ouvrir(self):
+                return Mock()
+
+            def decouvrir(self, source, rapport, *, contexte="", progression=None):
+                compte = source["compte"]
+                appels.append(compte)
+                if compte == premier:
+                    rapport["discovered_urls"] = [url_valide]
+                    rapport["metadonnees_api"] = {
+                        identifiant: {
+                            "id":identifiant,"url":url_valide,"author":premier,
+                            "description":"Manifestation", "hashtags":[],
+                            "created_at":"2026-01-01T10:00:00+00:00",
+                            "engagement":{"likes":{"valeur":8,"brut":"8"}},
+                        }
+                    }
+                    return [url_valide]
+                rapport["discovered_urls"] = [url_refusee]
+                rapport["recherches_compte"] = [{
+                    "discovered_urls":[url_refusee],
+                    "urls_embed_non_verifiees":1,
+                    "diagnostic":{"code":"tiktok_limitation_429"}
+                }]
+                raise PresseRateLimitError()
+
+            def lire_publication(self, url):
+                raise AssertionError("Aucun accès Selenium après découverte")
+
+            def fermer(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as dossier:
+            job = Job("a"*64,StartRequest(
+                source_collecte="presse",medias=[m["id"] for m in medias],
+                limit=1,
+            ),Path(dossier))
+            with (patch("connect_presse.ConnexionPresse",ConnexionDeuxMedias),
+                  patch.object(job,"pause",return_value=None)):
+                execute_job(job)
+            self.assertEqual(appels,[premier,bloque])
+            self.assertEqual(job.status,"partial",job.message)
+            self.assertTrue(job.archive_prete,job.message)
+            self.assertEqual([p["url"] for p in job.publications],[url_valide])
+            self.assertEqual([p["url"] for p in lire_publications(job.directory)],
+                             [url_valide])
+            self.assertEqual(inventaire_sources(job.directory)["publications_collectees"],1)
+            self.assertEqual(job.records[0]["engagement"]["likes"]["valeur"],8)
+            self.assertTrue((job.directory/"archive.zip").exists())
+            self.assertFalse((job.directory/"sources_visuelles.json").exists())
+            self.assertNotIn(url_refusee, (job.directory/"journal.json").read_text())
+            bilan=job.snapshot()["bilan_sources"]
+            self.assertEqual(bilan[1]["liens"],0)
+            self.assertEqual(bilan[1]["recherches"][0]["liens"],0)
 
     def test_429_interrompt_aussi_les_mp4_pendant_la_finalisation(self):
         """Même si des textes existent, 429 ne doit plus déclencher yt-dlp."""
