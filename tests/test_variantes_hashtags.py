@@ -128,13 +128,15 @@ class TestVariantesHashtags(unittest.TestCase):
         self.assertEqual(sum(connexion._quota_hashtag.values()), 11)
         self.assertLessEqual(len(connexion._ids_globaux), 11)
 
-    def test_formulaire_affiche_l_objectif_global_hashtags(self):
+    def test_formulaire_indique_la_limite_globale_sans_legende_supprimee(self):
         interface = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("Nombre TOTAL de posts à lire (tous hashtags confondus)", interface)
         self.assertIn("La limite est GLOBALE", interface)
-        self.assertIn("Objectif global : au plus", interface)
+        # L'information fonctionnelle reste dans le champ, mais la légende
+        # « Objectif global » a été volontairement retirée de l'interface.
+        self.assertNotIn("Objectif global : au plus", interface)
 
     def test_presse_ne_lance_pas_de_variantes(self):
         reglages = StartRequest(source_collecte="presse", medias=["lemonde"],
