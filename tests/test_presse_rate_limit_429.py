@@ -286,7 +286,7 @@ class LimitationPresseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dossier:
             job = Job("a" * 64, StartRequest(
                 source_collecte="presse", medias=[media["id"]],
-                telecharger_mp4=True,
+                telecharger_mp4=True, sauvegarde_progressive=True,
             ), Path(dossier))
             with (
                 patch("connect_presse.ConnexionPresse", Connexion429Partielle),
@@ -300,6 +300,7 @@ class LimitationPresseTests(unittest.TestCase):
             self.assertFalse((job.directory / "sources_visuelles.json").exists())
             self.assertFalse((job.directory / "publications.json").exists())
             self.assertFalse(job.path.exists())
+            self.assertIsNone(job.dernier_point_sauvegarde)
             self.assertEqual(lire_publications(job.directory), [])
             self.assertEqual(inventaire_sources(job.directory)["mp4_telechargeables"], 0)
             self.assertEqual(len(job.records), 0)

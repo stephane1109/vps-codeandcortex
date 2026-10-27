@@ -35,7 +35,7 @@ class TestIsolationPresse(unittest.TestCase):
     def test_methode_api_par_defaut_et_numero_version_explicite(self):
         requete=StartRequest(source_collecte="presse",medias=["lemonde"])
         self.assertEqual(requete.presse_moteur,"api")
-        self.assertEqual(VERSION_PRESSE,"presse-secuid-depuis-embed-createur-v10")
+        self.assertEqual(VERSION_PRESSE,"presse-secuid-depuis-embed-createur-v11")
         from pathlib import Path
         code=Path(__file__).resolve().parents[1].joinpath(
             "collecte/presse_api.py").read_text(encoding="utf-8")
