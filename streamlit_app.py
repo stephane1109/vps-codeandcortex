@@ -1206,7 +1206,6 @@ with onglet_multimodale:
             tableau['publication_id']=tableau['publication_id'].astype(str)
             tableau.insert(0,'numero_video',range(1,len(tableau)+1))
             st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
-            st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage.")
             # Une seule grille : menus déroulants directement dans la colonne
             # de chaque vidéo ; toutes les mesures automatiques restent protégées.
             from analyse_desordre.annotation import modifications_depuis_tableau
@@ -1229,7 +1228,8 @@ with onglet_multimodale:
                               if nom!='violence_visible']
             colonnes_annotations={"annotation_violence",*[v["id"] for v in variables_personnalisees]}
             etat_finalise=etat.get('statut') in ('termine','partiel')
-            st.caption("Annotez « Mouvements dans l’image » et vos colonnes personnalisées : "
+            st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage. "
+                       "Annotez « Mouvements dans l’image » et vos colonnes personnalisées : "
                        "1 = mouvements visibles, 0 = aucun mouvement visible, Non évaluée = manquant. "
                        "Les anciennes annotations de violence doivent être revérifiées avant de les interpréter comme des mouvements.")
             # Un formulaire empêche chaque sélection de provoquer un rerun
@@ -1352,8 +1352,6 @@ with onglet_multimodale:
                         specification, raison_droite = superposer_droite_regression(points, specification)
                         if raison_droite:
                             st.info("Droite non disponible : " + raison_droite)
-                        else:
-                            st.caption("Droite en pointillés : régression linéaire descriptive. Points bleus = au-dessus, orange = au-dessous, gris = sur la droite (résidus). Ces couleurs ne représentent ni des classes statistiques ni une causalité.")
                 if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
                 else:
                     st.vega_lite_chart(points,specification,use_container_width=True)
