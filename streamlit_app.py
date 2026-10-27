@@ -294,7 +294,7 @@ with onglet_collecte:
             informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
         else:
             informations_presse.append("Moteur : Méthode Selenium.")
-        else:
+        if st.session_state.get("presse_moteur") != "research":
             budget_api = limites_admin.get("budget_api_presse", {})
             informations_presse.append(
                 "Plafonds API Presse configurés (Coolify) : "
