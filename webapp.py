@@ -500,13 +500,6 @@ class Job:
                             "tentatives_embed_video": r.get("tentatives_embed_video", 0),
                             "videos_amorcage_disponibles": r.get("videos_amorcage_disponibles", 0),
                             "urls_embed_non_verifiees": r.get("urls_embed_non_verifiees", 0),
-                            # Liens déjà présents dans la réponse reçue AVANT le 429.
-                            # Exposés au seul propriétaire de la collecte pour export
-                            # et référencement, sans les compter comme textes lus.
-                            "urls_embed_references": (
-                                list(r.get("discovered_urls", []))
-                                if r.get("urls_embed_non_verifiees") else []
-                            ),
                             "message_erreur": r.get("message_erreur"),
                             "navigation_publications": r.get("navigation_publications"),
                             "url_rubrique_publications": r.get("url_rubrique_publications"),
@@ -614,6 +607,9 @@ class Job:
         """Point de récupération indépendant du TTL des dossiers de session."""
         if not self.settings.sauvegarde_progressive:
             return None
+        # Pas de ZIP de récupération contenant seulement un rapport d'échec.
+        if self.settings.source_collecte == "presse" and not self.publications:
+            return None
         from stockage.sauvegarde_progressive import enregistrer_point
         with self.lock:
             etat={"traitees":self.processed, "statut":statut,
@@ -637,9 +633,13 @@ class Job:
             content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt,
                                   self.settings.variables_txt, self.commentaires if self.settings.collecter_commentaires else None)
             nombre_exporte = sum(bool(r.get("description")) for r in self.records)
-        temp = self.path.with_suffix(".tmp")
-        temp.write_text(content, encoding="utf-8")
-        temp.replace(self.path)
+        if self.settings.source_collecte == "presse" and not self.publications:
+            # Ne pas produire un TXT vide après un refus avant toute donnée.
+            self.path.unlink(missing_ok=True)
+        else:
+            temp = self.path.with_suffix(".tmp")
+            temp.write_text(content, encoding="utf-8")
+            temp.replace(self.path)
         self.update(exportees=nombre_exporte)
 
 
@@ -1041,21 +1041,21 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     job.update(search_errors=job.search_errors + 1)
                     break
                 if isinstance(erreur, (PresseRateLimitError, PresseCooldownError)):
-                    # Conserver les URL déjà découvertes avant le HTTP 429,
-                    # sans nouvelle lecture de page, embed ou téléchargement.
-                    for url in rapport.get("discovered_urls", []):
-                        identite = scraper.canonical_post(url)
-                        if identite and (
-                            job.settings.source_collecte == "hashtags"
-                            or identite[2].casefold() in medias_par_compte
-                        ):
-                            unique_links.setdefault(identite[0], identite[1])
+                    # Le média interrompu n'a pas été intégralement collecté :
+                    # exclure ses liens/mesures incomplets de tous les exports,
+                    # sans perdre les publications des médias précédents.
+                    rapport["discovered_urls"] = []
+                    rapport["metadonnees_api"] = {}
+                    rapport["retenues_par_compte"] = {}
+                    for etape in rapport.get("recherches_compte", []):
+                        etape["discovered_urls"] = []
+                        etape["metadonnees_api"] = {}
                     links = list(unique_links.values())
                     limitation_tiktok = True
                     job.update(
                         search_errors=job.search_errors + 1,
                         status="finalizing",
-                        message="TikTok HTTP 429 : collecte interrompue, sauvegarde des résultats sans nouveau téléchargement.",
+                        message="TikTok HTTP 429 : collecte interrompue ; seules les données entièrement récupérées sont conservées.",
                     )
                     break
                 if len(sources) == 1 or scraper.est_erreur_session(erreur): raise
@@ -1127,7 +1127,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
                               "Les autres médias de cette collecte n'ont pas été sollicités ; "
                               "consultez l'éventuel délai Retry-After dans le diagnostic.")
-            final_status = "partial" if links else "failed"
+            final_status = "partial" if job.publications else "failed"
         if not links and job.search_errors:
             final_status = "failed"
         elif len(links) < args.limit and not job.settings.second_hashtag:
@@ -1184,7 +1184,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += " Téléchargement MP4 interrompu ; les textes sont conservés."
             finally:
                 contexte_mp4.clear()
-        if job.base:
+        if job.base and (job.settings.source_collecte != "presse" or job.publications):
             try:
                 from corpus.construction import construire_exports
                 from corpus.export_zip import exporter_zip
@@ -1196,10 +1196,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
                      "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal,
                      "diagnostics": job.diagnostics}, texte_source=job.path)
-                # Les collectes comptes/presse peuvent découvrir un lien vidéo
-                # sans pouvoir en lire la légende. Le conserver pour l'analyse
-                # visuelle, sans le transformer en texte ou en mesure d'engagement.
-                if job.settings.source_collecte in {"comptes", "presse"}:
+                # Le mode Profils conserve les vidéos découvertes sans légende.
+                # Le mode Presse n'archive QUE des publications réellement lues
+                # et jamais une référence brute issue d'un embed ou d'une API 429.
+                if job.settings.source_collecte == "comptes":
                     from analyse_desordre.sources import construire_sources_visuelles
                     complement = construire_sources_visuelles(
                         unique_links.values(), job.publications

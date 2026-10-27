@@ -708,9 +708,8 @@ with onglet_collecte:
                                 if recherche.get("urls_embed_non_verifiees"):
                                     st.caption(
                                         "Pagination : 0 page reçue. "
-                                        f"{recherche['urls_embed_non_verifiees']} référence(s) de vidéos "
-                                        "présente(s) dans l'embed du compte ; "
-                                        "identité individuelle, légendes et métriques non vérifiées."
+                                        f"{recherche['urls_embed_non_verifiees']} identifiant(s) repéré(s) "
+                                        "dans l'embed, non vérifiés et non sauvegardés."
                                     )
                                 else:
                                     st.caption(
@@ -765,23 +764,6 @@ with onglet_collecte:
                                       "recherche_redirigee": "redirection vers une autre page"}
                             if recherche.get("arret"):
                                 st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
-                            if recherche.get("urls_embed_non_verifiees"):
-                                st.info(
-                                    f"{recherche['urls_embed_non_verifiees']} URL de vidéo "
-                                    "déjà présente(s) dans l'embed du média ont été conservées "
-                                    "avant le refus. Ce sont des références pour Multimodale, "
-                                    "pas des textes, vidéos MP4 ou métriques collectés."
-                                )
-                                references = recherche.get("urls_embed_references") or []
-                                if references:
-                                    st.download_button(
-                                        "Télécharger ces références vidéo (TXT)",
-                                        data="\n".join(references) + "\n",
-                                        file_name=f"references_tiktok_{compte or numero_source}.txt",
-                                        mime="text/plain",
-                                        key=f"urls_embed_{numero_source}_{compte or 'inconnu'}",
-                                        help="Liste d'URL issue du premier embed, sans lecture supplémentaire de TikTok.",
-                                    )
                             if recherche.get("diagnostic"):
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
@@ -1090,7 +1072,10 @@ with onglet_multimodale:
             "dans votre historique privé pendant 30 jours, sans dupliquer les fichiers MP4."
         )
     if not tache_desordre.get('archive_prete'):
-        st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags). Les liens de vidéos découverts sont également exploitables lorsque leur légende est inaccessible.")
+        if tache_desordre.get('source_collecte') == "presse" and tache_desordre.get('status') in {"failed", "partial", "stopped"}:
+            st.warning("Aucune publication Presse exploitable n'a été enregistrée. La collecte a été interrompue avant de récupérer des métadonnées ; aucun fichier ni aucune vidéo non vérifiée ne sont proposés à l'analyse.")
+        else:
+            st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags). Les liens de vidéos découverts sont également exploitables lorsque leur légende est inaccessible.")
     else:
         if st.button("Enregistrer cette analyse (30 jours)",
                      key=f"sauvegarder_desordre_{tache_desordre['id']}",

@@ -444,17 +444,11 @@ def collecter_videos_presse_api(compte, limite, rapport, *, check=None,
             secuid = resoudre_secuid(client, compte, profil, rapport, check=check,
                                     referer=referer, obtenir=obtenir_avec_quota)
     except PresseRateLimitError as erreur:
-        # L'embed du créateur a parfois déjà fourni des ID de vidéos avant
-        # le refus sur /embed/v2/. Les conserver SANS requête supplémentaire.
-        # Le média est identifié, mais chaque vidéo n'est pas authentifiée
-        # individuellement et aucune métrique n'a été extraite.
+        # Un embed peut contenir des ID bruts : seul le nombre est conservé
+        # pour le diagnostic. Sans validation API complète, ces références
+        # ne sont ni des publications collectées ni des données exportables.
         if profil is not None:
-            identifiants = profil.get("video_ids") or []
-            premiers = identifiants[:limite]
-            rapport["discovered_urls"] = [
-                f"{HOTE}/@{compte}/video/{identifiant}" for identifiant in premiers
-            ]
-            rapport["urls_embed_non_verifiees"] = len(premiers)
+            rapport["urls_embed_non_verifiees"] = len((profil.get("video_ids") or [])[:limite])
             rapport["collecte_partielle"] = True
             rapport["discovery_stop"] = "rate_limit_429"
         if client_reel:

@@ -166,10 +166,13 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                                                 "cooldown_429" if attente else "rate_limit_429")
                     if (limitation or attente) and erreur.retry_after is not None:
                         etat["diagnostic"]["retry_after_seconds"] = erreur.retry_after
-                    # Même si des URL avaient été découvertes, un HTTP 429 ou
-                    # un plafond administrateur stoppe immédiatement le lot.
-                    # Le finally ci-dessous conserve les URL dans le rapport ;
-                    # le moteur de collecte sauvegarde sans autre requête.
+                    # Lors d'un HTTP 429, la collecte de ce média n'est pas
+                    # terminée. Ne pas conserver ses URL isolées comme des
+                    # publications ; préserver seulement le diagnostic.
+                    if limitation or attente:
+                        etat["discovered_urls"] = []
+                        etat["metadonnees_api"] = {}
+                        liens.clear()
                     raise
             if est_erreur_session(erreur):
                 raise
