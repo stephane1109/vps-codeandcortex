@@ -234,7 +234,7 @@ try:
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
 onglet_collecte, onglet_multimodale, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Multimodale", "Corpus fusionné", "Aide"]
+    ["Collecte", "Annotation/analyse", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
