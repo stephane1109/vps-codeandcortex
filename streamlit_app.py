@@ -291,33 +291,9 @@ with onglet_collecte:
                 "pour une nouvelle collecte."
             )
         elif st.session_state.get("presse_moteur") == "research":
-            informations_presse.append("Research API officielle : projet approuvé nécessaire. Période par défaut : 30 jours UTC ; périodes longues découpées en tranches de 30 jours. Les MP4 ne sont pas fournis par cette API.")
+            informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
         else:
             informations_presse.append("Moteur : Méthode Selenium.")
-        if st.session_state.get("presse_moteur") == "research":
-            try:
-                statut_research = api("/healthz")
-                informations_presse.append(
-                    "Version : " + statut_research.get("version_research", "non renseignée")
-                )
-                if statut_research.get("research_configuree"):
-                    informations_presse.append(
-                        "Identifiants serveur présents ; l'accès reste soumis à l'approbation TikTok."
-                    )
-                elif (st.session_state.get("research_client_key", "").strip()
-                      and st.session_state.get("research_client_secret", "").strip()):
-                    informations_presse.append(
-                        "Identifiants saisis pour cette collecte ; ils ne seront pas stockés."
-                    )
-                else:
-                    alerte_presse = True
-                    informations_presse.append(
-                        "Renseigner Client key et Client secret ci-dessus pour lancer Research. "
-                        "Les variables d'environnement Coolify restent facultatives."
-                    )
-            except RuntimeError as erreur:
-                alerte_presse = True
-                informations_presse.append("Research API : serveur indisponible : " + str(erreur))
         else:
             budget_api = limites_admin.get("budget_api_presse", {})
             informations_presse.append(

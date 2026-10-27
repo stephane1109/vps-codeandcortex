@@ -101,6 +101,21 @@ class TestIsolationPresse(unittest.TestCase):
         )
 
 
+    def test_resume_research_api_concis_sans_details_supprimes(self):
+        from pathlib import Path
+        code = Path(__file__).resolve().parents[1].joinpath(
+            "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")',
+            code,
+        )
+        self.assertNotIn("Période par défaut : 30 jours UTC", code)
+        self.assertNotIn("version_research", code)
+        self.assertNotIn("Renseigner Client key et Client secret ci-dessus", code)
+        self.assertIn('st.text_input("TIKTOK_RESEARCH_CLIENT_KEY"', code)
+        self.assertIn('st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET"', code)
+
+
 
 if __name__=="__main__":
     unittest.main()
