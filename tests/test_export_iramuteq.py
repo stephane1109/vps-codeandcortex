@@ -27,7 +27,10 @@ class TestsCorpus(unittest.TestCase):
                 for nom in ("engagement.csv", "ratios_engagement.csv", "commentaires.csv"):
                     with self.subTest(fichier=nom):
                         ligne = next(csv.DictReader(io.StringIO(archive.read(nom).decode("utf-8-sig")), delimiter=";"))
-                        self.assertEqual(ligne["id_"], identifiant)
+                        if nom == "engagement.csv":
+                            self.assertNotIn("id_", ligne)
+                        else:
+                            self.assertEqual(ligne["id_"], identifiant)
                         self.assertEqual(ligne["publication_id"], identifiant)
                         self.assertEqual(ligne["url"], url)
                         if nom == "commentaires.csv":
@@ -38,7 +41,7 @@ class TestsCorpus(unittest.TestCase):
 
     def test_csv_compteurs_sans_colonnes_techniques_et_json_complet(self):
         compteurs = ("likes", "vues", "partages", "commentaires", "favoris")
-        attendues = ["publication_id", "id_", "auteur", "media", "date_collecte", "url", "legende", "retenue", "langue_detection"]
+        attendues = ["publication_id", "url", "auteur", "media", "date_collecte", "legende", "retenue", "langue_detection"]
         attendues += ["video_id", "video_url", "video_fichier"]
         attendues += [nom + suffixe for nom in compteurs for suffixe in ("", "_brut")]
         self.assertEqual(COLONNES_ENGAGEMENT, ["groupe_visuel","reemploi_visuel"] + attendues)
