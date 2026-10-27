@@ -75,5 +75,20 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertLess(dates,variables)
 
 
+    def test_diagnostics_sources_compacts_et_nom_methode_selenium(self):
+        """Une ligne pour méthode/liens et une ligne pour pagination/arrêt."""
+        from pathlib import Path
+        interface = Path(__file__).resolve().parents[1].joinpath(
+            "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn('informations_source.append(', interface)
+        self.assertIn('st.caption(" · ".join(informations_source))', interface)
+        self.assertIn('ligne_pagination = (ligne_pagination + " · " + texte_arret', interface)
+        self.assertIn('st.caption(ligne_pagination)', interface)
+        self.assertIn('"navigateur":"Méthode Selenium"', interface)
+        self.assertIn('« Méthode Selenium »', interface)
+        self.assertNotIn("Grille du profil (Selenium", interface)
+
+
+
 if __name__=="__main__":
     unittest.main()

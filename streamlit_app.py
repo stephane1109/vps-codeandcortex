@@ -246,7 +246,7 @@ with onglet_collecte:
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
             ["api", "research", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
-                                   "navigateur":"Grille du profil (Selenium)"}[v],
+                                   "navigateur":"Méthode Selenium"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -288,13 +288,13 @@ with onglet_collecte:
         if st.session_state.get("presse_moteur") == "api":
             informations_presse.append(
                 "Moteur : API web Presse (distinct du navigateur Hashtags). "
-                "Si HTTP 429, choisir manuellement « Grille du profil (Selenium) » "
+                "Si HTTP 429, choisir manuellement « Méthode Selenium » "
                 "pour une nouvelle collecte."
             )
         elif st.session_state.get("presse_moteur") == "research":
             informations_presse.append("Research API officielle : projet approuvé nécessaire. Période par défaut : 30 jours UTC ; périodes longues découpées en tranches de 30 jours. Les MP4 ne sont pas fournis par cette API.")
         else:
-            informations_presse.append("Moteur : Grille du profil (Selenium).")
+            informations_presse.append("Moteur : Méthode Selenium.")
         if st.session_state.get("presse_moteur") == "research":
             try:
                 statut_research = api("/healthz")
@@ -667,17 +667,22 @@ with onglet_collecte:
                     requetes_api_lot = 0
                     for numero_source, bilan in enumerate(actuel["bilan_sources"], 1):
                         st.write(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        informations_source = []
                         if actuel.get("source_collecte") == "presse":
                             version_source=bilan.get("version_collecteur")
                             if version_source:
-                                st.caption("Méthode enregistrée : "+str(bilan.get("presse_moteur") or "?")+
-                                           " · version "+version_source)
+                                informations_source.append(
+                                    "Méthode enregistrée : "+str(bilan.get("presse_moteur") or "?")+
+                                    " · version "+version_source
+                                )
                             else:
                                 st.warning("Diagnostic issu d'une ancienne collecte, sans version enregistrée : "
                                            "relancez une collecte pour tester le nouveau moteur.")
                         if bilan.get("retenues_par_compte"):
-                            st.caption("Liens retenus cumulés : " + " · ".join(
+                            informations_source.append("Liens retenus cumulés : " + " · ".join(
                                 f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
+                        if informations_source:
+                            st.caption(" · ".join(informations_source))
                         for recherche in bilan.get("recherches", []):
                             st.write(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
                             auteurs = recherche.get("auteurs_dans_liens", {})
@@ -690,6 +695,7 @@ with onglet_collecte:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
                             navigation=recherche.get("navigation_publications")
+                            ligne_pagination = ""
                             if navigation=="research_officielle":
                                 st.caption(f"Research API : {recherche.get('pages_research',0)} page(s), {recherche.get('liens',0)} vidéo(s) retenue(s).")
                             elif navigation=="api_liste_createur":
@@ -706,13 +712,13 @@ with onglet_collecte:
                                     "identifiant non encore confirmé"
                                 )
                                 if recherche.get("urls_embed_non_verifiees"):
-                                    st.caption(
+                                    ligne_pagination = (
                                         "Pagination : 0 page reçue. "
                                         f"{recherche['urls_embed_non_verifiees']} identifiant(s) repéré(s) "
                                         "dans l'embed, non vérifiés et non sauvegardés."
                                     )
                                 else:
-                                    st.caption(
+                                    ligne_pagination = (
                                         f"Liste vidéo TikTok par secUid : "
                                         f"{recherche.get('pages_api',0)} page(s) reçue(s), "
                                         f"{recherche.get('liens',0)} vidéo(s) retenue(s) "
@@ -763,7 +769,12 @@ with onglet_collecte:
                                       "publications_non_accessibles": "invitation à se connecter et aucun lien lisible",
                                       "recherche_redirigee": "redirection vers une autre page"}
                             if recherche.get("arret"):
-                                st.caption(f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : " + motifs.get(recherche["arret"], recherche["arret"]))
+                                texte_arret = (f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : "
+                                               + motifs.get(recherche["arret"], recherche["arret"]))
+                                ligne_pagination = (ligne_pagination + " · " + texte_arret
+                                                    if ligne_pagination else texte_arret)
+                            if ligne_pagination:
+                                st.caption(ligne_pagination)
                             if recherche.get("diagnostic"):
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
@@ -777,7 +788,7 @@ with onglet_collecte:
                                         "Ce refus concerne l'API web Presse, et non nécessairement "
                                         "la collecte par hashtags. Pour une nouvelle collecte, "
                                         "vous pouvez choisir manuellement le moteur "
-                                        "« Grille du profil (Selenium, comme les hashtags) ». "
+                                        "« Méthode Selenium ». "
                                         "ScrapTikTok n'enchaîne pas automatiquement un autre "
                                         "moteur après un HTTP 429."
                                     )
