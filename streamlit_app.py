@@ -1079,19 +1079,24 @@ with onglet_aide:
 
 with onglet_multimodale:
     st.subheader("Désordre visuel et engagement")
-    st.caption("Mesurer l’agitation visuelle des vidéos (mouvements, instabilité et irrégularité) et explorer ses liens avec l’engagement sur TikTok.")
     tache_desordre=st.session_state.get('collecte') or {}
+    introduction_multimodale=(
+        "Mesurer l’agitation visuelle des vidéos (mouvements, instabilité et irrégularité) "
+        "et explorer ses liens avec l’engagement sur TikTok."
+    )
+    if tache_desordre.get('archive_prete'):
+        nom_source={
+            "presse": "Presse et médias", "comptes": "Profils",
+            "hashtags": "Hashtags",
+        }.get(tache_desordre.get("source_collecte"), "Collecte")
+        introduction_multimodale+=(
+            f" · Source : {nom_source} · Les résultats et annotations peuvent être conservés "
+            "dans votre historique privé pendant 30 jours, sans dupliquer les fichiers MP4."
+        )
+    st.caption(introduction_multimodale)
     if not tache_desordre.get('archive_prete'):
         st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags). Les liens de vidéos découverts sont également exploitables lorsque leur légende est inaccessible.")
     else:
-        st.caption(
-            "Source : " + {
-                "presse": "Presse et médias", "comptes": "Profils",
-                "hashtags": "Hashtags",
-            }.get(tache_desordre.get("source_collecte"), "Collecte")
-        )
-        st.caption("Les résultats et annotations peuvent être conservés dans votre historique privé "
-                   "pendant 30 jours, sans dupliquer les fichiers MP4.")
         if st.button("Enregistrer cette analyse (30 jours)",
                      key=f"sauvegarder_desordre_{tache_desordre['id']}",
                      disabled=bool(tache_desordre.get('busy') or tache_desordre.get('video_busy'))):

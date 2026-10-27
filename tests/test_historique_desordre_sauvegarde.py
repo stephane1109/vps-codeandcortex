@@ -114,6 +114,18 @@ class HistoriqueDesordreTests(unittest.TestCase):
                                  ["1234567890123"], 0)
                 self.assertEqual(resultat["annotations_violence"]["oui"], 1)
 
+    def test_introduction_multimodale_sur_une_seule_ligne(self):
+        """Description, source et historique sont réunis dans un seul caption."""
+        source=Path(__file__).resolve().parents[1].joinpath(
+            "streamlit_app.py").read_text(encoding="utf-8")
+        debut=source.index("with onglet_multimodale:")
+        fin=source.index("if st.button(\"Enregistrer cette analyse (30 jours)\"", debut)
+        section=source[debut:fin]
+        self.assertIn("introduction_multimodale+=(",section)
+        self.assertIn(" · Source : {nom_source} · ",section)
+        self.assertIn("st.caption(introduction_multimodale)",section)
+        self.assertEqual(section.count("st.caption("),1)
+
     def test_history_session_non_proprietaire_refusee(self):
         with tempfile.TemporaryDirectory() as dossier:
             manager=web.Manager(data_dir=dossier)
