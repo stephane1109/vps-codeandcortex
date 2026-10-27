@@ -114,16 +114,17 @@ class HistoriqueDesordreTests(unittest.TestCase):
                                  ["1234567890123"], 0)
                 self.assertEqual(resultat["annotations_violence"]["oui"], 1)
 
-    def test_introduction_multimodale_sur_une_seule_ligne(self):
-        """Description, source et historique sont réunis dans un seul caption."""
+    def test_titre_multimodale_sans_description_redondante(self):
+        """Un seul titre, source et historique conservés dans une légende."""
         source=Path(__file__).resolve().parents[1].joinpath(
             "streamlit_app.py").read_text(encoding="utf-8")
         debut=source.index("with onglet_multimodale:")
         fin=source.index("if st.button(\"Enregistrer cette analyse (30 jours)\"", debut)
         section=source[debut:fin]
-        self.assertIn("introduction_multimodale+=(",section)
-        self.assertIn(" · Source : {nom_source} · ",section)
-        self.assertIn("st.caption(introduction_multimodale)",section)
+        self.assertIn('st.subheader("Métrics, engagement et annotation")',section)
+        self.assertNotIn("Désordre visuel et engagement",section)
+        self.assertNotIn("Mesurer l’agitation visuelle des vidéos",section)
+        self.assertIn('f"Source : {nom_source} · Les résultats et annotations',section)
         self.assertEqual(section.count("st.caption("),1)
 
     def test_history_session_non_proprietaire_refusee(self):
