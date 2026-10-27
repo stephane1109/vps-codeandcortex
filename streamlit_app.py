@@ -1132,7 +1132,7 @@ with onglet_multimodale:
                 st.warning("Aucun MP4 associé ni URL TikTok exploitable dans cette collecte. Consultez les publications collectées.")
             telecharger=st.checkbox("Télécharger les MP4 manquants avant l’analyse",value=True,key='desordre_telecharger',
                 help="Les MP4 déjà présents sont réutilisés. Les échecs TikTok seront indiqués par publication.")
-            activation=st.checkbox("Activer l’analyse du désordre visuel",key='activer_desordre',value=False)
+            activation=st.checkbox("Analyse du mouvement",key='activer_desordre',value=False)
             with st.expander("Paramètres de cette analyse"):
                 frequence=st.number_input("Images analysées par seconde",min_value=1.,max_value=60.,value=10.,step=1.,key='frequence_desordre')
                 duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=10.,step=5.,key='duree_desordre',
