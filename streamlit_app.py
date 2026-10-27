@@ -27,8 +27,7 @@ st.html("""<style>
 components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
                 height=0, scrolling=False)
 st.title("ScrapTikTok")
-st.caption("Appli en cours de dév - modifiée 21-10-2026")
-st.caption("Collecter les textes des publications TikTok.")
+st.caption("Appli en cours de dév - modifiée 27-10-2026")
 
 session = st.context.cookies.get("scraptiktok_session", "")
 cookie_historique = st.context.cookies.get("scraptiktok_historique", "")
@@ -1086,7 +1085,7 @@ with onglet_multimodale:
         if tache_desordre.get('source_collecte') == "presse" and tache_desordre.get('status') in {"failed", "partial", "stopped"}:
             st.warning("Aucune publication Presse exploitable n'a été enregistrée. La collecte a été interrompue avant de récupérer des métadonnées ; aucun fichier ni aucune vidéo non vérifiée ne sont proposés à l'analyse.")
         else:
-            st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags). Les liens de vidéos découverts sont également exploitables lorsque leur légende est inaccessible.")
+            st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags).")
     else:
         if st.button("Enregistrer cette analyse (30 jours)",
                      key=f"sauvegarder_desordre_{tache_desordre['id']}",

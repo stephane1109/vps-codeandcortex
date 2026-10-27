@@ -89,6 +89,18 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertNotIn("Grille du profil (Selenium", interface)
 
 
+    def test_accueil_date_et_texte_multimodale(self):
+        from pathlib import Path
+        code = Path(__file__).resolve().parents[1].joinpath(
+            "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn('st.caption("Appli en cours de dév - modifiée 27-10-2026")', code)
+        self.assertNotIn("Collecter les textes des publications TikTok.", code)
+        self.assertNotIn(
+            "Les liens de vidéos découverts sont également exploitables lorsque leur légende est inaccessible.",
+            code,
+        )
+
+
 
 if __name__=="__main__":
     unittest.main()
