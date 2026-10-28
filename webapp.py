@@ -331,14 +331,14 @@ def texte_et_hashtags(publication):
 def entete_sources_ia(publication, source, themes=None):
     """Identifier la provenance du texte dans un corpus IRaMuTeQ."""
     def modalite(valeur):
-        texte = re.sub(r"[^\\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
+        texte = re.sub(r"[^\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
         return texte or "indetermine"
 
     theme = next((mot for mot in (themes or []) if mot), None)
     if not theme:
         theme = next(iter(publication.get("hashtags") or []), None)
     return (f"**** *source_{source} *theme_{modalite(theme)} "
-            f"*compte_{modalite(publication.get('author'))}\\n")
+            f"*compte_{modalite(publication.get('author'))}\n")
 
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
