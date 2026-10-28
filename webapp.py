@@ -346,6 +346,9 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         bloc = prefix + texte
+        texte_secondaire = (record.get("texte_secondaire") or "").strip()
+        if texte_secondaire and texte_secondaire != (record.get("description") or "").strip():
+            bloc += "\n\nTexte complémentaire affiché par TikTok :\n" + texte_secondaire
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
             etiquette = "Réponse" if commentaire.get("est_reponse") else "Commentaire"
             bloc += f"\n\n{etiquette} {numero} :\n{commentaire['texte']}"
