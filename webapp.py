@@ -1639,8 +1639,14 @@ def create_app(manager=None):
             if disponibles and etat.get('statut') in ('termine','partiel') else [])
         inventaire=inventaire_sources(job.directory)
         from analyse_desordre.sources import lire_publications
+        publications_analyse = lire_publications(job.directory)
         anotables=publications_annotables(
-            lire_publications(job.directory), [*lignes,*sans_resultat])
+            publications_analyse, [*lignes,*sans_resultat])
+        indicateurs_ia = {
+            str(publication.get("id") or publication.get("publication_id")):
+                publication.get("contenu_genere_ia")
+            for publication in publications_analyse if isinstance(publication, dict)
+        }
         from analyse_desordre.codages_personnalises import lire as lire_codages_personnalises
         with job.lock:
             personnalises=lire_codages_personnalises(job.directory)
@@ -1652,6 +1658,7 @@ def create_app(manager=None):
             'annotations_violence':statistiques_codage(codages,len(anotables)),
             'annotation_version':revision,
             'publications_annotables':anotables,
+            'indicateurs_ia':indicateurs_ia,
             'codages_personnalises':personnalises,
             'correlations':base+annotations_corr}
 
