@@ -1214,6 +1214,15 @@ with onglet_multimodale:
             tableau=pd.DataFrame(lignes)
             # Les identifiants restent des chaînes, même au-delà de 15 chiffres.
             tableau['publication_id']=tableau['publication_id'].astype(str)
+            valeurs_ia = donnees.get('indicateurs_ia') or {}
+            libelles_ia = {
+                'declare_par_createur': 'Déclaré par le créateur',
+                'etiquete_automatique': 'Étiquette automatique TikTok',
+            }
+            tableau['contenu_genere_ia'] = [
+                libelles_ia.get(valeurs_ia.get(identifiant), 'Non renseigné')
+                for identifiant in tableau['publication_id'].astype(str)
+            ]
             tableau.insert(0,'numero_video',range(1,len(tableau)+1))
             st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
             # Une seule grille : menus déroulants directement dans la colonne
@@ -1261,6 +1270,8 @@ with onglet_multimodale:
                         'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',
                             help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
                         'publication_id':st.column_config.TextColumn('ID TikTok'),
+                        'contenu_genere_ia':st.column_config.TextColumn('Généré par IA (TikTok)',
+                            help='Étiquette signalée dans les métadonnées TikTok ; Non renseigné ne signifie pas absence d’IA.'),
                         'annotation_violence':st.column_config.SelectboxColumn(
                             'Mouvements dans l’image',options=list(options_violence),
                             required=True,help=AIDES_INDICATEURS['violence_visible'],width='medium'),
