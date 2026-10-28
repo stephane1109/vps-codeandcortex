@@ -370,7 +370,7 @@ def extraire_resume_ia_tiktok(instantane, description):
     if not avis:
         return ""
 
-    titre = re.sub(r"\\s*\\|\\s*TikTok.*$", "", instantane.get("titre_page") or "",
+    titre = re.sub(r"\s*\|\s*TikTok.*$", "", instantane.get("titre_page") or "",
                    flags=re.IGNORECASE).strip()
     avant_avis = article[:avis.start()]
     debut = avant_avis.rfind(titre) if titre else -1
