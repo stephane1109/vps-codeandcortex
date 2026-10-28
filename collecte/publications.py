@@ -1,7 +1,7 @@
 """Enrichissement de la publication exacte, jamais d’une recommandation."""
 import json
 from .engagement import extraire_engagement
-from .metadonnees import extraire_metadonnees
+from .metadonnees import extraire_metadonnees, indicateur_ia
 
 def enrichir_publication(publication, instantane):
     from scraptiktok import find_item
@@ -16,4 +16,5 @@ def enrichir_publication(publication, instantane):
     date = publication["collected_at"]
     publication["engagement"] = extraire_engagement(element, instantane.get("engagement"), date)
     publication["metadonnees"] = extraire_metadonnees(element, date) if element else {"source": None}
+    publication["contenu_genere_ia"] = indicateur_ia(element)
     return publication
