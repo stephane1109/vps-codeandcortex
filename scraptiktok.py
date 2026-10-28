@@ -94,6 +94,27 @@ return {
     description: text,
     textes_visibles: fragments,
     texte_secondaire: secondaires.join('\\n\\n'),
+    // Ne considérer comme résumé IA que le bloc possédant un titre explicite.
+    resume_ia_tiktok: (() => {
+        const motif = /^(?:AI Overview|AI Summary|Aperçu IA|Résumé IA|Synthèse IA|Résumé généré par (?:l[’']?)?IA)$/i;
+        const titres = Array.from(document.querySelectorAll(
+            'h1,h2,h3,h4,h5,h6,strong,span,div,[role="heading"]'
+        )).filter(e => visible(e) && e.children.length <= 1 &&
+            (e.innerText || '').trim().length <= 90 &&
+            motif.test((e.innerText || '').trim()));
+        for (const titre of titres.slice(0, 20)) {
+            let conteneur = titre.parentElement;
+            for (let niveau = 0; niveau < 3 && conteneur; niveau++, conteneur = conteneur.parentElement) {
+                const contenu = (conteneur.innerText || '').trim();
+                const sans_titre = contenu.replace(motif, '').trim();
+                if (sans_titre.length >= 20 && sans_titre.length <= 5000 &&
+                    !sans_titre.includes(text)) {
+                    return sans_titre;
+                }
+            }
+        }
+        return '';
+    })(),
     // Lire uniquement les mentions IA visibles près de la publication.
     etiquette_ia: (() => {
         const motifs = [
@@ -368,6 +389,10 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
             textes_complementaires.append(texte)
     record["texte_secondaire"] = "\n\n".join(textes_complementaires) or (
         snapshot.get("texte_secondaire") or "").strip()
+    record["resume_ia_tiktok"] = (snapshot.get("resume_ia_tiktok") or "").strip()
+    if record["resume_ia_tiktok"] and record.get("texte_secondaire"):
+        record["texte_secondaire"] = record["texte_secondaire"].replace(
+            record["resume_ia_tiktok"], "").strip()
     record["status"] = "ok" if record["description"] else "empty_caption"
     from collecte.publications import enrichir_publication
     return enrichir_publication(record, snapshot)
@@ -717,14 +742,39 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     return list(links.values())
 
 
+DEPLIER_LEGENDE_JS = """
+// Restreindre le clic à la zone de légende de la vidéo courante.
+const zones = Array.from(document.querySelectorAll(
+    '[data-e2e="browse-video-desc"], [data-e2e="video-desc"]'
+));
+for (const zone of zones) {
+    if (!zone.getClientRects().length) continue;
+    const parent = zone.parentElement?.parentElement || zone.parentElement;
+    if (!parent) continue;
+    const boutons = Array.from(parent.querySelectorAll('button,[role="button"],span'));
+    for (const bouton of boutons) {
+        const libelle = (bouton.innerText || bouton.getAttribute('aria-label') || '').trim();
+        if (!/^(?:more|see more|read more|voir plus|afficher plus|plus|suite|…|\\.\\.\\.)$/i.test(libelle))
+            continue;
+        if (!bouton.getClientRects().length) continue;
+        bouton.click();
+        return true;
+    }
+}
+return false;
+"""
+
+
 def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
               *, interact=manual_step, check=None, sans_connexion=True) -> dict:
     """Lire une publication publique ; ne jamais demander une identification."""
     check = check or (lambda: None)
     check()
     open_page(driver, url)
+    tentative_depliage = False
 
     def read(browser: webdriver.Chrome) -> dict | bool:
+        nonlocal tentative_depliage
         check()
         fermer_invitation_connexion(browser)
         if captcha_present(browser):
@@ -732,6 +782,14 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
                 return False
             interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             check()
+        if not tentative_depliage:
+            tentative_depliage = True
+            try:
+                if browser.execute_script(DEPLIER_LEGENDE_JS):
+                    time.sleep(0.4)
+                    check()
+            except WebDriverException:
+                pass
         return extract_record(browser.execute_script(PAGE_JS), url) or False
 
     # Une légende inaccessible reste une erreur d'extraction, sans pause de connexion.
