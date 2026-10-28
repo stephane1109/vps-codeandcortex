@@ -65,7 +65,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]] | None = Field(default=None, max_length=9)
+    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "contenu_genere_ia", "hashtags"]] | None = Field(default=None, max_length=10)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
