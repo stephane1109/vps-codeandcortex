@@ -64,6 +64,7 @@ class StartRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=1000)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
+    inclure_texte_genere_ia: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
     variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "contenu_genere_ia", "hashtags"]] | None = Field(default=None, max_length=10)
     french_only: bool = False
@@ -327,8 +328,22 @@ def texte_et_hashtags(publication):
     return (texte + "\n" if texte else "") + " ".join(uniques.values())
 
 
+def entete_sources_ia(publication, source, themes=None):
+    """Identifier la provenance du texte dans un corpus IRaMuTeQ."""
+    def modalite(valeur):
+        texte = re.sub(r"[^\\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
+        return texte or "indetermine"
+
+    theme = next((mot for mot in (themes or []) if mot), None)
+    if not theme:
+        theme = next(iter(publication.get("hashtags") or []), None)
+    return (f"**** *source_{source} *theme_{modalite(theme)} "
+            f"*compte_{modalite(publication.get('author'))}\\n")
+
+
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
-                variables_txt=None, commentaires=None, supprimer_arobase_profil=False) -> str:
+                variables_txt=None, commentaires=None, supprimer_arobase_profil=False,
+                inclure_texte_genere_ia=False, themes=None) -> str:
     blocks = []
     par_publication = {}
     selection = normaliser_variables_txt(variables_txt)
@@ -345,17 +360,18 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
-        bloc = prefix + texte
-        resume_ia = (record.get("resume_ia_tiktok") or "").strip()
-        if resume_ia:
-            bloc += "\n\nSynthèse générée par TikTok (AI Overview) :\n" + resume_ia
-        texte_secondaire = (record.get("texte_secondaire") or "").strip()
-        if texte_secondaire and texte_secondaire != (record.get("description") or "").strip():
-            bloc += "\n\nTexte complémentaire affiché par TikTok :\n" + texte_secondaire
+        if inclure_texte_genere_ia:
+            bloc = entete_sources_ia(record, "original", themes) + texte
+        else:
+            bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
             etiquette = "Réponse" if commentaire.get("est_reponse") else "Commentaire"
             bloc += f"\n\n{etiquette} {numero} :\n{commentaire['texte']}"
         blocks.append(bloc)
+        if inclure_texte_genere_ia:
+            resume_ia = (record.get("resume_ia_tiktok") or "").strip()
+            if resume_ia and resume_ia != (record.get("description") or "").strip():
+                blocks.append(entete_sources_ia(record, "ia", themes) + resume_ia)
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
@@ -525,6 +541,7 @@ class Job:
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "variables_txt": self.settings.variables_txt,
+                    "inclure_texte_genere_ia": self.settings.inclure_texte_genere_ia,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
@@ -589,7 +606,9 @@ class Job:
             return text_export(self.records, self.settings.include_sources,
                 self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
                 self.commentaires if self.settings.collecter_commentaires else None,
-                supprimer_arobase_profil=supprimer_arobase_profil)
+                supprimer_arobase_profil=supprimer_arobase_profil,
+                inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
+                themes=self.settings.hashtags)
 
     def sauvegarder_historique(self):
         """Synchroniser les résultats et codages dans l'historique privé de 30 jours."""
@@ -638,7 +657,9 @@ class Job:
         # Les profils et captures ne sont jamais écrits dans les exports.
         with self.lock:
             content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt,
-                                  self.settings.variables_txt, self.commentaires if self.settings.collecter_commentaires else None)
+                                  self.settings.variables_txt, self.commentaires if self.settings.collecter_commentaires else None,
+                                  inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
+                                  themes=self.settings.hashtags)
             nombre_exporte = sum(bool(r.get("description")) for r in self.records)
         if self.settings.source_collecte == "presse" and not self.publications:
             # Ne pas produire un TXT vide après un refus avant toute donnée.
