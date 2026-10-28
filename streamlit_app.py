@@ -102,7 +102,7 @@ if "initialise" not in st.session_state:
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
-        "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
+        "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", True),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
@@ -152,7 +152,7 @@ for variable in VARIABLES_TXT:
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
 # rester lançable sans ce widget.
 st.session_state.setdefault("operator", "AND")
-st.session_state.setdefault("rechercher_dans_texte", False)
+st.session_state.setdefault("rechercher_dans_texte", True)
 st.session_state.setdefault("variantes_accents", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
@@ -389,8 +389,7 @@ with onglet_collecte:
             c1,c2 = st.columns(2)
             aide_hashtag = (
                 "Saisissez un hashtag sans espace, avec ou sans #. Exemple : #17octobre ou 17octobre. "
-                "Par défaut, la sélection finale porte uniquement sur les hashtags précédés de #. "
-                "Si vous cochez « Rechercher aussi dans le texte », une vidéo dont la légende "
+                "L’option « Rechercher aussi dans le texte » est cochée par défaut : une vidéo dont la légende "
                 "contient le mot recherché est retenue pour le TXT, même sans # (par exemple "
                 "#lyceen et « lycéen », ou #17octobre et « 17 octobre »). "
                 "La règle ET/OU et les filtres de langue/période restent applicables. "
@@ -414,8 +413,8 @@ with onglet_collecte:
                          "Le nombre de vidéos demandé est global et les variantes partagent le quota du hashtag initial.")
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
-                help="Décoché (par défaut) : seuls les #hashtags exacts de la légende comptent. "
-                     "Coché : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
+                help="Décoché : seuls les #hashtags exacts de la légende comptent. "
+                     "Coché (par défaut) : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
                      "Par exemple, #lyceen peut correspondre à « lycéen » et #17octobre à « 17 octobre ». "
                      "Une vidéo dont la légende contient le mot correspondant est donc retenue "
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
@@ -505,7 +504,7 @@ with onglet_collecte:
                     valeurs["research_client_key"] = st.session_state.get("research_client_key", "")
                     valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
                 valeurs["rechercher_dans_texte"] = (
-                    bool(st.session_state.get("rechercher_dans_texte", False)) if source != "presse" else False
+                    bool(st.session_state.get("rechercher_dans_texte", True)) if source != "presse" else False
                 )
                 valeurs["variantes_accents"] = (
                     bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
