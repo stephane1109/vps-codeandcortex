@@ -79,6 +79,17 @@ segments : `**** *source_original` puis `**** *source_ia`, avec les mêmes
 variables sélectionnées pour la publication (profil, date, identifiant,
 engagements, etc.). Aucun résumé n'est inventé si TikTok n'en fournit pas
 ou si son extraction échoue : seul le segment original est conservé.
+La lecture attend le chargement après « Plus » (jusqu'à 12 secondes par
+publication). Même avec un moteur API, cette option ouvre la page dans le
+navigateur pour rechercher le résumé. Un bilan indique combien de résumés ont
+réellement été récupérés, avec un détail par URL. Une ancienne collecte sans
+résumé doit être relancée après la mise à jour ; télécharger à nouveau son TXT
+ne récupère pas rétroactivement les textes manquants.
+
+La méthode de lecture du bloc déplié a été confrontée aux
+[tests et à l'implémentation de Rezepte](https://github.com/oliverzimmermann1986-debug/Rezepte/blob/main/app/core/tiktok_caption.py).
+Les sous-titres et la légende renvoyés par le lecteur TikTok ne sont pas attribués
+au résumé IA : il faut un titre ou un avis identifiant explicitement ce résumé.
 
 Le bouton **Arrêter** conserve les textes déjà obtenus. Recharger la page permet
 également de retrouver la collecte tant que la session est conservée.

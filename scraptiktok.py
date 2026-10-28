@@ -58,7 +58,19 @@ while (cible && cible !== document.body && cible !== document.documentElement) {
 }
 window.scrollTo(0, document.documentElement.scrollHeight);
 """
-PAGE_JS = """
+# Limiter les lectures et le clic à la publication demandée, pas aux recommandations.
+CIBLER_PUBLICATION_JS = r"""
+const identifiant = String(arguments[0] || '');
+const estVisible = e => e && e.getClientRects().length &&
+    getComputedStyle(e).visibility !== 'hidden';
+const articles = Array.from(document.querySelectorAll('article')).filter(estVisible);
+const articleCible = articles.find(a => Array.from(a.querySelectorAll('a[href]')).some(l =>
+    new RegExp('/(?:video|photo)/' + identifiant + '(?:[/?#]|$)').test(l.getAttribute('href') || '')))
+    || (articles.length === 1 && !articles[0].querySelector('a[href*="/video/"],a[href*="/photo/"]')
+        ? articles[0] : null);
+const racine = articleCible || (articles.length === 0 ? document : document.createElement('div'));
+"""
+PAGE_JS = CIBLER_PUBLICATION_JS + """
 const selecteurs = [
     '[data-media-card-description-container="true"]',
     '[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]',
@@ -76,7 +88,7 @@ const visible = element => {
 const fragments = [];
 const vus = new Set();
 for (const selecteur of selecteurs) {
-    for (const element of document.querySelectorAll(selecteur)) {
+    for (const element of racine.querySelectorAll(selecteur)) {
         if (!visible(element)) continue;
         const valeur = (element.innerText || '').trim();
         if (!valeur || vus.has(valeur) || valeur.length > 20000 ||
@@ -96,17 +108,30 @@ return {
     textes_visibles: fragments,
     // La synthèse TikTok peut se trouver dans un frère du bloc de légende.
     texte_article_deplie: (() => {
-        const zone = document.querySelector('[data-media-card-description-container="true"]');
-        const article = zone?.closest('article') ||
-            document.querySelector('article:has([data-e2e="video-desc"])');
-        return article?.innerText || '';
+        return articleCible?.innerText || '';
+    })(),
+    // Le petit conteneur portant l'avis IA fournit une borne même si le titre
+    // de l'onglet a été remplacé par « TikTok » ou une fenêtre de connexion.
+    blocs_resume_ia: (() => {
+        const avis = /(?:résumé généré par l[’']ia|ai-generated summary|ki-generierte zusammenfassung)/i;
+        const blocs = new Set();
+        for (const element of racine.querySelectorAll('p,span,div,small')) {
+            if (!estVisible(element) || !avis.test(element.innerText || '') ||
+                Array.from(element.children).some(e => avis.test(e.innerText || ''))) continue;
+            let parent = element.parentElement;
+            for (let n = 0; n < 4 && parent && parent !== racine; n++, parent = parent.parentElement) {
+                const contenu = (parent.innerText || '').trim();
+                if (contenu.length <= 12000) blocs.add(contenu);
+            }
+        }
+        return Array.from(blocs);
     })(),
     titre_page: document.title || '',
     texte_secondaire: secondaires.join('\\n\\n'),
     // Ne considérer comme résumé IA que le bloc possédant un titre explicite.
     resume_ia_tiktok: (() => {
         const motif = /^(?:AI Overview|AI Summary|Aperçu IA|Résumé IA|Synthèse IA|Résumé généré par (?:l[’']?)?IA)$/i;
-        const titres = Array.from(document.querySelectorAll(
+        const titres = Array.from(racine.querySelectorAll(
             'h1,h2,h3,h4,h5,h6,strong,span,div,[role="heading"]'
         )).filter(e => visible(e) && e.children.length <= 1 &&
             (e.innerText || '').trim().length <= 90 &&
@@ -115,9 +140,10 @@ return {
             let conteneur = titre.parentElement;
             for (let niveau = 0; niveau < 3 && conteneur; niveau++, conteneur = conteneur.parentElement) {
                 const contenu = (conteneur.innerText || '').trim();
-                const sans_titre = contenu.replace(motif, '').trim();
+                const sans_titre = contenu.startsWith(titre.innerText.trim())
+                    ? contenu.slice(titre.innerText.trim().length).trim() : '';
                 if (sans_titre.length >= 20 && sans_titre.length <= 5000 &&
-                    !sans_titre.includes(text)) {
+                    (!text || !sans_titre.includes(text))) {
                     return sans_titre;
                 }
             }
@@ -353,35 +379,48 @@ def timestamp_iso(value: object) -> str:
 
 
 def extraire_resume_ia_tiktok(instantane, description):
-    """Isoler la synthèse TikTok derrière Plus, attestée par sa mention IA."""
+    """Extraire uniquement une synthèse identifiée par son titre ou son avis IA."""
+    def normaliser(texte):
+        return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", texte)).strip().casefold()
+
+    original = normaliser(description)
+
+    def distinct(texte):
+        return len(texte) >= 20 and (not original or original not in normaliser(texte))
+
+    motif_avis = re.compile(
+        r"(?:ceci est un résumé généré par l[’']ia|this is an ai-generated summary|"
+        r"dies ist eine ki-generierte zusammenfassung)", re.IGNORECASE)
     explicite = (instantane.get("resume_ia_tiktok") or "").strip()
-    if explicite and explicite != description.strip() and description.strip() not in explicite:
+    avis_explicite = motif_avis.search(explicite)
+    if avis_explicite:
+        explicite = explicite[:avis_explicite.start()].strip().rstrip("ⓘℹ️ ").strip()
+    if distinct(explicite):
         return explicite
+    # Les conteneurs proches de l'avis évitent la dépendance au titre de la page.
+    for bloc in instantane.get("blocs_resume_ia") or []:
+        avis = motif_avis.search(bloc)
+        if not avis:
+            continue
+        resume = bloc[:avis.start()].strip().rstrip("ⓘℹ️ ").strip()
+        if distinct(resume):
+            return resume
 
     article = (instantane.get("texte_article_deplie") or "").strip()
-    if not article:
-        return ""
-    avis = re.search(
-        r"(?:ceci est un résumé généré par l[’']ia|"
-        r"this is an ai-generated summary|"
-        r"dies ist eine ki-generierte zusammenfassung)",
-        article, flags=re.IGNORECASE
-    )
+    avis = motif_avis.search(article)
     if not avis:
         return ""
-
     titre = re.sub(r"\s*\|\s*TikTok.*$", "", instantane.get("titre_page") or "",
                    flags=re.IGNORECASE).strip()
-    avant_avis = article[:avis.start()]
-    debut = avant_avis.rfind(titre) if titre else -1
-    if debut < 0:
-        # Aucune borne fiable : ne pas attribuer l'ensemble de l'article à l'IA.
+    if not titre or titre.casefold() == "tiktok":
         return ""
-    resume = avant_avis[debut:].strip()
-    if (len(resume) < 20 or resume == description.strip()
-            or description.strip() in resume):
+    # Le rendu HTML peut couper le titre sur plusieurs lignes.
+    motif_titre = r"\s+".join(re.escape(mot) for mot in titre.split())
+    bornes = list(re.finditer(motif_titre, article[:avis.start()], re.IGNORECASE))
+    if not bornes:
         return ""
-    return resume
+    resume = article[bornes[-1].start():avis.start()].strip().rstrip("ⓘℹ️ ").strip()
+    return resume if distinct(resume) else ""
 
 
 def extract_record(snapshot: dict, url: str) -> dict | None:
@@ -783,24 +822,25 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
     return list(links.values())
 
 
-DEPLIER_LEGENDE_JS = """
+DEPLIER_LEGENDE_JS = CIBLER_PUBLICATION_JS + """
 // Chercher « Plus » dans le voisinage de la légende, et non uniquement
 // dans ses descendants : TikTok utilise aussi un élément frère.
 const visible = element => element && element.getClientRects().length &&
     getComputedStyle(element).visibility !== 'hidden';
-const zones = Array.from(document.querySelectorAll(
-    '[data-media-card-description-container="true"], '
+const zones = Array.from(racine.querySelectorAll(
+    '[data-media-card-description-container="true"], ' +
     '[data-e2e="browse-video-desc"], [data-e2e="video-desc"]'
 )).filter(visible);
 for (const zone of zones) {
     for (const parent of [zone, zone.parentElement, zone.parentElement?.parentElement,
-                          zone.parentElement?.parentElement?.parentElement]) {
-        if (!parent) continue;
+                          zone.parentElement?.parentElement?.parentElement, articleCible]) {
+        if (!parent || (articleCible && !articleCible.contains(parent))) continue;
         for (const element of parent.querySelectorAll('button,[role="button"],span,a,div')) {
             if (!visible(element)) continue;
             if (element.children.length > 2) continue;
             const libelle = (element.innerText || element.getAttribute('aria-label') || '').trim();
-            if (!/^(?:plus|voir plus|afficher plus|more|see more|read more|\\.\\.\\.|…)$/i.test(libelle))
+            if (Array.from(element.children).some(e => (e.innerText || '').trim() === libelle)) continue;
+            if (!/^(?:plus|voir plus|afficher plus|more|see more|read more|mehr|ver más|altro|meer|mais|\\.\\.\\.|…)$/i.test(libelle))
                 continue;
             element.click();
             return true;
@@ -818,6 +858,8 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
     check()
     open_page(driver, url)
     tentatives_depliage = 0
+    identifiant = canonical_post(url)[0]
+    chercher_ia = bool(getattr(args, "inclure_texte_genere_ia", False))
 
     def read(browser: webdriver.Chrome) -> dict | bool:
         nonlocal tentatives_depliage
@@ -828,19 +870,60 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
                 return False
             interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             check()
-        if tentatives_depliage < 3:
+        if not chercher_ia and tentatives_depliage < 3:
             tentatives_depliage += 1
             try:
-                if browser.execute_script(DEPLIER_LEGENDE_JS):
+                if browser.execute_script(DEPLIER_LEGENDE_JS, identifiant):
                     time.sleep(0.6)
                     check()
                     return False
             except WebDriverException:
                 pass
-        return extract_record(browser.execute_script(PAGE_JS), url) or False
+        return extract_record(browser.execute_script(PAGE_JS, identifiant), url) or False
 
     # Une légende inaccessible reste une erreur d'extraction, sans pause de connexion.
-    return WebDriverWait(driver, args.timeout).until(read)
+    publication = WebDriverWait(driver, args.timeout).until(read)
+    if chercher_ia:
+        completer_resume_ia(driver, publication, args, check)
+    else:
+        publication["statut_resume_ia"] = "desactive"
+    return publication
+
+
+def completer_resume_ia(navigateur, publication, arguments, verifier):
+    """Attendre l'hydratation et le résumé, sans perdre une légende déjà lue."""
+    debut = time.monotonic()
+    echeance = debut + min(12.0, max(0.0, float(arguments.timeout)))
+    prochain_clic = debut + 2.0
+    tentatives = 0
+    meilleur = publication.get("resume_ia_tiktok") or ""
+    stable_depuis = debut
+    erreur = False
+    while time.monotonic() < echeance:
+        verifier()
+        maintenant = time.monotonic()
+        try:
+            # Un bouton visible avant l'hydratation peut ignorer le premier clic.
+            # Réessayer seulement « Plus », jamais « Moins ».
+            if maintenant >= prochain_clic and tentatives < 3:
+                navigateur.execute_script(DEPLIER_LEGENDE_JS, publication["id"])
+                tentatives += 1
+                prochain_clic = maintenant + 2.0
+            instantane = navigateur.execute_script(PAGE_JS, publication["id"])
+            cible = canonical_post(instantane.get("url", ""))
+            if cible and cible[0] == publication["id"]:
+                resume = extraire_resume_ia_tiktok(instantane, publication.get("description") or "")
+                if len(resume) > len(meilleur):
+                    meilleur, stable_depuis = resume, maintenant
+                # Laisser le rendu finir plutôt qu'exporter un fragment en cours de chargement.
+                if meilleur and maintenant - stable_depuis >= 1.0:
+                    break
+        except WebDriverException:
+            erreur = True
+        time.sleep(0.25)
+    publication["resume_ia_tiktok"] = meilleur
+    publication["statut_resume_ia"] = ("recupere" if meilleur else
+                                      "erreur_lecture" if erreur else "non_trouve")
 
 
 def positive_int(value: str) -> int:

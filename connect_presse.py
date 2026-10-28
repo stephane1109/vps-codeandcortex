@@ -16,6 +16,7 @@ class ConnexionPresse(SessionNavigateur):
         self.research_debut = parametres.date_debut
         self.research_fin = parametres.date_fin
         self.commentaires_research = bool(parametres.collecter_commentaires)
+        self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
         if self.moteur_collecte == "research":
             cle = (parametres.research_client_key.get_secret_value().strip()
@@ -27,8 +28,8 @@ class ConnexionPresse(SessionNavigateur):
         return [dict(m) for m in medias]
 
     def ouvrir(self):
-        """Research sans Chrome, sauf si l'utilisateur collecte les commentaires."""
-        if self.moteur_collecte == "research" and not self.commentaires_research:
+        """Research sans Chrome, sauf demande de commentaires ou de résumés IA."""
+        if self.moteur_collecte == "research" and not self.commentaires_research and not self.resume_research:
             if self.verifier:
                 self.verifier()
             return None

@@ -484,7 +484,7 @@ with onglet_collecte:
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
             value=False, disabled=occupe,
-            help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original. Les deux segments conservent les mêmes variables sélectionnées.")
+            help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original. Les deux segments conservent les mêmes variables sélectionnées. Cette option ouvre chaque publication dans le navigateur, y compris en mode API, et peut ajouter jusqu’à 12 secondes de lecture par publication.")
         st.checkbox("Supprimer le @ devant les profils dans le TXT",
                     key="export_profil_sans_arobase", value=True, disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary",
@@ -820,6 +820,13 @@ with onglet_collecte:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
                             ajouter_detail_source(" · ".join(indices))
                         st.caption(" · ".join(details_source))
+            bilan_ia = actuel.get("bilan_textes_ia")
+            if bilan_ia and bilan_ia["publications"]:
+                st.caption(f"Textes IA TikTok récupérés : {bilan_ia['recuperes']} sur {bilan_ia['publications']} publications retenues dans le TXT.")
+                if bilan_ia["recuperes"] < bilan_ia["publications"]:
+                    st.warning("Certains résumés IA n’ont pas été récupérés. Ils peuvent être absents ou inaccessibles dans la page TikTok. Les textes originaux restent exportés.")
+                with st.expander("Détail de la récupération des textes IA"):
+                    st.dataframe(bilan_ia["details"], hide_index=True)
             with st.expander("Aperçu des textes"):
                 st.caption("Les cinq premières publications, avec le codage des sources et les variables sélectionnées.")
                 for publication in actuel.get("preview",[]):

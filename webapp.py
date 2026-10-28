@@ -543,6 +543,15 @@ class Job:
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "variables_txt": self.settings.variables_txt,
                     "inclure_texte_genere_ia": self.settings.inclure_texte_genere_ia,
+                    "bilan_textes_ia": {
+                        "publications": len(self.records),
+                        "recuperes": sum(bool(r.get("resume_ia_tiktok")) for r in self.records),
+                        "details": [{"URL TikTok": r["url"],
+                                     "État": ("Récupéré" if r.get("resume_ia_tiktok") else
+                                              "Erreur de lecture" if r.get("statut_resume_ia") == "erreur_lecture" else
+                                              "Résumé non trouvé dans la page")}
+                                    for r in self.records]
+                    } if self.settings.inclure_texte_genere_ia else None,
                     "non_french": self.non_french, "language_unknown": self.language_unknown,
                     "date_debut": self.settings.date_debut, "date_fin": self.settings.date_fin,
                     "hors_periode": self.hors_periode, "dates_indeterminees": self.dates_indeterminees,
@@ -851,6 +860,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
         hashtag=job.settings.hashtag, limit=job.settings.limit,
+        inclure_texte_genere_ia=job.settings.inclure_texte_genere_ia,
         max_scrolls=max_defilements(),
         idle_rounds=3, delay=3.0, timeout=20.0, interactive=True,
         headless=os.getenv("SCRAPTIKTOK_HEADLESS", "1") == "1",
@@ -913,6 +923,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
                         record = dict(record_api)
+                        if job.settings.inclure_texte_genere_ia:
+                            # La case IA demande une lecture du résumé affiché ; les API
+                            # de métadonnées ne le fournissent pas. Garder leurs données.
+                            job.pause(args.delay)
+                            try:
+                                lecture_ia = connexion.lire_publication(url)
+                                for cle in ("resume_ia_tiktok", "statut_resume_ia"):
+                                    record[cle] = lecture_ia.get(cle, "")
+                            except scraper.WebDriverException:
+                                record["statut_resume_ia"] = "erreur_lecture"
                     else:
                         # La pause entre publications n'est utile que lorsqu'une
                         # consultation TikTok / Selenium est réellement nécessaire.
