@@ -59,32 +59,38 @@ while (cible && cible !== document.body && cible !== document.documentElement) {
 window.scrollTo(0, document.documentElement.scrollHeight);
 """
 PAGE_JS = """
-const selectors = ['[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]'];
-const text = selectors.flatMap(s => Array.from(document.querySelectorAll(s)))
-    .find(e => e.getClientRects().length && e.innerText.trim());
+const selecteurs = [
+    '[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]',
+    '[data-e2e*="translated" i]', '[data-e2e*="translation" i]',
+    '[data-e2e*="transcript" i]', '[data-e2e*="caption-text" i]',
+    '[data-e2e*="generated-text" i]', '[data-e2e*="ai-summary" i]'
+];
+const visible = element => {
+    if (!element.getClientRects().length) return false;
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+};
+const fragments = [];
+const vus = new Set();
+for (const selecteur of selecteurs) {
+    for (const element of document.querySelectorAll(selecteur)) {
+        if (!visible(element)) continue;
+        const valeur = (element.innerText || '').trim();
+        if (!valeur || vus.has(valeur) || valeur.length > 20000) continue;
+        vus.add(valeur);
+        fragments.push(valeur);
+    }
+}
+const text = fragments[0] || '';
+const secondaires = fragments.slice(1).filter(texte =>
+    texte !== text && !text.includes(texte) && !texte.includes(text)
+);
 return {
     payloads: ['__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE']
         .map(id => document.getElementById(id)?.textContent).filter(Boolean),
-    description: text ? text.innerText : '',
-    // Capturer séparément les textes complémentaires identifiables sur TikTok.
-    texte_secondaire: (() => {
-        const original = (text?.innerText || '').trim();
-        const selecteurs = [
-            '[data-e2e="video-translation"]',
-            '[data-e2e="browse-video-translation"]',
-            '[data-e2e="translated-video-desc"]',
-            '[data-e2e="video-generated-text"]',
-            '[data-e2e="video-ai-summary"]'
-        ];
-        for (const selecteur of selecteurs) {
-            for (const element of document.querySelectorAll(selecteur)) {
-                if (!element.getClientRects().length) continue;
-                const valeur = (element.innerText || '').trim();
-                if (valeur && valeur !== original && !original.includes(valeur)) return valeur;
-            }
-        }
-        return '';
-    })(),
+    description: text,
+    textes_visibles: fragments,
+    texte_secondaire: secondaires.join('\\n\\n'),
     // Lire uniquement les mentions IA visibles près de la publication.
     etiquette_ia: (() => {
         const motifs = [
@@ -349,7 +355,16 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
             return None
         record.update(description=snapshot["description"].strip(), source="page_dom")
     record["hashtags"] = list(dict.fromkeys(re.findall(r"#(\w+)", record["description"])))
-    record["texte_secondaire"] = (snapshot.get("texte_secondaire") or "").strip()
+    textes_visibles = snapshot.get("textes_visibles") or []
+    description = (record.get("description") or "").strip()
+    textes_complementaires = []
+    for texte in textes_visibles:
+        texte = str(texte).strip()
+        if (texte and texte != description and texte not in description
+                and description not in texte and texte not in textes_complementaires):
+            textes_complementaires.append(texte)
+    record["texte_secondaire"] = "\\n\\n".join(textes_complementaires) or (
+        snapshot.get("texte_secondaire") or "").strip()
     record["status"] = "ok" if record["description"] else "empty_caption"
     from collecte.publications import enrichir_publication
     return enrichir_publication(record, snapshot)
