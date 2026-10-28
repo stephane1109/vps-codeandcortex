@@ -1913,6 +1913,19 @@ def create_app(manager=None):
             headers={"Content-Disposition":f'attachment; filename="scraptiktok_analyse_{identifiant}.zip"'},
             background=BackgroundTask(flux.close))
 
+    @app.get("/api/historique/{identifiant}/sauvegarde/{categorie}")
+    def telecharger_sauvegarde_distincte(identifiant: str, categorie: str, request: Request):
+        from stockage.historique_analyses import retrouver, exporter_sauvegarde_distincte
+        if categorie not in {"collecte", "analyse"}:
+            raise HTTPException(404, "Type de sauvegarde inconnu.")
+        archive = retrouver(manager.data_dir, identifiant, owner_historique(request))
+        if archive is None:
+            raise HTTPException(404, "Sauvegarde introuvable.")
+        flux = exporter_sauvegarde_distincte(archive[1], categorie)
+        return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="scraptiktok_{categorie}_{identifiant}.zip"'},
+            background=BackgroundTask(flux.close))
+
     @app.get("/api/sauvegardes")
     def sauvegardes_disponibles(request: Request):
         from stockage.sauvegarde_progressive import lister_points
