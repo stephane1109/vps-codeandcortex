@@ -185,6 +185,24 @@ class FormatTxt(unittest.TestCase):
             self.assertTrue(job.path.read_text().startswith("*partages_42 *comment_123\n"))
             self.assertFalse(settings.collecter_commentaires)
 
+    def test_indicateur_ia_retire_des_anciennes_selections_et_des_deux_sources(self):
+        choix = web.StartRequest(hashtag="test", variables_txt=["date", "contenu_genere_ia", "profil"],
+                                 inclure_texte_genere_ia=True)
+        self.assertEqual(choix.variables_txt, ["date", "profil"])
+        self.assertTrue(choix.inclure_texte_genere_ia)
+        for valeur in (None, "indetermine", "declare_par_createur", "etiquete_automatique"):
+            publication = dict(self.publication(), contenu_genere_ia=valeur,
+                               resume_ia_tiktok="Un résumé distinct fourni par TikTok.")
+            # Une ancienne sélection passée directement à l'export est aussi migrée.
+            texte = web.text_export([publication], True,
+                variables_txt=["date", "contenu_genere_ia", "profil"], inclure_texte_genere_ia=True)
+            self.assertNotIn("*ia_", texte)
+            self.assertEqual(texte.count("*profil_"), 2)
+            self.assertEqual(texte.count("*date_"), 2)
+            self.assertIn("*source_original", texte)
+            self.assertIn("*source_ia", texte)
+        self.assertEqual(web.StartRequest(hashtag="test", variables_txt=["contenu_genere_ia"]).variables_txt, [])
+
     def test_arobase_optionnelle_avec_et_sans_ia_sans_compte_automatique(self):
         publication = dict(self.publication(), author='@baddydeadpool',
                            description='Texte authentique @autre.', resume_ia_tiktok='Un résumé distinct @autre.')

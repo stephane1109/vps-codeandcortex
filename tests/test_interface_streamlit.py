@@ -28,6 +28,8 @@ class TestsInterface(unittest.TestCase):
             page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
             self.assertFalse(page.exception)
             self.assertTrue(page.checkbox(key='export_profil_sans_arobase').value)
+            self.assertFalse(any(c.label == 'Contenu généré par IA ?' for c in page.checkbox))
+            self.assertTrue(any(c.label == 'Texte généré par IA' for c in page.checkbox))
             for sans_arobase in (False, True):
                 page.checkbox(key='export_profil_sans_arobase').set_value(sans_arobase).run()
                 self.assertFalse(page.exception)
