@@ -476,6 +476,8 @@ with onglet_collecte:
                 colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
         st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
+        st.checkbox("Supprimer le @ devant les profils dans le TXT",
+                    key="export_profil_sans_arobase", value=True, disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
@@ -878,8 +880,7 @@ with onglet_collecte:
                                    "État": v.get("video_message")} for v in actuel["bilan_mp4"]], hide_index=True)
             choix_export = ""
             if actuel["can_download"] or actuel["archive_prete"]:
-                sans_arobase = st.checkbox("Supprimer le @ devant les profils dans le TXT", value=True,
-                    key="export_profil_sans_arobase_" + actuel["id"])
+                sans_arobase = st.session_state.get("export_profil_sans_arobase", True)
                 choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
             liens = st.columns(2)
             if actuel["can_download"]:
