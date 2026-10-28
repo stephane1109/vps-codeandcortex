@@ -66,6 +66,27 @@ return {
     payloads: ['__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE']
         .map(id => document.getElementById(id)?.textContent).filter(Boolean),
     description: text ? text.innerText : '',
+    // Lire uniquement les mentions IA visibles près de la publication.
+    etiquette_ia: (() => {
+        const motifs = [
+            /le créateur a indiqué que ce contenu était généré par l[’']IA/i,
+            /creator labeled as AI-generated/i,
+            /généré par l[’']IA/i,
+            /AI-generated/i
+        ];
+        const elements = document.querySelectorAll(
+            '[data-e2e*="aigc" i], [data-e2e*="ai-label" i], ' +
+            '[class*="aigc" i], [class*="ai-label" i], [aria-label]'
+        );
+        for (const element of Array.from(elements).slice(0, 400)) {
+            if (!element.getClientRects().length) continue;
+            const texte = (element.getAttribute('aria-label') || element.innerText || '').trim();
+            if (texte.length > 160 || !motifs.some(m => m.test(texte))) continue;
+            return motifs[0].test(texte) || motifs[1].test(texte)
+                ? 'declare_par_createur' : 'etiquete_automatique';
+        }
+        return null;
+    })(),
     canonical: document.querySelector('link[rel="canonical"]')?.href || '',
     url: location.href,
     engagement: Object.fromEntries(Object.entries({likes:'like-count',partages:'share-count',commentaires:'comment-count',favoris:'collect-count',vues:'video-views'}).map(([nom,selecteur])=>[nom,Array.from(document.querySelectorAll('[data-e2e="'+selecteur+'"]')).find(e=>e.getClientRects().length)?.innerText || null]))
