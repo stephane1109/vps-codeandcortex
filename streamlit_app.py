@@ -640,8 +640,11 @@ with onglet_collecte:
             if actuel.get("bilan_sources"):
                 with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
                     requetes_api_lot = 0
+                    def ajouter_detail_source(message):
+                        details_source.append(" ".join(str(message).split()))
                     for numero_source, bilan in enumerate(actuel["bilan_sources"], 1):
-                        st.write(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        details_source = []
+                        ajouter_detail_source(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
                         informations_source = []
                         if actuel.get("source_collecte") == "presse":
                             version_source=bilan.get("version_collecteur")
@@ -651,28 +654,28 @@ with onglet_collecte:
                                     " · version "+version_source
                                 )
                             else:
-                                st.warning("Diagnostic issu d'une ancienne collecte, sans version enregistrée : "
+                                ajouter_detail_source("Diagnostic issu d'une ancienne collecte, sans version enregistrée : "
                                            "relancez une collecte pour tester le nouveau moteur.")
                         if bilan.get("retenues_par_compte"):
                             informations_source.append("Liens retenus cumulés : " + " · ".join(
                                 f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
                         if informations_source:
-                            st.caption(" · ".join(informations_source))
+                            ajouter_detail_source(" · ".join(informations_source))
                         for recherche in bilan.get("recherches", []):
-                            st.write(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
+                            ajouter_detail_source(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
                             auteurs = recherche.get("auteurs_dans_liens", {})
                             compte = recherche.get("compte")
                             if compte and not recherche.get("urls_embed_non_verifiees"):
-                                st.caption(f"@{compte} : {auteurs.get(compte, 0)} publication(s) dans les liens reçus de TikTok, sur {recherche.get('candidats_examines', 0)} publication(s) repérée(s).")
+                                ajouter_detail_source(f"@{compte} : {auteurs.get(compte, 0)} publication(s) dans les liens reçus de TikTok, sur {recherche.get('candidats_examines', 0)} publication(s) repérée(s).")
                                 if recherche.get("candidats_examines") and not auteurs.get(compte, 0):
-                                    st.info("Le compte ciblé est absent des liens reçus pour cette recherche. Le filtre l’a cherché ; cela ne prouve pas que ses vidéos n’existent pas.")
+                                    ajouter_detail_source("Le compte ciblé est absent des liens reçus pour cette recherche. Le filtre l’a cherché ; cela ne prouve pas que ses vidéos n’existent pas.")
                             if auteurs:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
-                                st.caption("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
+                                ajouter_detail_source("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
                             navigation=recherche.get("navigation_publications")
                             ligne_pagination = ""
                             if navigation=="research_officielle":
-                                st.caption(f"Research API : {recherche.get('pages_research',0)} page(s), {recherche.get('liens',0)} vidéo(s) retenue(s).")
+                                ajouter_detail_source(f"Research API : {recherche.get('pages_research',0)} page(s), {recherche.get('liens',0)} vidéo(s) retenue(s).")
                             elif navigation=="api_liste_createur":
                                 provenance=recherche.get("source_secuid")
                                 resolution=(
@@ -700,43 +703,43 @@ with onglet_collecte:
                                         f"du média ; {resolution}."
                                     )
                             elif navigation=="onglet_videos_selectionne":
-                                st.caption("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")
+                                ajouter_detail_source("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")
                             elif navigation=="grille_videos_sans_onglet_distinct":
-                                st.caption("Grille de vidéos du média reconnue ; aucun onglet distinct n'était nécessaire.")
+                                ajouter_detail_source("Grille de vidéos du média reconnue ; aucun onglet distinct n'était nécessaire.")
                             elif navigation=="onglet_videos_indisponible":
-                                st.warning("Onglet Vidéos introuvable sur ce profil : aucune recherche générale n'est substituée.")
+                                ajouter_detail_source("Onglet Vidéos introuvable sur ce profil : aucune recherche générale n'est substituée.")
                             elif navigation=="clic_onglet_videos_impossible":
-                                st.warning("Impossible d'ouvrir l'onglet Vidéos du média.")
+                                ajouter_detail_source("Impossible d'ouvrir l'onglet Vidéos du média.")
                             elif navigation=="ouverture_onglet_videos_en_cours":
-                                st.caption("Ouverture de l'onglet Vidéos demandée, mais le chargement n'a pas été confirmé.")
+                                ajouter_detail_source("Ouverture de l'onglet Vidéos demandée, mais le chargement n'a pas été confirmé.")
                             elif navigation=="rubrique_selectionnee":
-                                st.caption("Rubrique Vidéos/Publications ouverte avant la pagination.")
+                                ajouter_detail_source("Rubrique Vidéos/Publications ouverte avant la pagination.")
                             elif navigation=="pas_de_rubrique_distincte_detectee":
-                                st.caption("Aucun accès distinct à « Toutes les vidéos » détecté : collecte sur la grille visible du profil.")
+                                ajouter_detail_source("Aucun accès distinct à « Toutes les vidéos » détecté : collecte sur la grille visible du profil.")
                             elif navigation=="clic_impossible":
-                                st.warning("TikTok a refusé l'ouverture de la rubrique Vidéos/Publications.")
+                                ajouter_detail_source("TikTok a refusé l'ouverture de la rubrique Vidéos/Publications.")
                             details_pagination=recherche.get("pagination_bilan") or {}
                             if details_pagination:
-                                st.caption(
+                                ajouter_detail_source(
                                     f"Pagination du profil : {details_pagination.get('defilements',0)} "
                                     f"défilement(s), {details_pagination.get('sans_progres',0)} sans déplacement "
                                     f"de grille · {details_pagination.get('pages_reseau',0)} page(s) "
                                     "de publications reçue(s) par le navigateur."
                                 )
                                 if details_pagination.get("connexion_exigee"):
-                                    st.warning(
+                                    ajouter_detail_source(
                                         "TikTok interrompt la pagination anonyme de ce média en demandant "
                                         "une connexion. Les premières vidéos restent conservées ; "
                                         "la recherche complémentaire tente d'en trouver d'autres."
                                     )
                                 elif details_pagination.get("sans_progres",0):
-                                    st.info(
+                                    ajouter_detail_source(
                                         "La grille du profil n'a pas progressé à certains défilements. "
                                         "Cela peut provenir du conteneur TikTok ou d'une limite "
                                         "d'accès aux publications suivantes."
                                     )
                                 if not details_pagination.get("reseau_disponible",True):
-                                    st.caption("Observation des pages réseau indisponible ; liens HTML uniquement.")
+                                    ajouter_detail_source("Observation des pages réseau indisponible ; liens HTML uniquement.")
                             motifs = {"limit": "limite demandée atteinte", "no_new_links": "plus de nouveaux liens après plusieurs attentes",
                                       "max_scrolls": "budget de défilement atteint", "blocked": "vérification TikTok en attente",
                                       "tiktok_error": "erreur de chargement TikTok", "no_accessible_links": "aucun lien lisible",
@@ -749,17 +752,17 @@ with onglet_collecte:
                                 ligne_pagination = (ligne_pagination + " · " + texte_arret
                                                     if ligne_pagination else texte_arret)
                             if ligne_pagination:
-                                st.caption(ligne_pagination)
+                                ajouter_detail_source(ligne_pagination)
                             if recherche.get("diagnostic"):
                                 diagnostic_recherche=recherche["diagnostic"]
                                 code_recherche=diagnostic_recherche.get("code", "indéterminé")
-                                st.caption("Diagnostic : " + code_recherche)
+                                ajouter_detail_source("Diagnostic : " + code_recherche)
                                 if code_recherche in {"research_acces_refuse", "research_indisponible"}:
-                                    st.warning("Research API officielle : " + str(diagnostic_recherche.get("detail") or code_recherche))
+                                    ajouter_detail_source("Research API officielle : " + str(diagnostic_recherche.get("detail") or code_recherche))
                                 elif code_recherche=="tiktok_limitation_429":
-                                    st.error("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
+                                    ajouter_detail_source("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
                                              "essayer les autres vidéos ni les autres médias.")
-                                    st.info(
+                                    ajouter_detail_source(
                                         "Ce refus concerne l'API web Presse, et non nécessairement "
                                         "la collecte par hashtags. Pour une nouvelle collecte, "
                                         "vous pouvez choisir manuellement le moteur "
@@ -777,7 +780,7 @@ with onglet_collecte:
                                     if phase:
                                         appels_media = int(recherche.get("requetes_tentees") or
                                                             diagnostic_recherche.get("requetes_tentees") or 0)
-                                        st.caption(
+                                        ajouter_detail_source(
                                             "Média en échec : " + str(compte or bilan["source"])
                                             + f" · source {numero_source} de la sélection. "
                                             + "Étape du refus : " + etapes_429.get(phase,phase)
@@ -788,23 +791,24 @@ with onglet_collecte:
                                               "page(s) reçue(s) pour ce média."
                                         )
                                 elif code_recherche=="budget_interne_epuise":
-                                    st.warning("Budget administrateur des requêtes API Presse épuisé. "
+                                    ajouter_detail_source("Budget administrateur des requêtes API Presse épuisé. "
                                                "La collecte a été arrêtée avant de solliciter TikTok.")
                                 elif code_recherche=="tiktok_pause_429":
-                                    st.warning("Moteur API suspendu par la pause de protection après HTTP 429. "
+                                    ajouter_detail_source("Moteur API suspendu par la pause de protection après HTTP 429. "
                                                "Aucune requête TikTok n'a été envoyée pour cette nouvelle collecte.")
                                 if diagnostic_recherche.get("retry_after_seconds"):
-                                    st.caption(f"Délai indicatif transmis par TikTok (Retry-After) : "
+                                    ajouter_detail_source(f"Délai indicatif transmis par TikTok (Retry-After) : "
                                                f"{diagnostic_recherche['retry_after_seconds']} secondes.")
                                 if diagnostic_recherche.get("detail"):
-                                    st.warning("Accès TikTok : " + diagnostic_recherche["detail"])
+                                    ajouter_detail_source("Accès TikTok : " + diagnostic_recherche["detail"])
                             elif recherche.get("message_erreur"):
-                                st.warning("Accès TikTok : "+recherche["message_erreur"])
+                                ajouter_detail_source("Accès TikTok : "+recherche["message_erreur"])
                             requetes_api_lot += int(recherche.get("requetes_tentees") or 0)
                         diagnostic = bilan.get("diagnostic", {})
                         if diagnostic:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
-                            st.caption(" · ".join(indices))
+                            ajouter_detail_source(" · ".join(indices))
+                        st.caption(" · ".join(details_source))
             if actuel.get("apercu_engagement"):
                 st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres.")
 
