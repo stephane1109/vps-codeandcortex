@@ -167,7 +167,7 @@ occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
 # L'historique est identifié par un cookie privé distinct de la session de
 # collecte ; la session peut expirer sans effacer les analyses des 30 jours.
 with st.sidebar:
-    st.subheader("Historique des analyses")
+    st.subheader("Sauvegardes : collecte et analyse")
     if not cookie_historique:
         st.caption("Rechargez la page d'accueil pour activer l'historique privé.")
     else:
@@ -178,8 +178,8 @@ with st.sidebar:
         else:
             analyses_passees = historique_reponse.get("analyses", [])
             duree_historique = historique_reponse.get("retention_jours", 30)
-            st.caption(f"Collectes et analyses conservées {duree_historique} jours, "
-                       "sans duplication des vidéos MP4.")
+            st.caption(f"Deux sauvegardes distinctes conservées {duree_historique} jours : "
+                       "données de collecte réimportables et résultats d'analyse, sans MP4.")
             if not analyses_passees:
                 st.caption("Aucune analyse enregistrée.")
             else:
@@ -192,14 +192,14 @@ with st.sidebar:
                     return f"{date_} · {ligne.get('titre') or identifiant[:8]}"
 
                 choix_historique = st.selectbox(
-                    "Retrouver une analyse",
+                    "Retrouver une collecte et son analyse",
                     list(index_analyses),
                     format_func=afficher_entree_historique,
                     key="choix_historique_scraptiktok",
                 )
                 entree = index_analyses[choix_historique]
                 st.caption("Statut : " + entree.get("statut","indéterminé"))
-                if st.button("Rouvrir l'analyse",key="ouvrir_historique_scraptiktok",
+                if st.button("Rouvrir la collecte et l’analyse",key="ouvrir_historique_scraptiktok",
                              disabled=occupe,use_container_width=True):
                     try:
                         analyse_reouverte=api(
@@ -210,8 +210,13 @@ with st.sidebar:
                     except RuntimeError as erreur:
                         st.error("Réouverture impossible : " + str(erreur))
                 st.link_button(
-                    "Télécharger les résultats (ZIP sans MP4)",
-                    f"/api/historique/{choix_historique}/archive",
+                    "Sauvegarde 1 — Collecte (ZIP réimportable)",
+                    f"/api/historique/{choix_historique}/sauvegarde/collecte",
+                    use_container_width=True,
+                )
+                st.link_button(
+                    "Sauvegarde 2 — Résultats de l'analyse (ZIP)",
+                    f"/api/historique/{choix_historique}/sauvegarde/analyse",
                     use_container_width=True,
                 )
 
