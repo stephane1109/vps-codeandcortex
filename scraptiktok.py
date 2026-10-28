@@ -63,7 +63,9 @@ const selecteurs = [
     '[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]',
     '[data-e2e*="translated" i]', '[data-e2e*="translation" i]',
     '[data-e2e*="transcript" i]', '[data-e2e*="caption-text" i]',
-    '[data-e2e*="generated-text" i]', '[data-e2e*="ai-summary" i]'
+    '[data-e2e*="generated-text" i]', '[data-e2e*="ai-summary" i]',
+    '[data-e2e*="description" i]', '[data-e2e*="summary" i]',
+    '[data-e2e*="caption" i]'
 ];
 const visible = element => {
     if (!element.getClientRects().length) return false;
@@ -76,7 +78,8 @@ for (const selecteur of selecteurs) {
     for (const element of document.querySelectorAll(selecteur)) {
         if (!visible(element)) continue;
         const valeur = (element.innerText || '').trim();
-        if (!valeur || vus.has(valeur) || valeur.length > 20000) continue;
+        if (!valeur || vus.has(valeur) || valeur.length > 20000 ||
+            /^(?:AI.generated|Généré par (?:l[’\']?)?IA)$/i.test(valeur)) continue;
         vus.add(valeur);
         fragments.push(valeur);
     }
@@ -363,7 +366,7 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
         if (texte and texte != description and texte not in description
                 and description not in texte and texte not in textes_complementaires):
             textes_complementaires.append(texte)
-    record["texte_secondaire"] = "\\n\\n".join(textes_complementaires) or (
+    record["texte_secondaire"] = "\n\n".join(textes_complementaires) or (
         snapshot.get("texte_secondaire") or "").strip()
     record["status"] = "ok" if record["description"] else "empty_caption"
     from collecte.publications import enrichir_publication
