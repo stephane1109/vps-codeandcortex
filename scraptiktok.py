@@ -743,22 +743,26 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
 
 
 DEPLIER_LEGENDE_JS = """
-// Restreindre le clic à la zone de légende de la vidéo courante.
+// Chercher « Plus » dans le voisinage de la légende, et non uniquement
+// dans ses descendants : TikTok utilise aussi un élément frère.
+const visible = element => element && element.getClientRects().length &&
+    getComputedStyle(element).visibility !== 'hidden';
 const zones = Array.from(document.querySelectorAll(
     '[data-e2e="browse-video-desc"], [data-e2e="video-desc"]'
-));
+)).filter(visible);
 for (const zone of zones) {
-    if (!zone.getClientRects().length) continue;
-    const parent = zone.parentElement?.parentElement || zone.parentElement;
-    if (!parent) continue;
-    const boutons = Array.from(parent.querySelectorAll('button,[role="button"],span'));
-    for (const bouton of boutons) {
-        const libelle = (bouton.innerText || bouton.getAttribute('aria-label') || '').trim();
-        if (!/^(?:more|see more|read more|voir plus|afficher plus|plus|suite|…|\\.\\.\\.)$/i.test(libelle))
-            continue;
-        if (!bouton.getClientRects().length) continue;
-        bouton.click();
-        return true;
+    for (const parent of [zone, zone.parentElement, zone.parentElement?.parentElement,
+                          zone.parentElement?.parentElement?.parentElement]) {
+        if (!parent) continue;
+        for (const element of parent.querySelectorAll('button,[role="button"],span,a,div')) {
+            if (!visible(element)) continue;
+            if (element.children.length > 2) continue;
+            const libelle = (element.innerText || element.getAttribute('aria-label') || '').trim();
+            if (!/^(?:plus|voir plus|afficher plus|more|see more|read more|\\.\\.\\.|…)$/i.test(libelle))
+                continue;
+            element.click();
+            return true;
+        }
     }
 }
 return false;
@@ -771,10 +775,10 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
     check = check or (lambda: None)
     check()
     open_page(driver, url)
-    tentative_depliage = False
+    tentatives_depliage = 0
 
     def read(browser: webdriver.Chrome) -> dict | bool:
-        nonlocal tentative_depliage
+        nonlocal tentatives_depliage
         check()
         fermer_invitation_connexion(browser)
         if captcha_present(browser):
@@ -782,12 +786,13 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
                 return False
             interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             check()
-        if not tentative_depliage:
-            tentative_depliage = True
+        if tentatives_depliage < 3:
+            tentatives_depliage += 1
             try:
                 if browser.execute_script(DEPLIER_LEGENDE_JS):
-                    time.sleep(0.4)
+                    time.sleep(0.6)
                     check()
+                    return False
             except WebDriverException:
                 pass
         return extract_record(browser.execute_script(PAGE_JS), url) or False
