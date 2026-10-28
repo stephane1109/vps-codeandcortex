@@ -73,6 +73,13 @@ Documentation :
 
 Le fichier peut contenir seulement les textes, ou les textes avec leurs auteurs
 et leurs liens, selon la case cochée. Les doublons sont supprimés par identifiant.
+L'option **Texte généré par IA** ajoute, lorsqu'il est récupérable, le résumé
+fourni par TikTok sous la légende. L'aperçu et le TXT distinguent alors deux
+segments : `**** *source_original` puis `**** *source_ia`, avec les mêmes
+variables sélectionnées pour la publication (profil, date, identifiant,
+engagements, etc.). Aucun résumé n'est inventé si TikTok n'en fournit pas
+ou si son extraction échoue : seul le segment original est conservé.
+
 Le bouton **Arrêter** conserve les textes déjà obtenus. Recharger la page permet
 également de retrouver la collecte tant que la session est conservée.
 

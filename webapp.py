@@ -328,7 +328,7 @@ def texte_et_hashtags(publication):
     return (texte + "\n" if texte else "") + " ".join(uniques.values())
 
 
-def entete_sources_ia(publication, source, themes=None):
+def entete_sources_ia(publication, source, themes=None, variables=""):
     """Identifier la provenance du texte dans un corpus IRaMuTeQ."""
     def modalite(valeur):
         texte = re.sub(r"[^\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
@@ -338,7 +338,8 @@ def entete_sources_ia(publication, source, themes=None):
     if not theme:
         theme = next(iter(publication.get("hashtags") or []), None)
     return (f"**** *source_{source} *theme_{modalite(theme)} "
-            f"*compte_{modalite(publication.get('author'))}\n")
+            f"*compte_{modalite(publication.get('author'))}"
+            + (" " + variables.strip() if variables.strip() else "") + "\n")
 
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
@@ -361,7 +362,7 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         if inclure_texte_genere_ia:
-            bloc = entete_sources_ia(record, "original", themes) + texte
+            bloc = entete_sources_ia(record, "original", themes, prefix) + texte
         else:
             bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
@@ -371,7 +372,7 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
         if inclure_texte_genere_ia:
             resume_ia = (record.get("resume_ia_tiktok") or "").strip()
             if resume_ia and resume_ia != (record.get("description") or "").strip():
-                blocks.append(entete_sources_ia(record, "ia", themes) + resume_ia)
+                blocks.append(entete_sources_ia(record, "ia", themes, prefix) + resume_ia)
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
@@ -579,7 +580,12 @@ class Job:
                         "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection"),
                         "retenue_txt": bool(r.get("retenue", r in self.records))}
                         for r in (self.publications or self.records)],
-                    "preview": [{"author": r["author"], "description": r["description"]}
+                    "preview": [{"author": r["author"], "description": r["description"],
+                        "texte_export": text_export([r], self.settings.include_sources,
+                            self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
+                            self.commentaires if self.settings.collecter_commentaires else None,
+                            inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
+                            themes=self.settings.hashtags)}
                                 for r in self.records[:5]]}
 
     def check(self):

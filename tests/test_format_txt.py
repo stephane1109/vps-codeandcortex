@@ -70,9 +70,9 @@ class FormatTxt(unittest.TestCase):
                                inclure_texte_genere_ia=True, themes=["manifestation"])
         self.assertEqual(
             texte,
-            "**** *source_original *theme_manifestation *compte_ulyces\n"
+            "**** *source_original *theme_manifestation *compte_ulyces *profil_@ulyces\n"
             "La police réprime violemment les manifestants. Une honte pour notre démocratie !\n\n"
-            "**** *source_ia *theme_manifestation *compte_ulyces\n"
+            "**** *source_ia *theme_manifestation *compte_ulyces *profil_@ulyces\n"
             "Des tensions ont été observées entre les forces de l'ordre et des participants lors d'une manifestation.\n",
         )
         self.assertEqual(publication, avant)
@@ -184,6 +184,23 @@ class FormatTxt(unittest.TestCase):
             job.save()
             self.assertTrue(job.path.read_text().startswith("*partages_42 *comment_123\n"))
             self.assertFalse(settings.collecter_commentaires)
+
+    def test_memes_variables_dans_les_deux_sources_et_apercu(self):
+        publication = self.publication()
+        publication["resume_ia_tiktok"] = "Résumé TikTok extrait et identifié comme IA."
+        variables = ["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris"]
+        texte = web.text_export([publication], True, variables_txt=variables,
+                                inclure_texte_genere_ia=True)
+        entetes = [ligne for ligne in texte.splitlines() if ligne.startswith("****")]
+        self.assertEqual(len(entetes), 2)
+        self.assertEqual(entetes[0].replace("*source_original", "*source_ia"), entetes[1])
+        for nom in ("date", "profil", "id", "vues", "likes", "partages", "comment", "favoris"):
+            self.assertIn("*" + nom + "_", entetes[0])
+        with tempfile.TemporaryDirectory() as dossier:
+            job = web.Job("test", web.StartRequest(hashtag="manifestation", variables_txt=variables,
+                          inclure_texte_genere_ia=True), Path(dossier))
+            job.records.append(publication)
+            self.assertEqual(job.snapshot()["preview"][0]["texte_export"], job.texte_a_exporter())
 
 
 if __name__ == "__main__":

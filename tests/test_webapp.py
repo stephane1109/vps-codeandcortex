@@ -82,7 +82,7 @@ class WebTests(unittest.TestCase):
 
     def test_telechargement_ia_en_deux_segments_et_option_transmise(self):
         response = self.client.post('/api/jobs', headers=HEADERS,
-            json={'hashtag': 'manifestation', 'inclure_texte_genere_ia': True})
+            json={'hashtag': 'manifestation', 'inclure_texte_genere_ia': True, 'variables_txt': ['profil','id']})
         self.assertEqual(response.status_code, 202, response.text)
         session = self.client.get('/api/session').json()['job']
         self.assertTrue(session['inclure_texte_genere_ia'])
@@ -94,10 +94,12 @@ class WebTests(unittest.TestCase):
         job.save()
         reponse = self.client.get(f'/api/jobs/{job.id}/download')
         self.assertEqual(reponse.status_code, 200)
+        apercu=self.client.get(f'/api/jobs/{job.id}').json()['preview'][0]['texte_export']
+        self.assertEqual(apercu,reponse.text)
         self.assertEqual(reponse.text,
-            "**** *source_original *theme_manifestation *compte_ulyces\n"
+            f"**** *source_original *theme_manifestation *compte_ulyces *profil_@ulyces *id_{RECORD['id']}\n"
             + legende + "\n\n"
-            + "**** *source_ia *theme_manifestation *compte_ulyces\n"
+            + f"**** *source_ia *theme_manifestation *compte_ulyces *profil_@ulyces *id_{RECORD['id']}\n"
             + resume + "\n")
 
     def test_validation_and_csrf_guard(self):

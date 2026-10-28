@@ -484,7 +484,7 @@ with onglet_collecte:
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
             value=False, disabled=occupe,
-            help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original.")
+            help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original. Les deux segments conservent les mêmes variables sélectionnées.")
         st.checkbox("Supprimer le @ devant les profils dans le TXT",
                     key="export_profil_sans_arobase", value=True, disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary",
@@ -820,6 +820,10 @@ with onglet_collecte:
                             indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
                             ajouter_detail_source(" · ".join(indices))
                         st.caption(" · ".join(details_source))
+            with st.expander("Aperçu des textes"):
+                st.caption("Les cinq premières publications, avec le codage des sources et les variables sélectionnées.")
+                for publication in actuel.get("preview",[]):
+                    st.text(publication.get("texte_export", publication["description"]))
             if actuel.get("apercu_engagement"):
                 st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres.")
 
@@ -923,10 +927,6 @@ with onglet_collecte:
                     help="Alternative si le navigateur intégré n'affiche pas le CAPTCHA."
                 )
                 st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
-        with st.expander("Aperçu des textes"):
-            for publication in st.session_state["collecte"].get("preview",[]):
-                st.text("@" + publication["author"])
-                st.text(publication["description"])
 
 with onglet_collecte:
     with st.expander("Sauvegardes progressives — récupérer un corpus", expanded=False):
