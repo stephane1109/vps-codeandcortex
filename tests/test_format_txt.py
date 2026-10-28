@@ -56,6 +56,52 @@ class FormatTxt(unittest.TestCase):
                         self.assertEqual(marqueur in texte, nom in selection)
                     self.assertIn(publication["description"], texte)
 
+    def test_deux_sources_iramuteq_uniquement_sur_option_explicite(self):
+        publication = self.publication()
+        publication.update(
+            author="ulyces", description="La police réprime violemment les manifestants. Une honte pour notre démocratie !",
+            resume_ia_tiktok="Des tensions ont été observées entre les forces de l'ordre et des participants lors d'une manifestation.",
+        )
+        avant = deepcopy(publication)
+        sans_ia = web.text_export([publication], True, variables_txt=["profil"])
+        self.assertNotIn("source_ia", sans_ia)
+        self.assertNotIn("Des tensions ont été", sans_ia)
+        texte = web.text_export([publication], True, variables_txt=["profil"],
+                               inclure_texte_genere_ia=True, themes=["manifestation"])
+        self.assertEqual(
+            texte,
+            "**** *source_original *theme_manifestation *compte_ulyces\\n"
+            "La police réprime violemment les manifestants. Une honte pour notre démocratie !\\n\\n"
+            "**** *source_ia *theme_manifestation *compte_ulyces\\n"
+            "Des tensions ont été observées entre les forces de l'ordre et des participants lors d'une manifestation.\\n",
+        )
+        self.assertEqual(publication, avant)
+
+    def test_ia_absente_ne_cree_pas_de_fausse_source(self):
+        publication = self.publication()
+        publication["resume_ia_tiktok"] = ""
+        publication["texte_secondaire"] = "Texte non identifié : ne pas étiqueter IA"
+        sortie = web.text_export([publication], True, variables_txt=["id"],
+                                inclure_texte_genere_ia=True, themes=["manifestation"])
+        self.assertEqual(sortie.count("****"), 1)
+        self.assertIn("*source_original", sortie)
+        self.assertNotIn("*source_ia", sortie)
+        self.assertNotIn("Texte non identifié", sortie)
+
+    def test_option_ia_propagee_dans_sauvegarde_et_export(self):
+        settings = web.StartRequest(hashtag="manifestation", inclure_texte_genere_ia=True,
+                                    variables_txt=["profil"])
+        publication = self.publication()
+        publication["resume_ia_tiktok"] = "Résumé vérifié par le navigateur."
+        with tempfile.TemporaryDirectory() as dossier:
+            job = web.Job("test", settings, Path(dossier))
+            job.records.append(publication)
+            job.save()
+            texte = job.path.read_text(encoding="utf-8")
+            self.assertEqual(texte.count("****"), 2)
+            self.assertIn("*source_ia *theme_manifestation *compte_bfmtv", texte)
+            self.assertEqual(job.texte_a_exporter(), texte)
+
     def test_partages_absents_ne_reutilisent_pas_repostcount(self):
         publication = self.publication()
         publication["engagement"] = extraire_engagement({"stats": {"repostCount": 15, "commentCount": 0}})
