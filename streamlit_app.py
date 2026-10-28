@@ -108,6 +108,7 @@ if "initialise" not in st.session_state:
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
         "sauvegarde_progressive":ancienne.get("sauvegarde_progressive",False),
+        "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",False),
         "collecter_commentaires":ancienne.get("collecter_commentaires",False),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
@@ -481,6 +482,9 @@ with onglet_collecte:
                 colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
         st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
+        st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
+            value=False, disabled=occupe,
+            help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original.")
         st.checkbox("Supprimer le @ devant les profils dans le TXT",
                     key="export_profil_sans_arobase", value=True, disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary",
@@ -494,7 +498,7 @@ with onglet_collecte:
                 st.error("Sélectionnez au moins un média.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive")}
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
                 if source == "presse" and valeurs["presse_moteur"] == "research":
