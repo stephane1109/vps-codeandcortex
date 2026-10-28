@@ -160,3 +160,40 @@ def exporter_zip(dossier):
                 zipf.write(fichier, fichier.relative_to(dossier).as_posix())
     flux.seek(0)
     return flux
+
+
+def exporter_sauvegarde_distincte(dossier, categorie):
+    """Créer une archive réimportable de collecte ou une archive d'analyse."""
+    from io import BytesIO
+    if categorie not in {"collecte", "analyse"}:
+        raise ValueError("Catégorie de sauvegarde invalide.")
+    racine_source = Path(dossier)
+    collecte = {
+        "publications.json", "commentaires.json", "journal.json",
+        "textes.txt", "corpus_iramuteq.txt", "commentaires.txt",
+        "engagement.csv", "ratios_engagement.csv", "comparaison_medias.csv",
+        "commentaires.csv", "videos.csv", "videos.json",
+        "parametres_historique.json",
+    }
+    flux = BytesIO()
+    with ZipFile(flux, "w", compression=ZIP_DEFLATED, compresslevel=5) as archive:
+        for fichier in sorted(racine_source.rglob("*")):
+            if not fichier.is_file() or fichier.is_symlink():
+                continue
+            relatif = fichier.relative_to(racine_source)
+            if any(part in EXCLUS for part in relatif.parts):
+                continue
+            if fichier.suffix.lower() not in SUFFIXES:
+                continue
+            if categorie == "collecte":
+                if len(relatif.parts) != 1 or fichier.name not in collecte:
+                    continue
+            else:
+                if (len(relatif.parts) == 1 and fichier.name in collecte
+                        and fichier.name != "parametres_historique.json"):
+                    continue
+                if fichier.name.startswith("."):
+                    continue
+            archive.write(fichier, relatif.as_posix())
+    flux.seek(0)
+    return flux
