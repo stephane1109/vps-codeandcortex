@@ -80,6 +80,26 @@ class WebTests(unittest.TestCase):
         self.assertEqual(fichier.status_code, 200)
         self.assertEqual(fichier.text, '*profil_@test\n'+RECORD['description']+'\n\nCommentaire 1 :\nRéaction conservée\n')
 
+    def test_telechargement_ia_en_deux_segments_et_option_transmise(self):
+        response = self.client.post('/api/jobs', headers=HEADERS,
+            json={'hashtag': 'manifestation', 'inclure_texte_genere_ia': True})
+        self.assertEqual(response.status_code, 202, response.text)
+        session = self.client.get('/api/session').json()['job']
+        self.assertTrue(session['inclure_texte_genere_ia'])
+        job = self.manager.jobs[session['id']]
+        legende = "La police réprime violemment les manifestants."
+        resume = "Des tensions ont été observées entre les forces de l'ordre."
+        job.records.append(dict(RECORD, author='ulyces', description=legende,
+                                resume_ia_tiktok=resume))
+        job.save()
+        reponse = self.client.get(f'/api/jobs/{job.id}/download')
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.text,
+            "**** *source_original *theme_manifestation *compte_ulyces\n"
+            + legende + "\n\n"
+            + "**** *source_ia *theme_manifestation *compte_ulyces\n"
+            + resume + "\n")
+
     def test_validation_and_csrf_guard(self):
         self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
         for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 1001}):
