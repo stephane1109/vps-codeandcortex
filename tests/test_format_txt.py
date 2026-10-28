@@ -70,10 +70,10 @@ class FormatTxt(unittest.TestCase):
                                inclure_texte_genere_ia=True, themes=["manifestation"])
         self.assertEqual(
             texte,
-            "**** *source_original *theme_manifestation *compte_ulyces\\n"
-            "La police réprime violemment les manifestants. Une honte pour notre démocratie !\\n\\n"
-            "**** *source_ia *theme_manifestation *compte_ulyces\\n"
-            "Des tensions ont été observées entre les forces de l'ordre et des participants lors d'une manifestation.\\n",
+            "**** *source_original *theme_manifestation *compte_ulyces\n"
+            "La police réprime violemment les manifestants. Une honte pour notre démocratie !\n\n"
+            "**** *source_ia *theme_manifestation *compte_ulyces\n"
+            "Des tensions ont été observées entre les forces de l'ordre et des participants lors d'une manifestation.\n",
         )
         self.assertEqual(publication, avant)
 
