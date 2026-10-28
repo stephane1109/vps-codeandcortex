@@ -11,7 +11,7 @@ from interface.client import appeler_api
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
-                 "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
+                 "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris", "contenu_genere_ia": "Contenu généré par IA ?",
                  "hashtags": "Hashtags sous le texte"}
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
