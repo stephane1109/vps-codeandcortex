@@ -296,7 +296,8 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
                "vues": f"*vues_{compteur('vues')}", "likes": f"*likes_{compteur('likes')}",
                "partages": f"*partages_{compteur('partages')}",
                "commentaires": f"*comment_{compteur('commentaires')}",
-               "favoris": f"*favoris_{compteur('favoris')}"}
+               "favoris": f"*favoris_{compteur('favoris')}",
+               "contenu_genere_ia": f"*ia_{modalite(publication.get('contenu_genere_ia'))}"}
     # Les anciens appels sans sélection gardent leur en-tête à trois variables.
     selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "id"))
     entete = " ".join(texte for cle, texte in valeurs.items() if cle in selection)
