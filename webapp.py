@@ -853,12 +853,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         hors_selection = 0
         medias_par_compte = {s["compte"]: s for s in sources if "compte" in s}
         links = []
+        # La limite demandée concerne les résultats conservés, non les candidats
+        # explorés lorsque l’utilisateur filtre les dates de publication.
+        filtre_dates_hashtags = (job.settings.source_collecte == "hashtags" and
+                                 bool(job.settings.date_debut or job.settings.date_fin))
+        plafond_decouverte = min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit
         def lire_decouvertes():
             """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
             nonlocal links, hors_selection
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
+                if filtre_dates_hashtags and len(job.records) >= args.limit:
+                    break
                 url = links[index - 1]
                 job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
                 try:
@@ -979,7 +986,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.check()
             # Double garde-fou : même si un connecteur de hashtags renvoie
             # trop d'URL, ne jamais retenir plus que la limite globale saisie.
-            if job.settings.source_collecte == "hashtags" and len(unique_links) >= args.limit:
+            if job.settings.source_collecte == "hashtags" and len(unique_links) >= plafond_decouverte:
                 break
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
@@ -1012,7 +1019,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     if identity and (job.settings.source_collecte == "hashtags"
                                      or identity[2].casefold() in medias_par_compte):
                         if (job.settings.source_collecte == "hashtags"
-                                and len(unique_links) >= args.limit):
+                                and len(unique_links) >= plafond_decouverte):
                             break
                         unique_links.setdefault(identity[0], identity[1])
             except (RuntimeError, scraper.WebDriverException) as erreur:
@@ -1065,13 +1072,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.actualiser_decouverte(rapport)
             job.update(discovered=len(unique_links))
             # Exporter chaque compte aussitôt sa découverte terminée.
-            if job.settings.source_collecte != "hashtags" and len(unique_links) > job.processed:
+            if ((job.settings.source_collecte != "hashtags" or filtre_dates_hashtags)
+                    and len(unique_links) > job.processed):
                 lire_decouvertes()
+            if filtre_dates_hashtags and len(job.records) >= args.limit:
+                break
         # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
         if limitation_research and len(unique_links) > job.processed:
             lire_decouvertes()
-        if (job.settings.source_collecte == "hashtags" and not limitation_tiktok
-                and not limitation_budget and not job.stop.is_set()):
+        if (job.settings.source_collecte == "hashtags" and not filtre_dates_hashtags
+                and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
             lire_decouvertes()
         exclus_decouverte = set().union(*(set(e.get("rapport", {}).get("auteurs_ecartes_ids", [])) for e in job.journal))
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
