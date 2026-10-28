@@ -80,6 +80,56 @@ class WebTests(unittest.TestCase):
         self.assertEqual(fichier.status_code, 200)
         self.assertEqual(fichier.text, '*profil_@test\n'+RECORD['description']+'\n\nCommentaire 1 :\nRéaction conservée\n')
 
+    def test_choix_arobase_persistant_txt_apercu_et_zip_sans_doublon_compte(self):
+        from zipfile import ZipFile
+        from corpus.export_zip import exporter_zip
+        reponse = self.client.post('/api/jobs', headers=HEADERS, json={
+            'hashtag': 'manifestation', 'inclure_texte_genere_ia': True,
+            'supprimer_arobase_profil': True, 'variables_txt': ['date', 'profil']})
+        self.assertEqual(reponse.status_code, 202, reponse.text)
+        etat = self.client.get('/api/session').json()['job']
+        self.assertTrue(etat['supprimer_arobase_profil'])
+        tache = self.manager.jobs[etat['id']]
+        publication = dict(RECORD, author='baddydeadpool', created_at='2026-10-25',
+                           description='Original avec une mention @autre.',
+                           resume_ia_tiktok='Résumé IA avec une mention @autre.')
+        tache.records.append(publication)
+        tache.save()
+        texte = tache.path.read_text()
+        self.assertEqual(texte.count('*profil_baddydeadpool'), 2)
+        self.assertNotIn('*compte_', texte)
+        self.assertNotIn('*profil_@', texte)
+        self.assertEqual(texte.count('@autre'), 2)
+        apercu = self.client.get(f'/api/jobs/{tache.id}').json()['preview'][0]
+        self.assertEqual(apercu['texte_export'], texte)
+        self.assertEqual(apercu['texte_export_sans_arobase'], texte)
+        self.assertEqual(apercu['texte_export_avec_arobase'].count('*profil_@baddydeadpool'), 2)
+        tache.stop.set()
+        tache.thread.join(1)
+        tache.archive_prete = True
+        # Simuler un ancien export : le téléchargement doit le régénérer.
+        tache.path.write_text('**** *compte_baddydeadpool *profil_@baddydeadpool\nAncien texte')
+        exporter_zip(tache.directory, tache.directory / 'archive.zip')
+        archive_initiale = (tache.directory / 'archive.zip').read_bytes()
+        for choix, marqueur in [('', '*profil_baddydeadpool'),
+                               ('?supprimer_arobase_profil=true', '*profil_baddydeadpool'),
+                               ('?supprimer_arobase_profil=false', '*profil_@baddydeadpool')]:
+            fichier = self.client.get(f'/api/jobs/{tache.id}/download{choix}')
+            self.assertEqual(fichier.status_code, 200)
+            self.assertEqual(fichier.text.count(marqueur), 2)
+            self.assertNotIn('*compte_', fichier.text)
+            for historique in (False, True):
+                tache.historique = historique
+                with patch('stockage.historique_analyses.exporter_zip',
+                           return_value=io.BytesIO(archive_initiale)):
+                    archive = self.client.get(f'/api/jobs/{tache.id}/archive{choix}')
+                self.assertEqual(archive.status_code, 200, archive.text if archive.status_code != 200 else '')
+                with ZipFile(io.BytesIO(archive.content)) as zip_recu:
+                    self.assertEqual(zip_recu.read('textes.txt'), fichier.content)
+                    self.assertEqual(zip_recu.read('corpus_iramuteq.txt'), fichier.content)
+        self.assertTrue(tache.settings.supprimer_arobase_profil)
+        self.assertEqual((tache.directory / 'archive.zip').read_bytes(), archive_initiale)
+
     def test_telechargement_ia_en_deux_segments_et_option_transmise(self):
         response = self.client.post('/api/jobs', headers=HEADERS,
             json={'hashtag': 'manifestation', 'inclure_texte_genere_ia': True, 'variables_txt': ['profil','id']})
@@ -97,9 +147,9 @@ class WebTests(unittest.TestCase):
         apercu=self.client.get(f'/api/jobs/{job.id}').json()['preview'][0]['texte_export']
         self.assertEqual(apercu,reponse.text)
         self.assertEqual(reponse.text,
-            f"**** *source_original *theme_manifestation *compte_ulyces *profil_@ulyces *id_{RECORD['id']}\n"
+            f"**** *source_original *theme_manifestation *profil_@ulyces *id_{RECORD['id']}\n"
             + legende + "\n\n"
-            + f"**** *source_ia *theme_manifestation *compte_ulyces *profil_@ulyces *id_{RECORD['id']}\n"
+            + f"**** *source_ia *theme_manifestation *profil_@ulyces *id_{RECORD['id']}\n"
             + resume + "\n")
 
     def test_validation_and_csrf_guard(self):

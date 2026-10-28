@@ -498,7 +498,9 @@ Les sélecteurs peuvent évoluer avec TikTok ; les statuts partiels restent expl
 
 La case « Supprimer le @ devant les profils dans le TXT », cochée par défaut
 au-dessus des téléchargements, écrit `*profil_bfmtv` au lieu de `*profil_@bfmtv`.
-Ce choix peut être modifié après la collecte, avant chaque téléchargement.
+Ce choix est enregistré au lancement et peut être modifié après la collecte,
+avant chaque téléchargement, sans relancer la collecte. Le marqueur redondant
+`*compte_…` n’est pas ajouté : seul `*profil_…` identifie le profil sélectionné.
 Il s’applique au TXT et aux fichiers identiques `textes.txt` et `corpus_iramuteq.txt`
 de l’archive. Les CSV, les mentions dans les légendes et les commentaires restent
 inchangés ; aucune nouvelle collecte n’est nécessaire.

@@ -65,6 +65,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
+    supprimer_arobase_profil: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
     variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "contenu_genere_ia", "hashtags"]] | None = Field(default=None, max_length=10)
     french_only: bool = False
@@ -337,8 +338,7 @@ def entete_sources_ia(publication, source, themes=None, variables=""):
     theme = next((mot for mot in (themes or []) if mot), None)
     if not theme:
         theme = next(iter(publication.get("hashtags") or []), None)
-    return (f"**** *source_{source} *theme_{modalite(theme)} "
-            f"*compte_{modalite(publication.get('author'))}"
+    return (f"**** *source_{source} *theme_{modalite(theme)}"
             + (" " + variables.strip() if variables.strip() else "") + "\n")
 
 
@@ -543,6 +543,7 @@ class Job:
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "variables_txt": self.settings.variables_txt,
                     "inclure_texte_genere_ia": self.settings.inclure_texte_genere_ia,
+                    "supprimer_arobase_profil": self.settings.supprimer_arobase_profil,
                     "bilan_textes_ia": {
                         "publications": len(self.records),
                         "recuperes": sum(bool(r.get("resume_ia_tiktok")) for r in self.records),
@@ -590,11 +591,9 @@ class Job:
                         "retenue_txt": bool(r.get("retenue", r in self.records))}
                         for r in (self.publications or self.records)],
                     "preview": [{"author": r["author"], "description": r["description"],
-                        "texte_export": text_export([r], self.settings.include_sources,
-                            self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
-                            self.commentaires if self.settings.collecter_commentaires else None,
-                            inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
-                            themes=self.settings.hashtags)}
+                        "texte_export": self.texte_a_exporter(publications=[r]),
+                        "texte_export_sans_arobase": self.texte_a_exporter(True, publications=[r]),
+                        "texte_export_avec_arobase": self.texte_a_exporter(False, publications=[r])}
                                 for r in self.records[:5]]}
 
     def check(self):
@@ -615,10 +614,12 @@ class Job:
             self.retenues_sources[source] = retenues
             self.discovered = len(set().union(*self.retenues_sources.values()))
 
-    def texte_a_exporter(self, supprimer_arobase_profil=False):
+    def texte_a_exporter(self, supprimer_arobase_profil=None, *, publications=None):
         """Appliquer le choix de téléchargement sans modifier les données collectées."""
         with self.lock:
-            return text_export(self.records, self.settings.include_sources,
+            if supprimer_arobase_profil is None:
+                supprimer_arobase_profil = self.settings.supprimer_arobase_profil
+            return text_export(self.records if publications is None else publications, self.settings.include_sources,
                 self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
                 self.commentaires if self.settings.collecter_commentaires else None,
                 supprimer_arobase_profil=supprimer_arobase_profil,
@@ -671,10 +672,7 @@ class Job:
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
         with self.lock:
-            content = text_export(self.records, self.settings.include_sources, self.settings.inclure_metadonnees_txt,
-                                  self.settings.variables_txt, self.commentaires if self.settings.collecter_commentaires else None,
-                                  inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
-                                  themes=self.settings.hashtags)
+            content = self.texte_a_exporter()
             nombre_exporte = sum(bool(r.get("description")) for r in self.records)
         if self.settings.source_collecte == "presse" and not self.publications:
             # Ne pas produire un TXT vide après un refus avant toute donnée.
@@ -1899,24 +1897,24 @@ def create_app(manager=None):
         return {"medias": charger_inventaire()}
 
     @app.get("/api/jobs/{job_id}/archive")
-    def telecharger_archive(job_id: str, request: Request, supprimer_arobase_profil: bool = False):
+    def telecharger_archive(job_id: str, request: Request, supprimer_arobase_profil: bool | None = None):
         job = manager.get(owner(request), job_id)
         if job.busy or job.video_busy or not job.archive_prete:
             raise HTTPException(409, "L’archive enrichie n’est pas encore disponible.")
+        from corpus.export_zip import archive_avec_texte
+        contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
         if job.historique:
             from stockage.historique_analyses import exporter_zip
-            flux=exporter_zip(job.directory)
-            return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
-                headers={"Content-Disposition":f'attachment; filename="scraptiktok_{job.id}_historique.zip"'},
-                background=BackgroundTask(flux.close))
-        if supprimer_arobase_profil:
-            from corpus.export_zip import archive_avec_texte
-            contenu = job.texte_a_exporter(supprimer_arobase_profil=True).encode("utf-8")
+            # Le téléchargement de l'historique respecte le même choix que le TXT.
+            with exporter_zip(job.directory) as source:
+                flux = archive_avec_texte(source, contenu)
+            nom = f"scraptiktok_{job.id}_historique.zip"
+        else:
             flux = archive_avec_texte(job.directory / "archive.zip", contenu)
-            return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
-                headers={"Content-Disposition": f'attachment; filename="scraptiktok_{job.id}.zip"'},
-                background=BackgroundTask(flux.close))
-        return FileResponse(job.directory / "archive.zip", filename=f"scraptiktok_{job.id}.zip", media_type="application/zip")
+            nom = f"scraptiktok_{job.id}.zip"
+        return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{nom}"'},
+            background=BackgroundTask(flux.close))
 
     @app.get("/api/jobs/{job_id}/engagement.csv")
     def telecharger_engagement(job_id: str, request: Request):
@@ -2078,13 +2076,13 @@ def create_app(manager=None):
             return Response(job.frame, media_type="image/png", status_code=200 if job.frame else 204)
 
     @app.get("/api/jobs/{job_id}/download")
-    def download(job_id: str, request: Request, supprimer_arobase_profil: bool = False):
+    def download(job_id: str, request: Request, supprimer_arobase_profil: bool | None = None):
         job = manager.get(owner(request), job_id)
         if not job.path.exists() or not job.records:
             raise HTTPException(409, "Aucun texte n’est encore disponible.")
         filename = job.settings.filename
-        contenu = (job.texte_a_exporter(supprimer_arobase_profil=True).encode("utf-8")
-                   if supprimer_arobase_profil else job.path.read_bytes())
+        # Régénérer aussi les anciens exports pour appliquer les corrections de codage.
+        contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
         return Response(contenu, media_type="text/plain; charset=utf-8",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
 

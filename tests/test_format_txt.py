@@ -70,9 +70,9 @@ class FormatTxt(unittest.TestCase):
                                inclure_texte_genere_ia=True, themes=["manifestation"])
         self.assertEqual(
             texte,
-            "**** *source_original *theme_manifestation *compte_ulyces *profil_@ulyces\n"
+            "**** *source_original *theme_manifestation *profil_@ulyces\n"
             "La police réprime violemment les manifestants. Une honte pour notre démocratie !\n\n"
-            "**** *source_ia *theme_manifestation *compte_ulyces *profil_@ulyces\n"
+            "**** *source_ia *theme_manifestation *profil_@ulyces\n"
             "Des tensions ont été observées entre les forces de l'ordre et des participants lors d'une manifestation.\n",
         )
         self.assertEqual(publication, avant)
@@ -99,7 +99,7 @@ class FormatTxt(unittest.TestCase):
             job.save()
             texte = job.path.read_text(encoding="utf-8")
             self.assertEqual(texte.count("****"), 2)
-            self.assertIn("*source_ia *theme_manifestation *compte_bfmtv", texte)
+            self.assertIn("*source_ia *theme_manifestation", texte)
             self.assertEqual(job.texte_a_exporter(), texte)
 
     def test_partages_absents_ne_reutilisent_pas_repostcount(self):
@@ -184,6 +184,21 @@ class FormatTxt(unittest.TestCase):
             job.save()
             self.assertTrue(job.path.read_text().startswith("*partages_42 *comment_123\n"))
             self.assertFalse(settings.collecter_commentaires)
+
+    def test_arobase_optionnelle_avec_et_sans_ia_sans_compte_automatique(self):
+        publication = dict(self.publication(), author='@baddydeadpool',
+                           description='Texte authentique @autre.', resume_ia_tiktok='Un résumé distinct @autre.')
+        for ia in (False, True):
+            for supprimer in (False, True):
+                texte = web.text_export([publication], True, variables_txt=['date', 'profil'],
+                    inclure_texte_genere_ia=ia, supprimer_arobase_profil=supprimer)
+                profil = '*profil_' + ('' if supprimer else '@') + 'baddydeadpool'
+                self.assertEqual(texte.count(profil), 2 if ia else 1)
+                self.assertNotIn('*compte_', texte)
+                self.assertIn('@autre', texte)
+        texte = web.text_export([publication], True, variables_txt=['date'], inclure_texte_genere_ia=True)
+        self.assertNotIn('*profil_', texte)
+        self.assertNotIn('*compte_', texte)
 
     def test_memes_variables_dans_les_deux_sources_et_apercu(self):
         publication = self.publication()

@@ -109,6 +109,7 @@ if "initialise" not in st.session_state:
         "include_sources":ancienne.get("include_sources",True),
         "sauvegarde_progressive":ancienne.get("sauvegarde_progressive",False),
         "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",False),
+        "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",False),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
@@ -485,8 +486,6 @@ with onglet_collecte:
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
             value=False, disabled=occupe,
             help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original. Les deux segments conservent les mêmes variables sélectionnées. Cette option ouvre chaque publication dans le navigateur, y compris en mode API, et peut ajouter jusqu’à 12 secondes de lecture par publication.")
-        st.checkbox("Supprimer le @ devant les profils dans le TXT",
-                    key="export_profil_sans_arobase", value=True, disabled=occupe)
         if st.form_submit_button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
@@ -499,6 +498,7 @@ with onglet_collecte:
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
+                valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
                 if source == "presse" and valeurs["presse_moteur"] == "research":
@@ -519,6 +519,11 @@ with onglet_collecte:
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])
                 lancer("/api/jobs",valeurs)
+
+    # Hors formulaire : changer le choix actualise les liens sans relancer la collecte.
+    st.checkbox("Supprimer le @ devant les profils dans le TXT",
+                key="export_profil_sans_arobase",
+                help="Appliqué aux profils des blocs original et IA, dans l’aperçu, le TXT et le ZIP.")
 
 
 with onglet_collecte:
@@ -830,7 +835,9 @@ with onglet_collecte:
             with st.expander("Aperçu des textes"):
                 st.caption("Les cinq premières publications, avec le codage des sources et les variables sélectionnées.")
                 for publication in actuel.get("preview",[]):
-                    st.text(publication.get("texte_export", publication["description"]))
+                    cle_apercu = ("texte_export_sans_arobase" if st.session_state.get("export_profil_sans_arobase", True)
+                                  else "texte_export_avec_arobase")
+                    st.text(publication.get(cle_apercu, publication.get("texte_export", publication["description"])))
             if actuel.get("apercu_engagement"):
                 st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres.")
 

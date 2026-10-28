@@ -10,6 +10,33 @@ from collecte.presse import charger_inventaire
 from webapp import StartRequest
 
 class TestsInterface(unittest.TestCase):
+    def test_case_arobase_reactive_et_transmise_au_lancement(self):
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None, **options):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/sauvegardes': return {'sauvegardes': []}
+            if chemin == '/api/collecte/limites':
+                return {'maximum_publications_par_source': 1000, 'maximum_sources_par_collecte': 29,
+                        'maximum_commentaires_par_video': 500}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise RuntimeError('API non utilisée dans ce test : ' + chemin)
+        with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session': 'a'*64}, headers={})), \
+             patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertTrue(page.checkbox(key='export_profil_sans_arobase').value)
+            for sans_arobase in (False, True):
+                page.checkbox(key='export_profil_sans_arobase').set_value(sans_arobase).run()
+                self.assertFalse(page.exception)
+                self.assertEqual(page.session_state['export_profil_sans_arobase'], sans_arobase)
+                page.text_input(key='hashtag').set_value('manifestation')
+                next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(envois[-1]['supprimer_arobase_profil'], sans_arobase)
+
     def test_partages_commentaires_et_hashtags_transmis_independamment(self):
         envois = []
         def repondre(chemin, session, autorisation, donnees=None):
