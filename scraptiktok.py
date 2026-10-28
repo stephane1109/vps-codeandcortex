@@ -60,6 +60,7 @@ window.scrollTo(0, document.documentElement.scrollHeight);
 """
 PAGE_JS = """
 const selecteurs = [
+    '[data-media-card-description-container="true"]',
     '[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]',
     '[data-e2e*="translated" i]', '[data-e2e*="translation" i]',
     '[data-e2e*="transcript" i]', '[data-e2e*="caption-text" i]',
@@ -93,6 +94,14 @@ return {
         .map(id => document.getElementById(id)?.textContent).filter(Boolean),
     description: text,
     textes_visibles: fragments,
+    // La synthèse TikTok peut se trouver dans un frère du bloc de légende.
+    texte_article_deplie: (() => {
+        const zone = document.querySelector('[data-media-card-description-container="true"]');
+        const article = zone?.closest('article') ||
+            document.querySelector('article:has([data-e2e="video-desc"])');
+        return article?.innerText || '';
+    })(),
+    titre_page: document.title || '',
     texte_secondaire: secondaires.join('\\n\\n'),
     // Ne considérer comme résumé IA que le bloc possédant un titre explicite.
     resume_ia_tiktok: (() => {
@@ -343,6 +352,38 @@ def timestamp_iso(value: object) -> str:
         return ""
 
 
+def extraire_resume_ia_tiktok(instantane, description):
+    """Isoler la synthèse TikTok derrière Plus, attestée par sa mention IA."""
+    explicite = (instantane.get("resume_ia_tiktok") or "").strip()
+    if explicite and explicite != description.strip() and description.strip() not in explicite:
+        return explicite
+
+    article = (instantane.get("texte_article_deplie") or "").strip()
+    if not article:
+        return ""
+    avis = re.search(
+        r"(?:ceci est un résumé généré par l[’']ia|"
+        r"this is an ai-generated summary|"
+        r"dies ist eine ki-generierte zusammenfassung)",
+        article, flags=re.IGNORECASE
+    )
+    if not avis:
+        return ""
+
+    titre = re.sub(r"\\s*\\|\\s*TikTok.*$", "", instantane.get("titre_page") or "",
+                   flags=re.IGNORECASE).strip()
+    avant_avis = article[:avis.start()]
+    debut = avant_avis.rfind(titre) if titre else -1
+    if debut < 0:
+        # Aucune borne fiable : ne pas attribuer l'ensemble de l'article à l'IA.
+        return ""
+    resume = avant_avis[debut:].strip()
+    if (len(resume) < 20 or resume == description.strip()
+            or description.strip() in resume):
+        return ""
+    return resume
+
+
 def extract_record(snapshot: dict, url: str) -> dict | None:
     identity = canonical_post(url)
     if identity is None:
@@ -389,7 +430,7 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
             textes_complementaires.append(texte)
     record["texte_secondaire"] = "\n\n".join(textes_complementaires) or (
         snapshot.get("texte_secondaire") or "").strip()
-    record["resume_ia_tiktok"] = (snapshot.get("resume_ia_tiktok") or "").strip()
+    record["resume_ia_tiktok"] = extraire_resume_ia_tiktok(snapshot, description)
     if record["resume_ia_tiktok"] and record.get("texte_secondaire"):
         record["texte_secondaire"] = record["texte_secondaire"].replace(
             record["resume_ia_tiktok"], "").strip()
@@ -748,6 +789,7 @@ DEPLIER_LEGENDE_JS = """
 const visible = element => element && element.getClientRects().length &&
     getComputedStyle(element).visibility !== 'hidden';
 const zones = Array.from(document.querySelectorAll(
+    '[data-media-card-description-container="true"], '
     '[data-e2e="browse-video-desc"], [data-e2e="video-desc"]'
 )).filter(visible);
 for (const zone of zones) {
