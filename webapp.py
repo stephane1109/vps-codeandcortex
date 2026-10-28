@@ -346,6 +346,9 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         bloc = prefix + texte
+        resume_ia = (record.get("resume_ia_tiktok") or "").strip()
+        if resume_ia:
+            bloc += "\n\nSynthèse générée par TikTok (AI Overview) :\n" + resume_ia
         texte_secondaire = (record.get("texte_secondaire") or "").strip()
         if texte_secondaire and texte_secondaire != (record.get("description") or "").strip():
             bloc += "\n\nTexte complémentaire affiché par TikTok :\n" + texte_secondaire
