@@ -113,9 +113,10 @@ def construire_tableau_complet(session, dossier):
             }
         elif not lignes[identifiant].get("url"):
             lignes[identifiant]["url"] = publication.get("url") or ""
+        lignes[identifiant]["contenu_genere_ia"] = publication.get("contenu_genere_ia") or "non_renseigne"
 
     colonnes = list(dict.fromkeys([
-        "publication_id", "url", "statut", *colonnes_source, "violence_visible",
+        "publication_id", "url", "statut", "contenu_genere_ia", *colonnes_source, "violence_visible",
         *noms, *CHAMPS_PROVENANCE,
     ]))
     for identifiant, ligne in lignes.items():
