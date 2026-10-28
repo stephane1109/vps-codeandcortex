@@ -664,18 +664,18 @@ class WorkerTests(unittest.TestCase):
         ]
         urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111,222,333,444)]
         records = {url: dict(RECORD, url=url, description=text) for url, text in zip(urls, captions)}
-        for operator, expected in (("AND", 2), ("OR", 3)):
+        for operator, expected in (("AND", 1), ("OR", 2)):
             job = web.Job("test", web.StartRequest(hashtag="été", second_hashtag="voyage", operator=operator, french_only=True), self.job.directory)
             with patch.object(web.scraper, "collect_links", return_value=urls), \
                  patch.object(web.scraper, "read_post", side_effect=lambda d, url, *a, **k: records[url]), patch.object(job, "pause"):
                 web.execute_job(job, driver_factory=lambda args: Mock())
             self.assertEqual(len(job.records), expected)
             self.assertEqual((job.non_french, job.language_unknown), (1, 1))
-            self.assertEqual(job.filtered, 3 - expected)
+            self.assertEqual(job.filtered, 2 - expected)
             self.assertIn(captions[0], job.path.read_text())
             self.assertNotIn(captions[1], job.path.read_text())
-            self.assertIn(captions[2], job.path.read_text())
-            self.assertEqual(next(r for r in job.records if r['description']==captions[2])['langue_detection'], 'unknown')
+            self.assertNotIn(captions[2], job.path.read_text())
+            self.assertTrue(all(r['langue_detection'] == 'fr' for r in job.records))
             self.assertTrue(job.settings.filename.endswith("_fr.txt"))
 
     def test_disabled_language_filter_does_not_discard_short_text(self):
@@ -686,15 +686,15 @@ class WorkerTests(unittest.TestCase):
         detect.assert_not_called()
         self.assertEqual(len(self.job.records), 1)
 
-    def test_filtre_francais_conserve_les_textes_courts_indetermines(self):
+    def test_filtre_francais_exclut_les_textes_courts_indetermines(self):
         self.job.settings.french_only = True
         with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
              patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
             web.execute_job(self.job, driver_factory=lambda args: Mock())
         self.assertEqual(self.job.language_unknown, 1)
-        self.assertTrue(self.job.snapshot()["can_download"])
-        self.assertIn(RECORD['description'], self.job.path.read_text())
-        self.assertIn("langue indéterminée conservés", self.job.message)
+        self.assertFalse(self.job.snapshot()["can_download"])
+        self.assertNotIn(RECORD['description'], self.job.path.read_text())
+        self.assertIn("langue indéterminée écartés", self.job.message)
         self.assertEqual(self.job.status, "completed")
 
     def test_live_action_acknowledged_after_execution_and_reports_failure(self):

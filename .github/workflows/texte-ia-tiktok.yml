@@ -8,6 +8,8 @@ on:
       - "connect_presse.py"
       - "tests/test_resume_ia.py"
       - "tests/test_cadence_collecte.py"
+      - "tests/test_francais_dates_hashtag.py"
+      - "language_filter.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_scraptiktok.py"
@@ -37,6 +39,10 @@ jobs:
         run: python -m unittest discover -s tests -p test_resume_ia.py -v
       - name: Vérifier la cadence sans IA et les lots tardifs des hashtags
         run: python -m unittest discover -s tests -p test_cadence_collecte.py -v
+      - name: Vérifier le filtre français avec les dates et hashtags
+        run: |
+          python -m unittest discover -s tests -p test_language_filter.py -v
+          python -m unittest discover -s tests -p test_francais_dates_hashtag.py -v
       - name: Tester le format des corpus TXT
         run: python -m unittest discover -s tests -p test_format_txt.py -v
       - name: Tester le téléchargement depuis FastAPI

@@ -998,9 +998,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     job.filtered += 1
                                 elif language == "other":
                                     job.non_french += 1
+                                elif language == "unknown":
+                                    # « Filtre français » ne retient que les légendes reconnues
+                                    # en français, jamais les hashtags seuls ou un texte incertain.
+                                    job.language_unknown += 1
                                 else:
-                                    if language == "unknown":
-                                        job.language_unknown += 1
                                     record["retenue"] = True
                                     job.records.append(record)
                             # Les commentaires sont demandés uniquement pour les publications retenues.
@@ -1167,9 +1169,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only and job.processed:
-            if not job.records and job.non_french:
+            if not job.records and (job.non_french or job.language_unknown):
                 final_message = "Aucun texte retenu par le filtre français parmi les légendes consultées."
-            final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée conservés."
+            final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée écartés."
         if job.settings.hashtags and job.processed:
             nom_filtre = "hashtags et texte" if job.settings.rechercher_dans_texte else "hashtags"
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre {nom_filtre}."

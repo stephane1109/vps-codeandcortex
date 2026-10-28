@@ -446,7 +446,7 @@ with onglet_collecte:
         if source == "comptes":
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
-            help="Exclut les légendes identifiées dans une autre langue. Les légendes courtes ou de langue indéterminée sont conservées et signalées.")
+            help="Retient uniquement les légendes reconnues en français. Les autres langues et les légendes indéterminées (trop courtes ou composées uniquement de hashtags) sont exclues du TXT. La voix et le texte incrusté dans la vidéo ne sont pas analysés.")
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
             help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
         st.checkbox("Sauvegarde progressive des collectes (toutes les 10 publications)",
@@ -638,7 +638,7 @@ with onglet_collecte:
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
                             st.write(f"#{hashtag} : {nombre} légende(s)")
                         st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
-                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue écartés · {actuel['language_unknown']} de langue indéterminée conservés")
+                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue écartés · {actuel['language_unknown']} de langue indéterminée écartés")
                         st.write(f"{actuel['legendes_vides']} publication(s) sans légende lisible · {actuel['errors']} erreur(s) de lecture")
             if actuel["date_debut"] or actuel["date_fin"]:
                 st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
@@ -884,7 +884,11 @@ with onglet_collecte:
                     column_config={
                         "Publication": st.column_config.LinkColumn(
                             "Publication", display_text="Ouvrir"
-                        )
+                        ),
+                        "Langue": st.column_config.TextColumn("Langue de la légende",
+                            help="Langue du texte écrit, sans les hashtags ni les mentions. La voix de la vidéo n’est pas analysée."),
+                        "Retenue dans le TXT": st.column_config.TextColumn("Retenue dans le TXT",
+                            help="Les publications exclues restent visibles dans ce tableau avec Non ; elles ne sont pas exportées dans le TXT.")
                     }
                 )
 

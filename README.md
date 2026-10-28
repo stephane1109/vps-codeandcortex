@@ -355,12 +355,15 @@ La détection s’effectue localement sur le serveur avec
 service externe. Liens, mentions, hashtags et symboles sont exclus du texte utilisé
 pour la détection, mais l’export conserve la description originale intégrale.
 
-Le filtre exclut une autre langue identifiée avec un score de modèle d’au moins 0,9.
-Ce score n’est pas une garantie de justesse. Moins de quatre mots ou quinze lettres,
-ou un score insuffisant, donnent une langue indéterminée : le texte est conservé
-intégralement, sans être déclaré français. Aucun texte n’est éliminé pour sa longueur.
+Le filtre ne retient que les légendes reconnues en français avec un score de modèle
+d’au moins 0,9. Ce score n’est pas une garantie de justesse. Moins de quatre mots ou
+quinze lettres, des hashtags seuls ou un score insuffisant donnent une langue
+indéterminée : la publication est exclue du TXT lorsque le filtre est activé.
+Cela exclut aussi certaines légendes françaises trop courtes pour être reconnues.
 Les textes mixtes peuvent être mal classés. Les compteurs distinguent les autres
-langues écartées des langues indéterminées conservées. L’export porte le suffixe `_fr.txt`.
+langues écartées des langues indéterminées écartées. La voix et le texte incrusté
+dans la vidéo ne sont pas analysés. Le tableau conserve les publications consultées,
+y compris celles marquées « Non » dans « Retenue dans le TXT ». L’export porte le suffixe `_fr.txt`.
 La langue ne peut être évaluée qu’après lecture de la légende : ce filtre ne constitue
 pas une recherche TikTok limitée à la langue française avant collecte. Une collecte
 sans texte retenu affiche l’explication au lieu de proposer un fichier vide.
