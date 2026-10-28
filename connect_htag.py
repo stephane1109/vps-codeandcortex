@@ -26,9 +26,12 @@ class ConnexionHashtag(SessionNavigateur):
         # se partagent ce budget en ET comme en OU (la règle intervient après
         # lecture des légendes). Les variantes utilisent le quota de leur tag.
         nombre_demandes = len(demandes)
+        # Avec un filtre de dates, explorer davantage de candidats que le nombre
+        # de résultats demandé ; seules les dates vérifiées seront retenues.
+        self._budget_decouverte = min(parametres.limit * 5, 500) if (parametres.date_debut or parametres.date_fin) else parametres.limit
         self._quota_hashtag = {
-            demande: parametres.limit // nombre_demandes
-                    + int(rang < parametres.limit % nombre_demandes)
+            demande: self._budget_decouverte // nombre_demandes
+                    + int(rang < self._budget_decouverte % nombre_demandes)
             for rang, demande in enumerate(demandes)
         }
         for hashtag in demandes:
@@ -62,7 +65,7 @@ class ConnexionHashtag(SessionNavigateur):
         retenus = self._ids_par_hashtag.setdefault(demande, set())
         objectif_tag = self._quota_hashtag.get(demande, self.arguments.limit)
         restant = max(0, min(objectif_tag - len(retenus),
-                             self.arguments.limit - len(self._ids_globaux)))
+                             self._budget_decouverte - len(self._ids_globaux)))
         if not restant:
             rapport.update(discovered_urls=[], discovery_stop="objectif_hashtag_atteint",
                            objectif_hashtag_initial=objectif_tag,
@@ -82,12 +85,12 @@ class ConnexionHashtag(SessionNavigateur):
             identite = canonical_post(adresse)
             if (identite and identite[0] not in self._ids_globaux
                     and len(retenus) < objectif_tag
-                    and len(self._ids_globaux) < self.arguments.limit):
+                    and len(self._ids_globaux) < self._budget_decouverte):
                 retenus.add(identite[0])
                 self._ids_globaux.add(identite[0])
                 nouveaux.append(identite[1])
         rapport["discovered_urls"] = nouveaux
         rapport["objectif_hashtag_initial"] = objectif_tag
-        rapport["objectif_total_collecte"] = self.arguments.limit
+        rapport["objectif_total_collecte"] = self._budget_decouverte
         rapport["retenues_hashtag_initial"] = len(retenus)
         return nouveaux
