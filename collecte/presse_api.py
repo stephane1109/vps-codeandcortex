@@ -309,7 +309,9 @@ def _metadonnees_publication_api(item, compte, identifiant):
         cree = datetime.fromtimestamp(int(item.get("createTime")), timezone.utc).isoformat()
     except (TypeError, ValueError, OSError, OverflowError):
         cree = ""
+    from .metadonnees import indicateur_ia
     return {
+        "contenu_genere_ia": indicateur_ia(item),
         "id": identifiant,
         "url": f"{HOTE}/@{compte}/video/{identifiant}",
         "author": compte,
