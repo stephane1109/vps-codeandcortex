@@ -66,6 +66,25 @@ return {
     payloads: ['__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE']
         .map(id => document.getElementById(id)?.textContent).filter(Boolean),
     description: text ? text.innerText : '',
+    // Capturer séparément les textes complémentaires identifiables sur TikTok.
+    texte_secondaire: (() => {
+        const original = (text?.innerText || '').trim();
+        const selecteurs = [
+            '[data-e2e="video-translation"]',
+            '[data-e2e="browse-video-translation"]',
+            '[data-e2e="translated-video-desc"]',
+            '[data-e2e="video-generated-text"]',
+            '[data-e2e="video-ai-summary"]'
+        ];
+        for (const selecteur of selecteurs) {
+            for (const element of document.querySelectorAll(selecteur)) {
+                if (!element.getClientRects().length) continue;
+                const valeur = (element.innerText || '').trim();
+                if (valeur && valeur !== original && !original.includes(valeur)) return valeur;
+            }
+        }
+        return '';
+    })(),
     // Lire uniquement les mentions IA visibles près de la publication.
     etiquette_ia: (() => {
         const motifs = [
@@ -330,6 +349,7 @@ def extract_record(snapshot: dict, url: str) -> dict | None:
             return None
         record.update(description=snapshot["description"].strip(), source="page_dom")
     record["hashtags"] = list(dict.fromkeys(re.findall(r"#(\w+)", record["description"])))
+    record["texte_secondaire"] = (snapshot.get("texte_secondaire") or "").strip()
     record["status"] = "ok" if record["description"] else "empty_caption"
     from collecte.publications import enrichir_publication
     return enrichir_publication(record, snapshot)
