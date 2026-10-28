@@ -21,7 +21,7 @@ VERSION_RESEARCH = "presse-research-officielle-v1"
 URL_TOKEN = "https://open.tiktokapis.com/v2/oauth/token/"
 URL_VIDEOS = "https://open.tiktokapis.com/v2/research/video/query/"
 CHAMPS = ("id,username,video_description,create_time,region_code,like_count,"
-          "comment_count,share_count,view_count,favorites_count,video_duration,hashtag_names")
+          "comment_count,share_count,view_count,favorites_count,video_duration,hashtag_names,video_tag")
 MAX_PAGES = 60
 TAILLE_MAX = 4_000_000
 _cache_token = {"valeur": None, "expire": 0.0, "identite": None}
@@ -173,7 +173,8 @@ def _fiche(video, compte):
     hashtags = video.get("hashtag_names")
     hashtags = ([str(v).lstrip("#") for v in hashtags if isinstance(v, str)]
                 if isinstance(hashtags, list) else re.findall(r"#(\w+)", description))
-    return {"id": identifiant,
+    from .metadonnees import indicateur_ia
+    return {"contenu_genere_ia": indicateur_ia(video), "id": identifiant,
             "url": f"https://www.tiktok.com/@{compte}/video/{identifiant}",
             "author": compte, "description": description,
             "created_at": date_creation,
