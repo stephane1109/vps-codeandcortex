@@ -79,6 +79,13 @@ segments : `**** *source_original` puis `**** *source_ia`, avec les mêmes
 variables sélectionnées pour la publication (profil, date, identifiant,
 engagements, etc.). Aucun résumé n'est inventé si TikTok n'en fournit pas
 ou si son extraction échoue : seul le segment original est conservé.
+Lorsque l'option IA est décochée, la légende complète fournie dans les données
+TikTok est utilisée immédiatement ; le dépliage reste réservé au repli sur un
+texte affiché potentiellement tronqué. Pour les hashtags, les débuts de lecture
+restent espacés de trois secondes au minimum, mais le temps passé à lire une
+page compte dans cet intervalle. La fin du défilement est confirmée sur un délai
+cumulé de 20 secondes sans nouveau lien, plutôt que trois attentes de 20 secondes.
+
 La lecture attend le chargement après « Plus » (jusqu'à 12 secondes par
 publication). Même avec un moteur API, cette option ouvre la page dans le
 navigateur pour rechercher le résumé. Un bilan indique combien de résumés ont

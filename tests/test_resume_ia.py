@@ -72,7 +72,7 @@ class TestsResumeIA(unittest.TestCase):
         navigateur = Mock()
         clics = []
 
-        def executer(script, identifiant):
+        def executer(script, identifiant, *options):
             self.assertEqual(identifiant, "1234567890")
             if script == moteur.DEPLIER_LEGENDE_JS:
                 clics.append(horloge.temps)

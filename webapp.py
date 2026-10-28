@@ -854,6 +854,15 @@ def expliquer_echec_source(rapport, erreur):
     return "Aucun lien de publication lisible dans la page reçue de TikTok après vérification."
 
 
+def attendre_intervalle_lecture(debut_precedent, intervalle, pause):
+    """Espacer les débuts de lecture sans ajouter une pause à une page déjà lente."""
+    if debut_precedent is not None:
+        restant = intervalle - (time.monotonic() - debut_precedent)
+        if restant > 0:
+            pause(restant)
+    return time.monotonic()
+
+
 def execute_job(job: Job, driver_factory=scraper.create_driver):
     from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
@@ -869,6 +878,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     connexion = None
     unique_links = {}
     metadonnees_api = {}
+    dernier_debut_lecture = None
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
     limitation_research = False
@@ -901,7 +911,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         plafond_decouverte = min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit
         def lire_decouvertes():
             """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
-            nonlocal links, hors_selection
+            nonlocal links, hors_selection, dernier_debut_lecture
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
@@ -932,9 +942,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             except scraper.WebDriverException:
                                 record["statut_resume_ia"] = "erreur_lecture"
                     else:
-                        # La pause entre publications n'est utile que lorsqu'une
-                        # consultation TikTok / Selenium est réellement nécessaire.
-                        job.pause(args.delay)
+                        if job.settings.source_collecte == "hashtags":
+                            dernier_debut_lecture = attendre_intervalle_lecture(
+                                dernier_debut_lecture, args.delay, job.pause)
+                        else:
+                            job.pause(args.delay)
                         record = connexion.lire_publication(url)
                     record["retenue"] = False
                     if job.settings.telecharger_mp4:

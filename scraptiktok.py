@@ -71,6 +71,7 @@ const articleCible = articles.find(a => Array.from(a.querySelectorAll('a[href]')
 const racine = articleCible || (articles.length === 0 ? document : document.createElement('div'));
 """
 PAGE_JS = CIBLER_PUBLICATION_JS + """
+const chercherIA = arguments[1] !== false;
 const selecteurs = [
     '[data-media-card-description-container="true"]',
     '[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]',
@@ -87,7 +88,8 @@ const visible = element => {
 };
 const fragments = [];
 const vus = new Set();
-for (const selecteur of selecteurs) {
+// Sans résumé IA, les trois sélecteurs de légende suffisent.
+for (const selecteur of (chercherIA ? selecteurs : selecteurs.slice(0, 3))) {
     for (const element of racine.querySelectorAll(selecteur)) {
         if (!visible(element)) continue;
         const valeur = (element.innerText || '').trim();
@@ -108,11 +110,12 @@ return {
     textes_visibles: fragments,
     // La synthèse TikTok peut se trouver dans un frère du bloc de légende.
     texte_article_deplie: (() => {
-        return articleCible?.innerText || '';
+        return chercherIA ? (articleCible?.innerText || '') : '';
     })(),
     // Le petit conteneur portant l'avis IA fournit une borne même si le titre
     // de l'onglet a été remplacé par « TikTok » ou une fenêtre de connexion.
     blocs_resume_ia: (() => {
+        if (!chercherIA) return [];
         const avis = /(?:résumé généré par l[’']ia|ai-generated summary|ki-generierte zusammenfassung)/i;
         const blocs = new Set();
         for (const element of racine.querySelectorAll('p,span,div,small')) {
@@ -130,6 +133,7 @@ return {
     texte_secondaire: secondaires.join('\\n\\n'),
     // Ne considérer comme résumé IA que le bloc possédant un titre explicite.
     resume_ia_tiktok: (() => {
+        if (!chercherIA) return '';
         const motif = /^(?:AI Overview|AI Summary|Aperçu IA|Résumé IA|Synthèse IA|Résumé généré par (?:l[’']?)?IA)$/i;
         const titres = Array.from(racine.querySelectorAll(
             'h1,h2,h3,h4,h5,h6,strong,span,div,[role="heading"]'
@@ -775,6 +779,9 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 raise RuntimeError("TikTok bloque l’accès public. Seul un éventuel CAPTCHA peut être traité dans la fenêtre intégrée.") from exc
             raise RuntimeError("La page TikTok ne fournit aucun lien de publication lisible après vérification.") from exc
     idle = 0
+    attente_sans_nouveaute = 0.0
+    dernier_defilement = None
+    cadence_hashtag = urlsplit(report["hashtag_url"]).path.startswith("/tag/")
     for _ in range(args.max_scrolls):
         check()
         if objectif_atteint():
@@ -787,15 +794,26 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
             else:
                 report["discovery_stop"] = "blocked"
                 break
+        if cadence_hashtag:
+            # Le chargement compte dans l'intervalle entre deux défilements.
+            if dernier_defilement is not None:
+                restant = args.delay - (time.monotonic() - dernier_defilement)
+                if restant > 0:
+                    time.sleep(restant)
+                    check()
+            dernier_defilement = time.monotonic()
         driver.execute_script(DEFILER_PUBLICATIONS_JS)
         report["defilements_effectues"] += 1
-        time.sleep(args.delay)
-
+        if not cadence_hashtag:
+            time.sleep(args.delay)
+        delai = min(5.0, args.timeout) if cadence_hashtag else args.timeout
         try:
-            WebDriverWait(driver, args.timeout).until(scan)
+            WebDriverWait(driver, delai).until(scan)
             idle = 0
+            attente_sans_nouveaute = 0.0
         except TimeoutException:
             idle += 1
+            attente_sans_nouveaute += delai
             if (report.get("mode_decouverte") == "recherche_compte_hashtag"
                     and not meme_page_tiktok(driver.current_url, report["hashtag_url"])):
                 diagnostic = diagnostiquer_page(driver, report, code="recherche_redirigee")
@@ -812,6 +830,17 @@ def collect_links(driver: webdriver.Chrome, args: argparse.Namespace, report: di
                 break
         LOG.info("%d publication(s) repérée(s)", len(links))
         if idle >= args.idle_rounds:
+            # Confirmer la fin sur un délai cumulé complet : un lot tardif reste
+            # accepté, sans refaire trois attentes complètes de 20 secondes.
+            restant = args.timeout - attente_sans_nouveaute if cadence_hashtag else 0
+            if restant > 0:
+                try:
+                    WebDriverWait(driver, restant).until(scan)
+                    idle = 0
+                    attente_sans_nouveaute = 0.0
+                    continue
+                except TimeoutException:
+                    pass
             report["discovery_stop"] = "no_new_links"
             break
     else:
@@ -870,16 +899,21 @@ def read_post(driver: webdriver.Chrome, url: str, args: argparse.Namespace,
                 return False
             interact("TikTok affiche un CAPTCHA. Terminez cette vérification pour poursuivre.")
             check()
+        # Le JSON contient la légende entière : inutile de cliquer sur « Plus »
+        # ni de parcourir les zones IA pour une collecte de textes originaux.
+        publication = extract_record(browser.execute_script(PAGE_JS, identifiant, False), url)
+        if publication and publication.get("source") == "page_json":
+            return publication
+        # Le texte DOM peut être tronqué : conserver le dépliage en dernier recours.
         if not chercher_ia and tentatives_depliage < 3:
             tentatives_depliage += 1
             try:
                 if browser.execute_script(DEPLIER_LEGENDE_JS, identifiant):
-                    time.sleep(0.6)
                     check()
                     return False
             except WebDriverException:
                 pass
-        return extract_record(browser.execute_script(PAGE_JS, identifiant), url) or False
+        return publication or False
 
     # Une légende inaccessible reste une erreur d'extraction, sans pause de connexion.
     publication = WebDriverWait(driver, args.timeout).until(read)

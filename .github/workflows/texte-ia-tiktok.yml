@@ -7,6 +7,7 @@ on:
       - "scraptiktok.py"
       - "connect_presse.py"
       - "tests/test_resume_ia.py"
+      - "tests/test_cadence_collecte.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_scraptiktok.py"
@@ -34,6 +35,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_scraptiktok.py -v
       - name: Tester le chargement différé des résumés et le JavaScript Selenium
         run: python -m unittest discover -s tests -p test_resume_ia.py -v
+      - name: Vérifier la cadence sans IA et les lots tardifs des hashtags
+        run: python -m unittest discover -s tests -p test_cadence_collecte.py -v
       - name: Tester le format des corpus TXT
         run: python -m unittest discover -s tests -p test_format_txt.py -v
       - name: Tester le téléchargement depuis FastAPI
