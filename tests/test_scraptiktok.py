@@ -33,6 +33,39 @@ class ExtractionTests(unittest.TestCase):
         self.assertIsNone(app.canonical_post(URL.replace("www.tiktok.com", "evil.example")))
         self.assertIsNone(app.canonical_post("https://www.tiktok.com/@test"))
 
+    def test_resume_tiktok_apres_plus_separe_du_texte_original(self):
+        legende = "La police réprime violemment les manifestants."
+        extrait = {
+            "texte_article_deplie": (
+                "ulyces.co\n" + legende + "\nplus\n00:03 / 01:48\n"
+                "Tensions lors d'une manifestation\n"
+                "Des tensions ont été observées entre la police et des participants.\n"
+                "Ceci est un résumé généré par l’IA. Feedback et aide – TikTok\n"
+                "moins\n105K"
+            ),
+            "titre_page": "Tensions lors d'une manifestation | TikTok",
+        }
+        texte = app.extraire_resume_ia_tiktok(extrait, legende)
+        self.assertEqual(
+            texte, "Tensions lors d'une manifestation\n"
+                   "Des tensions ont été observées entre la police et des participants.")
+        page = snapshot(legende)
+        page.update(extrait)
+        fiche = app.extract_record(page, URL)
+        self.assertEqual(fiche["description"], legende)
+        self.assertEqual(fiche["resume_ia_tiktok"], texte)
+
+    def test_pas_de_fausse_synthese_sans_avis_tiktok(self):
+        original = "Légende originale de la publication."
+        sans_avis = {
+            "titre_page": "Tensions lors d'une manifestation | TikTok",
+            "texte_article_deplie": "Tensions lors d'une manifestation\nTexte complémentaire affiché.",
+        }
+        self.assertEqual(app.extraire_resume_ia_tiktok(sans_avis, original), "")
+        sans_borne = {**sans_avis,
+                      "texte_article_deplie": "Autre texte\nCeci est un résumé généré par l’IA"}
+        self.assertEqual(app.extraire_resume_ia_tiktok(sans_borne, original), "")
+
     def test_read_json_and_exclude_recommendations(self):
         page = snapshot()
         page["payloads"].insert(0, '{"id":"999","desc":"Mauvaise vidéo"}')
