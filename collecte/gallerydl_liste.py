@@ -57,10 +57,14 @@ def recuperer_liste(compte, limite, delai):
         donnees = {
             cle: objet.get(cle)
             for cle in ("id", "author", "desc", "createTime", "stats",
-                        "video", "imagePost", "video_tag", "videoTag",
+                        "imagePost", "video_tag", "videoTag",
                         "aigcLabelType", "aigc_label_type")
             if cle in objet
         }
+        # Les URL des flux MP4 ne servent pas à la découverte Presse.
+        # Conserver seulement la présence du champ vidéo.
+        if isinstance(objet.get("video"), dict):
+            donnees["video"] = {}
         messages.append([2, "", donnees])
     return messages
 
