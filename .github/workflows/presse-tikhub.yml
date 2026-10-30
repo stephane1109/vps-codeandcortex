@@ -9,6 +9,7 @@ on:
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_tikhub.py"
+      - "tests/test_presse_isolation_version.py"
       - ".github/workflows/presse-tikhub.yml"
   workflow_dispatch:
 
