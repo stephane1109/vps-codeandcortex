@@ -70,7 +70,7 @@ class PresseGalleryDL:
             sys.executable, "-m", "gallery_dl", "--config-ignore",
             "--dump-json", "--post-range", f"1-{limite}",
             "-o", "tiktok.order-posts=desc",
-            "-o", "tiktok.videos=false",
+            "-o", "tiktok.videos=true",
             "-o", "tiktok.photos=false",
             "-o", "tiktok.covers=false",
             f"https://www.tiktok.com/@{compte}/posts",
