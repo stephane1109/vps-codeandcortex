@@ -62,7 +62,7 @@ class GalleryDLPresseTests(unittest.TestCase):
         self.assertIn("--post-range", commande)
         self.assertIn("1-5", commande)
         self.assertIn("tiktok.order-posts=desc", commande)
-        self.assertIn("tiktok.videos=false", commande)
+        self.assertIn("tiktok.videos=true", commande)
         self.assertNotIn("--cookies", commande)
         self.assertEqual(commande[-1], "https://www.tiktok.com/@lemondefr/posts")
         self.assertEqual(bilan["metadonnees_api"]["7701005447410552097"]["author"], "lemondefr")
