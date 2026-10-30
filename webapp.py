@@ -147,7 +147,6 @@ class StartRequest(BaseModel):
         else:
             self.croiser_hashtag_presse = False
             self.hashtag_presse = ""
-        else:
             if not self.hashtag:
                 if self.source_collecte == "comptes":
                     raise ValueError("Renseignez au moins un hashtag pour une collecte par profil.")
