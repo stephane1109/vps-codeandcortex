@@ -342,6 +342,7 @@ class PressePlaywright:
                         rapport["navigation_publications"] = (
                             "ouverture_rubrique_videos" if statut == "clic" else
                             "videos_deja_actif" if statut == "deja_actif" else
+                            "videos_selectionne_sans_contenu" if statut == "selectionne_sans_publications" else
                             "rubrique_videos_introuvable")
                         if statut == "clic":
                             clics += 1
@@ -399,11 +400,23 @@ class PressePlaywright:
                 rapport["navigation_videos_observee"] = observation
                 if (rapport.get("etat_page") or {}).get("erreur_tiktok"):
                     rapport.update(discovery_stop="erreur_tiktok", diagnostic={
-                        **rapport["etat_page"], "code": "erreur_tiktok_playwright"})
-                    raise RuntimeError("TikTok affiche une erreur après recherche de la rubrique Vidéos.")
+                        **rapport["etat_page"], "code": "erreur_tiktok_playwright",
+                        "navigation": navigation.get("statut", "indetermine"),
+                        "statut_http": self.statut_http,
+                        "grilles": observation.get("grilles", 0),
+                        "liens_video_auteur": observation.get("liens_video_auteur", 0),
+                        "reponses_video": self.bilan_reseau.get("reponses", 0),
+                        "refus_video_http": self.bilan_reseau.get("refus_http"),
+                    })
+                    raise RuntimeError("TikTok affiche une erreur sur le profil : "
+                                       "les publications ne sont pas disponibles dans cette session.")
                 rapport.update(discovery_stop="delai_sans_publications", diagnostic={
                     "code": "profil_sans_liens_playwright",
                     "delai_secondes": delai,
+                    "navigation": navigation.get("statut", "indetermine"),
+                    "grilles": observation.get("grilles", 0),
+                    "liens_video_auteur": observation.get("liens_video_auteur", 0),
+                    "reponses_video": self.bilan_reseau.get("reponses", 0),
                     "detail": "Aucun lien du compte après attente du contenu dynamique.",
                     **(rapport.get("etat_page") or {}),
                 })
