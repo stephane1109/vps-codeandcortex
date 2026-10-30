@@ -195,7 +195,8 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                     return True
                 except WebDriverException:
                     rapport["navigation_publications"] = "clic_onglet_videos_impossible"
-            else:
+            elif not (navigation_videos_tentee and
+                      (rapport.get("navigation_videos") or {}).get("statut") == "clic"):
                 rapport["navigation_publications"] = "onglet_videos_indisponible"
             return False
 
