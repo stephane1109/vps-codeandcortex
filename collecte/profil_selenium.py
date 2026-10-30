@@ -153,7 +153,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
             # parfois un LIEN depuis l'accueil du profil, et non un onglet
             # avec data-e2e. Suivre le contrôle réellement affiché.
             retenter_clic = (clics_videos < 3 and time.monotonic() >= prochain_clic_videos
-                and (rapport.get("navigation_videos") or {}).get("statut") == "clic")
+                and (rapport.get("navigation_videos") or {}).get("statut") in ("clic", "clic_onglet_sans_contenu"))
             if (etat != "a_ouvrir" and not situation.get("grille")
                     and (not navigation_videos_tentee or retenter_clic)):
                 navigation = navigateur.execute_script(
@@ -163,7 +163,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                     # « Introuvable » décrit ce rendu uniquement : réexaminer
                     # le lien au prochain passage lorsque React a fini de charger.
                     navigation_videos_tentee = navigation.get("statut") in {"clic", "deja_actif"}
-                    if navigation.get("statut") == "clic":
+                    if navigation.get("statut") in ("clic", "clic_onglet_sans_contenu"):
                         clics_videos += 1
                         prochain_clic_videos = time.monotonic() + 2.0
                         rapport["navigation_publications"] = "ouverture_rubrique_videos"
@@ -175,7 +175,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 clic_videos_tente or
                 (navigation_videos_tentee and
                  (rapport.get("navigation_videos") or {}).get("statut") in
-                 ("clic", "deja_actif")) or
+                 ("clic", "clic_onglet_sans_contenu", "deja_actif")) or
                 etat == "selectionne"
             ):
                 from urllib.parse import urlsplit
