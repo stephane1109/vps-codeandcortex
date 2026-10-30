@@ -143,6 +143,27 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 )
                 rapport["onglet_publications_active"] = True
                 return False
+            # TikTok peut afficher des vidéos de l'auteur sans monter
+            # user-post-item-list : accepter cette vue seulement sur le
+            # véritable profil et avec des URL vidéo de cet auteur.
+            if etat != "a_ouvrir" and not situation.get("grille"):
+                from urllib.parse import urlsplit
+                page_url = urlsplit(getattr(navigateur, "current_url", ""))
+                meme_page = (page_url.hostname in {"www.tiktok.com", "tiktok.com"}
+                             and page_url.path.rstrip("/").casefold() ==
+                             ("/@" + compte).casefold())
+                if meme_page:
+                    visibles = navigateur.execute_script(LIENS_PROFIL_JS, compte) or []
+                    from scraptiktok import canonical_post
+                    valides = [url for url in visibles if
+                               (identite := canonical_post(url))
+                               and identite[2].casefold() == compte.casefold()
+                               and "/video/" in identite[1]]
+                    if valides:
+                        onglet_active = True
+                        rapport["navigation_publications"] = "profil_videos_sans_grille_e2e"
+                        rapport["onglet_publications_active"] = True
+                        return False
             if etat == "a_ouvrir":
                 if clic_videos_tente:
                     # Le DOM n'a pas encore confirmé la nouvelle vue.
@@ -195,8 +216,13 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         avant = len(liens)
         if cibler_onglet_videos:
             candidats = list(navigateur.execute_script(LIENS_ONGLET_VIDEOS_JS, compte) or [])
-            # Uniquement les listes du profil chargé : aucune exploration des
-            # recommandations, de la rubrique Photos ou de /search/video.
+            if onglet_active and rapport.get("navigation_publications") == "profil_videos_sans_grille_e2e":
+                candidats.extend(
+                    url for url in (navigateur.execute_script(LIENS_PROFIL_JS, compte) or [])
+                    if "/video/" in url
+                )
+            # Uniquement les liens vidéo de l'auteur sur le profil chargé,
+            # jamais les résultats d'une recherche générale.
             if onglet_active:
                 candidats.extend(
                     url for url in observation.lire() if "/video/" in url
