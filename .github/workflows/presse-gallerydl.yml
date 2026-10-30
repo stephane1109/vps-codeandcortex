@@ -5,6 +5,7 @@ on:
     branches: [deploy-scraptiktok]
     paths:
       - "collecte/presse_gallerydl.py"
+      - "collecte/gallerydl_liste.py"
       - "connect_presse.py"
       - "collecte/comptes.py"
       - "webapp.py"
@@ -27,7 +28,7 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Vérifier la syntaxe
         run: |
-          python -m compileall -q collecte/presse_gallerydl.py connect_presse.py webapp.py streamlit_app.py tests/test_presse_gallerydl.py
+          python -m compileall -q collecte/presse_gallerydl.py collecte/gallerydl_liste.py connect_presse.py webapp.py streamlit_app.py tests/test_presse_gallerydl.py
           python -m gallery_dl --version
       - name: Tester les extractions et les refus gallery-dl sans réseau
         run: python -m unittest discover -s tests -p test_presse_gallerydl.py -v
