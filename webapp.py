@@ -507,6 +507,8 @@ class Job:
                         "presse_moteur": entree.get("rapport", {}).get("presse_moteur"),
                         "message": entree.get("message", "Recherche terminée."),
                         "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
+                        "navigation_videos": entree.get("rapport", {}).get("navigation_videos", {}),
+                        "navigation_videos_observee": entree.get("rapport", {}).get("navigation_videos_observee", {}),
                         "recherches": [{"requete": r.get("requete_recherche"),
                             "compte": r.get("compte_attendu"),
                             "candidats_examines": r.get("candidats_examines", 0),
@@ -526,6 +528,8 @@ class Job:
                             "urls_embed_non_verifiees": r.get("urls_embed_non_verifiees", 0),
                             "message_erreur": r.get("message_erreur"),
                             "navigation_publications": r.get("navigation_publications"),
+                            "navigation_videos": r.get("navigation_videos", {}),
+                            "navigation_videos_observee": r.get("navigation_videos_observee", {}),
                             "url_rubrique_publications": r.get("url_rubrique_publications"),
                             "observation_reseau": {
                                 "actif": bool(r.get("observation_reseau", {}).get("actif")),
