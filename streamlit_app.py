@@ -250,9 +250,9 @@ with onglet_collecte:
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
-            ["api", "research", "navigateur"],key="presse_moteur",horizontal=True,disabled=occupe,
+            ["api", "research", "navigateur", "playwright"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
-                                   "navigateur":"Méthode Selenium"}[v],
+                                   "navigateur":"Méthode Selenium", "playwright":"Méthode Playwright"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -299,6 +299,8 @@ with onglet_collecte:
             )
         elif st.session_state.get("presse_moteur") == "research":
             informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
+        elif st.session_state.get("presse_moteur") == "playwright":
+            informations_presse.append("Moteur : Méthode Playwright (profils et publications, session indépendante).")
         else:
             informations_presse.append("Moteur : Méthode Selenium.")
         if st.session_state.get("presse_moteur") != "research":
