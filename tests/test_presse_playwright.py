@@ -82,6 +82,41 @@ class PressePlaywrightTests(unittest.TestCase):
         self.assertEqual(resultat, [adresse("bfmtv", "7701005447410552097")])
         self.assertEqual(mouvements, ["clic_videos", "lecture_videos"])
 
+    def test_page_tiktok_en_erreur_ne_passe_pas_pour_onglet_charge(self):
+        from collecte.navigation_videos import NAVIGUER_VIDEOS_JS, DIAGNOSTIC_VIDEOS_JS
+        args = SimpleNamespace(limit=2, timeout=0.1, delay=0, max_scrolls=0,
+                               interactive=False)
+        client = PressePlaywright(args)
+        client.page = Mock()
+        client.page.url = "https://www.tiktok.com/@lemondefr"
+        client._visiter = Mock()
+        client.statut_http = 200
+        def controle(rapport):
+            rapport["etat_page"] = {
+                "etat": "complete", "erreur_tiktok": True, "liens": 0
+            }
+            return True
+        client._surveiller_page = controle
+        def evaluer(code, *arguments):
+            if code == NAVIGUER_VIDEOS_JS:
+                return {"statut": "selectionne_sans_publications",
+                        "type": "onglet", "route": "/@lemondefr"}
+            if code == LIENS_VIDEOS_JS:
+                return []
+            if code == DIAGNOSTIC_VIDEOS_JS:
+                return {"route": "/@lemondefr", "grilles": 0,
+                        "liens_video_auteur": 0}
+            return []
+        client.page.evaluate.side_effect = evaluer
+        bilan = {}
+        with self.assertRaisesRegex(RuntimeError, "erreur"):
+            client.decouvrir("lemondefr", bilan)
+        self.assertEqual(bilan["diagnostic"]["code"], "erreur_tiktok_playwright")
+        self.assertEqual(bilan["diagnostic"]["navigation"], "selectionne_sans_publications")
+        self.assertEqual(bilan["diagnostic"]["statut_http"], 200)
+        self.assertEqual(bilan["navigation_publications"], "videos_selectionne_sans_contenu")
+        self.assertEqual(bilan["discovered_urls"], [])
+
     def test_lire_publication_playwright_reutilise_le_json_et_le_resume(self):
         import json
         url = adresse("lemondefr", "1234567890")
