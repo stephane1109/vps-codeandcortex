@@ -96,8 +96,9 @@ class ConnexionPresse(SessionNavigateur):
 
     def fermer(self):
         try:
-            if self.playwright_client is not None:
-                self.playwright_client.fermer()
+            client = getattr(self, "playwright_client", None)
+            if client is not None:
+                client.fermer()
                 self.playwright_client = None
         finally:
             super().fermer()
