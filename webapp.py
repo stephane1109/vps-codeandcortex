@@ -856,6 +856,18 @@ def expliquer_echec_source(rapport, erreur):
             reversed(rapport.get("recherches_compte", []))
             if (etape.get("diagnostic") or {}).get("code")), diagnostic)
     code = diagnostic.get("code")
+    if code == "gallerydl_sans_videos":
+        categorie = diagnostic.get("categorie")
+        detail = (" (HTTP 429)" if categorie == "http_429" else
+                  " (HTTP 403)" if categorie == "http_403" else "")
+        return ("Méthode gallery-dl : TikTok n'a pas fourni de publications"
+                + detail + ". Cela ne signifie pas que le compte est vide.")
+    if code == "gallerydl_delai_depasse":
+        return "Méthode gallery-dl : délai de collecte dépassé, sans relance automatique."
+    if code == "gallerydl_json_invalide":
+        return "Méthode gallery-dl : réponse non exploitable, aucune publication inventée."
+    if code == "gallerydl_indisponible":
+        return "Méthode gallery-dl : dépendance absente du conteneur."
     if code == "profil_sans_liens_playwright":
         return ("Le profil n’a fourni aucun lien vidéo après "
                 + str(diagnostic.get("delai_secondes", "?"))
