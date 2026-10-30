@@ -52,9 +52,18 @@ NAVIGUER_VIDEOS_JS = r"""(compte) => {
     route:location.pathname,liens_video:document.querySelectorAll('a[href*="/video/"]').length};
   const typ = choisi.tagName === 'A' ? 'lien_profil' : 'onglet';
   const destination = choisi.tagName === 'A' ? choisi.href : '';
-  // Un onglet déjà sélectionné peut attendre sa grille : ne pas le recliquer.
+  // aria-selected='true' décrit uniquement un état d'onglet, pas la
+  // disponibilité de la grille : ne jamais annoncer « déjà actif » à vide.
   if (choisi.getAttribute('aria-selected') === 'true') {
-    return {statut:'deja_actif',type:typ,route:location.pathname,destination};
+    const grille = document.querySelector(
+      '[data-e2e="user-post-item-list"],[data-e2e^="user-post-item-list"],' +
+      '[data-e2e="user-post-list"]'
+    );
+    const liens = Array.from(document.querySelectorAll('a[href*="/video/"]'))
+      .some(e => profil(e.href));
+    return {statut: grille || liens ? 'deja_actif' : 'selectionne_sans_publications',
+            type:typ,route:location.pathname,destination,
+            grille:!!grille,liens_video:liens};
   }
   choisi.click();
   return {statut:'clic',type:typ,route:location.pathname,destination};
