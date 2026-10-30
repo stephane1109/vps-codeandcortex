@@ -960,7 +960,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                  or job.settings.presse_moteur == "gallerydl"
                                  or (job.settings.presse_moteur == "api"
                                      and not job.settings.collecter_commentaires
-                                     and record_api.get("description"))))):
+                                     and record_api.get("description")))):
                         # TikTok a déjà fourni une légende et éventuellement les
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
