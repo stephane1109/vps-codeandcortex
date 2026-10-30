@@ -1,0 +1,53 @@
+name: ScrapTikTok - Presse Playwright et regression Selenium
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "collecte/presse_playwright.py"
+      - "collecte/profil_selenium.py"
+      - "collecte/comptes.py"
+      - "connect_presse.py"
+      - "streamlit_app.py"
+      - "webapp.py"
+      - "requirements.txt"
+      - "tests/test_presse_playwright.py"
+      - "tests/test_presse_onglet_videos.py"
+      - ".github/workflows/presse-playwright.yml"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q collecte/presse_playwright.py collecte/profil_selenium.py connect_presse.py webapp.py streamlit_app.py tests/test_presse_playwright.py
+      - name: Vérifier le JavaScript Playwright et Selenium
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from collecte.presse_playwright import LIENS_VIDEOS_JS, SELECT_ONGLET_JS, SCROLL_JS
+          from collecte.profil_selenium import ETAT_ONGLET_VIDEOS_JS, LIENS_ONGLET_VIDEOS_JS
+          j = (f"const a = {LIENS_VIDEOS_JS};\n"
+               f"const b = {SELECT_ONGLET_JS};\n"
+               f"const c = {SCROLL_JS};\n"
+               f"function d() {{ {ETAT_ONGLET_VIDEOS_JS} }}\n"
+               f"function e() {{ {LIENS_ONGLET_VIDEOS_JS} }}\n")
+          Path('/tmp/presse-playwright.js').write_text(j)
+          PY
+          node --check /tmp/presse-playwright.js
+      - name: Tester les deux moteurs sans TikTok réel
+        run: |
+          python -m unittest discover -s tests -p test_presse_playwright.py -v
+          python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
+      - name: Tester la pagination et la sélection des médias
+        run: python -m unittest discover -s tests -p test_profil_desordre_integration.py -v
