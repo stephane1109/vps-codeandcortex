@@ -678,6 +678,19 @@ with onglet_collecte:
                                 f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
                         if informations_source:
                             ajouter_detail_source(" · ".join(informations_source))
+                        navigation_videos = bilan.get("navigation_videos") or {}
+                        navigation_observee = bilan.get("navigation_videos_observee") or {}
+                        if navigation_videos:
+                            ajouter_detail_source(
+                                "Accès Vidéos : " + str(navigation_videos.get("statut", "?")) +
+                                (" · via " + str(navigation_videos.get("type"))
+                                 if navigation_videos.get("type") else ""))
+                        if navigation_observee:
+                            ajouter_detail_source(
+                                "Page visitée : " + str(navigation_observee.get("route", "?")) +
+                                " · grilles : " + str(navigation_observee.get("grilles", 0)) +
+                                " · liens vidéo du compte : " +
+                                str(navigation_observee.get("liens_video_auteur", 0)))
                         for recherche in bilan.get("recherches", []):
                             ajouter_detail_source(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
                             auteurs = recherche.get("auteurs_dans_liens", {})
@@ -689,6 +702,19 @@ with onglet_collecte:
                             if auteurs:
                                 frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
                                 ajouter_detail_source("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
+                            navigation_detail = recherche.get("navigation_videos") or {}
+                            navigation_observee = recherche.get("navigation_videos_observee") or {}
+                            if navigation_detail:
+                                ajouter_detail_source(
+                                    "Accès Vidéos : " + str(navigation_detail.get("statut", "?")) +
+                                    (" · via " + str(navigation_detail.get("type"))
+                                     if navigation_detail.get("type") else ""))
+                            if navigation_observee:
+                                ajouter_detail_source(
+                                    "Page visitée : " + str(navigation_observee.get("route", "?")) +
+                                    " · grilles : " + str(navigation_observee.get("grilles", 0)) +
+                                    " · liens vidéo du compte : " +
+                                    str(navigation_observee.get("liens_video_auteur", 0)))
                             navigation=recherche.get("navigation_publications")
                             ligne_pagination = ""
                             if navigation=="research_officielle":
