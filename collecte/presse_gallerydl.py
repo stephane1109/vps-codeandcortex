@@ -12,7 +12,6 @@ import subprocess
 import sys
 import time
 
-import scraptiktok as moteur
 from collecte.presse_api import _metadonnees_publication_api
 from collecte.verification_comptes import normaliser_compte
 
@@ -47,6 +46,35 @@ def extraire_publications(messages, compte, limite):
     return videos
 
 
+def _lignes_diagnostic(journal):
+    """N'extraire que les marqueurs internes, jamais les traces HTTP."""
+    if isinstance(journal, bytes):
+        journal = journal.decode("utf-8", errors="replace")
+    return (journal or "").splitlines()
+
+
+def _derniere_etape(journal):
+    """Identifier la requête réellement atteinte avant le blocage."""
+    etapes = {"initialisation", "resolution_profil",
+              "liste_createur", "conversion_metadonnees"}
+    trouvees = [
+        ligne.removeprefix("ETAPE:").strip()
+        for ligne in _lignes_diagnostic(journal)
+        if ligne.startswith("ETAPE:")
+    ]
+    return next((etape for etape in reversed(trouvees) if etape in etapes),
+                "non_identifiee")
+
+
+def _type_erreur(journal):
+    """Ne présenter que le type d'exception, sans message potentiellement privé."""
+    for ligne in reversed(_lignes_diagnostic(journal)):
+        if ligne.startswith("ERREUR:"):
+            nom = ligne[7:].strip()
+            return nom if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,70}", nom) else "inconnue"
+    return "inconnue"
+
+
 class PresseGalleryDL:
     """Appel borné du CLI officiel. Aucune signature TikTok n'est fabriquée."""
 
@@ -59,25 +87,25 @@ class PresseGalleryDL:
         compte = normaliser_compte(compte)
         limite = min(max(1, int(self.arguments.limit)), 500)
         rapport.update(
-            mode_decouverte="gallerydl_createur", technique="gallerydl_cli",
+            mode_decouverte="gallerydl_createur", technique="gallerydl_liste_directe",
             presse_moteur="gallerydl", compte_attendu=compte,
             hashtag_url=f"https://www.tiktok.com/@{compte}/posts",
             discovered_urls=[], metadonnees_api={},
             retenues_par_compte={compte: 0}, exhaustif=False,
             diagnostic={},
         )
+        # Liste seule : ne jamais demander les pages de chaque publication.
+        # Le traitement est isolé pour permettre un arrêt ferme en cas de blocage.
+        delai_requete = min(8.0, max(4.0, float(self.arguments.timeout) / 3))
         commande = [
-            sys.executable, "-m", "gallery_dl", "--config-ignore",
-            "--dump-json", "--post-range", f"1-{limite}",
-            "-o", "tiktok.order-posts=desc",
-            "-o", "tiktok.videos=true",
-            "-o", "tiktok.photos=false",
-            "-o", "tiktok.covers=false",
-            f"https://www.tiktok.com/@{compte}/posts",
+            sys.executable, "-m", "collecte.gallerydl_liste",
+            "--compte", compte, "--limite", str(limite),
+            "--delai", str(delai_requete),
         ]
         self.verifier()
-        borne = min(180.0, max(45.0, float(self.arguments.timeout) * 5))
+        borne = min(40.0, max(20.0, float(self.arguments.timeout) * 1.75))
         debut = time.monotonic()
+        journal_erreurs = ""
         try:
             self.processus = subprocess.Popen(
                 commande, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -87,18 +115,37 @@ class PresseGalleryDL:
                 self.verifier()
                 restant = borne - (time.monotonic() - debut)
                 if restant <= 0:
-                    rapport["diagnostic"] = {"code": "gallerydl_delai_depasse",
-                                            "delai_secondes": int(borne)}
+                    rapport["diagnostic"] = {
+                        "code": "gallerydl_delai_depasse",
+                        "delai_secondes": int(borne),
+                        "etape": _derniere_etape(journal_erreurs),
+                    }
                     raise RuntimeError("gallery-dl a dépassé le délai de collecte.")
                 try:
                     sortie, erreurs = self.processus.communicate(timeout=min(1.0, restant))
                     break
-                except subprocess.TimeoutExpired:
+                except subprocess.TimeoutExpired as interruption:
+                    # Les données partielles peuvent contenir la dernière étape.
+                    # Elles ne sont jamais publiées telles quelles.
+                    if interruption.stderr:
+                        journal_erreurs = interruption.stderr
                     continue
+            journal_erreurs = erreurs or journal_erreurs
+            if self.processus.returncode:
+                rapport["diagnostic"] = {
+                    "code": "gallerydl_extraction_echec",
+                    "etape": _derniere_etape(journal_erreurs),
+                    "erreur_type": _type_erreur(journal_erreurs),
+                    "code_retour": self.processus.returncode,
+                }
+                raise RuntimeError("gallery-dl n'a pas pu accéder à la liste des publications.")
             try:
                 messages = json.loads(sortie)
             except (TypeError, ValueError) as erreur:
-                rapport["diagnostic"] = {"code": "gallerydl_json_invalide"}
+                rapport["diagnostic"] = {
+                    "code": "gallerydl_json_invalide",
+                    "etape": _derniere_etape(journal_erreurs),
+                }
                 raise RuntimeError("gallery-dl n'a pas fourni une liste JSON exploitable.") from erreur
             videos = extraire_publications(messages, compte, limite)
             rapport["metadonnees_api"] = videos
@@ -121,7 +168,9 @@ class PresseGalleryDL:
                              "aucun_resultat")
                 rapport["diagnostic"] = {
                     "code": "gallerydl_sans_videos",
-                    "categorie": categorie, "code_retour": self.processus.returncode
+                    "categorie": categorie,
+                    "etape": _derniere_etape(journal_erreurs),
+                    "code_retour": self.processus.returncode,
                 }
                 raise RuntimeError(
                     "gallery-dl ne fournit aucune vidéo pour ce compte. "
