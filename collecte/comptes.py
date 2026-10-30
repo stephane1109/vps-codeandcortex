@@ -102,7 +102,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
     intervenir = options.get("interact")
     presse_videos_uniquement = bool(options.get("presse_videos_uniquement"))
     presse_moteur = options.get("presse_moteur", "api")
-    if presse_videos_uniquement and presse_moteur not in {"api", "navigateur", "research", "playwright"}:
+    if presse_videos_uniquement and presse_moteur not in {"api", "navigateur", "research", "gallerydl"}:
         raise ValueError("Moteur de collecte Presse inconnu.")
     etapes, liens = [], {}
     erreur_finale = None
