@@ -5,6 +5,7 @@ on:
     branches: [deploy-scraptiktok]
     paths:
       - "collecte/presse_playwright.py"
+      - "collecte/navigation_videos.py"
       - "collecte/profil_selenium.py"
       - "collecte/comptes.py"
       - "connect_presse.py"
@@ -36,8 +37,11 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from collecte.presse_playwright import LIENS_VIDEOS_JS, SELECT_ONGLET_JS, SCROLL_JS
+          from collecte.navigation_videos import NAVIGUER_VIDEOS_JS, DIAGNOSTIC_VIDEOS_JS
           from collecte.profil_selenium import ETAT_ONGLET_VIDEOS_JS, LIENS_ONGLET_VIDEOS_JS
-          j = (f"const a = {LIENS_VIDEOS_JS};\n"
+          j = (f"const nav = {NAVIGUER_VIDEOS_JS};\n"
+               f"const diag = {DIAGNOSTIC_VIDEOS_JS};\n"
+               f"const a = {LIENS_VIDEOS_JS};\n"
                f"const b = {SELECT_ONGLET_JS};\n"
                f"const c = {SCROLL_JS};\n"
                f"function d() {{ {ETAT_ONGLET_VIDEOS_JS} }}\n"
