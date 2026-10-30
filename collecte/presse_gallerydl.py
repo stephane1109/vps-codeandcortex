@@ -1,8 +1,8 @@
-"""Découverte Presse par gallery-dl (endpoint créateur, sans Playwright).
+"""Découverte Presse par extraction directe des listes gallery-dl.
 
-Le CLI gallery-dl est exécuté sans fichier de configuration utilisateur, sans
-cookies et sans téléchargement. Ses messages Directory apportent les
-métadonnées de la publication, qui sont validées par compte et identifiant.
+L'API Python de gallery-dl est isolée dans un processus court. La méthode
+posts() fournit les métadonnées d'itemList, sans visiter les pages des vidéos.
+Les identifiants et auteurs restent validés avant tout export.
 """
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def _type_erreur(journal):
 
 
 class PresseGalleryDL:
-    """Appel borné du CLI officiel. Aucune signature TikTok n'est fabriquée."""
+    """Appel borné de l'extracteur de listes gallery-dl. Aucune signature fabriquée."""
 
     def __init__(self, arguments, verifier=None):
         self.arguments = arguments
@@ -156,7 +156,7 @@ class PresseGalleryDL:
             rapport["discovery_stop"] = "limit" if len(videos) >= limite else "fin_gallerydl"
             rapport["bilan_recherche"] = (
                 f"@{compte} : {len(videos)} vidéo(s) fournies par gallery-dl "
-                "(creator/item_list, ordre décroissant)."
+                "(liste createur, ordre décroissant ; sans visite des pages vidéo)."
             )
             if progression:
                 progression(len(videos))
