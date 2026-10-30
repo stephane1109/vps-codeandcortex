@@ -119,9 +119,13 @@ class PressePlaywright:
 
     def _visiter(self, url):
         self.check()
-        self.page.goto(url, wait_until="domcontentloaded",
-                       timeout=max(5000, int(self.args.timeout * 1000)))
-        self.page.wait_for_timeout(750)
+        from playwright.sync_api import Error as PlaywrightError
+        try:
+            self.page.goto(url, wait_until="domcontentloaded",
+                           timeout=max(5000, int(self.args.timeout * 1000)))
+            self.page.wait_for_timeout(750)
+        except PlaywrightError as erreur:
+            raise moteur.WebDriverException("Navigation TikTok inaccessible avec Playwright.") from erreur
         self.check()
 
     def decouvrir(self, compte, rapport, progress=None):
@@ -141,7 +145,6 @@ class PressePlaywright:
         self.page.evaluate(SELECT_ONGLET_JS)
         self.page.wait_for_timeout(500)
         uniques = {}
-        sans_progres = 0
         tours = max(1, int(self.args.max_scrolls))
         for tour in range(tours + 1):
             self.check()
@@ -171,7 +174,6 @@ class PressePlaywright:
             rapport["pagination_profil"].append(
                 {"tour": tour + 1, "liens": avant, "defilement": position}
             )
-            sans_progres = sans_progres + 1 if avant == len(uniques) else 0
             # L'observation suivante validera la progression, sans boucle infinie.
             if len(rapport["pagination_profil"]) > 2:
                 nombres = [v["liens"] for v in rapport["pagination_profil"][-3:]]
