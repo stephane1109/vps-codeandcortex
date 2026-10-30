@@ -104,7 +104,7 @@ class ConnexionPresse(SessionNavigateur):
             return self.tikhub_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "gallerydl":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
-                           version_collecteur="gallerydl-presse-v1", presse_moteur="gallerydl")
+                           version_collecteur="gallerydl-presse-v2-liste-directe", presse_moteur="gallerydl")
             self.options_decouverte(rapport, contexte, progression)
             return self.gallerydl_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "research":
