@@ -705,6 +705,21 @@ with onglet_collecte:
                             ajouter_detail_source(" · ".join(informations_source))
                         navigation_videos = bilan.get("navigation_videos") or {}
                         navigation_observee = bilan.get("navigation_videos_observee") or {}
+                        etat_page = bilan.get("etat_page") or {}
+                        reseau_profil = bilan.get("reseau_profil") or {}
+                        if etat_page or reseau_profil:
+                            ajouter_detail_source(
+                                "Chargement TikTok : HTTP " +
+                                str(bilan.get("statut_http_profil") or "?") +
+                                " · état " + str(etat_page.get("etat") or "?") +
+                                " · erreur affichée : " + ("oui" if etat_page.get("erreur_tiktok") else "non") +
+                                " · réponses vidéo : " + str(reseau_profil.get("reponses", 0)) +
+                                (" · refus réseau HTTP " + str(reseau_profil["refus_http"])
+                                 if reseau_profil.get("refus_http") else ""))
+                        if navigation_videos.get("statut") == "selectionne_sans_publications":
+                            ajouter_detail_source(
+                                "L'onglet Vidéos est sélectionné mais aucune publication n'a été chargée. "
+                                "Ce n'est pas une preuve que la liste des vidéos est accessible.")
                         if navigation_videos:
                             ajouter_detail_source(
                                 "Accès Vidéos : " + str(navigation_videos.get("statut", "?")) +
