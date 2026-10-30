@@ -45,9 +45,11 @@ class PressePlaywrightTests(unittest.TestCase):
         client.page = Mock()
         client.page.url = "https://www.tiktok.com/@lemondefr"
         client._visiter = Mock()
-        client.page.evaluate.side_effect = lambda script: (
+        client.page.evaluate.side_effect = lambda script, *args: (
             [adresse("lemondefr", "123"), adresse("autre", "124"),
-             adresse("lemondefr", "126")] if script == LIENS_VIDEOS_JS else False
+             adresse("lemondefr", "126")] if script == LIENS_VIDEOS_JS else
+            {"statut": "clic", "type": "lien_profil"} if "const attendu" in str(script)
+            else False
         )
         bilan = {}
         resultat = client.decouvrir("lemondefr", bilan)
@@ -56,6 +58,29 @@ class PressePlaywrightTests(unittest.TestCase):
         self.assertEqual(bilan["presse_moteur"], "playwright")
         self.assertEqual(bilan["discovery_stop"], "limit")
         client._visiter.assert_called_once()
+
+    def test_playwright_ouvre_la_rubrique_avant_les_videos(self):
+        from collecte.navigation_videos import NAVIGUER_VIDEOS_JS
+        arguments = SimpleNamespace(limit=1, timeout=5, delay=0, max_scrolls=1)
+        client = PressePlaywright(arguments)
+        client.page = Mock()
+        client.page.url = "https://www.tiktok.com/@bfmtv"
+        client._visiter = Mock()
+        mouvements = []
+        def evaluer(code, *args):
+            if code == NAVIGUER_VIDEOS_JS:
+                mouvements.append("clic_videos")
+                return {"statut": "clic", "type": "lien_profil",
+                        "destination": "https://www.tiktok.com/@bfmtv?tab=videos"}
+            if code == LIENS_VIDEOS_JS:
+                self.assertIn("clic_videos", mouvements)
+                mouvements.append("lecture_videos")
+                return [adresse("bfmtv", "7701005447410552097")]
+            return False
+        client.page.evaluate.side_effect = evaluer
+        resultat = client.decouvrir("bfmtv", {})
+        self.assertEqual(resultat, [adresse("bfmtv", "7701005447410552097")])
+        self.assertEqual(mouvements, ["clic_videos", "lecture_videos"])
 
     def test_lire_publication_playwright_reutilise_le_json_et_le_resume(self):
         import json
