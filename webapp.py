@@ -697,10 +697,6 @@ class Job:
 
 
 def release_pointer(driver):
-    from collecte.controle_playwright import ControlePlaywright
-    if isinstance(driver, ControlePlaywright):
-        driver.liberer_pointeur()
-        return
     point = getattr(driver, "_scraptiktok_pointer", None)
     if isinstance(point, dict):
         driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
@@ -711,10 +707,6 @@ def release_pointer(driver):
 
 def perform_action(driver, action: BrowserAction):
     """Rejoue les gestes humains reçus ; aucun solveur de CAPTCHA ni JS utilisateur."""
-    from collecte.controle_playwright import ControlePlaywright
-    if isinstance(driver, ControlePlaywright):
-        driver.effectuer_geste(action)
-        return
     width, height = driver.execute_script("return [window.innerWidth, window.innerHeight];")
     chain = ActionChains(driver, duration=60)
 
@@ -766,10 +758,8 @@ def perform_action(driver, action: BrowserAction):
 
 
 def wait_for_user(driver, job: Job, message: str):
-    from collecte.controle_playwright import ControlePlaywright
-    est_playwright = isinstance(driver, ControlePlaywright)
     def nature_intervention():
-        return driver.nature_intervention() if est_playwright else scraper.type_intervention_tiktok(driver)
+        return scraper.type_intervention_tiktok(driver)
 
     with job.lock:
         previous, message_precedent = job.status, job.message
@@ -796,10 +786,7 @@ def wait_for_user(driver, job: Job, message: str):
             except queue.Empty:
                 continue
             if command == "continue":
-                if est_playwright:
-                    driver.fermer_invitation()
-                else:
-                    scraper.fermer_invitation_connexion(driver)
+                scraper.fermer_invitation_connexion(driver)
                 if nature_intervention() == "captcha":
                     job.update(type_intervention="captcha", action_error="TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer.")
                     continue
@@ -970,9 +957,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record_api = metadonnees_api.get(identifiant_publication)
                     if (job.settings.source_collecte == "presse" and record_api
                             and (job.settings.presse_moteur == "research"
-                                 or ((job.settings.presse_moteur == "gallerydl" or job.settings.presse_moteur == "api")
-                                     and (job.settings.presse_moteur == "gallerydl" or
-                                          (not job.settings.collecter_commentaires and record_api.get("description")))))):
+                                 or job.settings.presse_moteur == "gallerydl"
+                                 or (job.settings.presse_moteur == "api"
+                                     and not job.settings.collecter_commentaires
+                                     and record_api.get("description"))))):
                         # TikTok a déjà fourni une légende et éventuellement les
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
@@ -2091,7 +2079,7 @@ def create_app(manager=None):
         exiger_ticket(request)
         if payload.cookies_tiktok is not None:
             if payload.source_collecte != "presse" or payload.presse_moteur != "navigateur":
-                raise HTTPException(422, "L'import de cookies est disponible avec les méthodes Presse Selenium et Playwright.")
+                raise HTTPException(422, "L'import de cookies est disponible avec la méthode Presse Selenium.")
             try:
                 from collecte.cookies_presse import charger_cookies_presse
                 charger_cookies_presse(payload.cookies_tiktok.get_secret_value())
