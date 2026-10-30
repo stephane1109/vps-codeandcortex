@@ -106,6 +106,8 @@ if "initialise" not in st.session_state:
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
+        "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
+        "hashtag_presse":ancienne.get("hashtag_presse",""),
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", True),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
@@ -143,6 +145,8 @@ if "initialise" not in st.session_state:
 st.session_state.setdefault("telecharger_mp4", False)
 st.session_state.setdefault("sauvegarde_progressive", False)
 st.session_state.setdefault("presse_moteur", "api")
+st.session_state.setdefault("croiser_hashtag_presse", False)
+st.session_state.setdefault("hashtag_presse", "")
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
     st.session_state.pop("cookies_presse_fichier", None)
 if st.session_state.pop("_effacer_research_apres_requete", False):
@@ -312,6 +316,16 @@ with onglet_collecte:
         if len(selection)>max_sources_admin:
             st.warning("Trop de médias sélectionnés pour une même collecte : "
                        f"maximum {max_sources_admin}.")
+        st.checkbox("Croisement avec un hashtag", key="croiser_hashtag_presse",
+            disabled=occupe, help="Filtrer les publications des médias cochés avec un #hashtag exact. "
+            "Le filtre s'applique après la découverte des vidéos, sans lancer une recherche générale.")
+        if st.session_state.get("croiser_hashtag_presse"):
+            st.text_input("Hashtag du croisement", key="hashtag_presse",
+                placeholder="#manifestation", disabled=occupe,
+                help="Un seul hashtag, avec ou sans #. Seules les publications portant ce hashtag "
+                     "dans leur légende seront retenues pour les exports et les analyses.")
+            st.caption("Croisement : comptes sélectionnés ET hashtag indiqué. "
+                       "Le nombre de posts par média est une limite de lecture avant filtrage.")
         # Une seule ligne d'information Streamlit : plusieurs st.caption,
         # st.warning ou st.error consécutifs créent des espaces vides inutiles.
         # Les messages sont assemblés sans saut de paragraphe ; une alerte
@@ -525,12 +539,20 @@ with onglet_collecte:
                 st.error("Le premier hashtag est obligatoire pour la collecte par hashtags ou profils.")
             elif source == "presse" and not st.session_state.get("medias"):
                 st.error("Sélectionnez au moins un média.")
+            elif (source == "presse" and st.session_state.get("croiser_hashtag_presse")
+                  and not st.session_state.get("hashtag_presse", "").strip()):
+                st.error("Saisissez le hashtag à croiser avec les médias.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
+                valeurs["croiser_hashtag_presse"] = (
+                    bool(st.session_state.get("croiser_hashtag_presse", False)) if source == "presse" else False)
+                valeurs["hashtag_presse"] = (
+                    st.session_state.get("hashtag_presse", "").strip()
+                    if valeurs["croiser_hashtag_presse"] else "")
                 if source == "presse" and valeurs["presse_moteur"] == "navigateur":
                     fichier_cookies = st.session_state.get("cookies_presse_fichier")
                     if fichier_cookies is not None:
