@@ -1,4 +1,4 @@
-"""Collecte Presse : Selenium, API web secUid, Research API officielle."""
+"""Collecte Presse : Selenium, Playwright, API web secUid, Research."""
 from collecte.presse import selectionner_medias
 from collecte.session_navigateur import SessionNavigateur
 from collecte.verification_comptes import normaliser_compte
@@ -18,6 +18,7 @@ class ConnexionPresse(SessionNavigateur):
         self.commentaires_research = bool(parametres.collecter_commentaires)
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
+        self.playwright_client = None
         if self.moteur_collecte == "research":
             cle = (parametres.research_client_key.get_secret_value().strip()
                    if parametres.research_client_key else "")
@@ -29,6 +30,12 @@ class ConnexionPresse(SessionNavigateur):
 
     def ouvrir(self):
         """Research sans Chrome, sauf demande de commentaires ou de résumés IA."""
+        if self.moteur_collecte == "playwright":
+            from collecte.presse_playwright import PressePlaywright
+            self.playwright_client = PressePlaywright(self.arguments, self.verifier)
+            self.playwright_client.ouvrir()
+            # Le navigateur Selenium n’est nécessaire qu’aux commentaires.
+            return super().ouvrir() if self.commentaires_research else None
         if self.moteur_collecte == "research" and not self.commentaires_research and not self.resume_research:
             if self.verifier:
                 self.verifier()
@@ -36,6 +43,12 @@ class ConnexionPresse(SessionNavigateur):
         return super().ouvrir()
 
     def options_decouverte(self, rapport, contexte="", progression=None):
+        if self.moteur_collecte == "playwright":
+            if self.verifier:
+                self.verifier()
+            rapport["connexion"] = {"mode": "presse", "module": type(self).__module__,
+                                   "navigateur_decouverte": "playwright", "anonyme": True}
+            return {"check": self.verifier, "progress": progression}
         if self.moteur_collecte != "research":
             return super().options_decouverte(rapport, contexte, progression)
         if self.verifier:
@@ -54,6 +67,11 @@ class ConnexionPresse(SessionNavigateur):
         media = getattr(self, "medias_selectionnes", {}).get(source.get("id"))
         if media is None or normaliser_compte(source["compte"]) != media["compte"]:
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
+        if self.moteur_collecte == "playwright":
+            rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
+                           version_collecteur="playwright-presse-v1", presse_moteur="playwright")
+            self.options_decouverte(rapport, contexte, progression)
+            return self.playwright_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "research":
             from collecte.presse_research import VERSION_RESEARCH
             version = VERSION_RESEARCH
