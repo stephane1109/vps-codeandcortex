@@ -6,6 +6,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from .pagination_profils import defiler_grille_profil, etat_grille_profil
 from .reseau_profils import ObservationProfil
+from .navigation_videos import NAVIGUER_VIDEOS_JS, DIAGNOSTIC_VIDEOS_JS
 
 
 ONGLET_PUBLICATIONS_JS = """
@@ -116,6 +117,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
     observation = ObservationProfil(navigateur, compte, rapport["observation_reseau"], arguments.timeout)
     onglet_active = False
     clic_videos_tente = False
+    navigation_videos_tentee = False
 
     def afficher_page(motif, message):
         """Ouvrir automatiquement la fenêtre existante, sans nouvelle session."""
@@ -129,7 +131,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         Retourne True juste après un clic : il faut attendre un nouveau rendu
         avant de scanner la grille, sinon on compte l'aperçu d'accueil.
         """
-        nonlocal onglet_active, clic_videos_tente
+        nonlocal onglet_active, clic_videos_tente, navigation_videos_tentee
         if onglet_active or moteur.type_intervention_tiktok(navigateur) == "connexion":
             return False
         if cibler_onglet_videos:
@@ -143,22 +145,41 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 )
                 rapport["onglet_publications_active"] = True
                 return False
-            # TikTok peut afficher des vidéos de l'auteur sans monter
-            # user-post-item-list : accepter cette vue seulement sur le
-            # véritable profil et avec des URL vidéo de cet auteur.
-            if etat != "a_ouvrir" and not situation.get("grille"):
+            # Dans la nouvelle interface, « Voir toutes les vidéos » est
+            # parfois un LIEN depuis l'accueil du profil, et non un onglet
+            # avec data-e2e. Suivre le contrôle réellement affiché.
+            if etat != "a_ouvrir" and not navigation_videos_tentee and not situation.get("grille"):
+                navigation = navigateur.execute_script(
+                    "return (" + NAVIGUER_VIDEOS_JS + ")(arguments[0]);", compte)
+                if isinstance(navigation, dict):
+                    rapport["navigation_videos"] = navigation
+                    navigation_videos_tentee = True
+                    if navigation.get("statut") == "clic":
+                        rapport["navigation_publications"] = "ouverture_rubrique_videos"
+                        return True
+
+            # Ne retenir des liens hors de la grille e2e qu'après avoir
+            # ouvert la rubrique ou lorsque son onglet est déjà actif.
+            if not situation.get("grille") and (
+                clic_videos_tente or
+                (navigation_videos_tentee and
+                 (rapport.get("navigation_videos") or {}).get("statut") in
+                 ("clic", "deja_actif")) or
+                etat == "selectionne"
+            ):
                 from urllib.parse import urlsplit
                 page_url = urlsplit(getattr(navigateur, "current_url", ""))
-                meme_page = (page_url.hostname in {"www.tiktok.com", "tiktok.com"}
-                             and page_url.path.rstrip("/").casefold() ==
-                             ("/@" + compte).casefold())
-                if meme_page:
+                chemin = page_url.path.rstrip("/").casefold()
+                meme_profil = (page_url.hostname in {"www.tiktok.com", "tiktok.com"}
+                    and (chemin == ("/@" + compte).casefold()
+                         or chemin.startswith(("/@" + compte + "/").casefold())))
+                if meme_profil:
                     visibles = navigateur.execute_script(LIENS_PROFIL_JS, compte) or []
                     from scraptiktok import canonical_post
                     valides = [url for url in visibles if
-                               (identite := canonical_post(url))
-                               and identite[2].casefold() == compte.casefold()
-                               and "/video/" in identite[1]]
+                        (identite := canonical_post(url))
+                        and identite[2].casefold() == compte.casefold()
+                        and "/video/" in identite[1]]
                     if valides:
                         onglet_active = True
                         rapport["navigation_publications"] = "profil_videos_sans_grille_e2e"
@@ -166,7 +187,6 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                         return False
             if etat == "a_ouvrir":
                 if clic_videos_tente:
-                    # Le DOM n'a pas encore confirmé la nouvelle vue.
                     return False
                 try:
                     situation["element"].click()
@@ -265,6 +285,11 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                 break
             except TimeoutException:
                 diagnostic = moteur.diagnostiquer_page(navigateur, rapport)
+                try:
+                    rapport["navigation_videos_observee"] = navigateur.execute_script(
+                        "return (" + DIAGNOSTIC_VIDEOS_JS + ")(arguments[0]);", compte)
+                except WebDriverException:
+                    pass
                 if moteur.type_intervention_tiktok(navigateur) == "connexion":
                     diagnostic["code"] = "connexion_sans_publications_publiques"
                 # Une détection manquée ne doit pas terminer une source en silence.
@@ -277,6 +302,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                         "puis cliquez sur Continuer pour relire cette même page. Aucune connexion n’est imposée.")
                     onglet_active = False
                     clic_videos_tente = False
+                    navigation_videos_tentee = False
                     continue
                 if diagnostic["code"] == "erreur_tiktok" and not recharge_effectuee:
                     recharge_effectuee = True
@@ -285,6 +311,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                     moteur.open_page(navigateur, rapport["hashtag_url"])
                     onglet_active = False
                     clic_videos_tente = False
+                    navigation_videos_tentee = False
                     continue
                 rapport["discovery_stop"] = "no_accessible_links"
                 raise RuntimeError("Le profil ne fournit aucune publication publique lisible dans cette session.")
