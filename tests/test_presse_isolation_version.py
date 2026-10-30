@@ -20,7 +20,7 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertEqual(response.json()["version_presse"],VERSION_PRESSE)
 
     def test_une_seule_methode_est_selectionnee_par_collecte(self):
-        for moteur in ("api","navigateur","playwright"):
+        for moteur in ("api","navigateur","gallerydl"):
             with self.subTest(moteur=moteur):
                 requete=StartRequest(source_collecte="presse",
                                      medias=["lemonde"],presse_moteur=moteur)
@@ -56,7 +56,7 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertLess(cle,secret)
         self.assertLess(secret,medias)
         self.assertLess(medias,cases)
-        self.assertIn('["api", "research", "navigateur", "playwright"]',texte[choix:medias])
+        self.assertIn('["api", "research", "navigateur", "gallerydl"]',texte[choix:medias])
 
 
     def test_options_commentaires_sous_case_et_titre_periode(self):
