@@ -1,0 +1,32 @@
+name: ScrapTikTok - TikHub et regression Presse
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "collecte/presse_tikhub.py"
+      - "connect_presse.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_presse_tikhub.py"
+      - ".github/workflows/presse-tikhub.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe
+        run: python -m compileall -q collecte/presse_tikhub.py connect_presse.py webapp.py streamlit_app.py tests/test_presse_tikhub.py
+      - name: Tester TikHub sans déclencher de requêtes payantes
+        run: python -m unittest discover -s tests -p test_presse_tikhub.py -v
+      - name: Vérifier les anciens moteurs
+        run: |
+          python -m unittest discover -s tests -p test_presse_gallerydl.py -v
+          python -m unittest discover -s tests -p test_presse_isolation_version.py -v
