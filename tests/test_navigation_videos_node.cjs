@@ -46,8 +46,8 @@ assert.equal(visiter([navigationGenerale]).statut,"introuvable");
 console.log("Navigation TikTok : lien du profil, onglet, et exclusion hors profil OK");
 
 const actifSansGrille=element({tag:"BUTTON",label:"Vidéos",profile:true,selected:"true"});
-assert.equal(visiter([actifSansGrille]).statut,"selectionne_sans_publications");
-assert.equal(actifSansGrille.clicked,undefined);
+assert.equal(visiter([actifSansGrille]).statut,"clic_onglet_sans_contenu");
+assert.equal(actifSansGrille.clicked,1);
 // Le même onglet ne devient « actif » que lorsqu'une grille existe vraiment.
 function visiterAvecGrille(items) {
   const contexte = {
@@ -62,3 +62,17 @@ function visiterAvecGrille(items) {
   return naviguer("bfmtv");
 }
 assert.equal(visiterAvecGrille([actifSansGrille]).statut,"deja_actif");
+
+const erreurTikTok = element({tag:"BUTTON",label:"Vidéos",profile:true,selected:"true"});
+const erreurContext = {
+  URL, location:{href:"https://www.tiktok.com/@bfmtv",pathname:"/@bfmtv"},
+  document:{
+    body:{innerText:"Something went wrong"},
+    querySelectorAll(){return [erreurTikTok];},
+    querySelector(){return null;}
+  },
+  getComputedStyle(){return {display:"block",visibility:"visible"};}
+};
+const navigationErreur = vm.runInNewContext(fonctions + "\nnav",erreurContext);
+assert.equal(navigationErreur("bfmtv").statut,"selectionne_sans_publications");
+assert.equal(erreurTikTok.clicked,undefined);
