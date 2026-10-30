@@ -19,6 +19,11 @@ class ConnexionPresse(SessionNavigateur):
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
         self.gallerydl_client = None
+        self.tikhub_client = None
+        self.tikhub_cle = None
+        if self.moteur_collecte == "tikhub":
+            secret = getattr(parametres, "tikhub_api_key", None)
+            self.tikhub_cle = secret.get_secret_value().strip() if secret else None
         self.cookies_fournis = None
         secret_cookies = getattr(parametres, "cookies_tiktok", None)
         if secret_cookies and self.moteur_collecte == "navigateur":
@@ -34,7 +39,13 @@ class ConnexionPresse(SessionNavigateur):
         return [dict(m) for m in medias]
 
     def ouvrir(self):
-        """Research sans Chrome, sauf demande de commentaires ou de résumés IA."""
+        """Les moteurs API n'ouvrent Chrome que pour les fonctions nécessaires."""
+        if self.moteur_collecte == "tikhub":
+            from collecte.presse_tikhub import PresseTikHub
+            self.tikhub_client = PresseTikHub(self.arguments, self.tikhub_cle, self.verifier)
+            # Le résumé IA TikHub provient de l'API ; Selenium sert uniquement
+            # aux commentaires explicitement demandés.
+            return super().ouvrir() if self.commentaires_research else None
         if self.moteur_collecte == "gallerydl":
             from collecte.presse_gallerydl import PresseGalleryDL
             self.gallerydl_client = PresseGalleryDL(self.arguments, self.verifier)
@@ -52,6 +63,13 @@ class ConnexionPresse(SessionNavigateur):
         return navigateur
 
     def options_decouverte(self, rapport, contexte="", progression=None):
+        if self.moteur_collecte == "tikhub":
+            if self.verifier:
+                self.verifier()
+            rapport["connexion"] = {"mode": "presse", "module": type(self).__module__,
+                                    "navigateur_decouverte": False,
+                                    "api": "TikHub", "cle_configuree": True}
+            return {"check": self.verifier, "progress": progression}
         if self.moteur_collecte == "gallerydl":
             if self.verifier:
                 self.verifier()
@@ -79,6 +97,11 @@ class ConnexionPresse(SessionNavigateur):
         media = getattr(self, "medias_selectionnes", {}).get(source.get("id"))
         if media is None or normaliser_compte(source["compte"]) != media["compte"]:
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
+        if self.moteur_collecte == "tikhub":
+            rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
+                           version_collecteur="tikhub-presse-v1", presse_moteur="tikhub")
+            self.options_decouverte(rapport, contexte, progression)
+            return self.tikhub_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "gallerydl":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
                            version_collecteur="gallerydl-presse-v1", presse_moteur="gallerydl")
@@ -104,10 +127,20 @@ class ConnexionPresse(SessionNavigateur):
 
 
     def lire_publication(self, url):
+        if self.moteur_collecte == "tikhub":
+            return self.tikhub_client.lire_resume(url)
         return super().lire_publication(url)
 
     def fermer(self):
         self.cookies_fournis = None
+        self.tikhub_cle = None
+        try:
+            client_tikhub = getattr(self, "tikhub_client", None)
+            if client_tikhub is not None:
+                client_tikhub.fermer()
+                self.tikhub_client = None
+        finally:
+            pass
         try:
             client = getattr(self, "gallerydl_client", None)
             if client is not None:
