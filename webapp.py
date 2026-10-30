@@ -1010,11 +1010,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 from collecte.commentaires import collecter_commentaires
                                 try:
                                     if (job.settings.source_collecte == "presse"
-                                            and job.settings.presse_moteur == "research"):
-                                        # Les métadonnées sont fournies par Research.
-                                        # Les commentaires restent lus par Selenium :
-                                        # ouvrir explicitement la publication avant
-                                        # d'inspecter son panneau de commentaires.
+                                            and job.settings.presse_moteur in {"research", "playwright"}):
+                                        # Research fournit les métadonnées et Playwright
+                                        # les textes ; les commentaires restent pilotés
+                                        # par la session Selenium facultative.
                                         driver.get(url)
                                     resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
                                         job.settings.collecter_reponses, verifier=job.check, pause=job.pause,
