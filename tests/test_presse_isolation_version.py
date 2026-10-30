@@ -20,7 +20,7 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertEqual(response.json()["version_presse"],VERSION_PRESSE)
 
     def test_une_seule_methode_est_selectionnee_par_collecte(self):
-        for moteur in ("api","navigateur"):
+        for moteur in ("api","navigateur","playwright"):
             with self.subTest(moteur=moteur):
                 requete=StartRequest(source_collecte="presse",
                                      medias=["lemonde"],presse_moteur=moteur)
@@ -56,7 +56,7 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertLess(cle,secret)
         self.assertLess(secret,medias)
         self.assertLess(medias,cases)
-        self.assertIn('["api", "research", "navigateur"]',texte[choix:medias])
+        self.assertIn('["api", "research", "navigateur", "playwright"]',texte[choix:medias])
 
 
     def test_options_commentaires_sous_case_et_titre_periode(self):
@@ -81,9 +81,9 @@ class TestIsolationPresse(unittest.TestCase):
         interface = Path(__file__).resolve().parents[1].joinpath(
             "streamlit_app.py").read_text(encoding="utf-8")
         self.assertIn('informations_source.append(', interface)
-        self.assertIn('st.caption(" · ".join(informations_source))', interface)
+        self.assertIn('ajouter_detail_source(" · ".join(informations_source))', interface)
         self.assertIn('ligne_pagination = (ligne_pagination + " · " + texte_arret', interface)
-        self.assertIn('st.caption(ligne_pagination)', interface)
+        self.assertIn('ajouter_detail_source(ligne_pagination)', interface)
         self.assertIn('"navigateur":"Méthode Selenium"', interface)
         self.assertIn('« Méthode Selenium »', interface)
         self.assertNotIn("Grille du profil (Selenium", interface)
