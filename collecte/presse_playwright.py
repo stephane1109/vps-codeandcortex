@@ -1,6 +1,7 @@
 """Découverte et lecture TikTok Presse par Playwright, indépendante de Selenium.
 
-Un contexte anonyme par collecte. Aucune reconnexion ni changement automatique
+Un contexte par collecte, avec cookies facultatifs explicitement fournis.
+Aucune reconnexion ni changement automatique
 de moteur. Les liens sont limités aux vidéos du compte explicitement choisi.
 """
 from __future__ import annotations
@@ -90,7 +91,7 @@ def _profil_correct(url, compte):
 class PressePlaywright:
     """Un navigateur et une page par session, libérés à la fin de la collecte."""
 
-    def __init__(self, args, check=None):
+    def __init__(self, args, check=None, interaction=None, cookies=None):
         self.args = args
         self.check = check or (lambda: None)
         self.playwright = None
@@ -98,11 +99,20 @@ class PressePlaywright:
         self.context = None
         self.page = None
         self.statut_http = None
+        self.interaction = interaction
+        self.compte_attendu = ""
+        self.publications_reseau = {}
+        self.bilan_reseau = {}
+        self.intervention_proposee = False
+        self.nombre_cookies_importes = 0
+        self.cookies_fournis = cookies
 
     def ouvrir(self):
         from playwright.sync_api import sync_playwright
+        from collecte.cookies_presse import charger_cookies_presse
 
         self.check()
+        cookies = charger_cookies_presse() if self.cookies_fournis is None else self.cookies_fournis
         try:
             self.playwright = sync_playwright().start()
             binary = str(getattr(self.args, "chrome_binary", None)
@@ -116,12 +126,99 @@ class PressePlaywright:
             self.context = self.browser.new_context(
                 locale="fr-FR", viewport={"width": 1440, "height": 1000}
             )
+            if cookies:
+                self.context.add_cookies(cookies)
+                self.nombre_cookies_importes = len(cookies)
             self.page = self.context.new_page()
+            self.page.on("response", self._surveiller_reponse)
+            # Lire la réponse réellement demandée par TikTok : ne pas fabriquer
+            # de signature ni rejouer une URL API sans son contexte navigateur.
+            self.page.on("requestfinished", self._recevoir_publications)
             self.page.set_default_timeout(max(5000, int(self.args.timeout * 1000)))
         except Exception:
             self.fermer()
             raise
         return self
+
+    def _surveiller_reponse(self, reponse):
+        """Interrompre au statut HTTP, sans attendre la fin d'un corps bloqué."""
+        url = urlsplit(reponse.url)
+        if (self.compte_attendu and url.hostname in {"www.tiktok.com", "tiktok.com"}
+                and url.path in {"/api/post/item_list/", "/api/creator/item_list/"}
+                and reponse.status in (403, 429)):
+            self.bilan_reseau["refus_http"] = reponse.status
+            self.bilan_reseau["statut_http"] = reponse.status
+            delai = reponse.headers.get("retry-after", "")
+            if delai.isdecimal() and 0 < int(delai) <= 86400:
+                self.bilan_reseau["retry_after"] = int(delai)
+
+    def _recevoir_publications(self, requete):
+        """Conserver les vidéos du compte demandé même si sa grille ne se monte pas."""
+        url = urlsplit(requete.url)
+        if (not self.compte_attendu or url.scheme != "https"
+                or url.hostname not in {"www.tiktok.com", "tiktok.com"}
+                or url.path not in {"/api/post/item_list/", "/api/creator/item_list/"}):
+            return
+        try:
+            reponse = requete.response()
+            if reponse is None:
+                return
+            self.bilan_reseau["reponses"] = self.bilan_reseau.get("reponses", 0) + 1
+            self.bilan_reseau["statut_http"] = reponse.status
+            if reponse.status in (403, 429):
+                # Ce refus reste bloquant même si une autre requête aboutit ensuite.
+                self.bilan_reseau["refus_http"] = reponse.status
+                return
+            if reponse.status != 200:
+                return
+            contenu = reponse.body()
+            if not contenu.strip():
+                self.bilan_reseau["reponses_vides"] = self.bilan_reseau.get("reponses_vides", 0) + 1
+                return
+            if len(contenu) > 4_000_000:
+                self.bilan_reseau["reponse_trop_volumineuse"] = True
+                return
+            import json
+            donnees = json.loads(contenu)
+            if not isinstance(donnees, dict):
+                raise ValueError()
+            if donnees.get("statusCode", donnees.get("status_code", 0)) not in (0, "0", None):
+                self.bilan_reseau["liste_refusee"] = True
+                return
+            from collecte.presse_api import _metadonnees_publication_api
+            for item in donnees.get("itemList", []):
+                if len(self.publications_reseau) >= self.args.limit:
+                    break
+                if (not isinstance(item, dict) or not isinstance(item.get("video"), dict)
+                        or item.get("imagePost")):
+                    continue
+                auteur = item.get("author")
+                if not isinstance(auteur, dict):
+                    continue
+                nom = str(auteur.get("uniqueId") or auteur.get("unique_id") or "")
+                identifiant = str(item.get("id") or "")
+                if nom.casefold() != self.compte_attendu.casefold() or not re.fullmatch(r"\d{5,30}", identifiant):
+                    continue
+                fiche = _metadonnees_publication_api(item, self.compte_attendu, identifiant)
+                fiche["source"] = "playwright_reponse_profil"
+                self.publications_reseau.setdefault(identifiant, fiche)
+        except Exception:
+            # Aucune URL signée, donnée de session ni réponse brute dans les logs.
+            self.bilan_reseau["reponse_inexploitable"] = True
+
+    def _intervenir(self, message):
+        """Une seule intervention par source, dans le navigateur de la collecte."""
+        if self.intervention_proposee or not getattr(self.args, "interactive", False):
+            return False
+        self.intervention_proposee = True
+        self.check()
+        if self.interaction is None:
+            moteur.manual_step(message)
+        else:
+            from collecte.controle_playwright import ControlePlaywright
+            self.interaction(ControlePlaywright(self), message)
+        self.check()
+        return True
 
     def _visiter(self, url):
         self.check()
@@ -141,13 +238,22 @@ class PressePlaywright:
     def _surveiller_page(self, rapport):
         """Distinguer un refus, un CAPTCHA et une page encore incomplète."""
         nature = _script(self.page, moteur.TYPE_INTERVENTION_JS)
+        if nature != "captcha" and isinstance(getattr(self.page, "frames", None), list):
+            from collecte.controle_playwright import ControlePlaywright
+            nature = ControlePlaywright(self).nature_intervention()
+        refus = self.bilan_reseau.get("refus_http") or self.statut_http
+        if refus in (403, 429):
+            rapport.update(discovery_stop="refus_http", diagnostic={
+                "code": "refus_http_playwright", "statut_http": refus})
+            if refus == 429:
+                from collecte.presse_api import PresseRateLimitError
+                raise PresseRateLimitError(self.bilan_reseau.get("retry_after"))
+            raise RuntimeError(f"TikTok refuse la liste du profil (HTTP {refus}).")
         if nature == "captcha":
+            if self._intervenir("TikTok demande une vérification. Terminez-la dans la fenêtre ci-dessous, puis cliquez sur Continuer."):
+                return False
             rapport.update(discovery_stop="blocked", diagnostic={"code": "verification_tiktok"})
             raise RuntimeError("TikTok demande une vérification dans la session Playwright.")
-        if self.statut_http in (403, 429):
-            rapport.update(discovery_stop="refus_http", diagnostic={
-                "code": "refus_http_playwright", "statut_http": self.statut_http})
-            raise RuntimeError(f"TikTok refuse la page du profil (HTTP {self.statut_http}).")
         # Fermer seulement une invitation facultative avec le bouton proposé.
         # Ne saisir aucun identifiant et ne supprimer aucune modale du DOM.
         if nature == "connexion":
@@ -163,6 +269,10 @@ class PressePlaywright:
         if isinstance(page, dict):
             rapport["etat_page"] = page
             if page.get("erreur_tiktok"):
+                # L'erreur peut précéder la réponse réseau ou un CAPTCHA. Laisser
+                # finir l'attente bornée avant de proposer la fenêtre manuelle.
+                if not self.intervention_proposee:
+                    return False
                 rapport.update(discovery_stop="erreur_tiktok", diagnostic={
                     **page, "code": "erreur_tiktok_playwright"})
                 raise RuntimeError("TikTok affiche une erreur à la place du profil.")
@@ -170,6 +280,10 @@ class PressePlaywright:
 
     def decouvrir(self, compte, rapport, progress=None):
         compte = normaliser_compte(compte)
+        self.compte_attendu = compte
+        self.publications_reseau = {}
+        self.bilan_reseau = {}
+        self.intervention_proposee = False
         url = f"https://www.tiktok.com/@{compte}"
         rapport.update(mode_decouverte="profil_playwright", technique="playwright_profil",
                        presse_moteur="playwright", hashtag_url=url,
@@ -183,6 +297,8 @@ class PressePlaywright:
 
         def publier():
             rapport.update(discovered_urls=list(uniques.values()),
+                           reseau_profil=dict(self.bilan_reseau),
+                           cookies_importes=self.nombre_cookies_importes,
                            candidats_examines=len(uniques),
                            retenues_par_compte={compte: len(uniques)})
             if progress:
@@ -192,6 +308,18 @@ class PressePlaywright:
             nonlocal navigation, clics, prochain_clic
             self.check()
             try:
+                avant = len(uniques)
+                for identifiant, fiche in self.publications_reseau.items():
+                    if len(uniques) >= self.args.limit:
+                        break
+                    uniques.setdefault(identifiant, fiche["url"])
+                    rapport["metadonnees_api"].setdefault(identifiant, fiche)
+                if len(uniques) > avant:
+                    publier()
+                    # Un refus ultérieur doit conserver les résultats mais arrêter
+                    # la pagination, jamais passer pour une réussite exhaustive.
+                    if not self.bilan_reseau.get("refus_http"):
+                        return True
                 if not self._surveiller_page(rapport):
                     return False
                 actuelle = urlsplit(self.page.url)
@@ -248,8 +376,12 @@ class PressePlaywright:
             """Attendre des liens, avec contrôle d'arrêt et dernière lecture à l'échéance."""
             echeance = time.monotonic() + delai
             while True:
+                intervention_avant = self.intervention_proposee
                 if scanner():
                     return True
+                if self.intervention_proposee and not intervention_avant:
+                    # Le temps passé par l'utilisateur n'épuise pas le chargement.
+                    echeance = time.monotonic() + delai
                 restant = echeance - time.monotonic()
                 if restant <= 0:
                     return False
@@ -258,7 +390,14 @@ class PressePlaywright:
 
         try:
             self._visiter(url)
-            if not attendre_nouveaux():
+            obtenu = attendre_nouveaux()
+            if not obtenu and self._intervenir(
+                    "TikTok ne fournit pas la liste du profil. Vérifiez la page dans cette fenêtre, "
+                    "traitez les cookies ou la vérification proposée, puis cliquez sur Continuer."):
+                # L'utilisateur décide des actions. Aucune relance ni modification
+                # d'empreinte du navigateur pour contourner un refus TikTok.
+                obtenu = attendre_nouveaux()
+            if not obtenu:
                 observation = self.page.evaluate(DIAGNOSTIC_VIDEOS_JS, compte)
                 rapport["navigation_videos_observee"] = observation
                 rapport.update(discovery_stop="delai_sans_publications", diagnostic={
@@ -296,8 +435,11 @@ class PressePlaywright:
                 rapport["discovery_stop"] = "max_scrolls"
             if len(uniques) >= self.args.limit:
                 rapport["discovery_stop"] = "limit"
-        except (RuntimeError, moteur.WebDriverException):
+        except (RuntimeError, moteur.WebDriverException) as erreur:
             publier()
+            from collecte.presse_api import PresseRateLimitError
+            if isinstance(erreur, PresseRateLimitError):
+                raise  # Arrêter également les autres médias, sans relance.
             if not uniques:
                 raise
             # Préserver les liens déjà obtenus si la suite devient inaccessible.
@@ -307,7 +449,7 @@ class PressePlaywright:
             rapport.update(retenues_par_compte={compte: len(uniques)},
                            collecte_partielle=len(uniques) < self.args.limit,
                            bilan_recherche=f"@{compte} : {len(uniques)}/{self.args.limit} vidéo(s) "
-                                          "découverte(s) par Playwright (grille publique).")
+                                          "découverte(s) par Playwright (page et réponses du profil).")
             if rapport.get("collecte_interrompue"):
                 rapport["bilan_recherche"] += " Collecte interrompue ; les liens obtenus sont conservés. Voir le diagnostic."
         return list(uniques.values())
@@ -350,6 +492,7 @@ class PressePlaywright:
         return resultat
 
     def fermer(self):
+        self.cookies_fournis = None
         for nom in ("context", "browser", "playwright"):
             objet = getattr(self, nom)
             setattr(self, nom, None)

@@ -35,6 +35,54 @@ class ProfilsDansNavigateurTests(unittest.TestCase):
         self.assertEqual(rapport["discovery_stop"], "limit")
         self.assertTrue(self.requetes)
 
+    def test_reponse_native_avec_cookie_avant_navigation_et_sans_grille(self):
+        import json
+        self.client.context.add_cookies([{"name": "session_test", "value": "prive",
+            "domain": ".tiktok.com", "path": "/", "httpOnly": True, "secure": True}])
+        self.charger("fetch('/api/post/item_list/?test=1');", debut="Something went wrong")
+        requetes = []
+        def repondre_api(route):
+            requetes.append(route.request.headers.get("cookie", ""))
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "statusCode": 0, "itemList": [{"id": "1234567890",
+                "author": {"uniqueId": "lemondefr"}, "video": {}, "desc": "Texte reçu"}]}))
+        self.client.context.route("**/api/post/item_list/**", repondre_api)
+        rapport = {}
+        self.assertEqual(self.client.decouvrir("lemondefr", rapport),
+                         ["https://www.tiktok.com/@lemondefr/video/1234567890"])
+        self.assertIn("session_test=prive", requetes[0])
+        self.assertEqual(rapport["metadonnees_api"]["1234567890"]["description"], "Texte reçu")
+        self.assertNotIn("session_test", str(rapport))
+
+    def test_page_en_erreur_permet_intervention_et_reprise(self):
+        self.client.args.timeout = 0.3
+        self.client.args.interactive = True
+        self.charger("", debut="Something went wrong")
+        controles = []
+        def intervenir(controle, message):
+            # Simuler seulement notre page de test, jamais un CAPTCHA réel.
+            controles.append(controle)
+            self.assertTrue(controle.get_screenshot_as_png().startswith(b'\x89PNG'))
+            controle.client.page.evaluate("""() => {
+                document.querySelector('main').innerHTML = '<a href="/@lemondefr/video/1234567890">Vidéo</a>';
+            }""")
+        self.client.interaction = intervenir
+        self.assertEqual(self.client.decouvrir("lemondefr", {}),
+                         ["https://www.tiktok.com/@lemondefr/video/1234567890"])
+        self.assertEqual(len(controles), 1)
+
+    def test_429_api_interrompt_sans_fenetre_ni_requete_supplementaire(self):
+        from collecte.presse_api import PresseRateLimitError
+        from unittest.mock import Mock
+        self.client.args.interactive = True
+        self.client.interaction = Mock()
+        self.charger("fetch('/api/post/item_list/?test=1');")
+        self.client.context.route("**/api/post/item_list/**",
+                                  lambda route: route.fulfill(status=429, body=""))
+        with self.assertRaises(PresseRateLimitError):
+            self.client.decouvrir("lemondefr", {})
+        self.client.interaction.assert_not_called()
+
     def test_onglet_tardif_et_premier_clic_avant_attachement_react(self):
         self.charger('''setTimeout(() => {
           document.querySelector('main').innerHTML = '<button role="tab" aria-selected="false">Vidéos</button><div id="resultats"></div>';

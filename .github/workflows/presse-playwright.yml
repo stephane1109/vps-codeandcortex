@@ -5,6 +5,8 @@ on:
     branches: [deploy-scraptiktok]
     paths:
       - "collecte/presse_playwright.py"
+      - "collecte/cookies_presse.py"
+      - "collecte/controle_playwright.py"
       - "collecte/navigation_videos.py"
       - "collecte/profil_selenium.py"
       - "collecte/comptes.py"
@@ -14,6 +16,7 @@ on:
       - "requirements.txt"
       - "tests/test_presse_playwright.py"
       - "tests/test_presse_attente.py"
+      - "tests/test_presse_session.py"
       - "tests/test_presse_dom_navigateur.py"
       - "tests/test_navigation_videos_node.cjs"
       - "tests/test_presse_onglet_videos.py"
@@ -58,6 +61,7 @@ jobs:
           python -m unittest discover -s tests -p test_presse_playwright.py -v
           python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
           python -m unittest discover -s tests -p test_presse_attente.py -v
+          python -m unittest discover -s tests -p test_presse_session.py -v
       - name: Installer Chromium pour les pages simulées
         run: python -m playwright install --with-deps chromium
       - name: Vérifier les chargements différés dans un vrai navigateur

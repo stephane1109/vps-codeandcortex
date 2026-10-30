@@ -19,6 +19,11 @@ class ConnexionPresse(SessionNavigateur):
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
         self.playwright_client = None
+        self.cookies_fournis = None
+        secret_cookies = getattr(parametres, "cookies_tiktok", None)
+        if secret_cookies and self.moteur_collecte in {"playwright", "navigateur"}:
+            from collecte.cookies_presse import charger_cookies_presse
+            self.cookies_fournis = charger_cookies_presse(secret_cookies.get_secret_value())
         if self.moteur_collecte == "research":
             cle = (parametres.research_client_key.get_secret_value().strip()
                    if parametres.research_client_key else "")
@@ -32,7 +37,8 @@ class ConnexionPresse(SessionNavigateur):
         """Research sans Chrome, sauf demande de commentaires ou de résumés IA."""
         if self.moteur_collecte == "playwright":
             from collecte.presse_playwright import PressePlaywright
-            self.playwright_client = PressePlaywright(self.arguments, self.verifier)
+            self.playwright_client = PressePlaywright(self.arguments, self.verifier,
+                interaction=self.interaction, cookies=self.cookies_fournis)
             self.playwright_client.ouvrir()
             # Le navigateur Selenium n’est nécessaire qu’aux commentaires.
             return super().ouvrir() if self.commentaires_research else None
@@ -40,17 +46,25 @@ class ConnexionPresse(SessionNavigateur):
             if self.verifier:
                 self.verifier()
             return None
-        return super().ouvrir()
+        navigateur = super().ouvrir()
+        if self.moteur_collecte != "research":
+            from collecte.cookies_presse import appliquer_cookies_selenium
+            self.nombre_cookies_importes = appliquer_cookies_selenium(navigateur, self.cookies_fournis)
+        return navigateur
 
     def options_decouverte(self, rapport, contexte="", progression=None):
         if self.moteur_collecte == "playwright":
             if self.verifier:
                 self.verifier()
             rapport["connexion"] = {"mode": "presse", "module": type(self).__module__,
-                                   "navigateur_decouverte": "playwright", "anonyme": True}
+                                   "navigateur_decouverte": "playwright",
+                                   "cookies_configures": bool(self.playwright_client.nombre_cookies_importes)}
             return {"check": self.verifier, "progress": progression}
         if self.moteur_collecte != "research":
-            return super().options_decouverte(rapport, contexte, progression)
+            options = super().options_decouverte(rapport, contexte, progression)
+            rapport["connexion"].pop("anonyme", None)
+            rapport["connexion"]["cookies_configures"] = bool(getattr(self, "nombre_cookies_importes", 0))
+            return options
         if self.verifier:
             self.verifier()
         rapport["connexion"] = {"mode": "presse",
@@ -69,7 +83,7 @@ class ConnexionPresse(SessionNavigateur):
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
         if self.moteur_collecte == "playwright":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
-                           version_collecteur="playwright-presse-v2-attente", presse_moteur="playwright")
+                           version_collecteur="playwright-presse-v3-session", presse_moteur="playwright")
             self.options_decouverte(rapport, contexte, progression)
             return self.playwright_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "research":
@@ -97,6 +111,7 @@ class ConnexionPresse(SessionNavigateur):
         return super().lire_publication(url)
 
     def fermer(self):
+        self.cookies_fournis = None
         try:
             client = getattr(self, "playwright_client", None)
             if client is not None:

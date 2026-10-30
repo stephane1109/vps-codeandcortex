@@ -6,6 +6,44 @@ ordinateur et mobile. Le navigateur Selenium s'exécute sur le serveur :
 l'utilisateur n'a rien à installer.
 
 
+### Session facultative pour Presse (30 octobre 2026)
+
+Avec **Méthode Playwright** ou **Méthode Selenium**, ouvrir **Session TikTok —
+cookies facultatifs**, puis importer un fichier `.txt` au format Netscape issu
+de sa propre session TikTok. L'import est limité à 1 Mo et aux domaines TikTok ;
+les cookies expirés sont ignorés. Les données restent dans la mémoire de cette
+collecte, sont exclues des exports/archives/diagnostics, puis effacées à sa fin.
+Le champ d'import est vidé après le lancement. Sans fichier, le mode anonyme
+reste disponible. La présence de cookies ne prouve pas que la session est valide.
+
+L'administrateur peut aussi monter un fichier Netscape en lecture seule hors
+Git et hors exports, puis définir `SCRAPTIKTOK_COOKIES_FILE` avec son chemin
+interne au conteneur. Ce réglage existait pour l'API web ; il est maintenant
+appliqué avant la navigation Presse Selenium et Playwright. Le fichier fourni
+dans l'interface est prioritaire et n'est jamais enregistré sur disque.
+L'import d'interface ne concerne ni Research, ni les collectes par hashtags.
+
+Playwright conserve les réponses natives `/api/post/item_list/` et
+`/api/creator/item_list/`, vérifie chaque auteur et exclut les photos. Il peut
+ainsi récupérer les vidéos et leurs métadonnées même si la grille HTML ne se
+monte pas. Il ne fabrique pas de signature et ne rejoue pas ces requêtes.
+La fenêtre de contrôle existante fonctionne maintenant avec Playwright :
+captures, clics, déplacement du pointeur, défilement, Continuer et arrêt.
+Une vérification est traitée manuellement dans le même navigateur, une fois
+par source. Un HTTP 429 arrête le lot, sans intervention proposée ni autre média
+sollicité. Une réponse vide est comptabilisée comme telle, pas comme une preuve
+que le compte n'a pas de vidéos.
+
+Les tests de pages simulées valident ces parcours ; ils ne prouvent pas que
+TikTok accepte une session réelle depuis le VPS. Lors du contrôle du 30 octobre,
+l'embed public de `@lemondefr` répondait HTTP 429. Une collecte réelle avec une
+session valide reste nécessaire pour confirmer la résolution du blocage TikTok.
+
+Références examinées : [OpenCLI #2568](https://github.com/jackwener/OpenCLI/issues/2568),
+[TikTok-Api #1311](https://github.com/davidteather/TikTok-Api/issues/1311),
+[observations OpenTok](https://github.com/caixax/opentok/blob/main/docs/TIKTOK-API.md).
+Ces rapports décrivent des observations, pas une garantie de fonctionnement.
+
 ## Moteurs Presse et médias (octobre 2026)
 
 Dans **Collecte → Presse et médias**, sélectionner une seule méthode par collecte :
@@ -22,7 +60,7 @@ Dans **Collecte → Presse et médias**, sélectionner une seule méthode par co
   est un objectif, pas une garantie d'exhaustivité. Recherche limitée à 60 pages
   par compte et par collecte.
 - **Grille du profil (Selenium)** : méthode navigateur indépendante.
-- **Méthode Playwright** : autre navigateur anonyme, sans basculement implicite
+- **Méthode Playwright** : navigateur distinct, sans basculement implicite
   vers une autre méthode. La découverte attend jusqu'à 20 secondes les premiers
   liens, puis vérifie les nouvelles publications après chaque défilement, y
   compris le dernier. Les liens déjà reçus restent conservés si la suite échoue.
@@ -31,7 +69,7 @@ Les moteurs navigateur réexaminent une rubrique Vidéos apparue tardivement et
 retentent de façon bornée un clic resté sans effet avant le chargement de React.
 Ils distinguent les erreurs de navigateur, les vérifications TikTok et les
 profils sans liens après attente. Les diagnostics des nouvelles collectes
-indiquent `playwright-presse-v2-attente` ou `selenium-presse-v2-attente`.
+indiquent `playwright-presse-v3-session` ou `selenium-presse-v2-attente`.
 Playwright respecte désormais le réglage `SCRAPTIKTOK_HEADLESS` déjà utilisé par
 Selenium ; l’image Docker fournit Xvfb lorsque ce réglage vaut `0`.
 La correction des attentes ne supprime pas une limitation HTTP 429 de l'API
@@ -713,9 +751,9 @@ redémarrage complet par le superviseur Docker. Aucun réglage Redis n’est mod
 la fermeture des ports après SIGTERM et l’arrêt du moteur après perte de Streamlit.
 Ce test est également exécuté par le point d’entrée navigateur de la CI.
 
-## Collecte uniquement anonyme
+## Collecte anonyme par défaut
 
-Aucune option de connexion TikTok, aucun écran de connexion ouvert par le moteur et aucun profil Chrome persistant ne sont proposés. Hashtags, profils et médias utilisent un navigateur neuf, commun aux opérations d’une collecte, puis fermé à la fin. Une ancienne requête contenant l’option de connexion supprimée ne peut pas réactiver cette fonctionnalité.
+Le moteur n’ouvre aucun écran de connexion et ne conserve aucun profil Chrome persistant. Presse accepte désormais un import facultatif de cookies, décrit au début de ce document. Hashtags, profils et médias utilisent un navigateur neuf, commun aux opérations d’une collecte, puis fermé à la fin. Une ancienne requête contenant l’option de connexion supprimée ne peut pas réactiver cette fonctionnalité.
 
 Les invitations de TikTok sont fermées avec leur bouton lorsque c’est possible. Une restriction restante est signalée comme une collecte partielle ou une source inaccessible ; les textes déjà obtenus restent exportables. Le CAPTCHA peut toujours être traité manuellement dans la fenêtre intégrée à Streamlit. Le lien d’ouverture dans un autre onglet et les commandes API d’ouverture manuelle et de connexion ont été supprimés.
 

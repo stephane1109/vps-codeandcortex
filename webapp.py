@@ -51,6 +51,7 @@ class StartRequest(BaseModel):
     # ni exposés par snapshot(), model_dump() ou les diagnostics.
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
     research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    cookies_tiktok: SecretStr | None = Field(default=None, exclude=True, repr=False, max_length=1_048_576)
     enrichir: bool = False
     telecharger_mp4: bool = False
     sauvegarde_progressive: bool = False
@@ -689,6 +690,10 @@ class Job:
 
 
 def release_pointer(driver):
+    from collecte.controle_playwright import ControlePlaywright
+    if isinstance(driver, ControlePlaywright):
+        driver.liberer_pointeur()
+        return
     point = getattr(driver, "_scraptiktok_pointer", None)
     if isinstance(point, dict):
         driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
@@ -699,6 +704,10 @@ def release_pointer(driver):
 
 def perform_action(driver, action: BrowserAction):
     """Rejoue les gestes humains reçus ; aucun solveur de CAPTCHA ni JS utilisateur."""
+    from collecte.controle_playwright import ControlePlaywright
+    if isinstance(driver, ControlePlaywright):
+        driver.effectuer_geste(action)
+        return
     width, height = driver.execute_script("return [window.innerWidth, window.innerHeight];")
     chain = ActionChains(driver, duration=60)
 
@@ -750,6 +759,11 @@ def perform_action(driver, action: BrowserAction):
 
 
 def wait_for_user(driver, job: Job, message: str):
+    from collecte.controle_playwright import ControlePlaywright
+    est_playwright = isinstance(driver, ControlePlaywright)
+    def nature_intervention():
+        return driver.nature_intervention() if est_playwright else scraper.type_intervention_tiktok(driver)
+
     with job.lock:
         previous, message_precedent = job.status, job.message
         job.update(status="attention", message=message, action_error="")
@@ -764,7 +778,7 @@ def wait_for_user(driver, job: Job, message: str):
                 held_since = None
             # Ne pas parcourir les cadres pendant un glisser-déposer du puzzle.
             if held_since is None and time.monotonic() >= prochaine_detection:
-                nature = scraper.type_intervention_tiktok(driver)
+                nature = nature_intervention()
                 job.update(type_intervention=nature)
                 prochaine_detection = time.monotonic() + 1
             if time.monotonic() >= next_frame:
@@ -775,8 +789,11 @@ def wait_for_user(driver, job: Job, message: str):
             except queue.Empty:
                 continue
             if command == "continue":
-                scraper.fermer_invitation_connexion(driver)
-                if scraper.captcha_present(driver):
+                if est_playwright:
+                    driver.fermer_invitation()
+                else:
+                    scraper.fermer_invitation_connexion(driver)
+                if nature_intervention() == "captcha":
                     job.update(type_intervention="captcha", action_error="TikTok affiche encore un CAPTCHA. Terminez-le dans la fenêtre avant de continuer.")
                     continue
                 break
@@ -784,7 +801,7 @@ def wait_for_user(driver, job: Job, message: str):
             if live:
                 command = live.action
             try:
-                if command.kind == "text" and scraper.type_intervention_tiktok(driver) == "connexion":
+                if command.kind == "text" and nature_intervention() == "connexion":
                     command.text = ""
                     raise ValueError("La collecte est anonyme ; aucune saisie d’identifiants n’est proposée.")
                 perform_action(driver, command)
@@ -794,7 +811,7 @@ def wait_for_user(driver, job: Job, message: str):
                     held_since = None
                 job.update(action_error="")
                 next_frame = 0
-            except (scraper.WebDriverException, ValueError):
+            except Exception:
                 message = "Ce geste n’a pas abouti. Attendez l’actualisation de l’image et réessayez."
                 job.update(action_error=message)
                 if live:
@@ -805,7 +822,7 @@ def wait_for_user(driver, job: Job, message: str):
     finally:
         try:
             release_pointer(driver)
-        except scraper.WebDriverException:
+        except Exception:
             pass
         job.update(status=previous, message=message_precedent, frame=b"", type_intervention="")
         while not job.commands.empty():
@@ -946,7 +963,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record_api = metadonnees_api.get(identifiant_publication)
                     if (job.settings.source_collecte == "presse" and record_api
                             and (job.settings.presse_moteur == "research"
-                                 or (job.settings.presse_moteur == "api"
+                                 or (job.settings.presse_moteur in {"api", "playwright"}
                                      and not job.settings.collecter_commentaires
                                      and record_api.get("description")))):
                         # TikTok a déjà fourni une légende et éventuellement les
@@ -1089,7 +1106,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
-                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research"}:
+                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research", "playwright"}:
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(donnees, dict):
                             metadonnees_api.setdefault(str(identifiant), donnees)
@@ -1264,6 +1281,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         # Les valeurs restent en mémoire uniquement durant le job actif.
         job.settings.research_client_key = None
         job.settings.research_client_secret = None
+        job.settings.cookies_tiktok = None
         try:
             job.save()
         except OSError:
@@ -1566,6 +1584,15 @@ def create_app(manager=None):
         manager.shutdown()
 
     app = FastAPI(title="ScrapTikTok", lifespan=lifespan, docs_url=None, redoc_url=None)
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(RequestValidationError)
+    async def erreur_validation_sans_secrets(request, erreur):
+        """Ne jamais renvoyer le corps d'une requête contenant des cookies."""
+        return JSONResponse(status_code=422, content={"detail": [
+            {"loc": e["loc"], "msg": e["msg"], "type": e["type"]}
+            for e in erreur.errors()]})
     from interface.passerelle import CompressionInterface, ressource_interface_versionnee
     app.add_middleware(CompressionInterface)
     app.state.manager = manager
@@ -2055,6 +2082,14 @@ def create_app(manager=None):
     @app.post("/api/jobs", status_code=202)
     def start(payload: StartRequest, request: Request):
         exiger_ticket(request)
+        if payload.cookies_tiktok is not None:
+            if payload.source_collecte != "presse" or payload.presse_moteur not in {"navigateur", "playwright"}:
+                raise HTTPException(422, "L'import de cookies est disponible avec les méthodes Presse Selenium et Playwright.")
+            try:
+                from collecte.cookies_presse import charger_cookies_presse
+                charger_cookies_presse(payload.cookies_tiktok.get_secret_value())
+            except RuntimeError as erreur:
+                raise HTTPException(422, str(erreur)) from None
         cookie = request.cookies.get(HISTORIQUE_COOKIE,"")
         return manager.start(owner(request), payload,
             cookie if re.fullmatch(r"[a-f0-9]{64}",cookie) else "").snapshot()
@@ -2145,5 +2180,3 @@ def create_app(manager=None):
 
 
 app = create_app()
-
-

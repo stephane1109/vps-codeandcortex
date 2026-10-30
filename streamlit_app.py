@@ -50,6 +50,8 @@ def lancer(chemin, donnees):
         st.error(str(erreur)); return
     if "id" in resultat:
         st.session_state["collecte"] = resultat
+        if chemin == "/api/jobs" and donnees.get("cookies_tiktok"):
+            st.session_state["_effacer_cookies_apres_requete"] = True
         if chemin == "/api/jobs" and donnees.get("presse_moteur") == "research":
             # Effacer les champs sensibles avant le prochain affichage,
             # sans écraser un widget déjà instancié pendant cette exécution.
@@ -139,6 +141,8 @@ if "initialise" not in st.session_state:
 st.session_state.setdefault("telecharger_mp4", False)
 st.session_state.setdefault("sauvegarde_progressive", False)
 st.session_state.setdefault("presse_moteur", "api")
+if st.session_state.pop("_effacer_cookies_apres_requete", False):
+    st.session_state.pop("cookies_presse_fichier", None)
 if st.session_state.pop("_effacer_research_apres_requete", False):
     st.session_state.pop("research_client_key", None)
     st.session_state.pop("research_client_secret", None)
@@ -263,6 +267,14 @@ with onglet_collecte:
             st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
                           type="password", disabled=occupe,
                           help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
+        if st.session_state.get("presse_moteur") in {"playwright", "navigateur"}:
+            with st.expander("Session TikTok — cookies facultatifs"):
+                st.file_uploader("Importer les cookies TikTok (.txt, format Netscape)",
+                    type=["txt"], key="cookies_presse_fichier", disabled=occupe,
+                    help="Utiliser un export de votre propre session TikTok. Les cookies restent "
+                         "en mémoire pour cette collecte et ne figurent pas dans les résultats ou les archives.")
+                st.caption("Sans fichier, la collecte utilise une session anonyme, sauf cookies configurés par l’administrateur. "
+                           "Une session importée peut expirer ou nécessiter une vérification TikTok.")
         st.write("Choisir les médias à collecter")
         def memoriser_medias():
             st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
@@ -502,6 +514,19 @@ with onglet_collecte:
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
+                if source == "presse" and valeurs["presse_moteur"] in {"playwright", "navigateur"}:
+                    fichier_cookies = st.session_state.get("cookies_presse_fichier")
+                    if fichier_cookies is not None:
+                        try:
+                            if fichier_cookies.size > 1_048_576:
+                                raise ValueError()
+                            contenu_cookies = fichier_cookies.getvalue().decode("utf-8-sig")
+                            from collecte.cookies_presse import charger_cookies_presse
+                            charger_cookies_presse(contenu_cookies)
+                            valeurs["cookies_tiktok"] = contenu_cookies
+                        except (ValueError, RuntimeError):
+                            st.error("Importez un fichier Netscape valide de moins de 1 Mo contenant des cookies TikTok non expirés.")
+                            st.stop()
                 if source == "presse" and valeurs["presse_moteur"] == "research":
                     valeurs["research_client_key"] = st.session_state.get("research_client_key", "")
                     valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
