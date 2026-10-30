@@ -510,6 +510,13 @@ class Job:
                         "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
                         "navigation_videos": entree.get("rapport", {}).get("navigation_videos", {}),
                         "navigation_videos_observee": entree.get("rapport", {}).get("navigation_videos_observee", {}),
+                        "statut_http_profil": entree.get("rapport", {}).get("statut_http_profil"),
+                        "etat_page": {cle: entree.get("rapport", {}).get("etat_page", {}).get(cle)
+                            for cle in ("titre", "etat", "liens", "erreur_tiktok")
+                            if cle in entree.get("rapport", {}).get("etat_page", {})},
+                        "reseau_profil": {cle: entree.get("rapport", {}).get("reseau_profil", {}).get(cle)
+                            for cle in ("statut_http", "reponses", "refus_http", "reponses_vides", "liste_refusee")
+                            if cle in entree.get("rapport", {}).get("reseau_profil", {})},
                         "recherches": [{"requete": r.get("requete_recherche"),
                             "compte": r.get("compte_attendu"),
                             "candidats_examines": r.get("candidats_examines", 0),
