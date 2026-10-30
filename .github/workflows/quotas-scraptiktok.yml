@@ -1,14 +1,14 @@
 name: ScrapTikTok - Plafonds anti-scraping
 on:
   push:
+    branches: [deploy-scraptiktok]
     paths:
       - "collecte/quotas_exploitation.py"
       - "collecte/presse_api.py"
       - "collecte/comptes.py"
-      - "webapp.py"
-      - "streamlit_app.py"
       - "tests/test_quotas_exploitation.py"
       - ".github/workflows/quotas-scraptiktok.yml"
+  workflow_dispatch:
   pull_request:
     paths:
       - "collecte/quotas_exploitation.py"
