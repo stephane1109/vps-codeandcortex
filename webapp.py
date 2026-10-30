@@ -908,7 +908,14 @@ def expliquer_echec_source(rapport, erreur):
         return ("Méthode gallery-dl : TikTok n'a pas fourni de publications"
                 + detail + ". Cela ne signifie pas que le compte est vide.")
     if code == "gallerydl_delai_depasse":
-        return "Méthode gallery-dl : délai de collecte dépassé, sans relance automatique."
+        return ("Méthode gallery-dl : délai dépassé pendant l'étape "
+                + str(diagnostic.get("etape", "non_identifiee"))
+                + ". La collecte est arrêtée, sans prétendre que le compte est vide.")
+    if code == "gallerydl_extraction_echec":
+        return ("Méthode gallery-dl : échec pendant l'étape "
+                + str(diagnostic.get("etape", "non_identifiee"))
+                + " (type " + str(diagnostic.get("erreur_type", "inconnue"))
+                + "). Aucun résultat inventé.")
     if code == "gallerydl_json_invalide":
         return "Méthode gallery-dl : réponse non exploitable, aucune publication inventée."
     if code == "gallerydl_indisponible":
