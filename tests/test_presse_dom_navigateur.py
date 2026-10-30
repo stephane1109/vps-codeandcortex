@@ -71,6 +71,29 @@ class ProfilsDansNavigateurTests(unittest.TestCase):
                          ["https://www.tiktok.com/@lemondefr/video/1234567890"])
         self.assertEqual(len(controles), 1)
 
+    def test_erreur_accueil_ne_bloque_pas_le_lien_vers_les_videos(self):
+        """Une rubrique distincte est suivie même si l'accueil affiche une erreur."""
+        self.client.args.timeout = 1
+        self.charger('''document.querySelector('a').onclick = (evenement) => {
+          evenement.preventDefault();
+          history.pushState({}, '', evenement.currentTarget.href);
+          document.querySelector('main').innerHTML = '<div data-e2e="user-post-item-list"><a href="/@lemondefr/video/1234567890">Vidéo</a></div>';
+        };''', debut='''Something went wrong <a href="/@lemondefr?vue=test">Voir toutes les vidéos</a>''')
+        rapport = {}
+        self.assertEqual(self.client.decouvrir("lemondefr", rapport),
+                         ["https://www.tiktok.com/@lemondefr/video/1234567890"])
+        self.assertTrue(rapport["erreur_accueil_observee"])
+        self.assertIn("vue=test", self.client.page.url)
+
+    def test_erreur_persistante_signalee_apres_recherche_videos(self):
+        self.client.args.timeout = .3
+        self.charger("", debut='''Something went wrong <p role="tab" data-e2e="videos-tab" aria-selected="true">Videos</p>''')
+        rapport = {}
+        with self.assertRaisesRegex(RuntimeError, "après recherche"):
+            self.client.decouvrir("lemondefr", rapport)
+        self.assertEqual(rapport["navigation_videos"]["statut"], "deja_actif")
+        self.assertEqual(rapport["diagnostic"]["code"], "erreur_tiktok_playwright")
+
     def test_429_api_interrompt_sans_fenetre_ni_requete_supplementaire(self):
         from collecte.presse_api import PresseRateLimitError
         from unittest.mock import Mock

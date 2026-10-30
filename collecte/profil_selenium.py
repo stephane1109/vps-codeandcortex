@@ -120,6 +120,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
     navigation_videos_tentee = False
     clics_videos = 0
     prochain_clic_videos = 0.0
+    liens_reseau = {}
 
     def afficher_page(motif, message):
         """Ouvrir automatiquement la fenêtre existante, sans nouvelle session."""
@@ -239,39 +240,41 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
 
     def scanner(_):
         surveiller()
+        # Les réponses TikTok sont indépendantes du montage de la grille. Les
+        # conserver avant la sélection de l'onglet : lire() vide son tampon.
+        for url in observation.lire():
+            identite = moteur.canonical_post(url)
+            if (identite and identite[2].casefold() == compte.casefold()
+                    and (not cibler_onglet_videos or "/video/" in identite[1])):
+                if len(liens_reseau) < arguments.limit:
+                    liens_reseau.setdefault(identite[0], identite[1])
         # Les données initiales peuvent déjà contenir des liens alors que
         # l'onglet et la grille ne sont pas encore montés dans la page.
         transition = activer_publications()
-        if transition or (cibler_onglet_videos and not onglet_active):
-            # Aucun lien de l'aperçu n'est compté tant que l'onglet Vidéos
-            # et sa grille n'ont pas été confirmés.
-            return False
         avant = len(liens)
         if cibler_onglet_videos:
-            candidats = list(navigateur.execute_script(LIENS_ONGLET_VIDEOS_JS, compte) or [])
-            if onglet_active and rapport.get("navigation_publications") == "profil_videos_sans_grille_e2e":
+            # Les liens du DOM restent soumis à la sélection de la rubrique.
+            # Les vidéos dont TikTok a fourni l'auteur n'en dépendent pas.
+            candidats = list(liens_reseau.values())
+            if onglet_active and not transition:
+                candidats.extend(navigateur.execute_script(LIENS_ONGLET_VIDEOS_JS, compte) or [])
+            if onglet_active and not transition and rapport.get("navigation_publications") == "profil_videos_sans_grille_e2e":
                 candidats.extend(
                     url for url in (navigateur.execute_script(LIENS_PROFIL_JS, compte) or [])
                     if "/video/" in url
                 )
-            # Uniquement les liens vidéo de l'auteur sur le profil chargé,
-            # jamais les résultats d'une recherche générale.
-            if onglet_active:
-                candidats.extend(
-                    url for url in observation.lire() if "/video/" in url
-                )
             rapport["ciblage_videos"] = (
-                "grille_du_profil" if onglet_active else "onglet_indisponible"
+                "grille_du_profil" if onglet_active else
+                "reponses_du_profil" if liens_reseau else "onglet_indisponible"
             )
         else:
             candidats = list(navigateur.execute_script(LIENS_PROFIL_JS, compte) or [])
             candidats.extend(moteur.liens_donnees_publications(navigateur.execute_script(moteur.DONNEES_PUBLICATIONS_JS)))
-            candidats.extend(observation.lire())
+            candidats.extend(liens_reseau.values())
         for url in candidats:
             identite = moteur.canonical_post(url)
             if (identite and identite[2].casefold() == compte.casefold()
                     and (not cibler_onglet_videos or "/video/" in identite[1])
-                    and (not cibler_onglet_videos or onglet_active)
                     and len(liens) < arguments.limit):
                 liens.setdefault(identite[0], identite[1])
         rapport["discovered_urls"] = list(liens.values())

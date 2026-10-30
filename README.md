@@ -69,7 +69,14 @@ Les moteurs navigateur réexaminent une rubrique Vidéos apparue tardivement et
 retentent de façon bornée un clic resté sans effet avant le chargement de React.
 Ils distinguent les erreurs de navigateur, les vérifications TikTok et les
 profils sans liens après attente. Les diagnostics des nouvelles collectes
-indiquent `playwright-presse-v3-session` ou `selenium-presse-v2-attente`.
+indiquent `playwright-presse-v4-navigation` ou `selenium-presse-v3-reseau`.
+Playwright recherche la rubrique Vidéos même si l'accueil affiche une erreur :
+il suit le lien réellement présent, ou sélectionne l'onglet sur place. Selenium
+conserve aussi les vidéos du bon auteur reçues par le réseau avant l'apparition
+de la grille HTML. Les photos et publications d'autres comptes restent exclues.
+Ces corrections sont couvertes par des tests de régression, dont des pages
+dynamiques dans un vrai navigateur. Elles ne garantissent pas la fourniture
+des publications par TikTok dans une session donnée.
 Playwright respecte désormais le réglage `SCRAPTIKTOK_HEADLESS` déjà utilisé par
 Selenium ; l’image Docker fournit Xvfb lorsque ce réglage vaut `0`.
 La correction des attentes ne supprime pas une limitation HTTP 429 de l'API
@@ -803,4 +810,3 @@ conservation habituelle de la session s’applique également aux MP4.
 Seuls les formats MP4 accessibles via yt-dlp sont récupérés. Une restriction TikTok,
 un diaporama, un délai dépassé ou une limite de ressources est signalé et n’annule
 pas la collecte textuelle. Le téléchargement ne garantit pas l’accès à chaque vidéo.
-

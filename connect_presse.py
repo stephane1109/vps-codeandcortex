@@ -83,14 +83,14 @@ class ConnexionPresse(SessionNavigateur):
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
         if self.moteur_collecte == "playwright":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
-                           version_collecteur="playwright-presse-v3-session", presse_moteur="playwright")
+                           version_collecteur="playwright-presse-v4-navigation", presse_moteur="playwright")
             self.options_decouverte(rapport, contexte, progression)
             return self.playwright_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "research":
             from collecte.presse_research import VERSION_RESEARCH
             version = VERSION_RESEARCH
         elif self.moteur_collecte == "navigateur":
-            version = "selenium-presse-v2-attente"
+            version = "selenium-presse-v3-reseau"
         else:
             from collecte.presse_api import VERSION_PRESSE
             version = VERSION_PRESSE

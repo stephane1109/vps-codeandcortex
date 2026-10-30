@@ -27,6 +27,26 @@ class AttendreVueVideos:
 
 
 class PresseVideoTests(unittest.TestCase):
+    def test_reponse_du_compte_conservee_sans_grille_ni_onglet(self):
+        """Le réseau fournit des vidéos avant que TikTok monte sa grille HTML."""
+        navigateur = Mock()
+        navigateur.current_url = "https://www.tiktok.com/@lemondefr"
+        navigateur.execute_script.return_value = []
+        args = SimpleNamespace(limit=2, timeout=.01, delay=0, max_scrolls=0,
+                               idle_rounds=1, interactive=False)
+        rapport = {"compte_attendu": "lemondefr", "hashtag_url": navigateur.current_url}
+        with patch("collecte.profil_selenium.ObservationProfil") as obs, \
+             patch("collecte.profil_selenium.WebDriverWait", AttendreVueVideos), \
+             patch.object(moteur, "open_page"), \
+             patch.object(moteur, "type_intervention_tiktok", return_value=""), \
+             patch.object(moteur, "fermer_invitation_connexion"):
+            obs.return_value.lire.return_value = [lien(101), lien(102),
+                lien(103, compte="autre"), lien(104, "photo")]
+            resultat = collecter_grille_profil(navigateur, args, rapport,
+                interact=Mock(), cibler_onglet_videos=True)
+        self.assertEqual(resultat, [lien(101), lien(102)])
+        self.assertEqual(rapport["ciblage_videos"], "reponses_du_profil")
+
     def test_clic_vidéos_avant_de_lire_la_grille_sans_compter_l_apercu(self):
         bouton=Mock()
         navigateur=Mock()

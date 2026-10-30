@@ -269,13 +269,10 @@ class PressePlaywright:
         if isinstance(page, dict):
             rapport["etat_page"] = page
             if page.get("erreur_tiktok"):
-                # L'erreur peut précéder la réponse réseau ou un CAPTCHA. Laisser
-                # finir l'attente bornée avant de proposer la fenêtre manuelle.
-                if not self.intervention_proposee:
-                    return False
-                rapport.update(discovery_stop="erreur_tiktok", diagnostic={
-                    **page, "code": "erreur_tiktok_playwright"})
-                raise RuntimeError("TikTok affiche une erreur à la place du profil.")
+                # Une erreur dans le contenu de l'accueil n'empêche pas le lien
+                # Vidéos de fonctionner. Autoriser sa recherche avant de conclure
+                # à l'échec, y compris après une intervention dans cette page.
+                rapport["erreur_accueil_observee"] = True
         return True
 
     def decouvrir(self, compte, rapport, progress=None):
@@ -400,6 +397,10 @@ class PressePlaywright:
             if not obtenu:
                 observation = self.page.evaluate(DIAGNOSTIC_VIDEOS_JS, compte)
                 rapport["navigation_videos_observee"] = observation
+                if (rapport.get("etat_page") or {}).get("erreur_tiktok"):
+                    rapport.update(discovery_stop="erreur_tiktok", diagnostic={
+                        **rapport["etat_page"], "code": "erreur_tiktok_playwright"})
+                    raise RuntimeError("TikTok affiche une erreur après recherche de la rubrique Vidéos.")
                 rapport.update(discovery_stop="delai_sans_publications", diagnostic={
                     "code": "profil_sans_liens_playwright",
                     "delai_secondes": delai,
