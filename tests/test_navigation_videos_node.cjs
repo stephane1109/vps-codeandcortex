@@ -21,7 +21,11 @@ function visiter(items, compte="bfmtv") {
   const contexte = {
     URL, location:{href:url,pathname:"/@bfmtv"},
     document:{
-      querySelectorAll(){return items;},
+      querySelectorAll(selecteur){
+        if (selecteur.includes('a[href*="/video/"]'))
+          return items.filter(e => e.tagName === "A" && e.href.includes("/video/"));
+        return items;
+      },
       querySelector(){return null;}
     },
     getComputedStyle(){return {display:"block",visibility:"visible"};}
@@ -53,7 +57,11 @@ function visiterAvecGrille(items) {
   const contexte = {
     URL, location:{href:"https://www.tiktok.com/@bfmtv",pathname:"/@bfmtv"},
     document:{
-      querySelectorAll(){return items;},
+      querySelectorAll(selecteur){
+        if (selecteur.includes('a[href*="/video/"]'))
+          return items.filter(e => e.tagName === "A" && e.href.includes("/video/"));
+        return items;
+      },
       querySelector(selecteur){return selecteur.includes("user-post-item-list") ? {} : null;}
     },
     getComputedStyle(){return {display:"block",visibility:"visible"};}
@@ -68,7 +76,9 @@ const erreurContext = {
   URL, location:{href:"https://www.tiktok.com/@bfmtv",pathname:"/@bfmtv"},
   document:{
     body:{innerText:"Something went wrong"},
-    querySelectorAll(){return [erreurTikTok];},
+    querySelectorAll(selecteur){
+      return selecteur.includes('a[href*="/video/"]') ? [] : [erreurTikTok];
+    },
     querySelector(){return null;}
   },
   getComputedStyle(){return {display:"block",visibility:"visible"};}
