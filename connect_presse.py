@@ -139,12 +139,9 @@ class ConnexionPresse(SessionNavigateur):
             if client_tikhub is not None:
                 client_tikhub.fermer()
                 self.tikhub_client = None
-        finally:
-            pass
-        try:
-            client = getattr(self, "gallerydl_client", None)
-            if client is not None:
-                client.fermer()
+            client_gallerydl = getattr(self, "gallerydl_client", None)
+            if client_gallerydl is not None:
+                client_gallerydl.fermer()
                 self.gallerydl_client = None
         finally:
             super().fermer()
