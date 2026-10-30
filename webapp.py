@@ -46,7 +46,7 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
-    presse_moteur: Literal["api", "navigateur", "research"] = "api"
+    presse_moteur: Literal["api", "navigateur", "research", "playwright"] = "api"
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
     # ni exposés par snapshot(), model_dump() ou les diagnostics.
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
