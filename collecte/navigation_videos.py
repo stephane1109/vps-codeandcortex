@@ -61,9 +61,23 @@ NAVIGUER_VIDEOS_JS = r"""(compte) => {
     );
     const liens = Array.from(document.querySelectorAll('a[href*="/video/"]'))
       .some(e => profil(e.href));
-    return {statut: grille || liens ? 'deja_actif' : 'selectionne_sans_publications',
-            type:typ,route:location.pathname,destination,
-            grille:!!grille,liens_video:liens};
+    if (grille || liens) {
+      return {statut:'deja_actif',type:typ,route:location.pathname,destination,
+              grille:!!grille,liens_video:liens};
+    }
+    const texte = (document.body?.innerText || '').toLowerCase().replaceAll('’', "'");
+    const erreurPage = texte.includes('something went wrong') ||
+      (texte.includes('une erreur') && /réessaie plus tard|réessayer plus tard/.test(texte)) ||
+      (texte.includes('problème est survenu avec le serveur') && texte.includes('réessayer'));
+    // Un onglet présélectionné sans vidéos peut être inerte avant hydratation.
+    // Une fois disponible, tenter son clic comme une action, jamais comme succès.
+    if (!erreurPage && visible(choisi)) {
+      choisi.click();
+      return {statut:'clic_onglet_sans_contenu',type:typ,route:location.pathname,
+              destination,grille:false,liens_video:false};
+    }
+    return {statut:'selectionne_sans_publications',type:typ,route:location.pathname,
+            destination,grille:false,liens_video:false,erreur_page:erreurPage};
   }
   choisi.click();
   return {statut:'clic',type:typ,route:location.pathname,destination};
