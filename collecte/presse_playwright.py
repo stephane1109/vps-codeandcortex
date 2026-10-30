@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 import scraptiktok as moteur
 from collecte.verification_comptes import normaliser_compte
+from collecte.navigation_videos import NAVIGUER_VIDEOS_JS, DIAGNOSTIC_VIDEOS_JS
 
 
 # On privilégie la grille du profil ; l'aperçu sans data-e2e garde un repli
@@ -20,8 +21,9 @@ LIENS_VIDEOS_JS = """() => {
   const grilles = Array.from(document.querySelectorAll(
     '[data-e2e="user-post-item-list"],[data-e2e^="user-post-item-list"]'
   ));
-  const racines = grilles.length ? grilles :
-    Array.from(document.querySelectorAll('main,[data-e2e="user-post-list"],[data-e2e="user-post"]'));
+  // Les cartes vidéo peuvent être montées hors de <main> après le clic Vidéos.
+  // Le filtrage strict par auteur est effectué côté Python.
+  const racines = grilles.length ? grilles : [document];
   return Array.from(new Set(racines.flatMap(r =>
     Array.from(r.querySelectorAll('a[href*="/video/"]')).map(a => a.href)
   )));
@@ -142,8 +144,19 @@ class PressePlaywright:
             raise RuntimeError("TikTok n'a pas affiché le profil public demandé.")
         # Même principe que Rezepte : laisser le temps à React d'attacher les actions.
         self.page.wait_for_timeout(1500)
-        self.page.evaluate(SELECT_ONGLET_JS)
-        self.page.wait_for_timeout(500)
+        navigation = self.page.evaluate(NAVIGUER_VIDEOS_JS, compte)
+        if not isinstance(navigation, dict):
+            navigation = {"statut": "indetermine"}
+        rapport["navigation_publications"] = (
+            "ouverture_rubrique_videos" if navigation.get("statut") == "clic"
+            else "videos_deja_actif" if navigation.get("statut") == "deja_actif"
+            else "rubrique_videos_introuvable"
+        )
+        rapport["navigation_videos"] = navigation
+        if navigation.get("statut") == "clic":
+            self.page.wait_for_timeout(1500)
+        else:
+            self.page.wait_for_timeout(500)
         uniques = {}
         tours = max(1, int(self.args.max_scrolls))
         for tour in range(tours + 1):
@@ -158,6 +171,7 @@ class PressePlaywright:
                 if len(uniques) >= self.args.limit:
                     break
             rapport["discovered_urls"] = list(uniques.values())
+            rapport["url_rubrique_publications"] = self.page.url.split("?")[0]
             rapport["candidats_examines"] = len(uniques)
             if progress:
                 progress(len(uniques))
@@ -188,9 +202,18 @@ class PressePlaywright:
                        bilan_recherche=f"@{compte} : {len(uniques)}/{self.args.limit} vidéo(s) "
                                       "découverte(s) par Playwright (grille publique).")
         if not uniques:
+            try:
+                observation = self.page.evaluate(DIAGNOSTIC_VIDEOS_JS, compte)
+            except Exception:
+                observation = {}
+            rapport["navigation_videos_observee"] = observation
             rapport["diagnostic"] = {
                 "code": "profil_sans_liens_playwright",
-                "detail": "Aucun lien vidéo public vérifié dans la grille du compte.",
+                "detail": ("Rubrique Vidéos introuvable ou vide dans le navigateur Playwright. "
+                           "Consulter la navigation et les éléments détectés."),
+                "navigation": navigation.get("statut", "indetermine"),
+                "grilles": observation.get("grilles", 0),
+                "liens_video_auteur": observation.get("liens_video_auteur", 0),
             }
             raise RuntimeError("Aucune vidéo publique accessible par Playwright.")
         return list(uniques.values())
