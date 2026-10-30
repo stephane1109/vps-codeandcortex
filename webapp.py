@@ -47,6 +47,8 @@ class StartRequest(BaseModel):
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
     presse_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "api"
+    croiser_hashtag_presse: bool = False
+    hashtag_presse: str = Field(default="", max_length=100)
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
     # ni exposés par snapshot(), model_dump() ou les diagnostics.
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
@@ -96,6 +98,12 @@ class StartRequest(BaseModel):
         except argparse.ArgumentTypeError as exc:
             raise ValueError(str(exc)) from exc
 
+    @field_validator("hashtag_presse")
+    @classmethod
+    def valider_hashtag_presse(cls, valeur):
+        # Le croisement s'appuie sur le même validateur que la collecte hashtags.
+        return cls.valid_hashtag(valeur) if valeur.strip() else ""
+
     @field_validator("second_hashtag")
     @classmethod
     def valid_second_hashtag(cls, value):
@@ -126,12 +134,19 @@ class StartRequest(BaseModel):
             if not (cle and secret) and not identifiants_disponibles():
                 raise ValueError("Research API : renseigner Client key et Client secret dans l'application.")
         if self.source_collecte == "presse":
-            # La collecte média dépend uniquement des comptes choisis ; ignorer
-            # aussi les anciens hashtags présents dans une requête sauvegardée.
+            # Les anciens champs de recherche ne s'appliquent pas aux médias.
+            # Le croisement est une option indépendante, explicite et facultative.
             self.hashtag = ""
             self.second_hashtag = ""
             self.rechercher_dans_texte = False
             self.variantes_accents = False
+            if self.croiser_hashtag_presse and not self.hashtag_presse:
+                raise ValueError("Saisissez le hashtag à croiser avec les médias sélectionnés.")
+            if not self.croiser_hashtag_presse:
+                self.hashtag_presse = ""
+        else:
+            self.croiser_hashtag_presse = False
+            self.hashtag_presse = ""
         else:
             if not self.hashtag:
                 if self.source_collecte == "comptes":
@@ -156,7 +171,10 @@ class StartRequest(BaseModel):
     def libelle(self):
         if self.source_collecte == "hashtags":
             return (" OU " if self.operator == "OR" else " ET ").join("#" + h for h in self.hashtags)
-        return ", ".join("@" + s["compte"] for s in self.sources)
+        libelle = ", ".join("@" + s["compte"] for s in self.sources)
+        if self.source_collecte == "presse" and self.croiser_hashtag_presse:
+            libelle += " × #" + self.hashtag_presse
+        return libelle
 
     @property
     def sources(self):
@@ -171,7 +189,11 @@ class StartRequest(BaseModel):
     @property
     def filename(self):
         joiner = "_ET_" if self.operator == "AND" else "_OU_"
-        return "tiktok_" + (joiner.join(self.hashtags) if self.source_collecte == "hashtags" else "comptes_" + "_".join(s["compte"] for s in self.sources)[:100]) + ("_fr" if self.french_only else "") + ".txt"
+        nom = (joiner.join(self.hashtags) if self.source_collecte == "hashtags"
+               else "comptes_" + "_".join(s["compte"] for s in self.sources)[:100])
+        if self.source_collecte == "presse" and self.croiser_hashtag_presse:
+            nom += "_hashtag_" + self.hashtag_presse
+        return "tiktok_" + nom + ("_fr" if self.french_only else "") + ".txt"
 
 
 def tag_key(value):
@@ -212,6 +234,10 @@ def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False,
 
 
 def matches_hashtags(description, settings):
+    if settings.source_collecte == "presse":
+        if not settings.croiser_hashtag_presse:
+            return True
+        return correspondance_hashtag(description, settings.hashtag_presse)
     resultats = [
         correspondance_hashtag(description, tag,
             rechercher_dans_texte=settings.rechercher_dans_texte,
@@ -220,8 +246,7 @@ def matches_hashtags(description, settings):
     ]
 
     if not resultats:
-        # La collecte presse ne filtre pas les légendes sur les hashtags.
-        return settings.source_collecte == "presse"
+        return False
 
     return all(resultats) if settings.operator == "AND" else any(resultats)
 
@@ -430,7 +455,9 @@ class Job:
         self.processed = 0
         self.errors = 0
         self.filtered = 0
-        self.bilan_hashtags = {h: 0 for h in settings.hashtags}
+        hashtags_a_compter = (settings.hashtags if settings.source_collecte != "presse"
+            else [settings.hashtag_presse] if settings.croiser_hashtag_presse else [])
+        self.bilan_hashtags = {h: 0 for h in hashtags_a_compter}
         self.correspondances_hashtags = 0
         self.legendes_vides = 0
         self.non_french = 0
@@ -501,6 +528,8 @@ class Job:
         with self.lock:
             return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
+                    "croiser_hashtag_presse": self.settings.croiser_hashtag_presse,
+                    "hashtag_presse": self.settings.hashtag_presse,
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "variantes_accents": self.settings.variantes_accents,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
@@ -642,7 +671,8 @@ class Job:
                 self.commentaires if self.settings.collecter_commentaires else None,
                 supprimer_arobase_profil=supprimer_arobase_profil,
                 inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
-                themes=self.settings.hashtags)
+                themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
+                        else self.settings.hashtags))
 
     def sauvegarder_historique(self):
         """Synchroniser les résultats et codages dans l'historique privé de 30 jours."""
@@ -993,7 +1023,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
                         record = dict(record_api)
-                        if job.settings.inclure_texte_genere_ia:
+                        if (job.settings.inclure_texte_genere_ia
+                                and not (job.settings.source_collecte == "presse"
+                                         and job.settings.presse_moteur == "tikhub"
+                                         and job.settings.croiser_hashtag_presse
+                                         and not matches_hashtags(record.get("description", ""), job.settings))):
                             # La case IA demande une lecture du résumé affiché ; les API
                             # de métadonnées ne le fournissent pas. Garder leurs données.
                             job.pause(args.delay)
