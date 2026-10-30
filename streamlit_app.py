@@ -56,6 +56,8 @@ def lancer(chemin, donnees):
             # Effacer les champs sensibles avant le prochain affichage,
             # sans écraser un widget déjà instancié pendant cette exécution.
             st.session_state["_effacer_research_apres_requete"] = True
+        if chemin == "/api/jobs" and donnees.get("presse_moteur") == "tikhub":
+            st.session_state["_effacer_tikhub_apres_requete"] = True
     st.rerun()
 
 
@@ -146,6 +148,8 @@ if st.session_state.pop("_effacer_cookies_apres_requete", False):
 if st.session_state.pop("_effacer_research_apres_requete", False):
     st.session_state.pop("research_client_key", None)
     st.session_state.pop("research_client_secret", None)
+if st.session_state.pop("_effacer_tikhub_apres_requete", False):
+    st.session_state.pop("tikhub_api_key", None)
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
@@ -256,9 +260,10 @@ with onglet_collecte:
         if st.session_state.get("presse_moteur") == "playwright":
             st.session_state["presse_moteur"] = "gallerydl"
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
-            ["api", "research", "navigateur", "gallerydl"],key="presse_moteur",horizontal=True,disabled=occupe,
+            ["api", "research", "navigateur", "gallerydl", "tikhub"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
-                                   "navigateur":"Méthode Selenium", "gallerydl":"Méthode gallery-dl"}[v],
+                                   "navigateur":"Méthode Selenium", "gallerydl":"Méthode gallery-dl",
+                                   "tikhub":"Méthode TikHub (API)"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -269,6 +274,14 @@ with onglet_collecte:
             st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
                           type="password", disabled=occupe,
                           help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
+        if st.session_state.get("presse_moteur") == "tikhub":
+            st.text_input("Clé API TikHub", key="tikhub_api_key", type="password",
+                          disabled=occupe,
+                          help="Clé personnelle TikHub ; elle reste en mémoire uniquement pendant la collecte. "
+                               "La variable Coolify TIKHUB_API_KEY peut également fournir la clé.")
+            st.caption("Méthode payante : TikHub facture ses requêtes. "
+                       "Profil + pages de publications (15 par page), puis une requête "
+                       "supplémentaire par vidéo si « Texte généré par IA » est coché.")
         if st.session_state.get("presse_moteur") == "navigateur":
             with st.expander("Session TikTok — cookies facultatifs"):
                 st.file_uploader("Importer les cookies TikTok (.txt, format Netscape)",
@@ -315,6 +328,8 @@ with onglet_collecte:
             informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
         elif st.session_state.get("presse_moteur") == "gallerydl":
             informations_presse.append("Moteur : gallery-dl (creator/item_list). Les légendes et métadonnées sont collectées sans navigateur ; les commentaires et résumés IA demandent Selenium.")
+        elif st.session_state.get("presse_moteur") == "tikhub":
+            informations_presse.append("Moteur : TikHub (API payante). Profils et publications via l'API ; résumés natifs TikTok itemCustomTDK lorsque l'option IA est cochée.")
         else:
             informations_presse.append("Moteur : Méthode Selenium.")
         if st.session_state.get("presse_moteur") != "research":
@@ -500,7 +515,7 @@ with onglet_collecte:
             help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
             value=False, disabled=occupe,
-            help="Ajoute un second segment **** *source_ia uniquement si le résumé de TikTok est réellement récupéré. La légende originale est identifiée par *source_original. Les deux segments conservent les mêmes variables sélectionnées. Cette option ouvre chaque publication dans le navigateur, y compris en mode API, et peut ajouter jusqu’à 12 secondes de lecture par publication.")
+            help="Ajoute un second segment **** *source_ia uniquement si le résumé natif de TikTok est réellement récupéré. La légende originale reste *source_original. Avec TikHub, la récupération utilise l'API itemCustomTDK, qui peut être facturée par vidéo ; avec les autres moteurs, l'analyse du panneau TikTok nécessite un navigateur.")
         if st.form_submit_button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
@@ -532,6 +547,8 @@ with onglet_collecte:
                 if source == "presse" and valeurs["presse_moteur"] == "research":
                     valeurs["research_client_key"] = st.session_state.get("research_client_key", "")
                     valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
+                if source == "presse" and valeurs["presse_moteur"] == "tikhub":
+                    valeurs["tikhub_api_key"] = st.session_state.get("tikhub_api_key", "")
                 valeurs["rechercher_dans_texte"] = (
                     bool(st.session_state.get("rechercher_dans_texte", True)) if source != "presse" else False
                 )
