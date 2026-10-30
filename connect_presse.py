@@ -1,4 +1,4 @@
-"""Collecte Presse : Selenium, Playwright, API web secUid, Research."""
+"""Collecte Presse : Selenium, gallery-dl, API web secUid, Research."""
 from collecte.presse import selectionner_medias
 from collecte.session_navigateur import SessionNavigateur
 from collecte.verification_comptes import normaliser_compte
@@ -18,10 +18,10 @@ class ConnexionPresse(SessionNavigateur):
         self.commentaires_research = bool(parametres.collecter_commentaires)
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
-        self.playwright_client = None
+        self.gallerydl_client = None
         self.cookies_fournis = None
         secret_cookies = getattr(parametres, "cookies_tiktok", None)
-        if secret_cookies and self.moteur_collecte in {"playwright", "navigateur"}:
+        if secret_cookies and self.moteur_collecte == "navigateur":
             from collecte.cookies_presse import charger_cookies_presse
             self.cookies_fournis = charger_cookies_presse(secret_cookies.get_secret_value())
         if self.moteur_collecte == "research":
@@ -35,13 +35,12 @@ class ConnexionPresse(SessionNavigateur):
 
     def ouvrir(self):
         """Research sans Chrome, sauf demande de commentaires ou de résumés IA."""
-        if self.moteur_collecte == "playwright":
-            from collecte.presse_playwright import PressePlaywright
-            self.playwright_client = PressePlaywright(self.arguments, self.verifier,
-                interaction=self.interaction, cookies=self.cookies_fournis)
-            self.playwright_client.ouvrir()
-            # Le navigateur Selenium n’est nécessaire qu’aux commentaires.
-            return super().ouvrir() if self.commentaires_research else None
+        if self.moteur_collecte == "gallerydl":
+            from collecte.presse_gallerydl import PresseGalleryDL
+            self.gallerydl_client = PresseGalleryDL(self.arguments, self.verifier)
+            # Un navigateur Selenium n'est nécessaire que pour les commentaires
+            # ou les synthèses IA affichées dans la vidéo.
+            return super().ouvrir() if (self.commentaires_research or self.resume_research) else None
         if self.moteur_collecte == "research" and not self.commentaires_research and not self.resume_research:
             if self.verifier:
                 self.verifier()
@@ -53,12 +52,11 @@ class ConnexionPresse(SessionNavigateur):
         return navigateur
 
     def options_decouverte(self, rapport, contexte="", progression=None):
-        if self.moteur_collecte == "playwright":
+        if self.moteur_collecte == "gallerydl":
             if self.verifier:
                 self.verifier()
             rapport["connexion"] = {"mode": "presse", "module": type(self).__module__,
-                                   "navigateur_decouverte": "playwright",
-                                   "cookies_configures": bool(self.playwright_client.nombre_cookies_importes)}
+                                   "navigateur_decouverte": False, "outil": "gallery-dl"}
             return {"check": self.verifier, "progress": progression}
         if self.moteur_collecte != "research":
             options = super().options_decouverte(rapport, contexte, progression)
@@ -81,11 +79,11 @@ class ConnexionPresse(SessionNavigateur):
         media = getattr(self, "medias_selectionnes", {}).get(source.get("id"))
         if media is None or normaliser_compte(source["compte"]) != media["compte"]:
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
-        if self.moteur_collecte == "playwright":
+        if self.moteur_collecte == "gallerydl":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
-                           version_collecteur="playwright-presse-v5-verification-videos", presse_moteur="playwright")
+                           version_collecteur="gallerydl-presse-v1", presse_moteur="gallerydl")
             self.options_decouverte(rapport, contexte, progression)
-            return self.playwright_client.decouvrir(media["compte"], rapport, progression)
+            return self.gallerydl_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "research":
             from collecte.presse_research import VERSION_RESEARCH
             version = VERSION_RESEARCH
@@ -106,16 +104,14 @@ class ConnexionPresse(SessionNavigateur):
 
 
     def lire_publication(self, url):
-        if self.moteur_collecte == "playwright":
-            return self.playwright_client.lire(url)
         return super().lire_publication(url)
 
     def fermer(self):
         self.cookies_fournis = None
         try:
-            client = getattr(self, "playwright_client", None)
+            client = getattr(self, "gallerydl_client", None)
             if client is not None:
                 client.fermer()
-                self.playwright_client = None
+                self.gallerydl_client = None
         finally:
             super().fermer()
