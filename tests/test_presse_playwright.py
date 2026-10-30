@@ -16,9 +16,15 @@ def adresse(compte, identifiant):
 
 class PressePlaywrightTests(unittest.TestCase):
     def test_choix_valide_et_selenium_conserve(self):
+        from collecte.presse import charger_inventaire
+        media = charger_inventaire()[0]["id"]
         for methode in ("api", "research", "navigateur", "playwright"):
             with self.subTest(methode=methode):
-                options = StartRequest(source_collecte="presse", presse_moteur=methode)
+                champs = {"source_collecte": "presse", "presse_moteur": methode,
+                          "medias": [media]}
+                if methode == "research":
+                    champs.update(research_client_key="test", research_client_secret="test")
+                options = StartRequest(**champs)
                 self.assertEqual(options.presse_moteur, methode)
 
     def test_filtrage_profil_avec_identite_et_sans_photos(self):
