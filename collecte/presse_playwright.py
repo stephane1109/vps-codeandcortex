@@ -388,6 +388,7 @@ class PressePlaywright:
 
         try:
             self._visiter(url)
+            rapport["statut_http_profil"] = self.statut_http
             obtenu = attendre_nouveaux()
             if not obtenu and self._intervenir(
                     "TikTok ne fournit pas la liste du profil. Vérifiez la page dans cette fenêtre, "
