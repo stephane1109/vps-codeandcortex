@@ -46,7 +46,7 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
-    presse_moteur: Literal["api", "navigateur", "research", "playwright"] = "api"
+    presse_moteur: Literal["api", "navigateur", "research", "gallerydl"] = "api"
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
     # ni exposés par snapshot(), model_dump() ou les diagnostics.
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
@@ -970,9 +970,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record_api = metadonnees_api.get(identifiant_publication)
                     if (job.settings.source_collecte == "presse" and record_api
                             and (job.settings.presse_moteur == "research"
-                                 or (job.settings.presse_moteur in {"api", "playwright"}
-                                     and not job.settings.collecter_commentaires
-                                     and record_api.get("description")))):
+                                 or ((job.settings.presse_moteur == "gallerydl" or job.settings.presse_moteur == "api")
+                                     and (job.settings.presse_moteur == "gallerydl" or
+                                          (not job.settings.collecter_commentaires and record_api.get("description")))))):
                         # TikTok a déjà fourni une légende et éventuellement les
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
@@ -1056,9 +1056,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 from collecte.commentaires import collecter_commentaires
                                 try:
                                     if (job.settings.source_collecte == "presse"
-                                            and job.settings.presse_moteur in {"research", "playwright"}):
-                                        # Research fournit les métadonnées et Playwright
-                                        # les textes ; les commentaires restent pilotés
+                                            and job.settings.presse_moteur in {"research", "gallerydl"}):
+                                        # Research et gallery-dl fournissent les métadonnées ;
+                                        # les commentaires restent pilotés
                                         # par la session Selenium facultative.
                                         driver.get(url)
                                     resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
@@ -1113,7 +1113,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
-                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research", "playwright"}:
+                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research", "gallerydl"}:
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(donnees, dict):
                             metadonnees_api.setdefault(str(identifiant), donnees)
@@ -2090,7 +2090,7 @@ def create_app(manager=None):
     def start(payload: StartRequest, request: Request):
         exiger_ticket(request)
         if payload.cookies_tiktok is not None:
-            if payload.source_collecte != "presse" or payload.presse_moteur not in {"navigateur", "playwright"}:
+            if payload.source_collecte != "presse" or payload.presse_moteur != "navigateur":
                 raise HTTPException(422, "L'import de cookies est disponible avec les méthodes Presse Selenium et Playwright.")
             try:
                 from collecte.cookies_presse import charger_cookies_presse
