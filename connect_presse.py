@@ -87,3 +87,17 @@ class ConnexionPresse(SessionNavigateur):
             rapport=rapport, hashtags=(), presse_videos_uniquement=True,
             presse_moteur=self.moteur_collecte,
             **self.options_decouverte(rapport, contexte, progression))
+
+
+    def lire_publication(self, url):
+        if self.moteur_collecte == "playwright":
+            return self.playwright_client.lire(url)
+        return super().lire_publication(url)
+
+    def fermer(self):
+        try:
+            if self.playwright_client is not None:
+                self.playwright_client.fermer()
+                self.playwright_client = None
+        finally:
+            super().fermer()
