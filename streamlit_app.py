@@ -253,10 +253,12 @@ with onglet_collecte:
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     if source == "presse":
+        if st.session_state.get("presse_moteur") == "playwright":
+            st.session_state["presse_moteur"] = "gallerydl"
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
-            ["api", "research", "navigateur", "playwright"],key="presse_moteur",horizontal=True,disabled=occupe,
+            ["api", "research", "navigateur", "gallerydl"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
-                                   "navigateur":"Méthode Selenium", "playwright":"Méthode Playwright"}[v],
+                                   "navigateur":"Méthode Selenium", "gallerydl":"Méthode gallery-dl"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -267,7 +269,7 @@ with onglet_collecte:
             st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
                           type="password", disabled=occupe,
                           help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
-        if st.session_state.get("presse_moteur") in {"playwright", "navigateur"}:
+        if st.session_state.get("presse_moteur") == "navigateur":
             with st.expander("Session TikTok — cookies facultatifs"):
                 st.file_uploader("Importer les cookies TikTok (.txt, format Netscape)",
                     type=["txt"], key="cookies_presse_fichier", disabled=occupe,
@@ -311,8 +313,8 @@ with onglet_collecte:
             )
         elif st.session_state.get("presse_moteur") == "research":
             informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
-        elif st.session_state.get("presse_moteur") == "playwright":
-            informations_presse.append("Moteur : Méthode Playwright (profils et publications, session indépendante).")
+        elif st.session_state.get("presse_moteur") == "gallerydl":
+            informations_presse.append("Moteur : gallery-dl (creator/item_list). Les légendes et métadonnées sont collectées sans navigateur ; les commentaires et résumés IA demandent Selenium.")
         else:
             informations_presse.append("Moteur : Méthode Selenium.")
         if st.session_state.get("presse_moteur") != "research":
@@ -514,7 +516,7 @@ with onglet_collecte:
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
-                if source == "presse" and valeurs["presse_moteur"] in {"playwright", "navigateur"}:
+                if source == "presse" and valeurs["presse_moteur"] == "navigateur":
                     fichier_cookies = st.session_state.get("cookies_presse_fichier")
                     if fichier_cookies is not None:
                         try:
