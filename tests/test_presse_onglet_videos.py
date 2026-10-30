@@ -115,6 +115,42 @@ class PresseVideoTests(unittest.TestCase):
         self.assertEqual(resultat, comptes[:2])
         self.assertEqual(rapport["navigation_publications"], "profil_videos_sans_grille_e2e")
 
+    def test_selenium_quitte_accueil_pour_vue_videos_du_compte(self):
+        from collecte.navigation_videos import NAVIGUER_VIDEOS_JS
+        navigateur = Mock()
+        navigateur.current_url = "https://www.tiktok.com/@bfmtv"
+        compte = "bfmtv"
+        clics = []
+        urls = [lien(101, compte=compte), lien(102, compte="autre")]
+        def script(code, *args):
+            if code == ETAT_ONGLET_VIDEOS_JS:
+                return {"etat":"indisponible","grille":False}
+            if NAVIGUER_VIDEOS_JS in code:
+                clics.append("onglet_videos")
+                return {"statut":"clic","type":"lien_profil"}
+            if code == LIENS_PROFIL_JS:
+                return urls if clics else []
+            if code == LIENS_ONGLET_VIDEOS_JS:
+                return []
+            return []
+        navigateur.execute_script.side_effect = script
+        rapport = {"compte_attendu":compte,
+                   "hashtag_url":"https://www.tiktok.com/@bfmtv"}
+        args = SimpleNamespace(limit=1, timeout=.01, delay=0, max_scrolls=1,
+                               idle_rounds=1, interactive=False)
+        with patch("collecte.profil_selenium.ObservationProfil") as obs, \
+             patch("collecte.profil_selenium.WebDriverWait", AttendreVueVideos), \
+             patch.object(moteur,"open_page"), \
+             patch.object(moteur,"type_intervention_tiktok",return_value=""), \
+             patch.object(moteur,"fermer_invitation_connexion"):
+            obs.return_value.lire.return_value = []
+            resultat = collecter_grille_profil(navigateur,args,rapport,
+                          interact=Mock(),cibler_onglet_videos=True)
+        self.assertEqual(resultat, [urls[0]])
+        self.assertEqual(clics, ["onglet_videos"])
+        self.assertEqual(rapport["navigation_publications"],
+                         "profil_videos_sans_grille_e2e")
+
     def test_presse_ne_bascule_pas_vers_la_recherche_video_generale(self):
         args=SimpleNamespace(limit=50)
         urls=[lien(i) for i in range(100,112)]
