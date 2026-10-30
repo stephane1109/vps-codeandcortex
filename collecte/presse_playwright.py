@@ -340,11 +340,11 @@ class PressePlaywright:
                         rapport["navigation_videos"] = navigation
                         statut = navigation.get("statut")
                         rapport["navigation_publications"] = (
-                            "ouverture_rubrique_videos" if statut == "clic" else
+                            "ouverture_rubrique_videos" if statut in ("clic", "clic_onglet_sans_contenu") else
                             "videos_deja_actif" if statut == "deja_actif" else
                             "videos_selectionne_sans_contenu" if statut == "selectionne_sans_publications" else
                             "rubrique_videos_introuvable")
-                        if statut == "clic":
+                        if statut in ("clic", "clic_onglet_sans_contenu"):
                             clics += 1
                             prochain_clic = maintenant + 2.0
                             return False
