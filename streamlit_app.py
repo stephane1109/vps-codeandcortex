@@ -341,7 +341,7 @@ with onglet_collecte:
         elif st.session_state.get("presse_moteur") == "research":
             informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
         elif st.session_state.get("presse_moteur") == "gallerydl":
-            informations_presse.append("Moteur : gallery-dl (creator/item_list). Les légendes et métadonnées sont collectées sans navigateur ; les commentaires et résumés IA demandent Selenium.")
+            informations_presse.append("Moteur : gallery-dl (liste creator/item_list uniquement). La collecte n'ouvre pas les pages des vidéos ; les commentaires et résumés IA demandent Selenium.")
         elif st.session_state.get("presse_moteur") == "tikhub":
             informations_presse.append("Moteur : TikHub (API payante). Profils et publications via l'API ; résumés natifs TikTok itemCustomTDK lorsque l'option IA est cochée.")
         else:
