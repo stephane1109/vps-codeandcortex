@@ -130,3 +130,64 @@ jobs:
           if not liens:
               raise SystemExit(1)
           PY
+
+  application:
+    name: Integration reelle ScrapTikTok - lemondefr
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dependances ScrapTikTok
+        run: python -m pip install -r requirements-dev.txt
+      - name: Collecter via le moteur reel PresseGalleryDL puis exporter CSV
+        run: |
+          python - <<'PY'
+          import csv
+          import time
+          from types import SimpleNamespace
+          from collecte.presse_gallerydl import PresseGalleryDL
+          debut = time.monotonic()
+          moteur = PresseGalleryDL(SimpleNamespace(limit=3, timeout=12))
+          rapport = {}
+          try:
+              liens = moteur.decouvrir("lemondefr", rapport)
+          except RuntimeError as erreur:
+              print("RESULTAT=ECHEC")
+              print("DIAGNOSTIC=", rapport.get("diagnostic"))
+              print("DUREE_S=", round(time.monotonic()-debut, 1))
+              raise
+          finally:
+              moteur.fermer()
+          donnees = rapport.get("metadonnees_api") or {}
+          print("RESULTAT=SUCCES" if liens else "RESULTAT=AUCUN_LIEN")
+          print("LIENS=", len(liens))
+          print("LEGENDES=", sum(bool(fiche.get("description")) for fiche in donnees.values()))
+          print("COMPTEURS=", sum(bool(fiche.get("engagement")) for fiche in donnees.values()))
+          print("DUREE_S=", round(time.monotonic()-debut, 1))
+          print("MOTEUR=", rapport.get("presse_moteur"))
+          print("DIAGNOSTIC=", rapport.get("diagnostic"))
+          for url in liens:
+              print("VIDEO=", url)
+          assert len(liens) > 0, "Aucune publication collectee dans ScrapTikTok"
+          assert all(fiche.get("author") == "lemondefr" for fiche in donnees.values())
+          champs = ["id", "url", "author", "description", "created_at",
+                    "vues", "likes", "commentaires", "partages", "favoris",
+                    "contenu_genere_ia"]
+          with open("collecte_reelle_lemondefr.csv", "w", encoding="utf-8-sig", newline="") as fichier:
+              writer = csv.DictWriter(fichier, fieldnames=champs, delimiter=";")
+              writer.writeheader()
+              for fiche in donnees.values():
+                  ligne = {cle: fiche.get(cle, "") for cle in champs}
+                  for compteur in ("vues", "likes", "commentaires", "partages", "favoris"):
+                      ligne[compteur] = (fiche.get("engagement") or {}).get(compteur, {}).get("valeur", "")
+                  writer.writerow(ligne)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: collecte-reelle-lemondefr
+          path: collecte_reelle_lemondefr.csv
+          retention-days: 7
