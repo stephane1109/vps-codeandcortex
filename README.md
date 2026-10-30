@@ -22,6 +22,24 @@ Dans **Collecte → Presse et médias**, sélectionner une seule méthode par co
   est un objectif, pas une garantie d'exhaustivité. Recherche limitée à 60 pages
   par compte et par collecte.
 - **Grille du profil (Selenium)** : méthode navigateur indépendante.
+- **Méthode Playwright** : autre navigateur anonyme, sans basculement implicite
+  vers une autre méthode. La découverte attend jusqu'à 20 secondes les premiers
+  liens, puis vérifie les nouvelles publications après chaque défilement, y
+  compris le dernier. Les liens déjà reçus restent conservés si la suite échoue.
+
+Les moteurs navigateur réexaminent une rubrique Vidéos apparue tardivement et
+retentent de façon bornée un clic resté sans effet avant le chargement de React.
+Ils distinguent les erreurs de navigateur, les vérifications TikTok et les
+profils sans liens après attente. Les diagnostics des nouvelles collectes
+indiquent `playwright-presse-v2-attente` ou `selenium-presse-v2-attente`.
+Playwright respecte désormais le réglage `SCRAPTIKTOK_HEADLESS` déjà utilisé par
+Selenium ; l’image Docker fournit Xvfb lorsque ce réglage vaut `0`.
+La correction des attentes ne supprime pas une limitation HTTP 429 de l'API
+web secUid ; aucune relance en rafale ni changement de méthode ne la contourne.
+
+Références : [chargement et hydratation Playwright](https://playwright.dev/python/docs/navigations#hydration)
+et [attentes explicites Selenium](https://www.selenium.dev/documentation/webdriver/waits/).
+
 
 Après autorisation de la Research API, sélectionner cette méthode dans
 **Presse et médias**, puis saisir les deux champs masqués directement dans

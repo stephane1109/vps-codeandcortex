@@ -820,7 +820,7 @@ def wait_for_user(driver, job: Job, message: str):
 
 def expliquer_echec_source(rapport, erreur):
     """Donner la cause observée sans attribuer une panne du navigateur au média."""
-    from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+    from collecte.presse_api import PresseApiError, PresseRateLimitError, PresseCooldownError
     from collecte.presse_research import ResearchErreur
     from collecte.quotas_exploitation import QuotaScrapingAtteint
     if isinstance(erreur, ResearchErreur):
@@ -835,8 +835,26 @@ def expliquer_echec_source(rapport, erreur):
         return "Pause TikTok Retry-After encore active : aucune requête API Presse envoyée."
     if isinstance(erreur, QuotaScrapingAtteint):
         return "Quota de sécurité ScrapTikTok atteint : arrêt avant la requête TikTok suivante."
+    if isinstance(erreur, PresseApiError):
+        return "API web TikTok (secUid) : " + str(erreur)
     diagnostic = rapport.get("diagnostic", {})
+    if not diagnostic.get("code"):
+        # Les moteurs Selenium/API placent leurs observations dans l'étape
+        # du compte ; préserver cette cause dans le message principal.
+        diagnostic = next((etape["diagnostic"] for etape in
+            reversed(rapport.get("recherches_compte", []))
+            if (etape.get("diagnostic") or {}).get("code")), diagnostic)
     code = diagnostic.get("code")
+    if code == "profil_sans_liens_playwright":
+        return ("Le profil n’a fourni aucun lien vidéo après "
+                + str(diagnostic.get("delai_secondes", "?"))
+                + " seconde(s) d’attente du contenu. Cela ne signifie pas que le compte n’a pas de vidéos.")
+    if code == "refus_http_playwright":
+        return f"TikTok refuse le chargement du profil Playwright (HTTP {diagnostic.get('statut_http')})."
+    if code == "redirection_hors_profil":
+        return "TikTok a redirigé Playwright hors du profil demandé ; les liens de cette autre page sont ignorés."
+    if code == "erreur_tiktok_playwright":
+        return "TikTok affiche une erreur à la place des vidéos dans la session Playwright."
     if code == "erreur_session":
         return "La session Selenium a été fermée ou perdue. Relancez une collecte pour ouvrir un nouveau navigateur anonyme."
     if code == "recherche_redirigee":

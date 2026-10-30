@@ -118,6 +118,8 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
     onglet_active = False
     clic_videos_tente = False
     navigation_videos_tentee = False
+    clics_videos = 0
+    prochain_clic_videos = 0.0
 
     def afficher_page(motif, message):
         """Ouvrir automatiquement la fenêtre existante, sans nouvelle session."""
@@ -132,6 +134,7 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
         avant de scanner la grille, sinon on compte l'aperçu d'accueil.
         """
         nonlocal onglet_active, clic_videos_tente, navigation_videos_tentee
+        nonlocal clics_videos, prochain_clic_videos
         if onglet_active or moteur.type_intervention_tiktok(navigateur) == "connexion":
             return False
         if cibler_onglet_videos:
@@ -148,13 +151,20 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
             # Dans la nouvelle interface, « Voir toutes les vidéos » est
             # parfois un LIEN depuis l'accueil du profil, et non un onglet
             # avec data-e2e. Suivre le contrôle réellement affiché.
-            if etat != "a_ouvrir" and not navigation_videos_tentee and not situation.get("grille"):
+            retenter_clic = (clics_videos < 3 and time.monotonic() >= prochain_clic_videos
+                and (rapport.get("navigation_videos") or {}).get("statut") == "clic")
+            if (etat != "a_ouvrir" and not situation.get("grille")
+                    and (not navigation_videos_tentee or retenter_clic)):
                 navigation = navigateur.execute_script(
                     "return (" + NAVIGUER_VIDEOS_JS + ")(arguments[0]);", compte)
                 if isinstance(navigation, dict):
                     rapport["navigation_videos"] = navigation
-                    navigation_videos_tentee = True
+                    # « Introuvable » décrit ce rendu uniquement : réexaminer
+                    # le lien au prochain passage lorsque React a fini de charger.
+                    navigation_videos_tentee = navigation.get("statut") in {"clic", "deja_actif"}
                     if navigation.get("statut") == "clic":
+                        clics_videos += 1
+                        prochain_clic_videos = time.monotonic() + 2.0
                         rapport["navigation_publications"] = "ouverture_rubrique_videos"
                         return True
 
@@ -186,11 +196,13 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                         rapport["onglet_publications_active"] = True
                         return False
             if etat == "a_ouvrir":
-                if clic_videos_tente:
+                if clic_videos_tente and (clics_videos >= 3 or time.monotonic() < prochain_clic_videos):
                     return False
                 try:
                     situation["element"].click()
                     clic_videos_tente = True
+                    clics_videos += 1
+                    prochain_clic_videos = time.monotonic() + 2.0
                     rapport["navigation_publications"] = "ouverture_onglet_videos_en_cours"
                     return True
                 except WebDriverException:
@@ -304,6 +316,8 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                     onglet_active = False
                     clic_videos_tente = False
                     navigation_videos_tentee = False
+                    clics_videos = 0
+                    prochain_clic_videos = 0.0
                     continue
                 if diagnostic["code"] == "erreur_tiktok" and not recharge_effectuee:
                     recharge_effectuee = True
@@ -313,6 +327,8 @@ def collecter_grille_profil(navigateur, arguments, rapport, *, interact, check=N
                     onglet_active = False
                     clic_videos_tente = False
                     navigation_videos_tentee = False
+                    clics_videos = 0
+                    prochain_clic_videos = 0.0
                     continue
                 rapport["discovery_stop"] = "no_accessible_links"
                 raise RuntimeError("Le profil ne fournit aucune publication publique lisible dans cette session.")

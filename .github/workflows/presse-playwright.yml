@@ -13,6 +13,8 @@ on:
       - "webapp.py"
       - "requirements.txt"
       - "tests/test_presse_playwright.py"
+      - "tests/test_presse_attente.py"
+      - "tests/test_presse_dom_navigateur.py"
       - "tests/test_navigation_videos_node.cjs"
       - "tests/test_presse_onglet_videos.py"
       - ".github/workflows/presse-playwright.yml"
@@ -55,5 +57,12 @@ jobs:
         run: |
           python -m unittest discover -s tests -p test_presse_playwright.py -v
           python -m unittest discover -s tests -p test_presse_onglet_videos.py -v
+          python -m unittest discover -s tests -p test_presse_attente.py -v
+      - name: Installer Chromium pour les pages simulées
+        run: python -m playwright install --with-deps chromium
+      - name: Vérifier les chargements différés dans un vrai navigateur
+        env:
+          SCRAPTIKTOK_TEST_NAVIGATEUR: "1"
+        run: python -m unittest discover -s tests -p test_presse_dom_navigateur.py -v
       - name: Tester la pagination et la sélection des médias
         run: python -m unittest discover -s tests -p test_profil_desordre_integration.py -v

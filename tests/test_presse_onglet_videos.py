@@ -151,6 +151,35 @@ class PresseVideoTests(unittest.TestCase):
         self.assertEqual(rapport["navigation_publications"],
                          "profil_videos_sans_grille_e2e")
 
+    def test_selenium_recherche_a_nouveau_un_lien_videos_tardif(self):
+        from collecte.navigation_videos import NAVIGUER_VIDEOS_JS
+        navigateur = Mock()
+        navigateur.current_url = "https://www.tiktok.com/@lemondefr"
+        tentatives = []
+        def script(code, *args):
+            if code == ETAT_ONGLET_VIDEOS_JS:
+                return {"etat": "indisponible", "grille": False}
+            if NAVIGUER_VIDEOS_JS in code:
+                tentatives.append(1)
+                return {"statut": "introuvable" if len(tentatives) < 3 else "clic"}
+            if code == LIENS_PROFIL_JS:
+                return [lien(101)] if len(tentatives) >= 3 else []
+            return []
+        navigateur.execute_script.side_effect = script
+        rapport = {"compte_attendu": "lemondefr", "hashtag_url": navigateur.current_url}
+        args = SimpleNamespace(limit=1, timeout=.01, delay=0, max_scrolls=1,
+                               idle_rounds=1, interactive=False)
+        with patch("collecte.profil_selenium.ObservationProfil") as obs, \
+             patch("collecte.profil_selenium.WebDriverWait", AttendreVueVideos), \
+             patch.object(moteur, "open_page"), \
+             patch.object(moteur, "type_intervention_tiktok", return_value=""), \
+             patch.object(moteur, "fermer_invitation_connexion"):
+            obs.return_value.lire.return_value = []
+            resultat = collecter_grille_profil(navigateur, args, rapport,
+                interact=Mock(), cibler_onglet_videos=True)
+        self.assertEqual(resultat, [lien(101)])
+        self.assertEqual(len(tentatives), 3)
+
     def test_presse_ne_bascule_pas_vers_la_recherche_video_generale(self):
         args=SimpleNamespace(limit=50)
         urls=[lien(i) for i in range(100,112)]

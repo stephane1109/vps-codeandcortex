@@ -97,6 +97,7 @@ class PressePlaywright:
         self.browser = None
         self.context = None
         self.page = None
+        self.statut_http = None
 
     def ouvrir(self):
         from playwright.sync_api import sync_playwright
@@ -104,13 +105,16 @@ class PressePlaywright:
         self.check()
         try:
             self.playwright = sync_playwright().start()
-            binary = os.getenv("CHROME_BINARY", "/usr/bin/chromium")
-            options = {"headless": True, "args": ["--disable-dev-shm-usage", "--no-sandbox"]}
+            binary = str(getattr(self.args, "chrome_binary", None)
+                         or os.getenv("CHROME_BINARY", "/usr/bin/chromium"))
+            # Respecter le même réglage que Selenium ; Docker fournit déjà Xvfb.
+            options = {"headless": bool(getattr(self.args, "headless", True)),
+                       "args": ["--disable-dev-shm-usage", "--no-sandbox", "--mute-audio"]}
             if binary and os.path.isfile(binary):
                 options["executable_path"] = binary
             self.browser = self.playwright.chromium.launch(**options)
             self.context = self.browser.new_context(
-                locale="fr-FR", viewport={"width": 1280, "height": 900}
+                locale="fr-FR", viewport={"width": 1440, "height": 1000}
             )
             self.page = self.context.new_page()
             self.page.set_default_timeout(max(5000, int(self.args.timeout * 1000)))
@@ -123,12 +127,46 @@ class PressePlaywright:
         self.check()
         from playwright.sync_api import Error as PlaywrightError
         try:
-            self.page.goto(url, wait_until="domcontentloaded",
-                           timeout=max(5000, int(self.args.timeout * 1000)))
-            self.page.wait_for_timeout(750)
+            self.statut_http = None
+            reponse = self.page.goto(url, wait_until="domcontentloaded",
+                                     timeout=max(5000, int(self.args.timeout * 1000)))
+            if reponse is not None:
+                self.statut_http = reponse.status
+            # DOMContentLoaded ne garantit pas que React ait affiché les vidéos.
+            # La découverte attend ensuite une condition réelle, dans son budget.
         except PlaywrightError as erreur:
             raise moteur.WebDriverException("Navigation TikTok inaccessible avec Playwright.") from erreur
         self.check()
+
+    def _surveiller_page(self, rapport):
+        """Distinguer un refus, un CAPTCHA et une page encore incomplète."""
+        nature = _script(self.page, moteur.TYPE_INTERVENTION_JS)
+        if nature == "captcha":
+            rapport.update(discovery_stop="blocked", diagnostic={"code": "verification_tiktok"})
+            raise RuntimeError("TikTok demande une vérification dans la session Playwright.")
+        if self.statut_http in (403, 429):
+            rapport.update(discovery_stop="refus_http", diagnostic={
+                "code": "refus_http_playwright", "statut_http": self.statut_http})
+            raise RuntimeError(f"TikTok refuse la page du profil (HTTP {self.statut_http}).")
+        # Fermer seulement une invitation facultative avec le bouton proposé.
+        # Ne saisir aucun identifiant et ne supprimer aucune modale du DOM.
+        if nature == "connexion":
+            ferme = _script(self.page,
+                "const bouton = (function() {" + moteur.FERMETURE_CONNEXION_JS +
+                "})(); if (!bouton) return false; bouton.click(); return true;")
+            if not ferme:
+                rapport.update(discovery_stop="connexion", diagnostic={
+                    "code": "connexion_sans_publications_publiques"})
+                raise RuntimeError("TikTok affiche une connexion sans bouton de fermeture accessible.")
+            return False
+        page = _script(self.page, moteur.DIAGNOSTIC_JS)
+        if isinstance(page, dict):
+            rapport["etat_page"] = page
+            if page.get("erreur_tiktok"):
+                rapport.update(discovery_stop="erreur_tiktok", diagnostic={
+                    **page, "code": "erreur_tiktok_playwright"})
+                raise RuntimeError("TikTok affiche une erreur à la place du profil.")
+        return True
 
     def decouvrir(self, compte, rapport, progress=None):
         compte = normaliser_compte(compte)
@@ -137,85 +175,141 @@ class PressePlaywright:
                        presse_moteur="playwright", hashtag_url=url,
                        compte_attendu=compte, exhaustif=False, pagination_profil=[],
                        discovered_urls=[], metadonnees_api={})
-        self._visiter(url)
-        if not _profil_correct(self.page.url, compte):
-            rapport["diagnostic"] = {"code": "redirection_hors_profil"}
-            rapport["discovery_stop"] = "redirection"
-            raise RuntimeError("TikTok n'a pas affiché le profil public demandé.")
-        # Même principe que Rezepte : laisser le temps à React d'attacher les actions.
-        self.page.wait_for_timeout(1500)
-        navigation = self.page.evaluate(NAVIGUER_VIDEOS_JS, compte)
-        if not isinstance(navigation, dict):
-            navigation = {"statut": "indetermine"}
-        rapport["navigation_publications"] = (
-            "ouverture_rubrique_videos" if navigation.get("statut") == "clic"
-            else "videos_deja_actif" if navigation.get("statut") == "deja_actif"
-            else "rubrique_videos_introuvable"
-        )
-        rapport["navigation_videos"] = navigation
-        if navigation.get("statut") == "clic":
-            self.page.wait_for_timeout(1500)
-        else:
-            self.page.wait_for_timeout(500)
         uniques = {}
-        tours = max(1, int(self.args.max_scrolls))
-        for tour in range(tours + 1):
-            self.check()
-            try:
-                extraits = self.page.evaluate(LIENS_VIDEOS_JS)
-            except Exception:
-                extraits = []
-            for adresse in _liens_compte(extraits, compte, self.args.limit):
-                identite = moteur.canonical_post(adresse)
-                uniques.setdefault(identite[0], adresse)
-                if len(uniques) >= self.args.limit:
-                    break
-            rapport["discovered_urls"] = list(uniques.values())
-            rapport["url_rubrique_publications"] = self.page.url.split("?")[0]
-            rapport["candidats_examines"] = len(uniques)
+        navigation = {"statut": "introuvable"}
+        clics = 0
+        prochain_clic = 0.0
+        delai = max(0.1, float(self.args.timeout))
+
+        def publier():
+            rapport.update(discovered_urls=list(uniques.values()),
+                           candidats_examines=len(uniques),
+                           retenues_par_compte={compte: len(uniques)})
             if progress:
                 progress(len(uniques))
-            if len(uniques) >= self.args.limit:
-                rapport["discovery_stop"] = "limit"
-                break
-            if tour == tours:
-                rapport["discovery_stop"] = "max_scrolls"
-                break
-            avant = len(uniques)
-            position = self.page.evaluate(SCROLL_JS)
-            self.page.mouse.wheel(0, 1600)
-            self.page.wait_for_timeout(max(300, int(float(self.args.delay) * 1000)))
-            rapport["pagination_profil"].append(
-                {"tour": tour + 1, "liens": avant, "defilement": position}
-            )
-            # L'observation suivante validera la progression, sans boucle infinie.
-            if len(rapport["pagination_profil"]) > 2:
-                nombres = [v["liens"] for v in rapport["pagination_profil"][-3:]]
-                if nombres[0] == nombres[1] == nombres[2]:
+
+        def scanner():
+            nonlocal navigation, clics, prochain_clic
+            self.check()
+            try:
+                if not self._surveiller_page(rapport):
+                    return False
+                actuelle = urlsplit(self.page.url)
+                chemin = actuelle.path.rstrip("/").casefold()
+                attendu = ("/@" + compte).casefold()
+                if (actuelle.hostname not in {"www.tiktok.com", "tiktok.com"}
+                        or actuelle.scheme != "https"
+                        or not (chemin == attendu or chemin.startswith(attendu + "/"))
+                        or moteur.canonical_post(self.page.url)):
+                    rapport.update(discovery_stop="redirection", diagnostic={
+                        "code": "redirection_hors_profil"})
+                    raise RuntimeError("TikTok n'affiche plus le profil demandé.")
+                # Une rubrique absente au premier rendu doit être recherchée à nouveau.
+                # Un clic trop précoce peut précéder l'attachement des actions React :
+                # le retenter au plus trois fois, seulement tant qu'aucun lien n'est lu.
+                maintenant = time.monotonic()
+                if not uniques and clics < 3 and maintenant >= prochain_clic:
+                    resultat = self.page.evaluate(NAVIGUER_VIDEOS_JS, compte)
+                    if isinstance(resultat, dict):
+                        navigation = resultat
+                        rapport["navigation_videos"] = navigation
+                        statut = navigation.get("statut")
+                        rapport["navigation_publications"] = (
+                            "ouverture_rubrique_videos" if statut == "clic" else
+                            "videos_deja_actif" if statut == "deja_actif" else
+                            "rubrique_videos_introuvable")
+                        if statut == "clic":
+                            clics += 1
+                            prochain_clic = maintenant + 2.0
+                            return False
+                avant = len(uniques)
+                extraits = self.page.evaluate(LIENS_VIDEOS_JS)
+                for adresse in _liens_compte(extraits, compte, self.args.limit):
+                    identite = moteur.canonical_post(adresse)
+                    uniques.setdefault(identite[0], adresse)
+                    if len(uniques) >= self.args.limit:
+                        break
+                rapport["url_rubrique_publications"] = self.page.url.split("?")[0]
+                publier()
+                return len(uniques) > avant
+            except RuntimeError:
+                raise
+            except Exception as erreur:
+                # Une navigation initiée par le clic détruit brièvement l'ancien DOM.
+                # Toute autre erreur de script doit rester visible, jamais devenir []
+                # et être présentée comme une absence de vidéos.
+                if "Execution context was destroyed" in str(erreur):
+                    return False
+                rapport.update(discovery_stop="erreur_navigateur", diagnostic={
+                    "code": "erreur_navigateur", "exception": type(erreur).__name__})
+                raise moteur.WebDriverException("Lecture du profil Playwright impossible.") from erreur
+
+        def attendre_nouveaux():
+            """Attendre des liens, avec contrôle d'arrêt et dernière lecture à l'échéance."""
+            echeance = time.monotonic() + delai
+            while True:
+                if scanner():
+                    return True
+                restant = echeance - time.monotonic()
+                if restant <= 0:
+                    return False
+                # Cadence de vérification d'une condition, pas délai de chargement supposé.
+                self.page.wait_for_timeout(min(250, restant * 1000))
+
+        try:
+            self._visiter(url)
+            if not attendre_nouveaux():
+                observation = self.page.evaluate(DIAGNOSTIC_VIDEOS_JS, compte)
+                rapport["navigation_videos_observee"] = observation
+                rapport.update(discovery_stop="delai_sans_publications", diagnostic={
+                    "code": "profil_sans_liens_playwright",
+                    "delai_secondes": delai,
+                    "detail": "Aucun lien du compte après attente du contenu dynamique.",
+                    **(rapport.get("etat_page") or {}),
+                })
+                raise RuntimeError("Le profil ne fournit aucun lien vidéo dans le délai imparti.")
+            inactifs = 0
+            for tour in range(max(0, int(self.args.max_scrolls))):
+                if len(uniques) >= self.args.limit:
+                    break
+                self.check()
+                avant = len(uniques)
+                position = self.page.evaluate(SCROLL_JS)
+                self.page.mouse.wheel(0, 1600)
+                # Espacer les sollicitations de pagination ; la disponibilité des liens
+                # est ensuite vérifiée même après le tout dernier défilement autorisé.
+                repos = max(0.0, float(self.args.delay))
+                while repos > 0:
+                    self.check()
+                    pause = min(0.25, repos)
+                    self.page.wait_for_timeout(pause * 1000)
+                    repos -= pause
+                nouveaux = attendre_nouveaux()
+                rapport["pagination_profil"].append({
+                    "tour": tour + 1, "liens_avant": avant,
+                    "liens_apres": len(uniques), "defilement": position})
+                inactifs = 0 if nouveaux else inactifs + 1
+                if inactifs >= max(1, int(getattr(self.args, "idle_rounds", 3))):
                     rapport["discovery_stop"] = "pagination_stagnante"
                     break
-        else:
-            rapport["discovery_stop"] = "max_scrolls"
-
-        rapport.update(retenues_par_compte={compte: len(uniques)},
-                       collecte_partielle=len(uniques) < self.args.limit,
-                       bilan_recherche=f"@{compte} : {len(uniques)}/{self.args.limit} vidéo(s) "
-                                      "découverte(s) par Playwright (grille publique).")
-        if not uniques:
-            try:
-                observation = self.page.evaluate(DIAGNOSTIC_VIDEOS_JS, compte)
-            except Exception:
-                observation = {}
-            rapport["navigation_videos_observee"] = observation
-            rapport["diagnostic"] = {
-                "code": "profil_sans_liens_playwright",
-                "detail": ("Rubrique Vidéos introuvable ou vide dans le navigateur Playwright. "
-                           "Consulter la navigation et les éléments détectés."),
-                "navigation": navigation.get("statut", "indetermine"),
-                "grilles": observation.get("grilles", 0),
-                "liens_video_auteur": observation.get("liens_video_auteur", 0),
-            }
-            raise RuntimeError("Aucune vidéo publique accessible par Playwright.")
+            else:
+                rapport["discovery_stop"] = "max_scrolls"
+            if len(uniques) >= self.args.limit:
+                rapport["discovery_stop"] = "limit"
+        except (RuntimeError, moteur.WebDriverException):
+            publier()
+            if not uniques:
+                raise
+            # Préserver les liens déjà obtenus si la suite devient inaccessible.
+            rapport["collecte_interrompue"] = True
+            rapport["recherches_en_echec"] = 1
+        finally:
+            rapport.update(retenues_par_compte={compte: len(uniques)},
+                           collecte_partielle=len(uniques) < self.args.limit,
+                           bilan_recherche=f"@{compte} : {len(uniques)}/{self.args.limit} vidéo(s) "
+                                          "découverte(s) par Playwright (grille publique).")
+            if rapport.get("collecte_interrompue"):
+                rapport["bilan_recherche"] += " Collecte interrompue ; les liens obtenus sont conservés. Voir le diagnostic."
         return list(uniques.values())
 
     def lire(self, url):

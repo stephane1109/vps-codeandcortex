@@ -44,3 +44,7 @@ assert.equal(onglet.clicked,1);
 const navigationGenerale=element({tag:"BUTTON",label:"Vidéos",profile:false});
 assert.equal(visiter([navigationGenerale]).statut,"introuvable");
 console.log("Navigation TikTok : lien du profil, onglet, et exclusion hors profil OK");
+
+const actifSansGrille=element({tag:"BUTTON",label:"Vidéos",profile:true,selected:"true"});
+assert.equal(visiter([actifSansGrille]).statut,"deja_actif");
+assert.equal(actifSansGrille.clicked,undefined);

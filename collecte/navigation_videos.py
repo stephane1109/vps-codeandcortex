@@ -52,8 +52,8 @@ NAVIGUER_VIDEOS_JS = r"""(compte) => {
     route:location.pathname,liens_video:document.querySelectorAll('a[href*="/video/"]').length};
   const typ = choisi.tagName === 'A' ? 'lien_profil' : 'onglet';
   const destination = choisi.tagName === 'A' ? choisi.href : '';
-  if (choisi.getAttribute('aria-selected') === 'true' &&
-      document.querySelector('[data-e2e="user-post-item-list"] a[href*="/video/"]')) {
+  // Un onglet déjà sélectionné peut attendre sa grille : ne pas le recliquer.
+  if (choisi.getAttribute('aria-selected') === 'true') {
     return {statut:'deja_actif',type:typ,route:location.pathname,destination};
   }
   choisi.click();
