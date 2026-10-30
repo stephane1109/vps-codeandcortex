@@ -149,7 +149,7 @@ class GalleryDLPresseTests(unittest.TestCase):
         rapport = {}
         connecteur.decouvrir(source, rapport)
         connecteur.gallerydl_client.decouvrir.assert_called_once()
-        self.assertEqual(rapport["version_collecteur"], "gallerydl-presse-v1")
+        self.assertEqual(rapport["version_collecteur"], "gallerydl-presse-v2-liste-directe")
 
     def test_ui_et_dependances_sans_playwright(self):
         root = Path(__file__).resolve().parents[1]
