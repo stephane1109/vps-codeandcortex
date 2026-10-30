@@ -83,7 +83,7 @@ class ConnexionPresse(SessionNavigateur):
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
         if self.moteur_collecte == "playwright":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
-                           version_collecteur="playwright-presse-v4-navigation", presse_moteur="playwright")
+                           version_collecteur="playwright-presse-v5-verification-videos", presse_moteur="playwright")
             self.options_decouverte(rapport, contexte, progression)
             return self.playwright_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "research":
