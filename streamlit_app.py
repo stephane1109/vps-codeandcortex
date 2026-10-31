@@ -52,11 +52,14 @@ def lancer(chemin, donnees):
         st.session_state["collecte"] = resultat
         if chemin == "/api/jobs" and donnees.get("cookies_tiktok"):
             st.session_state["_effacer_cookies_apres_requete"] = True
-        if chemin == "/api/jobs" and donnees.get("presse_moteur") == "research":
+        methode = donnees.get({
+            "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+            "comptes": "profil_moteur"}.get(donnees.get("source_collecte"), "presse_moteur"))
+        if chemin == "/api/jobs" and methode == "research":
             # Effacer les champs sensibles avant le prochain affichage,
             # sans écraser un widget déjà instancié pendant cette exécution.
             st.session_state["_effacer_research_apres_requete"] = True
-        if chemin == "/api/jobs" and donnees.get("presse_moteur") == "tikhub":
+        if chemin == "/api/jobs" and methode == "tikhub":
             st.session_state["_effacer_tikhub_apres_requete"] = True
         if chemin == "/api/jobs" and donnees.get("presse_moteur") == "apify":
             st.session_state["_effacer_apify_apres_requete"] = True
