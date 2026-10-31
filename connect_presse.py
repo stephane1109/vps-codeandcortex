@@ -12,10 +12,15 @@ class ConnexionPresse(SessionNavigateur):
         if not medias:
             raise ValueError("Sélectionnez au moins un média.")
         self.medias_selectionnes = {m["id"]: dict(m) for m in medias}
-        self.moteur_collecte = parametres.presse_moteur
-        self.research_debut = parametres.date_debut
-        self.research_fin = parametres.date_fin
-        self.commentaires_research = bool(parametres.collecter_commentaires)
+        self.configurer_moteur(parametres, parametres.presse_moteur)
+        return [dict(m) for m in medias]
+
+    def configurer_moteur(self, parametres, methode):
+        """Configurer les moteurs pour tous les modes, sans inventaire presse."""
+        self.moteur_collecte = methode
+        self.research_debut = getattr(parametres, "date_debut", None)
+        self.research_fin = getattr(parametres, "date_fin", None)
+        self.commentaires_research = bool(getattr(parametres, "collecter_commentaires", False))
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
         self.gallerydl_client = None
@@ -35,14 +40,12 @@ class ConnexionPresse(SessionNavigateur):
             from collecte.cookies_presse import charger_cookies_presse
             self.cookies_fournis = charger_cookies_presse(secret_cookies.get_secret_value())
         if self.moteur_collecte == "research":
-            cle = (parametres.research_client_key.get_secret_value().strip()
-                   if parametres.research_client_key else "")
-            secret = (parametres.research_client_secret.get_secret_value().strip()
-                      if parametres.research_client_secret else "")
+            client_key = getattr(parametres, "research_client_key", None)
+            client_secret = getattr(parametres, "research_client_secret", None)
+            cle = client_key.get_secret_value().strip() if client_key else ""
+            secret = client_secret.get_secret_value().strip() if client_secret else ""
             if cle and secret:
                 self.research_credentiels = (cle, secret)
-        return [dict(m) for m in medias]
-
     def ouvrir(self):
         """Les moteurs API n'ouvrent Chrome que pour les fonctions nécessaires."""
         if self.moteur_collecte == "apify":

@@ -151,7 +151,7 @@ def _fiche(video, compte):
         auteur = normaliser_compte(video.get("username") or "")
     except (ValueError, TypeError, AttributeError):
         return None
-    if auteur != compte:
+    if compte is not None and auteur != compte:
         return None
     identifiant = str(video.get("id") or video.get("video_id") or "")
     if not re.fullmatch(r"\d{5,30}", identifiant):
@@ -175,8 +175,8 @@ def _fiche(video, compte):
                 if isinstance(hashtags, list) else re.findall(r"#(\w+)", description))
     from .metadonnees import indicateur_ia
     return {"contenu_genere_ia": indicateur_ia(video), "id": identifiant,
-            "url": f"https://www.tiktok.com/@{compte}/video/{identifiant}",
-            "author": compte, "description": description,
+            "url": f"https://www.tiktok.com/@{auteur}/video/{identifiant}",
+            "author": auteur, "description": description,
             "created_at": date_creation,
             "collected_at": datetime.now(timezone.utc).isoformat(),
             "hashtags": list(dict.fromkeys(hashtags)),
@@ -189,13 +189,18 @@ def _fiche(video, compte):
 def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin=None,
                                     check=None, progress=None, requete=_requete,
                                     jeton=None, pause=time.sleep, aujourd_hui=None,
-                                    credentiels=None):
-    """Un média par recherche, pages et périodes bornées ; aucune relance en 429."""
-    compte = normaliser_compte(compte)
+                                    credentiels=None, hashtag=None):
+    """Recherche par compte ou hashtag, avec pagination et périodes bornées."""
+    compte = normaliser_compte(compte) if compte is not None else None
+    if hashtag is not None:
+        from scraptiktok import normalize_hashtag
+        hashtag = normalize_hashtag(hashtag)
+    if compte is None and hashtag is None:
+        raise ResearchErreur("Research API : renseigner un compte ou un hashtag.")
     verifier = check or (lambda: None)
     limite = max(1, min(int(limite), 1000))
     rapport.update(compte_attendu=compte, navigation_publications="research_officielle",
-                   requete_recherche=f"@{compte} : Research API officielle",
+                   requete_recherche=(f"#{hashtag}" if hashtag else f"@{compte}") + " : Research API officielle",
                    discovered_urls=[], metadonnees_api={}, pages_research=0,
                    requetes_tentees=0, candidats_examines=0, auteurs_ecartes=0,
                    collecte_partielle=True, exhaustif=False,
@@ -215,8 +220,8 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
         while rapport["pages_research"] < MAX_PAGES and len(contenus) < limite:
             verifier()
             requete_corps = {
-                "query": {"and": [{"field_name": "username",
-                                   "operation": "EQ", "field_values": [compte]}]},
+                "query": {"and": [{"field_name": "hashtag_name" if hashtag else "username",
+                                   "operation": "EQ", "field_values": [hashtag or compte]}]},
                 "start_date": borne_debut, "end_date": borne_fin,
                 "max_count": min(100, limite - len(contenus)),
                 "is_random": False,
@@ -245,7 +250,9 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     continue
                 vus.add(identifiant)
                 fiche = _fiche(video, compte)
-                if fiche:
+                if fiche and (not hashtag or any(
+                        str(tag).lstrip("#").casefold() == hashtag.casefold()
+                        for tag in fiche.get("hashtags", []))):
                     contenus[identifiant] = fiche
                 else:
                     rapport["auteurs_ecartes"] += 1

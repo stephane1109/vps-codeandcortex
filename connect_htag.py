@@ -4,10 +4,11 @@ import copy
 import math
 
 from collecte.session_navigateur import SessionNavigateur
+from connect_presse import ConnexionPresse
 from scraptiktok import normalize_hashtag, canonical_post
 
 
-class ConnexionHashtag(SessionNavigateur):
+class ConnexionHashtag(ConnexionPresse):
     mode = "hashtags"
 
     def preparer_sources(self, parametres):
@@ -51,7 +52,63 @@ class ConnexionHashtag(SessionNavigateur):
                     "variantes_restantes": len(variantes) - rang,
                 })
         self.hashtags = tuple(s["hashtag"] for s in sources)
+        self.configurer_moteur(parametres, getattr(parametres, "hashtag_moteur", "navigateur"))
+        self._cache_profils = set()
+        self._metadonnees_profils = {}
+        self._limite_profils_api = 10
         return sources
+
+    def ouvrir(self):
+        """Seule la Research API recherche directement un hashtag sans navigateur."""
+        if self.moteur_collecte in {"tikhub", "gallerydl"}:
+            super().ouvrir()
+            return SessionNavigateur.ouvrir(self)
+        return super().ouvrir()
+
+    def _lire_profil_par_moteur(self, compte):
+        """Enrichir via l'API au plus dix comptes distincts par collecte."""
+        if compte in self._cache_profils or len(self._cache_profils) >= self._limite_profils_api:
+            return
+        self._cache_profils.add(compte)
+        rapport = {}
+        if self.moteur_collecte == "tikhub":
+            self.tikhub_client.decouvrir(compte, rapport)
+        elif self.moteur_collecte == "gallerydl":
+            self.gallerydl_client.decouvrir(compte, rapport)
+        else:
+            from collecte.presse_api import collecter_videos_presse_api
+            collecter_videos_presse_api(
+                compte, min(self.arguments.limit, 100), rapport,
+                check=self.verifier)
+        self._metadonnees_profils.update(rapport.get("metadonnees_api") or {})
+
+    def lire_publication(self, url):
+        """Recherche hybride : découverte par hashtag, métadonnées par profil."""
+        if self.moteur_collecte not in {"api", "gallerydl", "tikhub"}:
+            return SessionNavigateur.lire_publication(self, url)
+        identite = canonical_post(url)
+        if identite is None:
+            raise ValueError("URL de publication invalide.")
+        identifiant, _, compte = identite
+        self._lire_profil_par_moteur(compte)
+        fiche = self._metadonnees_profils.get(identifiant)
+        if not isinstance(fiche, dict) or fiche.get("author", "").casefold() != compte.casefold():
+            resultat = SessionNavigateur.lire_publication(self, url)
+            resultat["source"] = "selenium_secours_hashtag"
+            return resultat
+        resultat = dict(fiche)
+        if self.resume_research:
+            if self.moteur_collecte == "tikhub":
+                resultat.update(self.tikhub_client.lire_resume(url))
+            else:
+                lecture = SessionNavigateur.lire_publication(self, url)
+                for champ in ("resume_ia_tiktok", "statut_resume_ia",
+                              "source_resume_ia", "titre_ia_tiktok",
+                              "article_ia_tiktok", "mots_cles_ia_tiktok"):
+                    if champ in lecture:
+                        resultat[champ] = lecture[champ]
+        return resultat
+
 
     def decouvrir(self, source, rapport, *, contexte="", progression=None):
         """Ouvrir la page du hashtag et employer son défilement existant."""
@@ -78,8 +135,18 @@ class ConnexionHashtag(SessionNavigateur):
         nombre_variantes = max(1, source.get("variantes_restantes", 1))
         arguments = copy.copy(self.arguments)
         arguments.limit = min(restant, max(1, math.ceil(restant / nombre_variantes)))
-        trouves = collecter_hashtag(self.obtenir_navigateur(), arguments, rapport,
-            **self.options_decouverte(rapport, contexte, progression))
+        if self.moteur_collecte == "research":
+            from collecte.presse_research import collecter_videos_presse_research
+            trouves = collecter_videos_presse_research(
+                None, arguments.limit, rapport, hashtag=hashtag,
+                debut=self.research_debut, fin=self.research_fin,
+                check=self.verifier, progress=progression,
+                credentiels=self.research_credentiels)
+        else:
+            trouves = collecter_hashtag(
+                self.obtenir_navigateur(), arguments, rapport,
+                **SessionNavigateur.options_decouverte(
+                    self, rapport, contexte, progression))
         nouveaux = []
         for adresse in trouves:
             identite = canonical_post(adresse)
