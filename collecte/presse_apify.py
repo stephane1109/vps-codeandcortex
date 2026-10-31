@@ -166,9 +166,11 @@ class PresseApify:
         self.execution_id = None
         self.requetes = 0
 
-    def _requete(self, methode, chemin, parametres=None, entree=None):
+    def _requete(self, methode, chemin, parametres=None, entree=None,
+                 verifier=True):
         """Appel REST avec résultat borné et erreurs sans secrets."""
-        self.verifier()
+        if verifier:
+            self.verifier()
         url = HOTE + chemin
         if parametres:
             url += "?" + urlencode(parametres)
@@ -218,7 +220,8 @@ class PresseApify:
                 # Un arrêt distant peut lui-même échouer ; ne jamais masquer
                 # l'erreur ou l'annulation initiale.
                 self._requete("POST",
-                              "/actor-runs/" + self.execution_id + "/abort")
+                              "/actor-runs/" + self.execution_id + "/abort",
+                              verifier=False)
             except Exception:
                 pass
             self.execution_id = None
