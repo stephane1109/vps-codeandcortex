@@ -1052,7 +1052,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     if (record_api and (
                             (job.settings.source_collecte == "hashtags" and moteur_actif == "research")
                             or (job.settings.source_collecte == "comptes"
-                                and moteur_actif in {"api", "research", "gallerydl", "tikhub"})
+                                and (moteur_actif in {"research", "gallerydl", "tikhub"}
+                                     or (moteur_actif == "api"
+                                         and not job.settings.collecter_commentaires
+                                         and record_api.get("description"))))
                             or (job.settings.source_collecte == "presse"
                                 and (moteur_actif in {"research", "gallerydl", "tikhub", "apify"}
                                      or (moteur_actif == "api"
