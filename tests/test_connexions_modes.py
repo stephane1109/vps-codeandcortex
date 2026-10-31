@@ -73,7 +73,11 @@ class ConnexionsModes(unittest.TestCase):
                 def decouvrir(pilote, arguments, compte, rapport, **options):
                     self.assertIs(pilote, navigateur)
                     self.assertIn(compte, attendus)
-                    self.assertEqual(options["hashtags"], parametres.hashtags)
+                    # En Presse, aucun filtre de hashtag n'est appliqué sans
+                    # activer le croisement spécifique de l'interface.
+                    self.assertEqual(options["hashtags"],
+                                     () if classe.mode == "presse"
+                                     else parametres.hashtags)
                     self.assertTrue(options["sans_connexion"])
                     self.assertEqual(rapport["connexion"]["module"], classe.__module__)
                     validations.append(options["validation_initiale"])
