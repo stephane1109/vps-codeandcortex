@@ -29,10 +29,11 @@ class ConnexionHashtag(ConnexionPresse):
         nombre_demandes = len(demandes)
         # Avec un filtre de dates, explorer davantage de candidats que le nombre
         # de résultats demandé ; seules les dates vérifiées seront retenues.
-        self._budget_decouverte = (min(parametres.limit * 5, 500)
+        limite_demandee = getattr(parametres, "limit", self.arguments.limit)
+        self._budget_decouverte = (min(limite_demandee * 5, 500)
                                   if (getattr(parametres, "date_debut", None)
                                       or getattr(parametres, "date_fin", None))
-                                  else parametres.limit)
+                                  else limite_demandee)
         self._quota_hashtag = {
             demande: self._budget_decouverte // nombre_demandes
                     + int(rang < self._budget_decouverte % nombre_demandes)
