@@ -7,6 +7,7 @@ La clé reste en mémoire et passe exclusivement dans l'en-tête Authorization.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -59,6 +60,10 @@ def _nombre(valeur):
         return None
     if isinstance(valeur, int):
         return valeur if valeur >= 0 else None
+    # Apify expose ses mesures comme des nombres JSON, parfois décodés
+    # en flottants. Ne retenir que les valeurs entières, finies et positives.
+    if isinstance(valeur, float):
+        return int(valeur) if math.isfinite(valeur) and valeur >= 0 and valeur.is_integer() else None
     if isinstance(valeur, str) and valeur.isdecimal():
         return int(valeur)
     return None
@@ -72,7 +77,11 @@ def normaliser_publications(donnees, compte, limite):
         raise ErreurApify("Le dataset Apify n'est pas une liste de publications.",
                          "apify_dataset_invalide")
     for objet in donnees:
-        if not isinstance(objet, dict) or objet.get("isSlideshow") is True:
+        if (not isinstance(objet, dict)
+                or objet.get("isSlideshow") is True
+                or objet.get("slideshowImageLinks")):
+            # Les diaporamas ne doivent pas être assimilés à des vidéos
+            # lorsque le marqueur isSlideshow est absent.
             continue
         auteur = objet.get("authorMeta")
         if not isinstance(auteur, dict):
@@ -91,6 +100,10 @@ def normaliser_publications(donnees, compte, limite):
         if not re.fullmatch(r"\d{5,30}", identifiant):
             continue
         url = objet.get("webVideoUrl")
+        if isinstance(url, str) and not url.strip():
+            # URL facultative dans le schéma Apify : l'identité vérifiée et
+            # l'identifiant permettent de reconstruire l'URL canonique.
+            url = None
         if url is not None:
             if not isinstance(url, str):
                 continue
@@ -307,6 +320,17 @@ class PresseApify:
             if progression:
                 progression(len(videos))
             if not videos:
+                erreurs_distantes = [
+                    element for element in resultats
+                    if isinstance(element, dict)
+                    and (element.get("error") or element.get("errorCode"))
+                ]
+                if erreurs_distantes:
+                    # Certains Actors terminent SUCCEEDED même si le dataset
+                    # contient uniquement des lignes d'erreur.
+                    raise ErreurApify(
+                        "Apify a renvoyé des erreurs sans publication exploitable pour ce média.",
+                        "apify_resultats_erreur")
                 raise ErreurApify(
                     "Apify n'a fourni aucune vidéo vérifiée pour ce média.",
                     "apify_sans_videos")

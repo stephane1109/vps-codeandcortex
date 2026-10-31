@@ -2,7 +2,7 @@ name: ScrapTikTok - Moteur Presse Apify
 
 on:
   push:
-    branches: [deploy-scraptiktok]
+    branches: [deploy-scraptiktok, deploy-tiktok]
     paths:
       - "collecte/presse_apify.py"
       - "connect_presse.py"

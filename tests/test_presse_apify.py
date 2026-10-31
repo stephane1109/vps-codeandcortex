@@ -198,5 +198,64 @@ class TestsApify(unittest.TestCase):
         self.assertFalse(any("/datasets/" in url for url in appels))
 
 
+    def test_mesures_decimales_et_url_absente(self):
+        """Préserver les dates et métriques entières décodées comme flottants."""
+        from datetime import datetime, timezone
+        element = publication()
+        element.update(
+            createTime=1750000000.0, playCount=1250.0,
+            diggCount=72.0, commentCount=0.0,
+            shareCount=11.0, collectCount=7.0,
+            webVideoUrl="",
+        )
+        fiche = normaliser_publications([element], "lemondefr", 5)[IDENTIFIANT]
+        self.assertEqual(
+            fiche["created_at"],
+            datetime.fromtimestamp(1750000000, timezone.utc).isoformat(),
+        )
+        self.assertEqual(fiche["engagement"]["vues"]["valeur"], 1250)
+        self.assertEqual(fiche["engagement"]["favoris"]["valeur"], 7)
+        self.assertEqual(
+            fiche["url"],
+            f"https://www.tiktok.com/@lemondefr/video/{IDENTIFIANT}",
+        )
+
+    def test_diaporama_sans_marqueur_explicitement_rejete(self):
+        """Ne pas introduire d'images dans le corpus des vidéos."""
+        element = publication()
+        element.pop("isSlideshow")
+        element["slideshowImageLinks"] = [{"tiktokLink": "https://exemple.invalid/photo"}]
+        self.assertFalse(normaliser_publications([element], "lemondefr", 5))
+
+    def test_dataset_avec_erreurs_distantes_sans_videos(self):
+        """Distinguer un dataset d'erreurs d'un profil simplement vide."""
+        appels = []
+
+        def ouvrir(requete, timeout):
+            chemin = requete.full_url
+            appels.append(chemin)
+            if "/acts/" in chemin:
+                return ReponseSimulee({"data": {
+                    "id": "abcde12345", "status": "SUCCEEDED",
+                    "defaultDatasetId": "ds12345678",
+                }}, 201)
+            if "/datasets/" in chemin:
+                return ReponseSimulee([
+                    {"error": "TikTok a refusé ce profil", "errorCode": "PROFILE_ERROR"},
+                ])
+            raise AssertionError("Requête distante inattendue")
+
+        client = PresseApify(SimpleNamespace(limit=3),
+                            cle="JETON_TEST_PRIVE", ouvrir_url=ouvrir)
+        rapport = {}
+        with self.assertRaises(ErreurApify) as contexte:
+            client.decouvrir("lemondefr", rapport)
+        self.assertEqual(contexte.exception.code, "apify_resultats_erreur")
+        self.assertEqual(rapport["diagnostic"]["code"], "apify_resultats_erreur")
+        self.assertEqual(rapport["discovered_urls"], [])
+        self.assertEqual(len(appels), 2)
+        client.fermer()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,7 @@ Créer une application depuis le dépôt GitHub existant :
 | Réglage | Valeur |
 | --- | --- |
 | Dépôt | `stephane1109/vps-codeandcortex` |
-| Branche | **`deploy-scraptiktok`** |
+| Branche | **`deploy-tiktok`** (validation Apify) ou `deploy-scraptiktok` (historique) |
 | Build pack | Dockerfile |
 | Base directory | **`/`** |
 | Dockerfile | `/Dockerfile` (relatif à la base directory) |
@@ -19,7 +19,7 @@ Créer une application depuis le dépôt GitHub existant :
 | Healthcheck HTTP | `/healthz` sur le port `8501` |
 | Domaine | Le sous-domaine HTTPS que vous affectez à cette application |
 
-Comme les autres branches `deploy-…`, `deploy-scraptiktok` contient l'application
+Comme les autres branches `deploy-…`, `deploy-tiktok` et `deploy-scraptiktok` contiennent l'application
 à la racine. Le code source existe également dans `applications/scraptiktok` sur
 `main` ; cette autre branche exige une Base directory `/applications/scraptiktok`.
 Les mises à jour de `main` ne sont pas automatiquement reportées sur la branche
@@ -219,5 +219,6 @@ lorsqu'elles sont cochées, peuvent nécessiter le navigateur Selenium
 sur le VPS. Apify Profile Scraper ne fournit pas à lui seul de résumé
 natif `itemCustomTDK`. Les tests automatisés du moteur Apify sont
 **simulés** pour ne pas déclencher de frais. Une collecte réelle
-nécessite un jeton valide et un redéploiement Coolify de la branche
-`deploy-scraptiktok`.
+nécessite un jeton valide et un déploiement Coolify sur la branche
+`deploy-tiktok`. Cette branche de validation n'est pas déployée automatiquement
+sur le VPS : vérifier la branche configurée dans Coolify avant de tester.
