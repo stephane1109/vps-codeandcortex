@@ -7,12 +7,26 @@ from collecte.verification_comptes import normaliser_compte
 class ConnexionPresse(SessionNavigateur):
     mode = "presse"
 
+    def __init__(self, *arguments, **options):
+        super().__init__(*arguments, **options)
+        # État neutre : un test ou une fermeture peut précéder preparer_sources.
+        self.moteur_collecte = "navigateur"
+        self.commentaires_research = False
+        self.resume_research = False
+        self.cookies_fournis = None
+        self.research_credentiels = None
+        self.gallerydl_client = None
+        self.tikhub_client = None
+        self.tikhub_cle = None
+        self.apify_client = None
+        self.apify_cle = None
+
     def preparer_sources(self, parametres):
         medias = selectionner_medias(parametres.medias)
         if not medias:
             raise ValueError("Sélectionnez au moins un média.")
         self.medias_selectionnes = {m["id"]: dict(m) for m in medias}
-        self.configurer_moteur(parametres, parametres.presse_moteur)
+        self.configurer_moteur(parametres, getattr(parametres, "presse_moteur", "navigateur"))
         return [dict(m) for m in medias]
 
     def configurer_moteur(self, parametres, methode):
