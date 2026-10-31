@@ -46,7 +46,7 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
-    presse_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "api"
+    presse_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub", "apify"] = "api"
     croiser_hashtag_presse: bool = False
     hashtag_presse: str = Field(default="", max_length=100)
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
@@ -54,6 +54,7 @@ class StartRequest(BaseModel):
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
     research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
     tikhub_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    apify_api_token: SecretStr | None = Field(default=None, exclude=True, repr=False)
     cookies_tiktok: SecretStr | None = Field(default=None, exclude=True, repr=False, max_length=1_048_576)
     enrichir: bool = False
     telecharger_mp4: bool = False
@@ -119,6 +120,11 @@ class StartRequest(BaseModel):
     def valider_sources(self):
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
+        if self.source_collecte == "presse" and self.presse_moteur == "apify":
+            from collecte.presse_apify import cle_disponible
+            jeton = self.apify_api_token.get_secret_value().strip() if self.apify_api_token else ""
+            if not cle_disponible(jeton):
+                raise ValueError("Apify : saisir le jeton API ou renseigner APIFY_API_TOKEN dans Coolify.")
         if self.source_collecte == "presse" and self.presse_moteur == "tikhub":
             from collecte.presse_tikhub import cle_disponible
             cle = self.tikhub_api_key.get_secret_value().strip() if self.tikhub_api_key else ""
@@ -901,6 +907,20 @@ def expliquer_echec_source(rapport, erreur):
             "tikhub_acces_refuse": "TikHub a refusé l'accès : vérifier la clé ou le crédit disponible.",
         }
         return descriptions.get(code, "TikHub : la collecte a échoué ; consultez le diagnostic.")
+    if isinstance(code, str) and code.startswith("apify_"):
+        descriptions = {
+            "apify_cle_absente": "Apify : jeton API absent.",
+            "apify_acces_refuse": "Apify refuse l'accès : vérifier le jeton et les droits de l'Actor.",
+            "apify_credit": "Apify refuse la collecte : crédits ou moyens de paiement insuffisants.",
+            "apify_limite": "Apify limite les appels (HTTP 429).",
+            "apify_delai": "Apify : exécution distante interrompue après dépassement du délai.",
+            "apify_execution_echec": "L'Actor Apify n'a pas terminé avec succès.",
+            "apify_dataset_absent": "L'Actor Apify n'a pas fourni de dataset.",
+            "apify_sans_videos": "Apify n'a fourni aucune vidéo vérifiée pour ce compte.",
+            "apify_reseau": "Apify est inaccessible depuis le VPS.",
+            "apify_configuration": "Apify : plafond de coût invalide dans Coolify.",
+        }
+        return descriptions.get(code, "Apify : la collecte a échoué ; consulter le diagnostic.")
     if code == "gallerydl_sans_videos":
         categorie = diagnostic.get("categorie")
         detail = (" (HTTP 429)" if categorie == "http_429" else
@@ -1021,7 +1041,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record_api = metadonnees_api.get(identifiant_publication)
                     if (job.settings.source_collecte == "presse" and record_api
                             and (job.settings.presse_moteur == "research"
-                                 or job.settings.presse_moteur in {"gallerydl", "tikhub"}
+                                 or job.settings.presse_moteur in {"gallerydl", "tikhub", "apify"}
                                  or (job.settings.presse_moteur == "api"
                                      and not job.settings.collecter_commentaires
                                      and record_api.get("description")))):
@@ -1123,7 +1143,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 from collecte.commentaires import collecter_commentaires
                                 try:
                                     if (job.settings.source_collecte == "presse"
-                                            and job.settings.presse_moteur in {"research", "gallerydl", "tikhub"}):
+                                            and job.settings.presse_moteur in {"research", "gallerydl", "tikhub", "apify"}):
                                         # Research et gallery-dl fournissent les métadonnées ;
                                         # les commentaires restent pilotés
                                         # par la session Selenium facultative.
@@ -1180,7 +1200,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
-                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research", "gallerydl", "tikhub"}:
+                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research", "gallerydl", "tikhub", "apify"}:
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(donnees, dict):
                             metadonnees_api.setdefault(str(identifiant), donnees)
@@ -1350,6 +1370,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 connexion.research_credentiels = None
             if getattr(connexion, "moteur_collecte", None) == "tikhub":
                 connexion.tikhub_cle = None
+            if getattr(connexion, "moteur_collecte", None) == "apify":
+                connexion.apify_cle = None
             try:
                 connexion.fermer()
             except scraper.WebDriverException:
@@ -1358,6 +1380,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         job.settings.research_client_key = None
         job.settings.research_client_secret = None
         job.settings.tikhub_api_key = None
+        job.settings.apify_api_token = None
         job.settings.cookies_tiktok = None
         try:
             job.save()
