@@ -58,6 +58,8 @@ def lancer(chemin, donnees):
             st.session_state["_effacer_research_apres_requete"] = True
         if chemin == "/api/jobs" and donnees.get("presse_moteur") == "tikhub":
             st.session_state["_effacer_tikhub_apres_requete"] = True
+        if chemin == "/api/jobs" and donnees.get("presse_moteur") == "apify":
+            st.session_state["_effacer_apify_apres_requete"] = True
     st.rerun()
 
 
@@ -154,6 +156,8 @@ if st.session_state.pop("_effacer_research_apres_requete", False):
     st.session_state.pop("research_client_secret", None)
 if st.session_state.pop("_effacer_tikhub_apres_requete", False):
     st.session_state.pop("tikhub_api_key", None)
+if st.session_state.pop("_effacer_apify_apres_requete", False):
+    st.session_state.pop("apify_api_token", None)
 
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
@@ -264,10 +268,10 @@ with onglet_collecte:
         if st.session_state.get("presse_moteur") == "playwright":
             st.session_state["presse_moteur"] = "gallerydl"
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
-            ["api", "research", "navigateur", "gallerydl", "tikhub"],key="presse_moteur",horizontal=True,disabled=occupe,
+            ["api", "research", "navigateur", "gallerydl", "tikhub", "apify"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
                                    "navigateur":"Méthode Selenium", "gallerydl":"Méthode gallery-dl",
-                                   "tikhub":"Méthode TikHub (API)"}[v],
+                                   "tikhub":"Méthode TikHub (API)", "apify":"Méthode Apify (API)"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -286,6 +290,15 @@ with onglet_collecte:
             st.caption("Méthode payante : TikHub facture ses requêtes. "
                        "Profil + pages de publications (15 par page), puis une requête "
                        "supplémentaire par vidéo si « Texte généré par IA » est coché.")
+        if st.session_state.get("presse_moteur") == "apify":
+            st.text_input("Jeton API Apify", key="apify_api_token", type="password",
+                          disabled=occupe,
+                          help="Jeton personnel Apify. Peut aussi provenir de APIFY_API_TOKEN dans Coolify. "
+                               "Il n'est jamais enregistré dans les exports.")
+            st.caption("Méthode payante : l'Actor clockworks/tiktok-profile-scraper "
+                       "s'exécute sur Apify. Nombre de résultats plafonné par la collecte. "
+                       "Coût maximal par exécution : APIFY_MAX_CHARGE_USD (1 USD par défaut). "
+                       "L'option Texte généré par IA nécessite Selenium et ne garantit pas de résumé.")
         if st.session_state.get("presse_moteur") == "navigateur":
             with st.expander("Session TikTok — cookies facultatifs"):
                 st.file_uploader("Importer les cookies TikTok (.txt, format Netscape)",
@@ -344,6 +357,8 @@ with onglet_collecte:
             informations_presse.append("Moteur : gallery-dl (liste creator/item_list uniquement). La collecte n'ouvre pas les pages des vidéos ; les commentaires et résumés IA demandent Selenium.")
         elif st.session_state.get("presse_moteur") == "tikhub":
             informations_presse.append("Moteur : TikHub (API payante). Profils et publications via l'API ; résumés natifs TikTok itemCustomTDK lorsque l'option IA est cochée.")
+        elif st.session_state.get("presse_moteur") == "apify":
+            informations_presse.append("Moteur : Apify (API payante). La collecte se déroule sur Apify ; vidéos, légendes et compteurs sont réintégrés dans ScrapTikTok. Pas de téléchargement MP4 par l'Actor.")
         else:
             informations_presse.append("Moteur : Méthode Selenium.")
         if st.session_state.get("presse_moteur") != "research":
@@ -571,6 +586,8 @@ with onglet_collecte:
                     valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
                 if source == "presse" and valeurs["presse_moteur"] == "tikhub":
                     valeurs["tikhub_api_key"] = st.session_state.get("tikhub_api_key", "")
+                if source == "presse" and valeurs["presse_moteur"] == "apify":
+                    valeurs["apify_api_token"] = st.session_state.get("apify_api_token", "")
                 valeurs["rechercher_dans_texte"] = (
                     bool(st.session_state.get("rechercher_dans_texte", True)) if source != "presse" else False
                 )
