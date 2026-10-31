@@ -29,7 +29,10 @@ class ConnexionHashtag(ConnexionPresse):
         nombre_demandes = len(demandes)
         # Avec un filtre de dates, explorer davantage de candidats que le nombre
         # de résultats demandé ; seules les dates vérifiées seront retenues.
-        self._budget_decouverte = min(parametres.limit * 5, 500) if (parametres.date_debut or parametres.date_fin) else parametres.limit
+        self._budget_decouverte = (min(parametres.limit * 5, 500)
+                                  if (getattr(parametres, "date_debut", None)
+                                      or getattr(parametres, "date_fin", None))
+                                  else parametres.limit)
         self._quota_hashtag = {
             demande: self._budget_decouverte // nombre_demandes
                     + int(rang < self._budget_decouverte % nombre_demandes)
@@ -37,7 +40,7 @@ class ConnexionHashtag(ConnexionPresse):
         }
         for hashtag in demandes:
             variantes = variantes_hashtag(
-                hashtag, avec_accents=parametres.variantes_accents)
+                hashtag, avec_accents=getattr(parametres, "variantes_accents", False))
             # Supprimer les doublons entre recherches sans perdre le tag initial.
             distinctes = []
             for variante in variantes:
