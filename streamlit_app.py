@@ -110,6 +110,9 @@ if "initialise" not in st.session_state:
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
         "hashtag_presse":ancienne.get("hashtag_presse",""),
+        "presse_moteur":ancienne.get("presse_moteur","api"),
+        "hashtag_moteur":ancienne.get("hashtag_moteur","navigateur"),
+        "profil_moteur":ancienne.get("profil_moteur","navigateur"),
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", True),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
@@ -147,6 +150,8 @@ if "initialise" not in st.session_state:
 st.session_state.setdefault("telecharger_mp4", False)
 st.session_state.setdefault("sauvegarde_progressive", False)
 st.session_state.setdefault("presse_moteur", "api")
+st.session_state.setdefault("hashtag_moteur", "navigateur")
+st.session_state.setdefault("profil_moteur", "navigateur")
 st.session_state.setdefault("croiser_hashtag_presse", False)
 st.session_state.setdefault("hashtag_presse", "")
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
@@ -264,14 +269,51 @@ with onglet_collecte:
     api_tiktok_suspendue = False
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
+    libelles_moteurs = {
+        "api": "API web TikTok (secUid)",
+        "research": "Research API officielle",
+        "navigateur": "Méthode Selenium",
+        "gallerydl": "Méthode gallery-dl",
+        "tikhub": "Méthode TikHub (API) (payant)",
+        "apify": "Méthode Apify (API) (payant)",
+    }
+    if source in {"hashtags", "comptes"}:
+        cle_moteur = "hashtag_moteur" if source == "hashtags" else "profil_moteur"
+        st.radio(
+            "Moteur de découverte " + ("Hashtags" if source == "hashtags" else "Profils") +
+            " (une seule méthode par collecte)",
+            ["api", "research", "navigateur", "gallerydl", "tikhub"],
+            key=cle_moteur, horizontal=True, disabled=occupe,
+            format_func=lambda valeur: libelles_moteurs[valeur],
+        )
+        moteur_courant = st.session_state.get(cle_moteur, "navigateur")
+        if moteur_courant == "research":
+            st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
+                          type="password", disabled=occupe)
+            st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
+                          type="password", disabled=occupe)
+            st.caption("Research API officielle : accès réservé aux projets approuvés. "
+                       "Recherche directe de hashtags ou de comptes ; sans téléchargement MP4.")
+        elif moteur_courant == "tikhub":
+            st.text_input("Clé API TikHub", key="tikhub_api_key",
+                          type="password", disabled=occupe,
+                          help="Clé personnelle, ou TIKHUB_API_KEY dans Coolify.")
+            st.caption("TikHub : méthode payante. Les appels sont facturables ; "
+                       "l'option Texte généré par IA peut entraîner des appels supplémentaires.")
+        if source == "hashtags" and moteur_courant in {"api", "gallerydl", "tikhub"}:
+            st.caption("Parcours hybride : les hashtags sont découverts via Selenium. "
+                       "Le moteur choisi recherche ensuite les métadonnées des vidéos "
+                       "dans les profils des auteurs (10 profils distincts au maximum). "
+                       "Si une vidéo est absente de ces listes, sa page est lue par Selenium. "
+                       "Avec TikHub, chaque profil interrogé peut entraîner des frais.")
+        if source == "hashtags" and moteur_courant == "navigateur":
+            st.caption("Découverte et lecture par Selenium, comme dans la version précédente.")
     if source == "presse":
         if st.session_state.get("presse_moteur") == "playwright":
             st.session_state["presse_moteur"] = "gallerydl"
         st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
             ["api", "research", "navigateur", "gallerydl", "tikhub", "apify"],key="presse_moteur",horizontal=True,disabled=occupe,
-            format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
-                                   "navigateur":"Méthode Selenium", "gallerydl":"Méthode gallery-dl",
-                                   "tikhub":"Méthode TikHub (API) (payant)", "apify":"Méthode Apify (API) (payant)"}[v],
+            format_func=lambda v: libelles_moteurs[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
@@ -531,7 +573,10 @@ with onglet_collecte:
             d1,d2 = st.columns(2)
             d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
             d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
-            st.caption("Jours inclus en UTC. Research API : 30 derniers jours par défaut, fenêtres successives de 30 jours pour une période plus longue." if source=="presse" and st.session_state.get("presse_moteur")=="research" else "Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
+            methode_dates = st.session_state.get(
+                {"presse": "presse_moteur", "comptes": "profil_moteur",
+                 "hashtags": "hashtag_moteur"}[source], "navigateur")
+            st.caption("Jours inclus en UTC. Research API : 30 derniers jours par défaut, fenêtres successives de 30 jours pour une période plus longue." if methode_dates=="research" else "Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
@@ -563,6 +608,11 @@ with onglet_collecte:
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
+                valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "navigateur")
+                valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "navigateur")
+                moteur_selectionne = valeurs[{
+                    "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                    "comptes": "profil_moteur"}[source]]
                 valeurs["croiser_hashtag_presse"] = (
                     bool(st.session_state.get("croiser_hashtag_presse", False)) if source == "presse" else False)
                 valeurs["hashtag_presse"] = (
@@ -581,10 +631,10 @@ with onglet_collecte:
                         except (ValueError, RuntimeError):
                             st.error("Importez un fichier Netscape valide de moins de 1 Mo contenant des cookies TikTok non expirés.")
                             st.stop()
-                if source == "presse" and valeurs["presse_moteur"] == "research":
+                if moteur_selectionne == "research":
                     valeurs["research_client_key"] = st.session_state.get("research_client_key", "")
                     valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
-                if source == "presse" and valeurs["presse_moteur"] == "tikhub":
+                if moteur_selectionne == "tikhub":
                     valeurs["tikhub_api_key"] = st.session_state.get("tikhub_api_key", "")
                 if source == "presse" and valeurs["presse_moteur"] == "apify":
                     valeurs["apify_api_token"] = st.session_state.get("apify_api_token", "")
