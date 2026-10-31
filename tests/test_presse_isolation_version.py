@@ -56,7 +56,7 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertLess(cle,secret)
         self.assertLess(secret,medias)
         self.assertLess(medias,cases)
-        self.assertIn('["api", "research", "navigateur", "gallerydl", "tikhub"]',texte[choix:medias])
+        self.assertIn('["api", "research", "navigateur", "gallerydl", "tikhub", "apify"]',texte[choix:medias])
 
 
     def test_options_commentaires_sous_case_et_titre_periode(self):
