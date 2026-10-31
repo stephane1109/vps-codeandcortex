@@ -271,7 +271,7 @@ with onglet_collecte:
             ["api", "research", "navigateur", "gallerydl", "tikhub", "apify"],key="presse_moteur",horizontal=True,disabled=occupe,
             format_func=lambda v: {"api":"API web TikTok (secUid)", "research":"Research API officielle",
                                    "navigateur":"Méthode Selenium", "gallerydl":"Méthode gallery-dl",
-                                   "tikhub":"Méthode TikHub (API)", "apify":"Méthode Apify (API)"}[v],
+                                   "tikhub":"Méthode TikHub (API) (payant)", "apify":"Méthode Apify (API) (payant)"}[v],
             help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
                  "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
                  "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
