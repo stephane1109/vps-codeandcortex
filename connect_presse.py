@@ -1,4 +1,4 @@
-"""Collecte Presse : Selenium, gallery-dl, API web secUid, Research."""
+"""Collecte Presse : Selenium, gallery-dl, API web, Research, TikHub et Apify."""
 from collecte.presse import selectionner_medias
 from collecte.session_navigateur import SessionNavigateur
 from collecte.verification_comptes import normaliser_compte
@@ -21,6 +21,11 @@ class ConnexionPresse(SessionNavigateur):
         self.gallerydl_client = None
         self.tikhub_client = None
         self.tikhub_cle = None
+        self.apify_client = None
+        self.apify_cle = None
+        if self.moteur_collecte == "apify":
+            secret = getattr(parametres, "apify_api_token", None)
+            self.apify_cle = secret.get_secret_value().strip() if secret else None
         if self.moteur_collecte == "tikhub":
             secret = getattr(parametres, "tikhub_api_key", None)
             self.tikhub_cle = secret.get_secret_value().strip() if secret else None
@@ -40,6 +45,12 @@ class ConnexionPresse(SessionNavigateur):
 
     def ouvrir(self):
         """Les moteurs API n'ouvrent Chrome que pour les fonctions nécessaires."""
+        if self.moteur_collecte == "apify":
+            from collecte.presse_apify import PresseApify
+            self.apify_client = PresseApify(self.arguments, self.apify_cle, self.verifier)
+            # Les vidéos et métadonnées sont fournies par Apify. Les options
+            # de commentaires et de résumés IA restent distinctes via Selenium.
+            return super().ouvrir() if (self.commentaires_research or self.resume_research) else None
         if self.moteur_collecte == "tikhub":
             from collecte.presse_tikhub import PresseTikHub
             self.tikhub_client = PresseTikHub(self.arguments, self.tikhub_cle, self.verifier)
@@ -63,6 +74,13 @@ class ConnexionPresse(SessionNavigateur):
         return navigateur
 
     def options_decouverte(self, rapport, contexte="", progression=None):
+        if self.moteur_collecte == "apify":
+            if self.verifier:
+                self.verifier()
+            rapport["connexion"] = {"mode": "presse", "module": type(self).__module__,
+                                   "navigateur_decouverte": False, "api": "Apify",
+                                   "cle_configuree": True}
+            return {"check": self.verifier, "progress": progression}
         if self.moteur_collecte == "tikhub":
             if self.verifier:
                 self.verifier()
@@ -97,6 +115,12 @@ class ConnexionPresse(SessionNavigateur):
         media = getattr(self, "medias_selectionnes", {}).get(source.get("id"))
         if media is None or normaliser_compte(source["compte"]) != media["compte"]:
             raise ValueError("Ce compte ne correspond pas à un média sélectionné.")
+        if self.moteur_collecte == "apify":
+            from collecte.presse_apify import VERSION_APIFY
+            rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
+                           version_collecteur=VERSION_APIFY, presse_moteur="apify")
+            self.options_decouverte(rapport, contexte, progression)
+            return self.apify_client.decouvrir(media["compte"], rapport, progression)
         if self.moteur_collecte == "tikhub":
             rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
                            version_collecteur="tikhub-presse-v1", presse_moteur="tikhub")
@@ -134,7 +158,12 @@ class ConnexionPresse(SessionNavigateur):
     def fermer(self):
         self.cookies_fournis = None
         self.tikhub_cle = None
+        self.apify_cle = None
         try:
+            client_apify = getattr(self, "apify_client", None)
+            if client_apify is not None:
+                client_apify.fermer()
+                self.apify_client = None
             client_tikhub = getattr(self, "tikhub_client", None)
             if client_tikhub is not None:
                 client_tikhub.fermer()
