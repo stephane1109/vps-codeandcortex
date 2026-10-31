@@ -178,3 +178,46 @@ Le déploiement utilise le Dockerfile Python/Chromium. `NIXPACKS_NODE_VERSION`
 n’est pas lu par cette application ni par son Dockerfile ; il est sans effet avec
 ce mode de construction. Aucune installation de Node.js n’est nécessaire.
 
+
+
+## Apify : moteur Presse indépendant
+
+ScrapTikTok peut lancer à distance l'Actor Apify
+`clockworks/tiktok-profile-scraper` depuis la section
+« Presse et médias » → « Méthode Apify (API) ». Seule l'exécution de
+l'Actor se fait sur les serveurs Apify : le choix des médias,
+la validation des auteurs, les filtres, les exports et les analyses
+restent dans ScrapTikTok sur ce VPS.
+
+Créer un compte sur https://console.apify.com/ et récupérer un jeton dans
+**Settings → Integrations → API tokens**. Deux configurations possibles :
+saisir le jeton dans le champ masqué Streamlit à chaque collecte ou
+ajouter `APIFY_API_TOKEN` aux secrets de l'application dans Coolify.
+Ne jamais committer cette valeur ni l'inclure dans des URL de requêtes.
+
+Le plafond financier **par exécution de l'Actor et par média** est défini
+par `APIFY_MAX_CHARGE_USD` (1.0 USD par défaut). Le nombre maximum
+de résultats facturables est également limité à `limit`, via le
+paramètre API `maxItems`. Le service reste potentiellement payant :
+les coûts réels et l'éligibilité d'un plan dépendent d'Apify.
+Le moteur ne relance pas automatiquement les exécutions payantes en échec.
+En cas d'annulation ou de dépassement de délai, ScrapTikTok demande
+l'interruption de l'Actor distant, sans garantie de remboursement des
+opérations déjà facturées.
+
+L'Actor reçoit un profil à la fois, trie les vidéos par date décroissante,
+et ne télécharge ni MP4, ni jaquettes, ni sous-titres. Les champs Apify
+`id`, `text`, `createTime`, `authorMeta.name`, `webVideoUrl`,
+`playCount`, `diggCount`, `commentCount`, `shareCount` et
+`collectCount` sont adaptés au schéma ScrapTikTok.
+Les publications d'autres comptes et les diaporamas sont écartés.
+Les filtres de période, le croisement hashtags, la sélection de médias,
+l'analyse et les exports existants restent actifs.
+
+Les commentaires et le texte IA sont des options distinctes qui,
+lorsqu'elles sont cochées, peuvent nécessiter le navigateur Selenium
+sur le VPS. Apify Profile Scraper ne fournit pas à lui seul de résumé
+natif `itemCustomTDK`. Les tests automatisés du moteur Apify sont
+**simulés** pour ne pas déclencher de frais. Une collecte réelle
+nécessite un jeton valide et un redéploiement Coolify de la branche
+`deploy-scraptiktok`.
