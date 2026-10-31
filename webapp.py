@@ -47,6 +47,8 @@ class StartRequest(BaseModel):
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
     presse_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub", "apify"] = "api"
+    hashtag_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "navigateur"
+    profil_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "navigateur"
     croiser_hashtag_presse: bool = False
     hashtag_presse: str = Field(default="", max_length=100)
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
@@ -125,12 +127,12 @@ class StartRequest(BaseModel):
             jeton = self.apify_api_token.get_secret_value().strip() if self.apify_api_token else ""
             if not cle_disponible(jeton):
                 raise ValueError("Apify : saisir le jeton API ou renseigner APIFY_API_TOKEN dans Coolify.")
-        if self.source_collecte == "presse" and self.presse_moteur == "tikhub":
+        if self.moteur_actif == "tikhub":
             from collecte.presse_tikhub import cle_disponible
             cle = self.tikhub_api_key.get_secret_value().strip() if self.tikhub_api_key else ""
             if not cle_disponible(cle):
                 raise ValueError("TikHub : saisir une clé API ou renseigner TIKHUB_API_KEY dans Coolify.")
-        if self.source_collecte == "presse" and self.presse_moteur == "research":
+        if self.moteur_actif == "research":
             cle = self.research_client_key.get_secret_value().strip() if self.research_client_key else ""
             secret = (self.research_client_secret.get_secret_value().strip()
                       if self.research_client_secret else "")
@@ -167,6 +169,13 @@ class StartRequest(BaseModel):
             selectionner_medias(self.medias)
         if not self.collecter_commentaires: self.collecter_reponses = False
         return self
+
+    @property
+    def moteur_actif(self):
+        """Conserver le moteur propre à chacun des trois modes."""
+        return (self.presse_moteur if self.source_collecte == "presse" else
+                self.profil_moteur if self.source_collecte == "comptes" else
+                self.hashtag_moteur)
 
     @property
     def enrichie(self):
@@ -993,6 +1002,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     )
     driver = None
     connexion = None
+    moteur_actif = job.settings.moteur_actif
     unique_links = {}
     metadonnees_api = {}
     dernier_debut_lecture = None
@@ -1039,19 +1049,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 try:
                     identifiant_publication = scraper.canonical_post(url)[0]
                     record_api = metadonnees_api.get(identifiant_publication)
-                    if (job.settings.source_collecte == "presse" and record_api
-                            and (job.settings.presse_moteur == "research"
-                                 or job.settings.presse_moteur in {"gallerydl", "tikhub", "apify"}
-                                 or (job.settings.presse_moteur == "api"
-                                     and not job.settings.collecter_commentaires
-                                     and record_api.get("description")))):
+                    if (record_api and (
+                            (job.settings.source_collecte == "hashtags" and moteur_actif == "research")
+                            or (job.settings.source_collecte == "comptes"
+                                and moteur_actif in {"api", "research", "gallerydl", "tikhub"})
+                            or (job.settings.source_collecte == "presse"
+                                and (moteur_actif in {"research", "gallerydl", "tikhub", "apify"}
+                                     or (moteur_actif == "api"
+                                         and not job.settings.collecter_commentaires
+                                         and record_api.get("description")))))):
                         # TikTok a déjà fourni une légende et éventuellement les
                         # compteurs dans itemList : ne pas faire une nouvelle
                         # visite Selenium pour la même vidéo.
                         record = dict(record_api)
                         if (job.settings.inclure_texte_genere_ia
                                 and not (job.settings.source_collecte == "presse"
-                                         and job.settings.presse_moteur == "tikhub"
+                                         and moteur_actif == "tikhub"
                                          and job.settings.croiser_hashtag_presse
                                          and not matches_hashtags(record.get("description", ""), job.settings))):
                             # La case IA demande une lecture du résumé affiché ; les API
@@ -1142,8 +1155,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             if record.get("retenue") and job.settings.collecter_commentaires:
                                 from collecte.commentaires import collecter_commentaires
                                 try:
-                                    if (job.settings.source_collecte == "presse"
-                                            and job.settings.presse_moteur in {"research", "gallerydl", "tikhub", "apify"}):
+                                    if (job.settings.source_collecte in {"presse", "comptes", "hashtags"}
+                                            and moteur_actif in {"research", "gallerydl", "tikhub", "apify"}):
                                         # Research et gallery-dl fournissent les métadonnées ;
                                         # les commentaires restent pilotés
                                         # par la session Selenium facultative.
@@ -1200,7 +1213,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
-                if job.settings.source_collecte == "presse" and job.settings.presse_moteur in {"api", "research", "gallerydl", "tikhub", "apify"}:
+                if (job.settings.source_collecte in {"presse", "comptes", "hashtags"}
+                        and moteur_actif in {"api", "research", "gallerydl", "tikhub", "apify"}):
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(donnees, dict):
                             metadonnees_api.setdefault(str(identifiant), donnees)
