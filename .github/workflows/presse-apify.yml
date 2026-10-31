@@ -6,9 +6,14 @@ on:
     paths:
       - "collecte/presse_apify.py"
       - "connect_presse.py"
+      - "connect_profil.py"
+      - "connect_htag.py"
+      - "collecte/presse_research.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_apify.py"
+      - "tests/test_connexions_modes.py"
+      - "tests/test_moteurs_hashtags_profils.py"
       - "tests/test_presse_isolation_version.py"
       - ".github/workflows/presse-apify.yml"
   workflow_dispatch:
@@ -30,3 +35,7 @@ jobs:
         run: python -m unittest discover -s tests -p test_presse_apify.py -v
       - name: Tester la selection des moteurs Presse
         run: python -m unittest discover -s tests -p test_presse_isolation_version.py -v
+      - name: Tester les moteurs Hashtags et Profils
+        run: |
+          python -m unittest discover -s tests -p test_connexions_modes.py -v
+          python -m unittest discover -s tests -p test_moteurs_hashtags_profils.py -v

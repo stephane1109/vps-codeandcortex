@@ -275,7 +275,7 @@ with onglet_collecte:
     libelles_moteurs = {
         "api": "API web TikTok (secUid)",
         "research": "Research API officielle",
-        "navigateur": "Méthode Selenium",
+        "navigateur":"Méthode Selenium",
         "gallerydl": "Méthode gallery-dl",
         "tikhub": "Méthode TikHub (API) (payant)",
         "apify": "Méthode Apify (API) (payant)",
