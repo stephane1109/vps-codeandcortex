@@ -665,7 +665,7 @@ with onglet_collecte:
         moteur_formulaire = st.session_state.get(
             {"presse": "presse_moteur", "comptes": "profil_moteur",
              "hashtags": "hashtag_moteur"}[source], "navigateur")
-        st.subheader("Variables à inclure avant chaque post dans le TXT")
+        st.write("Variables à inclure avant chaque post dans le TXT")
         st.caption(
             "Cochez indépendamment les valeurs brutes et les intervalles. "
             "Les classes illustratives sont ajoutées au début du texte ; "
