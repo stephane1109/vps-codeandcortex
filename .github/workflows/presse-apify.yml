@@ -14,6 +14,8 @@ on:
       - "tests/test_researchapi_abonnes.py"
       - "collecte/classes_abonnes.py"
       - "tests/test_classes_abonnes.py"
+      - "collecte/variables_numeriques.py"
+      - "tests/test_variables_numeriques.py"
       - "corpus/construction.py"
       - "webapp.py"
       - "streamlit_app.py"
@@ -52,3 +54,4 @@ jobs:
           python -m unittest discover -s tests -p test_researchapi_commentaires.py -v
           python -m unittest discover -s tests -p test_researchapi_abonnes.py -v
           python -m unittest discover -s tests -p test_classes_abonnes.py -v
+          python -m unittest discover -s tests -p test_variables_numeriques.py -v

@@ -8,10 +8,11 @@ from .corpus_legendes import construire_legendes
 from .corpus_commentaires import construire_commentaires
 from analyse.engagement import calculer_ratios
 from analyse.comparaison_medias import comparer_medias
+from collecte.variables_numeriques import indicateurs_numeriques
 
 CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
 
-COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "date_collecte", "contenu_genere_ia", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
+COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "date_collecte", "contenu_genere_ia", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
@@ -21,7 +22,9 @@ def lignes_engagement(publications):
                  "url": p.get("url"), "contenu_genere_ia": p.get("contenu_genere_ia"), "legende": p.get("description"), "retenue": p.get("retenue"), "langue_detection": p.get("langue_detection"),
                  "follower_count": p.get("follower_count"),
                  "follower_count_statut": p.get("follower_count_statut"),
-                 "classe_abonnes": p.get("classe_abonnes")}
+                 "classe_abonnes": p.get("classe_abonnes"),
+                 "video_duration": p.get("video_duration")}
+        ligne.update(indicateurs_numeriques(p))
         ligne.update({k:p.get(k) for k in CHAMPS_VISUELS})
         ligne.update(correspondance_video(p))
         for nom, mesure in p.get("engagement", {}).items():

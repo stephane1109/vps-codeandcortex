@@ -67,6 +67,8 @@ class StartRequest(BaseModel):
     collecter_follower_count: bool = False
     follower_count_illustratif: bool = False
     abonnes_classe_illustratif: bool = False
+    variables_classes_txt: list[Literal["vues", "likes", "commentaires", "partages", "favoris", "duree"]] = Field(default_factory=list, max_length=6)
+    taux_engagement_txt: Literal["aucun", "brut", "classes"] = "aucun"
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
@@ -191,6 +193,8 @@ class StartRequest(BaseModel):
         if not self.collecter_follower_count:
             self.follower_count_illustratif = False
             self.abonnes_classe_illustratif = False
+        # Éviter deux fois la même modalité dans un seul en-tête.
+        self.variables_classes_txt = list(dict.fromkeys(self.variables_classes_txt))
         return self
 
     @property
@@ -350,7 +354,8 @@ def normaliser_variables_txt(variables):
 
 def entete_publication(publication: dict, variables=None, supprimer_arobase_profil=False,
                        follower_count_illustratif=False,
-                       abonnes_classe_illustratif=False) -> str:
+                       abonnes_classe_illustratif=False,
+                       variables_classes_txt=None, taux_engagement_txt="aucun") -> str:
     """Écrire les variables choisies au format *nom_valeur sur une seule ligne."""
     from datetime import datetime
 
@@ -391,6 +396,22 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
         classe = classer_nombre_abonnes(publication.get("follower_count"))
         # Une modalité partagée remplace les valeurs rares propres à chaque auteur.
         entete = f"*{classe}" + (" " + entete if entete else "")
+    if variables_classes_txt or taux_engagement_txt != "aucun":
+        from collecte.variables_numeriques import (
+            classer_compteur, valeur_variable, calculer_taux_engagement,
+            classer_taux_engagement, modalite_taux_brut)
+        classes = [
+            "*" + classer_compteur(nom, valeur_variable(publication, nom))
+            for nom in (variables_classes_txt or [])
+        ]
+        if taux_engagement_txt != "aucun":
+            taux = calculer_taux_engagement(publication)
+            modalite_taux = (modalite_taux_brut(taux)
+                            if taux_engagement_txt == "brut"
+                            else classer_taux_engagement(taux))
+            classes.append("*" + modalite_taux)
+        if classes:
+            entete = " ".join(classes) + (" " + entete if entete else "")
     return entete + "\n" if entete else ""
 
 
@@ -434,7 +455,8 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
                 variables_txt=None, commentaires=None, supprimer_arobase_profil=False,
                 inclure_texte_genere_ia=False, themes=None,
                 follower_count_illustratif=False,
-                abonnes_classe_illustratif=False) -> str:
+                abonnes_classe_illustratif=False,
+                variables_classes_txt=None, taux_engagement_txt="aucun") -> str:
     blocks = []
     par_publication = {}
     selection = normaliser_variables_txt(variables_txt)
@@ -444,19 +466,29 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
     for record in records:
         if not record.get("description"):
             continue
-        prefix = (entete_publication(record, selection, supprimer_arobase_profil,
-                                     follower_count_illustratif,
-                                     abonnes_classe_illustratif) if selection is not None
-                  else entete_publication(record, supprimer_arobase_profil=supprimer_arobase_profil,
-                                         follower_count_illustratif=follower_count_illustratif,
-                                         abonnes_classe_illustratif=abonnes_classe_illustratif) if inclure_metadonnees_txt
-                  else entete_publication(record, ("profil", "id"), supprimer_arobase_profil,
-                                          follower_count_illustratif,
-                                          abonnes_classe_illustratif) if include_sources
-                  else entete_publication(record, (), supprimer_arobase_profil,
-                                          follower_count_illustratif,
-                                          abonnes_classe_illustratif)
-                  if follower_count_illustratif or abonnes_classe_illustratif else "")
+        options_classes = {
+            "follower_count_illustratif": follower_count_illustratif,
+            "abonnes_classe_illustratif": abonnes_classe_illustratif,
+            "variables_classes_txt": variables_classes_txt,
+            "taux_engagement_txt": taux_engagement_txt,
+        }
+        if selection is not None:
+            prefix = entete_publication(
+                record, selection, supprimer_arobase_profil, **options_classes)
+        elif inclure_metadonnees_txt:
+            prefix = entete_publication(
+                record, supprimer_arobase_profil=supprimer_arobase_profil,
+                **options_classes)
+        elif include_sources:
+            prefix = entete_publication(
+                record, ("profil", "id"), supprimer_arobase_profil,
+                **options_classes)
+        elif (follower_count_illustratif or abonnes_classe_illustratif
+              or variables_classes_txt or taux_engagement_txt != "aucun"):
+            prefix = entete_publication(
+                record, (), supprimer_arobase_profil, **options_classes)
+        else:
+            prefix = ""
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
@@ -695,6 +727,8 @@ class Job:
                     "collecter_follower_count":self.settings.collecter_follower_count,
                     "follower_count_illustratif":self.settings.follower_count_illustratif,
                     "abonnes_classe_illustratif":self.settings.abonnes_classe_illustratif,
+                    "variables_classes_txt": self.settings.variables_classes_txt,
+                    "taux_engagement_txt": self.settings.taux_engagement_txt,
                     "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {
                         "inaccessible", "page_differente", "indisponible_ou_vide", "panneau_introuvable",
                         "extraction_impossible", "chargement_incomplet", "erreur_chargement", "verification_tiktok",
@@ -750,6 +784,8 @@ class Job:
                 inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
                 follower_count_illustratif=self.settings.follower_count_illustratif,
                 abonnes_classe_illustratif=self.settings.abonnes_classe_illustratif,
+                variables_classes_txt=self.settings.variables_classes_txt,
+                taux_engagement_txt=self.settings.taux_engagement_txt,
                 themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
                         else self.settings.hashtags))
 
@@ -1190,6 +1226,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         from collecte.classes_abonnes import classer_nombre_abonnes
                         record["classe_abonnes"] = classer_nombre_abonnes(
                             record["follower_count"])
+                    # Les classes et le taux sont calculés même si le TXT n'en a pas besoin.
+                    from collecte.variables_numeriques import indicateurs_numeriques
+                    record.update(indicateurs_numeriques(record))
                     if job.settings.telecharger_mp4:
                         from telechargement_videos import correspondance_video
                         record.update(correspondance_video(record))

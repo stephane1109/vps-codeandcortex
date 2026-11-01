@@ -129,6 +129,8 @@ if "initialise" not in st.session_state:
         "collecter_follower_count":ancienne.get("collecter_follower_count",False),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",False),
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
+        "variables_classes_txt": ancienne.get("variables_classes_txt") or [],
+        "taux_engagement_txt": ancienne.get("taux_engagement_txt", "aucun"),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
 
@@ -181,6 +183,8 @@ st.session_state.setdefault("hashtags_saisis_comptes", "")
 st.session_state.setdefault("collecter_follower_count", False)
 st.session_state.setdefault("follower_count_illustratif", False)
 st.session_state.setdefault("abonnes_classe_illustratif", False)
+st.session_state.setdefault("variables_classes_txt", [])
+st.session_state.setdefault("taux_engagement_txt", "aucun")
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
     st.session_state.pop("cookies_presse_fichier", None)
 if st.session_state.pop("_effacer_research_apres_requete", False):
@@ -645,6 +649,37 @@ with onglet_collecte:
                     help="Option conservée pour compatibilité : *follower_count_12345. "
                          "Pour la CHD, privilégiez les classes et évitez de cocher "
                          "les deux variables illustratives simultanément.")
+        with st.expander("Variables numériques : classes illustratives et taux d'engagement"):
+            st.multiselect(
+                "Ajouter des classes numériques dans le corpus IRaMuTeQ",
+                options=["vues", "likes", "commentaires", "partages", "favoris", "duree"],
+                format_func=lambda x: {
+                    "vues": "Vues : 0–999 ; 1k–10k ; 10k–100k ; 100k–1M ; ≥1M",
+                    "likes": "Likes : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
+                    "commentaires": "Commentaires : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
+                    "partages": "Partages : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
+                    "favoris": "Favoris : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
+                    "duree": "Durée vidéo : moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s",
+                }[x],
+                key="variables_classes_txt", disabled=occupe,
+                help="Classes fixes, indépendantes des variables brutes cochées ci-dessous. "
+                     "Décocher une variable brute si seule sa classe est souhaitée. "
+                     "Les valeurs manquantes deviennent des classes indéterminées.")
+            st.selectbox(
+                "Taux d'engagement : (likes + commentaires + partages + favoris) / vues × 100",
+                options=["aucun", "brut", "classes"],
+                format_func=lambda x: {
+                    "aucun": "Ne pas ajouter au TXT",
+                    "brut": "Ajouter le taux brut en pourcentage",
+                    "classes": "Ajouter la classe du taux d'engagement",
+                }[x],
+                key="taux_engagement_txt", disabled=occupe,
+                help="Classes : <1 % ; 1–<3 % ; 3–<5 % ; 5–<10 % ; ≥10 %. "
+                     "Vues nulles ou compteur manquant : modalité indéterminée. "
+                     "Le taux exact reste dans engagement.csv lorsque calculable.")
+            st.caption(
+                "Le taux et les classes sont calculés à partir des compteurs disponibles, "
+                "sans collecte supplémentaire. Leurs valeurs restent dans les exports statistiques.")
         st.write("Variables à inclure avant chaque post dans le TXT")
         choix_variables = [(variable, titre) for variable, titre in VARIABLES_TXT.items() if variable != "hashtags"]
         for debut_ligne in range(0, len(choix_variables), 3):
@@ -677,6 +712,8 @@ with onglet_collecte:
                 valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
                 valeurs["follower_count_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("follower_count_illustratif", False))
                 valeurs["abonnes_classe_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("abonnes_classe_illustratif", False))
+                valeurs["variables_classes_txt"] = list(st.session_state.get("variables_classes_txt", []))
+                valeurs["taux_engagement_txt"] = st.session_state.get("taux_engagement_txt", "aucun")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
                 valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "navigateur")
                 valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "navigateur")
