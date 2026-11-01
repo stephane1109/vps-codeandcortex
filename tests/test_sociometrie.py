@@ -71,7 +71,7 @@ class TestsSociometrie(unittest.TestCase):
                 client.get("/")
                 demande = client.post(
                     "/api/jobs", headers={"X-ScrapTikTok": "1"},
-                    json={"hashtag": "lyceens", "limit": 1})
+                    json={"nom_sauvegarde": "Réseau lycéens", "hashtag": "lyceens", "limit": 1})
                 self.assertEqual(demande.status_code, 202)
                 identifiant = demande.json()["id"]
                 job = gestion.jobs[identifiant]
