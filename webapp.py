@@ -66,6 +66,7 @@ class StartRequest(BaseModel):
     collecter_reponses: bool = False
     collecter_follower_count: bool = False
     follower_count_illustratif: bool = False
+    abonnes_classe_illustratif: bool = False
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
@@ -189,6 +190,7 @@ class StartRequest(BaseModel):
             self.collecter_follower_count = False
         if not self.collecter_follower_count:
             self.follower_count_illustratif = False
+            self.abonnes_classe_illustratif = False
         return self
 
     @property
@@ -347,7 +349,8 @@ def normaliser_variables_txt(variables):
 
 
 def entete_publication(publication: dict, variables=None, supprimer_arobase_profil=False,
-                       follower_count_illustratif=False) -> str:
+                       follower_count_illustratif=False,
+                       abonnes_classe_illustratif=False) -> str:
     """Écrire les variables choisies au format *nom_valeur sur une seule ligne."""
     from datetime import datetime
 
@@ -383,6 +386,11 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
                   and not isinstance(compteur_abonnes, bool) and compteur_abonnes >= 0
                   else "indetermine")
         entete = f"*follower_count_{valeur}" + (" " + entete if entete else "")
+    if abonnes_classe_illustratif:
+        from collecte.classes_abonnes import classer_nombre_abonnes
+        classe = classer_nombre_abonnes(publication.get("follower_count"))
+        # Une modalité partagée remplace les valeurs rares propres à chaque auteur.
+        entete = f"*{classe}" + (" " + entete if entete else "")
     return entete + "\n" if entete else ""
 
 
@@ -425,7 +433,8 @@ def entete_sources_ia(publication, source, themes=None, variables=""):
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
                 variables_txt=None, commentaires=None, supprimer_arobase_profil=False,
                 inclure_texte_genere_ia=False, themes=None,
-                follower_count_illustratif=False) -> str:
+                follower_count_illustratif=False,
+                abonnes_classe_illustratif=False) -> str:
     blocks = []
     par_publication = {}
     selection = normaliser_variables_txt(variables_txt)
@@ -436,13 +445,18 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
         if not record.get("description"):
             continue
         prefix = (entete_publication(record, selection, supprimer_arobase_profil,
-                                     follower_count_illustratif) if selection is not None
+                                     follower_count_illustratif,
+                                     abonnes_classe_illustratif) if selection is not None
                   else entete_publication(record, supprimer_arobase_profil=supprimer_arobase_profil,
-                                         follower_count_illustratif=follower_count_illustratif) if inclure_metadonnees_txt
+                                         follower_count_illustratif=follower_count_illustratif,
+                                         abonnes_classe_illustratif=abonnes_classe_illustratif) if inclure_metadonnees_txt
                   else entete_publication(record, ("profil", "id"), supprimer_arobase_profil,
-                                          follower_count_illustratif) if include_sources
+                                          follower_count_illustratif,
+                                          abonnes_classe_illustratif) if include_sources
                   else entete_publication(record, (), supprimer_arobase_profil,
-                                          follower_count_illustratif) if follower_count_illustratif else "")
+                                          follower_count_illustratif,
+                                          abonnes_classe_illustratif)
+                  if follower_count_illustratif or abonnes_classe_illustratif else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
@@ -680,6 +694,7 @@ class Job:
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
                     "collecter_follower_count":self.settings.collecter_follower_count,
                     "follower_count_illustratif":self.settings.follower_count_illustratif,
+                    "abonnes_classe_illustratif":self.settings.abonnes_classe_illustratif,
                     "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {
                         "inaccessible", "page_differente", "indisponible_ou_vide", "panneau_introuvable",
                         "extraction_impossible", "chargement_incomplet", "erreur_chargement", "verification_tiktok",
@@ -734,6 +749,7 @@ class Job:
                 supprimer_arobase_profil=supprimer_arobase_profil,
                 inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
                 follower_count_illustratif=self.settings.follower_count_illustratif,
+                abonnes_classe_illustratif=self.settings.abonnes_classe_illustratif,
                 themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
                         else self.settings.hashtags))
 
@@ -1171,6 +1187,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     cache_abonnes_research[compte_auteur] = (None, "indisponible")
                         record["follower_count"], record["follower_count_statut"] = (
                             cache_abonnes_research[compte_auteur])
+                        from collecte.classes_abonnes import classer_nombre_abonnes
+                        record["classe_abonnes"] = classer_nombre_abonnes(
+                            record["follower_count"])
                     if job.settings.telecharger_mp4:
                         from telechargement_videos import correspondance_video
                         record.update(correspondance_video(record))

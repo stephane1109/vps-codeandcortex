@@ -12,6 +12,9 @@ on:
       - "collecte/researchapi.py"
       - "tests/test_researchapi_commentaires.py"
       - "tests/test_researchapi_abonnes.py"
+      - "collecte/classes_abonnes.py"
+      - "tests/test_classes_abonnes.py"
+      - "corpus/construction.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_apify.py"
@@ -48,3 +51,4 @@ jobs:
           python -m unittest discover -s tests -p test_presse_research.py -v
           python -m unittest discover -s tests -p test_researchapi_commentaires.py -v
           python -m unittest discover -s tests -p test_researchapi_abonnes.py -v
+          python -m unittest discover -s tests -p test_classes_abonnes.py -v
