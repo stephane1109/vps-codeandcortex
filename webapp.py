@@ -83,7 +83,7 @@ class StartRequest(BaseModel):
     inclure_texte_genere_ia: bool = False
     supprimer_arobase_profil: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "region_code", "is_verified", "hashtags"]] | None = Field(default=None, max_length=10)
+    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "region_code", "is_verified", "hashtags"]] | None = Field(default=None, max_length=12)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
