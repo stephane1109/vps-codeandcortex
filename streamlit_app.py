@@ -310,8 +310,8 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_multimodale, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Annotation/analyse", "Corpus fusionné", "Aide"]
+onglet_collecte, onglet_multimodale, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Annotation/analyse", "Analyse sociométrique", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
@@ -1772,6 +1772,93 @@ with onglet_multimodale:
                 if etat.get('statut') in ('termine','partiel') or nom=='indicateurs_engagement.csv':
                     st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
         afficher_desordre()
+
+
+with onglet_sociometrie:
+    st.subheader("Analyse sociométrique des commentaires")
+    st.caption(
+        "Réseaux construits avec les commentaires déjà collectés. "
+        "Aucun appel supplémentaire à TikTok : les comptes observés sur les "
+        "pages publiques sont pseudonymisés ; Research conserve les liens de réponses."
+    )
+    actif_reseau = st.session_state.get("collecte") or {}
+    if not actif_reseau.get("id"):
+        st.info("Effectuez ou rouvrez une collecte avec commentaires.")
+    else:
+        modes_reseau = {
+            "auteurs_videos": "Auteurs–vidéos : commentaires par vidéo",
+            "videos_communes": "Vidéos–vidéos : commentateurs communs",
+            "reponses": "Commentaires : graphe des réponses",
+        }
+        mode_reseau = st.radio(
+            "Type de réseau", list(modes_reseau),
+            key="sociometrie_mode", format_func=lambda m: modes_reseau[m])
+        seuil_reseau = st.number_input(
+            "Nombre minimal de commentateurs communs",
+            min_value=1, max_value=1000, value=1, step=1,
+            disabled=mode_reseau != "videos_communes",
+            key="sociometrie_seuil")
+        from urllib.parse import urlencode
+        arguments_reseau = urlencode({"mode": mode_reseau, "seuil": seuil_reseau})
+        try:
+            res_reseau = api(
+                f"/api/jobs/{actif_reseau['id']}/sociometrie?{arguments_reseau}")
+        except RuntimeError as erreur:
+            st.warning("Analyse indisponible : " + str(erreur))
+        else:
+            stats = res_reseau["statistiques"]
+            colonnes = st.columns(4)
+            colonnes[0].metric("Commentaires", stats["commentaires_exploitables"])
+            colonnes[1].metric("Auteurs identifiés", stats["auteurs_distincts"])
+            colonnes[2].metric(
+                "Auteurs identifiés (%)", f"{stats['pourcentage_auteur_identifie']:.1f} %")
+            colonnes[3].metric("Liens du graphe", stats["liens"])
+            if stats["commentaires_sans_auteur_fiable"]:
+                st.info(
+                    f"{stats['commentaires_sans_auteur_fiable']} commentaire(s) sans "
+                    "identifiant d'auteur fiable. Ils sont exclus des graphes "
+                    "d'auteurs, mais les réponses observées sont utilisables."
+                )
+            if res_reseau["analyse_en_cours"]:
+                st.warning("Collecte en cours : résultats provisoires.")
+            for message in res_reseau["diagnostics"]:
+                st.warning(message)
+            if stats["liens"]:
+                st.graphviz_chart(res_reseau["dot"], use_container_width=True)
+                if res_reseau["apercu_partiel"]:
+                    st.caption("Visualisation limitée à 75 nœuds et 150 liens ; "
+                               "les exports conservent tous les liens calculés.")
+                with st.expander("Détail des liens affichés"):
+                    st.dataframe(res_reseau["apercu_liens"], hide_index=True,
+                                 use_container_width=True)
+            elif not stats["commentaires_exploitables"]:
+                st.info("Aucun commentaire exploitable pour cette collecte.")
+            else:
+                st.info("Aucune relation disponible pour le type de réseau et le seuil choisis.")
+            st.subheader("Exports sociométriques")
+            st.caption(
+                "CSV pour les nœuds, les liens pondérés et la matrice ; GraphML et "
+                "GEXF pour Gephi, NetworkX ou igraph. Aucune identité brute n'est exportée."
+            )
+            colonnes_export = st.columns(4)
+            for colonne, (titre, nom) in zip(colonnes_export, (
+                ("Nœuds CSV", "noeuds.csv"), ("Liens CSV", "liens.csv"),
+                ("GraphML", "graphml"), ("GEXF", "gexf"))):
+                colonne.link_button(
+                    titre,
+                    f"/api/jobs/{actif_reseau['id']}/sociometrie/export/"
+                    f"{nom}?{arguments_reseau}", use_container_width=True)
+            if res_reseau["matrice_disponible"]:
+                st.link_button(
+                    "Matrice d'adjacence CSV",
+                    f"/api/jobs/{actif_reseau['id']}/sociometrie/export/"
+                    f"matrice.csv?{arguments_reseau}")
+            else:
+                st.caption("Matrice limitée à 250 nœuds ; utilisez les liens CSV.")
+            st.caption(
+                "Une audience commune ne démontre pas nécessairement une relation "
+                "sociale ni une convergence d'opinions."
+            )
 
 
 with onglet_corpus:

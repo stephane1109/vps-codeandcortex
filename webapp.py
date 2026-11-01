@@ -2327,6 +2327,47 @@ def create_app(manager=None):
         return Response(contenu.encode("utf-8-sig"), media_type="text/csv",
             headers={"Content-Disposition": 'attachment; filename="engagement.csv"'})
 
+    @app.get("/api/jobs/{job_id}/sociometrie")
+    def consulter_sociometrie(job_id: str, request: Request,
+                             mode: str = "auteurs_videos", seuil: int = 1):
+        """Construire les réseaux à partir des commentaires autorisés de la session."""
+        job = manager.get(owner(request), job_id)
+        from analyse_sociometrique.reseaux import construire_reseau, apercu, construire_dot
+        with job.lock:
+            commentaires, publications = list(job.commentaires), list(job.records)
+        try:
+            graphe = construire_reseau(commentaires, publications, mode, job.id, seuil)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from erreur
+        visible = apercu(graphe)
+        return {
+            "statistiques": graphe["statistiques"],
+            "diagnostics": graphe["diagnostics"],
+            "dot": construire_dot(visible),
+            "apercu_liens": visible["liens"],
+            "apercu_partiel": visible["partiel"],
+            "matrice_disponible": len(graphe["noeuds"]) <= 250,
+            "analyse_en_cours": job.busy,
+        }
+
+    @app.get("/api/jobs/{job_id}/sociometrie/export/{format_}")
+    def exporter_sociometrie(job_id: str, format_: str, request: Request,
+                             mode: str = "auteurs_videos", seuil: int = 1):
+        """Exporter les liens et matrices privés en CSV, GraphML ou GEXF."""
+        job = manager.get(owner(request), job_id)
+        from analyse_sociometrique.reseaux import construire_reseau, exporter
+        with job.lock:
+            commentaires, publications = list(job.commentaires), list(job.records)
+        try:
+            reseau = construire_reseau(commentaires, publications, mode, job.id, seuil)
+            contenu = exporter(reseau, format_)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from erreur
+        media = "text/csv; charset=utf-8" if format_.endswith(".csv") else "application/xml"
+        nom = f"sociometrie_{mode}_{format_}"
+        return Response(contenu, media_type=media,
+                        headers={"Content-Disposition": f'attachment; filename="{nom}"'})
+
     @app.get("/api/jobs/{job_id}/commentaires.txt")
     def telecharger_commentaires(job_id: str, request: Request):
         job = manager.get(owner(request), job_id)
