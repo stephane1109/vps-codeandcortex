@@ -1808,6 +1808,22 @@ def telecharger_mp4_collecte(job, contexte_anonyme=None):
     return f"MP4 : {recuperes}/{len(resultats)} vidéo(s) disponible(s) dans l’archive. Voir le bilan MP4."
 
 
+class ProgrammerResearch(BaseModel):
+    """Programmation Research ; le corps des paramètres conserve son modèle existant."""
+    parametres: StartRequest
+    debut_execution: str
+    fin_execution: str
+
+    @field_validator("debut_execution", "fin_execution")
+    @classmethod
+    def verifier_date_programme(cls, valeur):
+        try:
+            date.fromisoformat(valeur)
+        except ValueError as erreur:
+            raise ValueError("Date au format AAAA-MM-JJ attendue.") from erreur
+        return valeur
+
+
 class Manager:
     def __init__(self, data_dir=None, runner=execute_job, max_jobs=None):
         self.data_dir = Path(data_dir or os.getenv("DATA_DIR", str(scraper.BASE_DIR / "data")))
@@ -2198,20 +2214,6 @@ def create_app(manager=None):
         from stockage.collectes_research import lister_plans, etat_quota
         return {"plans": lister_plans(manager.data_dir, owner_historique(request)),
                 "quota": etat_quota(manager.data_dir)}
-
-    class ProgrammerResearch(BaseModel):
-        parametres: StartRequest
-        debut_execution: str
-        fin_execution: str
-
-        @field_validator("debut_execution", "fin_execution")
-        @classmethod
-        def verifier_date_programme(cls, valeur):
-            try:
-                date.fromisoformat(valeur)
-            except ValueError as erreur:
-                raise ValueError("Date au format AAAA-MM-JJ attendue.") from erreur
-            return valeur
 
     @app.post("/api/research/plans", status_code=202)
     def programmer_research(payload: ProgrammerResearch, request: Request):
