@@ -857,3 +857,17 @@ volume persistant et export à la demande. Pour des écritures simultanées depu
 plusieurs conteneurs ou des comptes utilisateurs partagés, préférer PostgreSQL
 avec une migration explicite et des sauvegardes administrées, plutôt que
 de partager le même fichier SQLite entre instances.
+
+### Archivage PostgreSQL facultatif
+
+Si une base PostgreSQL est déjà accessible depuis Coolify, définir
+`RESEARCH_POSTGRES_DSN` dans les variables secrètes du service. ScrapTikTok
+conserve SQLite comme base principale pour le calendrier, la reprise et les
+exports, et réplique les publications/commentaires de chaque programme vers
+PostgreSQL. La réplication est rejouable avec « Synchroniser vers PostgreSQL »
+dans la liste des collectes programmées. Les données y sont stockées dans
+`research_plans`, `research_publications` et `research_commentaires`,
+avec clés uniques et colonnes JSONB. L'absence ou l'indisponibilité de PostgreSQL
+n'interrompt pas la collecte SQLite. Aucun serveur PostgreSQL n'est créé
+automatiquement par cette option : une instance et des identifiants de base
+doivent être configurés séparément dans Coolify.
