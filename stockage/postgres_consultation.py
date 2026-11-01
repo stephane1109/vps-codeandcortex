@@ -114,11 +114,13 @@ def nettoyer_parametres(parametres):
     return donnees
 
 
-def archiver_collecte(job):
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
     """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
 
-    L'archivage est idempotent : une relance actualise les lignes existantes
-    sans effacer les anciennes observations ni les commentaires.
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
     """
     if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
         raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
@@ -127,6 +129,8 @@ def archiver_collecte(job):
     with job.lock:
         publications = list(job.publications or job.records)
         commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
         parametres = nettoyer_parametres(job.settings.model_dump())
         statut = job.status
         traitees = job.processed
