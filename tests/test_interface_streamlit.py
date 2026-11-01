@@ -39,6 +39,48 @@ class TestsInterface(unittest.TestCase):
                 self.assertFalse(page.exception)
                 self.assertEqual(envois[-1]['supprimer_arobase_profil'], sans_arobase)
 
+    def test_nouveau_formulaire_variables_et_recodages_precoches(self):
+        """Les mesures et leurs recodages restent distincts et cochés par défaut."""
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None, **options):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise RuntimeError(chemin)
+
+        with patch('streamlit.context', SimpleNamespace(
+                cookies={'scraptiktok_session': 'a'*64}, headers={})), \
+             patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(
+                Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            for variable in ('date', 'profil', 'id', 'region_code',
+                             'is_verified', 'vues', 'likes', 'commentaires',
+                             'partages', 'favoris', 'duree'):
+                self.assertTrue(page.checkbox(key='txt_' + variable).value,
+                                variable)
+            for variable in ('vues', 'likes', 'commentaires',
+                             'partages', 'favoris', 'duree'):
+                self.assertTrue(page.checkbox(key='txt_classe_' + variable).value,
+                                variable)
+            self.assertFalse(page.checkbox(key='txt_hashtags').value)
+            self.assertEqual(
+                page.checkbox(key='txt_classe_favoris').label.split(' : ')[0],
+                'Favoris')
+            page.text_input(key='hashtag').set_value('manifestation')
+            next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]['variables_classes_txt'],
+                             ['vues', 'likes', 'commentaires', 'partages',
+                              'favoris', 'duree'])
+            self.assertIn('duree', envois[-1]['variables_txt'])
+            self.assertIn('date', envois[-1]['variables_txt'])
+            # Le moteur navigateur ne prétend pas fournir les deux champs Research.
+            self.assertNotIn('region_code', envois[-1]['variables_txt'])
+            self.assertNotIn('is_verified', envois[-1]['variables_txt'])
+
     def test_partages_commentaires_et_hashtags_transmis_independamment(self):
         envois = []
         def repondre(chemin, session, autorisation, donnees=None):
@@ -51,13 +93,13 @@ class TestsInterface(unittest.TestCase):
         with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
             page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
             self.assertFalse(page.exception)
-            self.assertEqual(page.checkbox(key='txt_partages').label, 'Nombre de partages')
-            self.assertEqual(page.checkbox(key='txt_commentaires').label, 'Nombre de commentaires')
-            self.assertEqual(page.checkbox(key='txt_favoris').label, 'Nombre de favoris')
+            self.assertEqual(page.checkbox(key='txt_partages').label, 'Partages : valeur numérique réelle')
+            self.assertEqual(page.checkbox(key='txt_commentaires').label, 'Commentaires : valeur numérique réelle')
+            self.assertEqual(page.checkbox(key='txt_favoris').label, 'Favoris : valeur numérique réelle')
             self.assertEqual(page.checkbox(key='txt_hashtags').label, 'Hashtags sous le texte')
             self.assertFalse(any(c.label == 'Nombre de republications' for c in page.checkbox))
             page.text_input(key='hashtag').set_value('#manifestation')
-            for variable in ('date', 'profil', 'id', 'vues', 'likes'):
+            for variable in ('date', 'profil', 'id', 'vues', 'likes', 'duree'):
                 page.checkbox(key='txt_'+variable).uncheck()
             for variable in ('partages', 'commentaires', 'favoris', 'hashtags'):
                 page.checkbox(key='txt_'+variable).check()
@@ -184,7 +226,7 @@ class TestsInterface(unittest.TestCase):
             raise AssertionError(chemin)
         with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
             page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
-            self.assertFalse(page.checkbox(key='txt_date').value)
+            self.assertTrue(page.checkbox(key='txt_date').value)
             self.assertTrue(page.checkbox(key='txt_profil').value)
             self.assertTrue(page.checkbox(key='txt_id').value)
             page.radio(key='source').set_value('presse').run()
@@ -198,6 +240,9 @@ class TestsInterface(unittest.TestCase):
                 page.checkbox(key='txt_date').check()
                 page.checkbox(key='txt_profil').uncheck()
                 page.checkbox(key='txt_id').uncheck()
+                for variable in ('vues', 'likes', 'commentaires',
+                                 'partages', 'favoris', 'duree'):
+                    page.checkbox(key='txt_' + variable).uncheck()
                 next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
                 self.assertFalse(page.exception)
                 requete = StartRequest(**envois[-1])
