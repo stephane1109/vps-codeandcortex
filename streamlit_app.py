@@ -1078,10 +1078,8 @@ with onglet_collecte:
                             ("json", "Données JSON"), ("txt", "Corpus TXT")):
                         st.link_button(
                             nom,
-                            f"/api/research/plans/{identifiant}/export/{format_}",
-                            key=f"plan_export_{format_.replace('.', '_')}_{identifiant}")
+                            f"/api/research/plans/{identifiant}/export/{format_}")
         afficher_plans_research()
-    if collecte:
     if collecte:
         st.divider()
         st.subheader("Résultats")
