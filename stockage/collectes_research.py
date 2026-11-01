@@ -506,16 +506,45 @@ def exporter(dossier, identifiant, proprietaire, format_):
                 archive.writestr(nom, contenu)
         return flux.getvalue()
     if format_ == "sqlite3":
+        # Copie indépendante contenant des colonnes SQL directement analysables.
         with tempfile.TemporaryDirectory() as rep:
             fichier = Path(rep) / "corpus.sqlite3"
             with sqlite3.connect(fichier) as base:
-                base.execute("CREATE TABLE publications(id TEXT PRIMARY KEY, retenue INTEGER, donnees TEXT)")
-                base.execute("CREATE TABLE commentaires(id TEXT PRIMARY KEY, publication_id TEXT, donnees TEXT)")
-                base.executemany("INSERT INTO publications VALUES(?,?,?)", [
-                    (str(p["id"]), int(p["_retenue"]), json.dumps(p, ensure_ascii=False))
-                    for p in publications])
-                base.executemany("INSERT INTO commentaires VALUES(?,?,?)", [
-                    (str(c["id"]), str(c["publication_id"]), json.dumps(c, ensure_ascii=False))
-                    for c in commentaires])
+                base.execute("""CREATE TABLE publications(
+                    id TEXT PRIMARY KEY, url TEXT, auteur TEXT,
+                    date_publication TEXT, description TEXT,
+                    region_code TEXT, is_verified TEXT,
+                    vues INTEGER, likes INTEGER, commentaires INTEGER,
+                    partages INTEGER, favoris INTEGER,
+                    retenue INTEGER, premiere_collecte TEXT,
+                    derniere_collecte TEXT, donnees_json TEXT)""")
+                base.execute("""CREATE TABLE commentaires(
+                    id TEXT PRIMARY KEY, publication_id TEXT, auteur TEXT,
+                    texte TEXT, parent_id TEXT, est_reponse INTEGER,
+                    donnees_json TEXT)""")
+                def mesure(p, nom):
+                    valeur = (p.get("engagement") or {}).get(nom)
+                    return valeur.get("valeur") if isinstance(valeur, dict) else valeur
+                base.executemany(
+                    "INSERT INTO publications VALUES(" + ",".join("?" * 16) + ")",
+                    [(str(p["id"]), p.get("url"), p.get("author"),
+                      str(p.get("create_time") or ""),
+                      p.get("description"), p.get("region_code"),
+                      str(p.get("is_verified"))
+                      if p.get("is_verified") is not None else None,
+                      *(mesure(p, nom) for nom in
+                        ("vues", "likes", "commentaires", "partages", "favoris")),
+                      int(p["_retenue"]), p["_premiere_collecte"],
+                      p["_derniere_collecte"], json.dumps(p, ensure_ascii=False))
+                     for p in publications])
+                base.executemany(
+                    "INSERT INTO commentaires VALUES(?,?,?,?,?,?,?)",
+                    [(str(com["id"]), str(com["publication_id"]),
+                      com.get("auteur"), com.get("texte"), com.get("parent_id"),
+                      int(bool(com.get("est_reponse"))),
+                      json.dumps(com, ensure_ascii=False))
+                     for com in commentaires])
+                base.execute("CREATE INDEX idx_publications_auteur ON publications(auteur)")
+                base.execute("CREATE INDEX idx_commentaires_video ON commentaires(publication_id)")
             return fichier.read_bytes()
     raise ValueError("Format d'export inconnu.")
