@@ -2725,7 +2725,12 @@ def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_
             CASE WHEN p.donnees->>'contenu_genere_ia' IN ('true', 'false')
                  THEN (p.donnees->>'contenu_genere_ia')::boolean END AS contenu_genere_ia,
             p.donnees->>'statut_resume_ia' AS statut_resume_ia,
-            p.donnees->>'resume_ia_tiktok' AS resume_ia_tiktok
+            p.donnees->>'resume_ia_tiktok' AS resume_ia_tiktok,
+            p.donnees#>>'{engagement,vues,brut}' AS vues_brut,
+            p.donnees#>>'{engagement,likes,brut}' AS likes_brut,
+            p.donnees#>>'{engagement,commentaires,brut}' AS commentaires_brut,
+            p.donnees#>>'{engagement,partages,brut}' AS partages_brut,
+            p.donnees#>>'{engagement,favoris,brut}' AS favoris_brut
         FROM scraptiktok_publications AS p
         JOIN scraptiktok_collectes AS c ON c.collecte_id = p.collecte_id
     """)
