@@ -78,6 +78,7 @@ class StartRequest(BaseModel):
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
     limit: int = Field(default=50, ge=1, le=1000)
+    collecte_research_complete: bool = False
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
@@ -198,6 +199,7 @@ class StartRequest(BaseModel):
         if not self.collecter_commentaires: self.collecter_reponses = False
         # Les compteurs de profils ne sont demandés que sur le moteur officiel.
         if self.moteur_actif != "research":
+            self.collecte_research_complete = False
             self.collecter_follower_count = False
             self.collecter_is_verified = False
         elif self.variables_txt is not None and "is_verified" in self.variables_txt:
@@ -759,6 +761,7 @@ class Job:
                     "bilan_commentaires": [{"publication_id": r["id"], **r["collecte_commentaires"]}
                         for r in self.records if "collecte_commentaires" in r],
                     "limite_commentaires":self.settings.limite_commentaires,
+                    "collecte_research_complete":self.settings.collecte_research_complete,
                     "archive_prete": self.archive_prete, "video_busy": self.video_busy,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
@@ -1116,7 +1119,9 @@ def attendre_intervalle_lecture(debut_precedent, intervalle, pause):
 def execute_job(job: Job, driver_factory=scraper.create_driver):
     from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
-        hashtag=job.settings.hashtag, limit=job.settings.limit,
+        hashtag=job.settings.hashtag,
+        limit=(None if job.settings.moteur_actif == "research"
+               and job.settings.collecte_research_complete else job.settings.limit),
         inclure_texte_genere_ia=job.settings.inclure_texte_genere_ia,
         max_scrolls=max_defilements(),
         idle_rounds=3, delay=3.0, timeout=20.0, interactive=True,
@@ -1162,14 +1167,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         # explorés lorsque l’utilisateur filtre les dates de publication.
         filtre_dates_hashtags = (job.settings.source_collecte == "hashtags" and
                                  bool(job.settings.date_debut or job.settings.date_fin))
-        plafond_decouverte = min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit
+        plafond_decouverte = (None if args.limit is None else
+                              min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit)
         def lire_decouvertes():
             """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
             nonlocal links, hors_selection, dernier_debut_lecture, limitation_commentaires_research, limitation_abonnes_research
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
-                if filtre_dates_hashtags and len(job.records) >= args.limit:
+                if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
                     break
                 url = links[index - 1]
                 job.update(message=f"Lecture de la publication {index} sur {len(links)}…", publication_en_cours=scraper.canonical_post(url)[0])
@@ -1440,7 +1446,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             job.check()
             # Double garde-fou : même si un connecteur de hashtags renvoie
             # trop d'URL, ne jamais retenir plus que la limite globale saisie.
-            if job.settings.source_collecte == "hashtags" and len(unique_links) >= plafond_decouverte:
+            if (job.settings.source_collecte == "hashtags" and plafond_decouverte is not None
+                    and len(unique_links) >= plafond_decouverte):
                 break
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
@@ -1448,7 +1455,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             def suivre_decouverte(nombre):
                 job.actualiser_decouverte(rapport)
                 requete = rapport.get("requete_recherche") or etiquette
-                objectif = f"{nombre}/{args.limit}" if job.settings.source_collecte != "hashtags" else str(nombre)
+                objectif = (f"{nombre}/{args.limit}" if args.limit is not None
+                            and job.settings.source_collecte != "hashtags" else str(nombre))
                 job.update(message=f"Source {numero_source}/{len(sources)} — recherche {requete} : "
                     f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), "
                     f"{objectif} retenue(s) pour ce compte…")
@@ -1474,6 +1482,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     if identity and (job.settings.source_collecte == "hashtags"
                                      or identity[2].casefold() in medias_par_compte):
                         if (job.settings.source_collecte == "hashtags"
+                                and plafond_decouverte is not None
                                 and len(unique_links) >= plafond_decouverte):
                             break
                         unique_links.setdefault(identity[0], identity[1])
@@ -1530,7 +1539,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if ((job.settings.source_collecte != "hashtags" or filtre_dates_hashtags)
                     and len(unique_links) > job.processed):
                 lire_decouvertes()
-            if filtre_dates_hashtags and len(job.records) >= args.limit:
+            if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
                 break
         # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
         if limitation_research and len(unique_links) > job.processed:
@@ -1547,7 +1556,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 if identite and identite[2].casefold() in retenues_par_compte:
                     retenues_par_compte[identite[2].casefold()] += 1
             # Chaque profil contribue indépendamment à la limite demandée.
-            recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
+            if args.limit is not None:
+                recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
         final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
         if not job.records:
@@ -1583,8 +1593,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.errors:
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if job.settings.source_collecte != "hashtags":
-            final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
-                              if recherche_partielle else " Collecte limitée au nombre demandé par compte ; historique complet non garanti.")
+            if args.limit is None:
+                final_message += (" Research API : pagination automatique des résultats accessibles ; "
+                                  "l’exhaustivité du corpus n’est pas garantie.")
+            else:
+                final_message += (" Collecte partielle : la recherche TikTok n’a pas fourni la limite demandée ; résultats non exhaustifs."
+                                  if recherche_partielle else " Collecte limitée au nombre demandé par compte ; historique complet non garanti.")
         if limitation_budget:
             final_message += (" Plafond interne de requêtes API Presse atteint : "
                               "collecte arrêtée sans demander davantage de données à TikTok.")
@@ -1610,7 +1624,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_status = "partial" if job.publications else "failed"
         if not links and job.search_errors:
             final_status = "failed"
-        elif len(links) < args.limit and not job.settings.second_hashtag:
+        elif args.limit is not None and len(links) < args.limit and not job.settings.second_hashtag:
             final_message += f" La recherche a fourni {len(links)} lien(s), pour un objectif de {args.limit}."
     except Stopped:
         final_status, final_message = "stopped", "Collecte arrêtée. " + ((job.cause_arret or {}).get("explication") or "Cause de l’arrêt non renseignée.") + " Les textes déjà obtenus restent téléchargeables."
@@ -1770,7 +1784,8 @@ class Manager:
         if settings.collecter_commentaires and settings.limite_commentaires > max_commentaires():
             raise HTTPException(422, f"Borne technique du moteur : "
                 f"{max_commentaires()} commentaires par publication.")
-        if settings.limit > max_publications():
+        if (settings.limit > max_publications()
+                and not (settings.moteur_actif == "research" and settings.collecte_research_complete)):
             raise HTTPException(422,
                 f"Borne technique du moteur : {max_publications()} publications par source.")
         nombre_sources = (len(settings.medias) if settings.source_collecte=="presse"
