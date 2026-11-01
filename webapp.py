@@ -1892,7 +1892,8 @@ class Manager:
         """Un seul lot actif à la fois, avec contrôle du quota UTC en SQLite."""
         from stockage.collectes_research import (
             clore_dates, candidats, reserver_lot, etat_quota)
-        clore_dates(self.data_dir)
+        for plan_expire in clore_dates(self.data_dir):
+            self.arreter_plan_research(plan_expire)
         if self.closed.is_set() or etat_quota(self.data_dir)["reste_local"] == 0:
             return
         with self.lock:
