@@ -1,4 +1,4 @@
-"""Filtre français strict combiné aux dates et au hashtag, cas réel de légende seule."""
+"""Filtre français : conserver les légendes incertaines avec dates et hashtags."""
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,13 +42,17 @@ class TestsFrancaisDatesHashtag(unittest.TestCase):
                 self.assertEqual(tache.status, 'completed', tache.message)
                 self.assertEqual(tache.hors_periode, 1)
                 self.assertEqual(tache.filtered, 1)
-                attendus = [publications[1]['id']] if francais_seulement else [p['id'] for p in publications[:3]]
+                attendus = ([publications[0]['id'], publications[1]['id']]
+                            if francais_seulement
+                            else [p['id'] for p in publications[:3]])
                 self.assertEqual([p['id'] for p in tache.records], attendus)
-                self.assertEqual(LEGENDE_SIGNALEE in tache.path.read_text(), not francais_seulement)
+                # Le détecteur n'a pas assez de texte pour identifier la langue.
+                # L'absence de certitude ne doit plus détruire cette légende.
+                self.assertIn(LEGENDE_SIGNALEE, tache.path.read_text())
                 self.assertEqual(tache.non_french, 1 if francais_seulement else 0)
                 self.assertEqual(tache.language_unknown, 1 if francais_seulement else 0)
                 ligne = next(p for p in tache.snapshot()['apercu_engagement'] if p['url'] == URL_SIGNALEE)
-                self.assertEqual(ligne['retenue_txt'], not francais_seulement)
+                self.assertTrue(ligne['retenue_txt'])
                 self.assertEqual(ligne['langue_detection'], 'unknown' if francais_seulement else None)
                 self.assertEqual((tache.directory / 'corpus_iramuteq.txt').read_bytes(), tache.path.read_bytes())
 
