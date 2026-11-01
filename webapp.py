@@ -1165,6 +1165,23 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 try:
                     identifiant_publication = scraper.canonical_post(url)[0]
                     record_api = metadonnees_api.get(identifiant_publication)
+                    if record_api and job.settings.hashtags_exclus:
+                        from collecte.exclusion_hashtags import hashtags_a_exclure
+                        correspondances_api = hashtags_a_exclure(
+                            record_api, job.settings.hashtags_exclus)
+                        if correspondances_api:
+                            # Ignorer immédiatement les vidéos déjà identifiées, sans
+                            # ouvrir Selenium ni payer un enrichissement supplémentaire.
+                            with job.lock:
+                                job.exclus_hashtags += 1
+                            job.journal.append({
+                                "publication_id": identifiant_publication,
+                                "filtre": "not_hashtag",
+                                "hashtags": correspondances_api})
+                            job.update(processed=index)
+                            if job.settings.sauvegarde_progressive and index % 10 == 0:
+                                job.sauvegarder_point()
+                            continue
                     if (record_api and (
                             (job.settings.source_collecte == "hashtags" and moteur_actif == "research")
                             or (job.settings.source_collecte == "comptes"
