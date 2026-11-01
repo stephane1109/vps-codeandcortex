@@ -1,7 +1,7 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import re
 
 from pathlib import Path
@@ -717,6 +717,38 @@ with onglet_collecte:
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Retient uniquement les légendes reconnues en français. Les autres langues et les légendes indéterminées (trop courtes ou composées uniquement de hashtags) sont exclues du TXT. La voix et le texte incrusté dans la vidéo ne sont pas analysés.")
+        if moteur_formulaire == "research":
+            st.checkbox(
+                "Collecte pluri-journalière (SQLite, reprise automatique)",
+                key="programmer_research", disabled=occupe,
+                help="Conserve les données dans une base SQLite indépendante "
+                     "des téléchargements et des sessions temporaires. "
+                     "Les collectes reprennent chaque jour jusqu'à la date de fin "
+                     "ou la fin du corpus."
+            )
+            if st.session_state.get("programmer_research", False):
+                st.info(
+                    "Pour la reprise automatique après fermeture du navigateur, "
+                    "configurez TIKTOK_RESEARCH_CLIENT_KEY et "
+                    "TIKTOK_RESEARCH_CLIENT_SECRET dans Coolify. "
+                    "Aucun identifiant sensible n'est sauvegardé dans SQLite."
+                )
+                d1, d2 = st.columns(2)
+                d1.date_input(
+                    "Début d'exécution de la collecte",
+                    key="research_execution_debut", value=date.today(),
+                    format="DD/MM/YYYY", disabled=occupe)
+                d2.date_input(
+                    "Fin d'exécution de la collecte",
+                    key="research_execution_fin",
+                    value=date.today() + timedelta(days=30),
+                    format="DD/MM/YYYY", disabled=occupe)
+                st.caption(
+                    "Les dates de publication sont définies dans « Période » ci-dessous. "
+                    "La date de fin d'exécution arrête le programme même si le "
+                    "corpus est incomplet. Une suspension ou un arrêt définitif "
+                    "reste possible depuis la liste des collectes programmées."
+                )
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
             help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
         st.checkbox("Sauvegarde progressive des collectes (toutes les 10 publications)",
@@ -856,7 +888,11 @@ with onglet_collecte:
             help="Ajoute un second segment **** *source_ia uniquement si le résumé "
                  "natif de TikTok est réellement récupéré. Les collecteurs existants "
                  "et leurs modalités de lecture restent inchangés.")
-        if st.button("Lancer la collecte", type="primary",
+        mode_programme = (moteur_formulaire == "research"
+                          and st.session_state.get("programmer_research", False))
+        if st.button(
+                "Programmer la collecte Research" if mode_programme else "Lancer la collecte",
+                type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
                                  on_click=respecter_choix_commentaires):
@@ -877,6 +913,18 @@ with onglet_collecte:
                   and not st.session_state.get("hashtag_presse", "").strip()):
                 st.error("Saisissez le hashtag à croiser avec les médias.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
+            elif mode_programme and (not debut or not fin):
+                st.error("Définissez la période des publications avant de programmer la collecte.")
+            elif mode_programme and st.session_state.get("test_research_10_publications", False):
+                st.error("Décochez le test sur 10 publications pour programmer une collecte pluri-journalière.")
+            elif mode_programme and (st.session_state.get("telecharger_mp4")
+                                    or st.session_state.get("inclure_texte_genere_ia")):
+                st.error("Le mode pluri-journalier Research ne télécharge pas les MP4 "
+                         "et n'utilise pas Selenium pour les textes IA.")
+            elif (mode_programme
+                  and st.session_state["research_execution_fin"]
+                      < st.session_state["research_execution_debut"]):
+                st.error("La date de fin d'exécution doit suivre la date de début.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 if moteur_formulaire != "research":
@@ -953,9 +1001,87 @@ with onglet_collecte:
                     source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])
-                lancer("/api/jobs",valeurs)
+                if mode_programme:
+                    try:
+                        plan = api("/api/research/plans", {
+                            "parametres": valeurs,
+                            "debut_execution": st.session_state["research_execution_debut"].isoformat(),
+                            "fin_execution": st.session_state["research_execution_fin"].isoformat(),
+                        })
+                    except RuntimeError as erreur:
+                        st.error(str(erreur))
+                    else:
+                        st.session_state["recherche_plans_afficher"] = True
+                        st.session_state["recherche_plan_cree"] = plan.get("id")
+                        st.rerun()
+                else:
+                    lancer("/api/jobs",valeurs)
 
 with onglet_collecte:
+    if st.session_state.get("recherche_plan_cree"):
+        st.success("Collecte Research programmée : données enregistrées dans SQLite.")
+        st.session_state.pop("recherche_plan_cree", None)
+    if st.checkbox("Afficher mes collectes Research programmées",
+                   key="recherche_plans_afficher"):
+        @st.fragment(run_every="20s")
+        def afficher_plans_research():
+            try:
+                donnees = api("/api/research/plans")
+            except RuntimeError as erreur:
+                st.warning(str(erreur))
+                return
+            plans = donnees.get("plans") or []
+            quota = donnees.get("quota") or {}
+            st.caption(
+                f"Budget Research local (UTC) : {quota.get('appels_enregistres', 0)} / "
+                f"{quota.get('plafond_local', 900)} requêtes aujourd'hui. "
+                "Le quota officiel restant de l'organisation ne peut pas "
+                "être garanti à partir de ce compteur."
+            )
+            if not plans:
+                st.info("Aucune collecte Research programmée.")
+            for plan in plans:
+                identifiant = plan["id"]
+                with st.expander(
+                        f"{plan['debut_corpus']} → {plan['fin_corpus']} · "
+                        f"{plan['statut']} · {plan['publications']} publications",
+                        expanded=False):
+                    st.write(
+                        f"Exécution : {plan['debut_execution']} au "
+                        f"{plan['fin_execution']} · "
+                        f"lots terminés : {plan['lots_termines']}/{plan['lots_totaux']} · "
+                        f"commentaires : {plan['commentaires']}"
+                    )
+                    if plan.get("message"):
+                        st.caption(plan["message"])
+                    commandes = (
+                        ["suspendre", "arreter"]
+                        if plan["statut"] in {"programme", "en_cours"}
+                        else ["reprendre", "arreter"] if plan["statut"] == "suspendu"
+                        else []
+                    )
+                    for action in commandes:
+                        if st.button(
+                                {"suspendre": "Suspendre", "reprendre": "Reprendre",
+                                 "arreter": "Arrêter définitivement"}[action],
+                                key=f"plan_{action}_{identifiant}"):
+                            try:
+                                api(f"/api/research/plans/{identifiant}/{action}", {})
+                            except RuntimeError as erreur:
+                                st.error(str(erreur))
+                            else:
+                                st.rerun()
+                    for format_, nom in (
+                            ("sqlite3", "Base SQLite"), ("zip", "Archive ZIP"),
+                            ("csv", "Publications CSV"),
+                            ("commentaires.csv", "Commentaires CSV"),
+                            ("json", "Données JSON"), ("txt", "Corpus TXT")):
+                        st.link_button(
+                            nom,
+                            f"/api/research/plans/{identifiant}/export/{format_}",
+                            key=f"plan_export_{format_.replace('.', '_')}_{identifiant}")
+        afficher_plans_research()
+    if collecte:
     if collecte:
         st.divider()
         st.subheader("Résultats")
