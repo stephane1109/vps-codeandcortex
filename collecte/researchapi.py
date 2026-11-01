@@ -216,7 +216,10 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     if hashtag and hashtag.casefold() in {nom.casefold() for nom in hashtags_exclus}:
         raise ResearchErreur("Un hashtag recherché ne peut pas être exclu.")
     verifier = check or (lambda: None)
-    limite = max(1, min(int(limite), 1000))
+    # La collecte automatique n’impose aucun plafond de publications local.
+    automatique = limite is None
+    if not automatique:
+        limite = max(1, min(int(limite), 1000))
     rapport.update(compte_attendu=compte, navigation_publications="research_officielle",
                    requete_recherche=(f"#{hashtag}" if hashtag else f"@{compte}") + " : Research API officielle",
                    discovered_urls=[], metadonnees_api={}, pages_research=0,
@@ -236,13 +239,14 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
         curseur = None
         search_id = None
         curseurs_vus = set()
-        while rapport["pages_research"] < MAX_PAGES and len(contenus) < limite:
+        while (automatique or (rapport["pages_research"] < MAX_PAGES
+                                and len(contenus) < limite)):
             verifier()
             requete_corps = {
                 "query": {"and": [{"field_name": "hashtag_name" if hashtag else "username",
                                    "operation": "EQ", "field_values": [hashtag or compte]}]},
                 "start_date": borne_debut, "end_date": borne_fin,
-                "max_count": min(100, limite - len(contenus)),
+                "max_count": 100 if automatique else min(100, limite - len(contenus)),
                 "is_random": False,
             }
             if hashtags_exclus:
@@ -285,14 +289,14 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     contenus[identifiant] = fiche
                 else:
                     rapport["auteurs_ecartes"] += 1
-                if len(contenus) >= limite:
+                if not automatique and len(contenus) >= limite:
                     break
             rapport["metadonnees_api"] = contenus.copy()
             rapport["discovered_urls"] = [f["url"] for f in contenus.values()]
             rapport["retenues_par_compte"] = {compte: len(contenus)}
             if progress:
                 progress(len(contenus))
-            if len(contenus) >= limite:
+            if not automatique and len(contenus) >= limite:
                 rapport["discovery_stop"] = "limit"
                 break
             if not donnees.get("has_more"):
@@ -306,13 +310,14 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             curseurs_vus.add(suivant)
             curseur, search_id = suivant, str(identifiant_recherche)
             pause(1.0)
-        if len(contenus) >= limite or rapport["pages_research"] >= MAX_PAGES:
+        if not automatique and (len(contenus) >= limite or rapport["pages_research"] >= MAX_PAGES):
             break
-    if rapport["pages_research"] >= MAX_PAGES and len(contenus) < limite:
+    if not automatique and rapport["pages_research"] >= MAX_PAGES and len(contenus) < limite:
         rapport["discovery_stop"] = "plafond_pages_research"
     else:
         rapport.setdefault("discovery_stop", "fin_des_periodes")
-    rapport["collecte_partielle"] = len(contenus) < limite
+    rapport["collecte_partielle"] = (rapport.get("discovery_stop") != "fin_des_periodes"
+                                   if automatique else len(contenus) < limite)
     rapport["plage_research"] = {"debut": periodes[-1][0], "fin": periodes[0][1]}
     return list(rapport["discovered_urls"])
 
@@ -419,8 +424,8 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
                                     requete=_requete, jeton=None, credentiels=None):
     """Interroger uniquement l'endpoint officiel, pour commentaires et réponses.
 
-    Sans limite explicite, la pagination est automatique dans la borne
-    technique de MAX_PAGES requêtes par publication (parents et réponses).
+    Sans limite explicite, la pagination est automatique jusqu’à la fin
+    des résultats accessibles ou à l’arrêt/quota TikTok, sans plafond local.
     Les appels existants avec une limite explicite restent pris en charge.
     Les résultats partiels restent exportables si un quota ou une erreur survient.
     """
@@ -431,17 +436,17 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
     if not re.fullmatch(r"\d{1,30}", video_id):
         raise ValueError("Identifiant TikTok Research invalide.")
     automatique = limite is None
-    if automatique:
-        limite = MAX_PAGES * 100
-    elif not 1 <= int(limite) <= 500:
-        raise ValueError("Limite de commentaires : 1 à 500.")
-    limite = int(limite)
+    if not automatique:
+        if not 1 <= int(limite) <= 500:
+            raise ValueError("Limite de commentaires : 1 à 500.")
+        limite = int(limite)
     verifier = verifier or (lambda: None)
     annonces = ((publication.get("engagement") or {}).get("commentaires") or {}).get("valeur")
     resultats = {}
     diagnostic = {"api": "Research API officielle", "pages": 0, "requetes": 0,
                   "reponses_demandees": bool(reponses), "repli_selenium": False,
-                  "pagination_automatique": automatique, "maximum_pages": MAX_PAGES}
+                  "pagination_automatique": automatique,
+                  "maximum_pages": None if automatique else MAX_PAGES}
     etat = {"statut": "complet", "bloquer": False, "jeton": jeton, "epuise": False}
 
     def lire_pages(identifiant, *, reponse=False, objectif=50, curseur_initial=0):
@@ -449,14 +454,17 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
         curseur = curseur_initial
         deja_vus = {curseur}
         pages = 0
-        while len(resultats) < limite and objectif > 0 and diagnostic["pages"] < MAX_PAGES:
+        while ((limite is None or len(resultats) < limite)
+               and (objectif is None or objectif > 0)
+               and (automatique or diagnostic["pages"] < MAX_PAGES)):
             verifier()
             try:
                 if etat["jeton"] is None:
                     etat["jeton"] = _jeton(requete=requete, credentiels=credentiels)
                 corps = {
                     ("comment_id" if reponse else "video_id"): int(identifiant),
-                    "max_count": min(100, objectif), "cursor": curseur,
+                    "max_count": 100 if objectif is None else min(100, objectif),
+                    "cursor": curseur,
                 }
                 diagnostic["requetes"] += 1
                 retour = requete(
@@ -483,14 +491,12 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
                 if item and (reponse or not item["est_reponse"]):
                     if item["id"] not in resultats:
                         resultats[item["id"]] = item
-                        objectif -= 1
-                        if objectif == 0 or len(resultats) >= limite:
+                        if objectif is not None:
+                            objectif -= 1
+                        if objectif == 0 or (limite is not None and len(resultats) >= limite):
                             break
-            if objectif == 0 or len(resultats) >= limite:
-                # Le curseur de TikTok distingue fin réelle et arrêt de sécurité.
-                if automatique and infos.get("has_more"):
-                    etat["statut"] = "pagination_incomplete"
-                return automatique and not infos.get("has_more")
+            if objectif == 0 or (limite is not None and len(resultats) >= limite):
+                return False
             if not infos.get("has_more"):
                 return True
             suivant = infos.get("cursor")
@@ -502,30 +508,29 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
             deja_vus.add(suivant)
             curseur = suivant
             pause(0.25)
-        if diagnostic["pages"] >= MAX_PAGES:
+        if not automatique and diagnostic["pages"] >= MAX_PAGES:
             etat["statut"] = "pagination_incomplete"
         return False
 
-    # En mode manuel, réserver 30 % du quota aux réponses accessibles.
-    # En mode automatique, parcourir les parents puis les réponses dans le
-    # budget partagé de pages de la publication.
-    plafond_parents = (limite if automatique or not reponses
-                      else max(1, (limite * 7 + 9) // 10))
+    # Le mode manuel réserve 30 % de son objectif aux réponses.
+    # La collecte Research automatique parcourt tous les parents accessibles.
+    plafond_parents = (None if automatique else
+                      limite if not reponses else max(1, (limite * 7 + 9) // 10))
     fin_parents = lire_pages(video_id, objectif=plafond_parents)
-    if reponses and not etat["bloquer"] and len(resultats) < limite:
+    if reponses and not etat["bloquer"] and (limite is None or len(resultats) < limite):
         parents = [item for item in resultats.values()
                    if not item["est_reponse"] and (item["nombre_reponses_annonce"] or 0) > 0]
         for parent in parents:
-            if (etat["bloquer"] or len(resultats) >= limite
-                    or diagnostic["pages"] >= MAX_PAGES):
+            if (etat["bloquer"] or (limite is not None and len(resultats) >= limite)
+                    or (not automatique and diagnostic["pages"] >= MAX_PAGES)):
                 break
-            lire_pages(parent["id"], reponse=True, objectif=limite-len(resultats))
+            lire_pages(parent["id"], reponse=True,
+                       objectif=None if automatique else limite-len(resultats))
     # La réserve peut produire un corpus partiel si TikTok ne retourne pas
     # de réponses ; signaler cette limite, sans annoncer une exhaustivité.
     if etat["statut"] == "complet":
-        if len(resultats) >= limite:
-            etat["statut"] = ("complet" if automatique and fin_parents and not reponses
-                             else "limite")
+        if limite is not None and len(resultats) >= limite:
+            etat["statut"] = "limite"
         elif not fin_parents or reponses:
             etat["statut"] = "partiel"
         elif not resultats:
