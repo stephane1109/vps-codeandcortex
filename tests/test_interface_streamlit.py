@@ -65,7 +65,14 @@ class TestsInterface(unittest.TestCase):
                              'partages', 'favoris', 'duree'):
                 self.assertTrue(page.checkbox(key='txt_classe_' + variable).value,
                                 variable)
-            self.assertFalse(page.checkbox(key='txt_hashtags').value)
+            self.assertTrue(page.checkbox(key='txt_hashtags').value)
+            for cle in (
+                    'collecter_commentaires', 'collecter_reponses',
+                    'collecter_follower_count', 'follower_count_illustratif',
+                    'abonnes_classe_illustratif', 'txt_taux_engagement_brut',
+                    'txt_taux_engagement_classe', 'export_profil_sans_arobase',
+                    'inclure_texte_genere_ia'):
+                self.assertTrue(page.checkbox(key=cle).value, cle)
             self.assertEqual(
                 page.checkbox(key='txt_classe_favoris').label.split(' : ')[0],
                 'Favoris')
@@ -240,6 +247,7 @@ class TestsInterface(unittest.TestCase):
                 page.checkbox(key='txt_date').check()
                 page.checkbox(key='txt_profil').uncheck()
                 page.checkbox(key='txt_id').uncheck()
+                page.checkbox(key='txt_hashtags').uncheck()
                 for variable in ('vues', 'likes', 'commentaires',
                                  'partages', 'favoris', 'duree'):
                     page.checkbox(key='txt_' + variable).uncheck()
