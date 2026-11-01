@@ -65,6 +65,7 @@ class StartRequest(BaseModel):
     collecter_commentaires: bool = False
     collecter_reponses: bool = False
     collecter_follower_count: bool = False
+    collecter_is_verified: bool = False
     follower_count_illustratif: bool = False
     abonnes_classe_illustratif: bool = False
     variables_classes_txt: list[Literal["vues", "likes", "commentaires", "partages", "favoris", "duree"]] = Field(default_factory=list, max_length=6)
@@ -82,7 +83,7 @@ class StartRequest(BaseModel):
     inclure_texte_genere_ia: bool = False
     supprimer_arobase_profil: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
-    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "hashtags"]] | None = Field(default=None, max_length=10)
+    variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "region_code", "is_verified", "hashtags"]] | None = Field(default=None, max_length=10)
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -198,6 +199,10 @@ class StartRequest(BaseModel):
         # Les compteurs de profils ne sont demandés que sur le moteur officiel.
         if self.moteur_actif != "research":
             self.collecter_follower_count = False
+            self.collecter_is_verified = False
+        elif self.variables_txt is not None and "is_verified" in self.variables_txt:
+            # L'export illustratif demande aussi la récupération du profil.
+            self.collecter_is_verified = True
         if not self.collecter_follower_count:
             self.follower_count_illustratif = False
             self.abonnes_classe_illustratif = False
@@ -383,13 +388,17 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
         # Zéro est une observation valide. Les détails des mesures restent dans le JSON.
         return modalite(mesure.get("valeur"))
 
+    from collecte.variables_profil import normaliser_region, modalite_verification
+    region = normaliser_region(publication.get("region_code"))
     valeurs = {"date": f"*date_{date_publication}",
                "profil": f"*profil_{profil}", "id": f"*id_{modalite(publication.get('id'))}",
                "vues": f"*vues_{compteur('vues')}", "likes": f"*likes_{compteur('likes')}",
                "partages": f"*partages_{compteur('partages')}",
                "commentaires": f"*comment_{compteur('commentaires')}",
                "favoris": f"*favoris_{compteur('favoris')}",
-               "duree": f"*duree_{modalite(publication.get('video_duration'))}"}
+               "duree": f"*duree_{modalite(publication.get('video_duration'))}",
+               "region_code": f"*region_{region if region else 'indetermine'}",
+               "is_verified": f"*is_verified_{modalite_verification(publication.get('is_verified'))}"}
     # Les anciens appels sans sélection gardent leur en-tête à trois variables.
     selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "id"))
     entete = " ".join(texte for cle, texte in valeurs.items() if cle in selection)
@@ -740,6 +749,7 @@ class Job:
                     "collecter_follower_count":self.settings.collecter_follower_count,
                     "follower_count_illustratif":self.settings.follower_count_illustratif,
                     "abonnes_classe_illustratif":self.settings.abonnes_classe_illustratif,
+                    "collecter_is_verified": self.settings.collecter_is_verified,
                     "variables_classes_txt": self.settings.variables_classes_txt,
                     "taux_engagement_txt": self.settings.taux_engagement_txt,
                     "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {
@@ -1248,30 +1258,66 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             if job.settings.sauvegarde_progressive and index % 10 == 0:
                                 job.sauvegarder_point()
                             continue
-                    if moteur_actif == "research" and job.settings.collecter_follower_count:
-                        # Un seul appel User Info par auteur ; conserver aussi les absences.
+                    if moteur_actif == "research" and (
+                            job.settings.collecter_follower_count
+                            or job.settings.collecter_is_verified):
+                        # Les deux propriétés sont regroupées en une requête par
+                        # auteur distinct ; les valeurs manquantes restent inconnues.
                         from collecte.researchapi import (
-                            ResearchErreur, ResearchAccesRefuse, collecter_abonnes_research)
+                            ResearchErreur, ResearchAccesRefuse,
+                            collecter_abonnes_research, collecter_verification_research,
+                            collecter_profil_research)
                         compte_auteur = str(record.get("author") or "").casefold()
                         if compte_auteur not in cache_abonnes_research:
                             if limitation_abonnes_research:
-                                cache_abonnes_research[compte_auteur] = (None, "acces_refuse")
+                                cache_abonnes_research[compte_auteur] = {
+                                    "follower_count": None, "is_verified": None,
+                                    "statut": "acces_refuse"}
                             else:
                                 try:
-                                    nombre_abonnes = collecter_abonnes_research(
-                                        compte_auteur, verifier=job.check,
-                                        credentiels=connexion.research_credentiels)
-                                    cache_abonnes_research[compte_auteur] = (nombre_abonnes, "ok")
+                                    if (job.settings.collecter_follower_count
+                                            and job.settings.collecter_is_verified):
+                                        profil = collecter_profil_research(
+                                            compte_auteur, verifier=job.check,
+                                            credentiels=connexion.research_credentiels)
+                                    elif job.settings.collecter_follower_count:
+                                        profil = {"follower_count": collecter_abonnes_research(
+                                            compte_auteur, verifier=job.check,
+                                            credentiels=connexion.research_credentiels),
+                                            "is_verified": None}
+                                    else:
+                                        profil = {"follower_count": None,
+                                                  "is_verified": collecter_verification_research(
+                                            compte_auteur, verifier=job.check,
+                                            credentiels=connexion.research_credentiels)}
+                                    cache_abonnes_research[compte_auteur] = {
+                                        **profil, "statut": "ok"}
                                 except ResearchAccesRefuse:
                                     limitation_abonnes_research = True
-                                    cache_abonnes_research[compte_auteur] = (None, "acces_refuse")
+                                    cache_abonnes_research[compte_auteur] = {
+                                        "follower_count": None, "is_verified": None,
+                                        "statut": "acces_refuse"}
                                 except ResearchErreur:
-                                    cache_abonnes_research[compte_auteur] = (None, "indisponible")
-                        record["follower_count"], record["follower_count_statut"] = (
-                            cache_abonnes_research[compte_auteur])
-                        from collecte.classes_abonnes import classer_nombre_abonnes
-                        record["classe_abonnes"] = classer_nombre_abonnes(
-                            record["follower_count"])
+                                    cache_abonnes_research[compte_auteur] = {
+                                        "follower_count": None, "is_verified": None,
+                                        "statut": "indisponible"}
+                        profil = cache_abonnes_research[compte_auteur]
+                        if job.settings.collecter_follower_count:
+                            nombre = profil.get("follower_count")
+                            record["follower_count"] = nombre
+                            record["follower_count_statut"] = (
+                                profil["statut"] if nombre is not None
+                                else ("indisponible" if profil["statut"] == "ok"
+                                      else profil["statut"]))
+                            from collecte.classes_abonnes import classer_nombre_abonnes
+                            record["classe_abonnes"] = classer_nombre_abonnes(nombre)
+                        if job.settings.collecter_is_verified:
+                            verifie = profil.get("is_verified")
+                            record["is_verified"] = verifie
+                            record["is_verified_statut"] = (
+                                profil["statut"] if verifie is not None
+                                else ("indisponible" if profil["statut"] == "ok"
+                                      else profil["statut"]))
                     # Les classes et le taux sont calculés même si le TXT n'en a pas besoin.
                     from collecte.variables_numeriques import indicateurs_numeriques
                     record.update(indicateurs_numeriques(record))

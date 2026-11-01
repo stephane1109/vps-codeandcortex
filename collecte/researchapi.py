@@ -186,6 +186,7 @@ def _fiche(video, compte):
     hashtags = ([str(v).lstrip("#") for v in hashtags if isinstance(v, str)]
                 if isinstance(hashtags, list) else re.findall(r"#(\w+)", description))
     from .metadonnees import indicateur_ia
+    from .variables_profil import normaliser_region
     return {"contenu_genere_ia": indicateur_ia(video), "id": identifiant,
             "url": f"https://www.tiktok.com/@{auteur}/video/{identifiant}",
             "author": auteur, "description": description,
@@ -194,7 +195,7 @@ def _fiche(video, compte):
             "hashtags": list(dict.fromkeys(hashtags)),
             "engagement": engagement, "source": "research_api_officielle",
             "status": "ok" if description else "empty_caption", "error": "",
-            "region_code": video.get("region_code") if isinstance(video.get("region_code"), str) else None,
+            "region_code": normaliser_region(video.get("region_code")),
             "video_duration": _entier_non_negatif(video.get("video_duration"))}
 
 
@@ -317,13 +318,20 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
 
 
 
-def collecter_abonnes_research(compte, *, verifier=None, requete=_requete,
-                               jeton=None, credentiels=None):
-    """Lire le nombre d'abonnés du profil public par l'API Research officielle.
+def collecter_profil_research(compte, *, inclure_abonnes=True,
+                              inclure_verification=True, verifier=None,
+                              requete=_requete, jeton=None, credentiels=None):
+    """Interroger le profil officiel une seule fois pour les champs demandés.
 
-    La valeur correspond à la date de la collecte, pas à la publication vidéo.
-    Une absence de valeur doit rester None et ne doit jamais devenir zéro.
+    L'absence de certification ne doit jamais être assimilée à False.
     """
+    champs = []
+    if inclure_abonnes:
+        champs.append("follower_count")
+    if inclure_verification:
+        champs.append("is_verified")
+    if not champs:
+        return {"follower_count": None, "is_verified": None}
     verifier = verifier or (lambda: None)
     compte = normaliser_compte(compte)
     verifier()
@@ -331,17 +339,43 @@ def collecter_abonnes_research(compte, *, verifier=None, requete=_requete,
     if not isinstance(acces, str) or not acces:
         raise ResearchAccesRefuse("Research API : jeton absent pour le profil.")
     resultat = requete(
-        _url_profil(),
+        URL_PROFIL + "?fields=" + ",".join(champs),
         data=json.dumps({"username": compte}).encode("utf-8"),
         headers={"Authorization": "Bearer " + acces, "Content-Type": "application/json"},
     )
     donnees = resultat.get("data") if isinstance(resultat, dict) else None
     if not isinstance(donnees, dict):
         raise ResearchErreur("Research API : données de profil absentes.")
-    valeur = _entier_non_negatif(donnees.get("follower_count"))
-    if valeur is None:
+    verification = donnees.get("is_verified")
+    return {
+        "follower_count": (_entier_non_negatif(donnees.get("follower_count"))
+                           if inclure_abonnes else None),
+        "is_verified": (verification if inclure_verification
+                        and isinstance(verification, bool) else None),
+    }
+
+
+def collecter_abonnes_research(compte, *, verifier=None, requete=_requete,
+                               jeton=None, credentiels=None):
+    """Compatibilité avec le collecteur historique de follower_count."""
+    valeurs = collecter_profil_research(
+        compte, inclure_abonnes=True, inclure_verification=False,
+        verifier=verifier, requete=requete, jeton=jeton, credentiels=credentiels)
+    if valeurs["follower_count"] is None:
         raise ResearchErreur("Research API : follower_count indisponible pour ce profil.")
-    return valeur
+    return valeurs["follower_count"]
+
+
+def collecter_verification_research(compte, *, verifier=None, requete=_requete,
+                                    jeton=None, credentiels=None):
+    """Récupérer seulement le booléen vérifié/non vérifié."""
+    valeurs = collecter_profil_research(
+        compte, inclure_abonnes=False, inclure_verification=True,
+        verifier=verifier, requete=requete, jeton=jeton, credentiels=credentiels)
+    if valeurs["is_verified"] is None:
+        raise ResearchErreur("Research API : is_verified indisponible pour ce profil.")
+    return valeurs["is_verified"]
+
 
 def normaliser_commentaire_research(donnee, publication_id, *, identifiant_parent=None):
     """Préparer un commentaire officiel avec son rattachement vérifié."""

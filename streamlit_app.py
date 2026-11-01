@@ -13,7 +13,8 @@ from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, n
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
                  "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
-                 "duree": "Durée vidéo",
+                 "duree": "Durée vidéo", "region_code": "Region Code",
+                 "is_verified": "Is Verified",
                  "hashtags": "Hashtags sous le texte"}
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
@@ -128,6 +129,7 @@ if "initialise" not in st.session_state:
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",False),
         "collecter_follower_count":ancienne.get("collecter_follower_count",False),
+        "collecter_is_verified":ancienne.get("collecter_is_verified",False),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",False),
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
         "variables_classes_txt": ancienne.get("variables_classes_txt") or [],
@@ -147,7 +149,7 @@ if "initialise" not in st.session_state:
         variables = (
             (["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt")
              else ["profil", "id"] if ancienne.get("include_sources", True) else [])
-            if ancienne else [v for v in VARIABLES_TXT if v not in ("hashtags", "duree")]
+            if ancienne else [v for v in VARIABLES_TXT if v not in ("hashtags", "duree", "region_code", "is_verified")]
         )
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
@@ -664,6 +666,22 @@ with onglet_collecte:
         colonnes_identification = st.columns(3)
         for colonne, nom in zip(colonnes_identification, ("date", "profil", "id")):
             colonne.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
+        colonne_region, colonne_verification = st.columns(2)
+        colonne_region.checkbox(
+            "Region Code (pays d'enregistrement du compte)",
+            key="txt_region_code",
+            disabled=occupe or moteur_formulaire != "research",
+            help="Code à deux lettres fourni par la Research API. "
+                 "Ce n'est pas nécessairement le pays de résidence de l'auteur. "
+                 "Donnée manquante : *region_indetermine.")
+        colonne_verification.checkbox(
+            "Is Verified (compte vérifié par TikTok)",
+            key="txt_is_verified",
+            disabled=occupe or moteur_formulaire != "research",
+            help="Statut du profil public via la Research API. "
+                 "Modalités : *is_verified_oui, *is_verified_non ou "
+                 "*is_verified_indetermine. Réutilise la requête des abonnés "
+                 "lorsque celle-ci est également sélectionnée.")
 
         classes_numeriques = {
             "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
@@ -781,6 +799,7 @@ with onglet_collecte:
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
                 valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
+                valeurs["collecter_is_verified"] = bool(moteur_formulaire == "research" and st.session_state.get("txt_is_verified", False))
                 valeurs["follower_count_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("follower_count_illustratif", False))
                 valeurs["abonnes_classe_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("abonnes_classe_illustratif", False))
                 valeurs["variables_classes_txt"] = [
@@ -831,7 +850,12 @@ with onglet_collecte:
                 )
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
-                valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
+                valeurs["variables_txt"] = [
+                    v for v in VARIABLES_TXT
+                    if st.session_state["txt_" + v]
+                    and (moteur_selectionne == "research"
+                         or v not in ("region_code", "is_verified"))
+                ]
                 valeurs.update(
                     hashtag=liste_hashtags[0] if liste_hashtags else "",
                     second_hashtag=liste_hashtags[1] if len(liste_hashtags) > 1 else "",
