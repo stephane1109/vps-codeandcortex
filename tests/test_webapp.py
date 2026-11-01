@@ -35,12 +35,12 @@ class WebTests(unittest.TestCase):
 
     def start(self, client=None):
         response = (client or self.client).post("/api/jobs", headers=HEADERS,
-                                               json={"hashtag": "#été", "limit": 2})
+                                               json={"nom_sauvegarde": "Test recherche", "hashtag": "#été", "limit": 2})
         self.assertEqual(response.status_code, 202, response.text)
         return response.json()["id"]
 
     def test_french_filter_settings_persist_and_download_filename(self):
-        response = self.client.post("/api/jobs", headers=HEADERS, json={"hashtag": "été", "french_only": True})
+        response = self.client.post("/api/jobs", headers=HEADERS, json={"nom_sauvegarde": "Test recherche", "hashtag": "été", "french_only": True})
         self.assertEqual(response.status_code, 202)
         self.assertTrue(response.json()["french_only"])
         snapshot = self.client.get("/api/session").json()["job"]
@@ -49,11 +49,11 @@ class WebTests(unittest.TestCase):
         job.records.append(RECORD)
         job.save()
         response = self.client.get(f"/api/jobs/{job.id}/download")
-        self.assertIn("_fr.txt", response.headers["content-disposition"])
+        self.assertIn("Test_recherche.txt", response.headers["content-disposition"])
 
     def test_option_entete_transmise_reprise_et_telechargee(self):
         response = self.client.post('/api/jobs', headers=HEADERS,
-            json={'hashtag':'été', 'inclure_metadonnees_txt':True, 'include_sources':False})
+            json={'nom_sauvegarde': 'Test recherche', 'hashtag':'été', 'inclure_metadonnees_txt':True, 'include_sources':False})
         self.assertEqual(response.status_code, 202)
         reprise = self.client.get('/api/session').json()['job']
         self.assertTrue(reprise['inclure_metadonnees_txt'])
@@ -67,7 +67,7 @@ class WebTests(unittest.TestCase):
 
     def test_choix_profil_seul_et_commentaires_dans_le_meme_telechargement(self):
         response = self.client.post('/api/jobs', headers=HEADERS,
-            json={'hashtag':'été', 'variables_txt':['profil'], 'collecter_commentaires':True,
+            json={'nom_sauvegarde': 'Test recherche', 'hashtag':'été', 'variables_txt':['profil'], 'collecter_commentaires':True,
                   'inclure_metadonnees_txt':True, 'include_sources':True})
         self.assertEqual(response.status_code, 202)
         reprise = self.client.get('/api/session').json()['job']
@@ -84,7 +84,7 @@ class WebTests(unittest.TestCase):
         from zipfile import ZipFile
         from corpus.export_zip import exporter_zip
         reponse = self.client.post('/api/jobs', headers=HEADERS, json={
-            'hashtag': 'manifestation', 'inclure_texte_genere_ia': True,
+            'nom_sauvegarde': 'Test recherche', 'hashtag': 'manifestation', 'inclure_texte_genere_ia': True,
             'supprimer_arobase_profil': True, 'variables_txt': ['date', 'profil']})
         self.assertEqual(reponse.status_code, 202, reponse.text)
         etat = self.client.get('/api/session').json()['job']
@@ -132,7 +132,7 @@ class WebTests(unittest.TestCase):
 
     def test_telechargement_ia_en_deux_segments_et_option_transmise(self):
         response = self.client.post('/api/jobs', headers=HEADERS,
-            json={'hashtag': 'manifestation', 'inclure_texte_genere_ia': True, 'variables_txt': ['profil','id']})
+            json={'nom_sauvegarde': 'Test recherche', 'hashtag': 'manifestation', 'inclure_texte_genere_ia': True, 'variables_txt': ['profil','id']})
         self.assertEqual(response.status_code, 202, response.text)
         session = self.client.get('/api/session').json()['job']
         self.assertTrue(session['inclure_texte_genere_ia'])
@@ -153,7 +153,7 @@ class WebTests(unittest.TestCase):
             + resume + "\n")
 
     def test_validation_and_csrf_guard(self):
-        self.assertEqual(self.client.post("/api/jobs", json={"hashtag": "test"}).status_code, 403)
+        self.assertEqual(self.client.post("/api/jobs", json={"nom_sauvegarde": "Test recherche", "hashtag": "test"}).status_code, 403)
         for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 1001}):
             response = self.client.post("/api/jobs", headers=HEADERS, json=payload)
             self.assertEqual(response.status_code, 422)
@@ -176,11 +176,11 @@ class WebTests(unittest.TestCase):
     def test_concurrency_limit_and_existing_job_survive_refresh(self):
         job_id = self.start()
         self.assertEqual(self.client.get("/api/session").json()["job"]["id"], job_id)
-        self.assertEqual(self.client.post("/api/jobs", headers=HEADERS, json={"hashtag": "test"}).status_code, 409)
+        self.assertEqual(self.client.post("/api/jobs", headers=HEADERS, json={"nom_sauvegarde": "Test recherche", "hashtag": "test"}).status_code, 409)
         stranger = TestClient(self.app)
         self.addCleanup(stranger.close)
         stranger.get("/")
-        self.assertEqual(stranger.post("/api/jobs", headers=HEADERS, json={"hashtag": "test"}).status_code, 429)
+        self.assertEqual(stranger.post("/api/jobs", headers=HEADERS, json={"nom_sauvegarde": "Test recherche", "hashtag": "test"}).status_code, 429)
 
     def test_utf8_text_download_and_stop_preserve_corpus(self):
         job_id = self.start()
@@ -191,7 +191,7 @@ class WebTests(unittest.TestCase):
         response = self.client.get(f"/api/jobs/{job_id}/download")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.headers["content-type"].startswith("text/plain"))
-        self.assertIn("tiktok_%C3%A9t%C3%A9.txt", response.headers["content-disposition"])
+        self.assertIn("Test_recherche.txt", response.headers["content-disposition"])
         self.assertIn(RECORD["description"], response.content.decode("utf-8"))
         self.client.post(f"/api/jobs/{job_id}/stop", json={}, headers=HEADERS)
         job.thread.join(1)
@@ -473,7 +473,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_reprise_api_retient_choix_recherche_texte(self):
         response = self.client.post("/api/jobs", headers=HEADERS,
-                                    json={"hashtag": "lyceen", "rechercher_dans_texte": True})
+                                    json={"nom_sauvegarde": "Test recherche", "hashtag": "lyceen", "rechercher_dans_texte": True})
         self.assertEqual(response.status_code, 202)
         job = self.manager.jobs[response.json()["id"]]
         self.assertTrue(job.settings.rechercher_dans_texte)

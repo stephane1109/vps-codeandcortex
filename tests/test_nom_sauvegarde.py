@@ -28,9 +28,10 @@ class TestsNomsSauvegarde(TestCase):
             self.assertIn('"nom_sauvegarde": "Test manifestations 2026"', parametres)
 
     def test_nom_vide_explicitement_refuse(self):
-        with self.assertRaises(ValidationError):
-            StartRequest(nom_sauvegarde="  ", source_collecte="presse",
-                         medias=["lemonde"])
+        # Les anciens réglages sauvegardés restent réouvrables sans nom.
+        ancien = StartRequest(nom_sauvegarde="  ", source_collecte="presse",
+                              medias=["lemonde"])
+        self.assertEqual(ancien.nom_sauvegarde, "")
         with self.assertRaises(ValidationError):
             StartRequest(nom_sauvegarde="nom\ninterdit", source_collecte="presse",
                          medias=["lemonde"])

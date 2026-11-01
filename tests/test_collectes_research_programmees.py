@@ -128,7 +128,8 @@ class TestsCollectesResearchProgrammees(unittest.TestCase):
             d = aujourd_hui()
             options = StartRequest(
                 source_collecte="presse", medias=["lemonde"],
-                presse_moteur="research", date_debut=d.isoformat(),
+                presse_moteur="research", nom_sauvegarde="Recherche de test",
+                date_debut=d.isoformat(),
                 date_fin=d.isoformat(), collecte_research_complete=True)
             plan = manager.programmer_research("cookie_historique", options,
                 d.isoformat(), (d+timedelta(days=1)).isoformat())

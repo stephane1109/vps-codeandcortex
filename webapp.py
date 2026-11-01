@@ -98,7 +98,9 @@ class StartRequest(BaseModel):
         """Nettoyer le nom affiché sans accepter de caractères de contrôle."""
         nom = valeur.strip()
         if not nom:
-            raise ValueError("Le nom de la sauvegarde est obligatoire.")
+            # Les sessions antérieures n'avaient pas de nom de sauvegarde.
+            # Seules les nouvelles requêtes HTTP exigent un nom explicite.
+            return ""
         if any(ord(caractere) < 32 or ord(caractere) == 127 for caractere in nom):
             raise ValueError("Le nom de la sauvegarde contient un caractère interdit.")
         return nom
