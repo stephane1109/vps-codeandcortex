@@ -20,6 +20,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
@@ -609,6 +610,7 @@ class Job:
         self.video_thread = None
         self.video_debut = None
         self.base = None
+        self.plan_research_id = None
         if settings.enrichie and not self.historique:
             from stockage.base_donnees import BaseDonnees
             self.base = BaseDonnees(data_dir / "scraptiktok.sqlite")
@@ -1452,6 +1454,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.save()
                 if job.base:
                     job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
+                if job.plan_research_id and job.publications:
+                    # Écriture permanente au fil de l'eau, indépendante de
+                    # l'expiration des fichiers temporaires de collecte.
+                    from stockage.collectes_research import enregistrer_partiel
+                    enregistrer_partiel(job.racine, job.plan_research_id,
+                        job.publications[-1], job.commentaires)
                 if job.settings.sauvegarde_progressive and index % 10 == 0:
                     job.sauvegarder_point()
 
@@ -1816,6 +1824,101 @@ class Manager:
         self.lock = threading.RLock()
         self.closed = threading.Event()
         self.reaper = None
+        from stockage.collectes_research import reprendre_apres_redemarrage
+        reprendre_apres_redemarrage(self.data_dir)
+
+    def _executer_lot_research(self, job, plan_id):
+        """Exécuter un lot journalier, puis archiver ses résultats sans secrets."""
+        from stockage.collectes_research import enregistrer_lot
+        try:
+            self.runner(job)
+        except Exception:
+            LOG.exception("Lot Research programmé interrompu : %s", plan_id)
+            job.update(status="failed", message="Échec du lot Research ; reprise planifiée.",
+                       busy=False, finished=time.monotonic())
+        finally:
+            try:
+                enregistrer_lot(self.data_dir, plan_id, job,
+                               abouti=job.status == "completed" and not job.stop.is_set())
+            except Exception:
+                LOG.exception("Persistance du lot Research impossible : %s", plan_id)
+
+    def programmer_research(self, proprietaire_historique, parametres, debut_execution, fin_execution):
+        """Enregistrer la programmation, sans jamais stocker les Client secrets."""
+        from collecte.researchapi import identifiants_disponibles
+        from stockage.collectes_research import creer_plan, detail_plan, lister_plans
+        if not identifiants_disponibles():
+            raise HTTPException(422, "Pour les reprises automatiques, configurez "
+                "TIKTOK_RESEARCH_CLIENT_KEY et TIKTOK_RESEARCH_CLIENT_SECRET "
+                "dans les variables d'environnement Coolify.")
+        if parametres.moteur_actif != "research":
+            raise HTTPException(422, "La programmation utilise uniquement Research API.")
+        if not parametres.date_debut or not parametres.date_fin:
+            raise HTTPException(422, "Précisez les dates des publications à rechercher.")
+        if parametres.test_research_10_publications:
+            raise HTTPException(422, "Désactivez le test sur 10 publications pour programmer une collecte.")
+        if parametres.telecharger_mp4 or parametres.inclure_texte_genere_ia:
+            raise HTTPException(422, "La collecte Research programmée ne lance "
+                "ni téléchargement MP4 ni navigation Selenium.")
+        if len([p for p in lister_plans(self.data_dir, proprietaire_historique)
+                if p["statut"] in ("programme", "en_cours", "suspendu")]) >= 3:
+            raise HTTPException(409, "Trois collectes Research programmées sont déjà actives.")
+        valeurs = parametres.model_dump()
+        valeurs["collecte_research_complete"] = True
+        try:
+            identifiant = creer_plan(self.data_dir, proprietaire_historique,
+                valeurs, debut_execution, fin_execution)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from erreur
+        return detail_plan(self.data_dir, identifiant, proprietaire_historique)
+
+    def traiter_plans_research(self):
+        """Un seul lot actif à la fois, avec contrôle du quota UTC en SQLite."""
+        from stockage.collectes_research import (
+            clore_dates, candidats, reserver_lot, etat_quota)
+        clore_dates(self.data_dir)
+        if self.closed.is_set() or etat_quota(self.data_dir)["reste_local"] == 0:
+            return
+        with self.lock:
+            if any(job.busy or job.video_busy for job in self.jobs.values()):
+                return
+            for plan in candidats(self.data_dir):
+                # Respecter aussi la limite de concurrence existante.
+                lot = reserver_lot(self.data_dir, plan["id"])
+                if lot is None:
+                    continue
+                valeurs = lot["parametres"]
+                valeurs.update(date_debut=lot["jour"], date_fin=lot["jour"],
+                               collecte_research_complete=True,
+                               test_research_10_publications=False,
+                               collecter_commentaires=valeurs.get("collecter_commentaires", False))
+                if lot["source_collecte"] == "presse":
+                    valeurs["medias"] = [lot["source"]]
+                elif lot["source_collecte"] == "comptes":
+                    valeurs["comptes"] = [lot["source"]]
+                try:
+                    parametres = StartRequest.model_validate(valeurs)
+                    job = Job(secrets.token_hex(32), parametres, self.data_dir)
+                    job.plan_research_id = plan["id"]
+                    job.limites_debug = {"duree_max_s": self.max_duration,
+                                        "collecte_programmee": True}
+                    self.jobs[job.id] = job
+                    job.thread = threading.Thread(
+                        target=self._executer_lot_research,
+                        args=(job, plan["id"]), daemon=True)
+                    job.thread.start()
+                except Exception:
+                    LOG.exception("Impossible de démarrer le lot Research %s", plan["id"])
+                    from stockage.collectes_research import remettre_en_attente
+                    remettre_en_attente(self.data_dir, plan["id"])
+                break
+
+    def arreter_plan_research(self, identifiant):
+        """Interrompre le lot courant d'un programme suspendu ou arrêté."""
+        with self.lock:
+            for job in self.jobs.values():
+                if job.plan_research_id == identifiant and job.busy:
+                    job.demander_arret("utilisateur")
 
     def start(self, owner, settings, owner_historique=""):
         from collecte.quotas_exploitation import (
@@ -1897,7 +2000,7 @@ class Manager:
         now = time.monotonic()
         with self.lock:
             for job in list(self.jobs.values()):
-                if job.busy or job.video_busy:
+                if (job.busy or job.video_busy) and not job.plan_research_id:
                     from ticket_gate import verifier_session_active
                     if not verifier_session_active(job.owner):
                         job.demander_arret("acces_inactif")
@@ -1906,7 +2009,7 @@ class Manager:
                     job.limites_debug={'inactivite_max_s':self.idle_timeout,'duree_max_s':self.max_duration}
                     if now-job.created > self.max_duration:
                         job.demander_arret('duree_maximale')
-                    elif now-job.last_seen > self.idle_timeout:
+                    elif not job.plan_research_id and now-job.last_seen > self.idle_timeout:
                         job.demander_arret('inactivite')
                 if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
                     job.video_stop.set()
@@ -1937,6 +2040,10 @@ class Manager:
     def maintain(self):
         while not self.closed.wait(15):
             self.cleanup()
+            try:
+                self.traiter_plans_research()
+            except Exception:
+                LOG.exception("Planificateur Research temporairement indisponible.")
 
     def shutdown(self):
         self.closed.set()
@@ -2084,6 +2191,72 @@ def create_app(manager=None):
             "maximum_pages_api_par_source": max_pages_api(),
             "budget_api_presse": etat_budget(),
         }
+
+    @app.get("/api/research/plans")
+    def lister_programmes_research(request: Request):
+        """Programmes privés et compteurs du budget local."""
+        from stockage.collectes_research import lister_plans, etat_quota
+        return {"plans": lister_plans(manager.data_dir, owner_historique(request)),
+                "quota": etat_quota(manager.data_dir)}
+
+    class ProgrammerResearch(BaseModel):
+        parametres: StartRequest
+        debut_execution: str
+        fin_execution: str
+
+        @field_validator("debut_execution", "fin_execution")
+        @classmethod
+        def verifier_date_programme(cls, valeur):
+            try:
+                date.fromisoformat(valeur)
+            except ValueError as erreur:
+                raise ValueError("Date au format AAAA-MM-JJ attendue.") from erreur
+            return valeur
+
+    @app.post("/api/research/plans", status_code=202)
+    def programmer_research(payload: ProgrammerResearch, request: Request):
+        exiger_ticket(request)
+        return manager.programmer_research(
+            owner_historique(request), payload.parametres,
+            payload.debut_execution, payload.fin_execution)
+
+    @app.post("/api/research/plans/{identifiant}/{action}")
+    def agir_programme_research(identifiant: str, action: str, request: Request):
+        from stockage.collectes_research import changer_etat, detail_plan
+        if action not in ("suspendre", "reprendre", "arreter"):
+            raise HTTPException(404, "Action inconnue.")
+        propriete = owner_historique(request)
+        try:
+            statut = changer_etat(manager.data_dir, identifiant, propriete, action)
+        except ValueError:
+            raise HTTPException(404, "Programme introuvable.")
+        if statut in ("suspendu", "arrete"):
+            manager.arreter_plan_research(identifiant)
+        return detail_plan(manager.data_dir, identifiant, propriete)
+
+    @app.get("/api/research/plans/{identifiant}/journal")
+    def lire_journal_research(identifiant: str, request: Request):
+        from stockage.collectes_research import journal_plan
+        valeurs = journal_plan(manager.data_dir, identifiant, owner_historique(request))
+        if valeurs is None:
+            raise HTTPException(404, "Programme introuvable.")
+        return {"journal": valeurs}
+
+    @app.get("/api/research/plans/{identifiant}/export/{format_}")
+    def exporter_programme_research(identifiant: str, format_: str, request: Request):
+        from stockage.collectes_research import exporter
+        if format_ not in ("json", "csv", "commentaires.csv", "txt", "zip", "sqlite3"):
+            raise HTTPException(404, "Format inconnu.")
+        contenu = exporter(manager.data_dir, identifiant, owner_historique(request), format_)
+        if contenu is None:
+            raise HTTPException(404, "Programme introuvable.")
+        media = {
+            "json": "application/json", "csv": "text/csv",
+            "commentaires.csv": "text/csv", "txt": "text/plain",
+            "zip": "application/zip", "sqlite3": "application/vnd.sqlite3",
+        }[format_]
+        return Response(contenu, media_type=media, headers={
+            "Content-Disposition": f'attachment; filename="research_{identifiant}.{format_}"'})
 
     @app.get("/api/presse/limitation")
     def statut_limitation_presse(request: Request):
