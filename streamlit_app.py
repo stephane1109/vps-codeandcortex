@@ -774,9 +774,9 @@ with onglet_collecte:
                 )
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
             help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
-        st.checkbox("Sauvegarde progressive des collectes (toutes les 10 publications)",
+        st.checkbox("Sauvegarde progressive ZIP (toutes les 10 publications)",
             key="sauvegarde_progressive", disabled=occupe,
-            help="Facultatif, désactivé par défaut. Conserve sur le VPS un ZIP de récupération "
+            help="Facultatif, désactivé par défaut. Indépendant de la sauvegarde PostgreSQL automatique. Conserve sur le VPS un ZIP de récupération "
                  "avec les légendes, publications, commentaires et données de sélection. "
                  "Le ZIP est remplacé toutes les 10 publications traitées et à la fin de la collecte, "
                  "même partielle. Il reste disponible après redémarrage pendant 7 jours par défaut, "
@@ -1647,6 +1647,16 @@ with onglet_collecte:
                 sans_arobase = st.session_state.get("export_profil_sans_arobase", True)
                 choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
             st.caption("Nom de la sauvegarde : " + (actuel.get("nom_sauvegarde") or "Collecte sans nom (ancienne session)"))
+            if actuel.get("busy"):
+                if actuel.get("sauvegarde_postgres") == "synchronise":
+                    st.caption(
+                        "PostgreSQL : sauvegarde automatique active · "
+                        f"{actuel.get('sauvegarde_postgres_publications', 0)} publication(s) "
+                        f"et {actuel.get('sauvegarde_postgres_commentaires', 0)} commentaire(s) "
+                        "déjà enregistrés. Mise à jour au cours de la collecte."
+                    )
+                elif actuel.get("sauvegarde_postgres") in ("erreur", "identite_absente"):
+                    st.error(actuel.get("erreur_postgres") or "Sauvegarde PostgreSQL interrompue.")
             if not actuel.get("busy"):
                 if actuel.get("sauvegarde_postgres") == "synchronise":
                     st.success("Sauvegarde PostgreSQL effectuée. Retrouvez les données dans « Base de données ».")
@@ -1722,7 +1732,9 @@ with onglet_base_donnees:
     st.caption(
         "Consultez vos collectes par nom, y compris les tests sur dix publications, "
         "puis récupérez les données en CSV ou JSON. Les données sont enregistrées "
-        "dans PostgreSQL indépendamment des fichiers temporaires SQLite."
+        "dans PostgreSQL indépendamment des fichiers temporaires SQLite. "
+        "Pour les collectes ponctuelles, une entrée apparaît dès le lancement, "
+        "puis les publications sont ajoutées progressivement pendant la collecte."
     )
     if not cookie_historique:
         st.warning("Rechargez la page d'accueil pour retrouver votre historique privé.")
