@@ -883,6 +883,7 @@ class Job:
             total_commentaires = len(self.commentaires)
             traitees = self.processed
             if (progressif and self._pg_initialise
+                    and self.sauvegarde_postgres == "synchronise"
                     and total_publications == self._pg_publications
                     and total_commentaires == self._pg_commentaires
                     and traitees == self._pg_traitees):
@@ -897,8 +898,11 @@ class Job:
                     a_partir_commentaires=indice_commentaires)
             else:
                 archiver_collecte(self)
-        except Exception:
-            LOG.warning("Archivage PostgreSQL impossible pour %s", self.id, exc_info=True)
+        except Exception as erreur:
+            # Ne pas inscrire le DSN ni les identifiants dans les journaux.
+            LOG.warning("Archivage PostgreSQL impossible pour %s : %s (SQLSTATE %s)",
+                        self.id, type(erreur).__name__,
+                        getattr(erreur, "sqlstate", None) or "indisponible")
             self.sauvegarde_postgres = "erreur"
             self.erreur_postgres = (
                 "Sauvegarde PostgreSQL impossible : vérifiez les journaux "
