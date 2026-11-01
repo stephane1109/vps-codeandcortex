@@ -28,7 +28,7 @@ def decouvrir_deux(compte, limite, rapport, **kwargs):
     ]
     rapport.update(
         discovered_urls=[v["url"] for v in videos],
-        metadonnees_api={v["id"]: v for v in videos],
+        metadonnees_api={v["id"]: v for v in videos},
         candidats_examines=2, pages_research=1,
         navigation_publications="research_officielle",
         discovery_stop="fin_des_periodes")
