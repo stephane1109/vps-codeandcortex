@@ -810,3 +810,50 @@ conservation habituelle de la session s’applique également aux MP4.
 Seuls les formats MP4 accessibles via yt-dlp sont récupérés. Une restriction TikTok,
 un diaporama, un délai dépassé ou une limite de ressources est signalé et n’annule
 pas la collecte textuelle. Le téléchargement ne garantit pas l’accès à chaque vidéo.
+
+## Collecte Research programmée et base SQLite persistante
+
+Dans le moteur « Research API officielle », cocher « Collecte pluri-journalière
+(SQLite, reprise automatique) », définir la **période des publications** puis
+le **début et la fin d'exécution**. Le bouton « Programmer la collecte Research »
+crée un plan. Les contrôles « Afficher mes collectes Research programmées »
+permettent de consulter la progression, de suspendre, reprendre ou arrêter
+définitivement une collecte et de télécharger les résultats.
+
+La base permanente `DATA_DIR/collectes_research.sqlite3` conserve les plans,
+les positions par source et journée, les publications, commentaires, journaux
+et compteurs de requêtes. Contrairement à `scraptiktok.sqlite`, liée aux
+sessions temporaires, **elle n'est pas supprimée par la purge des résultats**.
+Les identifiants des vidéos et commentaires servent de clés de dédoublonnage.
+La date de première et de dernière collecte est également conservée.
+Les publications sont enregistrées au fil de l'exécution ; la fin d'un lot
+permet d'avancer à la journée ou à la source suivante. Une interruption sur
+un lot incomplet entraîne une nouvelle tentative le lendemain à partir de
+la même journée et de la même source. Cette reprise préserve les données déjà
+stockées, mais peut consommer à nouveau des requêtes et n'est pas une reprise
+garantie au curseur exact de TikTok.
+
+La collecte programmée exige une configuration permanente des variables
+`TIKTOK_RESEARCH_CLIENT_KEY` et `TIKTOK_RESEARCH_CLIENT_SECRET` dans
+**Coolify**. Les clés et jetons ne sont jamais écrits dans SQLite ni les ZIP.
+La collecte reprend sans connexion du navigateur grâce au planificateur du
+service FastAPI, à condition que le conteneur et son volume soient actifs.
+Le quota de précaution `RESEARCH_QUOTA_LOCAL_JOUR` est de 900 requêtes par
+jour UTC par défaut (maximum 1 000). Il couvre les requêtes Research effectuées
+par cette instance, mais n'englobe pas les autres applications partageant
+éventuellement le quota officiel de l'organisation. Le dépassement suspend
+les nouveaux appels Research jusqu'au jour UTC suivant.
+
+Les résultats cumulés restent disponibles à l'export en SQLite relationnel
+(tables publications et commentaires avec colonnes interrogeables), CSV, JSON,
+TXT et ZIP. L'accès est contrôlé au moyen du cookie historique privé de
+l'utilisateur. Ce mode ne télécharge pas de MP4 et ne lance pas Selenium pour
+les textes IA. Les traitements restent soumis à `MAX_CONCURRENT_JOBS` et au
+délai maximal de chaque lot `JOB_TIMEOUT_SECONDS`. La date de fin d'exécution
+interrompt également les lots actifs, même si le corpus est incomplet.
+
+SQLite convient à une instance de ScrapTikTok avec écriture séquentielle,
+volume persistant et export à la demande. Pour des écritures simultanées depuis
+plusieurs conteneurs ou des comptes utilisateurs partagés, préférer PostgreSQL
+avec une migration explicite et des sauvegardes administrées, plutôt que
+de partager le même fichier SQLite entre instances.
