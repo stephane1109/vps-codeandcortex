@@ -227,7 +227,8 @@ class TestsResearch(unittest.TestCase):
         demandes = []
         def collecter(compte, limite, rapport, **options):
             demandes.append((compte, limite))
-            base = 0 if compte == "lemondefr" else 100
+            base = {"lemondefr": 0, "franceinfo": 100,
+                    "leparisien": 200}.get(compte, 300)
             maximum = 6 if compte == "lemondefr" else 20
             candidats = [
                 _fiche({**v(base + numero, compte),
@@ -350,9 +351,11 @@ class TestsResearch(unittest.TestCase):
                        side_effect=collecter):
                 execute_job(job, driver_factory=Mock(
                     side_effect=AssertionError("Chrome interdit avec Research")))
+            # Le budget de quatre résultats non obtenus sur Paris Match
+            # est réaffecté à Brut pour atteindre dix publications au total.
             self.assertEqual(observations, [
                 ("parismatch", 5, "24octobre"),
-                ("brutofficiel", 5, "24octobre")])
+                ("brutofficiel", 9, "24octobre")])
             self.assertEqual(job.processed, 2)
             self.assertEqual(len(job.records), 2)
 
