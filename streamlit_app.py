@@ -627,7 +627,8 @@ with onglet_collecte:
                          "ScrapTikTok explore également un nombre limité de pages de variantes (#lyceen, #lycéen…). "
                          "Les variantes proposées sont heuristiques (huit graphies au maximum par hashtag) : "
                          "la recherche peut être plus longue sans garantir un résultat exhaustif. "
-                         "Le nombre de vidéos demandé est global et les variantes partagent le quota du hashtag initial.")
+                         "Avec les autres moteurs, le nombre demandé est global. "
+                         "Avec Research, la pagination est automatique.")
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
                 help="Décoché : seuls les #hashtags exacts de la légende comptent. "
@@ -676,8 +677,14 @@ with onglet_collecte:
                 ),
             )
         if source == "presse":
-            nombre_medias=len(st.session_state.get("medias",[]))
-            if nombre_medias:
+            nombre_medias = len(st.session_state.get("medias", []))
+            if nombre_medias and moteur_formulaire == "research":
+                st.caption(
+                    f"Research API : parcours automatique pour {nombre_medias} média(s), "
+                    "sans objectif numérique par média. Les quotas TikTok et la "
+                    "durée maximale du traitement restent applicables."
+                )
+            elif nombre_medias:
                 st.caption(
                     f"Objectif demandé : {st.session_state.get('limit',50)} vidéos "
                     f"PAR média, pour {nombre_medias} média(s) sélectionné(s) "
