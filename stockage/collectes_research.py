@@ -1,0 +1,449 @@
+"""Collectes Research programmées : SQLite persistant, reprise et exports.
+
+Les paramètres et données sont enregistrés sans clés API. Un volume persistant
+DATA_DIR est indispensable sur le VPS. La base ne dépend pas du TTL des jobs.
+"""
+import csv
+from datetime import date, datetime, timedelta, timezone
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import sqlite3
+import tempfile
+import uuid
+from zipfile import ZipFile, ZIP_DEFLATED
+
+ETATS_ACTIFS = {"programme", "en_cours"}
+ETATS_FINAUX = {"termine", "arrete", "date_limite"}
+CHAMPS_CSV = ("id", "url", "author", "create_time", "description", "region_code",
+              "is_verified", "vues", "likes", "commentaires", "partages",
+              "favoris", "date_premiere_collecte", "date_derniere_collecte")
+
+
+def maintenant():
+    return datetime.now(timezone.utc)
+
+
+def chemin_base(dossier):
+    return Path(dossier) / "collectes_research.sqlite3"
+
+
+def empreinte_proprietaire(proprietaire):
+    return hashlib.sha256(proprietaire.encode("utf-8")).hexdigest()
+
+
+def connexion(dossier):
+    chemin = chemin_base(dossier)
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    base = sqlite3.connect(chemin, timeout=20)
+    base.row_factory = sqlite3.Row
+    base.execute("PRAGMA journal_mode=WAL")
+    base.execute("PRAGMA foreign_keys=ON")
+    base.execute("PRAGMA busy_timeout=20000")
+    base.executescript("""
+        CREATE TABLE IF NOT EXISTS plans (
+            id TEXT PRIMARY KEY,
+            proprietaire TEXT NOT NULL,
+            statut TEXT NOT NULL,
+            debut_execution TEXT NOT NULL,
+            fin_execution TEXT NOT NULL,
+            debut_corpus TEXT NOT NULL,
+            fin_corpus TEXT NOT NULL,
+            parametres TEXT NOT NULL,
+            source_index INTEGER NOT NULL DEFAULT 0,
+            jour_index INTEGER NOT NULL DEFAULT 0,
+            prochaine_tentative TEXT,
+            job_id TEXT,
+            message TEXT NOT NULL DEFAULT '',
+            cree_le TEXT NOT NULL,
+            actualise_le TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_plans_choix
+            ON plans(statut, debut_execution, fin_execution, prochaine_tentative);
+        CREATE INDEX IF NOT EXISTS idx_plans_proprietaire
+            ON plans(proprietaire, cree_le DESC);
+        CREATE TABLE IF NOT EXISTS publications (
+            plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+            id TEXT NOT NULL, retenue INTEGER NOT NULL,
+            donnees TEXT NOT NULL,
+            premiere_collecte TEXT NOT NULL, derniere_collecte TEXT NOT NULL,
+            PRIMARY KEY(plan_id, id)
+        );
+        CREATE TABLE IF NOT EXISTS commentaires (
+            plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+            id TEXT NOT NULL, publication_id TEXT NOT NULL,
+            donnees TEXT NOT NULL, collecte_le TEXT NOT NULL,
+            PRIMARY KEY(plan_id, id)
+        );
+        CREATE TABLE IF NOT EXISTS journal (
+            numero INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+            date TEXT NOT NULL, type TEXT NOT NULL, detail TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_journal_plan ON journal(plan_id, numero);
+        CREATE TABLE IF NOT EXISTS quotas (
+            jour_utc TEXT PRIMARY KEY, appels INTEGER NOT NULL DEFAULT 0
+        );
+    """)
+    return base
+
+
+def jours_corpus(plan):
+    debut = date.fromisoformat(plan["debut_corpus"])
+    fin = date.fromisoformat(plan["fin_corpus"])
+    return (fin - debut).days + 1
+
+
+def sources(plan):
+    parametres = json.loads(plan["parametres"])
+    if parametres["source_collecte"] == "presse":
+        return [("presse", identifiant) for identifiant in parametres["medias"]]
+    if parametres["source_collecte"] == "comptes":
+        return [("comptes", compte) for compte in parametres["comptes"]]
+    # Les combinaisons ET/OU et variantes doivent rester globales.
+    return [("hashtags", "")]
+
+
+def creer_plan(dossier, proprietaire, parametres, debut_execution, fin_execution):
+    """Créer un programme idempotent par identifiant, sans jeton ni secret."""
+    debut = date.fromisoformat(debut_execution)
+    fin = date.fromisoformat(fin_execution)
+    debut_corpus = date.fromisoformat(parametres["date_debut"])
+    fin_corpus = date.fromisoformat(parametres["date_fin"])
+    if fin < debut or (fin - debut).days > 366:
+        raise ValueError("Période d'exécution invalide (maximum 367 jours).")
+    if fin_corpus < debut_corpus or (fin_corpus - debut_corpus).days > 366:
+        raise ValueError("Période du corpus invalide (maximum 367 jours).")
+    identifiant = uuid.uuid4().hex
+    horodatage = maintenant().isoformat()
+    parametres = dict(parametres)
+    for secret in ("research_client_key", "research_client_secret", "cookies_tiktok",
+                   "tikhub_api_key", "apify_api_token"):
+        parametres.pop(secret, None)
+    with connexion(dossier) as base:
+        base.execute("""INSERT INTO plans (
+            id, proprietaire, statut, debut_execution, fin_execution,
+            debut_corpus, fin_corpus, parametres, cree_le, actualise_le)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (identifiant, empreinte_proprietaire(proprietaire), "programme",
+             debut.isoformat(), fin.isoformat(), debut_corpus.isoformat(),
+             fin_corpus.isoformat(), json.dumps(parametres, ensure_ascii=False),
+             horodatage, horodatage))
+    return identifiant
+
+
+def detail_plan(dossier, identifiant, proprietaire=None):
+    with connexion(dossier) as base:
+        if proprietaire is None:
+            ligne = base.execute("SELECT * FROM plans WHERE id=?", (identifiant,)).fetchone()
+        else:
+            ligne = base.execute(
+                "SELECT * FROM plans WHERE id=? AND proprietaire=?",
+                (identifiant, empreinte_proprietaire(proprietaire))).fetchone()
+        if ligne is None:
+            return None
+        plan = dict(ligne)
+        plan["publications"] = base.execute(
+            "SELECT COUNT(*) FROM publications WHERE plan_id=?", (identifiant,)).fetchone()[0]
+        plan["publications_retenues"] = base.execute(
+            "SELECT COUNT(*) FROM publications WHERE plan_id=? AND retenue=1",
+            (identifiant,)).fetchone()[0]
+        plan["commentaires"] = base.execute(
+            "SELECT COUNT(*) FROM commentaires WHERE plan_id=?", (identifiant,)).fetchone()[0]
+    plan.pop("proprietaire", None)
+    plan.pop("parametres", None)
+    plan["jour_corpus_courant"] = (
+        date.fromisoformat(plan["debut_corpus"]) + timedelta(days=plan["jour_index"])
+    ).isoformat() if plan["jour_index"] < jours_corpus(plan) else None
+    plan["lots_totaux"] = jours_corpus(plan) * len(sources(ligne))
+    plan["lots_termines"] = plan["jour_index"] * len(sources(ligne)) + plan["source_index"]
+    return plan
+
+
+def lister_plans(dossier, proprietaire):
+    with connexion(dossier) as base:
+        identifiants = [r[0] for r in base.execute(
+            "SELECT id FROM plans WHERE proprietaire=? ORDER BY cree_le DESC LIMIT 30",
+            (empreinte_proprietaire(proprietaire),)).fetchall()]
+    return [detail_plan(dossier, identifiant, proprietaire) for identifiant in identifiants]
+
+
+def changer_etat(dossier, identifiant, proprietaire, action):
+    if action not in ("suspendre", "reprendre", "arreter"):
+        raise ValueError("Action inconnue.")
+    avec = connexion(dossier)
+    try:
+        avec.execute("BEGIN IMMEDIATE")
+        plan = avec.execute("SELECT * FROM plans WHERE id=? AND proprietaire=?",
+            (identifiant, empreinte_proprietaire(proprietaire))).fetchone()
+        if plan is None:
+            raise ValueError("Collecte introuvable.")
+        actuel = plan["statut"]
+        if action == "reprendre" and actuel == "suspendu":
+            futur = "programme"
+        elif action == "suspendre" and actuel in ETATS_ACTIFS:
+            futur = "suspendu"
+        elif action == "arreter" and actuel not in ETATS_FINAUX:
+            futur = "arrete"
+        else:
+            futur = actuel
+        avec.execute("UPDATE plans SET statut=?, actualise_le=? WHERE id=?",
+                     (futur, maintenant().isoformat(), identifiant))
+        avec.commit()
+        return futur
+    finally:
+        avec.close()
+
+
+def candidats(dossier):
+    """Lister les plans éligibles sans exposer les identifiants privés."""
+    jour = maintenant().date().isoformat()
+    heure = maintenant().isoformat()
+    with connexion(dossier) as base:
+        lignes = base.execute(
+            """SELECT * FROM plans WHERE statut='programme'
+               AND debut_execution<=? AND fin_execution>=?
+               AND (prochaine_tentative IS NULL OR prochaine_tentative<=?)
+               ORDER BY actualise_le ASC LIMIT 20""", (jour, jour, heure)).fetchall()
+        return [dict(r) for r in lignes]
+
+
+def reserver_lot(dossier, identifiant):
+    """Réservation atomique : un redémarrage ne perd pas la position du lot."""
+    with connexion(dossier) as base:
+        base.execute("BEGIN IMMEDIATE")
+        plan = base.execute("SELECT * FROM plans WHERE id=?", (identifiant,)).fetchone()
+        if plan is None or plan["statut"] != "programme":
+            return None
+        plan = dict(plan)
+        if plan["jour_index"] >= jours_corpus(plan):
+            base.execute("UPDATE plans SET statut='termine' WHERE id=?", (identifiant,))
+            return None
+        date_lot = (date.fromisoformat(plan["debut_corpus"])
+                    + timedelta(days=plan["jour_index"]))
+        if date_lot > maintenant().date():
+            return None
+        selection = sources(plan)
+        if not selection:
+            return None
+        type_source, valeur = selection[plan["source_index"]]
+        modif = base.execute(
+            "UPDATE plans SET statut='en_cours', actualise_le=? "
+            "WHERE id=? AND statut='programme'",
+            (maintenant().isoformat(), identifiant))
+        if modif.rowcount != 1:
+            return None
+        return {"id": identifiant, "source_collecte": type_source,
+                "source": valeur, "jour": date_lot.isoformat(),
+                "parametres": json.loads(plan["parametres"])}
+
+
+def enregistrer_lot(dossier, identifiant, job, *, abouti):
+    """Conserver les données avant toute progression dans le calendrier."""
+    horodatage = maintenant().isoformat()
+    with connexion(dossier) as base:
+        base.execute("BEGIN IMMEDIATE")
+        ligne = base.execute("SELECT * FROM plans WHERE id=?", (identifiant,)).fetchone()
+        if ligne is None:
+            return
+        retenus = {str(p["id"]) for p in job.records}
+        for publication in job.publications:
+            pid = str(publication["id"])
+            base.execute(
+                """INSERT INTO publications
+                   (plan_id,id,retenue,donnees,premiere_collecte,derniere_collecte)
+                   VALUES(?,?,?,?,?,?)
+                   ON CONFLICT(plan_id,id) DO UPDATE SET
+                   retenue=MAX(publications.retenue,excluded.retenue),
+                   donnees=excluded.donnees,
+                   derniere_collecte=excluded.derniere_collecte""",
+                (identifiant, pid, int(pid in retenus),
+                 json.dumps(publication, ensure_ascii=False, allow_nan=False),
+                 horodatage, horodatage))
+        for commentaire in job.commentaires:
+            base.execute(
+                """INSERT INTO commentaires
+                   (plan_id,id,publication_id,donnees,collecte_le)
+                   VALUES(?,?,?,?,?)
+                   ON CONFLICT(plan_id,id) DO UPDATE SET
+                   donnees=excluded.donnees, collecte_le=excluded.collecte_le""",
+                (identifiant, str(commentaire["id"]), str(commentaire["publication_id"]),
+                 json.dumps(commentaire, ensure_ascii=False, allow_nan=False), horodatage))
+        etat = ligne["statut"]
+        if etat == "en_cours":
+            if abouti:
+                s = sources(dict(ligne))
+                suivant = ligne["source_index"] + 1
+                jour = ligne["jour_index"]
+                if suivant >= len(s):
+                    suivant = 0
+                    jour += 1
+                etat = "termine" if jour >= jours_corpus(dict(ligne)) else "programme"
+                base.execute(
+                    "UPDATE plans SET statut=?,source_index=?,jour_index=?,"
+                    "prochaine_tentative=NULL,job_id=NULL,message=?,actualise_le=? WHERE id=?",
+                    (etat, suivant, jour, str(job.message)[:500], horodatage, identifiant))
+            else:
+                lendemain = datetime.combine(
+                    maintenant().date() + timedelta(days=1), datetime.min.time(),
+                    tzinfo=timezone.utc).isoformat()
+                base.execute(
+                    "UPDATE plans SET statut='programme',prochaine_tentative=?,"
+                    "job_id=NULL,message=?,actualise_le=? WHERE id=?",
+                    (lendemain, str(job.message)[:500], horodatage, identifiant))
+        else:
+            base.execute("UPDATE plans SET job_id=NULL,message=?,actualise_le=? WHERE id=?",
+                         (str(job.message)[:500], horodatage, identifiant))
+        base.execute(
+            "INSERT INTO journal(plan_id,date,type,detail) VALUES(?,?,?,?)",
+            (identifiant, horodatage, "lot_termine" if abouti else "lot_incomplet",
+             json.dumps({"job_id": job.id, "statut": job.status, "date": job.settings.date_debut,
+                         "publications": len(job.publications),
+                         "commentaires": len(job.commentaires)}, ensure_ascii=False)))
+
+
+def journal_plan(dossier, identifiant, proprietaire):
+    if detail_plan(dossier, identifiant, proprietaire) is None:
+        return None
+    with connexion(dossier) as base:
+        lignes = base.execute(
+            "SELECT date,type,detail FROM journal WHERE plan_id=? "
+            "ORDER BY numero DESC LIMIT 100", (identifiant,)).fetchall()
+        return [dict(l) for l in lignes]
+
+
+def clore_dates(dossier):
+    """Échéance stricte : le plan ne reprend plus après sa date de fin."""
+    jour = maintenant().date().isoformat()
+    with connexion(dossier) as base:
+        base.execute(
+            "UPDATE plans SET statut='date_limite',actualise_le=?,"
+            "message='Date limite d’exécution atteinte : corpus potentiellement incomplet.' "
+            "WHERE statut IN ('programme','suspendu') AND fin_execution<?",
+            (maintenant().isoformat(), jour))
+
+
+def reserver_requete(dossier):
+    """Budget local atomique pour tous les appels Research de cette application."""
+    maximum = max(1, min(1000, int(os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "900"))))
+    jour = maintenant().date().isoformat()
+    avec = connexion(dossier)
+    try:
+        avec.execute("BEGIN IMMEDIATE")
+        actuel = avec.execute("SELECT appels FROM quotas WHERE jour_utc=?",
+                             (jour,)).fetchone()
+        nombre = actuel[0] if actuel else 0
+        if nombre >= maximum:
+            avec.rollback()
+            return False
+        avec.execute(
+            "INSERT INTO quotas(jour_utc,appels) VALUES(?,1) "
+            "ON CONFLICT(jour_utc) DO UPDATE SET appels=quotas.appels+1", (jour,))
+        avec.execute("DELETE FROM quotas WHERE jour_utc<?",
+                     ((maintenant().date() - timedelta(days=31)).isoformat(),))
+        avec.commit()
+        return True
+    finally:
+        avec.close()
+
+
+def etat_quota(dossier):
+    jour = maintenant().date().isoformat()
+    maximum = max(1, min(1000, int(os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "900"))))
+    with connexion(dossier) as base:
+        row = base.execute("SELECT appels FROM quotas WHERE jour_utc=?", (jour,)).fetchone()
+    nombre = row[0] if row else 0
+    return {"date_utc": jour, "appels_enregistres": nombre,
+            "plafond_local": maximum, "reste_local": max(0, maximum - nombre)}
+
+
+def donnees_plan(dossier, identifiant, proprietaire):
+    if detail_plan(dossier, identifiant, proprietaire) is None:
+        return None
+    with connexion(dossier) as base:
+        publications = [
+            {**json.loads(r["donnees"]), "_retenue": bool(r["retenue"]),
+             "_premiere_collecte": r["premiere_collecte"],
+             "_derniere_collecte": r["derniere_collecte"]}
+            for r in base.execute(
+                "SELECT * FROM publications WHERE plan_id=? ORDER BY id", (identifiant,))]
+        commentaires = [json.loads(r["donnees"]) for r in base.execute(
+            "SELECT donnees FROM commentaires WHERE plan_id=? ORDER BY id", (identifiant,))]
+    return publications, commentaires
+
+
+def texte_csv(publications, commentaires, categorie):
+    lignes = publications if categorie == "publications" else commentaires
+    if categorie == "publications":
+        colonnes = CHAMPS_CSV
+        resultat = []
+        for p in lignes:
+            engagement = p.get("engagement") or {}
+            def mesure(nom):
+                v = engagement.get(nom)
+                return v.get("valeur") if isinstance(v, dict) else v
+            resultat.append({
+                "id": p.get("id"), "url": p.get("url"),
+                "author": p.get("author"), "create_time": p.get("create_time"),
+                "description": p.get("description"), "region_code": p.get("region_code"),
+                "is_verified": p.get("is_verified"),
+                **{nom: mesure(nom) for nom in
+                   ("vues", "likes", "commentaires", "partages", "favoris")},
+                "date_premiere_collecte": p.get("_premiere_collecte"),
+                "date_derniere_collecte": p.get("_derniere_collecte"),
+            })
+    else:
+        colonnes = ("id", "publication_id", "auteur", "texte", "parent_id", "est_reponse")
+        resultat = [{nom: ligne.get(nom) for nom in colonnes} for ligne in lignes]
+    flux = io.StringIO()
+    ecrivain = csv.DictWriter(flux, fieldnames=colonnes)
+    ecrivain.writeheader()
+    ecrivain.writerows(resultat)
+    return flux.getvalue()
+
+
+def exporter(dossier, identifiant, proprietaire, format_):
+    donnees = donnees_plan(dossier, identifiant, proprietaire)
+    if donnees is None:
+        return None
+    publications, commentaires = donnees
+    retenues = [p for p in publications if p["_retenue"]]
+    if format_ == "json":
+        return json.dumps({"publications": publications, "commentaires": commentaires},
+                          ensure_ascii=False, indent=2).encode("utf-8")
+    if format_ == "csv":
+        return texte_csv(retenues, commentaires, "publications").encode("utf-8-sig")
+    if format_ == "commentaires.csv":
+        return texte_csv(retenues, commentaires, "commentaires").encode("utf-8-sig")
+    if format_ == "txt":
+        return "\n\n".join(
+            f"**** *id_{p.get('id')} *profil_{p.get('author')}\n{p.get('description') or ''}"
+            for p in retenues).encode("utf-8")
+    if format_ == "zip":
+        flux = io.BytesIO()
+        with ZipFile(flux, "w", ZIP_DEFLATED) as archive:
+            for nom, contenu in {
+                "publications.csv": texte_csv(retenues, commentaires, "publications").encode("utf-8-sig"),
+                "commentaires.csv": texte_csv(retenues, commentaires, "commentaires").encode("utf-8-sig"),
+                "collecte.json": json.dumps({"publications": publications, "commentaires": commentaires},
+                                             ensure_ascii=False).encode("utf-8"),
+                "textes.txt": exporter(dossier, identifiant, proprietaire, "txt")
+            }.items():
+                archive.writestr(nom, contenu)
+        return flux.getvalue()
+    if format_ == "sqlite3":
+        with tempfile.TemporaryDirectory() as rep:
+            fichier = Path(rep) / "corpus.sqlite3"
+            with sqlite3.connect(fichier) as base:
+                base.execute("CREATE TABLE publications(id TEXT PRIMARY KEY, retenue INTEGER, donnees TEXT)")
+                base.execute("CREATE TABLE commentaires(id TEXT PRIMARY KEY, publication_id TEXT, donnees TEXT)")
+                base.executemany("INSERT INTO publications VALUES(?,?,?)", [
+                    (str(p["id"]), int(p["_retenue"]), json.dumps(p, ensure_ascii=False))
+                    for p in publications])
+                base.executemany("INSERT INTO commentaires VALUES(?,?,?)", [
+                    (str(c["id"]), str(c["publication_id"]), json.dumps(c, ensure_ascii=False))
+                    for c in commentaires])
+            return fichier.read_bytes()
+    raise ValueError("Format d'export inconnu.")
