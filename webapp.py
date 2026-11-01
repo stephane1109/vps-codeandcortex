@@ -64,6 +64,8 @@ class StartRequest(BaseModel):
     sauvegarde_progressive: bool = False
     collecter_commentaires: bool = False
     collecter_reponses: bool = False
+    collecter_follower_count: bool = False
+    follower_count_illustratif: bool = False
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
@@ -182,6 +184,11 @@ class StartRequest(BaseModel):
             if not self.medias: raise ValueError("Sélectionnez au moins un média.")
             selectionner_medias(self.medias)
         if not self.collecter_commentaires: self.collecter_reponses = False
+        # Les compteurs de profils ne sont demandés que sur le moteur officiel.
+        if self.moteur_actif != "research":
+            self.collecter_follower_count = False
+        if not self.collecter_follower_count:
+            self.follower_count_illustratif = False
         return self
 
     @property
@@ -339,7 +346,8 @@ def normaliser_variables_txt(variables):
                              for v in variables if v != "contenu_genere_ia"))
 
 
-def entete_publication(publication: dict, variables=None, supprimer_arobase_profil=False) -> str:
+def entete_publication(publication: dict, variables=None, supprimer_arobase_profil=False,
+                       follower_count_illustratif=False) -> str:
     """Écrire les variables choisies au format *nom_valeur sur une seule ligne."""
     from datetime import datetime
 
@@ -368,6 +376,13 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
     # Les anciens appels sans sélection gardent leur en-tête à trois variables.
     selection = set(normaliser_variables_txt(variables) if variables is not None else ("date", "profil", "id"))
     entete = " ".join(texte for cle, texte in valeurs.items() if cle in selection)
+    if follower_count_illustratif:
+        compteur_abonnes = publication.get("follower_count")
+        # Une donnée absente ne doit jamais être interprétée comme zéro.
+        valeur = (str(compteur_abonnes) if isinstance(compteur_abonnes, int)
+                  and not isinstance(compteur_abonnes, bool) and compteur_abonnes >= 0
+                  else "indetermine")
+        entete = f"*follower_count_{valeur}" + (" " + entete if entete else "")
     return entete + "\n" if entete else ""
 
 
@@ -409,7 +424,8 @@ def entete_sources_ia(publication, source, themes=None, variables=""):
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
                 variables_txt=None, commentaires=None, supprimer_arobase_profil=False,
-                inclure_texte_genere_ia=False, themes=None) -> str:
+                inclure_texte_genere_ia=False, themes=None,
+                follower_count_illustratif=False) -> str:
     blocks = []
     par_publication = {}
     selection = normaliser_variables_txt(variables_txt)
@@ -419,9 +435,14 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
     for record in records:
         if not record.get("description"):
             continue
-        prefix = (entete_publication(record, selection, supprimer_arobase_profil) if selection is not None
-                  else entete_publication(record, supprimer_arobase_profil=supprimer_arobase_profil) if inclure_metadonnees_txt
-                  else entete_publication(record, ("profil", "id"), supprimer_arobase_profil) if include_sources else "")
+        prefix = (entete_publication(record, selection, supprimer_arobase_profil,
+                                     follower_count_illustratif) if selection is not None
+                  else entete_publication(record, supprimer_arobase_profil=supprimer_arobase_profil,
+                                         follower_count_illustratif=follower_count_illustratif) if inclure_metadonnees_txt
+                  else entete_publication(record, ("profil", "id"), supprimer_arobase_profil,
+                                          follower_count_illustratif) if include_sources
+                  else entete_publication(record, (), supprimer_arobase_profil,
+                                          follower_count_illustratif) if follower_count_illustratif else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
@@ -657,6 +678,8 @@ class Job:
                         "video_fichier": r.get("video_fichier")} for r in self.records if r.get("video_id")],
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
                     "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
+                    "collecter_follower_count":self.settings.collecter_follower_count,
+                    "follower_count_illustratif":self.settings.follower_count_illustratif,
                     "commentaires_indisponibles": sum(r.get("collecte_commentaires", {}).get("statut") in {
                         "inaccessible", "page_differente", "indisponible_ou_vide", "panneau_introuvable",
                         "extraction_impossible", "chargement_incomplet", "erreur_chargement", "verification_tiktok",
@@ -710,6 +733,7 @@ class Job:
                 self.commentaires if self.settings.collecter_commentaires else None,
                 supprimer_arobase_profil=supprimer_arobase_profil,
                 inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
+                follower_count_illustratif=self.settings.follower_count_illustratif,
                 themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
                         else self.settings.hashtags))
 
@@ -1035,6 +1059,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     limitation_tiktok = False
     limitation_research = False
     limitation_commentaires_research = False
+    limitation_abonnes_research = False
+    cache_abonnes_research = {}
     limitation_budget = False
     try:
         job.check()
@@ -1064,7 +1090,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         plafond_decouverte = min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit
         def lire_decouvertes():
             """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
-            nonlocal links, hors_selection, dernier_debut_lecture, limitation_commentaires_research
+            nonlocal links, hors_selection, dernier_debut_lecture, limitation_commentaires_research, limitation_abonnes_research
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
@@ -1124,6 +1150,27 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             job.pause(args.delay)
                         record = connexion.lire_publication(url)
                     record["retenue"] = False
+                    if moteur_actif == "research" and job.settings.collecter_follower_count:
+                        # Un seul appel User Info par auteur ; conserver aussi les absences.
+                        from collecte.researchapi import (
+                            ResearchErreur, ResearchAccesRefuse, collecter_abonnes_research)
+                        compte_auteur = str(record.get("author") or "").casefold()
+                        if compte_auteur not in cache_abonnes_research:
+                            if limitation_abonnes_research:
+                                cache_abonnes_research[compte_auteur] = (None, "acces_refuse")
+                            else:
+                                try:
+                                    nombre_abonnes = collecter_abonnes_research(
+                                        compte_auteur, verifier=job.check,
+                                        credentiels=connexion.research_credentiels)
+                                    cache_abonnes_research[compte_auteur] = (nombre_abonnes, "ok")
+                                except ResearchAccesRefuse:
+                                    limitation_abonnes_research = True
+                                    cache_abonnes_research[compte_auteur] = (None, "acces_refuse")
+                                except ResearchErreur:
+                                    cache_abonnes_research[compte_auteur] = (None, "indisponible")
+                        record["follower_count"], record["follower_count_statut"] = (
+                            cache_abonnes_research[compte_auteur])
                     if job.settings.telecharger_mp4:
                         from telechargement_videos import correspondance_video
                         record.update(correspondance_video(record))
@@ -1389,6 +1436,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += (" Plafond interne de requêtes API Presse atteint : "
                               "collecte arrêtée sans demander davantage de données à TikTok.")
             final_status = "partial" if links else "failed"
+        if limitation_abonnes_research:
+            final_message += (" Research API : accès au nombre d\u0027abonnés refusé ; "
+                              "les valeurs indisponibles sont notées indéterminées.")
+            if final_status == "completed":
+                final_status = "partial"
         if limitation_commentaires_research:
             final_message += (" Commentaires Research API : refus ou quota détecté ; "
                               "nouvelles requêtes de commentaires suspendues.")

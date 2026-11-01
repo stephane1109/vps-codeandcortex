@@ -21,9 +21,11 @@ VERSION_RESEARCH = "research-api-officielle-v2"
 URL_TOKEN = "https://open.tiktokapis.com/v2/oauth/token/"
 URL_VIDEOS = "https://open.tiktokapis.com/v2/research/video/query/"
 URL_COMMENTAIRES = "https://open.tiktokapis.com/v2/research/video/comment/list/"
+URL_PROFIL = "https://open.tiktokapis.com/v2/research/user/info/"
 CHAMPS = ("id,username,video_description,create_time,region_code,like_count,"
           "comment_count,share_count,view_count,favorites_count,video_duration,hashtag_names,video_tag")
 CHAMPS_COMMENTAIRES = "id,video_id,text,like_count,reply_count,parent_comment_id,create_time"
+CHAMPS_PROFIL = "follower_count"
 MAX_PAGES = 60
 TAILLE_MAX = 4_000_000
 _cache_token = {"valeur": None, "expire": 0.0, "identite": None}
@@ -45,7 +47,7 @@ def identifiants_disponibles():
 
 def _requete(url, *, data, headers):
     """POST vers deux URL officielles fixes, sans redirection vers un tiers."""
-    if url not in (URL_TOKEN, _url_videos(), _url_commentaires()):
+    if url not in (URL_TOKEN, _url_videos(), _url_commentaires(), _url_profil()):
         raise ResearchErreur("Endpoint Research non autorisé.")
     req = Request(url, data=data, headers=headers, method="POST")
     try:
@@ -85,6 +87,10 @@ def _url_videos():
 
 def _url_commentaires():
     return URL_COMMENTAIRES + "?fields=" + CHAMPS_COMMENTAIRES
+
+
+def _url_profil():
+    return URL_PROFIL + "?fields=" + CHAMPS_PROFIL
 
 
 def _jeton(requete=_requete, maintenant=time.monotonic, *, credentiels=None):
@@ -293,6 +299,33 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     rapport["plage_research"] = {"debut": periodes[-1][0], "fin": periodes[0][1]}
     return list(rapport["discovered_urls"])
 
+
+
+def collecter_abonnes_research(compte, *, verifier=None, requete=_requete,
+                               jeton=None, credentiels=None):
+    """Lire le nombre d'abonnés du profil public par l'API Research officielle.
+
+    La valeur correspond à la date de la collecte, pas à la publication vidéo.
+    Une absence de valeur doit rester None et ne doit jamais devenir zéro.
+    """
+    verifier = verifier or (lambda: None)
+    compte = normaliser_compte(compte)
+    verifier()
+    acces = jeton if jeton is not None else _jeton(requete=requete, credentiels=credentiels)
+    if not isinstance(acces, str) or not acces:
+        raise ResearchAccesRefuse("Research API : jeton absent pour le profil.")
+    resultat = requete(
+        _url_profil(),
+        data=json.dumps({"username": compte}).encode("utf-8"),
+        headers={"Authorization": "Bearer " + acces, "Content-Type": "application/json"},
+    )
+    donnees = resultat.get("data") if isinstance(resultat, dict) else None
+    if not isinstance(donnees, dict):
+        raise ResearchErreur("Research API : données de profil absentes.")
+    valeur = _entier_non_negatif(donnees.get("follower_count"))
+    if valeur is None:
+        raise ResearchErreur("Research API : follower_count indisponible pour ce profil.")
+    return valeur
 
 def normaliser_commentaire_research(donnee, publication_id, *, identifiant_parent=None):
     """Préparer un commentaire officiel avec son rattachement vérifié."""

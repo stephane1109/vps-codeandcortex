@@ -11,6 +11,7 @@ on:
       - "collecte/presse_research.py"
       - "collecte/researchapi.py"
       - "tests/test_researchapi_commentaires.py"
+      - "tests/test_researchapi_abonnes.py"
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_apify.py"
@@ -46,3 +47,4 @@ jobs:
           python -m unittest discover -s tests -p test_hashtags_multiples.py -v
           python -m unittest discover -s tests -p test_presse_research.py -v
           python -m unittest discover -s tests -p test_researchapi_commentaires.py -v
+          python -m unittest discover -s tests -p test_researchapi_abonnes.py -v

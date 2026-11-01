@@ -126,6 +126,8 @@ if "initialise" not in st.session_state:
         "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",False),
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",False),
+        "collecter_follower_count":ancienne.get("collecter_follower_count",False),
+        "follower_count_illustratif":ancienne.get("follower_count_illustratif",False),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
 
@@ -175,6 +177,8 @@ st.session_state.setdefault("croiser_hashtag_presse", False)
 st.session_state.setdefault("hashtag_presse", "")
 st.session_state.setdefault("hashtags_saisis", "")
 st.session_state.setdefault("hashtags_saisis_comptes", "")
+st.session_state.setdefault("collecter_follower_count", False)
+st.session_state.setdefault("follower_count_illustratif", False)
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
     st.session_state.pop("cookies_presse_fichier", None)
 if st.session_state.pop("_effacer_research_apres_requete", False):
@@ -614,6 +618,23 @@ with onglet_collecte:
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
+        moteur_formulaire = st.session_state.get(
+            {"presse": "presse_moteur", "comptes": "profil_moteur",
+             "hashtags": "hashtag_moteur"}[source], "navigateur")
+        if moteur_formulaire == "research":
+            st.checkbox(
+                "Récupérer le nombre d'abonnés des auteurs (follower_count)",
+                key="collecter_follower_count", disabled=occupe,
+                help="Requête officielle supplémentaire sur le profil public de chaque auteur "
+                     "(une fois par compte distinct). Valeur observée à la collecte et non "
+                     "à la publication de la vidéo ; une absence reste indéterminée.")
+            if st.session_state.get("collecter_follower_count"):
+                st.checkbox(
+                    "Ajouter *follower_count en première ligne (variable illustrative IRaMuTeQ)",
+                    key="follower_count_illustratif", disabled=occupe,
+                    help="Insère *follower_count_12345 avant les autres variables du TXT. "
+                         "Une valeur absente devient *follower_count_indetermine. "
+                         "Conserve également le nombre dans les données structurées.")
         st.write("Variables à inclure avant chaque post dans le TXT")
         choix_variables = [(variable, titre) for variable, titre in VARIABLES_TXT.items() if variable != "hashtags"]
         for debut_ligne in range(0, len(choix_variables), 3):
@@ -643,6 +664,8 @@ with onglet_collecte:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
+                valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
+                valeurs["follower_count_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("follower_count_illustratif", False))
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
                 valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "navigateur")
                 valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "navigateur")
