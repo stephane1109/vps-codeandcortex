@@ -2302,6 +2302,16 @@ def create_app(manager=None):
         except RuntimeError as erreur:
             raise HTTPException(503, str(erreur)) from None
 
+    @app.post("/api/base-donnees/importer-historique")
+    def importer_historique_postgres(request: Request):
+        """Importer uniquement les archives possédées par le navigateur courant."""
+        exiger_ticket(request)
+        from stockage.postgres_consultation import importer_historique
+        try:
+            return importer_historique(manager.data_dir, owner_historique(request))
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
+
     @app.get("/api/base-donnees/{type_sauvegarde}/{identifiant}/{categorie}")
     def consulter_postgres(type_sauvegarde: str, identifiant: str, categorie: str,
                           request: Request, filtre: str = "", limite: int = 100,
