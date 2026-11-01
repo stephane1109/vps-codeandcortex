@@ -49,6 +49,15 @@ def _requete(url, *, data, headers):
     """POST vers deux URL officielles fixes, sans redirection vers un tiers."""
     if url not in (URL_TOKEN, _url_videos(), _url_commentaires(), _url_profil()):
         raise ResearchErreur("Endpoint Research non autorisé.")
+    # Budget quotidien partagé par les collectes Research de cette instance.
+    # Les jetons OAuth ne comptent pas parmi les recherches de données.
+    if url != URL_TOKEN:
+        from stockage.collectes_research import reserver_requete
+        from pathlib import Path
+        dossier = Path(os.getenv("DATA_DIR", "data"))
+        if not reserver_requete(dossier):
+            raise ResearchAccesRefuse(
+                "Quota local quotidien Research atteint : reprise après 00 h UTC.")
     req = Request(url, data=data, headers=headers, method="POST")
     try:
         with urlopen(req, timeout=25) as resultat:
