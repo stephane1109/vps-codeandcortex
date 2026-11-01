@@ -32,7 +32,7 @@ class TestsNomsSauvegarde(TestCase):
             StartRequest(nom_sauvegarde="  ", source_collecte="presse",
                          medias=["lemonde"])
         with self.assertRaises(ValidationError):
-            StartRequest(nom_sauvegarde="nom\\ninterdit", source_collecte="presse",
+            StartRequest(nom_sauvegarde="nom\ninterdit", source_collecte="presse",
                          medias=["lemonde"])
 
     def test_sqlite_pluri_journaliere_conserve_nom(self):
