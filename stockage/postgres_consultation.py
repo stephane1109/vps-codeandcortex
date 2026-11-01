@@ -101,6 +101,8 @@ def preparer_tables(connexion):
         curseur.execute(
             "CREATE INDEX IF NOT EXISTS scraptiktok_commentaires_publication "
             "ON scraptiktok_commentaires(collecte_id, publication_id)")
+        from stockage.vues_tabulaire import preparer_vues_tabulaire
+        preparer_vues_tabulaire(curseur)
 
 
 def nettoyer_parametres(parametres):
