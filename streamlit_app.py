@@ -534,6 +534,55 @@ with onglet_collecte:
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
         st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
         st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+    # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
+    moteur_formulaire = st.session_state.get(
+        {"presse": "presse_moteur", "comptes": "profil_moteur",
+         "hashtags": "hashtag_moteur"}[source], "navigateur")
+    if moteur_formulaire == "research":
+        with st.expander("Aide spécifique — TikTok Research API (quotas et collecte)"):
+            st.markdown(
+                "**Accès et identifiants.** Le moteur officiel exige un projet Research "
+                "approuvé et un Client key / Client secret valides. Le jeton d'accès "
+                "expire au bout de deux heures. Les identifiants ne sont pas inclus "
+                "dans les exports."
+            )
+            st.markdown(
+                "**Quota officiel.** TikTok indique 1 000 requêtes par jour, "
+                "soit jusqu'à 100 000 enregistrements théoriques par jour "
+                "pour les API de vidéos et de commentaires (100 résultats "
+                "maximum par requête). Ce budget est partagé au niveau de "
+                "l'organisation et se réinitialise à 00 h 00 UTC."
+            )
+            st.markdown(
+                "**Vidéos et période.** La recherche interroge automatiquement les "
+                "pages accessibles sans plafond propre à ScrapTikTok de "
+                "1 000 publications ou de 60 pages. Chaque requête vidéo "
+                "couvre au maximum 30 jours ; les périodes plus longues sont "
+                "découpées. TikTok peut retourner moins de 100 résultats "
+                "sur une page, même si d'autres existent."
+            )
+            st.markdown(
+                "**Commentaires et réponses.** Si la collecte est cochée, "
+                "ScrapTikTok parcourt les pages de commentaires accessibles "
+                "sans limite locale de 60 pages. Les réponses sont interrogées "
+                "séparément lorsqu'elles sont activées ; ces requêtes "
+                "consomment également le quota officiel."
+            )
+            st.markdown(
+                "**Arrêts et limites.** Une erreur, un refus d'accès, un quota "
+                "épuisé, une interruption manuelle ou la durée maximale "
+                "du traitement sur le VPS peuvent arrêter la collecte. "
+                "Les résultats déjà enregistrés restent exploitables, "
+                "mais l'exhaustivité n'est pas garantie. ScrapTikTok "
+                "n'affiche pas actuellement de compteur officiel "
+                "du quota restant pour l'organisation. Les MP4 "
+                "ne sont pas fournis par cette API."
+            )
+            st.markdown(
+                "Documentation officielle : "
+                "[FAQ Research](https://developers.tiktok.com/docs/en/research-api-faq) "
+                "et [pagination des vidéos](https://developers.tiktok.com/docs/en/research-api-get-started)."
+            )
     cle_liste_hashtags = (
         "hashtags_saisis" if source == "hashtags" else "hashtags_saisis_comptes")
     liste_hashtags = []
@@ -606,19 +655,26 @@ with onglet_collecte:
         except ValueError as erreur:
             erreur_hashtags_exclus = str(erreur)
             st.error(erreur_hashtags_exclus)
-        st.number_input(
-            "Nombre TOTAL de posts à lire (tous hashtags confondus)"
-            if source == "hashtags" else "Nombre de posts TikTok à collecter par source",
-            min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
-            help=(
-                "Objectif maximal sur l'ensemble des hashtags saisis, en ET comme en OU. "
-                "Le budget est partagé entre les hashtags, y compris leurs variantes. "
-                "Les légendes, les langues et les dates sont filtrées après lecture."
-                if source == "hashtags" else
-                f"Borne technique du moteur : {max_posts_admin} posts par source. "
-                "Il est vérifié aussi sur les requêtes API directes."
-            ),
-        )
+        if moteur_formulaire == "research":
+            st.caption(
+                "Research API : collecte automatique des publications accessibles, "
+                "sans plafond local de posts ou de pages. La durée du traitement "
+                "et les quotas officiels de TikTok restent applicables."
+            )
+        else:
+            st.number_input(
+                "Nombre TOTAL de posts à lire (tous hashtags confondus)"
+                if source == "hashtags" else "Nombre de posts TikTok à collecter par source",
+                min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
+                help=(
+                    "Objectif maximal sur l'ensemble des hashtags saisis, en ET comme en OU. "
+                    "Le budget est partagé entre les hashtags, y compris leurs variantes. "
+                    "Les légendes, les langues et les dates sont filtrées après lecture."
+                    if source == "hashtags" else
+                    f"Borne technique du moteur : {max_posts_admin} posts par source. "
+                    "Il est vérifié aussi sur les requêtes API directes."
+                ),
+            )
         if source == "presse":
             nombre_medias=len(st.session_state.get("medias",[]))
             if nombre_medias:
@@ -654,9 +710,6 @@ with onglet_collecte:
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
-        moteur_formulaire = st.session_state.get(
-            {"presse": "presse_moteur", "comptes": "profil_moteur",
-             "hashtags": "hashtag_moteur"}[source], "navigateur")
         st.write("Variables à inclure avant chaque post dans le TXT")
         st.caption(
             "Cochez indépendamment les valeurs brutes et les intervalles. "
@@ -799,6 +852,7 @@ with onglet_collecte:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 if moteur_formulaire != "research":
                     valeurs["limite_commentaires"] = st.session_state.get("limite_commentaires", 50)
+                valeurs["collecte_research_complete"] = moteur_formulaire == "research"
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
