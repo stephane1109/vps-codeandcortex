@@ -89,6 +89,41 @@ class TestsPostgresConsultation(unittest.TestCase):
         self.assertNotIn("cookie_prive", textes)
         self.assertIn(empreinte("cookie_prive"), textes)
 
+    def test_archivage_incremental_ne_reecrit_pas_les_anciens_enregistrements(self):
+        """Un point automatique ne réinsère que les publications nouvelles."""
+        travail = SimpleNamespace(
+            lock=RLock(), id="d" * 32, owner_historique="cookie_prive",
+            settings=ParametresFictifs(), status="collecting", processed=2,
+            publications=[
+                {"id": "101", "description": "Ancienne vidéo"},
+                {"id": "102", "description": "Nouvelle vidéo"}],
+            records=[], commentaires=[
+                {"id": "201", "publication_id": "101", "texte": "Ancien"},
+                {"id": "202", "publication_id": "102", "texte": "Nouveau"}])
+        connexion = ConnexionFictive()
+        with patch("stockage.postgres_consultation.ouvrir_connexion",
+                   return_value=connexion):
+            bilan = archiver_collecte(
+                travail, a_partir_publications=1, a_partir_commentaires=1)
+        self.assertEqual(bilan["publications"], 1)
+        self.assertEqual(bilan["commentaires"], 1)
+        insertions = [
+            (sql, valeurs) for sql, valeurs in connexion.curseur.executions
+            if sql.lstrip().upper().startswith("INSERT INTO")]
+        donnees = {
+            "publications": [
+                valeurs[1] for sql, valeurs in insertions
+                if "INSERT INTO scraptiktok_publications" in sql],
+            "commentaires": [
+                valeurs[1] for sql, valeurs in insertions
+                if "INSERT INTO scraptiktok_commentaires" in sql],
+        }
+        self.assertEqual(donnees["publications"], ["102"])
+        self.assertEqual(donnees["commentaires"], ["202"])
+        self.assertEqual(
+            len([1 for sql, _ in insertions
+                 if "INSERT INTO scraptiktok_collectes" in sql]), 1)
+
     def test_import_historique_autorise_par_cookie(self):
         """L'import reprend la sauvegarde possédée par le même navigateur."""
         with tempfile.TemporaryDirectory() as dossier:
