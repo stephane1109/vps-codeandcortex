@@ -139,7 +139,8 @@ if "initialise" not in st.session_state:
         "hashtags_exclus_saisis": ", ".join(
             "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
-        "limite_commentaires":ancienne.get("limite_commentaires",50)}
+        "limite_commentaires":ancienne.get("limite_commentaires",50),
+        "test_research_10_publications":ancienne.get("test_research_10_publications",False)}
 
     variables = ancienne.get("variables_txt")
     if variables is None:
@@ -569,6 +570,12 @@ with onglet_collecte:
                 "consomment également le quota officiel."
             )
             st.markdown(
+                "**Mode test.** L'option \"Faire un test sur 10 publications\" "
+                "arrête la collecte après 10 publications consultées au total. "
+                "Les commentaires et les exports sélectionnés sont conservés ; "
+                "décochez la case pour lancer ensuite la collecte complète."
+            )
+            st.markdown(
                 "**Arrêts et limites.** Une erreur, un refus d'accès, un quota "
                 "épuisé, une interruption manuelle ou la durée maximale "
                 "du traitement sur le VPS peuvent arrêter la collecte. "
@@ -657,11 +664,26 @@ with onglet_collecte:
             erreur_hashtags_exclus = str(erreur)
             st.error(erreur_hashtags_exclus)
         if moteur_formulaire == "research":
-            st.caption(
-                "Research API : collecte automatique des publications accessibles, "
-                "sans plafond local de posts ou de pages. La durée du traitement "
-                "et les quotas officiels de TikTok restent applicables."
+            st.checkbox(
+                "Faire un test sur 10 publications",
+                key="test_research_10_publications", disabled=occupe,
+                help="Facultatif. Limite la collecte à 10 publications consultées "
+                     "au total, tous comptes ou hashtags confondus. Les filtres, "
+                     "les commentaires et les exports sélectionnés sont conservés. "
+                     "Décochez cette option pour lancer le scraping complet."
             )
+            if st.session_state.get("test_research_10_publications", False):
+                st.caption(
+                    "Mode test : 10 publications au maximum, toutes sources confondues. "
+                    "Les résultats sont exportables ; la collecte complète "
+                    "ne démarre pas automatiquement."
+                )
+            else:
+                st.caption(
+                    "Research API : collecte automatique des publications accessibles, "
+                    "sans plafond local de posts ou de pages. La durée du traitement "
+                    "et les quotas officiels de TikTok restent applicables."
+                )
         else:
             st.number_input(
                 "Nombre TOTAL de posts à lire (tous hashtags confondus)"
@@ -860,6 +882,9 @@ with onglet_collecte:
                 if moteur_formulaire != "research":
                     valeurs["limite_commentaires"] = st.session_state.get("limite_commentaires", 50)
                 valeurs["collecte_research_complete"] = moteur_formulaire == "research"
+                valeurs["test_research_10_publications"] = bool(
+                    moteur_formulaire == "research"
+                    and st.session_state.get("test_research_10_publications", False))
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus

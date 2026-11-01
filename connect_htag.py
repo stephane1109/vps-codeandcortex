@@ -36,6 +36,9 @@ class ConnexionHashtag(ConnexionPresse):
                                   if (getattr(parametres, "date_debut", None)
                                       or getattr(parametres, "date_fin", None))
                                   else limite_demandee)
+        if getattr(parametres, "test_research_10_publications", False):
+            # Ne pas élargir la découverte à cinquante candidats avec les dates.
+            self._budget_decouverte = 10
         self._quota_hashtag = {
             demande: (None if self._budget_decouverte is None else
                      self._budget_decouverte // nombre_demandes

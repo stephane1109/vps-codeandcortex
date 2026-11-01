@@ -79,6 +79,7 @@ class StartRequest(BaseModel):
     variantes_accents: bool = False
     limit: int = Field(default=50, ge=1, le=1000)
     collecte_research_complete: bool = False
+    test_research_10_publications: bool = False
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
@@ -197,8 +198,13 @@ class StartRequest(BaseModel):
             if not self.medias: raise ValueError("Sélectionnez au moins un média.")
             selectionner_medias(self.medias)
         if not self.collecter_commentaires: self.collecter_reponses = False
+        # Le mode test Research prend le pas sur la collecte automatique.
+        if self.moteur_actif == "research" and self.test_research_10_publications:
+            self.collecte_research_complete = True
+            self.limit = 10
         # Les compteurs de profils ne sont demandés que sur le moteur officiel.
         if self.moteur_actif != "research":
+            self.test_research_10_publications = False
             self.collecte_research_complete = False
             self.collecter_follower_count = False
             self.collecter_is_verified = False
@@ -762,6 +768,7 @@ class Job:
                         for r in self.records if "collecte_commentaires" in r],
                     "limite_commentaires":self.settings.limite_commentaires,
                     "collecte_research_complete":self.settings.collecte_research_complete,
+                    "test_research_10_publications":self.settings.test_research_10_publications,
                     "archive_prete": self.archive_prete, "video_busy": self.video_busy,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
@@ -1120,7 +1127,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
         hashtag=job.settings.hashtag,
-        limit=(None if job.settings.moteur_actif == "research"
+        limit=(10 if job.settings.test_research_10_publications
+               else None if job.settings.moteur_actif == "research"
                and job.settings.collecte_research_complete else job.settings.limit),
         inclure_texte_genere_ia=job.settings.inclure_texte_genere_ia,
         max_scrolls=max_defilements(),
@@ -1167,14 +1175,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         # explorés lorsque l’utilisateur filtre les dates de publication.
         filtre_dates_hashtags = (job.settings.source_collecte == "hashtags" and
                                  bool(job.settings.date_debut or job.settings.date_fin))
-        plafond_decouverte = (None if args.limit is None else
-                              min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit)
+        plafond_decouverte = (
+            10 if job.settings.test_research_10_publications else
+            None if args.limit is None else
+            min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit
+        )
         def lire_decouvertes():
             """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
             nonlocal links, hors_selection, dernier_debut_lecture, limitation_commentaires_research, limitation_abonnes_research
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
+                if job.settings.test_research_10_publications and job.processed >= 10:
+                    break
                 if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
                     break
                 url = links[index - 1]
@@ -1444,6 +1457,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
 
         for numero_source, source in enumerate(sources, 1):
             job.check()
+            if job.settings.test_research_10_publications and len(unique_links) >= 10:
+                break
             # Double garde-fou : même si un connecteur de hashtags renvoie
             # trop d'URL, ne jamais retenir plus que la limite globale saisie.
             if (job.settings.source_collecte == "hashtags" and plafond_decouverte is not None
@@ -1452,6 +1467,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
             rapport = {}
+            # Limiter chaque source à la quantité restante du test global.
+            limite_initiale = args.limit
+            if job.settings.test_research_10_publications:
+                args.limit = 10 - len(unique_links)
             def suivre_decouverte(nombre):
                 job.actualiser_decouverte(rapport)
                 requete = rapport.get("requete_recherche") or etiquette
@@ -1481,6 +1500,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     identity = scraper.canonical_post(url)
                     if identity and (job.settings.source_collecte == "hashtags"
                                      or identity[2].casefold() in medias_par_compte):
+                        if (job.settings.test_research_10_publications
+                                and len(unique_links) >= 10):
+                            break
                         if (job.settings.source_collecte == "hashtags"
                                 and plafond_decouverte is not None
                                 and len(unique_links) >= plafond_decouverte):
@@ -1502,6 +1524,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     for url in rapport.get("discovered_urls", []):
                         identite = scraper.canonical_post(url)
                         if identite and identite[2].casefold() in medias_par_compte:
+                            if (job.settings.test_research_10_publications
+                                    and len(unique_links) >= 10):
+                                break
                             unique_links.setdefault(identite[0], identite[1])
                     limitation_research = True
                     job.update(search_errors=job.search_errors + 1,
@@ -1533,6 +1558,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 if len(sources) == 1 or scraper.est_erreur_session(erreur): raise
                 job.update(search_errors=job.search_errors + 1)
             finally:
+                args.limit = limite_initiale
                 job.actualiser_decouverte(rapport)
             job.update(discovered=len(unique_links))
             # Exporter chaque compte aussitôt sa découverte terminée.
@@ -1540,6 +1566,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     and len(unique_links) > job.processed):
                 lire_decouvertes()
             if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
+                break
+            if (job.settings.test_research_10_publications
+                    and (job.processed >= 10 or len(unique_links) >= 10)):
                 break
         # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
         if limitation_research and len(unique_links) > job.processed:
@@ -1549,6 +1578,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             lire_decouvertes()
         exclus_decouverte = set().union(*(set(e.get("rapport", {}).get("auteurs_ecartes_ids", [])) for e in job.journal))
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
+        if job.settings.test_research_10_publications:
+            # L'arrêt voulu après dix lectures ne constitue pas une collecte partielle.
+            recherche_partielle = False
         if job.settings.source_collecte != "hashtags":
             retenues_par_compte = {compte: 0 for compte in medias_par_compte}
             for url in links:
@@ -1556,10 +1588,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 if identite and identite[2].casefold() in retenues_par_compte:
                     retenues_par_compte[identite[2].casefold()] += 1
             # Chaque profil contribue indépendamment à la limite demandée.
-            if args.limit is not None:
+            if args.limit is not None and not job.settings.test_research_10_publications:
                 recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
         final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
+        if job.settings.test_research_10_publications:
+            final_message += (
+                f" Mode test Research : {job.processed}/10 publication(s) consultée(s). "
+                "Décochez « Faire un test sur 10 publications » pour lancer "
+                "la collecte complète."
+            )
         if not job.records:
             final_message = ("Aucune publication accessible : consultez le détail des sources."
                              if not links else "Aucune légende exploitable retenue parmi les publications consultées.")
@@ -1593,7 +1631,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.errors:
             final_message += f" {job.errors} publication(s) dont la légende n’a pas pu être lue."
         if job.settings.source_collecte != "hashtags":
-            if args.limit is None:
+            if job.settings.test_research_10_publications:
+                pass  # Le résumé du mode test a déjà été ajouté.
+            elif args.limit is None:
                 final_message += (" Research API : pagination automatique des résultats accessibles ; "
                                   "l’exhaustivité du corpus n’est pas garantie.")
             else:

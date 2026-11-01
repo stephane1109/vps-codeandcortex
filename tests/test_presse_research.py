@@ -186,6 +186,66 @@ class TestsResearch(unittest.TestCase):
                     self.assertNotIn(b"client_test_secret", fichier.read_bytes())
 
 
+
+    def test_test_research_dix_publications_partagees_entre_medias(self):
+        """Le mode test arrête la découverte et la lecture après dix vidéos."""
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from webapp import Job, StartRequest, execute_job
+
+        demandes = []
+        def collecter(compte, limite, rapport, **options):
+            demandes.append((compte, limite))
+            base = 0 if compte == "lemondefr" else 100
+            maximum = 6 if compte == "lemondefr" else 20
+            candidats = [
+                _fiche({**v(base + numero, compte),
+                        "video_description": "Manifestation #manifestation",
+                        "hashtag_names": ["manifestation"]}, compte)
+                for numero in range(1, maximum + 1)
+            ]
+            retenus = candidats[:limite]
+            rapport.update(
+                discovered_urls=[item["url"] for item in retenus],
+                metadonnees_api={item["id"]: item for item in retenus},
+                candidats_examines=len(retenus), pages_research=1,
+                navigation_publications="research_officielle",
+                discovery_stop="fin_des_periodes", collecte_partielle=False)
+            return [item["url"] for item in retenus]
+
+        navigateur = Mock(side_effect=AssertionError("Pas de navigateur avec Research"))
+        with TemporaryDirectory() as dossier:
+            options = StartRequest(
+                source_collecte="presse",
+                medias=["lemonde", "franceinfo", "leparisien"],
+                presse_moteur="research",
+                test_research_10_publications=True,
+                research_client_key="test_key",
+                research_client_secret="test_secret")
+            self.assertEqual(options.limit, 10)
+            self.assertTrue(options.collecte_research_complete)
+            job = Job("f"*64, options, Path(dossier))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=collecter):
+                execute_job(job, driver_factory=navigateur)
+            navigateur.assert_not_called()
+            self.assertEqual(demandes, [("lemondefr", 10), ("franceinfo", 4)])
+            self.assertEqual(job.processed, 10)
+            self.assertEqual(len(job.records), 10)
+            self.assertEqual(len(job.publications), 10)
+            self.assertIn("Mode test Research", job.message)
+            self.assertEqual(job.snapshot()["test_research_10_publications"], True)
+
+    def test_test_research_est_ignore_pour_un_autre_moteur(self):
+        """Le mode test ne change pas le fonctionnement des moteurs non Research."""
+        from webapp import StartRequest
+        options = StartRequest(
+            source_collecte="presse", medias=["lemonde"],
+            presse_moteur="navigateur", limit=75,
+            test_research_10_publications=True)
+        self.assertFalse(options.test_research_10_publications)
+        self.assertEqual(options.limit, 75)
+
     def test_identifiants_du_formulaire_sont_exclus_des_serialisations(self):
         from webapp import StartRequest
         with patch.dict(os.environ, {}, clear=True):
