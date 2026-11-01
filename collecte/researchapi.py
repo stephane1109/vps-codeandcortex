@@ -230,7 +230,10 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     if not automatique:
         limite = max(1, min(int(limite), 1000))
     rapport.update(compte_attendu=compte, navigation_publications="research_officielle",
-                   requete_recherche=(f"#{hashtag}" if hashtag else f"@{compte}") + " : Research API officielle",
+                   requete_recherche=(
+                       (f"@{compte} ET #{hashtag}" if compte and hashtag else
+                        f"#{hashtag}" if hashtag else f"@{compte}")
+                       + " : Research API officielle"),
                    discovered_urls=[], metadonnees_api={}, pages_research=0,
                    requetes_tentees=0, candidats_examines=0, auteurs_ecartes=0,
                    collecte_partielle=True, exhaustif=False,
@@ -251,9 +254,15 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
         while (automatique or (rapport["pages_research"] < MAX_PAGES
                                 and len(contenus) < limite)):
             verifier()
+            conditions = []
+            if compte is not None:
+                conditions.append({"field_name": "username", "operation": "EQ",
+                                   "field_values": [compte]})
+            if hashtag is not None:
+                conditions.append({"field_name": "hashtag_name", "operation": "EQ",
+                                   "field_values": [hashtag]})
             requete_corps = {
-                "query": {"and": [{"field_name": "hashtag_name" if hashtag else "username",
-                                   "operation": "EQ", "field_values": [hashtag or compte]}]},
+                "query": {"and": conditions},
                 "start_date": borne_debut, "end_date": borne_fin,
                 "max_count": 100 if automatique else min(100, limite - len(contenus)),
                 "is_random": False,

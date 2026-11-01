@@ -440,8 +440,14 @@ with onglet_collecte:
                 placeholder="#manifestation", disabled=occupe,
                 help="Un seul hashtag, avec ou sans #. Seules les publications portant ce hashtag "
                      "dans leur légende seront retenues pour les exports et les analyses.")
-            st.caption("Croisement : comptes sélectionnés ET hashtag indiqué. "
-                       "Le nombre de posts par média est une limite de lecture avant filtrage.")
+            st.caption(
+                "Croisement : comptes sélectionnés ET hashtag indiqué. "
+                "Avec la Research API officielle, les deux critères sont "
+                "envoyés ensemble à TikTok (AND) puis vérifiés localement. "
+                "Les filtres de période et de langue peuvent encore exclure "
+                "certaines publications. Un hashtag ne garantit pas que le "
+                "contenu visuel traite effectivement du sujet."
+            )
         # Une seule ligne d'information Streamlit : plusieurs st.caption,
         # st.warning ou st.error consécutifs créent des espaces vides inutiles.
         # Les messages sont assemblés sans saut de paragraphe ; une alerte
@@ -1141,6 +1147,22 @@ with onglet_collecte:
             # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
             if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
                 st.rerun()
+            if actuel.get("source_collecte") == "presse":
+                if actuel.get("croiser_hashtag_presse"):
+                    st.caption(
+                        "Croisement appliqué : médias sélectionnés ET "
+                        f"#{actuel.get('hashtag_presse', '')}. "
+                        "Une vidéo ne doit être retenue que si ce hashtag figure "
+                        "parmi ses hashtags. Le tag ne garantit pas la pertinence "
+                        "thématique du contenu audiovisuel."
+                    )
+                else:
+                    st.caption(
+                        "Aucun filtre de hashtag n'est activé pour cette collecte "
+                        "par médias : leurs vidéos peuvent porter sur n'importe "
+                        "quel sujet. Activez « Croisement avec un hashtag » "
+                        "pour restreindre la recherche."
+                    )
             if actuel.get("comptes_filtres"):
                 st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
                 if actuel.get("source_collecte") != "presse":

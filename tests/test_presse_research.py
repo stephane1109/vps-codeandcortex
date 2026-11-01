@@ -81,6 +81,37 @@ class TestsResearch(unittest.TestCase):
                          ["engagement"]["vues"]["valeur"], 0)
         self.assertEqual(rapport["discovery_stop"], "limit")
 
+    def test_research_requete_compte_et_hashtag_combines_et_verifies(self):
+        """La sélection du croisement filtre les vidéos dès la requête API."""
+        demandes = []
+
+        def serveur(url, *, data, headers):
+            corps = json.loads(data)
+            demandes.append(corps)
+            return {"data": {"videos": [
+                {**v(1, "parismatch"), "hashtag_names": ["24octobre"],
+                 "video_description": "Manifestation #24octobre"},
+                {**v(2, "parismatch"), "hashtag_names": ["autre"],
+                 "video_description": "Actualité sans rapport"},
+                {**v(3, "brutofficiel"), "hashtag_names": ["24octobre"],
+                 "video_description": "Autre auteur #24octobre"},
+            ], "has_more": False}}
+
+        etat = {}
+        urls = collecter_videos_presse_research(
+            "parismatch", 10, etat, requete=serveur, jeton="test",
+            hashtag="24octobre", debut="2026-10-01", fin="2026-10-25",
+            aujourd_hui=date(2026, 10, 25), pause=lambda _: None)
+        self.assertEqual(demandes[0]["query"]["and"], [
+            {"field_name": "username", "operation": "EQ",
+             "field_values": ["parismatch"]},
+            {"field_name": "hashtag_name", "operation": "EQ",
+             "field_values": ["24octobre"]}
+        ])
+        self.assertEqual(len(urls), 1)
+        self.assertIn("@parismatch ET #24octobre", etat["requete_recherche"])
+        self.assertEqual(etat["auteurs_ecartes"], 2)
+
     def test_mode_automatique_depasse_ancien_plafond_pages(self):
         appels = []
 
@@ -286,6 +317,44 @@ class TestsResearch(unittest.TestCase):
             self.assertEqual(
                 {element["motif"] for element in resultat["apercu_filtrage"]},
                 {"langue_indeterminee", "retenue"})
+
+    def test_research_achemine_croisement_presse_vers_les_deux_medias(self):
+        """Le hashtag explicite est transmis pour chaque auteur interrogé."""
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from webapp import Job, StartRequest, execute_job
+
+        observations = []
+
+        def collecter(compte, limite, rapport, **options):
+            observations.append((compte, limite, options.get("hashtag")))
+            fiche = _fiche({**v(len(observations), compte),
+                           "video_description": "Manifestation #24octobre",
+                           "hashtag_names": ["24octobre"]}, compte)
+            rapport.update(
+                discovered_urls=[fiche["url"]],
+                metadonnees_api={fiche["id"]: fiche},
+                candidats_examines=1, pages_research=1,
+                navigation_publications="research_officielle",
+                discovery_stop="fin_des_periodes")
+            return [fiche["url"]]
+
+        with TemporaryDirectory() as dossier:
+            options = StartRequest(
+                source_collecte="presse", medias=["parismatch", "brut"],
+                presse_moteur="research", test_research_10_publications=True,
+                croiser_hashtag_presse=True, hashtag_presse="24octobre",
+                research_client_key="test_key", research_client_secret="test_secret")
+            job = Job("c" * 64, options, Path(dossier))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=collecter):
+                execute_job(job, driver_factory=Mock(
+                    side_effect=AssertionError("Chrome interdit avec Research")))
+            self.assertEqual(observations, [
+                ("parismatch", 5, "24octobre"),
+                ("brutofficiel", 5, "24octobre")])
+            self.assertEqual(job.processed, 2)
+            self.assertEqual(len(job.records), 2)
 
     def test_test_research_est_ignore_pour_un_autre_moteur(self):
         """Le mode test ne change pas le fonctionnement des moteurs non Research."""

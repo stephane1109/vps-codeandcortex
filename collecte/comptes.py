@@ -193,6 +193,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                 lambda etat, suivi: collecter_videos_presse_research(
                     compte, arguments.limit, etat, check=verifier, progress=suivi,
                     debut=options.get("research_debut"), fin=options.get("research_fin"),
+                    hashtag=options.get("research_hashtag"),
                     credentiels=options.get("research_credentiels"),
                     exclusions=options.get("research_exclusions", ())))
         else:
