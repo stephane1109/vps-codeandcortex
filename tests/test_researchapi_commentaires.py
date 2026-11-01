@@ -147,7 +147,8 @@ class TestResearchCommentaires(unittest.TestCase):
                 "texte": "Commentaire Research", "parent_id": None,
                 "est_reponse": False, "source": "research_api_officielle",
             }], "statut": "complet", "recuperes": 1,
-                "exhaustif": False, "bloquer_requetes": False}
+                "exhaustif": False, "bloquer_requetes": False,
+                "source": "research_api_officielle"}
         navigateur = Mock(side_effect=AssertionError("Le navigateur est interdit"))
         with tempfile.TemporaryDirectory() as dossier:
             travail = Job("test" * 16, StartRequest(
