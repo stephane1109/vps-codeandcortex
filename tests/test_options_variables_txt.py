@@ -47,6 +47,28 @@ class TestsOptionsVariablesTXT(unittest.TestCase):
         self.assertIn("*duree_0", texte)
         self.assertIn("*duree_classe_moins_15s", texte)
 
+    def test_collecte_commentaires_conservee_avec_les_variables_txt(self):
+        """La collecte des textes ne dépend pas de la case du compteur numérique."""
+        config = StartRequest(
+            hashtag="lyceens", collecter_commentaires=True,
+            collecter_reponses=True, limite_commentaires=30,
+            variables_txt=["date", "profil"],
+            variables_classes_txt=["commentaires"])
+        self.assertTrue(config.collecter_commentaires)
+        self.assertTrue(config.collecter_reponses)
+        self.assertEqual(config.limite_commentaires, 30)
+        self.assertNotIn("commentaires", config.variables_txt)
+        commentaire = {
+            "publication_id": "987654321", "texte": "Une réponse"}
+        publication = {"id": "987654321", "author": "pressefr",
+                       "description": "Manifestation"}
+        txt = text_export([publication], False,
+                          variables_txt=config.variables_txt,
+                          commentaires=[commentaire],
+                          variables_classes_txt=config.variables_classes_txt)
+        self.assertIn("Commentaire 1", txt)
+        self.assertIn("Une réponse", txt)
+
     def test_ancienne_selection_et_nouveaux_champs(self):
         config = StartRequest(
             hashtag="lyceens",

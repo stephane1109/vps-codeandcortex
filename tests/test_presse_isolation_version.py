@@ -59,20 +59,26 @@ class TestIsolationPresse(unittest.TestCase):
         self.assertIn('["api", "research", "navigateur", "gallerydl", "tikhub", "apify"]',texte[choix:medias])
 
 
-    def test_options_commentaires_sous_case_et_titre_periode(self):
-        """Les options commentaires suivent la case, avant le titre Période."""
+    def test_options_commentaires_dans_les_variables_txt(self):
+        """La collecte des commentaires et ses réglages suivent le titre du TXT."""
         from pathlib import Path
         code=Path(__file__).resolve().parents[1].joinpath(
             "streamlit_app.py").read_text(encoding="utf-8")
-        case=code.index('st.checkbox("Collecter les textes des commentaires"')
+        periode=code.index('st.subheader("Période")')
+        dates=code.index('with st.expander("Dates (facultatif)"', periode)
+        variables=code.index('st.write("Variables à inclure avant chaque post dans le TXT")', dates)
+        case=code.index('st.checkbox("Collecter les textes des commentaires"', variables)
         options=code.index('with st.expander("Options des commentaires")',case)
-        titre=code.index('st.subheader("Période")',options)
-        dates=code.index('with st.expander("Dates (facultatif)"',titre)
-        variables=code.index('st.write("Variables à inclure avant chaque post dans le TXT")',dates)
-        self.assertLess(case,options)
-        self.assertLess(options,titre)
-        self.assertLess(titre,dates)
-        self.assertLess(dates,variables)
+        reponses=code.index('st.checkbox("Inclure les réponses accessibles"',options)
+        limite=code.index('st.number_input("Commentaires maximum par publication"',reponses)
+        lancement=code.index('st.button("Lancer la collecte"', limite)
+        self.assertLess(periode, dates)
+        self.assertLess(dates, variables)
+        self.assertLess(variables, case)
+        self.assertLess(case, options)
+        self.assertLess(options, reponses)
+        self.assertLess(reponses, limite)
+        self.assertLess(limite, lancement)
 
 
     def test_diagnostics_sources_compacts_et_nom_methode_selenium(self):

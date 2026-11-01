@@ -640,16 +640,6 @@ with onglet_collecte:
                  "même partielle. Il reste disponible après redémarrage pendant 7 jours par défaut, "
                  "si /app/data est un volume persistant. Les MP4 ne sont pas copiés. "
                  "Cela ne permet pas de reprendre automatiquement Selenium.")
-        st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
-            help="Sur les publications retenues, dans la limite indiquée sous Options des commentaires. Le nombre de commentaires est recherché même si cette option est décochée.")
-        with st.expander("Options des commentaires"):
-            def respecter_choix_commentaires():
-                if not st.session_state["collecter_commentaires"]: st.session_state["collecter_reponses"] = False
-            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses", disabled=occupe, help="Les réponses sont collectées uniquement si la collecte des commentaires est cochée.")
-            st.number_input("Commentaires maximum par publication", min_value=1,
-                max_value=max_commentaires_admin, step=1,
-                key="limite_commentaires", disabled=occupe,
-                help="Borne technique contrôlée également côté serveur.")
         st.subheader("Période")
         with st.expander("Dates (facultatif)", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
             d1,d2 = st.columns(2)
@@ -693,6 +683,25 @@ with onglet_collecte:
                 key="txt_classe_" + nom, disabled=occupe,
                 help="Variable illustrative IRaMuTeQ. La valeur brute reste dans le CSV, "
                      "même si elle n'est pas cochée dans le TXT.")
+
+        # Cette option collecte les textes des commentaires ; elle est distincte
+        # de la variable numérique « Nombre de commentaires » du TXT.
+        st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
+            help="Ajoute les commentaires récupérés au corpus TXT et aux exports "
+                 "commentaires.csv et commentaires.json. Le nombre total de commentaires "
+                 "reste une variable numérique indépendante.")
+        with st.expander("Options des commentaires"):
+            def respecter_choix_commentaires():
+                if not st.session_state["collecter_commentaires"]:
+                    st.session_state["collecter_reponses"] = False
+            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses",
+                disabled=occupe or not st.session_state.get("collecter_commentaires", False),
+                help="Collecter les réponses uniquement lorsque la collecte des "
+                     "textes des commentaires est activée.")
+            st.number_input("Commentaires maximum par publication", min_value=1,
+                max_value=max_commentaires_admin, step=1,
+                key="limite_commentaires", disabled=occupe,
+                help="Borne technique contrôlée également côté serveur.")
 
         st.checkbox(
             "Récupérer le nombre d'abonnés des auteurs (follower_count)",
