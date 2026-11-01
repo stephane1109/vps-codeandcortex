@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from stockage.postgres_consultation import (
     IDENTIFIANT, adresse_configuree, empreinte, valeur_colonne,
-    archiver_collecte, importer_historique,
+    archiver_collecte, importer_historique, preparer_tables,
 )
 
 
@@ -65,6 +65,29 @@ class TestsPostgresConsultation(unittest.TestCase):
             {"engagement": {"vues": {"valeur": 0}}}, "vues"), "0")
         self.assertEqual(valeur_colonne(
             {"engagement": {"vues": {"valeur": None}}}, "vues"), "")
+
+    def test_vues_tabulaire_creees_avec_les_tables(self):
+        """Les métadonnées et compteurs ont des colonnes consultables."""
+        connexion = ConnexionFictive()
+        preparer_tables(connexion)
+        instructions = [
+            sql for sql, _ in connexion.curseur.executions]
+        vue_videos = next(
+            sql for sql in instructions
+            if "CREATE OR REPLACE VIEW scraptiktok_publications_tableau" in sql)
+        vue_commentaires = next(
+            sql for sql in instructions
+            if "CREATE OR REPLACE VIEW scraptiktok_commentaires_tableau" in sql)
+        for variable in (
+            "publication_id", "nom_sauvegarde", "region_code",
+            "is_verified", "follower_count", "vues", "likes",
+            "commentaires", "partages", "favoris", "taux_engagement",
+            "hashtags", "contenu_genere_ia", "duree_secondes"):
+            self.assertIn(variable, vue_videos)
+        self.assertIn("COALESCE", vue_commentaires)
+        self.assertIn("commentaire_id", vue_commentaires)
+        self.assertIn("JOIN scraptiktok_collectes", vue_videos)
+        self.assertIn("JOIN scraptiktok_collectes", vue_commentaires)
 
     def test_archiver_test_sans_texte_retenu_et_sans_secrets(self):
         """Les vidéos rejetées sont archivées, même si le TXT est vide."""
