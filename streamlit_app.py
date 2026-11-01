@@ -1054,6 +1054,24 @@ with onglet_collecte:
                     )
                     if plan.get("message"):
                         st.caption(plan["message"])
+                    st.caption(
+                        "SQLite conserve automatiquement le corpus. "
+                        "Avec RESEARCH_POSTGRES_DSN dans Coolify, "
+                        "une copie est également archivée dans PostgreSQL."
+                    )
+                    if st.button("Synchroniser vers PostgreSQL",
+                                 key=f"plan_pg_{identifiant}"):
+                        try:
+                            resultat_pg = api(
+                                f"/api/research/plans/{identifiant}/synchroniser-postgres", {})
+                        except RuntimeError as erreur:
+                            st.warning(str(erreur))
+                        else:
+                            st.success(
+                                f"PostgreSQL synchronisé : "
+                                f"{resultat_pg['publications']} publications et "
+                                f"{resultat_pg['commentaires']} commentaires."
+                            )
                     commandes = (
                         ["suspendre", "arreter"]
                         if plan["statut"] in {"programme", "en_cours"}

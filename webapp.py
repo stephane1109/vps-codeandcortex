@@ -1856,6 +1856,9 @@ class Manager:
             try:
                 enregistrer_lot(self.data_dir, plan_id, job,
                                abouti=job.status == "completed" and not job.stop.is_set())
+                # Archiver dans PostgreSQL après la validation du lot SQLite.
+                from stockage.postgres_research import synchroniser_plan
+                synchroniser_plan(self.data_dir, plan_id)
             except Exception:
                 LOG.exception("Persistance du lot Research impossible : %s", plan_id)
 
@@ -2236,6 +2239,19 @@ def create_app(manager=None):
         if statut in ("suspendu", "arrete"):
             manager.arreter_plan_research(identifiant)
         return detail_plan(manager.data_dir, identifiant, propriete)
+
+    @app.post("/api/research/plans/{identifiant}/synchroniser-postgres")
+    def synchroniser_programme_postgres(identifiant: str, request: Request):
+        """Rejouer l'archivage PostgreSQL d'un programme autorisé."""
+        exiger_ticket(request)
+        from stockage.collectes_research import detail_plan
+        from stockage.postgres_research import synchroniser_plan
+        if detail_plan(manager.data_dir, identifiant, owner_historique(request)) is None:
+            raise HTTPException(404, "Programme introuvable.")
+        try:
+            return synchroniser_plan(manager.data_dir, identifiant, exiger_configuration=True)
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
 
     @app.get("/api/research/plans/{identifiant}/journal")
     def lire_journal_research(identifiant: str, request: Request):
