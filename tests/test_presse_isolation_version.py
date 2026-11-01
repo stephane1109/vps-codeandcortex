@@ -71,7 +71,7 @@ class TestIsolationPresse(unittest.TestCase):
         options=code.index('with st.expander("Options des commentaires")',case)
         reponses=code.index('st.checkbox("Inclure les réponses accessibles"',options)
         limite=code.index('st.number_input("Commentaires maximum par publication"',reponses)
-        lancement=code.index('st.button("Lancer la collecte"', limite)
+        lancement=code.index('"Programmer la collecte Research" if mode_programme else "Lancer la collecte"', limite)
         self.assertLess(periode, dates)
         self.assertLess(dates, variables)
         self.assertLess(variables, case)
