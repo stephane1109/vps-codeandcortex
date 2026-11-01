@@ -29,14 +29,17 @@ class ConnexionHashtag(ConnexionPresse):
         nombre_demandes = len(demandes)
         # Avec un filtre de dates, explorer davantage de candidats que le nombre
         # de résultats demandé ; seules les dates vérifiées seront retenues.
-        limite_demandee = getattr(parametres, "limit", self.arguments.limit)
-        self._budget_decouverte = (min(limite_demandee * 5, 500)
+        limite_demandee = (None if self.arguments.limit is None else
+                           getattr(parametres, "limit", self.arguments.limit))
+        self._budget_decouverte = (None if limite_demandee is None else
+                                  min(limite_demandee * 5, 500)
                                   if (getattr(parametres, "date_debut", None)
                                       or getattr(parametres, "date_fin", None))
                                   else limite_demandee)
         self._quota_hashtag = {
-            demande: self._budget_decouverte // nombre_demandes
-                    + int(rang < self._budget_decouverte % nombre_demandes)
+            demande: (None if self._budget_decouverte is None else
+                     self._budget_decouverte // nombre_demandes
+                     + int(rang < self._budget_decouverte % nombre_demandes))
             for rang, demande in enumerate(demandes)
         }
         for hashtag in demandes:
@@ -125,9 +128,10 @@ class ConnexionHashtag(ConnexionPresse):
         demande = source.get("hashtag_demande", hashtag)
         retenus = self._ids_par_hashtag.setdefault(demande, set())
         objectif_tag = self._quota_hashtag.get(demande, self.arguments.limit)
-        restant = max(0, min(objectif_tag - len(retenus),
-                             self._budget_decouverte - len(self._ids_globaux)))
-        if not restant:
+        restant = (None if objectif_tag is None else
+                   max(0, min(objectif_tag - len(retenus),
+                              self._budget_decouverte - len(self._ids_globaux))))
+        if restant == 0:
             rapport.update(discovered_urls=[], discovery_stop="objectif_hashtag_atteint",
                            objectif_hashtag_initial=objectif_tag,
                            retenues_hashtag_initial=len(retenus),
@@ -138,7 +142,8 @@ class ConnexionHashtag(ConnexionPresse):
         # accents ne multiplie jamais le nombre total de vidéos du corpus.
         nombre_variantes = max(1, source.get("variantes_restantes", 1))
         arguments = copy.copy(self.arguments)
-        arguments.limit = min(restant, max(1, math.ceil(restant / nombre_variantes)))
+        arguments.limit = (None if restant is None else
+                           min(restant, max(1, math.ceil(restant / nombre_variantes))))
         if self.moteur_collecte == "research":
             from collecte.presse_research import collecter_videos_presse_research
             trouves = collecter_videos_presse_research(
@@ -156,8 +161,9 @@ class ConnexionHashtag(ConnexionPresse):
         for adresse in trouves:
             identite = canonical_post(adresse)
             if (identite and identite[0] not in self._ids_globaux
-                    and len(retenus) < objectif_tag
-                    and len(self._ids_globaux) < self._budget_decouverte):
+                    and (objectif_tag is None or len(retenus) < objectif_tag)
+                    and (self._budget_decouverte is None
+                         or len(self._ids_globaux) < self._budget_decouverte)):
                 retenus.add(identite[0])
                 self._ids_globaux.add(identite[0])
                 nouveaux.append(identite[1])
