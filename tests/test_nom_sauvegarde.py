@@ -56,7 +56,16 @@ class TestsNomsSauvegarde(TestCase):
         with TemporaryDirectory() as dossier:
             chemin = Path(dossier) / "collectes_research.sqlite3"
             with sqlite3.connect(chemin) as base:
-                base.execute("CREATE TABLE plans (id TEXT PRIMARY KEY)")
+                # Reproduire l'ancien schéma, avec les index attendus.
+                base.execute("""
+                    CREATE TABLE plans (
+                        id TEXT PRIMARY KEY, proprietaire TEXT, statut TEXT,
+                        debut_execution TEXT, fin_execution TEXT,
+                        debut_corpus TEXT, fin_corpus TEXT, parametres TEXT,
+                        source_index INTEGER, jour_index INTEGER,
+                        prochaine_tentative TEXT, job_id TEXT, message TEXT,
+                        cree_le TEXT, actualise_le TEXT)
+                """)
                 base.execute("INSERT INTO plans (id) VALUES ('ancien')")
             with connexion(dossier) as base:
                 nom = base.execute(
