@@ -34,6 +34,7 @@ class ConnexionPresse(SessionNavigateur):
         self.moteur_collecte = methode
         self.research_debut = getattr(parametres, "date_debut", None)
         self.research_fin = getattr(parametres, "date_fin", None)
+        self.hashtags_exclus = tuple(getattr(parametres, "hashtags_exclus", ()))
         self.commentaires_research = bool(getattr(parametres, "collecter_commentaires", False))
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
         self.research_credentiels = None
@@ -125,7 +126,8 @@ class ConnexionPresse(SessionNavigateur):
         return {"check": self.verifier, "progress": progression,
                 "research_debut": self.research_debut,
                 "research_fin": self.research_fin,
-                "research_credentiels": self.research_credentiels}
+                "research_credentiels": self.research_credentiels,
+                "research_exclusions": self.hashtags_exclus}
 
     def decouvrir(self, source, rapport, *, contexte="", progression=None):
         from collecte.comptes import collecter_compte

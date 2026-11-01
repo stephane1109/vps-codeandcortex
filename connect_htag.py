@@ -145,7 +145,8 @@ class ConnexionHashtag(ConnexionPresse):
                 None, arguments.limit, rapport, hashtag=hashtag,
                 debut=self.research_debut, fin=self.research_fin,
                 check=self.verifier, progress=progression,
-                credentiels=self.research_credentiels)
+                credentiels=self.research_credentiels,
+                exclusions=self.hashtags_exclus)
         else:
             trouves = collecter_hashtag(
                 self.obtenir_navigateur(), arguments, rapport,

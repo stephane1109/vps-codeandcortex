@@ -131,6 +131,8 @@ if "initialise" not in st.session_state:
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
         "variables_classes_txt": ancienne.get("variables_classes_txt") or [],
         "taux_engagement_txt": ancienne.get("taux_engagement_txt", "aucun"),
+        "hashtags_exclus_saisis": ", ".join(
+            "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50)}
 
@@ -180,6 +182,7 @@ st.session_state.setdefault("croiser_hashtag_presse", False)
 st.session_state.setdefault("hashtag_presse", "")
 st.session_state.setdefault("hashtags_saisis", "")
 st.session_state.setdefault("hashtags_saisis_comptes", "")
+st.session_state.setdefault("hashtags_exclus_saisis", "")
 st.session_state.setdefault("collecter_follower_count", False)
 st.session_state.setdefault("follower_count_illustratif", False)
 st.session_state.setdefault("abonnes_classe_illustratif", False)
@@ -518,7 +521,9 @@ with onglet_collecte:
     cle_liste_hashtags = (
         "hashtags_saisis" if source == "hashtags" else "hashtags_saisis_comptes")
     liste_hashtags = []
+    liste_hashtags_exclus = []
     erreur_hashtags = ""
+    erreur_hashtags_exclus = ""
     # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
     with st.form("filtres_collecte", border=False, enter_to_submit=False):
         if source != "presse":
@@ -566,6 +571,24 @@ with onglet_collecte:
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
                      "et les autres filtres (langue et période). "
                      "Ce choix agit après la découverte des vidéos TikTok.")
+        st.text_area(
+            "Hashtags à exclure (NOT) — facultatif",
+            key="hashtags_exclus_saisis",
+            placeholder="#publicite, #humour, #sponsorise",
+            help="Exclut toute vidéo portant au moins un hashtag indiqué. "
+                 "Research API : exclusion NOT directe. Autres moteurs : "
+                 "exclusion après lecture des hashtags réels. "
+                 "Jusqu'à dix hashtags séparés par une virgule, un espace "
+                 "ou un retour à la ligne. Les mots sans # dans la légende "
+                 "ne sont pas des critères d'exclusion.",
+            height=80, disabled=occupe,
+        )
+        try:
+            liste_hashtags_exclus = normaliser_liste_hashtags(
+                separer_saisie_hashtags(st.session_state.get("hashtags_exclus_saisis", "")))
+        except ValueError as erreur:
+            erreur_hashtags_exclus = str(erreur)
+            st.error(erreur_hashtags_exclus)
         st.number_input(
             "Nombre TOTAL de posts à lire (tous hashtags confondus)"
             if source == "hashtags" else "Nombre de posts TikTok à collecter par source",
@@ -697,6 +720,8 @@ with onglet_collecte:
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if source != "presse" and erreur_hashtags:
                 st.error("Corrigez la saisie des hashtags avant de lancer la collecte.")
+            elif erreur_hashtags_exclus:
+                st.error("Corrigez les hashtags à exclure avant de lancer la collecte.")
             elif source != "presse" and not liste_hashtags:
                 st.error("Renseignez au moins un hashtag pour lancer la collecte.")
             elif source == "presse" and not st.session_state.get("medias"):
@@ -709,6 +734,7 @@ with onglet_collecte:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
+                valeurs["hashtags_exclus"] = liste_hashtags_exclus
                 valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
                 valeurs["follower_count_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("follower_count_illustratif", False))
                 valeurs["abonnes_classe_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("abonnes_classe_illustratif", False))

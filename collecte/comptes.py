@@ -193,7 +193,8 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                 lambda etat, suivi: collecter_videos_presse_research(
                     compte, arguments.limit, etat, check=verifier, progress=suivi,
                     debut=options.get("research_debut"), fin=options.get("research_fin"),
-                    credentiels=options.get("research_credentiels")))
+                    credentiels=options.get("research_credentiels"),
+                    exclusions=options.get("research_exclusions", ())))
         else:
             executer(f"@{compte} : grille Vidéos (navigateur)",
                 lambda etat, suivi: collecter_profil_public(

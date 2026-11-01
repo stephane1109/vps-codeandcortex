@@ -72,6 +72,7 @@ class StartRequest(BaseModel):
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
+    hashtags_exclus: list[str] = Field(default_factory=list, max_length=10)
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
@@ -119,7 +120,7 @@ class StartRequest(BaseModel):
     def valid_second_hashtag(cls, value):
         return cls.valid_hashtag(value) if value.strip() else ""
 
-    @field_validator("hashtags_saisis")
+    @field_validator("hashtags_saisis", "hashtags_exclus")
     @classmethod
     def valider_hashtags_saisis(cls, valeurs):
         return normaliser_liste_hashtags(valeurs)
@@ -182,6 +183,13 @@ class StartRequest(BaseModel):
                 self.hashtags_saisis[1] if len(self.hashtags_saisis) > 1 else "")
         if self.source_collecte == "comptes" and not self.comptes:
             raise ValueError("Renseignez au moins un compte TikTok.")
+        inclus = ({nom.casefold() for nom in self.hashtags_saisis}
+                  if self.source_collecte != "presse" else
+                  ({self.hashtag_presse.casefold()} if self.croiser_hashtag_presse else set()))
+        conflits = inclus.intersection(nom.casefold() for nom in self.hashtags_exclus)
+        if conflits:
+            raise ValueError("Un hashtag ne peut pas être recherché et exclu : "
+                             + ", ".join("#" + nom for nom in sorted(conflits)))
         if self.source_collecte == "presse":
             from collecte.presse import selectionner_medias
             if not self.medias: raise ValueError("Sélectionnez au moins un média.")
@@ -538,6 +546,7 @@ class Job:
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.diagnostics = []
+        self.exclus_hashtags = 0
         self.cause_arret = None
         self.evenements_debug = []
         self.publication_en_cours = None
@@ -608,7 +617,8 @@ class Job:
                 'compteurs':{'decouvertes':len(self.decouvertes_ids),'retenues_lecture':self.discovered,
                     'traitees':self.processed,'restantes':max(0,self.discovered-self.processed),
                     'publications_enregistrees':len(self.publications),'exportees_txt':self.exportees,
-                    'hors_hashtags':self.filtered,'autre_langue':self.non_french,
+                    'hors_hashtags':self.filtered,'exclus_hashtags':self.exclus_hashtags,
+                    'autre_langue':self.non_french,
                     'hors_periode':self.hors_periode,'date_inconnue':self.dates_indeterminees,
                     'sans_legende':self.legendes_vides,'erreurs_lecture':self.errors},
                 'evenements_recents':list(self.evenements_debug)}
@@ -629,6 +639,8 @@ class Job:
             return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
                     "second_hashtag": self.settings.second_hashtag,
                     "hashtags_saisis": list(self.settings.hashtags_saisis),
+                    "hashtags_exclus": list(self.settings.hashtags_exclus),
+                    "exclus_hashtags": self.exclus_hashtags,
                     "operator": self.settings.operator,
                     "croiser_hashtag_presse": self.settings.croiser_hashtag_presse,
                     "hashtag_presse": self.settings.hashtag_presse,
@@ -1202,6 +1214,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             job.pause(args.delay)
                         record = connexion.lire_publication(url)
                     record["retenue"] = False
+                    if job.settings.hashtags_exclus:
+                        from collecte.exclusion_hashtags import hashtags_a_exclure
+                        correspondances = hashtags_a_exclure(
+                            record, job.settings.hashtags_exclus)
+                        if correspondances:
+                            # Écarter avant les commentaires, les analyses et les exports.
+                            with job.lock:
+                                job.exclus_hashtags += 1
+                            job.journal.append({
+                                "publication_id": record.get("id"),
+                                "filtre": "not_hashtag",
+                                "hashtags": correspondances})
+                            job.update(processed=index)
+                            if job.settings.sauvegarde_progressive and index % 10 == 0:
+                                job.sauvegarder_point()
+                            continue
                     if moteur_actif == "research" and job.settings.collecter_follower_count:
                         # Un seul appel User Info par auteur ; conserver aussi les absences.
                         from collecte.researchapi import (
@@ -1471,6 +1499,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if not job.records and (job.non_french or job.language_unknown):
                 final_message = "Aucun texte retenu par le filtre français parmi les légendes consultées."
             final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée écartés."
+        if job.settings.hashtags_exclus:
+            final_message += (
+                f" Exclusion NOT : {job.exclus_hashtags} publication(s) écartée(s) "
+                "après lecture. La Research API applique aussi NOT à la recherche.")
         if job.settings.hashtags and job.processed:
             nom_filtre = "hashtags et texte" if job.settings.rechercher_dans_texte else "hashtags"
             final_message += f" {job.filtered} texte(s) écarté(s) par le filtre {nom_filtre}."

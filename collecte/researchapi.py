@@ -201,14 +201,19 @@ def _fiche(video, compte):
 def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin=None,
                                     check=None, progress=None, requete=_requete,
                                     jeton=None, pause=time.sleep, aujourd_hui=None,
-                                    credentiels=None, hashtag=None):
-    """Recherche par compte ou hashtag, avec pagination et périodes bornées."""
+                                    credentiels=None, hashtag=None, exclusions=()):
+    """Recherche par compte ou hashtag avec NOT et pagination."""
     compte = normaliser_compte(compte) if compte is not None else None
     if hashtag is not None:
         from scraptiktok import normalize_hashtag
         hashtag = normalize_hashtag(hashtag)
     if compte is None and hashtag is None:
         raise ResearchErreur("Research API : renseigner un compte ou un hashtag.")
+    from .selection_hashtags import normaliser_liste_hashtags
+    from .exclusion_hashtags import hashtags_a_exclure
+    hashtags_exclus = normaliser_liste_hashtags(exclusions)
+    if hashtag and hashtag.casefold() in {nom.casefold() for nom in hashtags_exclus}:
+        raise ResearchErreur("Un hashtag recherché ne peut pas être exclu.")
     verifier = check or (lambda: None)
     limite = max(1, min(int(limite), 1000))
     rapport.update(compte_attendu=compte, navigation_publications="research_officielle",
@@ -216,7 +221,8 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                    discovered_urls=[], metadonnees_api={}, pages_research=0,
                    requetes_tentees=0, candidats_examines=0, auteurs_ecartes=0,
                    collecte_partielle=True, exhaustif=False,
-                   fournisseur_donnees="TikTok Research API")
+                   fournisseur_donnees="TikTok Research API",
+                   hashtags_exclus=list(hashtags_exclus), exclus_hashtags_api=0)
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
@@ -238,6 +244,12 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                 "max_count": min(100, limite - len(contenus)),
                 "is_random": False,
             }
+            if hashtags_exclus:
+                # Le serveur TikTok applique NOT IN sur le champ hashtag_name.
+                requete_corps["query"]["not"] = [{
+                    "field_name": "hashtag_name", "operation": "IN",
+                    "field_values": list(hashtags_exclus),
+                }]
             if curseur is not None:
                 requete_corps["cursor"] = curseur
                 requete_corps["search_id"] = search_id
@@ -262,6 +274,10 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     continue
                 vus.add(identifiant)
                 fiche = _fiche(video, compte)
+                if fiche and hashtags_a_exclure(fiche, hashtags_exclus):
+                    # Défense locale si l'API renvoie malgré tout un hashtag exclu.
+                    rapport["exclus_hashtags_api"] += 1
+                    continue
                 if fiche and (not hashtag or any(
                         str(tag).lstrip("#").casefold() == hashtag.casefold()
                         for tag in fiche.get("hashtags", []))):
