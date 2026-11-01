@@ -23,7 +23,7 @@ class ConnexionHashtag(ConnexionPresse):
         vus = set()
         self._ids_par_hashtag = {demande: set() for demande in demandes}
         self._ids_globaux = set()
-        # Le nombre demandé concerne l'ensemble du corpus. Deux hashtags
+        # Le nombre demandé concerne l'ensemble du corpus. Plusieurs hashtags
         # se partagent ce budget en ET comme en OU (la règle intervient après
         # lecture des légendes). Les variantes utilisent le quota de leur tag.
         nombre_demandes = len(demandes)

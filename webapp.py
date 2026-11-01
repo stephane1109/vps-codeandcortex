@@ -34,6 +34,7 @@ from selenium.webdriver.common.keys import Keys
 import scraptiktok as scraper
 from language_filter import classify_description
 from collecte.dates import normaliser_date, evaluer_periode
+from collecte.selection_hashtags import normaliser_liste_hashtags
 
 LOG = logging.getLogger("scraptiktok.web")
 TERMINAL = {"completed", "partial", "failed", "stopped"}
@@ -65,6 +66,7 @@ class StartRequest(BaseModel):
     collecter_reponses: bool = False
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
+    hashtags_saisis: list[str] = Field(default_factory=list)
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
@@ -112,6 +114,11 @@ class StartRequest(BaseModel):
     def valid_second_hashtag(cls, value):
         return cls.valid_hashtag(value) if value.strip() else ""
 
+    @field_validator("hashtags_saisis")
+    @classmethod
+    def valider_hashtags_saisis(cls, valeurs):
+        return normaliser_liste_hashtags(valeurs)
+
     @field_validator("comptes")
     @classmethod
     def valider_comptes(cls, valeurs):
@@ -146,6 +153,7 @@ class StartRequest(BaseModel):
             # Le croisement est une option indépendante, explicite et facultative.
             self.hashtag = ""
             self.second_hashtag = ""
+            self.hashtags_saisis = []
             self.rechercher_dans_texte = False
             self.variantes_accents = False
             if self.croiser_hashtag_presse and not self.hashtag_presse:
@@ -155,12 +163,18 @@ class StartRequest(BaseModel):
         else:
             self.croiser_hashtag_presse = False
             self.hashtag_presse = ""
-            if not self.hashtag:
+            # Préserver les anciens clients utilisant hashtag et second_hashtag.
+            # Lorsqu'une liste est fournie, elle constitue la sélection de référence.
+            if not self.hashtags_saisis:
+                self.hashtags_saisis = normaliser_liste_hashtags(
+                    [valeur for valeur in (self.hashtag, self.second_hashtag) if valeur])
+            if not self.hashtags_saisis:
                 if self.source_collecte == "comptes":
                     raise ValueError("Renseignez au moins un hashtag pour une collecte par profil.")
-                raise ValueError("Le premier hashtag est obligatoire.")
-            if self.second_hashtag and not self.hashtag:
-                raise ValueError("Renseignez le premier hashtag avant le deuxième.")
+                raise ValueError("Renseignez au moins un hashtag.")
+            self.hashtag = self.hashtags_saisis[0]
+            self.second_hashtag = (
+                self.hashtags_saisis[1] if len(self.hashtags_saisis) > 1 else "")
         if self.source_collecte == "comptes" and not self.comptes:
             raise ValueError("Renseignez au moins un compte TikTok.")
         if self.source_collecte == "presse":
@@ -198,7 +212,7 @@ class StartRequest(BaseModel):
 
     @property
     def hashtags(self):
-        return list({tag_key(tag): tag for tag in [self.hashtag, self.second_hashtag] if tag}.values())
+        return list(self.hashtags_saisis)
 
     @property
     def filename(self):
@@ -207,6 +221,11 @@ class StartRequest(BaseModel):
                else "comptes_" + "_".join(s["compte"] for s in self.sources)[:100])
         if self.source_collecte == "presse" and self.croiser_hashtag_presse:
             nom += "_hashtag_" + self.hashtag_presse
+        # Dix hashtags longs peuvent dépasser la limite de nom du système de fichiers.
+        if len(nom.encode("utf-8")) > 160:
+            empreinte = hashlib.sha256(nom.encode("utf-8")).hexdigest()[:12]
+            nom = nom.encode("utf-8")[:140].decode("utf-8", "ignore").rstrip("_")
+            nom = f"{nom}_{empreinte}"
         return "tiktok_" + nom + ("_fr" if self.french_only else "") + ".txt"
 
 
@@ -541,7 +560,9 @@ class Job:
     def snapshot(self):
         with self.lock:
             return {"debug_collecte": self.diagnostic_collecte(), "id": self.id, "hashtag": self.settings.hashtag,
-                    "second_hashtag": self.settings.second_hashtag, "operator": self.settings.operator,
+                    "second_hashtag": self.settings.second_hashtag,
+                    "hashtags_saisis": list(self.settings.hashtags_saisis),
+                    "operator": self.settings.operator,
                     "croiser_hashtag_presse": self.settings.croiser_hashtag_presse,
                     "hashtag_presse": self.settings.hashtag_presse,
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,

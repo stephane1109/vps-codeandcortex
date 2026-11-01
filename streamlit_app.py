@@ -8,6 +8,7 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 from interface.client import appeler_api
+from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, normaliser_liste_hashtags
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
@@ -141,6 +142,21 @@ if "initialise" not in st.session_state:
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
+    # Rétablir les listes des anciennes collectes à un ou deux hashtags,
+    # sans confondre les filtres propres aux modes Hashtags et Profils.
+    anciens_hashtags = ancienne.get("hashtags_saisis") or ancienne.get("hashtags") or [
+        ancienne.get("hashtag", ""), ancienne.get("second_hashtag", "")
+    ]
+    if isinstance(anciens_hashtags, str):
+        anciens_hashtags = [anciens_hashtags]
+    ancienne_saisie = ", ".join(
+        "#" + str(valeur).lstrip("#") for valeur in anciens_hashtags
+        if str(valeur).strip()
+    )
+    valeurs["hashtags_saisis"] = (
+        ancienne_saisie if ancienne.get("source_collecte") == "hashtags" else "")
+    valeurs["hashtags_saisis_comptes"] = (
+        ancienne_saisie if ancienne.get("source_collecte") == "comptes" else "")
     # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
     for nom in ("hashtag", "second_hashtag"):
         valeurs[nom + "_comptes"] = ancienne.get(nom, "") if ancienne.get("source_collecte") == "comptes" else ""
@@ -157,6 +173,8 @@ st.session_state.setdefault("hashtag_moteur", "navigateur")
 st.session_state.setdefault("profil_moteur", "navigateur")
 st.session_state.setdefault("croiser_hashtag_presse", False)
 st.session_state.setdefault("hashtag_presse", "")
+st.session_state.setdefault("hashtags_saisis", "")
+st.session_state.setdefault("hashtags_saisis_comptes", "")
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
     st.session_state.pop("cookies_presse_fichier", None)
 if st.session_state.pop("_effacer_research_apres_requete", False):
@@ -179,6 +197,7 @@ st.session_state.setdefault("operator", "AND")
 st.session_state.setdefault("rechercher_dans_texte", True)
 st.session_state.setdefault("variantes_accents", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
+            "hashtags_saisis", "hashtags_saisis_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
             "date_debut", "date_fin", "comptes"):
@@ -486,27 +505,39 @@ with onglet_collecte:
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
         st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
         st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
-    cle_hashtag = "hashtag" if source == "hashtags" else "hashtag_comptes"
-    cle_second = "second_hashtag" if source == "hashtags" else "second_hashtag_comptes"
+    cle_liste_hashtags = (
+        "hashtags_saisis" if source == "hashtags" else "hashtags_saisis_comptes")
+    liste_hashtags = []
+    erreur_hashtags = ""
     # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
     with st.form("filtres_collecte", border=False, enter_to_submit=False):
         if source != "presse":
-            c1,c2 = st.columns(2)
-            aide_hashtag = (
-                "Saisissez un hashtag sans espace, avec ou sans #. Exemple : #17octobre ou 17octobre. "
-                "L’option « Rechercher aussi dans le texte » est cochée par défaut : une vidéo dont la légende "
-                "contient le mot recherché est retenue pour le TXT, même sans # (par exemple "
-                "#lyceen et « lycéen », ou #17octobre et « 17 octobre »). "
-                "La règle ET/OU et les filtres de langue/période restent applicables. "
-                "Seules les vidéos effectivement découvertes et lues sur TikTok peuvent être retenues."
+            saisie = st.text_area(
+                "Hashtags à rechercher (1 à 10)", key=cle_liste_hashtags,
+                placeholder="#manifestation, #lyceens, #mobilisation",
+                help="Séparez les hashtags par des virgules, des points-virgules, "
+                     "des espaces ou des retours à la ligne. Le signe # est facultatif. "
+                     "Le même hashtag saisi plusieurs fois ne compte qu'une fois.",
+                height=95, disabled=occupe,
             )
-            c1.text_input("Hashtag (obligatoire)", key=cle_hashtag, placeholder="#actualité",
-                          help=aide_hashtag, disabled=occupe)
-            c1.caption("Avec ou sans # : #actualité ou actualité. Un seul hashtag, sans espace.")
-            c2.text_input("Deuxième hashtag (facultatif)", key=cle_second, placeholder="#politique",
-                          help=aide_hashtag, disabled=occupe)
-            c2.caption("Avec ou sans # : #politique ou politique. Un seul hashtag, sans espace.")
-            st.radio("Combiner les hashtags", ["AND","OR"], format_func=lambda v:"ET — les deux" if v=="AND" else "OU — au moins un", key="operator", horizontal=True, disabled=occupe)
+            try:
+                liste_hashtags = normaliser_liste_hashtags(separer_saisie_hashtags(saisie))
+            except ValueError as erreur:
+                erreur_hashtags = str(erreur)
+                st.error(erreur_hashtags)
+            if not erreur_hashtags:
+                st.caption(
+                    f"{len(liste_hashtags)}/{MAX_HASHTAGS} hashtags distincts. "
+                    + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags)
+                       if liste_hashtags else "Saisissez au moins un hashtag.")
+                )
+            st.radio(
+                "Combiner les hashtags", ["AND", "OR"],
+                format_func=lambda valeur: (
+                    "ET — tous les hashtags" if valeur == "AND"
+                    else "OU — au moins un hashtag"),
+                key="operator", horizontal=True, disabled=occupe,
+            )
             if source == "hashtags":
                 st.checkbox("Inclure les variantes accentuées des hashtags",
                     key="variantes_accents", disabled=occupe,
@@ -598,8 +629,10 @@ with onglet_collecte:
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
                                  on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
-            if source != "presse" and not st.session_state.get(cle_hashtag, "").strip():
-                st.error("Le premier hashtag est obligatoire pour la collecte par hashtags ou profils.")
+            if source != "presse" and erreur_hashtags:
+                st.error("Corrigez la saisie des hashtags avant de lancer la collecte.")
+            elif source != "presse" and not liste_hashtags:
+                st.error("Renseignez au moins un hashtag pour lancer la collecte.")
             elif source == "presse" and not st.session_state.get("medias"):
                 st.error("Sélectionnez au moins un média.")
             elif (source == "presse" and st.session_state.get("croiser_hashtag_presse")
@@ -650,8 +683,10 @@ with onglet_collecte:
                 # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
                 valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [v for v in VARIABLES_TXT if st.session_state["txt_" + v]]
-                valeurs.update(hashtag="" if source == "presse" else st.session_state.get(cle_hashtag,""),
-                    second_hashtag="" if source == "presse" else st.session_state.get(cle_second,""),
+                valeurs.update(
+                    hashtag=liste_hashtags[0] if liste_hashtags else "",
+                    second_hashtag=liste_hashtags[1] if len(liste_hashtags) > 1 else "",
+                    hashtags_saisis=liste_hashtags if source != "presse" else [],
                     source_collecte=source, date_debut=debut, date_fin=fin,
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])
@@ -728,7 +763,7 @@ with onglet_collecte:
                     "hashtags": (
                         "Nombre de publications TikTok distinctes retenues pour lecture, avant vérification "
                         "des hashtags dans les légendes et avant les autres filtres. La limite est GLOBALE : "
-                        "avec 50 posts et deux hashtags, au plus 50 vidéos distinctes peuvent être retenues, "
+                        "avec 50 posts et plusieurs hashtags, au plus 50 vidéos distinctes peuvent être retenues, "
                         "en mode OU comme en mode ET. La collecte répartit ce budget entre les hashtags. "
                         "Les variantes accentuées partagent le quota du hashtag initial ; les doublons "
                         "entre hashtags ne sont lus qu'une fois. Le choix ET/OU s'applique ensuite "
