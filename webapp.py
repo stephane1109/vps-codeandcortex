@@ -71,7 +71,7 @@ class StartRequest(BaseModel):
     follower_count_illustratif: bool = False
     abonnes_classe_illustratif: bool = False
     variables_classes_txt: list[Literal["vues", "likes", "commentaires", "partages", "favoris", "duree"]] = Field(default_factory=list, max_length=6)
-    taux_engagement_txt: Literal["aucun", "brut", "classes"] = "aucun"
+    taux_engagement_txt: Literal["aucun", "brut", "classes", "brut_et_classes"] = "aucun"
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
@@ -452,10 +452,11 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
         ]
         if taux_engagement_txt != "aucun":
             taux = calculer_taux_engagement(publication)
-            modalite_taux = (modalite_taux_brut(taux)
-                            if taux_engagement_txt == "brut"
-                            else classer_taux_engagement(taux))
-            classes.append("*" + modalite_taux)
+            # Le recodage complète la valeur numérique au lieu de la remplacer.
+            if taux_engagement_txt in ("brut", "brut_et_classes"):
+                classes.append("*" + modalite_taux_brut(taux))
+            if taux_engagement_txt in ("classes", "brut_et_classes"):
+                classes.append("*" + classer_taux_engagement(taux))
         if classes:
             entete = " ".join(classes) + (" " + entete if entete else "")
     return entete + "\n" if entete else ""

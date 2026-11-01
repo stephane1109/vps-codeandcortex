@@ -134,8 +134,8 @@ if "initialise" not in st.session_state:
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
         "variables_classes_txt": ancienne.get("variables_classes_txt") or [],
         "taux_engagement_txt": ancienne.get("taux_engagement_txt", "aucun"),
-        "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "aucun") == "brut",
-        "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "aucun") == "classes",
+        "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "aucun") in ("brut", "brut_et_classes"),
+        "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "aucun") in ("classes", "brut_et_classes"),
         "hashtags_exclus_saisis": ", ".join(
             "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
@@ -200,9 +200,9 @@ st.session_state.setdefault("abonnes_classe_illustratif", False)
 st.session_state.setdefault("variables_classes_txt", [])
 st.session_state.setdefault("taux_engagement_txt", "aucun")
 st.session_state.setdefault("txt_taux_engagement_brut",
-    st.session_state.get("taux_engagement_txt") == "brut")
+    st.session_state.get("taux_engagement_txt") in ("brut", "brut_et_classes"))
 st.session_state.setdefault("txt_taux_engagement_classe",
-    st.session_state.get("taux_engagement_txt") == "classes")
+    st.session_state.get("taux_engagement_txt") in ("classes", "brut_et_classes"))
 for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
     st.session_state.setdefault("txt_classe_" + variable,
         variable in st.session_state.get("variables_classes_txt", []))
@@ -782,9 +782,12 @@ with onglet_collecte:
             st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         st.write("Variables à inclure avant chaque post dans le TXT")
         st.caption(
-            "Cochez indépendamment les valeurs brutes et les intervalles. "
-            "Les classes illustratives sont ajoutées au début du texte ; "
-            "les valeurs numériques exactes restent dans engagement.csv."
+            "Recoder la variable continue en variables catégorielles : "
+            "chaque recodage ajoute une variable catégorielle en plus de "
+            "la valeur numérique réelle, sans la remplacer. Les deux "
+            "peuvent figurer dans le TXT. Les valeurs numériques exactes "
+            "restent dans engagement.csv, même non cochées dans le TXT. "
+            "Valeur manquante : classe « indéterminé » (jamais zéro)."
         )
         colonnes_identification = st.columns(3)
         for colonne, nom in zip(colonnes_identification, ("date", "profil", "id")):
@@ -815,15 +818,18 @@ with onglet_collecte:
             "duree": ("Durée vidéo", "moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s"),
         }
         for nom, (libelle, intervalles) in classes_numeriques.items():
-            colonne_brute, colonne_classe = st.columns([1, 2])
+            colonne_brute, colonne_classe = st.columns([1, 3])
             colonne_brute.checkbox(
-                libelle + " : valeur brute",
+                libelle + " : valeur numérique réelle",
                 key="txt_" + nom, disabled=occupe)
             colonne_classe.checkbox(
-                libelle + " : intervalles (" + intervalles + ")",
+                libelle + " : recoder la variable continue en variable catégorielle "
+                "(codage proposé : " + intervalles + ")",
                 key="txt_classe_" + nom, disabled=occupe,
-                help="Variable illustrative IRaMuTeQ. La valeur brute reste dans le CSV, "
-                     "même si elle n'est pas cochée dans le TXT.")
+                help="Variable catégorielle supplémentaire, en plus de la valeur "
+                     "numérique réelle. Les deux peuvent figurer dans le TXT. "
+                     "La valeur exacte reste dans engagement.csv et les "
+                     "données absentes sont codées « indéterminé ».")
 
         # Cette option collecte les textes des commentaires ; elle est distincte
         # de la variable numérique « Nombre de commentaires » du TXT.
@@ -854,35 +860,40 @@ with onglet_collecte:
                  "Une seule requête par auteur distinct ; valeur à la date de collecte. "
                  "Les autres moteurs et options conservent leur comportement.")
         st.checkbox(
-            "Abonnés : ajouter la valeur brute au TXT",
+            "Abonnés : valeur numérique réelle dans le TXT",
             key="follower_count_illustratif",
             disabled=occupe or moteur_formulaire != "research"
                      or not st.session_state.get("collecter_follower_count", False),
-            help="Exemple : *follower_count_12345.")
+            help="Valeur numérique exacte, par exemple : *follower_count_12345.")
         st.checkbox(
-            "Abonnés : ajouter les intervalles au TXT",
+            "Abonnés : recoder la variable continue en variable catégorielle "
+            "(codage proposé : 0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
+            "100 000–999 999 ; ≥1 000 000)",
             key="abonnes_classe_illustratif",
             disabled=occupe or moteur_formulaire != "research"
                      or not st.session_state.get("collecter_follower_count", False),
-            help="0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M. "
-                 "Exemple : *abonnes_10k_100k.")
+            help="Variable supplémentaire, en plus du nombre réel d'abonnés. "
+                 "Les deux modalités peuvent figurer dans le TXT. "
+                 "La valeur exacte reste dans les exports CSV. "
+                 "Classe possible : *abonnes_10k_100k ; "
+                 "absence de donnée : *abonnes_indetermine.")
 
         st.caption(
             "Taux d'engagement = (likes + commentaires + partages + favoris) "
             "/ vues × 100. Un compteur manquant ou zéro vue donne une modalité indéterminée.")
-        colonne_taux_brut, colonne_taux_classe = st.columns(2)
+        colonne_taux_brut, colonne_taux_classe = st.columns([1, 3])
         colonne_taux_brut.checkbox(
-            "Taux d'engagement : valeur brute",
+            "Taux d'engagement : valeur numérique réelle",
             key="txt_taux_engagement_brut", disabled=occupe)
         colonne_taux_classe.checkbox(
-            "Taux d'engagement : intervalles",
+            "Taux d'engagement : recoder la variable continue en variable catégorielle "
+            "(codage proposé : < 1 % ; 1 à < 3 % ; 3 à < 5 % ; "
+            "5 à < 10 % ; ≥ 10 %)",
             key="txt_taux_engagement_classe", disabled=occupe,
-            help="Moins de 1 % ; 1–<3 % ; 3–<5 % ; 5–<10 % ; ≥10 %. "
-                 "La valeur exacte est conservée dans engagement.csv.")
-        if (st.session_state.get("txt_taux_engagement_brut")
-                and st.session_state.get("txt_taux_engagement_classe")):
-            st.warning("Pour le taux d'engagement, choisissez soit la valeur brute, "
-                       "soit les intervalles, mais pas les deux.")
+            help="Variable supplémentaire, en plus du taux numérique réel. "
+                 "Les deux peuvent figurer simultanément dans le TXT. "
+                 "La valeur exacte reste dans engagement.csv ; "
+                 "données insuffisantes : *engagement_indetermine.")
 
         st.checkbox(
             "Supprimer le @ devant les profils dans le TXT",
@@ -912,10 +923,6 @@ with onglet_collecte:
                 st.error("Corrigez la saisie des hashtags avant de lancer la collecte.")
             elif erreur_hashtags_exclus:
                 st.error("Corrigez les hashtags à exclure avant de lancer la collecte.")
-            elif (st.session_state.get("txt_taux_engagement_brut")
-                  and st.session_state.get("txt_taux_engagement_classe")):
-                st.error("Choisissez une seule représentation du taux d'engagement "
-                         "pour le TXT : valeur brute ou intervalles.")
             elif source != "presse" and not liste_hashtags:
                 st.error("Renseignez au moins un hashtag pour lancer la collecte.")
             elif source == "presse" and not st.session_state.get("medias"):
@@ -958,7 +965,9 @@ with onglet_collecte:
                     if st.session_state.get("txt_classe_" + nom, False)
                 ]
                 valeurs["taux_engagement_txt"] = (
-                    "classes" if st.session_state.get("txt_taux_engagement_classe")
+                    "brut_et_classes" if (st.session_state.get("txt_taux_engagement_brut")
+                                         and st.session_state.get("txt_taux_engagement_classe"))
+                    else "classes" if st.session_state.get("txt_taux_engagement_classe")
                     else "brut" if st.session_state.get("txt_taux_engagement_brut")
                     else "aucun")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")

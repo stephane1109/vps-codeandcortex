@@ -101,6 +101,33 @@ class TestsVariablesNumeriques(unittest.TestCase):
                              variables_classes_txt=["vues"])
         self.assertTrue(double.startswith("*vues_classe_1k_10k *vues_2000\n"))
 
+    def test_taux_engagement_valeur_et_recodage_simultanes(self):
+        """Le TXT conserve la valeur numérique et sa classe distincte."""
+        exemple = publication()
+        texte = text_export(
+            [exemple], False, variables_txt=["vues", "likes"],
+            variables_classes_txt=["vues", "likes", "duree"],
+            taux_engagement_txt="brut_et_classes")
+        self.assertIn("*vues_2000", texte)
+        self.assertIn("*vues_classe_1k_10k", texte)
+        self.assertIn("*likes_100", texte)
+        self.assertIn("*likes_classe_100_999", texte)
+        self.assertIn("*taux_engagement_7p00pct", texte)
+        self.assertIn("*engagement_5_10pct", texte)
+        self.assertEqual(texte.count("*taux_engagement_7p00pct"), 1)
+        self.assertEqual(texte.count("*engagement_5_10pct"), 1)
+        options = StartRequest(hashtag="mobilisation",
+                               taux_engagement_txt="brut_et_classes")
+        self.assertEqual(options.taux_engagement_txt, "brut_et_classes")
+
+    def test_taux_absent_conserve_deux_modalites_indeterminees(self):
+        """Des compteurs absents ne sont jamais convertis en zéro."""
+        texte = text_export(
+            [publication(vues=0)], False, variables_txt=[],
+            taux_engagement_txt="brut_et_classes")
+        self.assertIn("*taux_engagement_indetermine", texte)
+        self.assertIn("*engagement_indetermine", texte)
+
     def test_ia_et_abonnes_compatibilite(self):
         exemple = {**publication(), "follower_count": 12345, "resume_ia_tiktok": "Analyse"}
         texte = text_export([exemple], False, variables_txt=["id"],
