@@ -47,7 +47,7 @@ class ConnexionProfil(ConnexionPresse):
 
         options = self.options_decouverte(rapport, contexte, progression)
         navigateur = (self.obtenir_navigateur() if self.moteur_collecte == "navigateur"
-                      or self.commentaires_research or self.resume_research else None)
+                      or self.resume_research else None)
         supplement = ({"presse_videos_uniquement": True,
                         "presse_moteur": self.moteur_collecte}
                        if self.moteur_collecte != "navigateur" else {})

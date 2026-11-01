@@ -80,7 +80,7 @@ class ConnexionPresse(SessionNavigateur):
             # Un navigateur Selenium n'est nécessaire que pour les commentaires
             # ou les synthèses IA affichées dans la vidéo.
             return super().ouvrir() if (self.commentaires_research or self.resume_research) else None
-        if self.moteur_collecte == "research" and not self.commentaires_research and not self.resume_research:
+        if self.moteur_collecte == "research" and not self.resume_research:
             if self.verifier:
                 self.verifier()
             return None
@@ -159,7 +159,7 @@ class ConnexionPresse(SessionNavigateur):
         rapport.update(media_id=media["id"], compte_selectionne=media["compte"],
                        version_collecteur=version, presse_moteur=self.moteur_collecte)
         navigateur = (self.obtenir_navigateur()
-                      if self.moteur_collecte != "research" or self.commentaires_research
+                      if self.moteur_collecte != "research" or self.resume_research
                       else None)
         return collecter_compte(navigateur, self.arguments, media["compte"],
             rapport=rapport, hashtags=(), presse_videos_uniquement=True,

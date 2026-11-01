@@ -1034,6 +1034,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
     limitation_research = False
+    limitation_commentaires_research = False
     limitation_budget = False
     try:
         job.check()
@@ -1063,7 +1064,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         plafond_decouverte = min(args.limit * 5, 500) if filtre_dates_hashtags else args.limit
         def lire_decouvertes():
             """Lire et exporter les nouvelles publications dès qu'un compte est découvert."""
-            nonlocal links, hors_selection, dernier_debut_lecture
+            nonlocal links, hors_selection, dernier_debut_lecture, limitation_commentaires_research
             links = list(unique_links.values())
             job.update(status="collecting", discovered=len(links))
             for index in range(job.processed + 1, len(links) + 1):
@@ -1181,23 +1182,42 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     job.records.append(record)
                             # Les commentaires sont demandés uniquement pour les publications retenues.
                             if record.get("retenue") and job.settings.collecter_commentaires:
-                                from collecte.commentaires import collecter_commentaires
                                 try:
-                                    if (job.settings.source_collecte in {"presse", "comptes", "hashtags"}
-                                            and moteur_actif in {"research", "gallerydl", "tikhub", "apify"}):
-                                        # Research et gallery-dl fournissent les métadonnées ;
-                                        # les commentaires restent pilotés
-                                        # par la session Selenium facultative.
-                                        driver.get(url)
-                                    resultat = collecter_commentaires(driver, record, job.settings.limite_commentaires,
-                                        job.settings.collecter_reponses, verifier=job.check, pause=job.pause,
-                                        interact=connexion.intervenir)
-                                    with job.lock:
-                                        recuperes = resultat.pop("commentaires")
-                                        resultat.setdefault("recuperes", len(recuperes))
-                                        resultat.setdefault("annonces", (record.get("engagement") or {}).get("commentaires", {}).get("valeur"))
-                                        job.commentaires.extend(recuperes)
-                                        record["collecte_commentaires"] = resultat
+                                    if moteur_actif == "research":
+                                        from collecte.researchapi import collecter_commentaires_research
+                                        if limitation_commentaires_research:
+                                            record["collecte_commentaires"] = {
+                                                "statut": "acces_refuse",
+                                                "source": "research_api_officielle",
+                                                "exhaustif": False,
+                                                "message": "Collecte des commentaires suspendue après un refus Research."
+                                            }
+                                            resultat = None
+                                        else:
+                                            resultat = collecter_commentaires_research(
+                                                record, job.settings.limite_commentaires,
+                                                job.settings.collecter_reponses,
+                                                verifier=job.check, pause=job.pause,
+                                                credentiels=connexion.research_credentiels)
+                                            if resultat.get("bloquer_requetes"):
+                                                limitation_commentaires_research = True
+                                    else:
+                                        from collecte.commentaires import collecter_commentaires
+                                        if moteur_actif in {"gallerydl", "tikhub", "apify"}:
+                                            driver.get(url)
+                                        resultat = collecter_commentaires(
+                                            driver, record, job.settings.limite_commentaires,
+                                            job.settings.collecter_reponses, verifier=job.check,
+                                            pause=job.pause, interact=connexion.intervenir)
+                                    if resultat is not None:
+                                        with job.lock:
+                                            recuperes = resultat.pop("commentaires")
+                                            resultat.setdefault("recuperes", len(recuperes))
+                                            resultat.setdefault(
+                                                "annonces",
+                                                (record.get("engagement") or {}).get("commentaires", {}).get("valeur"))
+                                            job.commentaires.extend(recuperes)
+                                            record["collecte_commentaires"] = resultat
                                 except scraper.WebDriverException as erreur:
                                     if scraper.est_erreur_session(erreur): raise
                                     record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
@@ -1369,6 +1389,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += (" Plafond interne de requêtes API Presse atteint : "
                               "collecte arrêtée sans demander davantage de données à TikTok.")
             final_status = "partial" if links else "failed"
+        if limitation_commentaires_research:
+            final_message += (" Commentaires Research API : refus ou quota détecté ; "
+                              "nouvelles requêtes de commentaires suspendues.")
+            if final_status == "completed":
+                final_status = "partial"
         if limitation_research:
             final_message += (" Research API : lot arrêté dès le premier refus ; "
                               "données déjà reçues conservées. Vérifier droits et quotas.")
