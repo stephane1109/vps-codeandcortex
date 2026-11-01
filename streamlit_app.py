@@ -132,7 +132,9 @@ if "initialise" not in st.session_state:
         "collecter_is_verified":ancienne.get("collecter_is_verified",False),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",False),
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
-        "variables_classes_txt": ancienne.get("variables_classes_txt") or [],
+        "variables_classes_txt": (
+            ancienne.get("variables_classes_txt") or []
+            if ancienne else ["vues", "likes", "commentaires", "partages", "favoris", "duree"]),
         "taux_engagement_txt": ancienne.get("taux_engagement_txt", "aucun"),
         "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "aucun") in ("brut", "brut_et_classes"),
         "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "aucun") in ("classes", "brut_et_classes"),
@@ -145,21 +147,21 @@ if "initialise" not in st.session_state:
 
     variables = ancienne.get("variables_txt")
     if variables is None:
-        # Nouveau formulaire : toutes les variables TXT sont cochées, sauf le
-        # déplacement des hashtags. Une collecte active sans sélection explicite
-        # conserve en revanche son ancien réglage de compatibilité.
+        # Nouvelle collecte : cocher toutes les variables descriptives demandées.
+        # Ne pas déplacer les hashtags par défaut ; respecter les choix anciens
+        # d'une collecte reprise sans sélection explicite.
         variables = (
             (["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt")
              else ["profil", "id"] if ancienne.get("include_sources", True) else [])
-            if ancienne else [v for v in VARIABLES_TXT if v not in ("hashtags", "duree", "region_code", "is_verified")]
+            if ancienne else [v for v in VARIABLES_TXT if v != "hashtags"]
         )
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
-    # Restaurer indépendamment les choix de classes lors d'une reprise d'analyse.
+    # Toutes les classes sont actives pour une nouvelle collecte ; une ancienne
+    # collecte conserve ses cases cochées et décochées.
     for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
-        valeurs["txt_classe_" + variable] = variable in (
-            ancienne.get("variables_classes_txt") or [])
+        valeurs["txt_classe_" + variable] = variable in valeurs["variables_classes_txt"]
     # Rétablir les listes des anciennes collectes à un ou deux hashtags,
     # sans confondre les filtres propres aux modes Hashtags et Profils.
     anciens_hashtags = ancienne.get("hashtags_saisis") or ancienne.get("hashtags") or [
@@ -197,7 +199,8 @@ st.session_state.setdefault("hashtags_exclus_saisis", "")
 st.session_state.setdefault("collecter_follower_count", False)
 st.session_state.setdefault("follower_count_illustratif", False)
 st.session_state.setdefault("abonnes_classe_illustratif", False)
-st.session_state.setdefault("variables_classes_txt", [])
+st.session_state.setdefault("variables_classes_txt",
+    ["vues", "likes", "commentaires", "partages", "favoris", "duree"])
 st.session_state.setdefault("taux_engagement_txt", "aucun")
 st.session_state.setdefault("txt_taux_engagement_brut",
     st.session_state.get("taux_engagement_txt") in ("brut", "brut_et_classes"))
@@ -219,7 +222,7 @@ if st.session_state.pop("_effacer_apify_apres_requete", False):
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
     # Initialiser seulement si absent : préserver les choix manuels déjà faits.
-    st.session_state.setdefault("txt_" + variable, variable not in ("hashtags", "duree"))
+    st.session_state.setdefault("txt_" + variable, variable != "hashtags")
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 # Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
@@ -800,47 +803,67 @@ with onglet_collecte:
             "restent dans engagement.csv, même non cochées dans le TXT. "
             "Valeur manquante : classe « indéterminé » (jamais zéro)."
         )
-        colonnes_identification = st.columns(3)
-        for colonne, nom in zip(colonnes_identification, ("date", "profil", "id")):
-            colonne.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
-        colonne_region, colonne_verification = st.columns(2)
-        colonne_region.checkbox(
-            "Region Code (pays d'enregistrement du compte)",
-            key="txt_region_code",
-            disabled=occupe or moteur_formulaire != "research",
-            help="Code à deux lettres fourni par la Research API. "
-                 "Ce n'est pas nécessairement le pays de résidence de l'auteur. "
-                 "Donnée manquante : *region_indetermine.")
-        colonne_verification.checkbox(
-            "Is Verified (compte vérifié par TikTok)",
-            key="txt_is_verified",
-            disabled=occupe or moteur_formulaire != "research",
-            help="Statut du profil public via la Research API. "
-                 "Modalités : *is_verified_oui, *is_verified_non ou "
-                 "*is_verified_indetermine. Réutilise la requête des abonnés "
-                 "lorsque celle-ci est également sélectionnée.")
+        # Une grille continue supprime les espaces entre les lignes de variables.
+        # Les deux cases d'une même mesure occupent systématiquement la même ligne.
+        with st.container(key="bloc_variables_txt"):
+            st.html("""
+            <style>
+            .st-key-bloc_variables_txt [data-testid="stVerticalBlock"] {
+                gap: 0 !important;
+                row-gap: 0 !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stHorizontalBlock"] {
+                gap: 0.65rem !important;
+                align-items: flex-start !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"] {
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+            }
+            </style>
+            """)
+            colonnes_identification = st.columns(3, gap="small")
+            for colonne, nom in zip(colonnes_identification, ("date", "profil", "id")):
+                colonne.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
+            colonne_region, colonne_verification = st.columns(2, gap="small")
+            colonne_region.checkbox(
+                "Region Code (pays d'enregistrement du compte)",
+                key="txt_region_code",
+                disabled=occupe or moteur_formulaire != "research",
+                help="Code à deux lettres fourni par la Research API. "
+                     "Ce n'est pas nécessairement le pays de résidence de l'auteur. "
+                     "Donnée manquante : *region_indetermine.")
+            colonne_verification.checkbox(
+                "Is Verified (compte vérifié par TikTok)",
+                key="txt_is_verified",
+                disabled=occupe or moteur_formulaire != "research",
+                help="Statut du profil public via la Research API. "
+                     "Modalités : *is_verified_oui, *is_verified_non ou "
+                     "*is_verified_indetermine. Réutilise la requête des abonnés "
+                     "lorsque celle-ci est également sélectionnée.")
 
-        classes_numeriques = {
-            "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
-            "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
-            "commentaires": ("Commentaires", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
-            "partages": ("Partages", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
-            "favoris": ("Favoris", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
-            "duree": ("Durée vidéo", "moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s"),
-        }
-        for nom, (libelle, intervalles) in classes_numeriques.items():
-            colonne_brute, colonne_classe = st.columns([1, 3])
-            colonne_brute.checkbox(
-                libelle + " : valeur numérique réelle",
-                key="txt_" + nom, disabled=occupe)
-            colonne_classe.checkbox(
-                libelle + " : recoder la variable continue en variable catégorielle "
-                "(codage proposé : " + intervalles + ")",
-                key="txt_classe_" + nom, disabled=occupe,
-                help="Variable catégorielle supplémentaire, en plus de la valeur "
-                     "numérique réelle. Les deux peuvent figurer dans le TXT. "
-                     "La valeur exacte reste dans engagement.csv et les "
-                     "données absentes sont codées « indéterminé ».")
+            classes_numeriques = {
+                "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
+                "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "commentaires": ("Commentaires", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "partages": ("Partages", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "favoris": ("Favoris", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "duree": ("Durée vidéo", "moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s"),
+            }
+            for nom, (libelle, intervalles) in classes_numeriques.items():
+                colonne_brute, colonne_classe = st.columns([1.05, 3.5], gap="small",
+                                                            vertical_alignment="top")
+                colonne_brute.checkbox(
+                    libelle + " : valeur numérique réelle",
+                    key="txt_" + nom, disabled=occupe)
+                colonne_classe.checkbox(
+                    libelle + " : recoder la variable continue en variable catégorielle "
+                    "(codage proposé : " + intervalles + ")",
+                    key="txt_classe_" + nom, disabled=occupe,
+                    help="Variable catégorielle supplémentaire, en plus de la valeur "
+                         "numérique réelle. Les deux peuvent figurer dans le TXT. "
+                         "La valeur exacte reste dans engagement.csv et les "
+                         "données absentes sont codées « indéterminé ».")
 
         # Cette option collecte les textes des commentaires ; elle est distincte
         # de la variable numérique « Nombre de commentaires » du TXT.
