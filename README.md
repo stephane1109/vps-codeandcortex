@@ -878,6 +878,34 @@ plusieurs conteneurs ou des comptes utilisateurs partagés, préférer PostgreSQ
 avec une migration explicite et des sauvegardes administrées, plutôt que
 de partager le même fichier SQLite entre instances.
 
+### Consultation tabulaire dans pgAdmin
+
+Les collectes ponctuelles conservent toutes les métadonnées originales en
+`JSONB`, mais PostgreSQL fournit également deux vues classiques qui
+déplient automatiquement les variables, sans copie supplémentaire :
+
+`scraptiktok_publications_tableau` : une ligne par publication et des
+colonnes séparées pour l'URL, le compte, la date, la région, la certification,
+les abonnés, la durée, les vues, les likes, les commentaires, les partages,
+les favoris, l'engagement, les hashtags, les classes et les indicateurs IA.
+
+`scraptiktok_commentaires_tableau` : une ligne par commentaire avec
+l'auteur, le texte, la vidéo, la réponse, la date et le nombre de likes.
+
+Ces vues sont créées à la prochaine initialisation PostgreSQL de
+ScrapTikTok, sans supprimer les anciennes collectes. Après déploiement,
+dans pgAdmin, ouvrir **Databases → postgres → Schemas → public → Views**,
+puis clic droit sur la vue et **View/Edit Data → All Rows**.
+On peut aussi exécuter directement :
+
+```sql
+SELECT * FROM public.scraptiktok_publications_tableau;
+SELECT * FROM public.scraptiktok_commentaires_tableau;
+```
+
+Les variables absentes restent à `NULL`, sans inventer de valeur.
+L'export CSV/JSON et la colonne JSONB d'origine sont conservés.
+
 ### Archivage PostgreSQL facultatif
 
 Si une base PostgreSQL est déjà accessible depuis Coolify, définir
