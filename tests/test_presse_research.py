@@ -229,12 +229,63 @@ class TestsResearch(unittest.TestCase):
                        side_effect=collecter):
                 execute_job(job, driver_factory=navigateur)
             navigateur.assert_not_called()
-            self.assertEqual(demandes, [("lemondefr", 10), ("franceinfo", 4)])
+            self.assertEqual(demandes, [("lemondefr", 4),
+                                        ("franceinfo", 3),
+                                        ("leparisien", 3)])
             self.assertEqual(job.processed, 10)
             self.assertEqual(len(job.records), 10)
             self.assertEqual(len(job.publications), 10)
             self.assertIn("Mode test Research", job.message)
             self.assertEqual(job.snapshot()["test_research_10_publications"], True)
+
+    def test_test_research_repartit_parismatch_et_brut_et_explique_les_exclusions(self):
+        """Deux médias contribuent au budget, malgré des légendes indéterminées."""
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from webapp import Job, StartRequest, execute_job
+
+        demandes = []
+
+        def collecter(compte, limite, rapport, **options):
+            demandes.append((compte, limite))
+            depart = 0 if compte == "parismatch" else 100
+            legende = ("#actu" if compte == "parismatch" else
+                       "Les élèves manifestent dans les rues de Paris aujourd'hui.")
+            fiches = [
+                _fiche({**v(depart + i, compte),
+                        "video_description": legende}, compte)
+                for i in range(1, limite + 1)
+            ]
+            rapport.update(
+                discovered_urls=[fiche["url"] for fiche in fiches],
+                metadonnees_api={fiche["id"]: fiche for fiche in fiches},
+                candidats_examines=len(fiches), pages_research=1,
+                navigation_publications="research_officielle",
+                discovery_stop="limit")
+            return [fiche["url"] for fiche in fiches]
+
+        with TemporaryDirectory() as dossier:
+            options = StartRequest(
+                source_collecte="presse", medias=["parismatch", "brut"],
+                presse_moteur="research", french_only=True,
+                test_research_10_publications=True,
+                research_client_key="cle_test", research_client_secret="secret_test")
+            job = Job("f" * 64, options, Path(dossier))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=collecter), patch(
+                           "webapp.classify_description",
+                           side_effect=lambda texte: "unknown" if texte == "#actu" else "fr"):
+                execute_job(job, driver_factory=Mock(
+                    side_effect=AssertionError("Chrome interdit avec Research")))
+            self.assertEqual(demandes, [("parismatch", 5), ("brutofficiel", 5)])
+            self.assertEqual(job.processed, 10)
+            self.assertEqual(job.language_unknown, 5)
+            self.assertEqual(len(job.records), 5)
+            resultat = job.snapshot()
+            self.assertEqual(len(resultat["apercu_filtrage"]), 10)
+            self.assertEqual(
+                {element["motif"] for element in resultat["apercu_filtrage"]},
+                {"langue_indeterminee", "retenue"})
 
     def test_test_research_est_ignore_pour_un_autre_moteur(self):
         """Le mode test ne change pas le fonctionnement des moteurs non Research."""

@@ -1197,8 +1197,9 @@ with onglet_collecte:
                     ),
                     "presse": (
                         "Nombre de publications distinctes trouvées pour les médias sélectionnés, avant "
-                        "filtrage de langue et de période. La limite s’applique à chaque média ; les doublons "
-                        "ne sont comptés qu’une fois."
+                        "filtrage de langue et de période. En mode test Research, dix "
+                        "publications au maximum sont réparties entre les médias ; "
+                        "les doublons ne sont comptés qu’une fois."
                     ),
                 }
                 colonnes = st.columns(4)
@@ -1214,6 +1215,51 @@ with onglet_collecte:
                            + "Les autres filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
+            if (actuel.get("test_research_10_publications")
+                    and actuel.get("moteur_actif") == "research"
+                    and not actuel.get("busy")):
+                with st.expander(
+                        "Diagnostic du test Research — textes retenus et exclus",
+                        expanded=not bool(actuel.get("captions"))):
+                    st.caption(
+                        "Les dix publications sont réparties entre les médias choisis. "
+                        "Le filtre français évalue chaque légende et non la nationalité "
+                        "du média. Une légende courte peut avoir une langue indéterminée."
+                    )
+                    details = actuel.get("apercu_filtrage") or []
+                    if details:
+                        motifs = {
+                            "retenue": "Retenue dans le TXT",
+                            "legende_vide": "Légende absente de la réponse API",
+                            "autre_langue": "Autre langue détectée",
+                            "langue_indeterminee": "Langue indéterminée",
+                            "filtre_hashtags": "Écartée par le filtre de hashtags",
+                            "hors_periode": "Hors période",
+                            "date_indeterminee": "Date indéterminée",
+                            "non_determine": "Diagnostic indisponible",
+                        }
+                        st.dataframe([
+                            {"Auteur": item.get("auteur", ""),
+                             "Légende API (extrait)": item.get("legende", ""),
+                             "Langue": item.get("langue", ""),
+                             "Décision": motifs.get(
+                                 item.get("motif"), item.get("motif", "")),
+                             "URL": item.get("url", "")}
+                            for item in details
+                        ], hide_index=True, use_container_width=True)
+                    elif actuel.get("processed"):
+                        st.info("Consultez les compteurs et le détail des sources "
+                                "pour connaître les motifs d'exclusion.")
+                    if actuel.get("french_only") and not actuel.get("captions"):
+                        st.warning(
+                            "Si les légendes sont classées « autre langue » ou "
+                            "« langue indéterminée », refaites un test avec "
+                            "« Filtre français » décoché pour examiner "
+                            "les légendes réellement fournies par TikTok."
+                        )
+                    if not actuel.get("processed"):
+                        st.warning("Aucune vidéo consultée : vérifiez le détail "
+                                   "des sources et les droits Research API.")
             if actuel.get("hashtags"):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
                 st.caption("Filtre appliqué : " + combinaison

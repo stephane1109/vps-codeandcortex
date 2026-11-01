@@ -659,6 +659,7 @@ class Job:
                     'publications_enregistrees':len(self.publications),'exportees_txt':self.exportees,
                     'hors_hashtags':self.filtered,'exclus_hashtags':self.exclus_hashtags,
                     'autre_langue':self.non_french,
+                    'langue_indeterminee':self.language_unknown,
                     'hors_periode':self.hors_periode,'date_inconnue':self.dates_indeterminees,
                     'sans_legende':self.legendes_vides,'erreurs_lecture':self.errors},
                 'evenements_recents':list(self.evenements_debug)}
@@ -800,6 +801,15 @@ class Job:
                         "traitees": self.processed, "exportees": self.exportees},
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
                     "action_error": self.action_error, "can_download": bool(self.records),
+                    "apercu_filtrage": [{
+                        "auteur": r.get("author", ""),
+                        "url": r.get("url", ""),
+                        "legende": str(r.get("description") or "")[:200],
+                        "langue": r.get("langue_detection") or "non_evaluee",
+                        "motif": r.get("motif_non_retenue") or
+                                 ("retenue" if r.get("retenue") else "non_determine")
+                    } for r in self.publications[:30]]
+                    if self.settings.test_research_10_publications else [],
                     "apercu_engagement": [{"id": r["id"], "author": r["author"], "url": r["url"],
                         "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection"),
                         "retenue_txt": bool(r.get("retenue", r in self.records))}
@@ -1379,6 +1389,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         continue
                     periode = evaluer_periode(record.get("created_at"), job.settings.date_debut, job.settings.date_fin)
                     if periode in {"hors_periode", "date_indeterminee"}:
+                        record["motif_non_retenue"] = periode
                         with job.lock:
                             if periode == "hors_periode": job.hors_periode += 1
                             else: job.dates_indeterminees += 1
@@ -1409,15 +1420,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             
                             with job.lock:
                                 if not matches:
+                                    record["motif_non_retenue"] = "filtre_hashtags"
                                     job.filtered += 1
                                 elif language == "other":
+                                    record["motif_non_retenue"] = "autre_langue"
                                     job.non_french += 1
                                 elif language == "unknown":
-                                    # « Filtre français » ne retient que les légendes reconnues
-                                    # en français, jamais les hashtags seuls ou un texte incertain.
+                                    # Une légende courte peut être française sans
+                                    # permettre une identification fiable.
+                                    record["motif_non_retenue"] = "langue_indeterminee"
                                     job.language_unknown += 1
                                 else:
                                     record["retenue"] = True
+                                    record["motif_non_retenue"] = "retenue"
                                     job.records.append(record)
                             # Les commentaires sont demandés uniquement pour les publications retenues.
                             if record.get("retenue") and job.settings.collecter_commentaires:
@@ -1460,6 +1475,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     if scraper.est_erreur_session(erreur): raise
                                     record["collecte_commentaires"] = {"statut": "inaccessible", "exhaustif": False}
                         else:
+                            record["motif_non_retenue"] = "legende_vide"
                             with job.lock:
                                 job.legendes_vides += 1
                 except scraper.WebDriverException as erreur:
@@ -1499,7 +1515,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             # Limiter chaque source à la quantité restante du test global.
             limite_initiale = args.limit
             if job.settings.test_research_10_publications:
-                args.limit = 10 - len(unique_links)
+                # Répartir le budget de dix vidéos entre toutes les sources.
+                # Deux médias donnent cinq publications par média.
+                restant = max(0, 10 - len(unique_links))
+                nombre_sources_restantes = len(sources) - numero_source + 1
+                args.limit = (restant + nombre_sources_restantes - 1) // nombre_sources_restantes
             def suivre_decouverte(nombre):
                 job.actualiser_decouverte(rapport)
                 requete = rapport.get("requete_recherche") or etiquette
@@ -1633,6 +1653,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if not links and job.settings.source_collecte != "hashtags":
                 final_message = ("Aucune publication publique accessible pour les comptes sélectionnés. "
                                  "Consultez les diagnostics de chaque source ; les filtres de langue et de légende n’ont pas été appliqués.")
+            elif job.settings.test_research_10_publications:
+                final_message += (
+                    " Consultez le diagnostic du test pour connaître les légendes "
+                    "absentes et les motifs d'exclusion.")
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only and job.processed:
