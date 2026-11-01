@@ -1696,6 +1696,27 @@ with onglet_base_donnees:
     if not cookie_historique:
         st.warning("Rechargez la page d'accueil pour retrouver votre historique privé.")
     else:
+        if st.button(
+                "Importer mes anciennes sauvegardes dans PostgreSQL",
+                key="base_pg_importer_historique",
+                help="Importer les collectes encore présentes dans votre historique "
+                     "privé de 30 jours, sans supprimer les fichiers originaux."):
+            try:
+                resultat_import = api("/api/base-donnees/importer-historique", {})
+            except RuntimeError as erreur:
+                st.error(str(erreur))
+            else:
+                st.session_state["bdd_dernier_import"] = resultat_import
+        if st.session_state.get("bdd_dernier_import"):
+            import_precedent = st.session_state["bdd_dernier_import"]
+            st.success(
+                f"Import historique : {import_precedent['imports']} sauvegarde(s), "
+                f"{import_precedent['publications']} publication(s), "
+                f"{import_precedent['commentaires']} commentaire(s)."
+            )
+            if import_precedent.get("erreurs"):
+                st.warning(
+                    f"{import_precedent['erreurs']} archive(s) n'ont pas pu être importées.")
         from urllib.parse import quote as encoder_recherche
         recherche_nom_bdd = st.text_input(
             "Rechercher une sauvegarde par nom",
