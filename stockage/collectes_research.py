@@ -314,6 +314,18 @@ def journal_plan(dossier, identifiant, proprietaire):
         return [dict(l) for l in lignes]
 
 
+def remettre_en_attente(dossier, identifiant):
+    """Une erreur au lancement ne doit pas bloquer définitivement le plan."""
+    suivant = datetime.combine(
+        maintenant().date() + timedelta(days=1),
+        datetime.min.time(), tzinfo=timezone.utc).isoformat()
+    with connexion(dossier) as base:
+        base.execute(
+            "UPDATE plans SET statut='programme',prochaine_tentative=?,job_id=NULL,"
+            "message='Démarrage du lot impossible ; nouvelle tentative demain' "
+            "WHERE id=? AND statut='en_cours'", (suivant, identifiant))
+
+
 def reprendre_apres_redemarrage(dossier):
     """Remettre en attente un lot dont le processus a disparu au redémarrage."""
     with connexion(dossier) as base:
