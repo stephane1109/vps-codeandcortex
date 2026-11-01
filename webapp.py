@@ -2279,6 +2279,25 @@ def create_app(manager=None):
     async def lifespan(app):
         manager.reaper = threading.Thread(target=manager.maintain, daemon=True)
         manager.reaper.start()
+
+        # Appliquer la migration additive dès le démarrage, sans bloquer
+        # le service HTTP ni exiger le lancement d'une nouvelle collecte.
+        from stockage.postgres_consultation import adresse_configuree
+        if adresse_configuree():
+            def initialiser_schema_postgres():
+                """Préparer les colonnes exploitables sans exposer le DSN."""
+                try:
+                    from stockage.postgres_consultation import verifier_disponibilite
+                    verifier_disponibilite()
+                except Exception as erreur:
+                    LOG.warning(
+                        "Initialisation du schéma PostgreSQL impossible : %s",
+                        type(erreur).__name__)
+            threading.Thread(
+                target=initialiser_schema_postgres,
+                name="scraptiktok-schema-postgres",
+                daemon=True,
+            ).start()
         yield
         manager.shutdown()
 
