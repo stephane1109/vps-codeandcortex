@@ -54,6 +54,13 @@ def ouvrir_connexion():
             "Connexion PostgreSQL indisponible : vérifiez la base dans Coolify.") from None
 
 
+def verifier_disponibilite():
+    """Contrôler la connexion et les droits avant une collecte payante."""
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+    return True
+
+
 def preparer_tables(connexion):
     """Créer les tables durables sans modifier les tables Research existantes."""
     with connexion.cursor() as curseur:
