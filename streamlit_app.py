@@ -314,8 +314,8 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
-onglet_collecte, onglet_multimodale, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Annotation/analyse", "Analyse sociométrique", "Corpus fusionné", "Aide"]
+onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Base de données", "Annotation/analyse", "Analyse sociométrique", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
@@ -1616,6 +1616,19 @@ with onglet_collecte:
                 sans_arobase = st.session_state.get("export_profil_sans_arobase", True)
                 choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
             st.caption("Nom de la sauvegarde : " + (actuel.get("nom_sauvegarde") or "Collecte sans nom (ancienne session)"))
+            if not actuel.get("busy"):
+                if actuel.get("sauvegarde_postgres") == "synchronise":
+                    st.success("Sauvegarde PostgreSQL effectuée. Retrouvez les données dans « Base de données ».")
+                elif actuel.get("sauvegarde_postgres") in ("erreur", "identite_absente"):
+                    st.error(actuel.get("erreur_postgres") or "Sauvegarde PostgreSQL impossible.")
+                    if st.button("Réessayer la sauvegarde PostgreSQL", key="relancer_pg_" + actuel["id"]):
+                        try:
+                            api(f"/api/base-donnees/{actuel['id']}/synchroniser", {})
+                        except RuntimeError as erreur:
+                            st.error(str(erreur))
+                        else:
+                            st.success("La sauvegarde a été enregistrée dans PostgreSQL.")
+                            st.rerun()
             liens = st.columns(2)
             if actuel["can_download"]:
                 liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download{choix_export}")
@@ -1671,6 +1684,150 @@ with onglet_collecte:
                 f"/api/sauvegardes/{point['id']}/telecharger")
         if not st.session_state["sauvegardes_collectes"]:
             st.info("Aucune sauvegarde disponible pour cette session.")
+
+
+with onglet_base_donnees:
+    st.subheader("Sauvegardes PostgreSQL")
+    st.caption(
+        "Consultez vos collectes par nom, y compris les tests sur dix publications, "
+        "puis récupérez les données en CSV ou JSON. Les données sont enregistrées "
+        "dans PostgreSQL indépendamment des fichiers temporaires SQLite."
+    )
+    if not cookie_historique:
+        st.warning("Rechargez la page d'accueil pour retrouver votre historique privé.")
+    else:
+        from urllib.parse import quote as encoder_recherche
+        recherche_nom_bdd = st.text_input(
+            "Rechercher une sauvegarde par nom",
+            placeholder="Ex. : Test_Manifestations_Lyceennes_2026",
+            key="base_pg_recherche_nom"
+        )
+        st.button("Actualiser la liste", key="base_pg_actualiser")
+        try:
+            resultat_bdd = api(
+                "/api/base-donnees?filtre=" + encoder_recherche(recherche_nom_bdd))
+        except RuntimeError as erreur:
+            st.error(str(erreur))
+            resultat_bdd = None
+        if resultat_bdd is not None:
+            if not resultat_bdd.get("configure"):
+                st.error(
+                    "PostgreSQL n'est pas configuré : renseignez la variable "
+                    "RESEARCH_POSTGRES_DSN dans Coolify, puis redéployez ScrapTikTok."
+                )
+            else:
+                sauvegardes_bdd = resultat_bdd.get("sauvegardes") or []
+                st.caption(f"{len(sauvegardes_bdd)} sauvegarde(s) dans PostgreSQL.")
+                if not sauvegardes_bdd:
+                    st.info(
+                        "Aucune sauvegarde correspondante. Les anciens tests "
+                        "réalisés avant cette mise à jour ne sont pas "
+                        "automatiquement présents dans PostgreSQL. "
+                        "Ils peuvent être accessibles dans l'historique SQLite."
+                    )
+                else:
+                    index_bdd = st.selectbox(
+                        "Choisir une sauvegarde",
+                        list(range(len(sauvegardes_bdd))),
+                        format_func=lambda i: (
+                            f"{sauvegardes_bdd[i]['nom']} · "
+                            f"{sauvegardes_bdd[i]['date'][:10]} · "
+                            f"{sauvegardes_bdd[i]['publications']} publications"
+                        ),
+                        key="base_pg_selection"
+                    )
+                    sauvegarde_bdd = sauvegardes_bdd[index_bdd]
+                    st.caption(
+                        f"Statut : {sauvegarde_bdd['statut']} · "
+                        f"Source : {sauvegarde_bdd['source']} · "
+                        f"Moteur : {sauvegarde_bdd['moteur']} · "
+                        f"Commentaires : {sauvegarde_bdd['commentaires']}"
+                    )
+                    adresse_bdd = (
+                        f"/api/base-donnees/{sauvegarde_bdd['type']}/"
+                        f"{sauvegarde_bdd['id']}"
+                    )
+                    colonnes_exports = st.columns(4)
+                    for colonne, nom, libelle in zip(
+                            colonnes_exports,
+                            ("publications.csv", "publications.json",
+                             "commentaires.csv", "commentaires.json"),
+                            ("Publications CSV", "Publications JSON",
+                             "Commentaires CSV", "Commentaires JSON")):
+                        colonne.link_button(
+                            libelle, adresse_bdd + "/export/" + nom,
+                            use_container_width=True)
+                    categorie_bdd = st.radio(
+                        "Table à consulter", ("publications", "commentaires"),
+                        format_func=lambda valeur: (
+                            "Publications" if valeur == "publications"
+                            else "Commentaires"),
+                        horizontal=True, key="base_pg_categorie"
+                    )
+                    filtre_bdd = st.text_input(
+                        "Rechercher dans les auteurs, identifiants et textes",
+                        key="base_pg_filtre"
+                    )
+                    page_bdd = st.number_input(
+                        "Page (100 résultats)", min_value=1, value=1,
+                        step=1, key="base_pg_page"
+                    )
+                    try:
+                        donnees_bdd = api(
+                            adresse_bdd + "/" + categorie_bdd +
+                            "?limite=100&decalage=" + str((page_bdd - 1) * 100) +
+                            "&filtre=" + encoder_recherche(filtre_bdd))
+                    except RuntimeError as erreur:
+                        st.error(str(erreur))
+                    else:
+                        lignes_bdd = donnees_bdd.get("lignes") or []
+                        st.caption(f"{donnees_bdd['total']} enregistrement(s) correspondant(s).")
+                        if not lignes_bdd:
+                            st.info("Aucun enregistrement correspondant à cette page.")
+                        elif categorie_bdd == "publications":
+                            tableau_bdd = []
+                            for ligne_bdd in lignes_bdd:
+                                compteurs = ligne_bdd.get("engagement") or {}
+                                def mesure_bdd(nom):
+                                    element = compteurs.get(nom) or {}
+                                    return element.get("valeur") if isinstance(element, dict) else None
+                                tableau_bdd.append({
+                                    "ID": ligne_bdd.get("id"),
+                                    "Auteur": ligne_bdd.get("author"),
+                                    "Légende": ligne_bdd.get("description"),
+                                    "Date": ligne_bdd.get("created_at"),
+                                    "Retenue TXT": ligne_bdd.get("retenue"),
+                                    "Raison exclusion": ligne_bdd.get("motif_non_retenue"),
+                                    "Region Code": ligne_bdd.get("region_code"),
+                                    "Is Verified": ligne_bdd.get("is_verified"),
+                                    "Vues": mesure_bdd("vues"),
+                                    "Likes": mesure_bdd("likes"),
+                                    "Commentaires": mesure_bdd("commentaires"),
+                                    "Partages": mesure_bdd("partages"),
+                                    "Favoris": mesure_bdd("favoris"),
+                                    "URL": ligne_bdd.get("url")
+                                })
+                            st.dataframe(tableau_bdd, hide_index=True, use_container_width=True)
+                        else:
+                            st.dataframe([{
+                                "ID": ligne.get("id"),
+                                "Publication": ligne.get("publication_id"),
+                                "Auteur": ligne.get("auteur"),
+                                "Texte": ligne.get("texte"),
+                                "Likes": ligne.get("likes"),
+                                "Réponse à": ligne.get("parent_id"),
+                                "Date": ligne.get("observe_le")
+                            } for ligne in lignes_bdd],
+                                hide_index=True, use_container_width=True)
+                        if lignes_bdd:
+                            with st.expander("Voir toutes les variables d'un enregistrement"):
+                                numero_ligne = st.selectbox(
+                                    "Enregistrement",
+                                    list(range(len(lignes_bdd))),
+                                    format_func=lambda i: str(lignes_bdd[i].get("id", "")),
+                                    key="base_pg_ligne"
+                                )
+                                st.json(lignes_bdd[numero_ligne], expanded=False)
 
 
 with onglet_aide:
