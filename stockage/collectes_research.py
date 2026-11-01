@@ -363,14 +363,19 @@ def enregistrer_partiel(dossier, identifiant, publication, commentaires):
 
 
 def clore_dates(dossier):
-    """Échéance stricte : le plan ne reprend plus après sa date de fin."""
+    """Arrêter les plans, y compris ceux en cours, après leur échéance."""
     jour = maintenant().date().isoformat()
     with connexion(dossier) as base:
+        expirations = [r[0] for r in base.execute(
+            "SELECT id FROM plans WHERE statut IN "
+            "('programme','suspendu','en_cours') AND fin_execution<?",
+            (jour,)).fetchall()]
         base.execute(
             "UPDATE plans SET statut='date_limite',actualise_le=?,"
             "message='Date limite d’exécution atteinte : corpus potentiellement incomplet.' "
-            "WHERE statut IN ('programme','suspendu') AND fin_execution<?",
+            "WHERE statut IN ('programme','suspendu','en_cours') AND fin_execution<?",
             (maintenant().isoformat(), jour))
+    return expirations
 
 
 def reserver_requete(dossier):
@@ -466,9 +471,28 @@ def exporter(dossier, identifiant, proprietaire, format_):
     if format_ == "commentaires.csv":
         return texte_csv(retenues, commentaires, "commentaires").encode("utf-8-sig")
     if format_ == "txt":
-        return "\n\n".join(
-            f"**** *id_{p.get('id')} *profil_{p.get('author')}\n{p.get('description') or ''}"
-            for p in retenues).encode("utf-8")
+        # Reprendre les options de construction du TXT existant.
+        from webapp import text_export
+        with connexion(dossier) as base:
+            ligne = base.execute(
+                "SELECT parametres FROM plans WHERE id=? AND proprietaire=?",
+                (identifiant, empreinte_proprietaire(proprietaire))).fetchone()
+        options = json.loads(ligne["parametres"])
+        contenu = text_export(
+            retenues, options.get("include_sources", True),
+            options.get("inclure_metadonnees_txt", False),
+            options.get("variables_txt"),
+            commentaires if options.get("collecter_commentaires", False) else None,
+            supprimer_arobase_profil=options.get("supprimer_arobase_profil", False),
+            inclure_texte_genere_ia=options.get("inclure_texte_genere_ia", False),
+            follower_count_illustratif=options.get("follower_count_illustratif", False),
+            abonnes_classe_illustratif=options.get("abonnes_classe_illustratif", False),
+            variables_classes_txt=options.get("variables_classes_txt", []),
+            taux_engagement_txt=options.get("taux_engagement_txt", "aucun"),
+            themes=([options.get("hashtag_presse")]
+                    if options.get("croiser_hashtag_presse") else
+                    options.get("hashtags_saisis") or []))
+        return contenu.encode("utf-8")
     if format_ == "zip":
         flux = io.BytesIO()
         with ZipFile(flux, "w", ZIP_DEFLATED) as archive:
