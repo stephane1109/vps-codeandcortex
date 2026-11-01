@@ -26,7 +26,7 @@ def preparer_vues_tabulaire(curseur):
             p.donnees->>'follower_count_statut' AS follower_count_statut,
             p.donnees->>'classe_abonnes' AS classe_abonnes,
             CASE WHEN (p.donnees->>'video_duration') ~ '^[0-9]+([.][0-9]+)?$'
-                THEN (p.donnees->>'video_duration')::numeric END AS duree_video,
+                THEN (p.donnees->>'video_duration')::numeric END AS duree_secondes,
             p.donnees->>'duree_classe' AS duree_classe,
             CASE WHEN (p.donnees#>>'{engagement,vues,valeur}') ~ '^[0-9]+$'
                 THEN (p.donnees#>>'{engagement,vues,valeur}')::bigint END AS vues,
