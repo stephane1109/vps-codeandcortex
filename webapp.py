@@ -616,6 +616,8 @@ class Job:
         self.records = []
         self.dernier_point_sauvegarde = None
         self.erreur_sauvegarde = None
+        self.sauvegarde_postgres = "en_attente"
+        self.erreur_postgres = ""
         self.frame = b""
         self.action_error = ""
         self.type_intervention = ""
@@ -689,6 +691,8 @@ class Job:
                     "variantes_accents": self.settings.variantes_accents,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "nom_sauvegarde": self.settings.nom_sauvegarde,
+                    "sauvegarde_postgres": self.sauvegarde_postgres,
+                    "erreur_postgres": self.erreur_postgres,
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "bilan_hashtags": dict(self.bilan_hashtags),
                     "correspondances_hashtags": self.correspondances_hashtags,
@@ -854,6 +858,31 @@ class Job:
                 taux_engagement_txt=self.settings.taux_engagement_txt,
                 themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
                         else self.settings.hashtags))
+
+    def sauvegarder_postgres(self):
+        """Archiver la collecte dans PostgreSQL et exposer son véritable statut."""
+        if self.historique:
+            return False
+        if self.plan_research_id:
+            # Les lots programmés sont consolidés dans research_plans.
+            return True
+        if not self.owner_historique:
+            self.sauvegarde_postgres = "identite_absente"
+            self.erreur_postgres = "Cookie d'historique absent : sauvegarde impossible."
+            return False
+        try:
+            from stockage.postgres_consultation import archiver_collecte
+            archiver_collecte(self)
+        except Exception:
+            LOG.warning("Archivage PostgreSQL impossible pour %s", self.id)
+            self.sauvegarde_postgres = "erreur"
+            self.erreur_postgres = (
+                "Sauvegarde PostgreSQL impossible : vérifiez la base dans Coolify. "
+                "Les fichiers SQLite et ZIP restent accessibles.")
+            return False
+        self.sauvegarde_postgres = "synchronise"
+        self.erreur_postgres = ""
+        return True
 
     def sauvegarder_historique(self):
         """Synchroniser les résultats et codages dans l'historique privé de 30 jours."""
@@ -1808,6 +1837,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += " L’archive enrichie n’a pas pu être finalisée ; le TXT reste disponible."
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
+        # Archiver même les vidéos dont les légendes ont été écartées du TXT.
+        job.sauvegarder_postgres()
         job.sauvegarder_historique()
         if job.settings.sauvegarde_progressive:
             try:
@@ -2258,6 +2289,69 @@ def create_app(manager=None):
             "maximum_pages_api_par_source": max_pages_api(),
             "budget_api_presse": etat_budget(),
         }
+
+    @app.get("/api/base-donnees")
+    def lister_postgres(request: Request, filtre: str = ""):
+        """Lister toutes les sauvegardes appartenant au cookie privé."""
+        from stockage.postgres_consultation import lister_sauvegardes, adresse_configuree
+        propriete = owner_historique(request)
+        if not adresse_configuree():
+            return {"configure": False, "sauvegardes": []}
+        try:
+            return {"configure": True, "sauvegardes": lister_sauvegardes(propriete, filtre)}
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
+
+    @app.get("/api/base-donnees/{type_sauvegarde}/{identifiant}/{categorie}")
+    def consulter_postgres(type_sauvegarde: str, identifiant: str, categorie: str,
+                          request: Request, filtre: str = "", limite: int = 100,
+                          decalage: int = 0):
+        """Consulter une page de publications ou de commentaires privés."""
+        from stockage.postgres_consultation import donnees_sauvegarde
+        try:
+            return donnees_sauvegarde(owner_historique(request), type_sauvegarde,
+                                      identifiant, categorie, filtre, limite, decalage)
+        except ValueError:
+            raise HTTPException(404, "Sauvegarde ou catégorie introuvable.") from None
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
+
+    @app.get("/api/base-donnees/{type_sauvegarde}/{identifiant}/export/{nom}")
+    def exporter_postgres(type_sauvegarde: str, identifiant: str, nom: str,
+                         request: Request):
+        """Exporter un corpus PostgreSQL complet en CSV ou JSON."""
+        from stockage.postgres_consultation import exporter_sauvegarde
+        if nom not in ("publications.csv", "commentaires.csv",
+                       "publications.json", "commentaires.json"):
+            raise HTTPException(404, "Format inconnu.")
+        categorie, format_ = nom.rsplit(".", 1)
+        try:
+            morceaux = exporter_sauvegarde(owner_historique(request),
+                type_sauvegarde, identifiant, categorie, format_)
+        except ValueError:
+            raise HTTPException(404, "Sauvegarde introuvable.") from None
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
+        nom_fichier = f"scraptiktok_{identifiant[:8]}_{nom}"
+        return StreamingResponse(morceaux,
+            media_type=("text/csv; charset=utf-8" if format_ == "csv"
+                        else "application/json; charset=utf-8"),
+            headers={"Content-Disposition": f'attachment; filename="{nom_fichier}"'})
+
+    @app.post("/api/base-donnees/{identifiant}/synchroniser")
+    def synchroniser_collecte_postgres(identifiant: str, request: Request):
+        """Rejouer l'archivage d'une collecte terminée."""
+        exiger_ticket(request)
+        job = manager.get(owner(request), identifiant)
+        if job.busy or job.video_busy:
+            raise HTTPException(409, "La collecte doit être terminée.")
+        if job.owner_historique != owner_historique(request):
+            raise HTTPException(403, "Cette sauvegarde ne vous appartient pas.")
+        if not job.sauvegarder_postgres():
+            raise HTTPException(503, job.erreur_postgres)
+        return {"statut": "synchronise",
+                "publications": len(job.publications),
+                "commentaires": len(job.commentaires)}
 
     @app.get("/api/research/plans")
     def lister_programmes_research(request: Request):
