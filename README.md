@@ -838,6 +838,26 @@ La collecte programmée exige une configuration permanente des variables
 **Coolify**. Les clés et jetons ne sont jamais écrits dans SQLite ni les ZIP.
 La collecte reprend sans connexion du navigateur grâce au planificateur du
 service FastAPI, à condition que le conteneur et son volume soient actifs.
+### Sauvegarde automatique PostgreSQL
+
+Avec `RESEARCH_POSTGRES_DSN` renseigné dans Coolify, les collectes ponctuelles
+créent leur entrée dans `scraptiktok_collectes` **avant** le lancement du
+moteur. Les vidéos et commentaires sont archivés progressivement dans
+`scraptiktok_publications` et `scraptiktok_commentaires` : après chaque
+média traité et toutes les dix publications consultées, puis lors de la
+finalisation. L'archivage utilise des insertions ou mises à jour idempotentes
+et n'enregistre aux points intermédiaires que les nouvelles observations.
+Le statut et les compteurs sont visibles pendant la collecte dans Streamlit.
+Une sauvegarde PostgreSQL initiale impossible empêche le lancement du job,
+afin de ne pas consommer de quota TikTok sans archivage disponible.
+
+L'option « Sauvegarde progressive ZIP » est indépendante de ce mécanisme.
+Pour les **collectes Research programmées**, la sauvegarde permanente par
+publication est d'abord assurée dans SQLite ; PostgreSQL est synchronisé
+après chaque lot programmé, dans les tables `research_plans`,
+`research_publications` et `research_commentaires`. Le programme
+conserve son bouton de synchronisation manuelle.
+
 Le quota de précaution `RESEARCH_QUOTA_LOCAL_JOUR` est de 900 requêtes par
 jour UTC par défaut (maximum 1 000). Il couvre les requêtes Research effectuées
 par cette instance, mais n'englobe pas les autres applications partageant
