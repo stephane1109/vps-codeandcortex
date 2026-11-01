@@ -618,6 +618,12 @@ class Job:
         self.erreur_sauvegarde = None
         self.sauvegarde_postgres = "en_attente"
         self.erreur_postgres = ""
+        self.sauvegarde_postgres_publications = 0
+        self.sauvegarde_postgres_commentaires = 0
+        self._pg_publications = 0
+        self._pg_commentaires = 0
+        self._pg_traitees = -1
+        self._pg_initialise = False
         self.frame = b""
         self.action_error = ""
         self.type_intervention = ""
@@ -693,6 +699,8 @@ class Job:
                     "nom_sauvegarde": self.settings.nom_sauvegarde,
                     "sauvegarde_postgres": self.sauvegarde_postgres,
                     "erreur_postgres": self.erreur_postgres,
+                    "sauvegarde_postgres_publications": self.sauvegarde_postgres_publications,
+                    "sauvegarde_postgres_commentaires": self.sauvegarde_postgres_commentaires,
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "bilan_hashtags": dict(self.bilan_hashtags),
                     "correspondances_hashtags": self.correspondances_hashtags,
@@ -859,29 +867,53 @@ class Job:
                 themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
                         else self.settings.hashtags))
 
-    def sauvegarder_postgres(self):
-        """Archiver la collecte dans PostgreSQL et exposer son véritable statut."""
+    def sauvegarder_postgres(self, *, progressif=False):
+        """Archiver automatiquement les nouvelles données sans réécrire le corpus."""
         if self.historique:
             return False
         if self.plan_research_id:
-            # Les lots programmés sont consolidés dans research_plans.
+            # Les lots programmés utilisent leur propre stockage SQLite/PostgreSQL.
             return True
         if not self.owner_historique:
             self.sauvegarde_postgres = "identite_absente"
             self.erreur_postgres = "Cookie d'historique absent : sauvegarde impossible."
             return False
+        with self.lock:
+            total_publications = len(self.publications or self.records)
+            total_commentaires = len(self.commentaires)
+            traitees = self.processed
+            if (progressif and self._pg_initialise
+                    and total_publications == self._pg_publications
+                    and total_commentaires == self._pg_commentaires
+                    and traitees == self._pg_traitees):
+                return True
+            indice_publications = self._pg_publications if progressif else 0
+            indice_commentaires = self._pg_commentaires if progressif else 0
         try:
             from stockage.postgres_consultation import archiver_collecte
-            archiver_collecte(self)
+            if progressif:
+                archiver_collecte(
+                    self, a_partir_publications=indice_publications,
+                    a_partir_commentaires=indice_commentaires)
+            else:
+                archiver_collecte(self)
         except Exception:
-            LOG.warning("Archivage PostgreSQL impossible pour %s", self.id)
+            LOG.warning("Archivage PostgreSQL impossible pour %s", self.id, exc_info=True)
             self.sauvegarde_postgres = "erreur"
             self.erreur_postgres = (
-                "Sauvegarde PostgreSQL impossible : vérifiez la base dans Coolify. "
+                "Sauvegarde PostgreSQL impossible : vérifiez les journaux "
+                "ScrapTikTok et les droits PostgreSQL dans Coolify. "
                 "Les fichiers SQLite et ZIP restent accessibles.")
             return False
-        self.sauvegarde_postgres = "synchronise"
-        self.erreur_postgres = ""
+        with self.lock:
+            self._pg_publications = total_publications
+            self._pg_commentaires = total_commentaires
+            self._pg_traitees = traitees
+            self._pg_initialise = True
+            self.sauvegarde_postgres_publications = total_publications
+            self.sauvegarde_postgres_commentaires = total_commentaires
+            self.sauvegarde_postgres = "synchronise"
+            self.erreur_postgres = ""
         return True
 
     def sauvegarder_historique(self):
@@ -1529,6 +1561,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     from stockage.collectes_research import enregistrer_partiel
                     enregistrer_partiel(job.racine, job.plan_research_id,
                         job.publications[-1], job.commentaires)
+                if index % 10 == 0 and not job.plan_research_id:
+                    # PostgreSQL conserve un point automatique toutes les dix vidéos.
+                    job.sauvegarder_postgres(progressif=True)
                 if job.settings.sauvegarde_progressive and index % 10 == 0:
                     job.sauvegarder_point()
 
@@ -1646,6 +1681,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if ((job.settings.source_collecte != "hashtags" or filtre_dates_hashtags)
                     and len(unique_links) > job.processed):
                 lire_decouvertes()
+            if not job.plan_research_id:
+                # Chaque média terminé devient consultable sans attendre le lot complet.
+                job.sauvegarder_postgres(progressif=True)
             if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
                 break
             if (job.settings.test_research_10_publications
@@ -2065,6 +2103,11 @@ class Manager:
                 raise HTTPException(409, "Le navigateur est occupé par une autre collecte. Réessayez dans quelques minutes.")
             job = Job(owner, settings, self.data_dir, owner_historique=owner_historique)
             job.limites_debug={"inactivite_max_s":self.idle_timeout,"duree_max_s":self.max_duration}
+            if adresse_configuree() and not job.sauvegarder_postgres():
+                raise HTTPException(
+                    503, "La sauvegarde PostgreSQL initiale a échoué. "
+                    "Collecte non lancée pour préserver votre corpus. "
+                    + job.erreur_postgres)
             self.jobs[job.id] = job
             job.thread = threading.Thread(target=self.runner, args=(job,), daemon=True)
             job.thread.start()
