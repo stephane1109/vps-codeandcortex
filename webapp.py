@@ -46,6 +46,7 @@ HISTORIQUE_COOKIE = "scraptiktok_historique"
 class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
+    nom_sauvegarde: str = Field(default="", max_length=120)
     comptes: list[str] = Field(default_factory=list, max_length=10)
     medias: list[str] = Field(default_factory=list, max_length=29)
     presse_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub", "apify"] = "api"
@@ -90,6 +91,17 @@ class StartRequest(BaseModel):
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
+
+    @field_validator("nom_sauvegarde")
+    @classmethod
+    def valider_nom_sauvegarde(cls, valeur):
+        """Nettoyer le nom affiché sans accepter de caractères de contrôle."""
+        nom = valeur.strip()
+        if not nom:
+            raise ValueError("Le nom de la sauvegarde est obligatoire.")
+        if any(ord(caractere) < 32 or ord(caractere) == 127 for caractere in nom):
+            raise ValueError("Le nom de la sauvegarde contient un caractère interdit.")
+        return nom
 
     @field_validator("variables_txt", mode="before")
     @classmethod
@@ -251,6 +263,11 @@ class StartRequest(BaseModel):
 
     @property
     def filename(self):
+        # Les noms de sauvegarde deviennent des noms de fichiers sûrs.
+        if self.nom_sauvegarde:
+            nom_fichier = re.sub(r"[^\w-]+", "_", self.nom_sauvegarde, flags=re.UNICODE).strip("_")[:100]
+            if nom_fichier:
+                return nom_fichier + ".txt"
         joiner = "_ET_" if self.operator == "AND" else "_OU_"
         nom = (joiner.join(self.hashtags) if self.source_collecte == "hashtags"
                else "comptes_" + "_".join(s["compte"] for s in self.sources)[:100])
@@ -667,6 +684,7 @@ class Job:
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "variantes_accents": self.settings.variantes_accents,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
+                    "nom_sauvegarde": self.settings.nom_sauvegarde,
                     "filtered": self.filtered, "search_errors": self.search_errors,
                     "bilan_hashtags": dict(self.bilan_hashtags),
                     "correspondances_hashtags": self.correspondances_hashtags,
@@ -1866,6 +1884,8 @@ class Manager:
         """Enregistrer la programmation, sans jamais stocker les Client secrets."""
         from collecte.researchapi import identifiants_disponibles
         from stockage.collectes_research import creer_plan, detail_plan, lister_plans
+        if not parametres.nom_sauvegarde:
+            raise HTTPException(422, "Le nom de la sauvegarde est obligatoire.")
         if not identifiants_disponibles():
             raise HTTPException(422, "Pour les reprises automatiques, configurez "
                 "TIKTOK_RESEARCH_CLIENT_KEY et TIKTOK_RESEARCH_CLIENT_SECRET "
@@ -2274,8 +2294,14 @@ def create_app(manager=None):
             "commentaires.csv": "text/csv", "txt": "text/plain",
             "zip": "application/zip", "sqlite3": "application/vnd.sqlite3",
         }[format_]
+        # Associer chaque fichier à son nom de sauvegarde, même lors d'un export ultérieur.
+        from stockage.collectes_research import detail_plan
+        plan = detail_plan(manager.data_dir, identifiant, owner_historique(request))
+        libelle = (plan or {}).get("nom_sauvegarde") or "research"
+        nom_nettoye = re.sub(r"[^\w-]+", "_", libelle, flags=re.UNICODE).strip("_")[:80] or "research"
+        nom_fichier = f"{nom_nettoye}_{identifiant[:8]}.{format_}"
         return Response(contenu, media_type=media, headers={
-            "Content-Disposition": f'attachment; filename="research_{identifiant}.{format_}"'})
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(nom_fichier)}"})
 
     @app.get("/api/presse/limitation")
     def statut_limitation_presse(request: Request):
@@ -2742,6 +2768,8 @@ def create_app(manager=None):
     @app.post("/api/jobs", status_code=202)
     def start(payload: StartRequest, request: Request):
         exiger_ticket(request)
+        if not payload.nom_sauvegarde:
+            raise HTTPException(422, "Le nom de la sauvegarde est obligatoire.")
         if payload.cookies_tiktok is not None:
             if payload.source_collecte != "presse" or payload.presse_moteur != "navigateur":
                 raise HTTPException(422, "L'import de cookies est disponible avec la méthode Presse Selenium.")

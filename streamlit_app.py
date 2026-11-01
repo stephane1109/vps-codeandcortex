@@ -140,7 +140,8 @@ if "initialise" not in st.session_state:
             "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
         "limite_commentaires":ancienne.get("limite_commentaires",50),
-        "test_research_10_publications":ancienne.get("test_research_10_publications",False)}
+        "test_research_10_publications":ancienne.get("test_research_10_publications",False),
+        "nom_sauvegarde": ancienne.get("nom_sauvegarde", "")}
 
     variables = ancienne.get("variables_txt")
     if variables is None:
@@ -319,6 +320,14 @@ onglet_collecte, onglet_multimodale, onglet_sociometrie, onglet_corpus, onglet_a
 
 with onglet_collecte:
     api_tiktok_suspendue = False
+    st.text_input(
+        "Nom de la sauvegarde *", key="nom_sauvegarde",
+        placeholder="Ex. : Manifestations_lyceennes_2026",
+        max_chars=120, disabled=occupe,
+        help="Obligatoire pour toutes les collectes, y compris les tests "
+             "sur 10 publications. Le nom accompagne les données sauvegardées "
+             "et les exports. Il n'efface pas les anciennes collectes."
+    )
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     libelles_moteurs = {
@@ -897,7 +906,9 @@ with onglet_collecte:
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
                                  on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
-            if source != "presse" and erreur_hashtags:
+            if not st.session_state.get("nom_sauvegarde", "").strip():
+                st.error("Renseignez le nom de la sauvegarde avant de lancer la collecte.")
+            elif source != "presse" and erreur_hashtags:
                 st.error("Corrigez la saisie des hashtags avant de lancer la collecte.")
             elif erreur_hashtags_exclus:
                 st.error("Corrigez les hashtags à exclure avant de lancer la collecte.")
@@ -929,6 +940,7 @@ with onglet_collecte:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
                 if moteur_formulaire != "research":
                     valeurs["limite_commentaires"] = st.session_state.get("limite_commentaires", 50)
+                valeurs["nom_sauvegarde"] = st.session_state["nom_sauvegarde"].strip()
                 valeurs["collecte_research_complete"] = moteur_formulaire == "research"
                 valeurs["test_research_10_publications"] = bool(
                     moteur_formulaire == "research"
@@ -1043,10 +1055,11 @@ with onglet_collecte:
             for plan in plans:
                 identifiant = plan["id"]
                 with st.expander(
-                        f"{plan['debut_corpus']} → {plan['fin_corpus']} · "
+                        f"{plan.get('nom_sauvegarde') or 'Collecte sans nom'} · "
                         f"{plan['statut']} · {plan['publications']} publications",
                         expanded=False):
                     st.write(
+                        f"Corpus : {plan['debut_corpus']} au {plan['fin_corpus']} · "
                         f"Exécution : {plan['debut_execution']} au "
                         f"{plan['fin_execution']} · "
                         f"lots terminés : {plan['lots_termines']}/{plan['lots_totaux']} · "
@@ -1525,6 +1538,7 @@ with onglet_collecte:
             if actuel["can_download"] or actuel["archive_prete"]:
                 sans_arobase = st.session_state.get("export_profil_sans_arobase", True)
                 choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
+            st.caption("Nom de la sauvegarde : " + (actuel.get("nom_sauvegarde") or "Collecte sans nom (ancienne session)"))
             liens = st.columns(2)
             if actuel["can_download"]:
                 liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download{choix_export}")

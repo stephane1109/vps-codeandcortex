@@ -24,7 +24,7 @@ def synchroniser_plan(dossier, identifiant, *, exiger_configuration=False):
         from psycopg.types.json import Jsonb
         with connexion(dossier) as source:
             plan = source.execute(
-                "SELECT id,proprietaire,statut,debut_corpus,fin_corpus,"
+                "SELECT id,proprietaire,nom_sauvegarde,statut,debut_corpus,fin_corpus,"
                 "debut_execution,fin_execution FROM plans WHERE id=?",
                 (identifiant,)).fetchone()
             if plan is None:
@@ -41,6 +41,7 @@ def synchroniser_plan(dossier, identifiant, *, exiger_configuration=False):
                         CREATE TABLE IF NOT EXISTS research_plans (
                             plan_id TEXT PRIMARY KEY,
                             proprietaire_hash TEXT NOT NULL,
+                            nom_sauvegarde TEXT NOT NULL DEFAULT '',
                             statut TEXT NOT NULL,
                             debut_corpus DATE NOT NULL,
                             fin_corpus DATE NOT NULL,
@@ -48,6 +49,9 @@ def synchroniser_plan(dossier, identifiant, *, exiger_configuration=False):
                             fin_execution DATE NOT NULL,
                             synchronise_le TIMESTAMPTZ NOT NULL
                         )""")
+                    curseur.execute(
+                        "ALTER TABLE research_plans ADD COLUMN IF NOT EXISTS "
+                        "nom_sauvegarde TEXT NOT NULL DEFAULT ''")
                     curseur.execute("""
                         CREATE TABLE IF NOT EXISTS research_publications (
                             plan_id TEXT NOT NULL REFERENCES research_plans(plan_id)
@@ -74,14 +78,15 @@ def synchroniser_plan(dossier, identifiant, *, exiger_configuration=False):
                         "ON research_commentaires(plan_id,publication_id)")
                     curseur.execute("""
                         INSERT INTO research_plans (
-                            plan_id,proprietaire_hash,statut,debut_corpus,fin_corpus,
+                            plan_id,proprietaire_hash,nom_sauvegarde,statut,debut_corpus,fin_corpus,
                             debut_execution,fin_execution,synchronise_le)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT(plan_id) DO UPDATE SET
+                            nom_sauvegarde=EXCLUDED.nom_sauvegarde,
                             statut=EXCLUDED.statut,
                             synchronise_le=EXCLUDED.synchronise_le
-                    """, (plan["id"], plan["proprietaire"], plan["statut"],
-                          plan["debut_corpus"], plan["fin_corpus"],
+                    """, (plan["id"], plan["proprietaire"], plan["nom_sauvegarde"],
+                          plan["statut"], plan["debut_corpus"], plan["fin_corpus"],
                           plan["debut_execution"], plan["fin_execution"], maintenant()))
                     for item in publications:
                         curseur.execute("""

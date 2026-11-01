@@ -113,7 +113,8 @@ def enregistrer(job, owner_cookie):
             VALUES(?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET titre=excluded.titre, statut=excluded.statut,
                 actualise_le=excluded.actualise_le, expire_le=excluded.expire_le""",
-            (job.id, empreinte(owner_cookie), job.settings.libelle[:160], job.status,
+            (job.id, empreinte(owner_cookie),
+              (job.settings.nom_sauvegarde or job.settings.libelle)[:160], job.status,
              maintenant, maintenant, maintenant + retention_jours()*86400))
 
 

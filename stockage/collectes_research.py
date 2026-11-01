@@ -46,6 +46,7 @@ def connexion(dossier):
         CREATE TABLE IF NOT EXISTS plans (
             id TEXT PRIMARY KEY,
             proprietaire TEXT NOT NULL,
+            nom_sauvegarde TEXT NOT NULL DEFAULT '',
             statut TEXT NOT NULL,
             debut_execution TEXT NOT NULL,
             fin_execution TEXT NOT NULL,
@@ -87,6 +88,11 @@ def connexion(dossier):
             jour_utc TEXT PRIMARY KEY, appels INTEGER NOT NULL DEFAULT 0
         );
     """)
+    # Migrer les bases créées avant l'ajout du nom, sans toucher aux corpus.
+    colonnes = {ligne[1] for ligne in base.execute("PRAGMA table_info(plans)")}
+    if "nom_sauvegarde" not in colonnes:
+        base.execute("ALTER TABLE plans ADD COLUMN nom_sauvegarde TEXT NOT NULL DEFAULT ''")
+        base.commit()
     return base
 
 
@@ -124,10 +130,11 @@ def creer_plan(dossier, proprietaire, parametres, debut_execution, fin_execution
         parametres.pop(secret, None)
     with connexion(dossier) as base:
         base.execute("""INSERT INTO plans (
-            id, proprietaire, statut, debut_execution, fin_execution,
+            id, proprietaire, nom_sauvegarde, statut, debut_execution, fin_execution,
             debut_corpus, fin_corpus, parametres, cree_le, actualise_le)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (identifiant, empreinte_proprietaire(proprietaire), "programme",
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (identifiant, empreinte_proprietaire(proprietaire),
+             parametres.get("nom_sauvegarde", ""), "programme",
              debut.isoformat(), fin.isoformat(), debut_corpus.isoformat(),
              fin_corpus.isoformat(), json.dumps(parametres, ensure_ascii=False),
              horodatage, horodatage))
