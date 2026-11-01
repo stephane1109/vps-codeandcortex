@@ -487,7 +487,10 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
                         if objectif == 0 or len(resultats) >= limite:
                             break
             if objectif == 0 or len(resultats) >= limite:
-                return False
+                # Le curseur de TikTok distingue fin réelle et arrêt de sécurité.
+                if automatique and infos.get("has_more"):
+                    etat["statut"] = "pagination_incomplete"
+                return automatique and not infos.get("has_more")
             if not infos.get("has_more"):
                 return True
             suivant = infos.get("cursor")
@@ -503,8 +506,9 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
             etat["statut"] = "pagination_incomplete"
         return False
 
-    # Sans réponses : conserver la limite totale sur les seuls commentaires.
-    # Avec réponses : réserver 30 % du quota aux premières réponses disponibles.
+    # En mode manuel, réserver 30 % du quota aux réponses accessibles.
+    # En mode automatique, parcourir les parents puis les réponses dans le
+    # budget partagé de pages de la publication.
     plafond_parents = (limite if automatique or not reponses
                       else max(1, (limite * 7 + 9) // 10))
     fin_parents = lire_pages(video_id, objectif=plafond_parents)
@@ -512,14 +516,16 @@ def collecter_commentaires_research(publication, limite=None, reponses=False, *,
         parents = [item for item in resultats.values()
                    if not item["est_reponse"] and (item["nombre_reponses_annonce"] or 0) > 0]
         for parent in parents:
-            if etat["bloquer"] or len(resultats) >= limite:
+            if (etat["bloquer"] or len(resultats) >= limite
+                    or diagnostic["pages"] >= MAX_PAGES):
                 break
             lire_pages(parent["id"], reponse=True, objectif=limite-len(resultats))
     # La réserve peut produire un corpus partiel si TikTok ne retourne pas
     # de réponses ; signaler cette limite, sans annoncer une exhaustivité.
     if etat["statut"] == "complet":
         if len(resultats) >= limite:
-            etat["statut"] = "limite"
+            etat["statut"] = ("complet" if automatique and fin_parents and not reponses
+                             else "limite")
         elif not fin_parents or reponses:
             etat["statut"] = "partiel"
         elif not resultats:
