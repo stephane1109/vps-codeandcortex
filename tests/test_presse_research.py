@@ -81,6 +81,28 @@ class TestsResearch(unittest.TestCase):
                          ["engagement"]["vues"]["valeur"], 0)
         self.assertEqual(rapport["discovery_stop"], "limit")
 
+    def test_mode_automatique_depasse_ancien_plafond_pages(self):
+        appels = []
+
+        def api(url, *, data, headers):
+            corps = json.loads(data)
+            appels.append(corps)
+            numero = len(appels)
+            return {"data": {"videos": [v(numero)], "cursor": numero,
+                             "search_id": "recherche_auto", "has_more": numero < 4}}
+
+        rapport = {}
+        with patch("collecte.researchapi.MAX_PAGES", 2):
+            urls = collecter_videos_presse_research(
+                "lemondefr", None, rapport, requete=api, jeton="test_token",
+                debut="2026-10-01", fin="2026-10-25",
+                aujourd_hui=date(2026, 10, 25), pause=lambda _: None)
+        self.assertEqual(len(appels), 4)
+        self.assertEqual(len(urls), 4)
+        self.assertTrue(all(a["max_count"] == 100 for a in appels))
+        self.assertEqual(rapport["discovery_stop"], "fin_des_periodes")
+        self.assertFalse(rapport["collecte_partielle"])
+
     def test_erreur_quota_conserve_pages_precedentes(self):
         numero = 0
         def api(url, *, data, headers):
@@ -125,6 +147,7 @@ class TestsResearch(unittest.TestCase):
         publication = v(1)
         fiche = _fiche(publication, "lemondefr")
         def collecte(compte, limite, rapport, **kwargs):
+            self.assertIsNone(limite)
             self.assertEqual(compte, "lemondefr")
             self.assertEqual(kwargs.get("credentiels"),
                              ("client_test_secret", "secret_test_secret"))
@@ -141,6 +164,7 @@ class TestsResearch(unittest.TestCase):
             job = Job("a" * 64, StartRequest(
                 source_collecte="presse", medias=["lemonde"],
                 presse_moteur="research", limit=5,
+                collecte_research_complete=True,
                 research_client_key="client_test_secret",
                 research_client_secret="secret_test_secret",
             ), Path(dossier))

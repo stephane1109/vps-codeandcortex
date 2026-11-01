@@ -140,7 +140,7 @@ class TestResearchCommentaires(unittest.TestCase):
         self.assertTrue(resultat["exhaustif"])
         self.assertTrue(resultat["diagnostic"]["pagination_automatique"])
 
-    def test_pagination_automatique_respecte_la_borne_de_pages(self):
+    def test_pagination_automatique_depasse_ancienne_borne_de_pages(self):
         appels = []
 
         def simuler(url, *, data, headers):
@@ -151,16 +151,17 @@ class TestResearchCommentaires(unittest.TestCase):
                 {"id": 200000 + curseur + i,
                  "video_id": int(self.publication["id"]), "text": str(i)}
                 for i in range(100)], "cursor": curseur + 100,
-                "has_more": True}}
+                "has_more": curseur + 100 < 400}}
 
         with patch("collecte.researchapi.MAX_PAGES", 3):
             resultat = collecter_commentaires_research(
                 self.publication, jeton="SIMULE", requete=simuler,
                 pause=lambda _: None)
-        self.assertEqual(len(appels), 3)
-        self.assertEqual(len(resultat["commentaires"]), 300)
-        self.assertEqual(resultat["statut"], "pagination_incomplete")
-        self.assertFalse(resultat["exhaustif"])
+        self.assertEqual(len(appels), 4)
+        self.assertEqual(len(resultat["commentaires"]), 400)
+        self.assertEqual(resultat["statut"], "complet")
+        self.assertTrue(resultat["exhaustif"])
+        self.assertIsNone(resultat["diagnostic"]["maximum_pages"])
 
     def test_rejet_identifiant_externe(self):
         self.assertIsNone(normaliser_commentaire_research(
