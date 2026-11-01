@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timezone
 
 JOURNAL = logging.getLogger(__name__)
-IDENTIFIANT = re.compile(r"[0-9a-f]{32}\\Z")
+IDENTIFIANT = re.compile(r"[0-9a-f]{32}\Z")
 TYPES = {"collecte", "research"}
 CATEGORIES = {"publications", "commentaires"}
 CHAMPS_PUBLICATIONS = (
@@ -176,6 +176,70 @@ def archiver_collecte(job):
             "commentaires": len(commentaires)}
 
 
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
 def tables_disponibles(curseur):
     """Identifier les programmes Research sans créer de faux programmes."""
     curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
@@ -322,7 +386,7 @@ def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_
             flux = io.StringIO()
             ecrivain = csv.writer(flux)
             ecrivain.writerow(entetes)
-            yield "\\ufeff" + flux.getvalue()
+            yield "\ufeff" + flux.getvalue()
         else:
             yield "["
         decalage = 0
