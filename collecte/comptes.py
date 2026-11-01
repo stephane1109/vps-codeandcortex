@@ -81,7 +81,7 @@ def collecter_profil_public(navigateur, arguments, compte, rapport, *,
     rapport.update(
         candidats_examines=len(liens),
         retenues_par_compte={compte: len(liens)},
-        collecte_partielle=len(liens) < arguments.limit,
+        collecte_partielle=(arguments.limit is None or len(liens) < arguments.limit),
     )
     return liens
 
@@ -115,7 +115,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         def suivre(_nombre):
             for adresse in etat.get("discovered_urls", []):
                 identite = canonical_post(adresse)
-                if identite and identite[2].casefold() == compte and len(liens) < arguments.limit:
+                if identite and identite[2].casefold() == compte and (arguments.limit is None or len(liens) < arguments.limit):
                     liens.setdefault(identite[0], identite[1])
             rapport.update(requete_recherche=etape,
                            recherches_compte=etapes,
@@ -132,7 +132,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
             trouves = fonction(etat, suivre)
             for adresse in trouves:
                 identite = canonical_post(adresse)
-                if identite and identite[2].casefold() == compte and len(liens) < arguments.limit:
+                if identite and identite[2].casefold() == compte and (arguments.limit is None or len(liens) < arguments.limit):
                     liens.setdefault(identite[0], identite[1])
         except (RuntimeError, WebDriverException) as erreur:
             erreur_finale = erreur
@@ -211,7 +211,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
 
     # Compléter jusqu'au nombre demandé pour CHAQUE compte, même si la
     # grille a déjà fourni quelques vidéos (ex. 6/50 ou 8/50).
-    if len(liens) < arguments.limit and not presse_videos_uniquement:
+    if (arguments.limit is None or len(liens) < arguments.limit) and not presse_videos_uniquement:
         def recherche_ciblee(etat, suivi):
             etat["compte_attendu"] = compte
             return collecter_recherche_compte(
@@ -235,16 +235,18 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                    retenues_par_compte={compte: len(liens)},
                    recherches_en_echec=sum(bool(e.get("echec")) for e in etapes),
                    candidats_examines=sum(e.get("candidats_examines", 0) for e in etapes),
-                   collecte_partielle=len(liens) < arguments.limit or any(e.get("echec") for e in etapes),
+                   collecte_partielle=(any(e.get("collecte_partielle") for e in etapes)
+                       if arguments.limit is None else len(liens) < arguments.limit)
+                       or any(e.get("echec") for e in etapes),
                    exhaustif=False,
                    bilan_recherche=(
-                       f"@{compte} : {len(liens)}/{arguments.limit} vidéo(s) découvertes "
+                       f"@{compte} : {len(liens)}{"/" + str(arguments.limit) if arguments.limit is not None else ""} vidéo(s) découvertes "
                        f"via le seul moteur {presse_moteur!r}. "
                        "Aucune recherche générale ni autre méthode n'est exécutée "
                        "automatiquement. Si TikTok bloque ce moteur, consulter le "
                        "diagnostic de la source."
                        if presse_videos_uniquement else
-                       f"@{compte} : {len(liens)}/{arguments.limit} publication(s) "
+                       f"@{compte} : {len(liens)}{"/" + str(arguments.limit) if arguments.limit is not None else ""} publication(s) "
                        "publiques accessibles. Grille du profil, puis recherche par "
                        "@identifiant pour compléter les résultats manquants. "
                        "Seul l'auteur sélectionné est conservé ; le nombre demandé "
