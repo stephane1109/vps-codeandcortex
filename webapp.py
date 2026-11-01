@@ -1428,7 +1428,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             media = medias_par_compte.get(record["author"].lower(), {})
                             record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
                             job.publications.append(record)
-                        if record["description"]:
+                        if str(record.get("description") or "").strip():
                             matches = matches_hashtags(record["description"], job.settings)
                             # Compter sur la même légende et dans la même période que le filtre.
                             with job.lock:
@@ -1455,10 +1455,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     record["motif_non_retenue"] = "autre_langue"
                                     job.non_french += 1
                                 elif language == "unknown":
-                                    # Une légende courte peut être française sans
-                                    # permettre une identification fiable.
-                                    record["motif_non_retenue"] = "langue_indeterminee"
+                                    # L'incertitude statistique n'est pas une preuve
+                                    # de langue étrangère : conserver la légende
+                                    # originale et signaler sa langue indéterminée.
+                                    record["retenue"] = True
+                                    record["motif_non_retenue"] = "retenue_langue_indeterminee"
                                     job.language_unknown += 1
+                                    job.records.append(record)
                                 else:
                                     record["retenue"] = True
                                     record["motif_non_retenue"] = "retenue"
@@ -1689,9 +1692,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only and job.processed:
-            if not job.records and (job.non_french or job.language_unknown):
-                final_message = "Aucun texte retenu par le filtre français parmi les légendes consultées."
-            final_message += f" Filtre français : {job.non_french} texte(s) identifié(s) dans une autre langue écartés ; {job.language_unknown} texte(s) de langue indéterminée écartés."
+            if not job.records and job.non_french:
+                final_message = ("Aucun texte retenu par le filtre français parmi "
+                                 "les légendes consultées.")
+            final_message += (
+                f" Filtre français : {job.non_french} texte(s) identifié(s) "
+                f"dans une autre langue écartés ; {job.language_unknown} "
+                "légende(s) de langue indéterminée conservée(s) et signalée(s)."
+            )
         if job.settings.hashtags_exclus:
             final_message += (
                 f" Exclusion NOT : {job.exclus_hashtags} publication(s) écartée(s) "

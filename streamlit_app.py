@@ -731,7 +731,12 @@ with onglet_collecte:
         if source == "comptes":
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
-            help="Retient uniquement les légendes reconnues en français. Les autres langues et les légendes indéterminées (trop courtes ou composées uniquement de hashtags) sont exclues du TXT. La voix et le texte incrusté dans la vidéo ne sont pas analysés.")
+            help="Écarte uniquement les légendes identifiées avec une forte confiance "
+                 "comme étant dans une autre langue. Les légendes françaises reconnues "
+                 "et les légendes de langue indéterminée (textes courts ou hashtags seuls) "
+                 "sont conservées dans le TXT, sans modifier leur contenu original. "
+                 "Le statut de langue reste présent dans les métadonnées. "
+                 "La voix et le texte incrusté dans la vidéo ne sont pas transcrits.")
         if moteur_formulaire == "research":
             st.checkbox(
                 "Collecte pluri-journalière (SQLite, reprise automatique)",
@@ -1246,7 +1251,8 @@ with onglet_collecte:
                     st.caption(
                         "Les dix publications sont réparties entre les médias choisis. "
                         "Le filtre français évalue chaque légende et non la nationalité "
-                        "du média. Une légende courte peut avoir une langue indéterminée."
+                        "du média. Une légende courte de langue indéterminée est "
+                        "désormais conservée dans le TXT et identifiée comme telle."
                     )
                     details = actuel.get("apercu_filtrage") or []
                     if details:
@@ -1254,7 +1260,8 @@ with onglet_collecte:
                             "retenue": "Retenue dans le TXT",
                             "legende_vide": "Légende absente de la réponse API",
                             "autre_langue": "Autre langue détectée",
-                            "langue_indeterminee": "Langue indéterminée",
+                            "langue_indeterminee": "Langue indéterminée (ancienne collecte, exclue)",
+                            "retenue_langue_indeterminee": "Retenue dans le TXT, langue indéterminée",
                             "filtre_hashtags": "Écartée par le filtre de hashtags",
                             "hors_periode": "Hors période",
                             "date_indeterminee": "Date indéterminée",
@@ -1274,10 +1281,11 @@ with onglet_collecte:
                                 "pour connaître les motifs d'exclusion.")
                     if actuel.get("french_only") and not actuel.get("captions"):
                         st.warning(
-                            "Si les légendes sont classées « autre langue » ou "
-                            "« langue indéterminée », refaites un test avec "
-                            "« Filtre français » décoché pour examiner "
-                            "les légendes réellement fournies par TikTok."
+                            "Aucune légende retenue. Vérifiez les légendes absentes "
+                            "de l'API, les dates, le croisement avec le hashtag "
+                            "et les langues détectées comme étrangères. "
+                            "Les légendes de langue indéterminée ne sont "
+                            "plus rejetées par le filtre français."
                         )
                     if not actuel.get("processed"):
                         st.warning("Aucune vidéo consultée : vérifiez le détail "
@@ -1299,7 +1307,7 @@ with onglet_collecte:
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
                             st.write(f"#{hashtag} : {nombre} légende(s)")
                         st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
-                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue écartés · {actuel['language_unknown']} de langue indéterminée écartés")
+                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue écartés · {actuel['language_unknown']} de langue indéterminée conservés avec signalement")
                         st.write(f"{actuel['legendes_vides']} publication(s) sans légende lisible · {actuel['errors']} erreur(s) de lecture")
             if actuel["date_debut"] or actuel["date_fin"]:
                 st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")

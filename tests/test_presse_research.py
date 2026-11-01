@@ -312,12 +312,68 @@ class TestsResearch(unittest.TestCase):
             self.assertEqual(demandes, [("parismatch", 5), ("brutofficiel", 5)])
             self.assertEqual(job.processed, 10)
             self.assertEqual(job.language_unknown, 5)
-            self.assertEqual(len(job.records), 5)
+            self.assertEqual(len(job.records), 10)
+            self.assertEqual(job.exportees, 10)
+            self.assertIn("#actu", job.path.read_text(encoding="utf-8"))
             resultat = job.snapshot()
             self.assertEqual(len(resultat["apercu_filtrage"]), 10)
             self.assertEqual(
                 {element["motif"] for element in resultat["apercu_filtrage"]},
-                {"langue_indeterminee", "retenue"})
+                {"retenue_langue_indeterminee", "retenue"})
+            self.assertTrue(all(element["retenue"] for element in job.records))
+
+    def test_research_filtre_langue_inconnue_et_absence_de_legende(self):
+        """Préserver les légendes incertaines, rejeter l'anglais, signaler le vide."""
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from webapp import Job, StartRequest, execute_job
+
+        textes = ["#24octobre", "Today we are discussing international news.",
+                  "Manifestation de lycéens ce matin à Paris.", ""]
+        def collecter(compte, limite, rapport, **options):
+            donnees = [
+                _fiche({**v(numero + 300, compte),
+                        "video_description": texte,
+                        "hashtag_names": ["24octobre"]}, compte)
+                for numero, texte in enumerate(textes, 1)
+            ]
+            rapport.update(
+                discovered_urls=[item["url"] for item in donnees],
+                metadonnees_api={item["id"]: item for item in donnees},
+                candidats_examines=len(donnees), pages_research=1,
+                discovery_stop="fin_des_periodes")
+            return [item["url"] for item in donnees]
+
+        with TemporaryDirectory() as dossier:
+            parametres = StartRequest(
+                source_collecte="presse", medias=["brut"],
+                presse_moteur="research", french_only=True,
+                test_research_10_publications=True,
+                research_client_key="cle_test", research_client_secret="secret_test")
+            travail = Job("d" * 64, parametres, Path(dossier))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=collecter), patch(
+                           "webapp.classify_description",
+                           side_effect=lambda texte: (
+                               "unknown" if texte.startswith("#") else
+                               "other" if texte.startswith("Today") else "fr")):
+                execute_job(travail, driver_factory=Mock(
+                    side_effect=AssertionError("Pas de navigateur en Research")))
+            self.assertEqual(travail.processed, 4)
+            self.assertEqual(travail.language_unknown, 1)
+            self.assertEqual(travail.non_french, 1)
+            self.assertEqual(travail.legendes_vides, 1)
+            self.assertEqual(len(travail.records), 2)
+            self.assertEqual(len(travail.publications), 4)
+            contenu = travail.path.read_text(encoding="utf-8")
+            self.assertIn("#24octobre", contenu)
+            self.assertIn("Manifestation de lycéens", contenu)
+            self.assertNotIn("Today we are discussing", contenu)
+            motifs = [v["motif_non_retenue"] for v in travail.publications]
+            self.assertEqual(motifs, [
+                "retenue_langue_indeterminee", "autre_langue",
+                "retenue", "legende_vide"
+            ])
 
     def test_research_achemine_croisement_presse_vers_les_deux_medias(self):
         """Le hashtag explicite est transmis pour chaque auteur interrogé."""
