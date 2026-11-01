@@ -314,6 +314,42 @@ def journal_plan(dossier, identifiant, proprietaire):
         return [dict(l) for l in lignes]
 
 
+def reprendre_apres_redemarrage(dossier):
+    """Remettre en attente un lot dont le processus a disparu au redémarrage."""
+    with connexion(dossier) as base:
+        base.execute(
+            "UPDATE plans SET statut='programme',job_id=NULL,"
+            "message='Reprise après redémarrage du service', actualise_le=? "
+            "WHERE statut='en_cours'", (maintenant().isoformat(),))
+
+
+def enregistrer_partiel(dossier, identifiant, publication, commentaires):
+    """Transférer chaque publication vers le corpus permanent avant la fin du lot."""
+    horodatage = maintenant().isoformat()
+    with connexion(dossier) as base:
+        if publication is not None:
+            pid = str(publication["id"])
+            base.execute(
+                """INSERT INTO publications
+                   (plan_id,id,retenue,donnees,premiere_collecte,derniere_collecte)
+                   VALUES(?,?,?,?,?,?)
+                   ON CONFLICT(plan_id,id) DO UPDATE SET
+                   retenue=MAX(publications.retenue,excluded.retenue),
+                   donnees=excluded.donnees, derniere_collecte=excluded.derniere_collecte""",
+                (identifiant, pid, int(bool(publication.get("retenue"))),
+                 json.dumps(publication, ensure_ascii=False, allow_nan=False),
+                 horodatage, horodatage))
+        for commentaire in commentaires:
+            base.execute(
+                """INSERT INTO commentaires(plan_id,id,publication_id,donnees,collecte_le)
+                   VALUES(?,?,?,?,?)
+                   ON CONFLICT(plan_id,id) DO UPDATE SET
+                   donnees=excluded.donnees,collecte_le=excluded.collecte_le""",
+                (identifiant, str(commentaire["id"]),
+                 str(commentaire["publication_id"]),
+                 json.dumps(commentaire, ensure_ascii=False, allow_nan=False), horodatage))
+
+
 def clore_dates(dossier):
     """Échéance stricte : le plan ne reprend plus après sa date de fin."""
     jour = maintenant().date().isoformat()
