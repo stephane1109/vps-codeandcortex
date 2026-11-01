@@ -2309,7 +2309,7 @@ def create_app(manager=None):
         if not re.fullmatch(r"[a-f0-9]{64}",request.cookies.get(HISTORIQUE_COOKIE,"")):
             response.set_cookie(HISTORIQUE_COOKIE, secrets.token_hex(32), httponly=True,
                                 samesite="strict", secure=os.getenv("COOKIE_SECURE","0")=="1",
-                                max_age=90*86400)
+                                max_age=400*86400)
         return response
 
     @app.post("/api/jobs/{job_id}/desordre", status_code=202)
