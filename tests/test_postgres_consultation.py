@@ -124,6 +124,33 @@ class TestsPostgresConsultation(unittest.TestCase):
             len([1 for sql, _ in insertions
                  if "INSERT INTO scraptiktok_collectes" in sql]), 1)
 
+    def test_points_postgres_rejouables_sans_reecriture_inutile(self):
+        """Un deuxième point inchangé ne réécrit pas le même corpus."""
+        from webapp import Job, StartRequest
+        with tempfile.TemporaryDirectory() as dossier:
+            parametres = StartRequest(
+                source_collecte="hashtags", hashtag="test",
+                nom_sauvegarde="Corpus de test")
+            travail = Job(
+                "e" * 64, parametres, Path(dossier),
+                owner_historique="f" * 64)
+            travail.records.append({"id": "101", "description": "Première"})
+            travail.update(processed=1)
+            with patch("stockage.postgres_consultation.archiver_collecte",
+                       return_value={"statut": "synchronise",
+                                     "publications": 1, "commentaires": 0}
+                       ) as enregistrer:
+                self.assertTrue(travail.sauvegarder_postgres(progressif=True))
+                self.assertTrue(travail.sauvegarder_postgres(progressif=True))
+                self.assertEqual(enregistrer.call_count, 1)
+                travail.records.append({"id": "102", "description": "Deuxième"})
+                travail.update(processed=2)
+                self.assertTrue(travail.sauvegarder_postgres(progressif=True))
+                self.assertEqual(enregistrer.call_count, 2)
+                self.assertEqual(
+                    enregistrer.call_args.kwargs["a_partir_publications"], 1)
+                self.assertEqual(travail.sauvegarde_postgres_publications, 2)
+
     def test_import_historique_autorise_par_cookie(self):
         """L'import reprend la sauvegarde possédée par le même navigateur."""
         with tempfile.TemporaryDirectory() as dossier:
