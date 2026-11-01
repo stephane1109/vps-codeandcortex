@@ -101,7 +101,8 @@ class TestsExclusionHashtags(unittest.TestCase):
                 navigation_publications="research_officielle",
                 discovery_stop="fin_des_periodes")
             return [v["url"] for v in fiches]
-        def commentaires(pub, limite, reponses, **kwargs):
+        def commentaires(pub, limite=None, reponses=False, **kwargs):
+            self.assertIsNone(limite)
             return {"commentaires": [{
                 "id": "99", "publication_id": pub["id"], "texte": "Avis",
             }], "statut": "complet", "recuperes": 1,
