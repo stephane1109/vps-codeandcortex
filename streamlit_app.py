@@ -125,35 +125,34 @@ if "initialise" not in st.session_state:
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
         "sauvegarde_progressive":ancienne.get("sauvegarde_progressive",False),
-        "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",False),
+        "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",True),
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
-        "collecter_commentaires":ancienne.get("collecter_commentaires",False),
-        "collecter_follower_count":ancienne.get("collecter_follower_count",False),
-        "collecter_is_verified":ancienne.get("collecter_is_verified",False),
-        "follower_count_illustratif":ancienne.get("follower_count_illustratif",False),
-        "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
+        "collecter_commentaires":ancienne.get("collecter_commentaires",True),
+        "collecter_follower_count":ancienne.get("collecter_follower_count",True),
+        "collecter_is_verified":ancienne.get("collecter_is_verified",True),
+        "follower_count_illustratif":ancienne.get("follower_count_illustratif",True),
+        "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",True),
         "variables_classes_txt": (
             ancienne.get("variables_classes_txt") or []
             if ancienne else ["vues", "likes", "commentaires", "partages", "favoris", "duree"]),
-        "taux_engagement_txt": ancienne.get("taux_engagement_txt", "aucun"),
-        "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "aucun") in ("brut", "brut_et_classes"),
-        "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "aucun") in ("classes", "brut_et_classes"),
+        "taux_engagement_txt": ancienne.get("taux_engagement_txt", "brut_et_classes"),
+        "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "brut_et_classes") in ("brut", "brut_et_classes"),
+        "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "brut_et_classes") in ("classes", "brut_et_classes"),
         "hashtags_exclus_saisis": ", ".join(
             "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
-        "collecter_reponses":ancienne.get("collecter_reponses",False),
+        "collecter_reponses":ancienne.get("collecter_reponses",True),
         "limite_commentaires":ancienne.get("limite_commentaires",50),
         "test_research_10_publications":ancienne.get("test_research_10_publications",False),
         "nom_sauvegarde": ancienne.get("nom_sauvegarde", "")}
 
     variables = ancienne.get("variables_txt")
     if variables is None:
-        # Nouvelle collecte : cocher toutes les variables descriptives demandées.
-        # Ne pas déplacer les hashtags par défaut ; respecter les choix anciens
-        # d'une collecte reprise sans sélection explicite.
+        # Nouvelle collecte : cocher toutes les variables, y compris les hashtags.
+        # Une collecte reprise conserve sa sélection enregistrée.
         variables = (
             (["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt")
              else ["profil", "id"] if ancienne.get("include_sources", True) else [])
-            if ancienne else [v for v in VARIABLES_TXT if v != "hashtags"]
+            if ancienne else list(VARIABLES_TXT)
         )
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
@@ -196,12 +195,12 @@ st.session_state.setdefault("hashtag_presse", "")
 st.session_state.setdefault("hashtags_saisis", "")
 st.session_state.setdefault("hashtags_saisis_comptes", "")
 st.session_state.setdefault("hashtags_exclus_saisis", "")
-st.session_state.setdefault("collecter_follower_count", False)
-st.session_state.setdefault("follower_count_illustratif", False)
-st.session_state.setdefault("abonnes_classe_illustratif", False)
+st.session_state.setdefault("collecter_follower_count", True)
+st.session_state.setdefault("follower_count_illustratif", True)
+st.session_state.setdefault("abonnes_classe_illustratif", True)
 st.session_state.setdefault("variables_classes_txt",
     ["vues", "likes", "commentaires", "partages", "favoris", "duree"])
-st.session_state.setdefault("taux_engagement_txt", "aucun")
+st.session_state.setdefault("taux_engagement_txt", "brut_et_classes")
 st.session_state.setdefault("txt_taux_engagement_brut",
     st.session_state.get("taux_engagement_txt") in ("brut", "brut_et_classes"))
 st.session_state.setdefault("txt_taux_engagement_classe",
@@ -222,7 +221,7 @@ if st.session_state.pop("_effacer_apify_apres_requete", False):
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
     # Initialiser seulement si absent : préserver les choix manuels déjà faits.
-    st.session_state.setdefault("txt_" + variable, variable != "hashtags")
+    st.session_state.setdefault("txt_" + variable, True)
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 # Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
