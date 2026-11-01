@@ -11,6 +11,9 @@ from stockage.postgres_consultation import (
     IDENTIFIANT, adresse_configuree, empreinte, valeur_colonne,
     archiver_collecte, importer_historique, preparer_tables,
 )
+from stockage.colonnes_publications import (
+    colonnes_publications, preparer_colonnes_publications,
+)
 
 
 class CurseurFictif:
@@ -25,6 +28,10 @@ class CurseurFictif:
 
     def execute(self, instruction, parametres=None):
         self.executions.append((instruction, parametres))
+
+    def fetchall(self):
+        """Simuler une table sans les colonnes calculées avant migration."""
+        return []
 
 
 class ConnexionFictive:
@@ -88,6 +95,40 @@ class TestsPostgresConsultation(unittest.TestCase):
         self.assertIn("commentaire_id", vue_commentaires)
         self.assertIn("JOIN scraptiktok_collectes", vue_videos)
         self.assertIn("JOIN scraptiktok_collectes", vue_commentaires)
+
+    def test_colonnes_reelles_dans_scraptiktok_publications(self):
+        """Le tableau original, et pas seulement une vue, est enrichi."""
+        colonnes = colonnes_publications()
+        for nom in (
+            "url", "profil", "date_publication", "region_code", "is_verified",
+            "follower_count", "duree_secondes", "vues", "likes",
+            "commentaires", "partages", "favoris", "taux_engagement",
+            "classe_abonnes", "vues_classe", "likes_classe",
+            "commentaires_classe", "partages_classe", "favoris_classe",
+            "duree_classe", "classe_taux_engagement", "hashtags",
+            "langue_detection", "contenu_genere_ia", "resume_ia_tiktok"):
+            self.assertIn(nom, colonnes)
+
+        curseur = CurseurFictif()
+        nombre = preparer_colonnes_publications(curseur)
+        self.assertEqual(nombre, len(colonnes))
+        alterations = [
+            texte for texte, _ in curseur.executions
+            if texte.startswith("ALTER TABLE scraptiktok_publications")]
+        self.assertEqual(len(alterations), 1)
+        self.assertIn("ADD COLUMN IF NOT EXISTS region_code TEXT", alterations[0])
+        self.assertIn("GENERATED ALWAYS AS", alterations[0])
+        self.assertIn("STORED", alterations[0])
+        self.assertIn("donnees#>>'{engagement,vues,valeur}'", alterations[0])
+        self.assertIn("THEN", alterations[0])
+
+    def test_schema_existant_ne_declenche_pas_de_migration(self):
+        """Aucun verrou DDL si toutes les colonnes existent déjà."""
+        curseur = CurseurFictif()
+        curseur.fetchall = lambda: [(nom,) for nom in colonnes_publications()]
+        self.assertEqual(preparer_colonnes_publications(curseur), 0)
+        self.assertFalse(any(
+            commande.startswith("ALTER TABLE") for commande, _ in curseur.executions))
 
     def test_archiver_test_sans_texte_retenu_et_sans_secrets(self):
         """Les vidéos rejetées sont archivées, même si le TXT est vide."""
