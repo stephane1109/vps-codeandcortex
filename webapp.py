@@ -2035,6 +2035,18 @@ class Manager:
         if nombre_sources > max_sources():
             raise HTTPException(422,
                 f"Borne technique du moteur : {max_sources()} sources par collecte.")
+        # Une base configurée doit être joignable avant de consommer le quota TikTok.
+        # L'archivage sera ensuite automatiquement tenté en fin de collecte.
+        from stockage.postgres_consultation import (
+            adresse_configuree, verifier_disponibilite)
+        if adresse_configuree():
+            try:
+                verifier_disponibilite()
+            except RuntimeError as erreur:
+                raise HTTPException(
+                    503, "La base PostgreSQL n'est pas accessible. "
+                    "Collecte non lancée pour éviter une sauvegarde perdue. "
+                    "Vérifiez la ressource PostgreSQL dans Coolify.") from None
         with self.lock:
             if any(j.video_busy for j in self.jobs.values()):
                 raise HTTPException(409, "Un traitement vidéo est en cours. Patientez avant une nouvelle collecte.")
