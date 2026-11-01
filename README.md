@@ -878,33 +878,41 @@ plusieurs conteneurs ou des comptes utilisateurs partagés, préférer PostgreSQ
 avec une migration explicite et des sauvegardes administrées, plutôt que
 de partager le même fichier SQLite entre instances.
 
-### Consultation tabulaire dans pgAdmin
+### Consultation tabulaire directement dans les tables PostgreSQL
 
-Les collectes ponctuelles conservent toutes les métadonnées originales en
-`JSONB`, mais PostgreSQL fournit également deux vues classiques qui
-déplient automatiquement les variables, sans copie supplémentaire :
+La table **`scraptiktok_publications` elle-même** possède une colonne
+par variable TikTok : profil, date, URL, région, vérification, abonnés,
+compteurs numériques et bruts, classes, durée, langue, hashtags, textes,
+indicateurs IA, état de la collecte des commentaires et informations MP4.
+Chaque ligne reste une vidéo, identifiée par `collecte_id` et `publication_id`.
 
-`scraptiktok_publications_tableau` : une ligne par publication et des
-colonnes séparées pour l'URL, le compte, la date, la région, la certification,
-les abonnés, la durée, les vues, les likes, les commentaires, les partages,
-les favoris, l'engagement, les hashtags, les classes et les indicateurs IA.
+Les nouvelles colonnes utilisent `GENERATED ALWAYS AS (...) STORED`.
+PostgreSQL les renseigne **pour les lignes déjà enregistrées**, puis les
+actualise automatiquement lors de chaque insertion ou modification du JSONB.
+La colonne `donnees` d'origine est conservée pour éviter toute perte et
+permettre de retrouver les valeurs non encore dépliées. Les valeurs absentes
+deviennent `NULL`, et ne sont jamais forcées à zéro. Il n'est pas nécessaire
+de changer le code d'insertion des publications.
 
-`scraptiktok_commentaires_tableau` : une ligne par commentaire avec
-l'auteur, le texte, la vidéo, la réponse, la date et le nombre de likes.
+La migration additive est lancée à l'initialisation PostgreSQL au démarrage
+de ScrapTikTok et vérifiée à l'ouverture d'une nouvelle collecte. Si le
+schéma est déjà complet, aucune commande ALTER TABLE n'est exécutée.
+Sur une grosse table, la première migration peut prendre du temps : PostgreSQL
+doit réécrire la table pour les colonnes calculées stockées. Sauvegarder la
+base et ne pas redéployer pendant une collecte active.
 
-Ces vues sont créées à la prochaine initialisation PostgreSQL de
-ScrapTikTok, sans supprimer les anciennes collectes. Après déploiement,
-dans pgAdmin, ouvrir **Databases → postgres → Schemas → public → Views**,
-puis clic droit sur la vue et **View/Edit Data → All Rows**.
-On peut aussi exécuter directement :
+Dans pgAdmin : **Databases → postgres → Schemas → public → Tables**,
+puis ouvrir `scraptiktok_publications` et afficher les lignes. Cette table
+dispose directement des colonnes, sans passage par une vue ou une requête SQL.
+Les champs `collecte_id`, `publication_id`, `retenue` et `donnees`
+restent présents, suivis des variables ajoutées.
 
-```sql
-SELECT * FROM public.scraptiktok_publications_tableau;
-SELECT * FROM public.scraptiktok_commentaires_tableau;
-```
+Les vues de compatibilité `scraptiktok_publications_tableau` et
+`scraptiktok_commentaires_tableau` restent disponibles sous **Views**.
+Les commentaires détaillés restent dans `scraptiktok_commentaires`,
+reliés aux vidéos, pour ne pas dupliquer les publications.
 
-Les variables absentes restent à `NULL`, sans inventer de valeur.
-L'export CSV/JSON et la colonne JSONB d'origine sont conservés.
+L'export CSV/JSON et les données déjà sauvegardées sont conservés.
 
 ### Archivage PostgreSQL facultatif
 
