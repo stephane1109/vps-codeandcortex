@@ -822,18 +822,18 @@ with onglet_collecte:
             }
             </style>
             """)
-            colonnes_identification = st.columns(3, gap="small")
-            for colonne, nom in zip(colonnes_identification, ("date", "profil", "id")):
-                colonne.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
-            colonne_region, colonne_verification = st.columns(2, gap="small")
-            colonne_region.checkbox(
+            # Chaque variable d'identification occupe une ligne distincte.
+            # Les clés et conditions restent inchangées pour préserver les choix.
+            for nom in ("date", "profil", "id"):
+                st.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
+            st.checkbox(
                 "Region Code (pays d'enregistrement du compte)",
                 key="txt_region_code",
                 disabled=occupe or moteur_formulaire != "research",
                 help="Code à deux lettres fourni par la Research API. "
                      "Ce n'est pas nécessairement le pays de résidence de l'auteur. "
                      "Donnée manquante : *region_indetermine.")
-            colonne_verification.checkbox(
+            st.checkbox(
                 "Is Verified (compte vérifié par TikTok)",
                 key="txt_is_verified",
                 disabled=occupe or moteur_formulaire != "research",
