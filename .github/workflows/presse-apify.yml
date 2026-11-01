@@ -29,6 +29,8 @@ on:
       - "webapp.py"
       - "streamlit_app.py"
       - "tests/test_presse_apify.py"
+      - "stockage/collectes_research.py"
+      - "tests/test_collectes_research_programmees.py"
       - "tests/test_connexions_modes.py"
       - "tests/test_moteurs_hashtags_profils.py"
       - "tests/test_hashtags_multiples.py"
@@ -60,6 +62,7 @@ jobs:
           python -m unittest discover -s tests -p test_moteurs_hashtags_profils.py -v
           python -m unittest discover -s tests -p test_hashtags_multiples.py -v
           python -m unittest discover -s tests -p test_presse_research.py -v
+          python -m unittest discover -s tests -p test_collectes_research_programmees.py -v
           python -m unittest discover -s tests -p test_researchapi_commentaires.py -v
           python -m unittest discover -s tests -p test_researchapi_abonnes.py -v
           python -m unittest discover -s tests -p test_region_verification.py -v
