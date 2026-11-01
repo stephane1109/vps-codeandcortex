@@ -101,6 +101,2976 @@ def preparer_tables(connexion):
         curseur.execute(
             "CREATE INDEX IF NOT EXISTS scraptiktok_commentaires_publication "
             "ON scraptiktok_commentaires(collecte_id, publication_id)")
+        preparer_vues_tabulaire(curseur)
+
+
+def preparer_vues_tabulaire(curseur):
+    """Présenter les JSONB comme des colonnes exploitables dans pgAdmin.
+
+    Les vues ne dupliquent aucune donnée et reflètent les collectes existantes.
+    Les conversions numériques tolèrent les valeurs manquantes ou inconnues.
+    """
+    curseur.execute("""
+        CREATE OR REPLACE VIEW scraptiktok_publications_tableau AS
+        SELECT
+            p.collecte_id,
+            c.nom_sauvegarde,
+            c.source_collecte,
+            c.moteur,
+            c.statut AS statut_collecte,
+            p.publication_id,
+            p.retenue,
+            p.donnees->>'url' AS url,
+            p.donnees->>'author' AS auteur,
+            p.donnees->>'created_at' AS date_publication,
+            p.donnees->>'collected_at' AS date_collecte,
+            p.donnees->>'description' AS description,
+            p.donnees->>'source' AS source_video,
+            p.donnees->>'status' AS statut_video,
+            p.donnees->>'error' AS erreur_video,
+            p.donnees->>'region_code' AS region_code,
+            CASE WHEN p.donnees->>'is_verified' IN ('true', 'false')
+                 THEN (p.donnees->>'is_verified')::boolean END AS is_verified,
+            p.donnees->>'is_verified_statut' AS is_verified_statut,
+            CASE WHEN (p.donnees->>'follower_count') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees->>'follower_count')::bigint END AS follower_count,
+            p.donnees->>'follower_count_statut' AS follower_count_statut,
+            p.donnees->>'classe_abonnes' AS classe_abonnes,
+            CASE WHEN (p.donnees->>'video_duration') ~ '^[0-9]+([.][0-9]+)?
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees->>'video_duration')::numeric END AS duree_secondes,
+            p.donnees->>'duree_classe' AS duree_classe,
+            CASE WHEN (p.donnees#>>'{engagement,vues,valeur}') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees#>>'{engagement,vues,valeur}')::bigint END AS vues,
+            CASE WHEN (p.donnees#>>'{engagement,likes,valeur}') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees#>>'{engagement,likes,valeur}')::bigint END AS likes,
+            CASE WHEN (p.donnees#>>'{engagement,commentaires,valeur}') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees#>>'{engagement,commentaires,valeur}')::bigint END AS commentaires,
+            CASE WHEN (p.donnees#>>'{engagement,partages,valeur}') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees#>>'{engagement,partages,valeur}')::bigint END AS partages,
+            CASE WHEN (p.donnees#>>'{engagement,favoris,valeur}') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees#>>'{engagement,favoris,valeur}')::bigint END AS favoris,
+            CASE WHEN (p.donnees->>'taux_engagement') ~ '^-?[0-9]+([.][0-9]+)?
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (p.donnees->>'taux_engagement')::numeric END AS taux_engagement,
+            p.donnees->>'vues_classe' AS vues_classe,
+            p.donnees->>'likes_classe' AS likes_classe,
+            p.donnees->>'commentaires_classe' AS commentaires_classe,
+            p.donnees->>'partages_classe' AS partages_classe,
+            p.donnees->>'favoris_classe' AS favoris_classe,
+            p.donnees->>'classe_taux_engagement' AS classe_taux_engagement,
+            p.donnees->>'hashtags' AS hashtags,
+            p.donnees->>'langue_detection' AS langue_detection,
+            p.donnees->>'motif_non_retenue' AS motif_non_retenue,
+            p.donnees->>'media_id' AS media_id,
+            p.donnees->>'categorie_media' AS categorie_media,
+            CASE WHEN p.donnees->>'contenu_genere_ia' IN ('true', 'false')
+                 THEN (p.donnees->>'contenu_genere_ia')::boolean END AS contenu_genere_ia,
+            p.donnees->>'statut_resume_ia' AS statut_resume_ia,
+            p.donnees->>'resume_ia_tiktok' AS resume_ia_tiktok
+        FROM scraptiktok_publications AS p
+        JOIN scraptiktok_collectes AS c ON c.collecte_id = p.collecte_id
+    """)
+    curseur.execute("""
+        CREATE OR REPLACE VIEW scraptiktok_commentaires_tableau AS
+        SELECT
+            m.collecte_id,
+            c.nom_sauvegarde,
+            c.moteur,
+            c.statut AS statut_collecte,
+            m.commentaire_id,
+            m.publication_id,
+            COALESCE(m.donnees->>'auteur', m.donnees->>'author') AS auteur,
+            COALESCE(m.donnees->>'texte', m.donnees->>'text') AS texte,
+            m.donnees->>'parent_id' AS parent_id,
+            CASE WHEN m.donnees->>'est_reponse' IN ('true', 'false')
+                 THEN (m.donnees->>'est_reponse')::boolean END AS est_reponse,
+            m.donnees->>'date_brute' AS date_commentaire,
+            CASE WHEN (m.donnees->>'likes') ~ '^[0-9]+
+    """Écarter tous les secrets avant leur archivage."""
+    donnees = dict(parametres)
+    for cle in (
+        "research_client_key", "research_client_secret", "cookies_tiktok",
+        "tikhub_api_key", "apify_api_token",
+    ):
+        donnees.pop(cle, None)
+    return donnees
+
+
+def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
+    """Sauvegarder une collecte ponctuelle, même sans légende TXT retenue.
+
+    L'archivage est idempotent : une relance actualise les lignes existantes.
+    Les indices facultatifs permettent une sauvegarde incrémentale pendant
+    la collecte, sans réécrire toutes les observations à chaque point.
+    Une synchronisation finale sans indices reste exhaustive.
+    """
+    if not job.owner_historique or not IDENTIFIANT.fullmatch(str(job.id)):
+        raise RuntimeError("Cookie de sauvegarde ou identifiant de collecte absent.")
+    from psycopg.types.json import Jsonb
+
+    with job.lock:
+        publications = list(job.publications or job.records)
+        commentaires = list(job.commentaires)
+        publications = publications[max(0, a_partir_publications):]
+        commentaires = commentaires[max(0, a_partir_commentaires):]
+        parametres = nettoyer_parametres(job.settings.model_dump())
+        statut = job.status
+        traitees = job.processed
+        identifiant = job.id
+        nom = job.settings.nom_sauvegarde or job.settings.libelle
+        source = job.settings.source_collecte
+        moteur = job.settings.moteur_actif
+    maintenant = datetime.now(timezone.utc)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                INSERT INTO scraptiktok_collectes (
+                    collecte_id, proprietaire_hash, nom_sauvegarde,
+                    source_collecte, moteur, statut, cree_le, actualise_le,
+                    traitees, parametres)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (collecte_id) DO UPDATE SET
+                    nom_sauvegarde=EXCLUDED.nom_sauvegarde,
+                    statut=EXCLUDED.statut,
+                    actualise_le=EXCLUDED.actualise_le,
+                    traitees=EXCLUDED.traitees,
+                    parametres=EXCLUDED.parametres
+            """, (
+                identifiant, empreinte(job.owner_historique), nom, source,
+                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+            for publication in publications:
+                code = str(publication.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_publications (
+                        collecte_id, publication_id, retenue, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,publication_id) DO UPDATE SET
+                        retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
+                """, (identifiant, code, bool(publication.get("retenue")),
+                      Jsonb(publication)))
+            for commentaire in commentaires:
+                code = str(commentaire.get("id") or "")
+                if not code:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_commentaires (
+                        collecte_id, commentaire_id, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,commentaire_id) DO UPDATE SET
+                        publication_id=EXCLUDED.publication_id,
+                        donnees=EXCLUDED.donnees
+                """, (identifiant, code,
+                      str(commentaire.get("publication_id") or ""),
+                      Jsonb(commentaire)))
+    return {"statut": "synchronise", "publications": len(publications),
+            "commentaires": len(commentaires)}
+
+
+def importer_historique(dossier, cookie):
+    """Importer dans PostgreSQL les archives locales encore conservées.
+
+    Ne récupère que l'historique du cookie courant. Ne requiert aucune
+    clé TikTok et conserve les archives originales sans les supprimer.
+    """
+    from pathlib import Path
+    from threading import RLock
+    from types import SimpleNamespace
+    from stockage.historique_analyses import lister, retrouver
+
+    comptes = {"imports": 0, "publications": 0, "commentaires": 0,
+               "erreurs": 0}
+    for entree in lister(dossier, cookie):
+        archive = retrouver(dossier, entree["id"], cookie)
+        if archive is None:
+            comptes["erreurs"] += 1
+            continue
+        _, repertoire, manifeste = archive
+        try:
+            chemin_publications = Path(repertoire) / "publications.json"
+            chemin_commentaires = Path(repertoire) / "commentaires.json"
+            publications = (
+                json.loads(chemin_publications.read_text(encoding="utf-8"))
+                if chemin_publications.is_file() else [])
+            commentaires = (
+                json.loads(chemin_commentaires.read_text(encoding="utf-8"))
+                if chemin_commentaires.is_file() else [])
+            if not isinstance(publications, list) or not isinstance(commentaires, list):
+                raise ValueError("Format d'archive incorrect.")
+            parametres = nettoyer_parametres(manifeste.get("parametres") or {})
+            nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
+            source = parametres.get("source_collecte") or "presse"
+            moteur = parametres.get({
+                "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                "comptes": "profil_moteur"}.get(source, "presse_moteur")) or "inconnu"
+
+            class ParametresImportes:
+                """Enveloppe des paramètres historiques sans clé confidentielle."""
+                nom_sauvegarde = nom
+                libelle = nom
+                source_collecte = source
+                moteur_actif = moteur
+
+                def model_dump(self):
+                    """Renvoyer les paramètres historiques épurés."""
+                    return parametres
+
+            travail = SimpleNamespace(
+                lock=RLock(), owner_historique=cookie, id=entree["id"],
+                settings=ParametresImportes(),
+                publications=publications, records=publications,
+                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                status=entree.get("statut") or "termine")
+            resultat = archiver_collecte(travail)
+            comptes["imports"] += 1
+            comptes["publications"] += resultat["publications"]
+            comptes["commentaires"] += resultat["commentaires"]
+        except Exception:
+            JOURNAL.warning("Archive ancienne non importée : %s", entree["id"])
+            comptes["erreurs"] += 1
+    return comptes
+
+
+def tables_disponibles(curseur):
+    """Identifier les programmes Research sans créer de faux programmes."""
+    curseur.execute("SELECT to_regclass('research_plans') IS NOT NULL")
+    return bool(curseur.fetchone()[0])
+
+
+def lister_sauvegardes(cookie, filtre=""):
+    """Lister toutes les sauvegardes privées, ponctuelles et programmées."""
+    if not cookie:
+        raise RuntimeError("Historique privé absent : rechargez l'application.")
+    recherche = "%" + str(filtre or "")[:100].strip() + "%"
+    proprietaire = empreinte(cookie)
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                SELECT c.collecte_id, c.nom_sauvegarde, c.statut,
+                    c.source_collecte, c.moteur, c.actualise_le,
+                    (SELECT count(*) FROM scraptiktok_publications p
+                     WHERE p.collecte_id=c.collecte_id),
+                    (SELECT count(*) FROM scraptiktok_commentaires m
+                     WHERE m.collecte_id=c.collecte_id)
+                FROM scraptiktok_collectes c
+                WHERE c.proprietaire_hash=%s
+                  AND c.nom_sauvegarde ILIKE %s
+                ORDER BY c.actualise_le DESC LIMIT 500
+            """, (proprietaire, recherche))
+            resultats = [{
+                "id": r[0], "type": "collecte", "nom": r[1], "statut": r[2],
+                "source": r[3], "moteur": r[4], "date": r[5].isoformat(),
+                "publications": r[6], "commentaires": r[7]
+            } for r in curseur.fetchall()]
+            if tables_disponibles(curseur):
+                curseur.execute("""
+                    SELECT c.plan_id, c.nom_sauvegarde, c.statut,
+                           c.synchronise_le,
+                           (SELECT count(*) FROM research_publications p
+                            WHERE p.plan_id=c.plan_id),
+                           (SELECT count(*) FROM research_commentaires m
+                            WHERE m.plan_id=c.plan_id)
+                    FROM research_plans c
+                    WHERE c.proprietaire_hash=%s
+                      AND c.nom_sauvegarde ILIKE %s
+                    ORDER BY c.synchronise_le DESC LIMIT 500
+                """, (proprietaire, recherche))
+                resultats.extend({
+                    "id": r[0], "type": "research", "nom": r[1],
+                    "statut": r[2], "source": "research_programme",
+                    "moteur": "research", "date": r[3].isoformat(),
+                    "publications": r[4], "commentaires": r[5]
+                } for r in curseur.fetchall())
+    return sorted(resultats, key=lambda r: r["date"], reverse=True)
+
+
+def description_table(type_sauvegarde, categorie):
+    """Choisir exclusivement des noms de tables définis par l'application."""
+    if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
+        raise ValueError("Type de sauvegarde ou catégorie inconnus.")
+    if type_sauvegarde == "collecte":
+        parent = "scraptiktok_collectes"
+        table = "scraptiktok_" + categorie
+        cle = "collecte_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    else:
+        parent = "research_plans"
+        table = "research_" + categorie
+        cle = "plan_id"
+        identifiant = "publication_id" if categorie == "publications" else "commentaire_id"
+    return parent, table, cle, identifiant
+
+
+def donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie,
+                       filtre="", limite=100, decalage=0):
+    """Lire une page de données sans consulter celles d'un autre utilisateur."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Accès à la sauvegarde impossible.")
+    parent, table, cle, code = description_table(type_sauvegarde, categorie)
+    limite = min(200, max(1, int(limite)))
+    decalage = max(0, int(decalage))
+    terme = str(filtre or "")[:150].strip()
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Aucune sauvegarde Research synchronisée.")
+            condition = (
+                f"FROM {table} d JOIN {parent} c ON c.{cle}=d.{cle} "
+                f"WHERE c.proprietaire_hash=%s AND c.{cle}=%s"
+            )
+            parametres = [empreinte(cookie), identifiant]
+            if terme:
+                condition += (
+                    " AND (coalesce(d.donnees->>'description','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'texte','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'author','') ILIKE %s "
+                    "OR coalesce(d.donnees->>'auteur','') ILIKE %s "
+                    f"OR d.{code} ILIKE %s)")
+                parametres.extend(["%" + terme + "%"] * 5)
+            curseur.execute("SELECT count(*) " + condition, parametres)
+            nombre = curseur.fetchone()[0]
+            curseur.execute(
+                f"SELECT d.donnees, d.{code}, d.retenue " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s"
+                if categorie == "publications" else
+                f"SELECT d.donnees, d.{code}, NULL " + condition +
+                f" ORDER BY d.{code} LIMIT %s OFFSET %s",
+                [*parametres, limite, decalage])
+            lignes = []
+            for donnees, id_, retenue in curseur.fetchall():
+                donnees = donnees if isinstance(donnees, dict) else json.loads(donnees)
+                lignes.append({**donnees, "id": str(id_),
+                               **({"retenue": retenue}
+                                  if categorie == "publications" else {})})
+    return {"total": nombre, "decalage": decalage, "limite": limite,
+            "lignes": lignes}
+
+
+def valeur_colonne(donnees, nom):
+    """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
+    if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
+        mesure = (donnees.get("engagement") or {}).get(nom)
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+    else:
+        valeur = donnees.get(nom)
+    if valeur is None:
+        return ""
+    if isinstance(valeur, (list, dict)):
+        return json.dumps(valeur, ensure_ascii=False)
+    return str(valeur)
+
+
+def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
+    """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
+    if format_ not in ("csv", "json"):
+        raise ValueError("Format inconnu.")
+    # Valider la propriété avant d'émettre le moindre octet d'un export.
+    donnees_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, limite=1)
+    entetes = (CHAMPS_PUBLICATIONS if categorie == "publications"
+               else CHAMPS_COMMENTAIRES)
+
+    def morceaux():
+        """Émettre un export complet sans limiter le nombre de publications."""
+        if format_ == "csv":
+            flux = io.StringIO()
+            ecrivain = csv.writer(flux)
+            ecrivain.writerow(entetes)
+            yield "\ufeff" + flux.getvalue()
+        else:
+            yield "["
+        decalage = 0
+        premier = True
+        while True:
+            page = donnees_sauvegarde(
+                cookie, type_sauvegarde, identifiant, categorie,
+                limite=200, decalage=decalage)
+            for ligne in page["lignes"]:
+                if format_ == "csv":
+                    flux = io.StringIO()
+                    csv.writer(flux).writerow([
+                        valeur_colonne(ligne, champ) for champ in entetes])
+                    yield flux.getvalue()
+                else:
+                    yield ("" if premier else ",") + json.dumps(
+                        ligne, ensure_ascii=False, default=str)
+                    premier = False
+            decalage += len(page["lignes"])
+            if decalage >= page["total"] or not page["lignes"]:
+                break
+        if format_ == "json":
+            yield "]"
+
+    return morceaux()
+
+                 THEN (m.donnees->>'likes')::bigint END AS likes,
+            m.donnees->>'source' AS source_commentaire,
+            m.donnees->>'observe_le' AS date_collecte
+        FROM scraptiktok_commentaires AS m
+        JOIN scraptiktok_collectes AS c ON c.collecte_id = m.collecte_id
+    """)
 
 
 def nettoyer_parametres(parametres):
