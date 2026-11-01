@@ -229,6 +229,7 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
         for identifiant, donnees in (etape.get("metadonnees_api") or {}).items():
             if isinstance(donnees, dict):
                 metadonnees_api.setdefault(identifiant, donnees)
+    objectif_affiche = (f"/{arguments.limit}" if arguments.limit is not None else "")
     rapport.update(recherches_compte=etapes,
                    discovered_urls=list(liens.values()),
                    metadonnees_api=metadonnees_api,
@@ -240,13 +241,13 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                        or any(e.get("echec") for e in etapes),
                    exhaustif=False,
                    bilan_recherche=(
-                       f"@{compte} : {len(liens)}{"/" + str(arguments.limit) if arguments.limit is not None else ""} vidéo(s) découvertes "
+                       f"@{compte} : {len(liens)}{objectif_affiche} vidéo(s) découvertes "
                        f"via le seul moteur {presse_moteur!r}. "
                        "Aucune recherche générale ni autre méthode n'est exécutée "
                        "automatiquement. Si TikTok bloque ce moteur, consulter le "
                        "diagnostic de la source."
                        if presse_videos_uniquement else
-                       f"@{compte} : {len(liens)}{"/" + str(arguments.limit) if arguments.limit is not None else ""} publication(s) "
+                       f"@{compte} : {len(liens)}{objectif_affiche} publication(s) "
                        "publiques accessibles. Grille du profil, puis recherche par "
                        "@identifiant pour compléter les résultats manquants. "
                        "Seul l'auteur sélectionné est conservé ; le nombre demandé "
