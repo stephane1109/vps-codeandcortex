@@ -13,6 +13,7 @@ from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, n
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
                  "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
+                 "duree": "Durée vidéo",
                  "hashtags": "Hashtags sous le texte"}
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
@@ -131,6 +132,8 @@ if "initialise" not in st.session_state:
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",False),
         "variables_classes_txt": ancienne.get("variables_classes_txt") or [],
         "taux_engagement_txt": ancienne.get("taux_engagement_txt", "aucun"),
+        "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "aucun") == "brut",
+        "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "aucun") == "classes",
         "hashtags_exclus_saisis": ", ".join(
             "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
         "collecter_reponses":ancienne.get("collecter_reponses",False),
@@ -144,11 +147,15 @@ if "initialise" not in st.session_state:
         variables = (
             (["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt")
              else ["profil", "id"] if ancienne.get("include_sources", True) else [])
-            if ancienne else [v for v in VARIABLES_TXT if v != "hashtags"]
+            if ancienne else [v for v in VARIABLES_TXT if v not in ("hashtags", "duree")]
         )
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
         valeurs["txt_" + variable] = variable in variables
+    # Restaurer indépendamment les choix de classes lors d'une reprise d'analyse.
+    for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
+        valeurs["txt_classe_" + variable] = variable in (
+            ancienne.get("variables_classes_txt") or [])
     # Rétablir les listes des anciennes collectes à un ou deux hashtags,
     # sans confondre les filtres propres aux modes Hashtags et Profils.
     anciens_hashtags = ancienne.get("hashtags_saisis") or ancienne.get("hashtags") or [
@@ -188,6 +195,13 @@ st.session_state.setdefault("follower_count_illustratif", False)
 st.session_state.setdefault("abonnes_classe_illustratif", False)
 st.session_state.setdefault("variables_classes_txt", [])
 st.session_state.setdefault("taux_engagement_txt", "aucun")
+st.session_state.setdefault("txt_taux_engagement_brut",
+    st.session_state.get("taux_engagement_txt") == "brut")
+st.session_state.setdefault("txt_taux_engagement_classe",
+    st.session_state.get("taux_engagement_txt") == "classes")
+for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
+    st.session_state.setdefault("txt_classe_" + variable,
+        variable in st.session_state.get("variables_classes_txt", []))
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
     st.session_state.pop("cookies_presse_fichier", None)
 if st.session_state.pop("_effacer_research_apres_requete", False):
@@ -201,7 +215,7 @@ if st.session_state.pop("_effacer_apify_apres_requete", False):
 # Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
 for variable in VARIABLES_TXT:
     # Initialiser seulement si absent : préserver les choix manuels déjà faits.
-    st.session_state.setdefault("txt_" + variable, variable != "hashtags")
+    st.session_state.setdefault("txt_" + variable, variable not in ("hashtags", "duree"))
     st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
 # Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
@@ -524,8 +538,9 @@ with onglet_collecte:
     liste_hashtags_exclus = []
     erreur_hashtags = ""
     erreur_hashtags_exclus = ""
-    # Envoyer les filtres ensemble évite les pertes de saisie entre deux réexécutions.
-    with st.form("filtres_collecte", border=False, enter_to_submit=False):
+    # L'interface reste réactive : les cases d'export sont regroupées avec
+    # la collecte et peuvent modifier les liens TXT sans relancer une collecte.
+    with st.container(border=False):
         if source != "presse":
             saisie = st.text_area(
                 "Hashtags à rechercher (1 à 10)", key=cle_liste_hashtags,
@@ -646,74 +661,91 @@ with onglet_collecte:
             st.caption("Jours inclus en UTC. Research API : 30 derniers jours par défaut, fenêtres successives de 30 jours pour une période plus longue." if methode_dates=="research" else "Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
-            st.form_submit_button("Effacer la période", on_click=effacer_dates, disabled=occupe)
+            st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
         moteur_formulaire = st.session_state.get(
             {"presse": "presse_moteur", "comptes": "profil_moteur",
              "hashtags": "hashtag_moteur"}[source], "navigateur")
-        if moteur_formulaire == "research":
-            st.checkbox(
-                "Récupérer le nombre d'abonnés des auteurs (follower_count)",
-                key="collecter_follower_count", disabled=occupe,
-                help="Requête officielle supplémentaire sur le profil public de chaque auteur "
-                     "(une fois par compte distinct). Valeur observée à la collecte et non "
-                     "à la publication de la vidéo ; une absence reste indéterminée.")
-            if st.session_state.get("collecter_follower_count"):
-                st.checkbox(
-                    "Ajouter la classe d'abonnés en première ligne (variable illustrative IRaMuTeQ)",
-                    key="abonnes_classe_illustratif", disabled=occupe,
-                    help="Cinq classes fixes : 0–999, 1 000–9 999, 10 000–99 999, "
-                         "100 000–999 999 et 1 000 000 et plus. "
-                         "Exemple : *abonnes_10k_100k pour 12 345 abonnés. "
-                         "Donnée absente : *abonnes_indetermine. "
-                         "Le nombre brut reste disponible dans les exports statistiques.")
-                st.checkbox(
-                    "Ajouter aussi le nombre brut *follower_count (option précédente)",
-                    key="follower_count_illustratif", disabled=occupe,
-                    help="Option conservée pour compatibilité : *follower_count_12345. "
-                         "Pour la CHD, privilégiez les classes et évitez de cocher "
-                         "les deux variables illustratives simultanément.")
-        with st.expander("Variables numériques : classes illustratives et taux d'engagement"):
-            st.multiselect(
-                "Ajouter des classes numériques dans le corpus IRaMuTeQ",
-                options=["vues", "likes", "commentaires", "partages", "favoris", "duree"],
-                format_func=lambda x: {
-                    "vues": "Vues : 0–999 ; 1k–10k ; 10k–100k ; 100k–1M ; ≥1M",
-                    "likes": "Likes : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
-                    "commentaires": "Commentaires : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
-                    "partages": "Partages : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
-                    "favoris": "Favoris : 0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k",
-                    "duree": "Durée vidéo : moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s",
-                }[x],
-                key="variables_classes_txt", disabled=occupe,
-                help="Classes fixes, indépendantes des variables brutes cochées ci-dessous. "
-                     "Décocher une variable brute si seule sa classe est souhaitée. "
-                     "Les valeurs manquantes deviennent des classes indéterminées.")
-            st.selectbox(
-                "Taux d'engagement : (likes + commentaires + partages + favoris) / vues × 100",
-                options=["aucun", "brut", "classes"],
-                format_func=lambda x: {
-                    "aucun": "Ne pas ajouter au TXT",
-                    "brut": "Ajouter le taux brut en pourcentage",
-                    "classes": "Ajouter la classe du taux d'engagement",
-                }[x],
-                key="taux_engagement_txt", disabled=occupe,
-                help="Classes : <1 % ; 1–<3 % ; 3–<5 % ; 5–<10 % ; ≥10 %. "
-                     "Vues nulles ou compteur manquant : modalité indéterminée. "
-                     "Le taux exact reste dans engagement.csv lorsque calculable.")
-            st.caption(
-                "Le taux et les classes sont calculés à partir des compteurs disponibles, "
-                "sans collecte supplémentaire. Leurs valeurs restent dans les exports statistiques.")
-        st.write("Variables à inclure avant chaque post dans le TXT")
-        choix_variables = [(variable, titre) for variable, titre in VARIABLES_TXT.items() if variable != "hashtags"]
-        for debut_ligne in range(0, len(choix_variables), 3):
-            for colonne, (variable, titre) in zip(st.columns(3), choix_variables[debut_ligne:debut_ligne + 3]):
-                colonne.checkbox(titre, key="txt_" + variable, disabled=occupe)
-        st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags", disabled=occupe,
-            help="Déplace les hashtags sur une ligne sous le texte. Décoché, la légende reste inchangée.")
+        st.subheader("Variables à inclure avant chaque post dans le TXT")
+        st.caption(
+            "Cochez indépendamment les valeurs brutes et les intervalles. "
+            "Les classes illustratives sont ajoutées au début du texte ; "
+            "les valeurs numériques exactes restent dans engagement.csv."
+        )
+        colonnes_identification = st.columns(3)
+        for colonne, nom in zip(colonnes_identification, ("date", "profil", "id")):
+            colonne.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
+
+        classes_numeriques = {
+            "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
+            "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+            "commentaires": ("Commentaires", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+            "partages": ("Partages", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+            "favoris": ("Favoris", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+            "duree": ("Durée vidéo", "moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s"),
+        }
+        for nom, (libelle, intervalles) in classes_numeriques.items():
+            colonne_brute, colonne_classe = st.columns([1, 2])
+            colonne_brute.checkbox(
+                libelle + " : valeur brute",
+                key="txt_" + nom, disabled=occupe)
+            colonne_classe.checkbox(
+                libelle + " : intervalles (" + intervalles + ")",
+                key="txt_classe_" + nom, disabled=occupe,
+                help="Variable illustrative IRaMuTeQ. La valeur brute reste dans le CSV, "
+                     "même si elle n'est pas cochée dans le TXT.")
+
+        st.checkbox(
+            "Récupérer le nombre d'abonnés des auteurs (follower_count)",
+            key="collecter_follower_count",
+            disabled=occupe or moteur_formulaire != "research",
+            help="Disponible uniquement avec la Research API officielle. "
+                 "Une seule requête par auteur distinct ; valeur à la date de collecte. "
+                 "Les autres moteurs et options conservent leur comportement.")
+        st.checkbox(
+            "Abonnés : ajouter la valeur brute au TXT",
+            key="follower_count_illustratif",
+            disabled=occupe or moteur_formulaire != "research"
+                     or not st.session_state.get("collecter_follower_count", False),
+            help="Exemple : *follower_count_12345.")
+        st.checkbox(
+            "Abonnés : ajouter les intervalles au TXT",
+            key="abonnes_classe_illustratif",
+            disabled=occupe or moteur_formulaire != "research"
+                     or not st.session_state.get("collecter_follower_count", False),
+            help="0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M. "
+                 "Exemple : *abonnes_10k_100k.")
+
+        st.caption(
+            "Taux d'engagement = (likes + commentaires + partages + favoris) "
+            "/ vues × 100. Un compteur manquant ou zéro vue donne une modalité indéterminée.")
+        colonne_taux_brut, colonne_taux_classe = st.columns(2)
+        colonne_taux_brut.checkbox(
+            "Taux d'engagement : valeur brute",
+            key="txt_taux_engagement_brut", disabled=occupe)
+        colonne_taux_classe.checkbox(
+            "Taux d'engagement : intervalles",
+            key="txt_taux_engagement_classe", disabled=occupe,
+            help="Moins de 1 % ; 1–<3 % ; 3–<5 % ; 5–<10 % ; ≥10 %. "
+                 "La valeur exacte est conservée dans engagement.csv.")
+        if (st.session_state.get("txt_taux_engagement_brut")
+                and st.session_state.get("txt_taux_engagement_classe")):
+            st.warning("Pour le taux d'engagement, choisissez soit la valeur brute, "
+                       "soit les intervalles, mais pas les deux.")
+
+        st.checkbox(
+            "Supprimer le @ devant les profils dans le TXT",
+            key="export_profil_sans_arobase",
+            help="S'applique immédiatement à l'aperçu, au TXT et au ZIP "
+                 "sans relancer une collecte.")
+        st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags",
+            disabled=occupe,
+            help="Déplace les hashtags sous le texte. Décoché, la légende reste inchangée.")
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
-            value=False, disabled=occupe,
-            help="Ajoute un second segment **** *source_ia uniquement si le résumé natif de TikTok est réellement récupéré. La légende originale reste *source_original. Avec TikHub, la récupération utilise l'API itemCustomTDK, qui peut être facturée par vidéo ; avec les autres moteurs, l'analyse du panneau TikTok nécessite un navigateur.")
-        if st.form_submit_button("Lancer la collecte", type="primary",
+            disabled=occupe,
+            help="Ajoute un second segment **** *source_ia uniquement si le résumé "
+                 "natif de TikTok est réellement récupéré. Les collecteurs existants "
+                 "et leurs modalités de lecture restent inchangés.")
+        if st.button("Lancer la collecte", type="primary",
                                  disabled=occupe or api_tiktok_suspendue
                                           or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
                                  on_click=respecter_choix_commentaires):
@@ -722,6 +754,10 @@ with onglet_collecte:
                 st.error("Corrigez la saisie des hashtags avant de lancer la collecte.")
             elif erreur_hashtags_exclus:
                 st.error("Corrigez les hashtags à exclure avant de lancer la collecte.")
+            elif (st.session_state.get("txt_taux_engagement_brut")
+                  and st.session_state.get("txt_taux_engagement_classe")):
+                st.error("Choisissez une seule représentation du taux d'engagement "
+                         "pour le TXT : valeur brute ou intervalles.")
             elif source != "presse" and not liste_hashtags:
                 st.error("Renseignez au moins un hashtag pour lancer la collecte.")
             elif source == "presse" and not st.session_state.get("medias"):
@@ -738,8 +774,15 @@ with onglet_collecte:
                 valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
                 valeurs["follower_count_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("follower_count_illustratif", False))
                 valeurs["abonnes_classe_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("abonnes_classe_illustratif", False))
-                valeurs["variables_classes_txt"] = list(st.session_state.get("variables_classes_txt", []))
-                valeurs["taux_engagement_txt"] = st.session_state.get("taux_engagement_txt", "aucun")
+                valeurs["variables_classes_txt"] = [
+                    nom for nom in ("vues", "likes", "commentaires", "partages",
+                                    "favoris", "duree")
+                    if st.session_state.get("txt_classe_" + nom, False)
+                ]
+                valeurs["taux_engagement_txt"] = (
+                    "classes" if st.session_state.get("txt_taux_engagement_classe")
+                    else "brut" if st.session_state.get("txt_taux_engagement_brut")
+                    else "aucun")
                 valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
                 valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "navigateur")
                 valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "navigateur")
@@ -788,12 +831,6 @@ with onglet_collecte:
                     comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
                     medias=st.session_state.get("medias",[]) if source == "presse" else [])
                 lancer("/api/jobs",valeurs)
-
-    # Hors formulaire : changer le choix actualise les liens sans relancer la collecte.
-    st.checkbox("Supprimer le @ devant les profils dans le TXT",
-                key="export_profil_sans_arobase",
-                help="Appliqué aux profils des blocs original et IA, dans l’aperçu, le TXT et le ZIP.")
-
 
 with onglet_collecte:
     if collecte:

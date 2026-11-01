@@ -16,6 +16,7 @@ on:
       - "tests/test_classes_abonnes.py"
       - "collecte/variables_numeriques.py"
       - "tests/test_variables_numeriques.py"
+      - "tests/test_options_variables_txt.py"
       - "collecte/exclusion_hashtags.py"
       - "tests/test_exclusion_hashtags.py"
       - "collecte/comptes.py"
@@ -58,4 +59,5 @@ jobs:
           python -m unittest discover -s tests -p test_researchapi_abonnes.py -v
           python -m unittest discover -s tests -p test_classes_abonnes.py -v
           python -m unittest discover -s tests -p test_variables_numeriques.py -v
+          python -m unittest discover -s tests -p test_options_variables_txt.py -v
           python -m unittest discover -s tests -p test_exclusion_hashtags.py -v
