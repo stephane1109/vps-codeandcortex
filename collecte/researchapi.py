@@ -414,13 +414,15 @@ def normaliser_commentaire_research(donnee, publication_id, *, identifiant_paren
     }
 
 
-def collecter_commentaires_research(publication, limite=50, reponses=False, *,
+def collecter_commentaires_research(publication, limite=None, reponses=False, *,
                                     verifier=None, pause=time.sleep,
                                     requete=_requete, jeton=None, credentiels=None):
     """Interroger uniquement l'endpoint officiel, pour commentaires et réponses.
 
-    Le plafond est commun aux commentaires et à leurs réponses. Les résultats
-    partiels restent exportables si un quota ou une erreur survient.
+    Sans limite explicite, la pagination est automatique dans la borne
+    technique de MAX_PAGES requêtes par publication (parents et réponses).
+    Les appels existants avec une limite explicite restent pris en charge.
+    Les résultats partiels restent exportables si un quota ou une erreur survient.
     """
     from .reponses import rattacher_reponses
     if not isinstance(publication, dict):
@@ -428,14 +430,18 @@ def collecter_commentaires_research(publication, limite=50, reponses=False, *,
     video_id = str(publication.get("id") or "")
     if not re.fullmatch(r"\d{1,30}", video_id):
         raise ValueError("Identifiant TikTok Research invalide.")
-    if not 1 <= int(limite) <= 500:
+    automatique = limite is None
+    if automatique:
+        limite = MAX_PAGES * 100
+    elif not 1 <= int(limite) <= 500:
         raise ValueError("Limite de commentaires : 1 à 500.")
     limite = int(limite)
     verifier = verifier or (lambda: None)
     annonces = ((publication.get("engagement") or {}).get("commentaires") or {}).get("valeur")
     resultats = {}
     diagnostic = {"api": "Research API officielle", "pages": 0, "requetes": 0,
-                  "reponses_demandees": bool(reponses), "repli_selenium": False}
+                  "reponses_demandees": bool(reponses), "repli_selenium": False,
+                  "pagination_automatique": automatique, "maximum_pages": MAX_PAGES}
     etat = {"statut": "complet", "bloquer": False, "jeton": jeton, "epuise": False}
 
     def lire_pages(identifiant, *, reponse=False, objectif=50, curseur_initial=0):
@@ -443,7 +449,7 @@ def collecter_commentaires_research(publication, limite=50, reponses=False, *,
         curseur = curseur_initial
         deja_vus = {curseur}
         pages = 0
-        while len(resultats) < limite and objectif > 0 and pages < MAX_PAGES:
+        while len(resultats) < limite and objectif > 0 and diagnostic["pages"] < MAX_PAGES:
             verifier()
             try:
                 if etat["jeton"] is None:
@@ -493,13 +499,14 @@ def collecter_commentaires_research(publication, limite=50, reponses=False, *,
             deja_vus.add(suivant)
             curseur = suivant
             pause(0.25)
-        if pages >= MAX_PAGES:
+        if diagnostic["pages"] >= MAX_PAGES:
             etat["statut"] = "pagination_incomplete"
         return False
 
     # Sans réponses : conserver la limite totale sur les seuls commentaires.
     # Avec réponses : réserver 30 % du quota aux premières réponses disponibles.
-    plafond_parents = limite if not reponses else max(1, (limite * 7 + 9) // 10)
+    plafond_parents = (limite if automatique or not reponses
+                      else max(1, (limite * 7 + 9) // 10))
     fin_parents = lire_pages(video_id, objectif=plafond_parents)
     if reponses and not etat["bloquer"] and len(resultats) < limite:
         parents = [item for item in resultats.values()

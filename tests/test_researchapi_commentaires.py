@@ -115,6 +115,53 @@ class TestResearchCommentaires(unittest.TestCase):
         self.assertEqual(appels[1]["cursor"], 1)
         self.assertEqual(resultat["statut"], "complet")
 
+    def test_pagination_automatique_collecte_plus_de_500_commentaires(self):
+        appels = []
+
+        def simuler(url, *, data, headers):
+            requete = json.loads(data)
+            curseur = requete["cursor"]
+            appels.append(requete)
+            commentaires = [
+                {"id": 100000 + i, "video_id": int(self.publication["id"]),
+                 "text": f"Commentaire numéro {i}"}
+                for i in range(curseur, min(curseur + 100, 600))
+            ]
+            return {"data": {"comments": commentaires,
+                             "has_more": curseur + 100 < 600,
+                             "cursor": curseur + len(commentaires)}}
+
+        resultat = collecter_commentaires_research(
+            self.publication, jeton="SIMULE", requete=simuler,
+            pause=lambda _: None)
+        self.assertEqual(len(resultat["commentaires"]), 600)
+        self.assertEqual(len(appels), 6)
+        self.assertEqual(resultat["statut"], "complet")
+        self.assertTrue(resultat["exhaustif"])
+        self.assertTrue(resultat["diagnostic"]["pagination_automatique"])
+
+    def test_pagination_automatique_respecte_la_borne_de_pages(self):
+        appels = []
+
+        def simuler(url, *, data, headers):
+            requete = json.loads(data)
+            appels.append(requete)
+            curseur = requete["cursor"]
+            return {"data": {"comments": [
+                {"id": 200000 + curseur + i,
+                 "video_id": int(self.publication["id"]), "text": str(i)}
+                for i in range(100)], "cursor": curseur + 100,
+                "has_more": True}}
+
+        with patch("collecte.researchapi.MAX_PAGES", 3):
+            resultat = collecter_commentaires_research(
+                self.publication, jeton="SIMULE", requete=simuler,
+                pause=lambda _: None)
+        self.assertEqual(len(appels), 3)
+        self.assertEqual(len(resultat["commentaires"]), 300)
+        self.assertEqual(resultat["statut"], "pagination_incomplete")
+        self.assertFalse(resultat["exhaustif"])
+
     def test_rejet_identifiant_externe(self):
         self.assertIsNone(normaliser_commentaire_research(
             {"id": "10", "video_id": "123", "text": "Autre vidéo"},
@@ -138,7 +185,8 @@ class TestResearchCommentaires(unittest.TestCase):
                 navigation_publications="research_officielle",
                 discovery_stop="fin_des_periodes")
             return [fiche["url"]]
-        def simuler_commentaires(publication, limite, reponses, **kwargs):
+        def simuler_commentaires(publication, limite=None, reponses=False, **kwargs):
+            self.assertIsNone(limite)
             self.assertEqual(publication["id"], fiche["id"])
             self.assertEqual(kwargs["credentiels"], ("test_key", "test_secret"))
             self.assertTrue(reponses)

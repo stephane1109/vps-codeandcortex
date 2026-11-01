@@ -1392,8 +1392,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                             resultat = None
                                         else:
                                             resultat = collecter_commentaires_research(
-                                                record, job.settings.limite_commentaires,
-                                                job.settings.collecter_reponses,
+                                                record, reponses=job.settings.collecter_reponses,
                                                 verifier=job.check, pause=job.pause,
                                                 credentiels=connexion.research_credentiels)
                                             if resultat.get("bloquer_requetes"):

@@ -716,10 +716,12 @@ with onglet_collecte:
                 disabled=occupe or not st.session_state.get("collecter_commentaires", False),
                 help="Collecter les réponses uniquement lorsque la collecte des "
                      "textes des commentaires est activée.")
-            st.number_input("Commentaires maximum par publication", min_value=1,
-                max_value=max_commentaires_admin, step=1,
-                key="limite_commentaires", disabled=occupe,
-                help="Borne technique contrôlée également côté serveur.")
+            if moteur_formulaire != "research":
+                st.session_state.setdefault("limite_commentaires", min(50, max_commentaires_admin))
+                st.number_input("Commentaires maximum par publication", min_value=1,
+                    max_value=max_commentaires_admin, step=1,
+                    key="limite_commentaires", disabled=occupe,
+                    help="Borne technique contrôlée également côté serveur.")
 
         st.checkbox(
             "Récupérer le nombre d'abonnés des auteurs (follower_count)",
@@ -794,7 +796,9 @@ with onglet_collecte:
                 st.error("Saisissez le hashtag à croiser avec les médias.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","limite_commentaires","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
+                if moteur_formulaire != "research":
+                    valeurs["limite_commentaires"] = st.session_state.get("limite_commentaires", 50)
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
                 valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
