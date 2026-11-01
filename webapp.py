@@ -72,7 +72,7 @@ class StartRequest(BaseModel):
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
-    hashtags_exclus: list[str] = Field(default_factory=list, max_length=10)
+    hashtags_exclus: list[str] = Field(default_factory=list)
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
