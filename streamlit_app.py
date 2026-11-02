@@ -1807,20 +1807,16 @@ with onglet_base_donnees:
                         "Télécharger cette collecte (ZIP)",
                         adresse_bdd + "/archive.zip",
                         use_container_width=True,
-                        help="Contient toutes les publications et tous les commentaires "
-                             "de la collecte, en CSV et JSON."
+                        help="Un seul ZIP : publications et commentaires CSV/JSON, "
+                             "engagement, autres tableaux CSV, textes et corpus "
+                             "SQLite, plus les fichiers originaux encore disponibles "
+                             "(y compris les MP4 déjà archivés)."
                     )
-                    with st.expander("Téléchargements séparés (facultatifs)"):
-                        colonnes_exports = st.columns(4)
-                        for colonne, nom, libelle in zip(
-                                colonnes_exports,
-                                ("publications.csv", "publications.json",
-                                 "commentaires.csv", "commentaires.json"),
-                                ("Publications CSV", "Publications JSON",
-                                 "Commentaires CSV", "Commentaires JSON")):
-                            colonne.link_button(
-                                libelle, adresse_bdd + "/export/" + nom,
-                                use_container_width=True)
+                    st.caption(
+                        "Le ZIP regroupe les résultats disponibles pour cette collecte. "
+                        "Les MP4 absents de PostgreSQL et des archives locales ne "
+                        "peuvent pas être récupérés rétroactivement."
+                    )
                     categorie_bdd = st.radio(
                         "Table à consulter", ("publications", "commentaires"),
                         format_func=lambda valeur: (
