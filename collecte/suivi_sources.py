@@ -51,6 +51,8 @@ def etablir_bilan_medias(sources, journal, *, source_en_cours=None, termine=Fals
                     etat = "partielle"
                 else:
                     etat = "traitee"
+            if etat == "en_cours" and termine:
+                etat = "interrompue"
             raison = str(entree.get("message") or "").strip()
             liens = len(rapport.get("discovered_urls") or [])
         bilan.append({
