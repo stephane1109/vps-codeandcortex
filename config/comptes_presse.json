@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "comptes": [
     {
       "id": "lemonde",
@@ -283,10 +283,28 @@
       "url": "https://www.tiktok.com/@angersinfo"
     },
     {
+      "id": "actucaen",
+      "nom": "Actu Caen",
+      "compte": "actucaen",
+      "categorie": "presse_locale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actucaen"
+    },
+    {
+      "id": "actubordeaux",
+      "nom": "Actu Bordeaux",
+      "compte": "actubordeaux",
+      "categorie": "presse_locale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actubordeaux"
+    },
+    {
       "id": "actutoulouse",
       "nom": "Actu Toulouse",
       "compte": "actutoulouse",
-      "categorie": "presse_regionale",
+      "categorie": "presse_locale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@actutoulouse"
