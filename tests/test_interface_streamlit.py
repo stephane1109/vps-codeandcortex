@@ -66,6 +66,10 @@ class TestsInterface(unittest.TestCase):
                 self.assertTrue(page.checkbox(key='txt_classe_' + variable).value,
                                 variable)
             self.assertTrue(page.checkbox(key='txt_hashtags').value)
+            # L'option de ZIP progressif est retirée du formulaire.
+            self.assertFalse(any(
+                case.label.startswith("Sauvegarde progressive")
+                for case in page.checkbox))
             for cle in (
                     'collecter_commentaires', 'collecter_reponses',
                     'collecter_follower_count', 'follower_count_illustratif',
@@ -76,9 +80,15 @@ class TestsInterface(unittest.TestCase):
             self.assertEqual(
                 page.checkbox(key='txt_classe_favoris').label.split(' : ')[0],
                 'Favoris')
+            # Une ancienne valeur enregistrée ne doit jamais réactiver le ZIP.
+            page.session_state['sauvegarde_progressive'] = True
+            page.run()
+            self.assertFalse(page.exception)
+            self.assertFalse(page.session_state['sauvegarde_progressive'])
             page.text_input(key='hashtag').set_value('manifestation')
             next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
             self.assertFalse(page.exception)
+            self.assertFalse(envois[-1]['sauvegarde_progressive'])
             self.assertEqual(envois[-1]['variables_classes_txt'],
                              ['vues', 'likes', 'commentaires', 'partages',
                               'favoris', 'duree'])
