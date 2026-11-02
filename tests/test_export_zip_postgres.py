@@ -161,6 +161,37 @@ class TestsExportPostgresZip(unittest.TestCase):
             finally:
                 fichier.close()
 
+    def test_generer_de_nouveau_les_resultats_depuis_postgres(self):
+        """Les CSV, TXT et SQLite sont recréés sans archive locale."""
+        import sqlite3
+        from stockage.export_zip_postgres import _generer_fichiers
+        with tempfile.TemporaryDirectory() as dossier:
+            _generer_fichiers(
+                dossier, [PUBLICATION], [COMMENTAIRE],
+                "a" * 32,
+                {"include_sources": True,
+                 "variables_txt": ["date", "profil", "id", "vues"]},
+            )
+            noms = {f.name for f in Path(dossier).iterdir()}
+            self.assertTrue({
+                "publications.csv", "publications.json",
+                "commentaires.csv", "commentaires.json",
+                "engagement.csv", "ratios_engagement.csv",
+                "comparaison_medias.csv", "textes.txt",
+                "corpus_iramuteq.txt", "corpus_commentaires_iramuteq.txt",
+                "commentaires.txt", "corpus.sqlite3",
+            }.issubset(noms))
+            self.assertIn("7702544004629531937",
+                          (Path(dossier) / "textes.txt").read_text(
+                              encoding="utf-8"))
+            with sqlite3.connect(Path(dossier) / "corpus.sqlite3") as base:
+                self.assertEqual(
+                    base.execute("SELECT count(*) FROM publications").fetchone()[0],
+                    1)
+                self.assertEqual(
+                    base.execute("SELECT count(*) FROM commentaires").fetchone()[0],
+                    1)
+
     def test_route_zip_prioritaire_sur_consultation_generique(self):
         """Le 404 « Sauvegarde ou catégorie introuvable » est éliminé."""
         from webapp import app
