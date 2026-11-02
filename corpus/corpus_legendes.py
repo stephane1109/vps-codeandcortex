@@ -1,6 +1,25 @@
 """Une unité textuelle par publication retenue."""
+from collecte.presse import code_presse_publication
+
+
 def construire_legendes(publications, variables=None):
+    """Conserver les variables textuelles et la catégorie du compte connu."""
     variables = variables or {}
-    return [{"id": p["id"], "texte": p.get("description", ""), "variables": {
-        "type": "legende", "media": p.get("media_id"), "categorie": p.get("categorie_media"),
-        **variables.get(p["id"], {})}} for p in publications if p.get("retenue", True)]
+    documents = []
+    for publication in publications:
+        if not publication.get("retenue", True):
+            continue
+        code = code_presse_publication(publication)
+        illustratives = {code: True} if code else {}
+        documents.append({
+            "id": publication["id"],
+            "texte": publication.get("description", ""),
+            "variables": {
+                "type": "legende",
+                "media": publication.get("media_id"),
+                "categorie": publication.get("categorie_media"),
+                **variables.get(publication["id"], {}),
+                **illustratives,
+            },
+        })
+    return documents
