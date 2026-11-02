@@ -2415,9 +2415,24 @@ def create_app(manager=None):
             type_sauvegarde: str, identifiant: str, request: Request):
         """Télécharger les publications et commentaires PostgreSQL en un ZIP."""
         from stockage.export_zip_postgres import construire_archive_postgres
+        # Pour une collecte encore active en mémoire, récupérer aussi
+        # son archive ZIP d'origine et les éventuels MP4 disponibles.
+        archive_active = None
+        try:
+            tache = manager.get(owner(request), identifiant)
+        except HTTPException:
+            tache = None
+        if (tache is not None and not tache.busy and not tache.video_busy
+                and tache.archive_prete
+                and tache.owner_historique == owner_historique(request)):
+            chemin = tache.directory / "archive.zip"
+            if chemin.is_file() and not chemin.is_symlink():
+                archive_active = chemin
         try:
             fichier, nom = construire_archive_postgres(
-                owner_historique(request), type_sauvegarde, identifiant)
+                owner_historique(request), type_sauvegarde, identifiant,
+                dossier_local=manager.data_dir,
+                archive_active=archive_active)
         except ValueError:
             raise HTTPException(404, "Collecte PostgreSQL introuvable.") from None
         except RuntimeError as erreur:
