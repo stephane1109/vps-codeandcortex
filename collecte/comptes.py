@@ -194,6 +194,8 @@ def collecter_compte(navigateur, arguments, compte, rapport=None, hashtags=(), *
                     compte, arguments.limit, etat, check=verifier, progress=suivi,
                     debut=options.get("research_debut"), fin=options.get("research_fin"),
                     hashtag=options.get("research_hashtag"),
+                    hashtags=options.get("research_hashtags"),
+                    operateur=options.get("research_operateur", "AND"),
                     credentiels=options.get("research_credentiels"),
                     exclusions=options.get("research_exclusions", ())))
         else:
