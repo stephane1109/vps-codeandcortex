@@ -9,7 +9,8 @@ import io
 import json
 from pathlib import Path
 from collecte.presse import colonnes_categories_presse
-from corpus.publications_csv import hashtags_pour_csv
+from corpus.publications_csv import (hashtags_pour_csv,
+                                     hashtags_collecte_pour_csv)
 import re
 
 
@@ -72,6 +73,15 @@ def construire_tableau_complet(session, dossier):
         lecteur = csv.DictReader(flux, dialect=dialecte)
         colonnes_source = list(lecteur.fieldnames or [])
         mesures = list(lecteur)
+    # Lire également les anciens tableaux déjà exportés sous l'ancien nom.
+    if "hashtags_recherches" in colonnes_source:
+        colonnes_source = [
+            nom for nom in colonnes_source if nom != "hashtags_recherches"]
+        if "htag_collecte" not in colonnes_source:
+            colonnes_source.append("htag_collecte")
+        for mesure in mesures:
+            mesure["htag_collecte"] = hashtags_collecte_pour_csv(mesure)
+            mesure.pop("hashtags_recherches", None)
     if "publication_id" not in colonnes_source:
         raise ValueError("Le tableau de mesures ne possède aucun ID TikTok.")
 
@@ -119,7 +129,10 @@ def construire_tableau_complet(session, dossier):
         lignes[identifiant].update(colonnes_categories_presse(publication))
         if publication.get("inclure_hashtags_csv"):
             lignes[identifiant]["hashtags"] = hashtags_pour_csv(publication)
-        for nom in ("hashtags_recherches", "hashtags_correspondants",
+        lignes[identifiant]["htag_collecte"] = (
+            hashtags_collecte_pour_csv(publication)
+            or lignes[identifiant].get("htag_collecte", ""))
+        for nom in ("hashtags_correspondants",
                     "operateur_hashtags", "type_publication", "compte_reposteur",
                     "comptes_reposteurs", "auteur_original", "id_video_originale",
                     "republication_confirmee", "date_republication"):
@@ -132,7 +145,7 @@ def construire_tableau_complet(session, dossier):
         "publication_id", "url", "statut", "contenu_genere_ia", *colonnes_source,
         "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
         "hashtags",
-        "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags",
+        "htag_collecte", "hashtags_correspondants", "operateur_hashtags",
         "type_publication", "compte_reposteur", "comptes_reposteurs",
         "auteur_original", "id_video_originale", "republication_confirmee",
         "date_republication",
