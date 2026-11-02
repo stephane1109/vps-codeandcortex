@@ -2523,23 +2523,29 @@ def create_app(manager=None):
     def exporter_postgres(type_sauvegarde: str, identifiant: str, nom: str,
                          request: Request):
         """Exporter un corpus PostgreSQL complet en CSV ou JSON."""
-        from stockage.postgres_consultation import exporter_sauvegarde
+        from stockage.postgres_consultation import (
+            exporter_sauvegarde, obtenir_nom_collecte)
         if nom not in ("publications.csv", "commentaires.csv",
                        "publications.json", "commentaires.json"):
             raise HTTPException(404, "Format inconnu.")
         categorie, format_ = nom.rsplit(".", 1)
+        propriete = owner_historique(request)
         try:
-            morceaux = exporter_sauvegarde(owner_historique(request),
-                type_sauvegarde, identifiant, categorie, format_)
+            nom_collecte = obtenir_nom_collecte(
+                propriete, type_sauvegarde, identifiant)
+            morceaux = exporter_sauvegarde(
+                propriete, type_sauvegarde, identifiant,
+                categorie, format_)
         except ValueError:
             raise HTTPException(404, "Sauvegarde introuvable.") from None
         except RuntimeError as erreur:
             raise HTTPException(503, str(erreur)) from None
-        nom_fichier = f"scraptiktok_{identifiant[:8]}_{nom}"
+        nom_fichier = nom_fichier_telechargement(
+            nom_collecte, categorie, format_)
         return StreamingResponse(morceaux,
             media_type=("text/csv; charset=utf-8" if format_ == "csv"
                         else "application/json; charset=utf-8"),
-            headers={"Content-Disposition": f'attachment; filename="{nom_fichier}"'})
+            headers=entete_telechargement(nom_fichier))
 
     @app.post("/api/base-donnees/{identifiant}/synchroniser")
     def synchroniser_collecte_postgres(identifiant: str, request: Request):
