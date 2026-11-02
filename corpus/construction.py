@@ -50,7 +50,7 @@ def lignes_engagement(publications):
         lignes.append(ligne)
     return lignes
 
-def construire_exports(dossier, publications, commentaires, journal, variables=None, *, texte_source=None, republications=None):
+def construire_exports(dossier, publications, commentaires, journal, variables=None, *, texte_source=None, republications=None, inclure_commentaires_txt=True):
     """Reprendre le TXT téléchargeable comme corpus principal dès qu’il existe."""
     dossier = Path(dossier)
     source = Path(texte_source) if texte_source is not None else dossier / "textes.txt"
@@ -107,4 +107,8 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     else:
         # Compatibilité des lots autonomes créés sans collecte textuelle préalable.
         exporter_iramuteq(dossier / "corpus_iramuteq.txt", construire_legendes(publications, variables))
-    exporter_iramuteq(dossier / "corpus_commentaires_iramuteq.txt", construire_commentaires(commentaires,variables))
+    # Le corpus des commentaires est facultatif : une collecte CSV seule ne
+    # génère aucun fichier TXT contenant ces textes.
+    if inclure_commentaires_txt:
+        exporter_iramuteq(dossier / "corpus_commentaires_iramuteq.txt",
+                         construire_commentaires(commentaires, variables))
