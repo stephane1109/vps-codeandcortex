@@ -9,6 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from interface.client import appeler_api
 from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, normaliser_liste_hashtags
+from collecte.presse import cle_tri_media
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
@@ -476,10 +477,13 @@ with onglet_collecte:
             ("autres_medias", "Autres médias ou statut à confirmer"),
         )
         for categorie, libelle_categorie in categories_medias:
-            comptes_categorie = [
-                (identifiant, media) for identifiant, media in medias.items()
-                if media.get("categorie") == categorie
-            ]
+            # Le tri concerne l'affichage : les identifiants de sélection,
+            # la liste complète et les collectes existantes restent inchangés.
+            comptes_categorie = sorted(
+                ((identifiant, media) for identifiant, media in medias.items()
+                 if media.get("categorie") == categorie),
+                key=lambda element: cle_tri_media(element[1]),
+            )
             if not comptes_categorie:
                 continue
             identifiants_categorie = tuple(
