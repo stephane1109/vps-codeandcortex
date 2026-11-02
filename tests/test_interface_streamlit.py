@@ -39,6 +39,35 @@ class TestsInterface(unittest.TestCase):
                 self.assertFalse(page.exception)
                 self.assertEqual(envois[-1]['supprimer_arobase_profil'], sans_arobase)
 
+    def test_research_officielle_preselectionnee_pour_les_trois_sources(self):
+        """Le moteur officiel est choisi par défaut, sans verrouiller la radio."""
+        def repondre(chemin, session, autorisation, donnees=None, **options):
+            if chemin == '/api/session':
+                return {'job': None}
+            if chemin == '/api/presse':
+                return {'medias': charger_inventaire()}
+            raise RuntimeError(chemin)
+
+        with patch('streamlit.context', SimpleNamespace(
+                cookies={'scraptiktok_session': 'a' * 64}, headers={})), \\
+             patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(
+                Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.radio(key='hashtag_moteur').value, 'research')
+            self.assertEqual(page.session_state['presse_moteur'], 'research')
+            self.assertEqual(page.session_state['profil_moteur'], 'research')
+            page.radio(key='source').set_value('presse').run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.radio(key='presse_moteur').value, 'research')
+            page.radio(key='presse_moteur').set_value('api').run()
+            self.assertEqual(page.radio(key='presse_moteur').value, 'api')
+            page.radio(key='source').set_value('comptes').run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.radio(key='profil_moteur').value, 'research')
+            page.radio(key='source').set_value('presse').run()
+            self.assertEqual(page.radio(key='presse_moteur').value, 'api')
+
     def test_nouveau_formulaire_variables_et_recodages_precoches(self):
         """Les mesures et leurs recodages restent distincts et cochés par défaut."""
         envois = []
@@ -94,9 +123,9 @@ class TestsInterface(unittest.TestCase):
                               'favoris', 'duree'])
             self.assertIn('duree', envois[-1]['variables_txt'])
             self.assertIn('date', envois[-1]['variables_txt'])
-            # Le moteur navigateur ne prétend pas fournir les deux champs Research.
-            self.assertNotIn('region_code', envois[-1]['variables_txt'])
-            self.assertNotIn('is_verified', envois[-1]['variables_txt'])
+            # La méthode Research sélectionnée par défaut conserve ces champs.
+            self.assertIn('region_code', envois[-1]['variables_txt'])
+            self.assertIn('is_verified', envois[-1]['variables_txt'])
 
     def test_partages_commentaires_et_hashtags_transmis_independamment(self):
         envois = []
