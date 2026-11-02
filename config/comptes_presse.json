@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "comptes": [
     {
       "id": "lemonde",
@@ -594,6 +594,16 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@marc.verdenet"
+    },
+    {
+      "id": "france24",
+      "nom": "France 24",
+      "compte": "france24",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france24"
     }
   ]
 }
