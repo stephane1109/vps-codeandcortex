@@ -1905,52 +1905,54 @@ with onglet_base_donnees:
     if not cookie_historique:
         st.warning("Historique privé indisponible : rechargez la page.")
     else:
-        try:
-            etat_sqlite = api("/api/research/plans")
-            plans_sqlite = etat_sqlite.get("plans") or []
-        except RuntimeError as erreur:
-            st.warning("Liste des programmes SQLite indisponible : " + str(erreur))
-            plans_sqlite = []
-        if plans_sqlite:
-            index_sqlite = st.selectbox(
-                "Choisir une collecte Research dans SQLite",
-                list(range(len(plans_sqlite))),
-                format_func=lambda i: (
-                    f"{plans_sqlite[i].get('nom_sauvegarde') or 'Sans nom'} · "
-                    f"{plans_sqlite[i].get('statut', '')} · "
-                    f"{plans_sqlite[i].get('publications', 0)} publications"
-                ),
-                key="sqlite_plan_selection",
-            )
-            plan_sqlite = plans_sqlite[index_sqlite]
-            identifiant_sqlite = plan_sqlite["id"]
-            st.caption(
-                f"Publications : {plan_sqlite.get('publications', 0)} · "
-                f"Commentaires : {plan_sqlite.get('commentaires', 0)}"
-            )
-            st.link_button(
-                "Télécharger cette collecte SQLite (ZIP)",
-                f"/api/research/plans/{identifiant_sqlite}/export/zip",
-                use_container_width=True,
-                help="Publications et commentaires CSV, JSON, textes et une "
-                     "copie SQLite du corpus. Ne réinstalle pas le calendrier."
-            )
-            if st.button("Copier cette collecte SQLite dans PostgreSQL",
-                         key="sqlite_copier_postgres"):
-                try:
-                    bilan_sqlite = api(
-                        f"/api/research/plans/{identifiant_sqlite}/synchroniser-postgres",
-                        {})
-                except RuntimeError as erreur:
-                    st.error(str(erreur))
-                else:
-                    st.success(
-                        f"Copie vers PostgreSQL : "
-                        f"{bilan_sqlite['publications']} publications et "
-                        f"{bilan_sqlite['commentaires']} commentaires."
-                    )
-        else:
-            st.info("Aucun programme Research SQLite accessible dans cet historique.")
+        if st.checkbox("Afficher mes collectes SQLite Research",
+                       key="base_sqlite_afficher", value=False):
+            try:
+                etat_sqlite = api("/api/research/plans")
+                plans_sqlite = etat_sqlite.get("plans") or []
+            except RuntimeError as erreur:
+                st.warning("Liste des programmes SQLite indisponible : " + str(erreur))
+                plans_sqlite = []
+            if plans_sqlite:
+                index_sqlite = st.selectbox(
+                    "Choisir une collecte Research dans SQLite",
+                    list(range(len(plans_sqlite))),
+                    format_func=lambda i: (
+                        f"{plans_sqlite[i].get('nom_sauvegarde') or 'Sans nom'} · "
+                        f"{plans_sqlite[i].get('statut', '')} · "
+                        f"{plans_sqlite[i].get('publications', 0)} publications"
+                    ),
+                    key="sqlite_plan_selection",
+                )
+                plan_sqlite = plans_sqlite[index_sqlite]
+                identifiant_sqlite = plan_sqlite["id"]
+                st.caption(
+                    f"Publications : {plan_sqlite.get('publications', 0)} · "
+                    f"Commentaires : {plan_sqlite.get('commentaires', 0)}"
+                )
+                st.link_button(
+                    "Télécharger cette collecte SQLite (ZIP)",
+                    f"/api/research/plans/{identifiant_sqlite}/export/zip",
+                    use_container_width=True,
+                    help="Publications et commentaires CSV, JSON, textes et une "
+                         "copie SQLite du corpus. Ne réinstalle pas le calendrier."
+                )
+                if st.button("Copier cette collecte SQLite dans PostgreSQL",
+                             key="sqlite_copier_postgres"):
+                    try:
+                        bilan_sqlite = api(
+                            f"/api/research/plans/{identifiant_sqlite}/synchroniser-postgres",
+                            {})
+                    except RuntimeError as erreur:
+                        st.error(str(erreur))
+                    else:
+                        st.success(
+                            f"Copie vers PostgreSQL : "
+                            f"{bilan_sqlite['publications']} publications et "
+                            f"{bilan_sqlite['commentaires']} commentaires."
+                        )
+            else:
+                st.info("Aucun programme Research SQLite accessible dans cet historique.")
 
     st.divider()
     st.subheader("3. Concaténer des publications CSV")
