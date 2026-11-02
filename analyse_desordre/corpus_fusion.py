@@ -10,7 +10,8 @@ import json
 from pathlib import Path
 from collecte.presse import colonnes_categories_presse
 from corpus.publications_csv import (hashtags_pour_csv,
-                                     hashtags_collecte_pour_csv)
+                                     hashtags_collecte_pour_csv,
+                                     compte_reposteur_pour_csv)
 import re
 
 
@@ -88,8 +89,7 @@ def construire_tableau_complet(session, dossier):
         colonnes_source = [
             nom for nom in colonnes_source if nom not in colonnes_a_retirer]
         for mesure in mesures:
-            if not mesure.get("compte_reposteur"):
-                mesure["compte_reposteur"] = mesure.get("comptes_reposteurs", "")
+            mesure["compte_reposteur"] = compte_reposteur_pour_csv(mesure)
             mesure.pop("comptes_reposteurs", None)
             mesure.pop("contenu_genere_ia", None)
     if "publication_id" not in colonnes_source:
@@ -144,6 +144,13 @@ def construire_tableau_complet(session, dossier):
         lignes[identifiant]["htag_collecte"] = (
             hashtags_collecte_pour_csv(publication)
             or lignes[identifiant].get("htag_collecte", ""))
+        ligne_reposteurs = {
+            **lignes[identifiant],
+            **{nom: valeur for nom, valeur in publication.items()
+               if nom in {"compte_reposteur", "comptes_reposteurs"}}
+        }
+        lignes[identifiant]["compte_reposteur"] = (
+            compte_reposteur_pour_csv(ligne_reposteurs))
         for nom in ("hashtags_correspondants",
                     "operateur_hashtags", "type_publication", "compte_reposteur",
                     "auteur_original", "id_video_originale",
