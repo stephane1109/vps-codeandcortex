@@ -492,12 +492,15 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 61 comptes
+L’inventaire `config/comptes_presse.json` contient désormais 62 comptes
 sélectionnables, après suppression explicite de la seule variante
-`@liberationfr`. Le compte `@liberation.fr` et tous les autres médias
-restent présents. L'Humanité (`@lhumanitefr`) est ajouté dans la presse
-écrite nationale. L'interface regroupe les comptes en presse nationale
-(24, avec deux sous-groupes TV et presse écrite), presse régionale (21),
+`@liberationfr` lors d'une demande antérieure. Le compte `@liberation.fr`
+et tous les autres médias sont conservés. L'Humanité (`@lhumanitefr`) est
+présent dans la presse écrite nationale. Mediapart (`@mediapartfr`) a été
+reclassé en presse nationale, sous-groupe presse écrite. "L’info en 60
+secondes" (`@iuzdrmqevnu`) a été ajouté à la presse indépendante.
+L'interface regroupe les comptes en presse nationale
+(25, avec deux sous-groupes TV et presse écrite), presse régionale (21),
 presse indépendante (8) et autres
 médias ou statut à confirmer (8). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
