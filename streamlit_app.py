@@ -116,9 +116,9 @@ if "initialise" not in st.session_state:
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
         "hashtag_presse":ancienne.get("hashtag_presse",""),
-        "presse_moteur":ancienne.get("presse_moteur","api"),
-        "hashtag_moteur":ancienne.get("hashtag_moteur","navigateur"),
-        "profil_moteur":ancienne.get("profil_moteur","navigateur"),
+        "presse_moteur":ancienne.get("presse_moteur","research"),
+        "hashtag_moteur":ancienne.get("hashtag_moteur","research"),
+        "profil_moteur":ancienne.get("profil_moteur","research"),
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", True),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
@@ -189,9 +189,9 @@ if "initialise" not in st.session_state:
 st.session_state.setdefault("telecharger_mp4", False)
 # Ignorer également l'ancienne valeur éventuellement conservée en session.
 st.session_state["sauvegarde_progressive"] = False
-st.session_state.setdefault("presse_moteur", "api")
-st.session_state.setdefault("hashtag_moteur", "navigateur")
-st.session_state.setdefault("profil_moteur", "navigateur")
+st.session_state.setdefault("presse_moteur", "research")
+st.session_state.setdefault("hashtag_moteur", "research")
+st.session_state.setdefault("profil_moteur", "research")
 st.session_state.setdefault("croiser_hashtag_presse", False)
 st.session_state.setdefault("hashtag_presse", "")
 st.session_state.setdefault("hashtags_saisis", "")
@@ -351,7 +351,7 @@ with onglet_collecte:
             key=cle_moteur, horizontal=True, disabled=occupe,
             format_func=lambda valeur: libelles_moteurs[valeur],
         )
-        moteur_courant = st.session_state.get(cle_moteur, "navigateur")
+        moteur_courant = st.session_state.get(cle_moteur, "research")
         if moteur_courant == "research":
             st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
                           type="password", disabled=occupe)
@@ -557,7 +557,7 @@ with onglet_collecte:
     # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
     moteur_formulaire = st.session_state.get(
         {"presse": "presse_moteur", "comptes": "profil_moteur",
-         "hashtags": "hashtag_moteur"}[source], "navigateur")
+         "hashtags": "hashtag_moteur"}[source], "research")
     if moteur_formulaire == "research":
         with st.expander("Aide spécifique — TikTok Research API (quotas et collecte)"):
             st.markdown(
@@ -782,7 +782,7 @@ with onglet_collecte:
             d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
             methode_dates = st.session_state.get(
                 {"presse": "presse_moteur", "comptes": "profil_moteur",
-                 "hashtags": "hashtag_moteur"}[source], "navigateur")
+                 "hashtags": "hashtag_moteur"}[source], "research")
             st.caption("Jours inclus en UTC. Research API : 30 derniers jours par défaut, fenêtres successives de 30 jours pour une période plus longue." if methode_dates=="research" else "Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
@@ -999,9 +999,9 @@ with onglet_collecte:
                     else "classes" if st.session_state.get("txt_taux_engagement_classe")
                     else "brut" if st.session_state.get("txt_taux_engagement_brut")
                     else "aucun")
-                valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "api")
-                valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "navigateur")
-                valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "navigateur")
+                valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "research")
+                valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "research")
+                valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "research")
                 moteur_selectionne = valeurs[{
                     "presse": "presse_moteur", "hashtags": "hashtag_moteur",
                     "comptes": "profil_moteur"}[source]]
