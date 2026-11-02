@@ -14,6 +14,13 @@ on:
       - "streamlit_app.py"
       - "tests/test_scraptiktok.py"
       - "tests/test_format_txt.py"
+      - "tests/test_categories_presse_illustratives.py"
+      - "collecte/presse.py"
+      - "config/comptes_presse.json"
+      - "corpus/publications_csv.py"
+      - "corpus/construction.py"
+      - "corpus/export_iramuteq.py"
+      - "corpus/corpus_legendes.py"
       - "tests/test_webapp.py"
       - ".github/workflows/texte-ia-tiktok.yml"
   workflow_dispatch:
@@ -32,7 +39,7 @@ jobs:
       - name: Installer les dépendances des tests
         run: python -m pip install -r requirements-dev.txt
       - name: Vérifier la syntaxe des scripts
-        run: python -m compileall -q scraptiktok.py webapp.py streamlit_app.py tests/test_scraptiktok.py tests/test_format_txt.py tests/test_webapp.py
+        run: python -m compileall -q scraptiktok.py webapp.py streamlit_app.py collecte/presse.py corpus/publications_csv.py corpus/construction.py corpus/export_iramuteq.py corpus/corpus_legendes.py tests/test_scraptiktok.py tests/test_format_txt.py tests/test_categories_presse_illustratives.py tests/test_webapp.py
       - name: Tester l'extraction TikTok
         run: python -m unittest discover -s tests -p test_scraptiktok.py -v
       - name: Tester le chargement différé des résumés et le JavaScript Selenium
@@ -45,5 +52,7 @@ jobs:
           python -m unittest discover -s tests -p test_francais_dates_hashtag.py -v
       - name: Tester le format des corpus TXT
         run: python -m unittest discover -s tests -p test_format_txt.py -v
+      - name: Vérifier les catégories de presse dans le TXT et les CSV
+        run: python -m unittest discover -s tests -p test_categories_presse_illustratives.py -v
       - name: Tester le téléchargement depuis FastAPI
         run: python -m unittest discover -s tests -p test_webapp.py -v
