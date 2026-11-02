@@ -81,7 +81,9 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     nom_sauvegarde: str = Field(default="", max_length=120)
     comptes: list[str] = Field(default_factory=list, max_length=10)
-    medias: list[str] = Field(default_factory=list, max_length=29)
+    # Aucun plafond arbitraire de médias : l'inventaire valide les identifiants.
+    # Les limites de requêtes et de pagination sont celles de la Research API.
+    medias: list[str] = Field(default_factory=list)
     presse_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub", "apify"] = "api"
     hashtag_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "navigateur"
     profil_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "navigateur"
@@ -2448,7 +2450,10 @@ class Manager:
         nombre_sources = (len(settings.medias) if settings.source_collecte=="presse"
                           else len(settings.comptes) if settings.source_collecte=="comptes"
                           else len(settings.hashtags))
-        if nombre_sources > max_sources():
+        if settings.moteur_actif != "research" and nombre_sources > max_sources():
+            # Pour les autres moteurs, conserver la garde technique existante.
+            # En Research, seul l'inventaire valide la sélection : aucun
+            # plafond local additionnel sur le nombre de comptes sélectionnés.
             raise HTTPException(422,
                 f"Borne technique du moteur : {max_sources()} sources par collecte.")
         # Une base configurée doit être joignable avant de consommer le quota TikTok.
