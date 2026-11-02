@@ -15,7 +15,7 @@ from collecte.presse import colonnes_categories_presse
 
 CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
 
-COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre", "hashtags", "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags", "date_collecte", "contenu_genere_ia", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "region_code", "is_verified", "is_verified_statut", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
+COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "presse_nationale", "presse_regio_dpt", "presse_locale", "presse_indep", "presse_autre", "hashtags", "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags", "date_collecte", "contenu_genere_ia", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "region_code", "is_verified", "is_verified_statut", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
