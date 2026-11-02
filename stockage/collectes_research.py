@@ -18,7 +18,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 ETATS_ACTIFS = {"programme", "en_cours"}
 ETATS_FINAUX = {"termine", "arrete", "date_limite"}
 from corpus.publications_csv import (
-    COLONNES_PUBLICATIONS_CSV, lignes_publications_csv,
+    COLONNES_PUBLICATIONS_CSV, lignes_publications_csv, cellule_csv,
 )
 
 # Préserver les colonnes historiques et ajouter toutes les variables de l'interface.
@@ -448,7 +448,10 @@ def texte_csv(publications, commentaires, categorie):
     flux = io.StringIO()
     ecrivain = csv.DictWriter(flux, fieldnames=colonnes)
     ecrivain.writeheader()
-    ecrivain.writerows(resultat)
+    for ligne in resultat:
+        ecrivain.writerow({
+            nom: cellule_csv(ligne.get(nom)) for nom in colonnes
+        })
     return flux.getvalue()
 
 
