@@ -1894,6 +1894,125 @@ with onglet_base_donnees:
                                 st.json(lignes_bdd[numero_ligne], expanded=False)
 
 
+    st.divider()
+    st.subheader("2. SQLite — collectes Research programmées")
+    st.caption(
+        "SQLite conserve le calendrier et la reprise des programmes Research. "
+        "La copie SQLite proposée dans le ZIP est un export des données : "
+        "elle ne réinstalle pas un programme de collecte. "
+        "Le stockage opérationnel reste sur le volume du VPS."
+    )
+    if not cookie_historique:
+        st.warning("Historique privé indisponible : rechargez la page.")
+    else:
+        try:
+            etat_sqlite = api("/api/research/plans")
+            plans_sqlite = etat_sqlite.get("plans") or []
+        except RuntimeError as erreur:
+            st.warning("Liste des programmes SQLite indisponible : " + str(erreur))
+            plans_sqlite = []
+        if plans_sqlite:
+            index_sqlite = st.selectbox(
+                "Choisir une collecte Research dans SQLite",
+                list(range(len(plans_sqlite))),
+                format_func=lambda i: (
+                    f"{plans_sqlite[i].get('nom_sauvegarde') or 'Sans nom'} · "
+                    f"{plans_sqlite[i].get('statut', '')} · "
+                    f"{plans_sqlite[i].get('publications', 0)} publications"
+                ),
+                key="sqlite_plan_selection",
+            )
+            plan_sqlite = plans_sqlite[index_sqlite]
+            identifiant_sqlite = plan_sqlite["id"]
+            st.caption(
+                f"Publications : {plan_sqlite.get('publications', 0)} · "
+                f"Commentaires : {plan_sqlite.get('commentaires', 0)}"
+            )
+            st.link_button(
+                "Télécharger cette collecte SQLite (ZIP)",
+                f"/api/research/plans/{identifiant_sqlite}/export/zip",
+                use_container_width=True,
+                help="Publications et commentaires CSV, JSON, textes et une "
+                     "copie SQLite du corpus. Ne réinstalle pas le calendrier."
+            )
+            if st.button("Copier cette collecte SQLite dans PostgreSQL",
+                         key="sqlite_copier_postgres"):
+                try:
+                    bilan_sqlite = api(
+                        f"/api/research/plans/{identifiant_sqlite}/synchroniser-postgres",
+                        {})
+                except RuntimeError as erreur:
+                    st.error(str(erreur))
+                else:
+                    st.success(
+                        f"Copie vers PostgreSQL : "
+                        f"{bilan_sqlite['publications']} publications et "
+                        f"{bilan_sqlite['commentaires']} commentaires."
+                    )
+        else:
+            st.info("Aucun programme Research SQLite accessible dans cet historique.")
+
+    st.divider()
+    st.subheader("3. Concaténer des publications CSV")
+    st.caption(
+        "Importez des fichiers publications.csv ou engagement.csv obtenus "
+        "depuis PostgreSQL, SQLite ou les ZIP de collecte. "
+        "Chaque vidéo est identifiée par son ID TikTok. Les colonnes des "
+        "différents fichiers sont réunies, et les doublons sont écartés. "
+        "Cette fusion ne modifie aucune base de données."
+    )
+    fichiers_concat = st.file_uploader(
+        "Importer des fichiers CSV pour les concaténer",
+        type=["csv"], accept_multiple_files=True,
+        key="base_fichiers_concat",
+        help="20 fichiers au maximum, 10 Mo par fichier, 100 000 lignes au total."
+    )
+    priorite_concat = st.radio(
+        "En cas de doublon",
+        ("premier", "dernier"),
+        horizontal=True,
+        format_func=lambda v: (
+            "Conserver le premier" if v == "premier"
+            else "Conserver le dernier"),
+        key="base_priorite_concat",
+    )
+    if fichiers_concat:
+        from corpus.fusion_publications import fusionner_publications_csv
+        try:
+            resultat_concat = fusionner_publications_csv(
+                [(f.name, f.getvalue()) for f in fichiers_concat],
+                priorite_concat)
+        except ValueError as erreur:
+            st.error("Fusion impossible : " + str(erreur))
+        else:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Lignes importées", resultat_concat["total_initial"])
+            c2.metric("Vidéos distinctes", resultat_concat["nombre_unique"])
+            c3.metric("Doublons écartés", resultat_concat["doublons"])
+            if resultat_concat["doublons_divergents"]:
+                st.warning(
+                    f"{resultat_concat['doublons_divergents']} doublon(s) "
+                    "présentent des valeurs différentes : la priorité "
+                    "sélectionnée détermine les valeurs conservées."
+                )
+            st.download_button(
+                "Télécharger le CSV concaténé",
+                resultat_concat["csv"],
+                file_name="scraptiktok_publications_concatenees.csv",
+                mime="text/csv",
+                key="base_telecharger_concat",
+                use_container_width=True,
+            )
+            st.caption(
+                f"{len(resultat_concat['colonnes'])} colonnes conservées, "
+                "dont le nom des fichiers d'origine."
+            )
+            st.dataframe(
+                resultat_concat["lignes"][:100],
+                hide_index=True, use_container_width=True,
+            )
+
+
 with onglet_aide:
     st.subheader("Comment utiliser l’application")
     st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
