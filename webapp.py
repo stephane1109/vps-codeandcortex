@@ -43,6 +43,18 @@ COOKIE = "scraptiktok_session"
 HISTORIQUE_COOKIE = "scraptiktok_historique"
 
 
+def texte_commentaires_collectes(job):
+    """Restituer les commentaires dans le ZIP et dans le TXT individuel."""
+    with job.lock:
+        retenues = {str(p["id"]) for p in job.records}
+        blocs = [
+            f"*id_{c['publication_id']}\n@{c.get('auteur') or 'inconnu'}\n{c['texte']}"
+            for c in job.commentaires
+            if str(c["publication_id"]) in retenues
+        ]
+    return "\n\n".join(blocs) + ("\n" if blocs else "")
+
+
 class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
@@ -2827,17 +2839,25 @@ def create_app(manager=None):
             raise HTTPException(409, "L’archive enrichie n’est pas encore disponible.")
         from corpus.export_zip import archive_avec_texte
         contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
+        # Inclure les fichiers auparavant disponibles via des boutons séparés.
+        ajouts = {}
+        if job.commentaires:
+            ajouts["commentaires.txt"] = texte_commentaires_collectes(job).encode("utf-8")
+        diagnostic = job.snapshot().get("debug_collecte")
+        if diagnostic:
+            ajouts["diagnostic_collecte.json"] = json.dumps(
+                diagnostic, ensure_ascii=False, indent=2).encode("utf-8")
         if job.historique:
             from stockage.historique_analyses import exporter_zip
             # Le téléchargement de l'historique respecte le même choix que le TXT.
             with exporter_zip(job.directory) as source:
-                flux = archive_avec_texte(source, contenu)
-            nom = f"scraptiktok_{job.id}_historique.zip"
+                flux = archive_avec_texte(source, contenu, ajouts)
         else:
-            flux = archive_avec_texte(job.directory / "archive.zip", contenu)
-            nom = f"scraptiktok_{job.id}.zip"
+            flux = archive_avec_texte(job.directory / "archive.zip", contenu, ajouts)
+        # Le nom existant de la collecte sert aussi de nom de ZIP.
+        nom = Path(job.settings.filename).stem + ".zip"
         return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{nom}"'},
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(nom)}"},
             background=BackgroundTask(flux.close))
 
     @app.get("/api/jobs/{job_id}/engagement.csv")
@@ -2906,11 +2926,7 @@ def create_app(manager=None):
     @app.get("/api/jobs/{job_id}/commentaires.txt")
     def telecharger_commentaires(job_id: str, request: Request):
         job = manager.get(owner(request), job_id)
-        with job.lock:
-            retenues = {p["id"]: p for p in job.records}
-            blocs = [f"*id_{c['publication_id']}\n@{c.get('auteur') or 'inconnu'}\n{c['texte']}"
-                for c in job.commentaires if c["publication_id"] in retenues]
-        return Response("\n\n".join(blocs) + ("\n" if blocs else ""), media_type="text/plain",
+        return Response(texte_commentaires_collectes(job), media_type="text/plain",
             headers={"Content-Disposition": 'attachment; filename="commentaires.txt"'})
 
     @app.get("/api/historique")
