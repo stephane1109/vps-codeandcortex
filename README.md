@@ -965,10 +965,16 @@ L'onglet **Base de données** rassemble désormais trois opérations distinctes.
 **1. PostgreSQL — archives durables.** Les collectes ponctuelles sont
 archivées automatiquement. Les collectes Research n'apparaissent dans
 PostgreSQL qu'après synchronisation depuis SQLite. Choisir une collecte,
-puis sélectionner **Télécharger cette collecte (ZIP)**. L'archive contient
-`publications.csv`, `publications.json`, `commentaires.csv`,
-`commentaires.json` et `informations_export.json`. Les quatre anciens
-téléchargements individuels restent disponibles dans un expandeur.
+puis sélectionner **Télécharger cette collecte (ZIP)**. Un seul fichier
+regroupe les tableaux et variables des publications et commentaires en
+CSV et JSON, les métriques (`engagement.csv`, `ratios_engagement.csv`,
+`comparaison_medias.csv`), les corpus TXT, une version tabulaire SQLite
+et les résultats annexes encore récupérables dans l'historique. Les MP4
+originaux sont inclus uniquement si l'archive de la session est encore
+accessible et s'ils ont réellement été téléchargés. L'archive conserve
+également `informations_export.json` qui décrit les fichiers présents.
+Les quatre boutons de téléchargement séparé ont été retirés de
+l'interface, mais leurs API restent disponibles pour compatibilité.
 
 ScrapTikTok ne supprime **pas automatiquement** les collectes PostgreSQL.
 Leur conservation dépend de la persistance du serveur PostgreSQL, des
