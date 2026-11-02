@@ -5,6 +5,7 @@ L'export conserve les champs existants et inclut les variables de la section
 Les valeurs indisponibles restent vides : aucune donnée n'est inventée.
 """
 import json
+import re
 from collecte.variables_numeriques import indicateurs_numeriques
 from collecte.presse import colonnes_categories_presse
 
@@ -19,6 +20,36 @@ def cellule_csv(valeur):
     return "'" + texte if texte.lstrip().startswith(("=", "+", "-", "@")) else texte
 
 COMPTEURS = ("vues", "likes", "commentaires", "partages", "favoris")
+
+
+def hashtags_pour_csv(publication):
+    """Produire une colonne de hashtags sans dièse sur demande explicite.
+
+    Les données brutes ne sont pas modifiées ; les anciennes publications,
+    sans réglage enregistré, conservent le comportement historique.
+    """
+    if "inclure_hashtags_csv" not in publication:
+        return publication.get("hashtags")
+    if not publication.get("inclure_hashtags_csv"):
+        return ""
+    hashtags = publication.get("hashtags")
+    valeurs = list(hashtags) if isinstance(hashtags, (list, tuple)) else []
+    # Compléter la liste structurée avec les hashtags visibles dans la légende,
+    # sans extraire les fragments d'URL externes.
+    description = publication.get("description") or ""
+    if isinstance(description, str):
+        motif = r"https?://\\S+|#(\\w+)"
+        valeurs.extend(
+            occurrence.group(1) for occurrence in re.finditer(motif, description)
+            if occurrence.group(1))
+    uniques = {}
+    for valeur in valeurs:
+        if not isinstance(valeur, str):
+            continue
+        nom = valeur.strip().lstrip("#").strip()
+        if re.fullmatch(r"\\w+", nom):
+            uniques.setdefault(nom.casefold(), nom)
+    return ", ".join(uniques.values())
 
 # Une structure stable permet de concaténer les CSV de plusieurs collectes.
 # Conserver les noms historiques (id, author, create_time, etc.).
@@ -60,6 +91,7 @@ def ligne_publication_csv(publication):
     """Déplier les valeurs brutes, catégorielles et métadonnées d'une vidéo."""
     ligne = {nom: publication.get(nom) for nom in COLONNES_PUBLICATIONS_CSV}
     ligne.update(colonnes_categories_presse(publication))
+    ligne["hashtags"] = hashtags_pour_csv(publication)
     ligne["id"] = _premiere_valeur(publication, "id", "publication_id")
     ligne["publication_id"] = ligne["id"]
     ligne["author"] = _premiere_valeur(publication, "author", "profil")
