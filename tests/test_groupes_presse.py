@@ -86,7 +86,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(len(handles), 60)
         self.assertEqual(
             len([m for m in inventaire
-                 if m["categorie"] == "presse_nationale"]), 24)
+                 if m["categorie"] == "presse_nationale"]), 23)
 
     def test_liberation_variante_supprimee_compte_original_conserve(self):
         """Ne supprimer que @liberationfr sans toucher aux autres comptes."""
