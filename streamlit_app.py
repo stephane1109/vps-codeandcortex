@@ -799,7 +799,7 @@ with onglet_collecte:
             "chaque recodage ajoute une variable catégorielle en plus de "
             "la valeur numérique réelle, sans la remplacer. Les deux "
             "peuvent figurer dans le TXT. Les valeurs numériques exactes "
-            "restent dans engagement.csv, même non cochées dans le TXT. "
+            "restent dans engagement.csv et publications.csv. "
             "Valeur manquante : classe « indéterminé » (jamais zéro)."
         )
         # Une grille continue supprime les espaces entre les lignes de variables.
@@ -861,7 +861,7 @@ with onglet_collecte:
                     key="txt_classe_" + nom, disabled=occupe,
                     help="Variable catégorielle supplémentaire, en plus de la valeur "
                          "numérique réelle. Les deux peuvent figurer dans le TXT. "
-                         "La valeur exacte reste dans engagement.csv et les "
+                         "La valeur exacte reste dans engagement.csv et publications.csv ; les "
                          "données absentes sont codées « indéterminé ».")
 
         # Cette option collecte les textes des commentaires ; elle est distincte
@@ -925,7 +925,7 @@ with onglet_collecte:
             key="txt_taux_engagement_classe", disabled=occupe,
             help="Variable supplémentaire, en plus du taux numérique réel. "
                  "Les deux peuvent figurer simultanément dans le TXT. "
-                 "La valeur exacte reste dans engagement.csv ; "
+                 "La valeur exacte reste dans engagement.csv et publications.csv ; "
                  "données insuffisantes : *engagement_indetermine.")
 
         st.checkbox(
