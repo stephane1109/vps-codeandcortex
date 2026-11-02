@@ -2410,6 +2410,27 @@ def create_app(manager=None):
         except RuntimeError as erreur:
             raise HTTPException(503, str(erreur)) from None
 
+    @app.get("/api/base-donnees/{type_sauvegarde}/{identifiant}/archive.zip")
+    def telecharger_archive_postgres(
+            type_sauvegarde: str, identifiant: str, request: Request):
+        """Télécharger les publications et commentaires PostgreSQL en un ZIP."""
+        from stockage.export_zip_postgres import construire_archive_postgres
+        try:
+            fichier, nom = construire_archive_postgres(
+                owner_historique(request), type_sauvegarde, identifiant)
+        except ValueError:
+            raise HTTPException(404, "Collecte PostgreSQL introuvable.") from None
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
+        return StreamingResponse(
+            iter(lambda: fichier.read(65536), b""),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(nom)}"
+            },
+            background=BackgroundTask(fichier.close),
+        )
+
     @app.get("/api/base-donnees/{type_sauvegarde}/{identifiant}/{categorie}")
     def consulter_postgres(type_sauvegarde: str, identifiant: str, categorie: str,
                           request: Request, filtre: str = "", limite: int = 100,
@@ -2445,27 +2466,6 @@ def create_app(manager=None):
             media_type=("text/csv; charset=utf-8" if format_ == "csv"
                         else "application/json; charset=utf-8"),
             headers={"Content-Disposition": f'attachment; filename="{nom_fichier}"'})
-
-    @app.get("/api/base-donnees/{type_sauvegarde}/{identifiant}/archive.zip")
-    def telecharger_archive_postgres(
-            type_sauvegarde: str, identifiant: str, request: Request):
-        """Télécharger les publications et commentaires PostgreSQL en un ZIP."""
-        from stockage.export_zip_postgres import construire_archive_postgres
-        try:
-            fichier, nom = construire_archive_postgres(
-                owner_historique(request), type_sauvegarde, identifiant)
-        except ValueError:
-            raise HTTPException(404, "Collecte PostgreSQL introuvable.") from None
-        except RuntimeError as erreur:
-            raise HTTPException(503, str(erreur)) from None
-        return StreamingResponse(
-            iter(lambda: fichier.read(65536), b""),
-            media_type="application/zip",
-            headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(nom)}"
-            },
-            background=BackgroundTask(fichier.close),
-        )
 
     @app.post("/api/base-donnees/{identifiant}/synchroniser")
     def synchroniser_collecte_postgres(identifiant: str, request: Request):
