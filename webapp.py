@@ -1571,6 +1571,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record.update(colonnes_categories_presse(record))
                     from collecte.variables_numeriques import indicateurs_numeriques
                     record.update(indicateurs_numeriques(record))
+                    if job.settings.source_collecte != "presse":
+                        # Requête par hashtags ou profils : mémoriser les
+                        # critères de collecte, et non ceux présents dans la vidéo.
+                        record["hashtags_recherches"] = list(job.settings.hashtags)
                     if job.settings.source_collecte == "presse":
                         # Conserver le filtre demandé et les hashtags réellement rencontrés.
                         recherches = (job.settings.hashtags_presse
