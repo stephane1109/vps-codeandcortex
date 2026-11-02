@@ -1,5 +1,5 @@
 {
-  "version": 17,
+  "version": 18,
   "comptes": [
     {
       "id": "lemonde",
@@ -170,15 +170,6 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@flashinfosoff"
-    },
-    {
-      "id": "lereplay2",
-      "nom": "Le Replay",
-      "compte": "lereplay2",
-      "categorie": "autres_medias",
-      "source": "fourni_par_utilisateur",
-      "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@lereplay2"
     },
     {
       "id": "ladepechedumidi",
