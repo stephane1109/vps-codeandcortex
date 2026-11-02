@@ -51,6 +51,41 @@ def hashtags_pour_csv(publication):
             uniques.setdefault(nom.casefold(), nom)
     return ", ".join(uniques.values())
 
+def hashtags_collecte_pour_csv(publication):
+    """Exporter les hashtags demandés pour la collecte, sans dièse ni liste vide.
+
+    Une vidéo trouvée par compte média sans croisement de hashtag n'a aucun
+    critère de collecte de ce type : cellule vide, jamais « [] ».
+    L'ancien nom interne reste lisible pour les sessions déjà archivées.
+    """
+    valeurs = publication.get("htag_collecte")
+    if valeurs is None:
+        valeurs = publication.get("hashtags_recherches")
+    if valeurs is None or valeurs == "" or valeurs == []:
+        return ""
+    if isinstance(valeurs, str):
+        texte = valeurs.strip()
+        if not texte or texte == "[]":
+            return ""
+        if texte.startswith("[") and texte.endswith("]"):
+            try:
+                valeurs = json.loads(texte)
+            except (ValueError, TypeError):
+                valeurs = [texte]
+        else:
+            valeurs = texte.split(",")
+    if not isinstance(valeurs, (tuple, list, set)):
+        return ""
+    uniques = {}
+    for valeur in valeurs:
+        if not isinstance(valeur, str):
+            continue
+        hashtag = valeur.strip().lstrip("#").strip()
+        if hashtag:
+            uniques.setdefault(hashtag.casefold(), hashtag)
+    return ", ".join(uniques.values())
+
+
 # Une structure stable permet de concaténer les CSV de plusieurs collectes.
 # Conserver les noms historiques (id, author, create_time, etc.).
 COLONNES_PUBLICATIONS_CSV = (
@@ -66,7 +101,7 @@ COLONNES_PUBLICATIONS_CSV = (
     "partages_classe", "favoris_classe",
     "vues_brut", "likes_brut", "commentaires_brut",
     "partages_brut", "favoris_brut",
-    "hashtags", "hashtags_recherches", "hashtags_correspondants",
+    "hashtags", "htag_collecte", "hashtags_correspondants",
     "operateur_hashtags", "media_id", "categorie_media",
     "type_publication", "compte_reposteur", "comptes_reposteurs",
     "auteur_original", "id_video_originale",
@@ -95,6 +130,7 @@ def ligne_publication_csv(publication):
     ligne = {nom: publication.get(nom) for nom in COLONNES_PUBLICATIONS_CSV}
     ligne.update(colonnes_categories_presse(publication))
     ligne["hashtags"] = hashtags_pour_csv(publication)
+    ligne["htag_collecte"] = hashtags_collecte_pour_csv(publication)
     ligne["id"] = _premiere_valeur(publication, "id", "publication_id")
     ligne["publication_id"] = ligne["id"]
     ligne["author"] = _premiere_valeur(publication, "author", "profil")
