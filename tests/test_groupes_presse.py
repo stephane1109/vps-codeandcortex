@@ -86,7 +86,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(len(handles), 61)
         self.assertEqual(
             len([m for m in inventaire
-                 if m["categorie"] == "presse_nationale"]), 28)
+                 if m["categorie"] == "presse_nationale"]), 24)
 
     def test_les_variantes_m6_et_liberation_ne_sont_pas_effacees(self):
         """Deux identifiants distincts ne doivent pas être fusionnés."""
@@ -103,6 +103,26 @@ class TestsGroupesPresse(unittest.TestCase):
             next(m["statut"] for m in inventaire
                  if m["compte"] == "liberationfr"),
             "declare_utilisateur")
+
+    def test_quatre_medias_reclasses_independants(self):
+        """Les quatre comptes changent de groupe sans changer d'identifiant."""
+        inventaire = charger_inventaire()
+        groupes = {media["compte"]: media for media in inventaire}
+        for compte in (
+            "lehuffpostfr", "cquoilinfo", "hugodecrypte", "brutofficiel",
+        ):
+            with self.subTest(compte=compte):
+                self.assertIn(compte, groupes)
+                self.assertEqual(
+                    groupes[compte]["categorie"], "presse_independante")
+                self.assertNotIn("sous_categorie", groupes[compte])
+        self.assertEqual(len(inventaire), 61)
+        self.assertEqual(
+            sum(m["categorie"] == "presse_independante" for m in inventaire),
+            8)
+        self.assertEqual(
+            sum(m["categorie"] == "presse_regionale" for m in inventaire),
+            21)
 
     def test_comptes_sans_profil_distinct_non_ajoutes(self):
         """Ne pas inventer de profil pour les cas particuliers."""
@@ -156,7 +176,9 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertIn('key="tous_medias"', interface)
         self.assertIn('"cocher_categorie_" + categorie', interface)
         self.assertIn('"decocher_categorie_" + categorie', interface)
-        self.assertIn('key=cle, disabled=occupe, on_change=memoriser_medias', interface)
+        self.assertIn('with st.container(gap=None):', interface)
+        self.assertIn('if indice % 2 != numero_colonne:', interface)
+        self.assertIn('on_change=memoriser_medias,', interface)
         self.assertIn('"Chaînes de télévision nationales"', interface)
         self.assertIn('"Presse écrite nationale"', interface)
         self.assertIn('"Autres médias nationaux"', interface)
