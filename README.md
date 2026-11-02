@@ -914,6 +914,25 @@ reliés aux vidéos, pour ne pas dupliquer les publications.
 
 L'export CSV/JSON et les données déjà sauvegardées sont conservés.
 
+### Fichiers publications.csv : variables complètes
+
+Les exports `publications.csv` issus des programmes Research, des
+téléchargements PostgreSQL et des archives ZIP des collectes ponctuelles
+partagent maintenant un schéma commun de 61 colonnes, sans suppression des
+champs historiques. Ce schéma comprend toutes les variables sélectionnables
+dans l'interface : identifiants, dates, profil, `region_code`,
+`is_verified`, abonnés, vues, likes, partages, commentaires, favoris, durée,
+valeurs brutes et catégories, taux d'engagement et classe, hashtags et résumé
+TikTok généré par IA. Les états de récupération et les références MP4 sont
+également conservés lorsqu'ils sont disponibles.
+
+Une case cochée dans l'interface ne garantit pas que TikTok fournisse la
+valeur correspondante : dans ce cas, la cellule CSV reste vide. Les vrais
+zéros sont conservés. La collecte des textes des commentaires reste dans
+`commentaires.csv` pour respecter la relation plusieurs commentaires /
+une publication. Les exports téléchargés après mise à jour utilisent le
+nouveau schéma ; les ZIP anciens déjà téléchargés ne changent pas.
+
 ### Archivage PostgreSQL facultatif
 
 Si une base PostgreSQL est déjà accessible depuis Coolify, définir
