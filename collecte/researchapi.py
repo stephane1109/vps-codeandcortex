@@ -47,7 +47,9 @@ def identifiants_disponibles():
 
 def _requete(url, *, data, headers):
     """POST vers deux URL officielles fixes, sans redirection vers un tiers."""
-    if url not in (URL_TOKEN, _url_videos(), _url_commentaires(), _url_profil()):
+    from .republications_research import url_republications
+    if url not in (URL_TOKEN, _url_videos(), _url_commentaires(),
+                   _url_profil(), url_republications()):
         raise ResearchErreur("Endpoint Research non autorisé.")
     # Budget quotidien partagé par les collectes Research de cette instance.
     # Les jetons OAuth ne comptent pas parmi les recherches de données.
