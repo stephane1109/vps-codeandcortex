@@ -1571,10 +1571,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             # Compter sur la même légende et dans la même période que le filtre.
                             with job.lock:
                                 for hashtag in job.bilan_hashtags:
-                                    if correspondance_hashtag(
+                                    correspondance = (
+                                        hashtag in record.get("hashtags_correspondants", [])
+                                        if job.settings.source_collecte == "presse" else
+                                        correspondance_hashtag(
                                             record["description"], hashtag,
                                             rechercher_dans_texte=job.settings.rechercher_dans_texte,
-                                            variantes_accents=job.settings.variantes_accents):
+                                            variantes_accents=job.settings.variantes_accents))
+                                    if correspondance:
                                         job.bilan_hashtags[hashtag] += 1
                                 if matches:
                                     job.correspondances_hashtags += 1
