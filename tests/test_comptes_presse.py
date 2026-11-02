@@ -18,6 +18,8 @@ class TestsComptes(unittest.TestCase):
         requete = StartRequest(hashtag="test", source_collecte="presse", medias=[m["id"] for m in inventaire])
         self.assertEqual(len(requete.sources), len(inventaire))
         self.assertEqual(selectionner_medias(["lemonde"])[0]["compte"], "lemondefr")
+        self.assertEqual(selectionner_medias(["lepoint_fr"])[0]["compte"], "lepointfr")
+        self.assertEqual(selectionner_medias(["lepoint_fr"])[0]["url"], "https://www.tiktok.com/@lepointfr")
         self.assertEqual(selectionner_medias(["marianne_lemag"])[0]["compte"], "mariannelemag")
         self.assertEqual(selectionner_medias(["marianne_lemag"])[0]["url"], "https://www.tiktok.com/@mariannelemag")
         with self.assertRaises(ValueError): selectionner_medias(["inconnu"])
