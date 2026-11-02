@@ -323,12 +323,12 @@ onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_sociometrie, on
 with onglet_collecte:
     api_tiktok_suspendue = False
     st.text_input(
-        "Nom de la sauvegarde *", key="nom_sauvegarde",
+        "Nom de la collecte *", key="nom_sauvegarde",
         placeholder="Ex. : Manifestations_lyceennes_2026",
         max_chars=120, disabled=occupe,
         help="Obligatoire pour toutes les collectes, y compris les tests "
              "sur 10 publications. Le nom accompagne les données sauvegardées "
-             "et les exports. Il n'efface pas les anciennes collectes."
+             "et devient le nom du ZIP de résultats. Il n'efface pas les anciennes collectes."
     )
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
@@ -1144,14 +1144,13 @@ with onglet_collecte:
                                 st.error(str(erreur))
                             else:
                                 st.rerun()
-                    for format_, nom in (
-                            ("sqlite3", "Base SQLite"), ("zip", "Archive ZIP"),
-                            ("csv", "Publications CSV"),
-                            ("commentaires.csv", "Commentaires CSV"),
-                            ("json", "Données JSON"), ("txt", "Corpus TXT")):
-                        st.link_button(
-                            nom,
-                            f"/api/research/plans/{identifiant}/export/{format_}")
+                    st.link_button(
+                        "Télécharger les résultats",
+                        f"/api/research/plans/{identifiant}/export/zip",
+                        use_container_width=True,
+                        help="ZIP nommé comme la collecte : publications et "
+                             "commentaires CSV, données JSON, corpus TXT, "
+                             "base SQLite et journal Research.")
         afficher_plans_research()
     if collecte:
         st.divider()
@@ -1222,10 +1221,8 @@ with onglet_collecte:
                     if cause: st.warning(cause['explication'])
                     elif actuel.get('status')=='stopped': st.warning('Cause non enregistrée pour cette ancienne collecte.')
                     st.json(diagnostic,expanded=True)
-                    st.download_button('Télécharger le diagnostic debug (JSON)',
-                        json.dumps(diagnostic,ensure_ascii=False,indent=2),
-                        file_name='diagnostic_collecte.json',mime='application/json',
-                        key='telecharger_debug_collecte')
+                    st.caption(
+                        "Ce diagnostic est inclus dans le ZIP des résultats.")
                 else: st.info('Diagnostic indisponible pour cette ancienne session. Relancez une collecte après le déploiement.')
             compteurs = actuel.get("compteurs_collecte")
             if compteurs:
@@ -1645,7 +1642,7 @@ with onglet_collecte:
             if actuel["can_download"] or actuel["archive_prete"]:
                 sans_arobase = st.session_state.get("export_profil_sans_arobase", True)
                 choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
-            st.caption("Nom de la sauvegarde : " + (actuel.get("nom_sauvegarde") or "Collecte sans nom (ancienne session)"))
+            st.caption("Nom de la collecte : " + (actuel.get("nom_sauvegarde") or "Collecte sans nom (ancienne session)"))
             if actuel.get("busy"):
                 if actuel.get("sauvegarde_postgres") == "synchronise":
                     st.caption(
@@ -1669,13 +1666,17 @@ with onglet_collecte:
                         else:
                             st.success("La sauvegarde a été enregistrée dans PostgreSQL.")
                             st.rerun()
-            liens = st.columns(2)
-            if actuel["can_download"]:
-                liens[0].link_button("Télécharger le TXT", f"/api/jobs/{actuel['id']}/download{choix_export}")
-                liens[1].link_button("Télécharger les compteurs CSV", f"/api/jobs/{actuel['id']}/engagement.csv")
-            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]): liens[0].link_button("Télécharger l’archive ZIP", f"/api/jobs/{actuel['id']}/archive{choix_export}")
-            if actuel.get("commentaires_collectes"):
-                liens[1].link_button("Télécharger les commentaires TXT", f"/api/jobs/{actuel['id']}/commentaires.txt")
+            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]):
+                st.link_button(
+                    "Télécharger les résultats",
+                    f"/api/jobs/{actuel['id']}/archive{choix_export}",
+                    use_container_width=True,
+                    help="Un ZIP au nom de la collecte, comprenant tous les "
+                         "fichiers TXT, CSV, JSON, commentaires, diagnostic et "
+                         "MP4 accessibles lorsque cette option a été activée.")
+            elif actuel["can_download"]:
+                st.caption(
+                    "Le ZIP complet sera disponible à la fin de la collecte.")
         afficher_resultats()
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
