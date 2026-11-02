@@ -492,6 +492,11 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
                 classes.append("*" + classer_taux_engagement(taux))
         if classes:
             entete = " ".join(classes) + (" " + entete if entete else "")
+    # La catégorie du média s'ajoute au profil sans dépendre des autres cases.
+    from collecte.presse import code_presse_publication
+    code_presse = code_presse_publication(publication)
+    if code_presse:
+        entete = (entete + " " if entete else "") + "*" + code_presse
     return entete + "\n" if entete else ""
 
 
@@ -568,7 +573,10 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             prefix = entete_publication(
                 record, (), supprimer_arobase_profil, **options_classes)
         else:
-            prefix = ""
+            # Même sans métadonnées sélectionnées, le code du média est conservé.
+            from collecte.presse import code_presse_publication
+            prefix = (entete_publication(record, (), supprimer_arobase_profil)
+                      if code_presse_publication(record) else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
@@ -1469,6 +1477,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 else ("indisponible" if profil["statut"] == "ok"
                                       else profil["statut"]))
                     # Les classes et le taux sont calculés même si le TXT n'en a pas besoin.
+                    # Catégorie déterminée par l'auteur lu, y compris depuis un hashtag.
+                    # Conserver les quatre indicatrices dans les données archivées.
+                    from collecte.presse import (categorie_presse_publication,
+                                                 colonnes_categories_presse)
+                    categorie_compte = categorie_presse_publication(record)
+                    if categorie_compte and not record.get("categorie_media"):
+                        record["categorie_media"] = categorie_compte
+                    record.update(colonnes_categories_presse(record))
                     from collecte.variables_numeriques import indicateurs_numeriques
                     record.update(indicateurs_numeriques(record))
                     if job.settings.telecharger_mp4:
