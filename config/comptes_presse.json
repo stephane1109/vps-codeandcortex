@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "comptes": [
     {
       "id": "lemonde",
@@ -8,7 +8,8 @@
       "categorie": "presse_nationale",
       "source": "https://www.lemonde.fr/le-monde-et-vous/article/2023/10/29/mille-et-une-manieres-de-profiter-du-monde_6197214_6065879.html",
       "statut": "reference_editoriale",
-      "consulte_le": "2026-10-09"
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "franceinfo",
@@ -17,7 +18,8 @@
       "categorie": "presse_nationale",
       "source": "https://www.radiofrance.com/presse/franceinfo-les-coulisses-de-linfo?page=1",
       "statut": "reference_editoriale",
-      "consulte_le": "2026-10-09"
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "television_nationale"
     },
     {
       "id": "leparisien",
@@ -35,7 +37,8 @@
       "categorie": "presse_nationale",
       "source": "https://www.20minutes.fr/",
       "statut": "reference_editoriale",
-      "consulte_le": "2026-10-09"
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "brut",
@@ -53,7 +56,8 @@
       "categorie": "presse_nationale",
       "source": "https://www.huffingtonpost.fr/",
       "statut": "reference_editoriale",
-      "consulte_le": "2026-10-09"
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "parismatch",
@@ -62,7 +66,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@parismatch"
+      "url": "https://www.tiktok.com/@parismatch",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "cquoilinfo",
@@ -71,7 +76,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@cquoilinfo"
+      "url": "https://www.tiktok.com/@cquoilinfo",
+      "sous_categorie": "television_nationale"
     },
     {
       "id": "m6info_",
@@ -80,7 +86,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@m6info_"
+      "url": "https://www.tiktok.com/@m6info_",
+      "sous_categorie": "television_nationale"
     },
     {
       "id": "hugodecrypte",
@@ -107,7 +114,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@bfmtv"
+      "url": "https://www.tiktok.com/@bfmtv",
+      "sous_categorie": "television_nationale"
     },
     {
       "id": "tf1info",
@@ -116,7 +124,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@tf1info"
+      "url": "https://www.tiktok.com/@tf1info",
+      "sous_categorie": "television_nationale"
     },
     {
       "id": "le_progres_",
@@ -152,7 +161,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@le20hfrancetelevisions"
+      "url": "https://www.tiktok.com/@le20hfrancetelevisions",
+      "sous_categorie": "television_nationale"
     },
     {
       "id": "flashinfosoff",
@@ -188,7 +198,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@rtl.officiel"
+      "url": "https://www.tiktok.com/@rtl.officiel",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "streetpress",
@@ -287,7 +298,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@lefigaro"
+      "url": "https://www.tiktok.com/@lefigaro",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "valeursactuelles",
@@ -296,7 +308,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@valeursactuelles"
+      "url": "https://www.tiktok.com/@valeursactuelles",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "liberation_fr",
@@ -305,7 +318,8 @@
       "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@liberation.fr"
+      "url": "https://www.tiktok.com/@liberation.fr",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "loopsider",
@@ -442,6 +456,130 @@
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lalsacefr",
       "note": "Compte L'Alsace communiqué pour DNA ; l'identité avec Dernières Nouvelles d'Alsace n'est pas établie."
+    },
+    {
+      "id": "francetvpolitique",
+      "nom": "France Télévisions — Politique",
+      "compte": "francetvpolitique",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@francetvpolitique"
+    },
+    {
+      "id": "france_tv",
+      "nom": "France Télévisions — france.tv",
+      "compte": "france.tv",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "https://www.francetvpro.fr/contenu-de-presse/2341672",
+      "statut": "reference_editoriale",
+      "url": "https://www.tiktok.com/@france.tv"
+    },
+    {
+      "id": "m6info",
+      "nom": "M6 Info — variante à vérifier",
+      "compte": "m6info",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@m6info",
+      "note": "@m6info_ est indiqué comme compte TikTok dans une publication officielle M6 Info ; ne pas confondre les deux identifiants."
+    },
+    {
+      "id": "lci",
+      "nom": "LCI",
+      "compte": "lci",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lci"
+    },
+    {
+      "id": "cnewsofficiel",
+      "nom": "CNews — identifiant à vérifier",
+      "compte": "cnewsofficiel",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@cnewsofficiel",
+      "note": "L'identifiant peut correspondre à une autre plateforme ; propriété TikTok non vérifiée."
+    },
+    {
+      "id": "artefr",
+      "nom": "Arte",
+      "compte": "artefr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@artefr"
+    },
+    {
+      "id": "liberationfr",
+      "nom": "Libération — variante à vérifier",
+      "compte": "liberationfr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@liberationfr",
+      "note": "Identifiant communiqué avec une URL TikTok pointant vers Nice-Matin. Ne pas confondre avec @liberation.fr, conservé."
+    },
+    {
+      "id": "lequipe",
+      "nom": "L'Équipe",
+      "compte": "lequipe",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lequipe"
+    },
+    {
+      "id": "lesechos",
+      "nom": "Les Échos",
+      "compte": "lesechos",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lesechos"
+    },
+    {
+      "id": "lobs",
+      "nom": "L'Obs",
+      "compte": "lobs",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lobs",
+      "note": "Lien fourni vers @bfmtv : le compte TikTok reste à vérifier."
+    },
+    {
+      "id": "lepoint_fr",
+      "nom": "Le Point",
+      "compte": "lepoint.fr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lepoint.fr"
+    },
+    {
+      "id": "marianne_lemag",
+      "nom": "Marianne",
+      "compte": "marianne.lemag",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@marianne.lemag"
     }
   ]
 }
