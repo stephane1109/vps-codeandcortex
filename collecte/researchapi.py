@@ -211,29 +211,36 @@ def _fiche(video, compte):
 def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin=None,
                                     check=None, progress=None, requete=_requete,
                                     jeton=None, pause=time.sleep, aujourd_hui=None,
-                                    credentiels=None, hashtag=None, exclusions=()):
-    """Recherche par compte ou hashtag avec NOT et pagination."""
+                                    credentiels=None, hashtag=None, exclusions=(),
+                                    hashtags=None, operateur="AND"):
+    """Recherche par compte et liste de hashtags en ET/OU, avec NOT et pagination."""
     compte = normaliser_compte(compte) if compte is not None else None
-    if hashtag is not None:
-        from scraptiktok import normalize_hashtag
-        hashtag = normalize_hashtag(hashtag)
-    if compte is None and hashtag is None:
-        raise ResearchErreur("Research API : renseigner un compte ou un hashtag.")
     from .selection_hashtags import normaliser_liste_hashtags
+    liste_hashtags = normaliser_liste_hashtags(
+        list(hashtags) if hashtags else [hashtag] if hashtag else [])
+    if operateur not in ("AND", "OR"):
+        raise ResearchErreur("Research API : opérateur de hashtags inconnu.")
+    if compte is None and not liste_hashtags:
+        raise ResearchErreur("Research API : renseigner un compte ou un hashtag.")
     from .exclusion_hashtags import hashtags_a_exclure
     hashtags_exclus = normaliser_liste_hashtags(exclusions)
-    if hashtag and hashtag.casefold() in {nom.casefold() for nom in hashtags_exclus}:
+    if {nom.casefold() for nom in liste_hashtags}.intersection(
+            nom.casefold() for nom in hashtags_exclus):
         raise ResearchErreur("Un hashtag recherché ne peut pas être exclu.")
     verifier = check or (lambda: None)
     # La collecte automatique n’impose aucun plafond de publications local.
     automatique = limite is None
     if not automatique:
         limite = max(1, min(int(limite), 1000))
+    libelle_tags = (" OU " if operateur == "OR" else " ET ").join(
+        "#" + nom for nom in liste_hashtags)
+    libelle = (f"@{compte} ET ({libelle_tags})" if compte and len(liste_hashtags) > 1 else
+               f"@{compte} ET {libelle_tags}" if compte and liste_hashtags else
+               libelle_tags if liste_hashtags else f"@{compte}")
     rapport.update(compte_attendu=compte, navigation_publications="research_officielle",
-                   requete_recherche=(
-                       (f"@{compte} ET #{hashtag}" if compte and hashtag else
-                        f"#{hashtag}" if hashtag else f"@{compte}")
-                       + " : Research API officielle"),
+                   requete_recherche=libelle + " : Research API officielle",
+                   hashtags_recherches=list(liste_hashtags),
+                   operateur_hashtags=operateur,
                    discovered_urls=[], metadonnees_api={}, pages_research=0,
                    requetes_tentees=0, candidats_examines=0, auteurs_ecartes=0,
                    collecte_partielle=True, exhaustif=False,
@@ -258,9 +265,17 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             if compte is not None:
                 conditions.append({"field_name": "username", "operation": "EQ",
                                    "field_values": [compte]})
-            if hashtag is not None:
-                conditions.append({"field_name": "hashtag_name", "operation": "EQ",
-                                   "field_values": [hashtag]})
+            if liste_hashtags:
+                if operateur == "OR" and len(liste_hashtags) > 1:
+                    # IN produit le groupe (hashtag A OU hashtag B) conjoint
+                    # à username, sans ambiguïté entre les opérateurs de l'API.
+                    conditions.append({"field_name": "hashtag_name",
+                                       "operation": "IN",
+                                       "field_values": list(liste_hashtags)})
+                else:
+                    conditions.extend(
+                        {"field_name": "hashtag_name", "operation": "EQ",
+                         "field_values": [nom]} for nom in liste_hashtags)
             requete_corps = {
                 "query": {"and": conditions},
                 "start_date": borne_debut, "end_date": borne_fin,
@@ -301,9 +316,15 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     # Défense locale si l'API renvoie malgré tout un hashtag exclu.
                     rapport["exclus_hashtags_api"] += 1
                     continue
-                if fiche and (not hashtag or any(
-                        str(tag).lstrip("#").casefold() == hashtag.casefold()
-                        for tag in fiche.get("hashtags", []))):
+                hashtags_observes = (
+                    {str(tag).lstrip("#").casefold() for tag in fiche.get("hashtags", [])}
+                    if fiche else set())
+                concordances = [
+                    nom.casefold() in hashtags_observes for nom in liste_hashtags
+                ]
+                valide = (all(concordances) if operateur == "AND"
+                          else any(concordances)) if concordances else True
+                if fiche and valide:
                     contenus[identifiant] = fiche
                 else:
                     rapport["auteurs_ecartes"] += 1
