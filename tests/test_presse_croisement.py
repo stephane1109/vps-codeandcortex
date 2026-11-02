@@ -60,6 +60,38 @@ class CroisementPresseTests(unittest.TestCase):
         self.assertFalse(autres.croiser_hashtag_presse)
         self.assertTrue(web.matches_hashtags("#mobilisation", autres))
 
+    def test_plusieurs_hashtags_et_ou_validation_et_compatibilite(self):
+        """Une liste dédoublonnée accepte deux opérateurs sans changer les anciens appels."""
+        criteres = ["#manifestation", "#blocage", "#MANIFESTATION"]
+        commun = dict(source_collecte="presse", medias=["lemonde"],
+                      croiser_hashtag_presse=True, hashtags_presse=criteres)
+        disjonction = web.StartRequest(**commun, operator_presse="OR")
+        conjonction = web.StartRequest(**commun, operator_presse="AND")
+        self.assertEqual(disjonction.hashtags_presse, ["manifestation", "blocage"])
+        self.assertEqual(disjonction.hashtag_presse, "manifestation")
+        self.assertTrue(web.matches_hashtags("Une #manifestation", disjonction))
+        self.assertTrue(web.matches_hashtags("Un #blocage", disjonction))
+        self.assertFalse(web.matches_hashtags("Aucune étiquette", disjonction))
+        self.assertFalse(web.matches_hashtags("Une #manifestations", disjonction))
+        self.assertFalse(web.matches_hashtags("Une #manifestation", conjonction))
+        self.assertTrue(web.matches_hashtags("Une #manifestation et un #blocage",
+                                             conjonction))
+        self.assertTrue(web.matches_hashtags(
+            "Sans étiquette dans la légende", disjonction,
+            hashtags_observes=["blocage"]))
+        self.assertEqual(
+            web.hashtags_correspondants_presse(
+                "Une #manifestation et un #blocage", disjonction),
+            ["manifestation", "blocage"])
+        self.assertIn("OU", disjonction.libelle)
+        self.assertIn("_OU_", disjonction.filename)
+        self.assertIn("_ET_", conjonction.filename)
+        with self.assertRaises(ValueError):
+            web.StartRequest(**{**commun, "hashtags_presse": [
+                "tag" + str(indice) for indice in range(11)]))
+        with self.assertRaises(ValueError):
+            web.StartRequest(**{**commun, "hashtags_exclus": ["blocage"]})
+
     def test_les_medias_sont_filtres_apres_decouverte_et_compteurs_corrects(self):
         with tempfile.TemporaryDirectory() as dossier:
             reglages = web.StartRequest(source_collecte="presse",
@@ -128,10 +160,12 @@ class CroisementPresseTests(unittest.TestCase):
         interface = (Path(__file__).resolve().parents[1] /
                      "streamlit_app.py").read_text(encoding="utf-8")
         pos_comptes = interface.index('st.write("Choisir les médias à collecter")')
-        pos_selection = interface.index('selection = [m for m in medias', pos_comptes)
-        pos_croisement = interface.index('st.checkbox("Croisement avec un hashtag"', pos_selection)
+        pos_selection = interface.index('st.session_state["medias"] = selection', pos_comptes)
+        pos_croisement = interface.index('st.checkbox("Croisement avec des hashtags"', pos_selection)
         pos_infos = interface.index('informations_presse = []', pos_croisement)
         self.assertLess(pos_selection, pos_croisement)
+        self.assertIn('"Hashtags du croisement (1 à 10)"', interface)
+        self.assertIn('"Combiner les hashtags de presse"', interface)
         self.assertLess(pos_croisement, pos_infos)
         for moteur in ("api", "navigateur", "gallerydl", "research", "tikhub"):
             if moteur == "research":
