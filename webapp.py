@@ -2761,9 +2761,8 @@ def create_app(manager=None):
                 raise HTTPException(404, "Aucun tableau d'analyse disponible pour cette collecte.")
             texte=fichier.read_text(encoding="utf-8")
         return Response(texte,media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition":
-                     entete_telechargement(nom_fichier_telechargement(
-                         job.settings.nom_sauvegarde, "tableau_complet", "csv"))})
+            headers=entete_telechargement(nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, "tableau_complet", "csv")))
 
     @app.post("/api/jobs/{job_id}/desordre/sauvegarder")
     def enregistrer_analyse_desordre(job_id: str, request: Request):
