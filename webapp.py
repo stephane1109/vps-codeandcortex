@@ -290,7 +290,9 @@ class StartRequest(BaseModel):
 
     @property
     def enrichie(self):
-        return self.enrichir or self.source_collecte != "hashtags" or self.collecter_commentaires or self.telecharger_mp4
+        return (self.enrichir or self.source_collecte != "hashtags"
+                or self.collecter_commentaires or self.telecharger_mp4
+                or self.filtrer_texte_ia_tiktok)
 
     @property
     def libelle(self):
@@ -469,7 +471,7 @@ def texte_ia_tiktok_exploitable(publication):
         return False
     if publication.get("statut_resume_ia") in ("erreur_lecture", "non_trouve", "desactive", "absent"):
         return False
-    nettoyer = lambda texte: re.sub(r"\\s+", " ", str(texte or "")).strip().casefold()
+    nettoyer = lambda texte: re.sub(r"\s+", " ", str(texte or "")).strip().casefold()
     return nettoyer(resume) != nettoyer(publication.get("description"))
 
 
@@ -1600,7 +1602,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         if job.settings.enrichie:
                             media = medias_par_compte.get(record["author"].lower(), {})
                             record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
-                            job.publications.append(record)
+                            if not job.settings.filtrer_texte_ia_tiktok:
+                                job.publications.append(record)
                         if str(record.get("description") or "").strip():
                             matches = matches_hashtags(
                                 record["description"], job.settings,
@@ -1645,6 +1648,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     record["retenue"] = True
                                     record["motif_non_retenue"] = "retenue"
                                     job.records.append(record)
+                            # Avec le filtre positif IA, tous les exports doivent
+                            # contenir uniquement les publications réellement retenues.
+                            if (record.get("retenue") and job.settings.filtrer_texte_ia_tiktok
+                                    and job.settings.enrichie):
+                                job.publications.append(record)
                             # Les commentaires sont demandés uniquement pour les publications retenues.
                             if record.get("retenue") and job.settings.collecter_commentaires:
                                 try:
@@ -1700,9 +1708,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         raise
                 job.update(processed=index)
                 job.save()
-                if job.base:
+                if job.base and (not job.settings.filtrer_texte_ia_tiktok
+                                 or record.get("retenue")):
                     job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
-                if job.plan_research_id and job.publications:
+                if (job.plan_research_id and job.publications
+                        and (not job.settings.filtrer_texte_ia_tiktok
+                             or record.get("retenue"))):
                     # Écriture permanente au fil de l'eau, indépendante de
                     # l'expiration des fichiers temporaires de collecte.
                     from stockage.collectes_research import enregistrer_partiel
