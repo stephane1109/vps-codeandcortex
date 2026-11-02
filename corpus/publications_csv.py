@@ -4,7 +4,18 @@ L'export conserve les champs existants et inclut les variables de la section
 « Variables à inclure avant chaque post dans le TXT », avec leurs recodages.
 Les valeurs indisponibles restent vides : aucune donnée n'est inventée.
 """
+import json
 from collecte.variables_numeriques import indicateurs_numeriques
+
+
+def cellule_csv(valeur):
+    """Protéger les cellules CSV sans perdre les listes ni les vrais zéros."""
+    texte = (
+        json.dumps(valeur, ensure_ascii=False, allow_nan=False)
+        if isinstance(valeur, (list, dict)) else
+        "" if valeur is None else str(valeur)
+    )
+    return "'" + texte if texte.lstrip().startswith(("=", "+", "-", "@")) else texte
 
 COMPTEURS = ("vues", "likes", "commentaires", "partages", "favoris")
 
