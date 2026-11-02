@@ -84,7 +84,7 @@ class TestsRepublicationsResearch(unittest.TestCase):
             debut="2025-10-01", fin="2025-10-31",
             accepter=lambda f: "lyceens" in f["hashtags"],
             requete=lambda url, **kwargs: {"data": {
-                "reposted_videos": [video(1), video(2, texte="Sans hashtag")],
+                "reposted_videos": [video(1), {**video(2, texte="Sans hashtag"), "hashtag_names": []}],
                 "has_more": True, "cursor": 0}},
             rapport=diagnostic)
         self.assertEqual(len(resultats), 1)
@@ -116,7 +116,7 @@ class TestsRepublicationsResearch(unittest.TestCase):
         repub_identique = _fiche(video_originale, None)
         repub_externe = _fiche(video(18, auteur="autreauteur"), None)
 
-        def decouvrir(source, rapport, **kwargs):
+        def decouvrir(compte, limite, rapport, **kwargs):
             rapport.update(
                 discovered_urls=[fiche["url"]],
                 metadonnees_api={fiche["id"]: fiche},
