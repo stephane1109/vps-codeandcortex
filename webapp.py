@@ -2541,6 +2541,7 @@ class Manager:
             if isinstance(journal_archive, dict):
                 job.journal = list(journal_archive.get("evenements") or [])
             job.processed=int(manifeste.get("traites",0))
+            job.source_en_cours_id = manifeste.get("source_en_cours_id")
             job.busy=False
             job.status=ligne["statut"]
             job.archive_prete=True
