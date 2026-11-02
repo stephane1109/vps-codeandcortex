@@ -62,7 +62,10 @@ class TestsNombreAbonnesResearch(unittest.TestCase):
             texte, False, variables_txt=["profil", "id"],
             follower_count_illustratif=True)
         self.assertTrue(sortie.startswith(
-            "*follower_count_25000 *profil_@lemondefr *id_123\n"))
+            "*follower_count_25000 *profil_@lemondefr *id_123"))
+        # Le codage de catégorie des médias est un champ illustratif
+        # indépendant, ajouté automatiquement depuis l'inventaire.
+        self.assertIn("*presse_nationale", sortie.splitlines()[0])
         sans = text_export(texte, False, variables_txt=["profil", "id"])
         self.assertNotIn("follower_count", sans)
         texte[0]["follower_count"] = None
