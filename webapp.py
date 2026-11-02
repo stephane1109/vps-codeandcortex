@@ -2433,8 +2433,12 @@ def create_app(manager=None):
                 raise HTTPException(
                     409, "Arrêtez la collecte avant de supprimer son archive.")
         elif type_sauvegarde == "research":
-            from stockage.collectes_research import detail_plan
-            programme = detail_plan(manager.data_dir, identifiant, utilisateur)
+            # Une copie PostgreSQL peut subsister alors que SQLite a expiré :
+            # ne jamais créer une nouvelle base SQLite en contrôlant son état.
+            programme = None
+            if (manager.data_dir / "collectes_research.sqlite3").is_file():
+                from stockage.collectes_research import detail_plan
+                programme = detail_plan(manager.data_dir, identifiant, utilisateur)
             if programme and programme.get("statut") in ("programme", "en_cours"):
                 raise HTTPException(
                     409, "Arrêtez le programme Research avant de supprimer "
