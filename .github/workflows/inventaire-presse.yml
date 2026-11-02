@@ -6,6 +6,8 @@ on:
     paths:
       - "config/comptes_presse.json"
       - "tests/test_groupes_presse.py"
+      - "tests/test_presse_research_sans_limite_medias.py"
+      - "webapp.py"
       - "tests/test_categories_presse_illustratives.py"
       - "streamlit_app.py"
       - "corpus/publications_csv.py"
@@ -27,8 +29,10 @@ jobs:
       - name: Vérifier le JSON et la syntaxe Python
         run: |
           python -m json.tool config/comptes_presse.json >/dev/null
-          python -m compileall -q collecte/presse.py tests/test_groupes_presse.py
+          python -m compileall -q collecte/presse.py webapp.py streamlit_app.py tests/test_groupes_presse.py tests/test_presse_research_sans_limite_medias.py
       - name: Tester les regroupements des comptes Presse
         run: python -m unittest discover -s tests -p test_groupes_presse.py -v
+      - name: Tester les 93 médias et l'absence de plafond Research
+        run: python -m unittest discover -s tests -p test_presse_research_sans_limite_medias.py -v
       - name: Tester les catégories dans les exports
         run: python -m unittest discover -s tests -p test_categories_presse_illustratives.py -v
