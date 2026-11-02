@@ -1119,7 +1119,7 @@ with onglet_collecte:
 
             classes_numeriques = {
                 "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
-                "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; 1 000–9 999 ; ≥10 000"),
                 "commentaires": ("Commentaires", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
                 "partages": ("Partages", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
                 "favoris": ("Favoris", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
