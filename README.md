@@ -492,13 +492,20 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient 29 comptes sélectionnables. Les six
-références éditoriales initiales sont conservées ; les ajouts fournis par l’utilisateur
-sont identifiés comme tels, sans présumer de leur propriété éditoriale ni de leur
-catégorie sociologique. Les catégories non vérifiées restent indéterminées. Les
-identifiants sont conservés exactement, notamment leurs traits de soulignement.
-Une collecte peut sélectionner jusqu’à 29 médias ; les limites par source et les
-traitements séquentiels restent inchangés.
+L’inventaire `config/comptes_presse.json` contient désormais 61 comptes
+sélectionnables, sans suppression des 49 entrées précédentes. L'interface
+regroupe les comptes en presse nationale (28, avec deux sous-groupes TV
+et presse écrite), presse régionale (21), presse indépendante (4) et autres
+médias ou statut à confirmer (8). Les six références éditoriales initiales
+et les identifiants historiques sont préservés. Les comptes fournis par
+l’utilisateur sont signalés comme tels lorsque leur propriété sur TikTok
+n’a pas été vérifiée. Les identifiants différents sont conservés comme
+entrées distinctes : `@m6info_` et `@m6info`, `@liberation.fr` et
+`@liberationfr`. Les liens fournis pour `@m6info`, `@liberationfr`
+et `@lobs` pointaient vers d’autres comptes : leur propriété doit être
+vérifiée avant exploitation scientifique. Une collecte peut sélectionner
+jusqu'au nombre de médias présents dans l’inventaire ; les autres bornes
+techniques et le traitement séquentiel restent inchangés.
 
 En **mode API Presse**, la légende et les compteurs déjà présents dans la
 réponse `itemList` de chaque média sont directement repris dans le corpus,
