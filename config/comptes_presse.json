@@ -569,12 +569,12 @@
     {
       "id": "lepoint_fr",
       "nom": "Le Point",
-      "compte": "lepoint.fr",
+      "compte": "lepointfr",
       "categorie": "presse_nationale",
       "sous_categorie": "presse_ecrite_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@lepoint.fr"
+      "url": "https://www.tiktok.com/@lepointfr"
     },
     {
       "id": "marianne_lemag",
