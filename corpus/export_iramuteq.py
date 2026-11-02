@@ -2,6 +2,7 @@
 import re
 import unicodedata
 from pathlib import Path
+from collecte.presse import CODES_CATEGORIES_PRESSE
 
 def normaliser_modalite(valeur):
     if valeur is None or valeur == "": return "indetermine"
@@ -14,7 +15,12 @@ def construire_corpus(documents):
         texte = str(document.get("texte") or "").strip()
         if not texte: continue
         variables = {"id": document["id"], **document.get("variables", {})}
-        entete = "**** " + " ".join("*" + normaliser_modalite(k) + "_" + normaliser_modalite(v) for k, v in variables.items())
+        # Une variable de catégorie presse doit être autonome (*presse_indep),
+        # sans suffixe booléen ; les autres modalités conservent leur format.
+        entete = "**** " + " ".join(
+            "*" + k if k in CODES_CATEGORIES_PRESSE.values() and v is True
+            else "*" + normaliser_modalite(k) + "_" + normaliser_modalite(v)
+            for k, v in variables.items())
         # Les astérisques du contenu ne doivent pas introduire de fausses variables.
         texte = texte.replace("*", " ").replace("\x00", "")
         blocs.append(entete + "\n" + texte)
