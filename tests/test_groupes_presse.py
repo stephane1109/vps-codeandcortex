@@ -183,7 +183,7 @@ class TestsGroupesPresse(unittest.TestCase):
             mediapart["sous_categorie"], "presse_ecrite_nationale")
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
-            7)
+            8)
         self.assertEqual(
             sum(m["categorie"] == "presse_nationale" for m in inventaire),
             26)
@@ -211,7 +211,7 @@ class TestsGroupesPresse(unittest.TestCase):
             profils[0]["url"], "https://www.tiktok.com/@marc.verdenet")
         self.assertEqual(len(inventaire), 75)
         self.assertEqual(
-            sum(m["categorie"] == "autres_medias" for m in inventaire), 10)
+            sum(m["categorie"] == "autres_medias" for m in inventaire), 9)
 
     def test_noahdecrypte_dans_autres_medias(self):
         """Ajouter Noah Décrypte sans supprimer ni renommer d'autres médias."""
@@ -223,7 +223,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(
             comptes[0]["url"], "https://www.tiktok.com/@noahdecrypte")
         self.assertEqual(
-            sum(m["categorie"] == "autres_medias" for m in inventaire), 10)
+            sum(m["categorie"] == "autres_medias" for m in inventaire), 9)
         self.assertEqual(len(inventaire), 75)
 
     def test_liberation_variante_supprimee_compte_original_conserve(self):
@@ -257,10 +257,10 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(len(inventaire), 75)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
-            7)
+            8)
         self.assertEqual(
             sum(m["categorie"] == "presse_regionale" for m in inventaire),
-            21)
+            32)
 
     def test_comptes_sans_profil_distinct_non_ajoutes(self):
         """Ne pas inventer de profil pour les cas particuliers."""
@@ -271,6 +271,17 @@ class TestsGroupesPresse(unittest.TestCase):
                       if m["compte"] == "lalsacefr")
         self.assertEqual(alsace["nom"], "L'Alsace")
         self.assertIn("DNA", alsace["note"])
+
+    def test_clpress_et_france3_regroupes(self):
+        """CLPRESS est indépendant et les douze France 3 restent consécutifs."""
+        inventaire = charger_inventaire()
+        clpress = next(media for media in inventaire if media["compte"] == "clpress")
+        self.assertEqual(clpress["categorie"], "presse_independante")
+        regionaux = [m for m in inventaire if m["categorie"] == "presse_regionale"]
+        indices = [rang for rang, media in enumerate(regionaux)
+                   if media["nom"].startswith("France 3 ")]
+        self.assertEqual(len(indices), 12)
+        self.assertEqual(indices, list(range(indices[0], indices[0] + 12)))
 
     def test_identifiants_anciens_et_selection_conserves(self):
         """La sélection actuelle se fait toujours par ID interne."""
@@ -306,7 +317,7 @@ class TestsGroupesPresse(unittest.TestCase):
                      "streamlit_app.py").read_text(encoding="utf-8")
         for categorie, libelle in (
             ("presse_nationale", "Presse nationale"),
-            ("presse_regionale", "Presse régionale"),
+            ("presse_regionale", "Presse Régionale/départementale"),
             ("presse_independante", "Presse indépendante"),
             ("autres_medias", "Autres médias ou statut à confirmer"),
         ):
