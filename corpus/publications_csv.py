@@ -86,6 +86,35 @@ def hashtags_collecte_pour_csv(publication):
     return ", ".join(uniques.values())
 
 
+def compte_reposteur_pour_csv(publication):
+    """Conserver tous les reposteurs dans une seule cellule lisible.
+
+    La forme interne structurée reste disponible dans les JSON et PostgreSQL.
+    Prendre en charge les anciennes sauvegardes contenant une liste JSON.
+    """
+    valeur = publication.get("compte_reposteur")
+    if isinstance(valeur, str) and valeur.strip():
+        return valeur.strip()
+    if valeur:
+        return str(valeur)
+    comptes = publication.get("comptes_reposteurs") or []
+    if isinstance(comptes, str):
+        if comptes.strip().startswith("["):
+            try:
+                comptes = json.loads(comptes)
+            except (ValueError, TypeError):
+                comptes = comptes.split(",")
+        else:
+            comptes = comptes.split(",")
+    if not isinstance(comptes, (tuple, list, set)):
+        return ""
+    propres = {
+        str(compte).strip() for compte in comptes
+        if isinstance(compte, str) and compte.strip()
+    }
+    return ", ".join(sorted(propres))
+
+
 # Une structure stable permet de concaténer les CSV de plusieurs collectes.
 # Conserver les noms historiques (id, author, create_time, etc.).
 COLONNES_PUBLICATIONS_CSV = (
@@ -131,16 +160,8 @@ def ligne_publication_csv(publication):
     ligne.update(colonnes_categories_presse(publication))
     ligne["hashtags"] = hashtags_pour_csv(publication)
     ligne["htag_collecte"] = hashtags_collecte_pour_csv(publication)
-    # Une colonne lisible suffit dans le CSV : conserver les listes structurées
-    # uniquement dans les données JSONB et les fichiers JSON de la collecte.
-    reposteurs = ligne.get("compte_reposteur")
-    if not reposteurs:
-        liste = publication.get("comptes_reposteurs") or []
-        if isinstance(liste, (list, tuple, set)):
-            reposteurs = ", ".join(sorted(set(str(c).strip() for c in liste if c)))
-        else:
-            reposteurs = str(liste).strip()
-    ligne["compte_reposteur"] = reposteurs or ""
+    # Une seule cellule CSV contient les reposteurs, quel que soit leur nombre.
+    ligne["compte_reposteur"] = compte_reposteur_pour_csv(publication)
     ligne["id"] = _premiere_valeur(publication, "id", "publication_id")
     ligne["publication_id"] = ligne["id"]
     ligne["author"] = _premiere_valeur(publication, "author", "profil")
