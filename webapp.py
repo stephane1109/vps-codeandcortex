@@ -560,7 +560,9 @@ def entete_sources_ia(publication, source, themes=None, variables=""):
         texte = re.sub(r"[^\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
         return texte or "indetermine"
 
-    theme = next((mot for mot in (themes or []) if mot), None)
+    theme = next(iter(publication.get("hashtags_correspondants") or []), None)
+    if not theme:
+        theme = next((mot for mot in (themes or []) if mot), None)
     if not theme:
         theme = next(iter(publication.get("hashtags") or []), None)
     return (f"**** *source_{source} *theme_{modalite(theme)}"
