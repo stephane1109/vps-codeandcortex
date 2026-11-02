@@ -494,9 +494,12 @@ Le filtre français conserve son fonctionnement et son caractère facultatif.
 
 L’inventaire `config/comptes_presse.json` contient désormais 61 comptes
 sélectionnables, sans suppression des 49 entrées précédentes. L'interface
-regroupe les comptes en presse nationale (28, avec deux sous-groupes TV
-et presse écrite), presse régionale (21), presse indépendante (4) et autres
-médias ou statut à confirmer (8). Les six références éditoriales initiales
+regroupe les comptes en presse nationale (24, avec deux sous-groupes TV
+et presse écrite), presse régionale (21), presse indépendante (8) et autres
+médias ou statut à confirmer (8). Les comptes @lehuffpostfr, @cquoilinfo,
+@hugodecrypte et @brutofficiel sont classés en presse indépendante sans
+suppression ni changement d'identifiant. La liste des comptes est affichée
+sans interligne entre les cases à cocher dans chaque groupe. Les six références éditoriales initiales
 et les identifiants historiques sont préservés. Les comptes fournis par
 l’utilisateur sont signalés comme tels lorsque leur propriété sur TikTok
 n’a pas été vérifiée. Les identifiants différents sont conservés comme
