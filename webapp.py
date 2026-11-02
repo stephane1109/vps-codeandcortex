@@ -102,6 +102,9 @@ class StartRequest(BaseModel):
     telecharger_mp4: bool = False
     sauvegarde_progressive: bool = False
     collecter_commentaires: bool = False
+    # Par défaut historique, les API existantes conservent leurs exports TXT.
+    # L'interface transmet explicitement False pour les nouvelles collectes.
+    inclure_commentaires_txt: bool = True
     collecter_reponses: bool = False
     collecter_follower_count: bool = False
     collecter_is_verified: bool = False
@@ -268,7 +271,9 @@ class StartRequest(BaseModel):
             from collecte.presse import selectionner_medias
             if not self.medias: raise ValueError("Sélectionnez au moins un média.")
             selectionner_medias(self.medias)
-        if not self.collecter_commentaires: self.collecter_reponses = False
+        if not self.collecter_commentaires:
+            self.collecter_reponses = False
+            self.inclure_commentaires_txt = False
         # Le mode test Research prend le pas sur la collecte automatique.
         if self.moteur_actif == "research" and self.test_research_10_publications:
             self.collecte_research_complete = True
@@ -901,7 +906,9 @@ class Job:
                         "video_message": r.get("video_message", "En attente du téléchargement."),
                         "video_fichier": r.get("video_fichier")} for r in self.records if r.get("video_id")],
                     "enrichir": self.settings.enrichie, "commentaires_collectes": len(self.commentaires),
-                    "collecter_commentaires":self.settings.collecter_commentaires, "collecter_reponses":self.settings.collecter_reponses,
+                    "collecter_commentaires":self.settings.collecter_commentaires,
+                    "inclure_commentaires_txt":self.settings.inclure_commentaires_txt,
+                    "collecter_reponses":self.settings.collecter_reponses,
                     "collecter_follower_count":self.settings.collecter_follower_count,
                     "follower_count_illustratif":self.settings.follower_count_illustratif,
                     "abonnes_classe_illustratif":self.settings.abonnes_classe_illustratif,
@@ -969,7 +976,8 @@ class Job:
                 supprimer_arobase_profil = self.settings.supprimer_arobase_profil
             return text_export(self.records if publications is None else publications, self.settings.include_sources,
                 self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
-                self.commentaires if self.settings.collecter_commentaires else None,
+                self.commentaires if (self.settings.collecter_commentaires
+                                     and self.settings.inclure_commentaires_txt) else None,
                 supprimer_arobase_profil=supprimer_arobase_profil,
                 inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
                 follower_count_illustratif=self.settings.follower_count_illustratif,
@@ -2124,7 +2132,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                      "diagnostics": job.diagnostics}, texte_source=job.path,
                      republications=(job.republications
                                      if job.settings.collecter_republications_research
-                                     else None))
+                                     else None),
+                     inclure_commentaires_txt=job.settings.inclure_commentaires_txt)
                 # Le mode Profils conserve les vidéos découvertes sans légende.
                 # Le mode Presse n'archive QUE des publications réellement lues
                 # et jamais une référence brute issue d'un embed ou d'une API 429.
@@ -2136,7 +2145,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     (job.directory / "sources_visuelles.json").write_text(
                         json.dumps(complement, ensure_ascii=False), encoding="utf-8"
                     )
-                exporter_zip(job.directory, job.directory / "archive.zip", inclure_mp4=job.settings.telecharger_mp4)
+                exporter_zip(
+                    job.directory, job.directory / "archive.zip",
+                    inclure_mp4=job.settings.telecharger_mp4,
+                    commentaires_csv_uniquement=(
+                        job.settings.collecter_commentaires
+                        and not job.settings.inclure_commentaires_txt))
                 job.archive_prete = True
             except Exception:
                 LOG.exception("Export enrichi impossible")
@@ -3180,7 +3194,7 @@ def create_app(manager=None):
         contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
         # Inclure les fichiers auparavant disponibles via des boutons séparés.
         ajouts = {}
-        if job.commentaires:
+        if job.commentaires and job.settings.inclure_commentaires_txt:
             ajouts["commentaires.txt"] = texte_commentaires_collectes(job).encode("utf-8")
         diagnostic = job.snapshot().get("debug_collecte")
         if diagnostic:
@@ -3190,9 +3204,17 @@ def create_app(manager=None):
             from stockage.historique_analyses import exporter_zip
             # Le téléchargement de l'historique respecte le même choix que le TXT.
             with exporter_zip(job.directory) as source:
-                flux = archive_avec_texte(source, contenu, ajouts)
+                flux = archive_avec_texte(
+                    source, contenu, ajouts,
+                    commentaires_csv_uniquement=(
+                        job.settings.collecter_commentaires
+                        and not job.settings.inclure_commentaires_txt))
         else:
-            flux = archive_avec_texte(job.directory / "archive.zip", contenu, ajouts)
+            flux = archive_avec_texte(
+                job.directory / "archive.zip", contenu, ajouts,
+                commentaires_csv_uniquement=(
+                    job.settings.collecter_commentaires
+                    and not job.settings.inclure_commentaires_txt))
         # Le nom existant de la collecte sert aussi de nom de ZIP.
         nom = Path(job.settings.filename).stem + ".zip"
         return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
@@ -3272,6 +3294,10 @@ def create_app(manager=None):
     @app.get("/api/jobs/{job_id}/commentaires.txt")
     def telecharger_commentaires(job_id: str, request: Request):
         job = manager.get(owner(request), job_id)
+        if not job.settings.inclure_commentaires_txt:
+            raise HTTPException(409,
+                "Les commentaires ont été enregistrés uniquement dans le CSV. "
+                "L'export TXT n'était pas activé pour cette collecte.")
         return Response(texte_commentaires_collectes(job), media_type="text/plain",
             headers=entete_telechargement(nom_fichier_telechargement(
                 job.settings.nom_sauvegarde, "commentaires", "txt")))
