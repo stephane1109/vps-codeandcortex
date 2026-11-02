@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "comptes": [
     {
       "id": "lemonde",
@@ -351,6 +351,97 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@letelegramme"
+    },
+    {
+      "id": "ouestfrance",
+      "nom": "Ouest-France",
+      "compte": "ouestfrance",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@ouestfrance"
+    },
+    {
+      "id": "journalsudouest",
+      "nom": "Sud Ouest",
+      "compte": "journalsudouest",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@journalsudouest"
+    },
+    {
+      "id": "lamontagne_fr",
+      "nom": "La Montagne",
+      "compte": "lamontagne_fr",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lamontagne_fr"
+    },
+    {
+      "id": "midilibre",
+      "nom": "Midi Libre",
+      "compte": "midilibre",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@midilibre"
+    },
+    {
+      "id": "lindependant_officiel",
+      "nom": "L'Indépendant",
+      "compte": "lindependant_officiel",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lindependant_officiel"
+    },
+    {
+      "id": "nice_matin",
+      "nom": "Nice-Matin",
+      "compte": "nice_matin",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@nice_matin"
+    },
+    {
+      "id": "parisnormandieofficiel",
+      "nom": "Paris-Normandie",
+      "compte": "parisnormandieofficiel",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@parisnormandieofficiel"
+    },
+    {
+      "id": "corsematin",
+      "nom": "Corse Matin",
+      "compte": "corsematin",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@corsematin"
+    },
+    {
+      "id": "lestrepublicain",
+      "nom": "L'Est Républicain",
+      "compte": "lestrepublicain",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lestrepublicain"
+    },
+    {
+      "id": "lalsacefr",
+      "nom": "L'Alsace",
+      "compte": "lalsacefr",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lalsacefr",
+      "note": "Compte L'Alsace communiqué pour DNA ; l'identité avec Dernières Nouvelles d'Alsace n'est pas établie."
     }
   ]
 }
