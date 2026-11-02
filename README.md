@@ -914,6 +914,31 @@ reliés aux vidéos, pour ne pas dupliquer les publications.
 
 L'export CSV/JSON et les données déjà sauvegardées sont conservés.
 
+### Téléchargement des résultats d'une collecte
+
+Dans l'onglet **Collecte**, le champ obligatoire **Nom de la collecte**
+situé en haut de la page fournit automatiquement le nom de l'archive ZIP.
+Il n'est pas nécessaire de renseigner un deuxième champ.
+
+Une fois la collecte ponctuelle terminée, un seul bouton
+**Télécharger les résultats** remplace les téléchargements séparés TXT,
+compteurs CSV, commentaires et archive. Le ZIP conserve tous les fichiers
+précédemment enregistrés, y compris `publications.csv`,
+`engagement.csv`, `publications.json`, les autres CSV/JSON/TXT,
+les MP4 disponibles si leur collecte était activée, ainsi que les
+commentaires TXT et le diagnostic de collecte disponibles.
+
+Chaque collecte Research programmée propose également un bouton
+**Télécharger les résultats** ; son ZIP contient
+`publications.csv`, `commentaires.csv`, `collecte.json`,
+`textes.txt`, `corpus.sqlite3` et `journal_research.json`.
+L'archive est nommée d'après la collecte, avec les caractères impropres
+aux noms de fichiers remplacés par des underscores.
+
+Les sauvegardes de récupération intermédiaires, et les deux sauvegardes
+distinctes de l'historique d'analyse, conservent leurs propres commandes :
+elles remplissent des fonctions indépendantes du téléchargement final.
+
 ### Fichiers publications.csv : variables complètes
 
 Les exports `publications.csv` issus des programmes Research, des
