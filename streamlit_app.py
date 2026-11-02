@@ -132,6 +132,7 @@ if "initialise" not in st.session_state:
         # L'option a été supprimée : les futures collectes n'activent pas ce ZIP.
         "sauvegarde_progressive": False,
         "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",True),
+        "filtrer_texte_ia_tiktok":ancienne.get("filtrer_texte_ia_tiktok",False),
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True),
         "collecter_follower_count":ancienne.get("collecter_follower_count",True),
@@ -802,6 +803,21 @@ with onglet_collecte:
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
                      "et les autres filtres (langue et période). "
                      "Ce choix agit après la découverte des vidéos TikTok.")
+        st.checkbox(
+            "Conserver uniquement les publications avec un texte généré par IA par TikTok",
+            key="filtrer_texte_ia_tiktok", disabled=occupe,
+            help="Après la sélection des médias, profils et hashtags, seules les publications "
+                 "dont le résumé natif TikTok a été effectivement récupéré sont conservées. "
+                 "Une simple étiquette « contenu généré par IA » ne suffit pas. "
+                 "La lecture des pages peut nécessiter Selenium et ralentir la collecte.")
+        if st.session_state.get("filtrer_texte_ia_tiktok", False):
+            st.caption(
+                "Filtre actif : les publications sans résumé IA TikTok accessible sont "
+                "exclues du TXT, des CSV et des analyses. La lecture du résumé est "
+                "activée automatiquement. Ce critère ne peut pas être appliqué "
+                "directement à la recherche Research API ; il est vérifié après "
+                "la découverte des vidéos. Une absence de résumé récupéré ne prouve "
+                "pas que TikTok n'en a jamais produit.")
         st.text_area(
             "Hashtags à exclure (NOT) — facultatif",
             key="hashtags_exclus_saisis",
@@ -1107,7 +1123,8 @@ with onglet_collecte:
             elif mode_programme and st.session_state.get("test_research_10_publications", False):
                 st.error("Décochez le test sur 10 publications pour programmer une collecte pluri-journalière.")
             elif mode_programme and (st.session_state.get("telecharger_mp4")
-                                    or st.session_state.get("inclure_texte_genere_ia")):
+                                    or st.session_state.get("inclure_texte_genere_ia")
+                                    or st.session_state.get("filtrer_texte_ia_tiktok")):
                 st.error("Le mode pluri-journalier Research ne télécharge pas les MP4 "
                          "et n'utilise pas Selenium pour les textes IA.")
             elif (mode_programme
@@ -1115,7 +1132,9 @@ with onglet_collecte:
                       < st.session_state["research_execution_debut"]):
                 st.error("La date de fin d'exécution doit suivre la date de début.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","inclure_texte_genere_ia")}
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","inclure_texte_genere_ia","filtrer_texte_ia_tiktok")}
+                if valeurs["filtrer_texte_ia_tiktok"]:
+                    valeurs["inclure_texte_genere_ia"] = True
                 # Ne plus déclencher de sauvegarde ZIP progressive pour les nouveaux jobs.
                 valeurs["sauvegarde_progressive"] = False
                 if moteur_formulaire != "research":
@@ -1408,6 +1427,7 @@ with onglet_collecte:
                             "langue_indeterminee": "Langue indéterminée (ancienne collecte, exclue)",
                             "retenue_langue_indeterminee": "Retenue dans le TXT, langue indéterminée",
                             "filtre_hashtags": "Écartée par le filtre de hashtags",
+                            "sans_texte_ia_tiktok": "Écartée : aucun résumé IA TikTok récupéré",
                             "hors_periode": "Hors période",
                             "date_indeterminee": "Date indéterminée",
                             "non_determine": "Diagnostic indisponible",
@@ -1435,6 +1455,12 @@ with onglet_collecte:
                     if not actuel.get("processed"):
                         st.warning("Aucune vidéo consultée : vérifiez le détail "
                                    "des sources et les droits Research API.")
+            if actuel.get("filtrer_texte_ia_tiktok"):
+                st.caption(
+                    "Filtre texte IA TikTok actif : seules les publications dont le "
+                    "résumé a été récupéré restent dans le corpus. "
+                    f"{actuel.get('exclus_sans_texte_ia', 0)} publication(s) "
+                    "écartée(s) faute de texte IA exploitable.")
             if actuel.get("hashtags"):
                 combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
                 st.caption("Filtre appliqué : " + combinaison
