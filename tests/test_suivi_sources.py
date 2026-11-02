@@ -33,6 +33,30 @@ class TestsSuiviSourcesMedias(unittest.TestCase):
         self.assertEqual(medias_a_reprendre(bilan), [
             "media_2", "media_3", "media_4"])
 
+    def test_noventetrois_medias_cinquante_trois_parcourus(self):
+        """Reproduire un arrêt Research après la 53e source sur 93."""
+        sources = [
+            {"id": f"media_{i}", "nom": f"Média {i}", "compte": f"media{i}"}
+            for i in range(1, 94)
+        ]
+        journal = [
+            {"source": f"@media{i}", "statut_source": "traitee",
+             "rapport": {"media_id": f"media_{i}", "discovered_urls": []}}
+            for i in range(1, 53)
+        ]
+        journal.append({
+            "source": "@media53", "statut_source": "interrompue",
+            "rapport": {"media_id": "media_53", "discovered_urls": []},
+            "message": "Quota Research API atteint.",
+        })
+        bilan = etablir_bilan_medias(
+            sources, journal, source_en_cours="media_53", termine=True)
+        reprise = medias_a_reprendre(bilan)
+        self.assertEqual(len(bilan), 93)
+        self.assertEqual(len(reprise), 41)
+        self.assertEqual(reprise[0], "media_53")
+        self.assertEqual(reprise[-1], "media_93")
+
     def test_source_en_cours_au_moment_de_l_arret(self):
         journal = [{"source": "@premier", "rapport": {
             "media_id": "media_1", "discovered_urls": []},
