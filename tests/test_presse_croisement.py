@@ -188,8 +188,12 @@ class CroisementPresseTests(unittest.TestCase):
                     csv_engagement = lignes_engagement([record])[0]
                     self.assertEqual(csv_publication["hashtags_correspondants"],
                                      record["hashtags_correspondants"])
-                    self.assertEqual(csv_engagement["hashtags_recherches"],
-                                     ["manifestation", "blocage"])
+                    self.assertEqual(csv_publication["htag_collecte"],
+                                     "manifestation, blocage")
+                    self.assertEqual(csv_engagement["htag_collecte"],
+                                     "manifestation, blocage")
+                    self.assertNotIn("hashtags_recherches", csv_publication)
+                    self.assertNotIn("hashtags_recherches", csv_engagement)
                     self.assertEqual(csv_engagement["operateur_hashtags"], operateur)
                 self.assertIn(
                     "Des jeunes #manifestation" if operateur == "OR"
