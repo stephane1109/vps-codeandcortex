@@ -9,7 +9,7 @@ from collecte.quotas_exploitation import max_sources
 
 
 COMPTES_NOUVEAUX = {
-    "mediapartfr": "presse_independante",
+    "mediapartfr": "presse_nationale",
     "actutoulouse": "presse_regionale",
     "lefigaro": "presse_nationale",
     "valeursactuelles": "presse_nationale",
@@ -29,6 +29,7 @@ COMPTES_NATIONAUX_TELEVISION = {
 
 COMPTES_NATIONAUX_ECRITS = {
     "lemondefr", "lefigaro", "liberation.fr", "lequipe", "lhumanitefr",
+    "mediapartfr",
     "lesechos", "lobs", "lepoint.fr", "marianne.lemag",
 }
 
@@ -65,7 +66,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(regionaux.count(compte), 1)
         self.assertEqual(len(regionaux), 21)
         # Seul @liberationfr a été supprimé à la demande de l'utilisateur.
-        self.assertEqual(len(inventaire), 61)
+        self.assertEqual(len(inventaire), 62)
 
     def test_nationaux_tv_et_presse_ecrite_conserves(self):
         """Compléter les deux listes sans supprimer les anciens médias."""
@@ -83,10 +84,10 @@ class TestsGroupesPresse(unittest.TestCase):
                     handles[compte]["categorie"], "presse_nationale")
                 self.assertEqual(
                     handles[compte]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(handles), 61)
+        self.assertEqual(len(handles), 62)
         self.assertEqual(
             len([m for m in inventaire
-                 if m["categorie"] == "presse_nationale"]), 24)
+                 if m["categorie"] == "presse_nationale"]), 25)
 
     def test_lhumanite_dans_presse_ecrite_nationale(self):
         """Ajouter L'Humanité sans créer de doublon ni modifier ses voisins."""
@@ -100,6 +101,27 @@ class TestsGroupesPresse(unittest.TestCase):
             humanite[0]["sous_categorie"], "presse_ecrite_nationale")
         self.assertEqual(
             humanite[0]["url"], "https://www.tiktok.com/@lhumanitefr")
+
+    def test_linfo_60_secondes_et_deplacement_mediapart(self):
+        """Ajouter un compte indépendant et reclasser Mediapart sans suppression."""
+        inventaire = charger_inventaire()
+        handles = {m["compte"]: m for m in inventaire}
+        self.assertEqual(len(inventaire), 62)
+        info = handles["iuzdrmqevnu"]
+        self.assertEqual(info["nom"], "L’info en 60 secondes")
+        self.assertEqual(info["categorie"], "presse_independante")
+        self.assertEqual(
+            info["url"], "https://www.tiktok.com/@iuzdrmqevnu")
+        mediapart = handles["mediapartfr"]
+        self.assertEqual(mediapart["categorie"], "presse_nationale")
+        self.assertEqual(
+            mediapart["sous_categorie"], "presse_ecrite_nationale")
+        self.assertEqual(
+            sum(m["categorie"] == "presse_independante" for m in inventaire),
+            8)
+        self.assertEqual(
+            sum(m["categorie"] == "presse_nationale" for m in inventaire),
+            25)
 
     def test_liberation_variante_supprimee_compte_original_conserve(self):
         """Ne supprimer que @liberationfr sans toucher aux autres comptes."""
@@ -125,7 +147,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(
                     groupes[compte]["categorie"], "presse_independante")
                 self.assertNotIn("sous_categorie", groupes[compte])
-        self.assertEqual(len(inventaire), 61)
+        self.assertEqual(len(inventaire), 62)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
             8)
