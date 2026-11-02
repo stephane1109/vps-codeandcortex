@@ -29,7 +29,7 @@ COMPTES_NATIONAUX_TELEVISION = {
 
 COMPTES_NATIONAUX_ECRITS = {
     "lemondefr", "lefigaro", "liberation.fr", "lequipe", "lhumanitefr",
-    "mediapartfr",
+    "mediapartfr", "politis_fr",
     "lesechos", "lobs", "lepoint.fr", "marianne.lemag",
 }
 
@@ -87,7 +87,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(len(handles), 63)
         self.assertEqual(
             len([m for m in inventaire
-                 if m["categorie"] == "presse_nationale"]), 25)
+                 if m["categorie"] == "presse_nationale"]), 26)
 
     def test_lhumanite_dans_presse_ecrite_nationale(self):
         """Ajouter L'Humanité sans créer de doublon ni modifier ses voisins."""
@@ -118,10 +118,21 @@ class TestsGroupesPresse(unittest.TestCase):
             mediapart["sous_categorie"], "presse_ecrite_nationale")
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
-            8)
+            7)
         self.assertEqual(
             sum(m["categorie"] == "presse_nationale" for m in inventaire),
-            25)
+            26)
+
+    def test_politis_deplace_en_presse_nationale(self):
+        """Conserver le compte Politis et le ranger parmi les titres nationaux."""
+        inventaire = charger_inventaire()
+        politis = [m for m in inventaire if m["compte"] == "politis_fr"]
+        self.assertEqual(len(politis), 1)
+        self.assertEqual(politis[0]["id"], "politis_fr")
+        self.assertEqual(politis[0]["categorie"], "presse_nationale")
+        self.assertEqual(
+            politis[0]["sous_categorie"], "presse_ecrite_nationale")
+        self.assertEqual(len(inventaire), 63)
 
     def test_noahdecrypte_dans_autres_medias(self):
         """Ajouter Noah Décrypte sans supprimer ni renommer d'autres médias."""
@@ -163,7 +174,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(len(inventaire), 63)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
-            8)
+            7)
         self.assertEqual(
             sum(m["categorie"] == "presse_regionale" for m in inventaire),
             21)
