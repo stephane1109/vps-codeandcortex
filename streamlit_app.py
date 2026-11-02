@@ -1716,6 +1716,12 @@ with onglet_collecte:
 with onglet_base_donnees:
     st.subheader("1. PostgreSQL — collectes sauvegardées")
     st.caption(
+        "Les fichiers téléchargés sont enregistrés dans le dossier choisi "
+        "dans les paramètres du navigateur (Firefox, Safari, etc.), "
+        "et non dans un dossier imposé par le serveur VPS. "
+        "Le nom du fichier reprend celui de la collecte ou de l'export."
+    )
+    st.caption(
         "Sauvegarde automatique des collectes ponctuelles. "
         "Aucune expiration automatique n'est programmée dans ScrapTikTok. "
         "Les collectes Research programmées doivent être copiées depuis SQLite."
