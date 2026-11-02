@@ -2260,6 +2260,10 @@ class Manager:
             raise HTTPException(422, "Précisez les dates des publications à rechercher.")
         if parametres.test_research_10_publications:
             raise HTTPException(422, "Désactivez le test sur 10 publications pour programmer une collecte.")
+        if parametres.collecter_republications_research:
+            raise HTTPException(422,
+                "Les republications Research sont disponibles dans les collectes "
+                "ponctuelles, pas encore dans les collectes programmées.")
         if (parametres.telecharger_mp4 or parametres.inclure_texte_genere_ia
                 or parametres.filtrer_texte_ia_tiktok):
             raise HTTPException(422, "La collecte Research programmée ne lance "
@@ -2393,6 +2397,7 @@ class Manager:
             job.publications=charger("publications.json")
             job.records=[p for p in job.publications if p.get("retenue")]
             job.commentaires=charger("commentaires.json")
+            job.republications=charger("republications.json")
             job.processed=int(manifeste.get("traites",0))
             job.busy=False
             job.status=ligne["statut"]
