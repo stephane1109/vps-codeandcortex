@@ -174,6 +174,7 @@ def exporter_sauvegarde_distincte(dossier, categorie):
         "textes.txt", "corpus_iramuteq.txt", "commentaires.txt",
         "engagement.csv", "ratios_engagement.csv", "comparaison_medias.csv",
         "commentaires.csv", "videos.csv", "videos.json",
+        "profils_medias.csv", "profils_medias.json",
         "parametres_historique.json",
     }
     flux = BytesIO()
