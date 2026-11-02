@@ -518,17 +518,6 @@
       "url": "https://www.tiktok.com/@artefr"
     },
     {
-      "id": "liberationfr",
-      "nom": "Libération — variante à vérifier",
-      "compte": "liberationfr",
-      "categorie": "presse_nationale",
-      "sous_categorie": "presse_ecrite_nationale",
-      "source": "fourni_par_utilisateur",
-      "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@liberationfr",
-      "note": "Identifiant communiqué avec une URL TikTok pointant vers Nice-Matin. Ne pas confondre avec @liberation.fr, conservé."
-    },
-    {
       "id": "lequipe",
       "nom": "L'Équipe",
       "compte": "lequipe",
