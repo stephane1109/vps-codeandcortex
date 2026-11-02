@@ -12,6 +12,7 @@ COMPTES_NOUVEAUX = {
     "mediapartfr": "presse_nationale",
     "actutoulouse": "presse_regionale",
     "actu.fr.officiel": "presse_regionale",
+    "actulyon": "presse_regionale",
     "lefigaro": "presse_nationale",
     "valeursactuelles": "presse_nationale",
     "liberation.fr": "presse_nationale",
@@ -65,9 +66,9 @@ class TestsGroupesPresse(unittest.TestCase):
         for compte in COMPTES_REGIONAUX:
             with self.subTest(compte=compte):
                 self.assertEqual(regionaux.count(compte), 1)
-        self.assertEqual(len(regionaux), 36)
+        self.assertEqual(len(regionaux), 37)
         # Les variantes @liberationfr et @m6info ont été retirées séparément.
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_onze_nouveaux_comptes_france3_regionaux(self):
         """Les comptes régionaux France 3 sont tous présents et uniques."""
@@ -101,10 +102,10 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(
             sum(media["compte"] == "france3occitanie" for media in inventaire),
             1)
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
         self.assertEqual(
             sum(media["categorie"] == "presse_regionale"
-                for media in inventaire), 36)
+                for media in inventaire), 37)
 
     def test_nationaux_tv_et_presse_ecrite_conserves(self):
         """Compléter les deux listes sans supprimer les anciens médias."""
@@ -122,7 +123,7 @@ class TestsGroupesPresse(unittest.TestCase):
                     handles[compte]["categorie"], "presse_nationale")
                 self.assertEqual(
                     handles[compte]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(handles), 80)
+        self.assertEqual(len(handles), 81)
         self.assertEqual(
             len([m for m in inventaire
                  if m["categorie"] == "presse_nationale"]), 26)
@@ -139,7 +140,7 @@ class TestsGroupesPresse(unittest.TestCase):
             france24[0]["sous_categorie"], "television_nationale")
         self.assertEqual(
             france24[0]["url"], "https://www.tiktok.com/@france24")
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_cnews_avec_le_compte_corrige(self):
         """Conserver l'ID de sélection CNews et corriger le compte TikTok."""
@@ -153,7 +154,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(cnews[0]["url"], "https://www.tiktok.com/@cnews")
         self.assertNotIn(
             "cnewsofficiel", {m["compte"] for m in inventaire})
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_lhumanite_dans_presse_ecrite_nationale(self):
         """Ajouter L'Humanité sans créer de doublon ni modifier ses voisins."""
@@ -172,7 +173,7 @@ class TestsGroupesPresse(unittest.TestCase):
         """Ajouter un compte indépendant et reclasser Mediapart sans suppression."""
         inventaire = charger_inventaire()
         handles = {m["compte"]: m for m in inventaire}
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
         info = handles["iuzdrmqevnu"]
         self.assertEqual(info["nom"], "L’info en 60 secondes")
         self.assertEqual(info["categorie"], "presse_independante")
@@ -198,7 +199,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(politis[0]["categorie"], "presse_nationale")
         self.assertEqual(
             politis[0]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_marc_verdenet_dans_autres_medias(self):
         """Ajouter ce profil sans altérer les autres comptes de l'inventaire."""
@@ -210,7 +211,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(profils[0]["categorie"], "autres_medias")
         self.assertEqual(
             profils[0]["url"], "https://www.tiktok.com/@marc.verdenet")
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
         self.assertEqual(
             sum(m["categorie"] == "autres_medias" for m in inventaire), 9)
 
@@ -225,7 +226,7 @@ class TestsGroupesPresse(unittest.TestCase):
             comptes[0]["url"], "https://www.tiktok.com/@noahdecrypte")
         self.assertEqual(
             sum(m["categorie"] == "autres_medias" for m in inventaire), 9)
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_liberation_variante_supprimee_compte_original_conserve(self):
         """Ne supprimer que @liberationfr sans toucher aux autres comptes."""
@@ -255,13 +256,13 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(
                     groupes[compte]["categorie"], "presse_independante")
                 self.assertNotIn("sous_categorie", groupes[compte])
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
             9)
         self.assertEqual(
             sum(m["categorie"] == "presse_regionale" for m in inventaire),
-            36)
+            37)
 
     def test_comptes_sans_profil_distinct_non_ajoutes(self):
         """Ne pas inventer de profil pour les cas particuliers."""
@@ -296,7 +297,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(colonnes[variable], 1)
                 self.assertEqual(sum(colonnes.values()), 1)
         self.assertIn("confirmer", par_compte["camdiafr"]["note"])
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_actu_locaux_reclasses_regionaux_et_loopsider_independant(self):
         """Vérifier les reclassements, les comptes uniques et l'absence du groupe local."""
@@ -304,7 +305,7 @@ class TestsGroupesPresse(unittest.TestCase):
 
         inventaire = charger_inventaire()
         comptes = {media["compte"]: media for media in inventaire}
-        for compte in ("actucaen", "actubordeaux", "actutoulouse"):
+        for compte in ("actucaen", "actubordeaux", "actutoulouse", "actulyon"):
             with self.subTest(compte=compte):
                 self.assertIn(compte, comptes)
                 self.assertEqual(comptes[compte]["categorie"], "presse_regionale")
@@ -323,11 +324,11 @@ class TestsGroupesPresse(unittest.TestCase):
             media["categorie"] == "presse_locale" for media in inventaire))
         self.assertEqual(
             sum(media["categorie"] == "presse_regionale" for media in inventaire),
-            36)
+            37)
         self.assertEqual(
             sum(media["categorie"] == "presse_independante" for media in inventaire),
             9)
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
 
     def test_compte_actufr_officiel_et_tri_alphabetique(self):
         """Le compte officiel est sélectionnable et l'affichage reste alphabétique."""
@@ -347,7 +348,16 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(
             code_presse_publication({"author": "actu.fr.officiel"}),
             "presse_regio_dpt")
-        self.assertEqual(len(inventaire), 80)
+        self.assertEqual(len(inventaire), 81)
+        lyon = comptes["actulyon"]
+        self.assertEqual(lyon["nom"], "Actu Lyon")
+        self.assertEqual(lyon["categorie"], "presse_regionale")
+        self.assertEqual(lyon["url"], "https://www.tiktok.com/@actulyon")
+        self.assertEqual(
+            selectionner_medias(["actulyon"])[0]["compte"], "actulyon")
+        self.assertEqual(
+            code_presse_publication({"author": "actulyon"}),
+            "presse_regio_dpt")
 
         def cle_attendue(nom):
             texte = normalize("NFKD", nom)
