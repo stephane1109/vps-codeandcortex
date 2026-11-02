@@ -1705,201 +1705,93 @@ with onglet_collecte:
 
 
 with onglet_base_donnees:
-    st.subheader("1. PostgreSQL — archives durables")
+    st.subheader("1. PostgreSQL — collectes sauvegardées")
     st.caption(
-        "Conservation : sans suppression automatique par ScrapTikTok. "
-        "Une collecte ponctuelle est copiée automatiquement dans PostgreSQL. "
-        "Une collecte Research programmée doit être synchronisée depuis SQLite."
-    )
-    st.caption(
-        "Pour récupérer une collecte PostgreSQL, sélectionnez son nom "
-        "puis cliquez sur « Télécharger cette collecte (ZIP) ». "
-        "Le ZIP contient les publications et commentaires en CSV et JSON. "
-        "Ce n'est pas un fichier de sauvegarde physique pg_dump."
+        "Sauvegarde automatique des collectes ponctuelles. "
+        "Aucune expiration automatique n'est programmée dans ScrapTikTok. "
+        "Les collectes Research programmées doivent être copiées depuis SQLite."
     )
     if not cookie_historique:
-        st.warning("Rechargez la page d'accueil pour retrouver votre historique privé.")
+        st.warning("Rechargez la page pour accéder à vos collectes privées.")
     else:
-        with st.expander("Opération exceptionnelle : recopier un ancien historique local"):
-            st.caption(
-                "Cette commande copie les fichiers JSON des archives locales "
-                "encore conservées (30 jours par défaut) vers PostgreSQL. "
-                "Elle ne restaure pas un fichier SQLite ni un export pg_dump."
+        message_suppression = st.session_state.pop(
+            "base_pg_suppression_reussie", None)
+        if message_suppression:
+            st.success(
+                f"Collecte « {message_suppression} » supprimée de PostgreSQL."
             )
-            if st.button(
-                    "Copier les anciennes collectes de l'historique local vers PostgreSQL",
-                    key="base_pg_importer_historique",
-                    help="Copie les publications.json et commentaires.json des archives "
-                         "locales encore conservées dans PostgreSQL. Les archives "
-                         "originales ne sont pas effacées. Si une collecte existe déjà, "
-                         "ses enregistrements sont actualisés. Cette opération ne "
-                         "synchronise pas les programmes Research enregistrés en SQLite."):
-                try:
-                    resultat_import = api("/api/base-donnees/importer-historique", {})
-                except RuntimeError as erreur:
-                    st.error(str(erreur))
-                else:
-                    st.session_state["bdd_dernier_import"] = resultat_import
-            if st.session_state.get("bdd_dernier_import"):
-                import_precedent = st.session_state["bdd_dernier_import"]
-                st.success(
-                    f"Historique local vers PostgreSQL : "
-                    f"{import_precedent['imports']} archive(s) traitée(s) "
-                    "(création ou mise à jour éventuelle), "
-                    f"{import_precedent['publications']} publication(s) et "
-                    f"{import_precedent['commentaires']} commentaire(s) parcouru(s)."
-                )
-                if import_precedent.get("erreurs"):
-                    st.warning(
-                        f"{import_precedent['erreurs']} archive(s) n'ont pas pu être copiées.")
-        from urllib.parse import quote as encoder_recherche
-        recherche_nom_bdd = st.text_input(
-            "Rechercher une sauvegarde par nom",
-            placeholder="Ex. : Test_Manifestations_Lyceennes_2026",
-            key="base_pg_recherche_nom"
-        )
-        st.button("Actualiser la liste", key="base_pg_actualiser")
         try:
-            resultat_bdd = api(
-                "/api/base-donnees?filtre=" + encoder_recherche(recherche_nom_bdd))
+            resultat_bdd = api("/api/base-donnees")
         except RuntimeError as erreur:
             st.error(str(erreur))
             resultat_bdd = None
         if resultat_bdd is not None:
             if not resultat_bdd.get("configure"):
                 st.error(
-                    "PostgreSQL n'est pas configuré : renseignez la variable "
-                    "RESEARCH_POSTGRES_DSN dans Coolify, puis redéployez ScrapTikTok."
+                    "PostgreSQL n'est pas configuré : renseignez "
+                    "RESEARCH_POSTGRES_DSN dans Coolify."
                 )
             else:
                 sauvegardes_bdd = resultat_bdd.get("sauvegardes") or []
-                st.caption(f"{len(sauvegardes_bdd)} sauvegarde(s) dans PostgreSQL.")
                 if not sauvegardes_bdd:
-                    st.info(
-                        "Aucune sauvegarde correspondante. Les anciens tests "
-                        "réalisés avant cette mise à jour ne sont pas "
-                        "automatiquement présents dans PostgreSQL. "
-                        "Ils peuvent être accessibles dans l'historique SQLite."
-                    )
+                    st.info("Aucune collecte PostgreSQL disponible.")
                 else:
                     index_bdd = st.selectbox(
-                        "Choisir une sauvegarde",
+                        "Choisir une collecte",
                         list(range(len(sauvegardes_bdd))),
                         format_func=lambda i: (
                             f"{sauvegardes_bdd[i]['nom']} · "
+                            f"{sauvegardes_bdd[i]['publications']} publications · "
                             f"{sauvegardes_bdd[i]['date'][:10]} · "
-                            f"{sauvegardes_bdd[i]['publications']} publications"
+                            f"{'Research' if sauvegardes_bdd[i]['type'] == 'research' else 'Ponctuelle'}"
                         ),
-                        key="base_pg_selection"
+                        key="base_pg_selection",
                     )
                     sauvegarde_bdd = sauvegardes_bdd[index_bdd]
-                    st.caption(
-                        f"Statut : {sauvegarde_bdd['statut']} · "
-                        f"Source : {sauvegarde_bdd['source']} · "
-                        f"Moteur : {sauvegarde_bdd['moteur']} · "
-                        f"Commentaires : {sauvegarde_bdd['commentaires']}"
-                    )
                     adresse_bdd = (
                         f"/api/base-donnees/{sauvegarde_bdd['type']}/"
                         f"{sauvegarde_bdd['id']}"
                     )
                     st.link_button(
-                        "Télécharger cette collecte (ZIP)",
+                        "Télécharger tous les résultats (ZIP)",
                         adresse_bdd + "/archive.zip",
                         use_container_width=True,
-                        help="Un seul ZIP : publications et commentaires CSV/JSON, "
-                             "engagement, autres tableaux CSV, textes et corpus "
-                             "SQLite, plus les fichiers originaux encore disponibles "
-                             "(y compris les MP4 déjà archivés)."
+                        help="Tous les exports CSV, JSON, TXT, métriques et "
+                             "fichiers originaux encore disponibles. "
+                             "Les MP4 absents ne peuvent pas être reconstitués.",
                     )
-                    st.caption(
-                        "Le ZIP regroupe les résultats disponibles pour cette collecte. "
-                        "Les MP4 absents de PostgreSQL et des archives locales ne "
-                        "peuvent pas être récupérés rétroactivement."
-                    )
-                    categorie_bdd = st.radio(
-                        "Table à consulter", ("publications", "commentaires"),
-                        format_func=lambda valeur: (
-                            "Publications" if valeur == "publications"
-                            else "Commentaires"),
-                        horizontal=True, key="base_pg_categorie"
-                    )
-                    filtre_bdd = st.text_input(
-                        "Rechercher dans les auteurs, identifiants et textes",
-                        key="base_pg_filtre"
-                    )
-                    page_bdd = st.number_input(
-                        "Page (100 résultats)", min_value=1, value=1,
-                        step=1, key="base_pg_page"
-                    )
-                    try:
-                        donnees_bdd = api(
-                            adresse_bdd + "/" + categorie_bdd +
-                            "?limite=100&decalage=" + str((page_bdd - 1) * 100) +
-                            "&filtre=" + encoder_recherche(filtre_bdd))
-                    except RuntimeError as erreur:
-                        st.error(str(erreur))
-                    else:
-                        lignes_bdd = donnees_bdd.get("lignes") or []
-                        st.caption(f"{donnees_bdd['total']} enregistrement(s) correspondant(s).")
-                        if not lignes_bdd:
-                            st.info("Aucun enregistrement correspondant à cette page.")
-                        elif categorie_bdd == "publications":
-                            tableau_bdd = []
-                            for ligne_bdd in lignes_bdd:
-                                compteurs = ligne_bdd.get("engagement") or {}
-                                def mesure_bdd(nom):
-                                    element = compteurs.get(nom) or {}
-                                    return element.get("valeur") if isinstance(element, dict) else None
-                                tableau_bdd.append({
-                                    "ID": ligne_bdd.get("id"),
-                                    "Auteur": ligne_bdd.get("author"),
-                                    "Légende": ligne_bdd.get("description"),
-                                    "Date": ligne_bdd.get("created_at"),
-                                    "Retenue TXT": ligne_bdd.get("retenue"),
-                                    "Raison exclusion": ligne_bdd.get("motif_non_retenue"),
-                                    "Region Code": ligne_bdd.get("region_code"),
-                                    "Is Verified": ligne_bdd.get("is_verified"),
-                                    "Vues": mesure_bdd("vues"),
-                                    "Likes": mesure_bdd("likes"),
-                                    "Commentaires": mesure_bdd("commentaires"),
-                                    "Partages": mesure_bdd("partages"),
-                                    "Favoris": mesure_bdd("favoris"),
-                                    "URL": ligne_bdd.get("url")
-                                })
-                            st.dataframe(tableau_bdd, hide_index=True, use_container_width=True)
-                        else:
-                            st.dataframe([{
-                                "ID": ligne.get("id"),
-                                "Publication": ligne.get("publication_id"),
-                                "Auteur": ligne.get("auteur"),
-                                "Texte": ligne.get("texte"),
-                                "Likes": ligne.get("likes"),
-                                "Réponse à": ligne.get("parent_id"),
-                                "Date": ligne.get("observe_le")
-                            } for ligne in lignes_bdd],
-                                hide_index=True, use_container_width=True)
-                        if lignes_bdd:
-                            with st.expander("Voir toutes les variables d'un enregistrement"):
-                                numero_ligne = st.selectbox(
-                                    "Enregistrement",
-                                    list(range(len(lignes_bdd))),
-                                    format_func=lambda i: str(lignes_bdd[i].get("id", "")),
-                                    key="base_pg_ligne"
+                    with st.expander("Supprimer cette collecte de PostgreSQL"):
+                        st.warning(
+                            "Suppression définitive de cette seule collecte, "
+                            "de ses publications et de ses commentaires dans "
+                            "PostgreSQL. Les autres collectes restent intactes. "
+                            "Cette opération n'efface ni les fichiers locaux "
+                            "ni les copies SQLite."
+                        )
+                        nom_confirmation = st.text_input(
+                            f"Saisissez exactement « {sauvegarde_bdd['nom']} »",
+                            key=("base_pg_confirmation_"
+                                 + sauvegarde_bdd["type"] + "_"
+                                 + sauvegarde_bdd["id"]),
+                        )
+                        if st.button(
+                                "Supprimer définitivement cette collecte",
+                                key=("base_pg_supprimer_"
+                                     + sauvegarde_bdd["type"] + "_"
+                                     + sauvegarde_bdd["id"]),
+                                disabled=nom_confirmation != sauvegarde_bdd["nom"]):
+                            try:
+                                api(
+                                    adresse_bdd + "/supprimer",
+                                    {"nom_confirmation": nom_confirmation},
                                 )
-                                st.json(lignes_bdd[numero_ligne], expanded=False)
-
-
-    with st.expander("Sauvegarder ou restaurer une base PostgreSQL entière"):
-        st.caption(
-            "Le ZIP ci-dessus exporte les données d'une seule collecte. "
-            "Pour sauvegarder ou restaurer toute la base PostgreSQL, utilisez "
-            "une sauvegarde administrée (pg_dump/pg_restore, via un client "
-            "comme DBeaver ou une tâche de sauvegarde du serveur). "
-            "L'importation directe d'un dump PostgreSQL n'est pas disponible "
-            "dans l'interface ScrapTikTok. Ne confondez pas ce dump avec "
-            "un CSV à concaténer."
-        )
+                            except RuntimeError as erreur:
+                                st.error(str(erreur))
+                            else:
+                                st.session_state["base_pg_suppression_reussie"] = (
+                                    sauvegarde_bdd["nom"]
+                                )
+                                st.rerun()
 
     st.divider()
     st.subheader("2. SQLite — collectes Research programmées")
