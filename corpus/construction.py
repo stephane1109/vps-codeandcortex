@@ -15,7 +15,7 @@ from collecte.presse import colonnes_categories_presse
 
 CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
 
-COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre", "hashtags", "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags", "date_collecte", "contenu_genere_ia", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "region_code", "is_verified", "is_verified_statut", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
+COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre", "hashtags", "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags", "type_publication", "compte_reposteur", "comptes_reposteurs", "auteur_original", "id_video_originale", "republication_confirmee", "date_republication", "date_collecte", "contenu_genere_ia", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "region_code", "is_verified", "is_verified_statut", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
@@ -33,7 +33,14 @@ def lignes_engagement(publications):
                  "hashtags": hashtags_pour_csv(p),
                  "hashtags_recherches": p.get("hashtags_recherches"),
                  "hashtags_correspondants": p.get("hashtags_correspondants"),
-                 "operateur_hashtags": p.get("operateur_hashtags")}
+                 "operateur_hashtags": p.get("operateur_hashtags"),
+                 "type_publication": p.get("type_publication"),
+                 "compte_reposteur": p.get("compte_reposteur"),
+                 "comptes_reposteurs": p.get("comptes_reposteurs"),
+                 "auteur_original": p.get("auteur_original"),
+                 "id_video_originale": p.get("id_video_originale"),
+                 "republication_confirmee": p.get("republication_confirmee"),
+                 "date_republication": p.get("date_republication")}
         ligne.update(indicateurs_numeriques(p))
         ligne.update(colonnes_categories_presse(p))
         ligne.update({k:p.get(k) for k in CHAMPS_VISUELS})
@@ -43,7 +50,7 @@ def lignes_engagement(publications):
         lignes.append(ligne)
     return lignes
 
-def construire_exports(dossier, publications, commentaires, journal, variables=None, *, texte_source=None):
+def construire_exports(dossier, publications, commentaires, journal, variables=None, *, texte_source=None, republications=None):
     """Reprendre le TXT téléchargeable comme corpus principal dès qu’il existe."""
     dossier = Path(dossier)
     source = Path(texte_source) if texte_source is not None else dossier / "textes.txt"
@@ -62,6 +69,12 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
                    "video_message": p.get("video_message"), "video_diagnostic": p.get("video_diagnostic")} for p in publications]
         exporter_json(dossier / "videos.json", videos)
         exporter_csv(dossier / "videos.csv", videos, [*CHAMPS_VIDEO, "video_statut", "video_message", "video_diagnostic"])
+    if republications is not None:
+        # Une ligne par relation compte reposteur–vidéo originale. La table
+        # reste séparée : l'auteur de la vidéo peut être hors des médias choisis.
+        exporter_json(dossier / "republications.json", republications)
+        exporter_csv(dossier / "republications.csv",
+                     lignes_publications_csv(republications), COLONNES_PUBLICATIONS_CSV)
     exporter_json(dossier / "commentaires.json", commentaires)
     exporter_json(dossier / "journal.json", journal)
     exporter_csv(dossier / "engagement.csv", lignes_engagement(publications), COLONNES_ENGAGEMENT)
