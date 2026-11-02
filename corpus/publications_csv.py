@@ -6,6 +6,7 @@ Les valeurs indisponibles restent vides : aucune donnée n'est inventée.
 """
 import json
 from collecte.variables_numeriques import indicateurs_numeriques
+from collecte.presse import colonnes_categories_presse
 
 
 def cellule_csv(valeur):
@@ -34,7 +35,9 @@ COLONNES_PUBLICATIONS_CSV = (
     "partages_classe", "favoris_classe",
     "vues_brut", "likes_brut", "commentaires_brut",
     "partages_brut", "favoris_brut",
-    "hashtags", "media_id", "categorie_media", "source", "status",
+    "hashtags", "media_id", "categorie_media",
+    "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
+    "source", "status",
     "error", "groupe_visuel", "reemploi_visuel",
     "contenu_genere_ia", "statut_resume_ia", "resume_ia_tiktok",
     "video_id", "video_url", "video_fichier",
@@ -55,6 +58,7 @@ def _premiere_valeur(publication, *noms):
 def ligne_publication_csv(publication):
     """Déplier les valeurs brutes, catégorielles et métadonnées d'une vidéo."""
     ligne = {nom: publication.get(nom) for nom in COLONNES_PUBLICATIONS_CSV}
+    ligne.update(colonnes_categories_presse(publication))
     ligne["id"] = _premiere_valeur(publication, "id", "publication_id")
     ligne["publication_id"] = ligne["id"]
     ligne["author"] = _premiere_valeur(publication, "author", "profil")
