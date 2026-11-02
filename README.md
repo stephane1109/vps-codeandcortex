@@ -958,6 +958,25 @@ zéros sont conservés. La collecte des textes des commentaires reste dans
 une publication. Les exports téléchargés après mise à jour utilisent le
 nouveau schéma ; les ZIP anciens déjà téléchargés ne changent pas.
 
+### Dossier local de téléchargement et noms de fichiers
+
+Le serveur ScrapTikTok ne peut pas choisir le dossier de téléchargement
+sur le Mac de l'utilisateur : le navigateur décide où enregistrer les
+fichiers. Dans Firefox sur macOS, ouvrir **Paramètres → Général →
+Fichiers et applications → Téléchargements → Enregistrer les fichiers
+dans**, puis sélectionner le dossier local souhaité. Ce paramétrage
+s'applique à tous les téléchargements de Firefox, pas uniquement à
+ScrapTikTok. Le stockage PostgreSQL automatique reste sur le VPS :
+seuls les fichiers téléchargés par l'utilisateur arrivent dans ce dossier.
+
+Les téléchargements ZIP PostgreSQL, Research et ponctuels reprennent
+le nom de la collecte. Les exports individuels incluent le nom de la
+collecte puis le type de résultat (par exemple
+`sauvegarde_test_3_annotations.csv`). Les sauvegardes de l'historique
+ajoutent `_collecte` ou `_analyse` ; les CSV concaténés incluent
+le type de fusion et la date. Aucun chemin local propre à un utilisateur
+n'est enregistré dans le dépôt ou envoyé au serveur.
+
 ### Sauvegardes PostgreSQL, SQLite et concaténation de CSV
 
 L'onglet **Base de données** rassemble désormais trois opérations distinctes.
