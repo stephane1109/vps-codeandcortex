@@ -518,16 +518,24 @@ with onglet_collecte:
                         continue
                     if titre:
                         st.markdown("**" + titre + "**")
-                    colonnes_medias = st.columns(2)
-                    for indice, (identifiant, media) in enumerate(comptes_affiches):
-                        cle = "media_" + identifiant
-                        st.session_state.setdefault(
-                            cle, identifiant in st.session_state.get("medias", []),
-                        )
-                        colonnes_medias[indice % 2].checkbox(
-                            media["nom"] + " (@" + media["compte"] + ")",
-                            key=cle, disabled=occupe, on_change=memoriser_medias,
-                        )
+                    colonnes_medias = st.columns(2, gap="small")
+                    for numero_colonne, colonne_media in enumerate(colonnes_medias):
+                        with colonne_media:
+                            # Un seul conteneur par colonne supprime les
+                            # espacements verticaux entre les comptes.
+                            with st.container(gap=None):
+                                for indice, (identifiant, media) in enumerate(comptes_affiches):
+                                    if indice % 2 != numero_colonne:
+                                        continue
+                                    cle = "media_" + identifiant
+                                    st.session_state.setdefault(
+                                        cle, identifiant in st.session_state.get("medias", []),
+                                    )
+                                    st.checkbox(
+                                        media["nom"] + " (@" + media["compte"] + ")",
+                                        key=cle, disabled=occupe,
+                                        on_change=memoriser_medias,
+                                    )
         selection = [
             identifiant for identifiant in medias
             if st.session_state.get("media_" + identifiant, False)
