@@ -121,6 +121,7 @@ class StartRequest(BaseModel):
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
     filtrer_texte_ia_tiktok: bool = False
+    inclure_hashtags_csv: bool = False
     supprimer_arobase_profil: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
     variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "region_code", "is_verified", "hashtags"]] | None = Field(default=None, max_length=12)
@@ -853,6 +854,7 @@ class Job:
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "variables_txt": self.settings.variables_txt,
                     "inclure_texte_genere_ia": self.settings.inclure_texte_genere_ia,
+                    "inclure_hashtags_csv": self.settings.inclure_hashtags_csv,
                     "filtrer_texte_ia_tiktok": self.settings.filtrer_texte_ia_tiktok,
                     "exclus_sans_texte_ia": self.exclus_sans_texte_ia,
                     "supprimer_arobase_profil": self.settings.supprimer_arobase_profil,
@@ -1458,6 +1460,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             job.pause(args.delay)
                         record = connexion.lire_publication(url)
                     record["retenue"] = False
+                    # La case Htag dans le csv concerne uniquement les exports :
+                    # garder intactes les données brutes et le corpus TXT.
+                    record["inclure_hashtags_csv"] = job.settings.inclure_hashtags_csv
                     if job.settings.hashtags_exclus:
                         from collecte.exclusion_hashtags import hashtags_a_exclure
                         correspondances = hashtags_a_exclure(
