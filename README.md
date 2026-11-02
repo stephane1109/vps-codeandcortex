@@ -499,9 +499,11 @@ et tous les autres médias sont conservés. L'Humanité (`@lhumanitefr`) est
 présent dans la presse écrite nationale. Mediapart (`@mediapartfr`) a été
 reclassé en presse nationale, sous-groupe presse écrite. "L’info en 60
 secondes" (`@iuzdrmqevnu`) a été ajouté à la presse indépendante.
+Politis (`@politis_fr`) a été reclassé en presse nationale, dans le
+sous-groupe affiché « Presse nationale », sans modification d'identifiant.
 L'interface regroupe les comptes en presse nationale
-(25, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
-et « Presse nationale »), presse régionale (21), presse indépendante (8)
+(26, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
+et « Presse nationale »), presse régionale (21), presse indépendante (7)
 et autres
 médias ou statut à confirmer (9), dont @noahdecrypte (Noah Décrypte). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
