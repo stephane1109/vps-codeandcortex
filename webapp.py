@@ -3093,8 +3093,21 @@ def create_app(manager=None):
             raise HTTPException(404, "Sauvegarde introuvable.")
         if chemin is None:
             raise HTTPException(404, "Sauvegarde introuvable.")
-        return FileResponse(chemin, media_type="application/zip",
-            filename=f"scraptiktok_sauvegarde_{identifiant}.zip")
+        # L'ancienne sauvegarde progressive conserve aussi son nom initial
+        # lorsqu'il figure dans les paramètres archivés.
+        nom_collecte = identifiant[:8]
+        from zipfile import ZipFile
+        try:
+            with ZipFile(chemin) as archive:
+                parametres = json.loads(archive.read("parametres.json"))
+                nom_collecte = (
+                    parametres.get("nom_sauvegarde") or nom_collecte)
+        except (OSError, KeyError, ValueError, TypeError):
+            pass
+        return FileResponse(
+            chemin, media_type="application/zip",
+            filename=nom_fichier_telechargement(
+                nom_collecte, "sauvegarde_intermediaire", "zip"))
 
     @app.get("/api/session")
     def session(request: Request):
