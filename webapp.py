@@ -89,6 +89,8 @@ class StartRequest(BaseModel):
     hashtag_presse: str = Field(default="", max_length=100)
     hashtags_presse: list[str] = Field(default_factory=list, max_length=10)
     operator_presse: Literal["AND", "OR"] = "AND"
+    collecter_republications_research: bool = False
+    maximum_republications_par_compte: int = Field(default=100, ge=1, le=1000)
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
     # ni exposés par snapshot(), model_dump() ou les diagnostics.
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
@@ -194,6 +196,11 @@ class StartRequest(BaseModel):
         # L'indicateur de contenu IA fourni par l'API ne constitue pas ce texte.
         if self.filtrer_texte_ia_tiktok:
             self.inclure_texte_genere_ia = True
+        if (self.collecter_republications_research and
+                (self.source_collecte != "presse" or self.presse_moteur != "research")):
+            raise ValueError(
+                "La récupération des republications est réservée au mode "
+                "Presse et médias avec Research API officielle.")
         if self.source_collecte == "presse" and self.presse_moteur == "apify":
             from collecte.presse_apify import cle_disponible
             jeton = self.apify_api_token.get_secret_value().strip() if self.apify_api_token else ""
@@ -724,6 +731,8 @@ class Job:
         self.thread = None
         self.publications = []
         self.commentaires = []
+        self.republications = []
+        self.bilan_republications = {}
         self.journal = []
         self.archive_prete = False
         self.video_busy = False
@@ -789,6 +798,10 @@ class Job:
                     "hashtag_presse": self.settings.hashtag_presse,
                     "hashtags_presse": list(self.settings.hashtags_presse),
                     "operator_presse": self.settings.operator_presse,
+                    "collecter_republications_research": self.settings.collecter_republications_research,
+                    "maximum_republications_par_compte": self.settings.maximum_republications_par_compte,
+                    "nombre_republications": len(self.republications),
+                    "bilan_republications": dict(self.bilan_republications),
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "variantes_accents": self.settings.variantes_accents,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
@@ -1852,6 +1865,61 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if (job.settings.test_research_10_publications
                     and (job.processed >= 10 or len(unique_links) >= 10)):
                 break
+        if job.settings.collecter_republications_research and moteur_actif == "research":
+            from collecte.researchapi import ResearchErreur, ResearchAccesRefuse
+        # Les republications sont une population distincte : le créateur de la
+        # vidéo n'est pas nécessairement l'un des médias choisis. Les conserver
+        # dans une table séparée, sans contourner le contrôle des auteurs
+        # du corpus principal ni inventer des résultats négatifs.
+        if (job.settings.collecter_republications_research
+                and moteur_actif == "research" and not limitation_research
+                and not job.stop.is_set()):
+            from collecte.republications_research import (
+                collecter_republications_research, rapprocher_republications)
+            from collecte.exclusion_hashtags import hashtags_a_exclure
+            for media in sources:
+                job.check()
+                compte = media["compte"]
+                diagnostic = {}
+                job.update(status="collecting",
+                    message="Recherche des republications de @" + compte + "…")
+                def accepter_republication(fiche):
+                    if hashtags_a_exclure(fiche, job.settings.hashtags_exclus):
+                        return False
+                    if (job.settings.croiser_hashtag_presse
+                            and not matches_hashtags(
+                                fiche.get("description") or "", job.settings,
+                                hashtags_observes=fiche.get("hashtags"))):
+                        return False
+                    if (job.settings.french_only
+                            and classify_description(fiche.get("description") or "") == "other"):
+                        return False
+                    return True
+                try:
+                    lignes = collecter_republications_research(
+                        compte, job.settings.maximum_republications_par_compte,
+                        debut=job.settings.date_debut, fin=job.settings.date_fin,
+                        verifier=job.check, pause=job.pause,
+                        credentiels=connexion.research_credentiels,
+                        accepter=accepter_republication, rapport=diagnostic)
+                    for ligne in lignes:
+                        ligne["media_id"] = media["id"]
+                    job.republications.extend(lignes)
+                except (ResearchErreur, ValueError) as erreur:
+                    diagnostic.update(statut="erreur_research",
+                                      exception=type(erreur).__name__)
+                    job.bilan_republications[compte] = diagnostic
+                    job.update(search_errors=job.search_errors + 1)
+                    job.diagnostics.append({
+                        "code": "republications_research",
+                        "compte": compte, "exception": type(erreur).__name__})
+                    # Un refus de droits ou de quota n'est pas un résultat négatif.
+                    if isinstance(erreur, ResearchAccesRefuse):
+                        break
+                    continue
+                job.bilan_republications[compte] = diagnostic
+            rapprocher_republications(job.publications, job.republications)
+            rapprocher_republications(job.records, job.republications)
         # Un 429 interdit aussi la lecture différée des vidéos déjà découvertes.
         if limitation_research and len(unique_links) > job.processed:
             lire_decouvertes()
@@ -1878,6 +1946,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += (
                 f" Filtre texte IA TikTok : {job.exclus_sans_texte_ia} publication(s) "
                 "écartée(s), car aucun résumé natif exploitable n'a été récupéré."
+            )
+        if job.settings.collecter_republications_research:
+            final_message += (
+                f" Republications Research : {len(job.republications)} "
+                "relation(s) compte–vidéo identifiée(s) dans la collecte séparée. "
+                "Une absence n'est pas une preuve de non-republication."
             )
         if job.settings.test_research_10_publications:
             final_message += (
@@ -2027,7 +2101,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += " Téléchargement MP4 interrompu ; les textes sont conservés."
             finally:
                 contexte_mp4.clear()
-        if job.base and (job.settings.source_collecte != "presse" or job.publications):
+        if job.base and (job.settings.source_collecte != "presse"
+                         or job.publications or job.settings.collecter_republications_research):
             try:
                 from corpus.construction import construire_exports
                 from corpus.export_zip import exporter_zip
@@ -2038,7 +2113,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 construire_exports(job.directory, job.publications, job.commentaires,
                     {"session": job.id, "statut": final_status, "parametres": job.settings.model_dump(),
                      "compteurs_collecte": job.snapshot()["compteurs_collecte"], "evenements": job.journal,
-                     "diagnostics": job.diagnostics}, texte_source=job.path)
+                     "diagnostics": job.diagnostics}, texte_source=job.path,
+                     republications=(job.republications
+                                     if job.settings.collecter_republications_research
+                                     else None))
                 # Le mode Profils conserve les vidéos découvertes sans légende.
                 # Le mode Presse n'archive QUE des publications réellement lues
                 # et jamais une référence brute issue d'un embed ou d'une API 429.
