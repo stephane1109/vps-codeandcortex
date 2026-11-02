@@ -1118,8 +1118,11 @@ class Job:
         with self.lock:
             content = self.texte_a_exporter()
             nombre_exporte = sum(bool(r.get("description")) for r in self.records)
-        if self.settings.source_collecte == "presse" and not self.publications:
+        if (self.settings.source_collecte == "presse" and not self.publications
+                and not self.profils_medias and not self.republications):
             # Ne pas produire un TXT vide après un refus avant toute donnée.
+            # Un export profils/republications seul conserve néanmoins une source
+            # TXT vide pour l'assemblage cohérent de l'archive ZIP.
             self.path.unlink(missing_ok=True)
         else:
             temp = self.path.with_suffix(".tmp")
