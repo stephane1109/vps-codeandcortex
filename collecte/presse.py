@@ -10,7 +10,7 @@ def charger_inventaire(chemin=None):
     identifiants = set()
     noms_comptes = set()
     categories = {
-        "presse_nationale", "presse_regionale", "presse_locale",
+        "presse_nationale", "presse_regionale",
         "presse_independante", "autres_medias",
     }
     for compte in comptes:
@@ -38,7 +38,6 @@ from functools import lru_cache
 CODES_CATEGORIES_PRESSE = {
     "presse_nationale": "presse_nationale",
     "presse_regionale": "presse_regio_dpt",
-    "presse_locale": "presse_locale",
     "presse_independante": "presse_indep",
     "autres_medias": "presse_autre",
 }
