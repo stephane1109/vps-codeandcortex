@@ -14,9 +14,9 @@ class FormatTxt(unittest.TestCase):
         settings = web.StartRequest(hashtag="test", variables_txt=["url", "id", "profil"])
         self.assertEqual(settings.variables_txt, ["id", "profil"])
         publication = self.publication()
-        self.assertEqual(web.entete_publication(publication, ["url"]), "*id_7694262098129603843\n")
+        self.assertEqual(web.entete_publication(publication, ["url"]), "*id_7694262098129603843 *presse_nationale\n")
         texte = web.text_export([publication], True, variables_txt=["id"])
-        self.assertTrue(texte.startswith("*id_7694262098129603843\n"))
+        self.assertTrue(texte.startswith("*id_7694262098129603843 *presse_nationale\n"))
         self.assertNotIn(publication["url"], texte)
         self.assertNotIn("*url_", texte)
         self.assertEqual(web.entete_publication({}, ["id"]), "*id_indetermine\n")
@@ -37,7 +37,7 @@ class FormatTxt(unittest.TestCase):
             "vues", "likes", "partages", "commentaires", "favoris", "hashtags"])
         self.assertEqual(texte,
             "*date_2026-10-08 *profil_@bfmtv *id_7694262098129603843 "
-            "*vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456\n"
+            "*vues_8000000 *likes_576000 *partages_42 *comment_123 *favoris_456 *presse_nationale\n"
             "Les élèves manifestent.\n#blocage #lycee #manifestation #lyceen #lyon\n")
         self.assertEqual(publication, avant)
         self.assertNotIn("*hashtags", texte)
@@ -106,17 +106,17 @@ class FormatTxt(unittest.TestCase):
         publication = self.publication()
         publication["engagement"] = extraire_engagement({"stats": {"repostCount": 15, "commentCount": 0}})
         texte = web.text_export([publication], False, variables_txt=["partages", "commentaires"])
-        self.assertTrue(texte.startswith("*partages_indetermine *comment_0\n"))
+        self.assertTrue(texte.startswith("*partages_indetermine *comment_0 *presse_nationale\n"))
         publication["engagement"] = extraire_engagement({"stats": {"shareCount": 0}})
         texte = web.text_export([publication], False, variables_txt=["partages", "commentaires"])
-        self.assertTrue(texte.startswith("*partages_0 *comment_indetermine\n"))
+        self.assertTrue(texte.startswith("*partages_0 *comment_indetermine *presse_nationale\n"))
 
     def test_favoris_facultatifs_zero_et_valeur_inconnue(self):
         for brut, attendu in [(456, "456"), (0, "0"), (None, "indetermine")]:
             with self.subTest(favoris=brut):
                 publication = self.publication()
                 publication["engagement"] = extraire_engagement({"stats": {"collectCount": brut, "diggCount": 999}})
-                self.assertEqual(web.entete_publication(publication, ["favoris"]), f"*favoris_{attendu}\n")
+                self.assertEqual(web.entete_publication(publication, ["favoris"]), f"*favoris_{attendu} *presse_nationale\n")
                 self.assertNotIn("*favoris_", web.text_export([publication], False, variables_txt=[]))
         variables = ["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "hashtags"]
         settings = web.StartRequest(hashtag="manifestation", variables_txt=variables)
@@ -129,7 +129,7 @@ class FormatTxt(unittest.TestCase):
             with self.subTest(commentaires=recuperes):
                 texte = web.text_export([publication], False,
                     variables_txt=["commentaires", "hashtags"], commentaires=recuperes)
-                self.assertTrue(texte.startswith("*comment_123\n"))
+                self.assertTrue(texte.startswith("*comment_123 *presse_nationale\n"))
                 self.assertEqual("Commentaire 1 :" in texte, bool(recuperes))
                 if recuperes:
                     self.assertLess(texte.index("#blocage"), texte.index("Commentaire 1 :"))
@@ -143,19 +143,19 @@ class FormatTxt(unittest.TestCase):
                            hashtags=["#Manifestation", "manifestation"])
         avant = deepcopy(publication)
         texte = web.text_export([publication], False, variables_txt=["hashtags"])
-        self.assertEqual(texte, "Avant après.\nAutre ligne\n#Manifestation #lycéen\n")
+        self.assertEqual(texte, "*presse_nationale\nAvant après.\nAutre ligne\n#Manifestation #lycéen\n")
         self.assertEqual(publication, avant)
-        self.assertEqual(web.text_export([publication], False, variables_txt=[]), publication["description"] + "\n")
+        self.assertEqual(web.text_export([publication], False, variables_txt=[]), "*presse_nationale\n" + publication["description"] + "\n")
         publication.update(description="#lycéen #lycéen", hashtags=[])
-        self.assertEqual(web.text_export([publication], False, variables_txt=["hashtags"]), "#lycéen\n")
+        self.assertEqual(web.text_export([publication], False, variables_txt=["hashtags"]), "*presse_nationale\n#lycéen\n")
         publication.update(description="Une légende sans hashtag.", hashtags=[])
-        self.assertEqual(web.text_export([publication], False, variables_txt=["hashtags"]), publication["description"] + "\n")
+        self.assertEqual(web.text_export([publication], False, variables_txt=["hashtags"]), "*presse_nationale\n" + publication["description"] + "\n")
 
     def test_liens_dans_la_legende_conserves(self):
         publication = self.publication()
         publication.update(description="Lire https://exemple.fr/page#section #lycee", hashtags=["lycee"])
         self.assertEqual(web.text_export([publication], False, variables_txt=["hashtags"]),
-                         "Lire https://exemple.fr/page#section\n#lycee\n")
+                         "*presse_nationale\nLire https://exemple.fr/page#section\n#lycee\n")
 
     def test_date_sans_heure_et_absence_explicite(self):
         for date, attendu in [("2026-10-08T11:46:46+00:00", "2026-10-08"),
@@ -169,7 +169,7 @@ class FormatTxt(unittest.TestCase):
         publication = self.publication()
         publication["engagement"] = extraire_engagement(dom={"vues": "8M"})
         texte = web.text_export([publication], False, variables_txt=["vues"])
-        self.assertTrue(texte.startswith("*vues_8000000\n"))
+        self.assertTrue(texte.startswith("*vues_8000000 *presse_nationale\n"))
         self.assertEqual(publication["engagement"]["vues"]["brut"], "8M")
         self.assertTrue(publication["engagement"]["vues"]["estime"])
 
@@ -177,12 +177,12 @@ class FormatTxt(unittest.TestCase):
         settings = web.StartRequest(hashtag="manifestation", variables_txt=["republications", "partages", "commentaires"])
         self.assertEqual(settings.variables_txt, ["partages", "commentaires"])
         publication = self.publication()
-        self.assertEqual(web.entete_publication(publication, ["republications"]), "*partages_42\n")
+        self.assertEqual(web.entete_publication(publication, ["republications"]), "*partages_42 *presse_nationale\n")
         with tempfile.TemporaryDirectory() as dossier:
             job = web.Job("test", settings, Path(dossier))
             job.records.append(publication)
             job.save()
-            self.assertTrue(job.path.read_text().startswith("*partages_42 *comment_123\n"))
+            self.assertTrue(job.path.read_text().startswith("*partages_42 *comment_123 *presse_nationale\n"))
             self.assertFalse(settings.collecter_commentaires)
 
     def test_indicateur_ia_retire_des_anciennes_selections_et_des_deux_sources(self):
