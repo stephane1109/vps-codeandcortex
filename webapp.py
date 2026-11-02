@@ -36,6 +36,7 @@ import scraptiktok as scraper
 from language_filter import classify_description
 from collecte.dates import normaliser_date, evaluer_periode
 from collecte.selection_hashtags import normaliser_liste_hashtags
+from collecte.suivi_sources import etablir_bilan_medias, exporter_bilan_medias_csv
 
 LOG = logging.getLogger("scraptiktok.web")
 TERMINAL = {"completed", "partial", "failed", "stopped"}
@@ -764,6 +765,7 @@ class Job:
         self.profils_medias = []
         self.bilan_republications = {}
         self.journal = []
+        self.source_en_cours_id = None
         self.archive_prete = False
         self.video_busy = False
         self.video_stop = threading.Event()
@@ -850,6 +852,11 @@ class Job:
                     "bilan_hashtags": dict(self.bilan_hashtags),
                     "correspondances_hashtags": self.correspondances_hashtags,
                     "legendes_vides": self.legendes_vides,
+                    "bilan_medias": (etablir_bilan_medias(
+                        self.settings.sources, self.journal,
+                        source_en_cours=self.source_en_cours_id,
+                        termine=not self.busy)
+                        if self.settings.source_collecte == "presse" else []),
                     "bilan_sources": [{"source": entree["source"],
                         "liens": len(entree.get("rapport", {}).get("discovered_urls", [])),
                         "version_collecteur": entree.get("rapport", {}).get("version_collecteur"),
@@ -1833,7 +1840,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if (job.settings.source_collecte == "hashtags" and plafond_decouverte is not None
                     and len(unique_links) >= plafond_decouverte):
                 break
+            job.source_en_cours_id = source.get("id") if job.settings.source_collecte == "presse" else None
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
+            entree_source = None
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
             rapport = {}
             # Limiter chaque source à la quantité restante du test global.
@@ -1866,9 +1875,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     job.update(search_errors=job.search_errors + 1)
                 message_source = rapport.get("bilan_recherche") or ("Recherche partielle : une recherche TikTok a échoué."
                                   if rapport.get("recherches_en_echec") else "Recherche terminée.")
-                job.journal.append({"source":etiquette,"date":scraper.utc_now(),"rapport":rapport,
+                entree_source = {"source": etiquette, "date": scraper.utc_now(),
+                    "rapport": rapport, "statut_source": "en_cours",
                     "message": message_source if found or rapport.get("bilan_recherche") else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
-                        if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")})
+                        if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")}
+                job.journal.append(entree_source)
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity and (job.settings.source_collecte == "hashtags"
@@ -1885,7 +1896,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 LOG.warning("Source %s : %s", etiquette, type(erreur).__name__)
                 if "diagnostic" not in rapport:
                     rapport["diagnostic"] = {"exception": type(erreur).__name__}
-                job.journal.append({"source": etiquette, "statut": "inaccessible", "date": scraper.utc_now(), "rapport": rapport,
+                from collecte.presse_research import ResearchErreur
+                from collecte.presse_api import PresseRateLimitError, PresseCooldownError
+                from collecte.quotas_exploitation import QuotaScrapingAtteint
+                statut_echec = ("partielle" if rapport.get("discovered_urls") else "interrompue") if isinstance(
+                    erreur, (ResearchErreur, PresseRateLimitError, PresseCooldownError, QuotaScrapingAtteint)) else "echec"
+                job.journal.append({"source": etiquette, "statut": "inaccessible",
+                    "statut_source": statut_echec, "date": scraper.utc_now(), "rapport": rapport,
                     "message": expliquer_echec_source(rapport, erreur)})
                 from collecte.presse_api import PresseRateLimitError, PresseCooldownError
                 from collecte.presse_research import ResearchErreur
@@ -1943,6 +1960,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.sauvegarder_postgres(progressif=True)
             if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
                 break
+            if entree_source is not None:
+                incomplete = bool(rapport.get("collecte_partielle") or rapport.get("recherches_en_echec")
+                    or any(r.get("collecte_partielle") or r.get("recherches_en_echec")
+                        for r in rapport.get("recherches_compte", [])))
+                entree_source["statut_source"] = "partielle" if incomplete else "traitee"
             if (job.settings.test_research_10_publications
                     and (job.processed >= 10 or len(unique_links) >= 10)):
                 break
@@ -2212,6 +2234,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                      job.settings.profils_medias_variables else None),
                      profils_medias_variables=job.settings.profils_medias_variables,
                      profils_medias_classes=job.settings.profils_medias_classes)
+                if job.settings.source_collecte == "presse":
+                    bilan = etablir_bilan_medias(
+                        job.settings.sources, job.journal,
+                        source_en_cours=job.source_en_cours_id, termine=True)
+                    (job.directory / "bilan_medias.csv").write_bytes(
+                        exporter_bilan_medias_csv(bilan))
                 # Le mode Profils conserve les vidéos découvertes sans légende.
                 # Le mode Presse n'archive QUE des publications réellement lues
                 # et jamais une référence brute issue d'un embed ou d'une API 429.
