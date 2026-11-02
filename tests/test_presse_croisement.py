@@ -139,6 +139,65 @@ class CroisementPresseTests(unittest.TestCase):
             self.assertEqual(apercu["hashtag_presse"], "manifestation")
             self.assertEqual(apercu["bilan_hashtags"]["manifestation"], 2)
 
+    def test_collecte_multi_hashtags_et_exports_csv(self):
+        """Le filtrage des vidéos et les colonnes restent cohérents après la collecte."""
+        from corpus.publications_csv import ligne_publication_csv
+        from corpus.construction import lignes_engagement
+        medias = {
+            "lemondefr": [
+                publication("lemondefr", "7701005447410552031",
+                            "Des jeunes #manifestation."),
+                publication("lemondefr", "7701005447410552032",
+                            "Un #blocage du lycée."),
+                publication("lemondefr", "7701005447410552033",
+                            "#manifestation et #blocage."),
+                publication("lemondefr", "7701005447410552034",
+                            "Publication sans hashtag."),
+            ]
+        }
+        videos = {p["url"]: p for p in medias["lemondefr"]}
+        def decouvrir(source, rapport, **options):
+            return [p["url"] for p in medias[source["compte"]]]
+
+        for operateur, comptes_attendus in (("OR", 3), ("AND", 1)):
+            with self.subTest(operateur=operateur), tempfile.TemporaryDirectory() as dossier:
+                options = web.StartRequest(
+                    source_collecte="presse", medias=["lemonde"],
+                    presse_moteur="api", limit=10,
+                    croiser_hashtag_presse=True,
+                    hashtags_presse=["#manifestation", "#blocage"],
+                    operator_presse=operateur, variables_txt=["profil", "id"])
+                travail = web.Job("essai-multiple", options, Path(dossier))
+                travail.base = None
+                with patch("connect_presse.ConnexionPresse.decouvrir",
+                           side_effect=decouvrir), patch.object(
+                           web.scraper, "read_post",
+                           side_effect=lambda driver, url, *args, **kwargs:
+                           dict(videos[url])), patch.object(travail, "pause"):
+                    web.execute_job(travail, driver_factory=lambda args: Mock())
+                self.assertEqual(len(travail.records), comptes_attendus)
+                self.assertEqual(travail.bilan_hashtags,
+                                 {"manifestation": 2, "blocage": 2})
+                self.assertEqual(travail.correspondances_hashtags, comptes_attendus)
+                self.assertEqual(travail.filtered, 4 - comptes_attendus)
+                for record in travail.records:
+                    self.assertEqual(record["hashtags_recherches"],
+                                     ["manifestation", "blocage"])
+                    self.assertEqual(record["operateur_hashtags"], operateur)
+                    csv_publication = ligne_publication_csv(record)
+                    csv_engagement = lignes_engagement([record])[0]
+                    self.assertEqual(csv_publication["hashtags_correspondants"],
+                                     record["hashtags_correspondants"])
+                    self.assertEqual(csv_engagement["hashtags_recherches"],
+                                     ["manifestation", "blocage"])
+                    self.assertEqual(csv_engagement["operateur_hashtags"], operateur)
+                self.assertIn("Une #manifestation", travail.texte_a_exporter()
+                              if operateur == "OR" else
+                              "Une #manifestation et un #blocage")
+                self.assertEqual(travail.snapshot()["hashtags_presse"],
+                                 ["manifestation", "blocage"])
+                self.assertEqual(travail.snapshot()["operator_presse"], operateur)
+
     def test_croisement_et_export_double_source_ia(self):
         with tempfile.TemporaryDirectory() as dossier:
             params = web.StartRequest(source_collecte="presse", medias=["lemonde"],
