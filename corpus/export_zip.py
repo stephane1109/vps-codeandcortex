@@ -18,21 +18,30 @@ def exporter_zip(dossier, destination, inclure_medias=False, *, inclure_mp4=Fals
     return destination
 
 
-def archive_avec_texte(chemin, contenu_txt):
-    """Adapter uniquement les deux TXT principaux pour ce téléchargement."""
+def archive_avec_texte(chemin, contenu_txt, fichiers_supplementaires=None):
+    """Réunir les résultats dans un seul ZIP en actualisant les TXT principaux.
+
+    Les fichiers supplémentaires (commentaires et diagnostic) sont inclus
+    sans supprimer les autres exports déjà présents dans l'archive.
+    """
     from shutil import copyfileobj
     from tempfile import SpooledTemporaryFile
     # Au-delà de 8 Mio, utiliser un fichier temporaire pour ménager la mémoire du VPS.
     flux = SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
     try:
+        ajouts = dict(fichiers_supplementaires or {})
         with ZipFile(chemin, "r") as source, ZipFile(flux, "w", ZIP_DEFLATED) as cible:
+            fichiers_remplaces = {"textes.txt", "corpus_iramuteq.txt", *ajouts}
             for entree in source.infolist():
-                if entree.filename in {"textes.txt", "corpus_iramuteq.txt"}:
+                if entree.filename in fichiers_remplaces:
                     continue
                 with source.open(entree) as lecture, cible.open(entree, "w") as ecriture:
                     copyfileobj(lecture, ecriture, length=1024 * 1024)
             for nom in ("textes.txt", "corpus_iramuteq.txt"):
                 cible.writestr(nom, contenu_txt)
+            for nom, contenu in ajouts.items():
+                if nom not in {"textes.txt", "corpus_iramuteq.txt"}:
+                    cible.writestr(nom, contenu)
         flux.seek(0)
         return flux
     except Exception:
