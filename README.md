@@ -958,6 +958,57 @@ zéros sont conservés. La collecte des textes des commentaires reste dans
 une publication. Les exports téléchargés après mise à jour utilisent le
 nouveau schéma ; les ZIP anciens déjà téléchargés ne changent pas.
 
+### Sauvegardes PostgreSQL, SQLite et concaténation de CSV
+
+L'onglet **Base de données** rassemble désormais trois opérations distinctes.
+
+**1. PostgreSQL — archives durables.** Les collectes ponctuelles sont
+archivées automatiquement. Les collectes Research n'apparaissent dans
+PostgreSQL qu'après synchronisation depuis SQLite. Choisir une collecte,
+puis sélectionner **Télécharger cette collecte (ZIP)**. L'archive contient
+`publications.csv`, `publications.json`, `commentaires.csv`,
+`commentaires.json` et `informations_export.json`. Les quatre anciens
+téléchargements individuels restent disponibles dans un expandeur.
+
+ScrapTikTok ne supprime **pas automatiquement** les collectes PostgreSQL.
+Leur conservation dépend de la persistance du serveur PostgreSQL, des
+actions manuelles et des éventuelles règles d'administration extérieures.
+Le ZIP exporte un corpus et **ne constitue pas** une sauvegarde complète
+restaurable de l'instance PostgreSQL. Effectuer séparément des sauvegardes
+physiques/logiques (par exemple `pg_dump`, puis `pg_restore`) pour la
+reprise après une panne.
+
+L'import de l'ancien historique local reste disponible sous
+**Opération exceptionnelle : recopier un ancien historique local**. Il
+copie les `publications.json` et `commentaires.json` des archives locales
+encore conservées dans PostgreSQL, sans supprimer les originaux. Il ne
+restaure ni un dump PostgreSQL ni une base SQLite.
+
+**2. SQLite — collectes Research programmées.** Cocher
+**Afficher mes collectes SQLite Research**, choisir un programme, puis
+**Télécharger cette collecte SQLite (ZIP)**. Le ZIP contient une copie
+`corpus.sqlite3`, des CSV, des JSON et un TXT. La copie est **un extrait
+tabulaire des données**, et non le fichier opérationnel
+`collectes_research.sqlite3` contenant le calendrier de reprise.
+**Copier cette collecte SQLite dans PostgreSQL** synchronise ses résultats
+dans les tables `research_*` sans supprimer SQLite. Le moteur de collecte
+continue de dépendre du fichier opérationnel situé dans `DATA_DIR`.
+
+La sauvegarde temporaire de l'historique des analyses est conservée
+**30 jours par défaut**, configurables via
+`SCRAPTIKTOK_ANALYSIS_RETENTION_DAYS`. Elle est indépendante de la
+persistance du fichier SQLite Research et des archives PostgreSQL.
+
+**3. Concaténer des publications CSV.** Charger jusqu'à 20 fichiers CSV
+(de 10 Mo maximum chacun, 100 000 lignes au total), issus de PostgreSQL,
+SQLite, ou du ZIP des collectes. L'outil accepte les séparateurs virgule
+et point-virgule, réunit les colonnes, conserve les identifiants TikTok
+comme chaînes, compte les doublons et propose de privilégier le premier
+ou le dernier enregistrement en cas de conflit. Télécharger ensuite le
+**CSV concaténé**. Cette opération n'écrit aucune ligne dans PostgreSQL
+ni dans SQLite ; elle est distincte de la fusion des tableaux d'analyse
+multimodale. Les commentaires détaillés restent dans leurs propres fichiers.
+
 ### Archivage PostgreSQL facultatif
 
 Si une base PostgreSQL est déjà accessible depuis Coolify, définir
