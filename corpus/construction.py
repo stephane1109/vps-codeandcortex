@@ -4,7 +4,8 @@ from telechargement_videos import CHAMPS_VIDEO, correspondance_video
 from .export_json import exporter_json
 from .export_csv import exporter_csv
 from .publications_csv import (COLONNES_PUBLICATIONS_CSV, lignes_publications_csv,
-                               hashtags_pour_csv, hashtags_collecte_pour_csv)
+                               hashtags_pour_csv, hashtags_collecte_pour_csv,
+                               compte_reposteur_pour_csv)
 from .export_iramuteq import exporter_iramuteq
 from .corpus_legendes import construire_legendes
 from .corpus_commentaires import construire_commentaires
@@ -35,11 +36,7 @@ def lignes_engagement(publications):
                  "hashtags_correspondants": p.get("hashtags_correspondants"),
                  "operateur_hashtags": p.get("operateur_hashtags"),
                  "type_publication": p.get("type_publication"),
-                 # Une cellule textuelle représente tous les comptes identifiés,
-                 # même dans un enregistrement importé d'un ancien corpus.
-                 "compte_reposteur": (
-                     p.get("compte_reposteur") or
-                     ", ".join(sorted(set(p.get("comptes_reposteurs") or [])))),
+                 "compte_reposteur": compte_reposteur_pour_csv(p),
                  "auteur_original": p.get("auteur_original"),
                  "id_video_originale": p.get("id_video_originale"),
                  "republication_confirmee": p.get("republication_confirmee"),
