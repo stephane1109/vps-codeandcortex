@@ -82,6 +82,16 @@ def construire_tableau_complet(session, dossier):
         for mesure in mesures:
             mesure["htag_collecte"] = hashtags_collecte_pour_csv(mesure)
             mesure.pop("hashtags_recherches", None)
+    # Ne pas réexporter les anciens intitulés retirés des CSV.
+    colonnes_a_retirer = {"comptes_reposteurs", "contenu_genere_ia"}
+    if any(nom in colonnes_source for nom in colonnes_a_retirer):
+        colonnes_source = [
+            nom for nom in colonnes_source if nom not in colonnes_a_retirer]
+        for mesure in mesures:
+            if not mesure.get("compte_reposteur"):
+                mesure["compte_reposteur"] = mesure.get("comptes_reposteurs", "")
+            mesure.pop("comptes_reposteurs", None)
+            mesure.pop("contenu_genere_ia", None)
     if "publication_id" not in colonnes_source:
         raise ValueError("Le tableau de mesures ne possède aucun ID TikTok.")
 
@@ -125,7 +135,9 @@ def construire_tableau_complet(session, dossier):
             }
         elif not lignes[identifiant].get("url"):
             lignes[identifiant]["url"] = publication.get("url") or ""
-        lignes[identifiant]["contenu_genere_ia"] = publication.get("contenu_genere_ia") or "non_renseigne"
+        lignes[identifiant]["statut_resume_ia"] = (
+            publication.get("statut_resume_ia") or
+            lignes[identifiant].get("statut_resume_ia") or "non_renseigne")
         lignes[identifiant].update(colonnes_categories_presse(publication))
         if publication.get("inclure_hashtags_csv"):
             lignes[identifiant]["hashtags"] = hashtags_pour_csv(publication)
@@ -134,7 +146,7 @@ def construire_tableau_complet(session, dossier):
             or lignes[identifiant].get("htag_collecte", ""))
         for nom in ("hashtags_correspondants",
                     "operateur_hashtags", "type_publication", "compte_reposteur",
-                    "comptes_reposteurs", "auteur_original", "id_video_originale",
+                    "auteur_original", "id_video_originale",
                     "republication_confirmee", "date_republication"):
             valeur = publication.get(nom)
             if valeur is not None:
@@ -142,11 +154,11 @@ def construire_tableau_complet(session, dossier):
                     ", ".join(valeur) if isinstance(valeur, list) else valeur)
 
     colonnes = list(dict.fromkeys([
-        "publication_id", "url", "statut", "contenu_genere_ia", *colonnes_source,
+        "publication_id", "url", "statut", "statut_resume_ia", *colonnes_source,
         "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
         "hashtags",
         "htag_collecte", "hashtags_correspondants", "operateur_hashtags",
-        "type_publication", "compte_reposteur", "comptes_reposteurs",
+        "type_publication", "compte_reposteur",
         "auteur_original", "id_video_originale", "republication_confirmee",
         "date_republication",
         "violence_visible",
