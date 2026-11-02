@@ -55,6 +55,11 @@ def texte_commentaires_collectes(job):
     return "\n\n".join(blocs) + ("\n" if blocs else "")
 
 
+class SupprimerCollectePostgresPayload(BaseModel):
+    """Confirmation explicite du nom exact avant une suppression définitive."""
+    nom_confirmation: str = Field(min_length=1, max_length=160)
+
+
 class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
@@ -2407,6 +2412,40 @@ def create_app(manager=None):
         from stockage.postgres_consultation import importer_historique
         try:
             return importer_historique(manager.data_dir, owner_historique(request))
+        except RuntimeError as erreur:
+            raise HTTPException(503, str(erreur)) from None
+
+    @app.post("/api/base-donnees/{type_sauvegarde}/{identifiant}/supprimer")
+    def supprimer_archive_postgres(
+            type_sauvegarde: str, identifiant: str,
+            payload: SupprimerCollectePostgresPayload, request: Request):
+        """Supprimer uniquement l'enregistrement d'une collecte autorisée."""
+        exiger_ticket(request)
+        utilisateur = owner_historique(request)
+        # Ne pas supprimer une archive susceptible d'être réécrite par
+        # une collecte encore active ou un programme Research en cours.
+        if type_sauvegarde == "collecte":
+            try:
+                tache = manager.get(owner(request), identifiant)
+            except HTTPException:
+                tache = None
+            if tache is not None and (tache.busy or tache.video_busy):
+                raise HTTPException(
+                    409, "Arrêtez la collecte avant de supprimer son archive.")
+        elif type_sauvegarde == "research":
+            from stockage.collectes_research import detail_plan
+            programme = detail_plan(manager.data_dir, identifiant, utilisateur)
+            if programme and programme.get("statut") in ("programme", "en_cours"):
+                raise HTTPException(
+                    409, "Arrêtez le programme Research avant de supprimer "
+                         "sa copie PostgreSQL, sinon elle sera recréée.")
+        from stockage.postgres_consultation import supprimer_collecte_postgres
+        try:
+            return supprimer_collecte_postgres(
+                utilisateur, type_sauvegarde, identifiant,
+                payload.nom_confirmation)
+        except ValueError as erreur:
+            raise HTTPException(400, str(erreur)) from None
         except RuntimeError as erreur:
             raise HTTPException(503, str(erreur)) from None
 
