@@ -66,7 +66,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(regionaux.count(compte), 1)
         self.assertEqual(len(regionaux), 21)
         # Seul @liberationfr a été supprimé à la demande de l'utilisateur.
-        self.assertEqual(len(inventaire), 62)
+        self.assertEqual(len(inventaire), 63)
 
     def test_nationaux_tv_et_presse_ecrite_conserves(self):
         """Compléter les deux listes sans supprimer les anciens médias."""
@@ -84,7 +84,7 @@ class TestsGroupesPresse(unittest.TestCase):
                     handles[compte]["categorie"], "presse_nationale")
                 self.assertEqual(
                     handles[compte]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(handles), 62)
+        self.assertEqual(len(handles), 63)
         self.assertEqual(
             len([m for m in inventaire
                  if m["categorie"] == "presse_nationale"]), 25)
@@ -106,7 +106,7 @@ class TestsGroupesPresse(unittest.TestCase):
         """Ajouter un compte indépendant et reclasser Mediapart sans suppression."""
         inventaire = charger_inventaire()
         handles = {m["compte"]: m for m in inventaire}
-        self.assertEqual(len(inventaire), 62)
+        self.assertEqual(len(inventaire), 63)
         info = handles["iuzdrmqevnu"]
         self.assertEqual(info["nom"], "L’info en 60 secondes")
         self.assertEqual(info["categorie"], "presse_independante")
@@ -122,6 +122,19 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(
             sum(m["categorie"] == "presse_nationale" for m in inventaire),
             25)
+
+    def test_noahdecrypte_dans_autres_medias(self):
+        """Ajouter Noah Décrypte sans supprimer ni renommer d'autres médias."""
+        inventaire = charger_inventaire()
+        comptes = [m for m in inventaire if m["compte"] == "noahdecrypte"]
+        self.assertEqual(len(comptes), 1)
+        self.assertEqual(comptes[0]["nom"], "Noah Décrypte")
+        self.assertEqual(comptes[0]["categorie"], "autres_medias")
+        self.assertEqual(
+            comptes[0]["url"], "https://www.tiktok.com/@noahdecrypte")
+        self.assertEqual(
+            sum(m["categorie"] == "autres_medias" for m in inventaire), 9)
+        self.assertEqual(len(inventaire), 63)
 
     def test_liberation_variante_supprimee_compte_original_conserve(self):
         """Ne supprimer que @liberationfr sans toucher aux autres comptes."""
@@ -147,7 +160,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(
                     groupes[compte]["categorie"], "presse_independante")
                 self.assertNotIn("sous_categorie", groupes[compte])
-        self.assertEqual(len(inventaire), 62)
+        self.assertEqual(len(inventaire), 63)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
             8)
