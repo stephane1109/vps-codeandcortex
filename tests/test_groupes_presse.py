@@ -24,7 +24,7 @@ COMPTES_NOUVEAUX = {
 
 COMPTES_NATIONAUX_TELEVISION = {
     "tf1info", "bfmtv", "francetvpolitique", "france.tv",
-    "m6info", "lci", "cnewsofficiel", "artefr",
+    "m6info", "lci", "cnews", "artefr",
 }
 
 COMPTES_NATIONAUX_ECRITS = {
@@ -88,6 +88,20 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(
             len([m for m in inventaire
                  if m["categorie"] == "presse_nationale"]), 26)
+
+    def test_cnews_avec_le_compte_corrige(self):
+        """Conserver l'ID de sélection CNews et corriger le compte TikTok."""
+        inventaire = charger_inventaire()
+        cnews = [m for m in inventaire if m["compte"] == "cnews"]
+        self.assertEqual(len(cnews), 1)
+        self.assertEqual(cnews[0]["id"], "cnewsofficiel")
+        self.assertEqual(cnews[0]["nom"], "CNews")
+        self.assertEqual(cnews[0]["categorie"], "presse_nationale")
+        self.assertEqual(cnews[0]["sous_categorie"], "television_nationale")
+        self.assertEqual(cnews[0]["url"], "https://www.tiktok.com/@cnews")
+        self.assertNotIn(
+            "cnewsofficiel", {m["compte"] for m in inventaire})
+        self.assertEqual(len(inventaire), 63)
 
     def test_lhumanite_dans_presse_ecrite_nationale(self):
         """Ajouter L'Humanité sans créer de doublon ni modifier ses voisins."""
