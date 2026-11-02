@@ -3,7 +3,8 @@ from pathlib import Path
 from telechargement_videos import CHAMPS_VIDEO, correspondance_video
 from .export_json import exporter_json
 from .export_csv import exporter_csv
-from .publications_csv import COLONNES_PUBLICATIONS_CSV, lignes_publications_csv
+from .publications_csv import (COLONNES_PUBLICATIONS_CSV, lignes_publications_csv,
+                               hashtags_pour_csv)
 from .export_iramuteq import exporter_iramuteq
 from .corpus_legendes import construire_legendes
 from .corpus_commentaires import construire_commentaires
@@ -29,7 +30,7 @@ def lignes_engagement(publications):
                  "is_verified": p.get("is_verified"),
                  "is_verified_statut": p.get("is_verified_statut"),
                  "video_duration": p.get("video_duration"),
-                 "hashtags": p.get("hashtags"),
+                 "hashtags": hashtags_pour_csv(p),
                  "hashtags_recherches": p.get("hashtags_recherches"),
                  "hashtags_correspondants": p.get("hashtags_correspondants"),
                  "operateur_hashtags": p.get("operateur_hashtags")}
