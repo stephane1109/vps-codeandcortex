@@ -1071,7 +1071,7 @@ with onglet_collecte:
     if st.session_state.get("recherche_plan_cree"):
         st.success("Collecte Research programmée : données enregistrées dans SQLite.")
         st.session_state.pop("recherche_plan_cree", None)
-    if st.checkbox("Afficher mes collectes Research programmées",
+    if st.checkbox("Gérer mes collectes Research programmées",
                    key="recherche_plans_afficher"):
         @st.fragment(run_every="20s")
         def afficher_plans_research():
@@ -1106,23 +1106,10 @@ with onglet_collecte:
                     if plan.get("message"):
                         st.caption(plan["message"])
                     st.caption(
-                        "SQLite conserve automatiquement le corpus. "
-                        "Avec RESEARCH_POSTGRES_DSN dans Coolify, "
-                        "une copie est également archivée dans PostgreSQL."
+                        "Corpus et calendrier conservés dans SQLite. "
+                        "Pour télécharger ou copier les résultats dans PostgreSQL, "
+                        "ouvrez l'onglet « Base de données »."
                     )
-                    if st.button("Synchroniser vers PostgreSQL",
-                                 key=f"plan_pg_{identifiant}"):
-                        try:
-                            resultat_pg = api(
-                                f"/api/research/plans/{identifiant}/synchroniser-postgres", {})
-                        except RuntimeError as erreur:
-                            st.warning(str(erreur))
-                        else:
-                            st.success(
-                                f"PostgreSQL synchronisé : "
-                                f"{resultat_pg['publications']} publications et "
-                                f"{resultat_pg['commentaires']} commentaires."
-                            )
                     commandes = (
                         ["suspendre", "arreter"]
                         if plan["statut"] in {"programme", "en_cours"}
@@ -1140,13 +1127,7 @@ with onglet_collecte:
                                 st.error(str(erreur))
                             else:
                                 st.rerun()
-                    st.link_button(
-                        "Télécharger les résultats",
-                        f"/api/research/plans/{identifiant}/export/zip",
-                        use_container_width=True,
-                        help="ZIP nommé comme la collecte : publications et "
-                             "commentaires CSV, données JSON, corpus TXT, "
-                             "base SQLite et journal Research.")
+
         afficher_plans_research()
     if collecte:
         st.divider()
