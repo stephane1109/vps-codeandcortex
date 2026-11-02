@@ -61,10 +61,12 @@ class TestsPublicationsCsv(unittest.TestCase):
             "commentaires_classe", "partages_classe", "favoris_classe",
             "duree_classe", "taux_engagement", "classe_taux_engagement",
             "hashtags", "description", "resume_ia_tiktok",
-            "contenu_genere_ia", "statut_resume_ia",
+            "statut_resume_ia",
             "commentaires_collecte_recuperes",
         )
         self.assertTrue(set(attendues).issubset(COLONNES_PUBLICATIONS_CSV))
+        for supprimee in ("comptes_reposteurs", "contenu_genere_ia"):
+            self.assertNotIn(supprimee, COLONNES_PUBLICATIONS_CSV)
         self.assertEqual(len(COLONNES_PUBLICATIONS_CSV),
                          len(set(COLONNES_PUBLICATIONS_CSV)))
         self.assertEqual(CHAMPS_PUBLICATIONS, COLONNES_PUBLICATIONS_CSV)
