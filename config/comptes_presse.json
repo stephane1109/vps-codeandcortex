@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "comptes": [
     {
       "id": "lemonde",
@@ -272,6 +272,15 @@
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@mediapartfr",
       "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "angersinfo",
+      "nom": "Angers Info",
+      "compte": "angersinfo",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@angersinfo"
     },
     {
       "id": "actutoulouse",
@@ -567,6 +576,16 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@iuzdrmqevnu"
+    },
+    {
+      "id": "camdiafr",
+      "nom": "Camdia FR",
+      "compte": "camdiafr",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@camdiafr",
+      "note": "Statut éditorial à confirmer"
     },
     {
       "id": "noahdecrypte",
