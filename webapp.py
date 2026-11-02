@@ -2537,6 +2537,9 @@ class Manager:
             job.commentaires=charger("commentaires.json")
             job.republications=charger("republications.json")
             job.profils_medias=charger("profils_medias.json")
+            journal_archive = charger("journal.json")
+            if isinstance(journal_archive, dict):
+                job.journal = list(journal_archive.get("evenements") or [])
             job.processed=int(manifeste.get("traites",0))
             job.busy=False
             job.status=ligne["statut"]
