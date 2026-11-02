@@ -2,13 +2,20 @@
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
 
-def exporter_zip(dossier, destination, inclure_medias=False, *, inclure_mp4=False):
+def exporter_zip(dossier, destination, inclure_medias=False, *, inclure_mp4=False,
+                 commentaires_csv_uniquement=False):
     dossier = Path(dossier).resolve(); destination = Path(destination).resolve()
     temporaire = destination.with_suffix(".zip.tmp")
     with ZipFile(temporaire, "w", ZIP_DEFLATED) as archive:
         for chemin in sorted(dossier.rglob("*")):
             if not chemin.is_file() or chemin.is_symlink() or chemin.resolve() in {destination, temporaire}: continue
             relatif = chemin.relative_to(dossier)
+            if (commentaires_csv_uniquement and relatif.as_posix() in {
+                    "commentaires.txt", "corpus_commentaires_iramuteq.txt",
+                    "commentaires.json"}):
+                # Le JSON interne reste disponible pour l'historique, les réseaux
+                # et PostgreSQL. Il n'est pas exporté en mode CSV uniquement.
+                continue
             if not inclure_medias and relatif.parts[0] in {"videos", "images", "audio"}:
                 if not (inclure_mp4 and relatif.parts[0] == "videos" and len(relatif.parts) == 2 and chemin.suffix == ".mp4"):
                     continue
@@ -18,7 +25,8 @@ def exporter_zip(dossier, destination, inclure_medias=False, *, inclure_mp4=Fals
     return destination
 
 
-def archive_avec_texte(chemin, contenu_txt, fichiers_supplementaires=None):
+def archive_avec_texte(chemin, contenu_txt, fichiers_supplementaires=None, *,
+                       commentaires_csv_uniquement=False):
     """Réunir les résultats dans un seul ZIP en actualisant les TXT principaux.
 
     Les fichiers supplémentaires (commentaires et diagnostic) sont inclus
@@ -32,6 +40,10 @@ def archive_avec_texte(chemin, contenu_txt, fichiers_supplementaires=None):
         ajouts = dict(fichiers_supplementaires or {})
         with ZipFile(chemin, "r") as source, ZipFile(flux, "w", ZIP_DEFLATED) as cible:
             fichiers_remplaces = {"textes.txt", "corpus_iramuteq.txt", *ajouts}
+            if commentaires_csv_uniquement:
+                fichiers_remplaces.update({
+                    "commentaires.txt", "corpus_commentaires_iramuteq.txt",
+                    "commentaires.json"})
             for entree in source.infolist():
                 if entree.filename in fichiers_remplaces:
                     continue
