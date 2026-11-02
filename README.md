@@ -500,8 +500,9 @@ présent dans la presse écrite nationale. Mediapart (`@mediapartfr`) a été
 reclassé en presse nationale, sous-groupe presse écrite. "L’info en 60
 secondes" (`@iuzdrmqevnu`) a été ajouté à la presse indépendante.
 L'interface regroupe les comptes en presse nationale
-(25, avec deux sous-groupes TV et presse écrite), presse régionale (21),
-presse indépendante (8) et autres
+(25, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
+et « Presse nationale »), presse régionale (21), presse indépendante (8)
+et autres
 médias ou statut à confirmer (8). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
 suppression ni changement d'identifiant. La liste des comptes est affichée
