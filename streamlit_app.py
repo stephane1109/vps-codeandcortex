@@ -122,6 +122,10 @@ if "initialise" not in st.session_state:
                 ancienne.get("hashtags_presse") or
                 ([ancienne.get("hashtag_presse")] if ancienne.get("hashtag_presse") else []))),
         "operator_presse": ancienne.get("operator_presse", "OR"),
+        "collecter_republications_research": ancienne.get(
+            "collecter_republications_research", False),
+        "maximum_republications_par_compte": ancienne.get(
+            "maximum_republications_par_compte", 100),
         "presse_moteur":ancienne.get("presse_moteur","research"),
         "hashtag_moteur":ancienne.get("hashtag_moteur","research"),
         "profil_moteur":ancienne.get("profil_moteur","research"),
@@ -600,6 +604,27 @@ with onglet_collecte:
                 "Research API : conditions appliquées dès la découverte, puis vérifiées "
                 "localement. Autres moteurs : filtrage après lecture des publications. "
                 "Les autres filtres de période et de langue restent applicables.")
+        st.checkbox(
+            "Récupérer les vidéos republiées par les comptes sélectionnés (Research API)",
+            key="collecter_republications_research",
+            disabled=occupe or st.session_state.get("presse_moteur") != "research",
+            help="Interroge le compte public de chaque média via l'endpoint officiel "
+                 "des republications. Produit republications.csv et republications.json, "
+                 "et rapproche les identifiants avec le corpus principal. "
+                 "La date TikTok fournie est celle de la création de la vidéo, "
+                 "pas celle de sa republication.")
+        if (st.session_state.get("collecter_republications_research")
+                and st.session_state.get("presse_moteur") == "research"):
+            st.number_input(
+                "Maximum de republications à conserver par compte",
+                min_value=1, max_value=1000, step=25,
+                key="maximum_republications_par_compte", disabled=occupe)
+            st.caption(
+                "L'API renvoie les vidéos republiées par chaque compte public éligible. "
+                "Un fichier distinct conserve l'auteur de la vidéo, le compte reposteur "
+                "et les métriques. Les dates et hashtags sont filtrés sur la vidéo "
+                "originale. Une absence de résultat ne prouve pas l'absence de "
+                "republication et les requêtes consomment le quota Research.")
         # Une seule ligne d'information Streamlit : plusieurs st.caption,
         # st.warning ou st.error consécutifs créent des espaces vides inutiles.
         # Les messages sont assemblés sans saut de paragraphe ; une alerte
@@ -1188,6 +1213,11 @@ with onglet_collecte:
                 valeurs["hashtag_presse"] = (
                     valeurs["hashtags_presse"][0] if valeurs["hashtags_presse"] else "")
                 valeurs["operator_presse"] = st.session_state.get("operator_presse", "OR")
+                valeurs["collecter_republications_research"] = bool(
+                    source == "presse" and moteur_selectionne == "research"
+                    and st.session_state.get("collecter_republications_research", False))
+                valeurs["maximum_republications_par_compte"] = int(
+                    st.session_state.get("maximum_republications_par_compte", 100))
                 if source == "presse" and valeurs["presse_moteur"] == "navigateur":
                     fichier_cookies = st.session_state.get("cookies_presse_fichier")
                     if fichier_cookies is not None:
@@ -1361,6 +1391,14 @@ with onglet_collecte:
                     st.caption(f"Sauvegarde progressive : {point.get('traitees',0)} publication(s) traitée(s) sauvegardée(s) · {point.get('sauvegarde_le','')}.")
                 else:
                     st.caption("Sauvegarde progressive activée : premier point après 10 publications traitées.")
+            if actuel.get("collecter_republications_research"):
+                st.caption(
+                    f"Republications Research : {actuel.get('nombre_republications', 0)} "
+                    "relation(s) compte–vidéo collectée(s) séparément ; "
+                    "consultez republications.csv dans le ZIP. "
+                    "L'absence dans l'API ne signifie pas non-republication.")
+                with st.expander("Diagnostic des republications par média"):
+                    st.json(actuel.get("bilan_republications") or {})
             if actuel.get("source_collecte") == "presse":
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
