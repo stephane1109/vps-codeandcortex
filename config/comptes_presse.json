@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "comptes": [
     {
       "id": "lemonde",
@@ -275,10 +275,11 @@
       "id": "mediapartfr",
       "nom": "Mediapart",
       "compte": "mediapartfr",
-      "categorie": "presse_independante",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@mediapartfr"
+      "url": "https://www.tiktok.com/@mediapartfr",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "actutoulouse",
@@ -577,6 +578,15 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lhumanitefr"
+    },
+    {
+      "id": "iuzdrmqevnu",
+      "nom": "L’info en 60 secondes",
+      "compte": "iuzdrmqevnu",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@iuzdrmqevnu"
     }
   ]
 }
