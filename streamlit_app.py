@@ -1894,6 +1894,17 @@ with onglet_base_donnees:
                                 st.json(lignes_bdd[numero_ligne], expanded=False)
 
 
+    with st.expander("Sauvegarder ou restaurer une base PostgreSQL entière"):
+        st.caption(
+            "Le ZIP ci-dessus exporte les données d'une seule collecte. "
+            "Pour sauvegarder ou restaurer toute la base PostgreSQL, utilisez "
+            "une sauvegarde administrée (pg_dump/pg_restore, via un client "
+            "comme DBeaver ou une tâche de sauvegarde du serveur). "
+            "L'importation directe d'un dump PostgreSQL n'est pas disponible "
+            "dans l'interface ScrapTikTok. Ne confondez pas ce dump avec "
+            "un CSV à concaténer."
+        )
+
     st.divider()
     st.subheader("2. SQLite — collectes Research programmées")
     st.caption(
