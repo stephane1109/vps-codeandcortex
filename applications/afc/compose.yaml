@@ -1,0 +1,16 @@
+services:
+  afc-factominer:
+    build: .
+    container_name: afc-factominer
+    restart: unless-stopped
+    init: true
+    environment:
+      AFC_TIMEOUT_SECONDS: "180"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    ports:
+      # Accès local au VPS : utiliser un reverse proxy HTTPS pour l'extérieur.
+      - "127.0.0.1:8501:8501"
+    expose:
+      - "8501"
+    mem_limit: 3g
+    cpus: 2.0

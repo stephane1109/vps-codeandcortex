@@ -1,0 +1,216 @@
+# Calcul d'une AFC avec FactoMineR depuis l'interface Streamlit.
+# Entrées : tableau de contingence TSV, dossier de sortie et paramètres.
+
+arguments <- commandArgs(trailingOnly = TRUE)
+if (length(arguments) < 8L) {
+  stop("Arguments insuffisants pour le calcul AFC.")
+}
+chemin_tableau <- arguments[[1L]]
+dossier_sortie <- arguments[[2L]]
+repetitions <- as.integer(arguments[[3L]])
+variable_lignes <- arguments[[4L]]
+variable_colonnes <- arguments[[5L]]
+nom_source <- arguments[[6L]]
+effectif_initial <- as.integer(arguments[[7L]])
+effectif_final <- as.integer(arguments[[8L]])
+
+if (!requireNamespace("FactoMineR", quietly = TRUE)) {
+  stop("FactoMineR n'est pas installé dans l'environnement R.")
+}
+if (!dir.exists(dossier_sortie)) {
+  dir.create(dossier_sortie, recursive = TRUE, showWarnings = FALSE)
+}
+
+# L'interface Python a déjà filtré les observations et compté les croisements.
+tableau_importe <- read.delim(
+  chemin_tableau,
+  sep = "\t",
+  row.names = 1L,
+  header = TRUE,
+  check.names = FALSE,
+  stringsAsFactors = FALSE,
+  fileEncoding = "UTF-8",
+  na.strings = NULL,
+  quote = "\""
+)
+tableau <- as.matrix(tableau_importe)
+suppressWarnings(storage.mode(tableau) <- "numeric")
+if (any(!is.finite(tableau)) || any(tableau < 0) ||
+    any(tableau != floor(tableau))) {
+  stop("Le tableau de contingence doit comporter des effectifs entiers positifs.")
+}
+if (nrow(tableau) < 2L || ncol(tableau) < 2L ||
+    any(rowSums(tableau) == 0) || any(colSums(tableau) == 0)) {
+  stop("L'AFC exige au moins deux lignes et deux colonnes actives, sans marge nulle.")
+}
+if (sum(tableau) < 2L) stop("Effectif total insuffisant.")
+
+# Le modèle conserve au maximum cinq dimensions factorielles.
+nombre_axes <- min(5L, nrow(tableau) - 1L, ncol(tableau) - 1L)
+resultat <- FactoMineR::CA(
+  as.data.frame(tableau, check.names = FALSE),
+  ncp = nombre_axes,
+  graph = FALSE
+)
+
+# L'estimation Monte-Carlo est utilisée dès qu'une cellule attendue est inférieure à 5.
+test_asymptotique <- suppressWarnings(stats::chisq.test(tableau, correct = FALSE))
+cellules_faibles <- sum(test_asymptotique$expected < 5)
+utiliser_monte_carlo <- cellules_faibles > 0L && repetitions >= 100L
+if (utiliser_monte_carlo) {
+  set.seed(2026L)
+  test_retenu <- suppressWarnings(stats::chisq.test(
+    tableau, simulate.p.value = TRUE, B = repetitions
+  ))
+  methode_test <- paste0("Chi-deux de Pearson ; p estimée par Monte-Carlo (B=", repetitions, ")")
+} else {
+  test_retenu <- test_asymptotique
+  methode_test <- "Chi-deux de Pearson ; p asymptotique"
+}
+chi2 <- unname(as.numeric(test_asymptotique$statistic))
+n <- sum(tableau)
+v_cramer <- sqrt(chi2 / (n * min(nrow(tableau) - 1L, ncol(tableau) - 1L)))
+
+# Toutes les matrices sont exportées dans un CSV lisible avec Excel en français.
+exporter_matrice <- function(matrice, nom_fichier) {
+  matrice <- as.matrix(matrice)
+  tableau_export <- data.frame(
+    modalite = rownames(matrice),
+    as.data.frame(matrice, check.names = FALSE),
+    row.names = NULL,
+    check.names = FALSE
+  )
+  utils::write.csv2(
+    tableau_export,
+    file = file.path(dossier_sortie, nom_fichier),
+    row.names = FALSE,
+    fileEncoding = "UTF-8",
+    na = ""
+  )
+}
+
+exporter_matrice(tableau, "01_tableau_contingence.csv")
+exporter_matrice(test_asymptotique$expected, "02_effectifs_attendus.csv")
+exporter_matrice(test_asymptotique$residuals, "03_residus_pearson.csv")
+exporter_matrice(prop.table(tableau, 1L) * 100, "04_profils_lignes_pourcent.csv")
+exporter_matrice(prop.table(tableau, 2L) * 100, "05_profils_colonnes_pourcent.csv")
+exporter_matrice(resultat$eig, "06_valeurs_propres_inerties.csv")
+exporter_matrice(resultat$row$coord, "07_coordonnees_lignes.csv")
+exporter_matrice(resultat$col$coord, "08_coordonnees_colonnes.csv")
+exporter_matrice(resultat$row$contrib, "09_contributions_lignes.csv")
+exporter_matrice(resultat$col$contrib, "10_contributions_colonnes.csv")
+exporter_matrice(resultat$row$cos2, "11_cos2_lignes.csv")
+exporter_matrice(resultat$col$cos2, "12_cos2_colonnes.csv")
+
+# Mise en forme du plan factoriel, y compris si un seul axe est disponible.
+limites_axes <- function(valeurs, proportion = 0.22) {
+  bornes <- range(valeurs, finite = TRUE)
+  amplitude <- diff(bornes)
+  marge <- if (amplitude < 1e-9) 0.75 else amplitude * proportion
+  bornes + c(-marge, marge)
+}
+
+dessiner_plan <- function() {
+  lignes <- as.matrix(resultat$row$coord)
+  colonnes <- as.matrix(resultat$col$coord)
+  deux_axes <- ncol(lignes) >= 2L && ncol(colonnes) >= 2L
+  abscisses_lignes <- lignes[, 1L]
+  abscisses_colonnes <- colonnes[, 1L]
+  ordonnees_lignes <- if (deux_axes) lignes[, 2L] else rep(0.12, nrow(lignes))
+  ordonnees_colonnes <- if (deux_axes) colonnes[, 2L] else rep(-0.12, nrow(colonnes))
+  inerties <- resultat$eig[, 2L]
+  nom_x <- sprintf("Axe 1 (%.1f %% d'inertie)", inerties[[1L]])
+  nom_y <- if (deux_axes) {
+    sprintf("Axe 2 (%.1f %% d'inertie)", inerties[[2L]])
+  } else {
+    "Disposition illustrative (aucun axe 2)"
+  }
+  par(mar = c(6.5, 5, 4, 2))
+  plot(
+    NA_real_, NA_real_, type = "n",
+    xlim = limites_axes(c(abscisses_lignes, abscisses_colonnes)),
+    ylim = limites_axes(c(ordonnees_lignes, ordonnees_colonnes), 0.3),
+    xlab = nom_x, ylab = nom_y,
+    main = paste("AFC :", variable_lignes, "x", variable_colonnes)
+  )
+  abline(h = 0, v = 0, col = "grey75", lty = 2)
+  points(abscisses_lignes, ordonnees_lignes, col = "#2166AC", pch = 16, cex = 1.2)
+  points(abscisses_colonnes, ordonnees_colonnes, col = "#B2182B", pch = 17, cex = 1.25)
+  text(abscisses_lignes, ordonnees_lignes, rownames(lignes),
+       pos = 3, cex = 0.75, col = "#2166AC", xpd = TRUE)
+  text(abscisses_colonnes, ordonnees_colonnes, rownames(colonnes),
+       pos = if (deux_axes) 3 else 1, cex = 0.75, col = "#B2182B", xpd = TRUE)
+  legend("topright", c("Modalités en lignes", "Modalités en colonnes"),
+         pch = c(16, 17), col = c("#2166AC", "#B2182B"), bty = "n")
+  if (!deux_axes) {
+    mtext("Décalage vertical artificiel : ne pas interpréter la hauteur des points.",
+          side = 1, line = 4.3, cex = 0.7)
+  }
+}
+
+dessiner_inerties <- function() {
+  inerties <- resultat$eig[, 2L]
+  par(mar = c(5, 5, 4, 2))
+  barplot(inerties, names.arg = paste("Axe", seq_along(inerties)),
+          col = "grey55", ylim = c(0, 105),
+          ylab = "Pourcentage d'inertie", main = "Inertie des axes factoriels")
+}
+
+gg <- function(nom, action) {
+  grDevices::png(file.path(dossier_sortie, nom), width = 1600, height = 1100, res = 160)
+  tryCatch(action(), finally = grDevices::dev.off())
+}
+gg("13_plan_factoriel.png", dessiner_plan)
+grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 12, height = 8.5)
+tryCatch(dessiner_plan(), finally = grDevices::dev.off())
+gg("15_inerties.png", dessiner_inerties)
+
+statistiques <- data.frame(
+  indicateur = c(
+    "Source", "Variable en lignes", "Variable en colonnes", "Observations initiales",
+    "Observations analysées", "Modalités lignes", "Modalités colonnes",
+    "Axes factoriels", "Chi-deux de Pearson", "Degrés de liberté",
+    "Valeur p", "Méthode du test", "V de Cramér",
+    "Cellules attendues inférieures à 5", "Nombre total de cellules"
+  ),
+  valeur = c(
+    nom_source, variable_lignes, variable_colonnes,
+    as.character(effectif_initial), as.character(effectif_final),
+    as.character(nrow(tableau)), as.character(ncol(tableau)), as.character(nombre_axes),
+    format(chi2, digits = 9), as.character(unname(test_asymptotique$parameter)),
+    format(test_retenu$p.value, digits = 9), methode_test, format(v_cramer, digits = 7),
+    as.character(cellules_faibles), as.character(length(test_asymptotique$expected))
+  ),
+  stringsAsFactors = FALSE
+)
+utils::write.csv2(statistiques,
+  file.path(dossier_sortie, "16_resultats_statistiques.csv"),
+  row.names = FALSE, fileEncoding = "UTF-8")
+
+rapport <- c(
+  "ANALYSE FACTORIELLE DES CORRESPONDANCES — FactoMineR",
+  paste("Source :", nom_source),
+  paste("Variables :", variable_lignes, "x", variable_colonnes),
+  paste("Observations initiales :", effectif_initial),
+  paste("Observations analysées :", effectif_final),
+  paste("Dimensions du tableau :", nrow(tableau), "x", ncol(tableau)),
+  paste("Chi-deux de Pearson :", signif(chi2, 7)),
+  paste("Valeur p :", signif(test_retenu$p.value, 7)),
+  paste("Méthode :", methode_test),
+  paste("V de Cramér :", signif(v_cramer, 5)),
+  paste("Cellules avec effectif théorique < 5 :", cellules_faibles),
+  "",
+  "VALEURS PROPRES ET INERTIES (%)",
+  capture.output(print(round(resultat$eig, 4))),
+  "",
+  "AVERTISSEMENTS METHODOLOGIQUES",
+  "L'AFC décrit des associations entre variables catégorielles sans établir de causalité.",
+  "La position des modalités de groupes différents n'est pas une mesure directe de leur proximité.",
+  "Lire les contributions, cos2 et profils avant de conclure.",
+  "La valeur p obtenue par Monte-Carlo est une estimation, et non une p-value asymptotique.",
+  "Vues et taux d'engagement partagent un dénominateur : association mécanique possible.",
+  if (effectif_final < 30) "Effectif inférieur à 30 : interprétation exploratoire uniquement." else "",
+  if (nombre_axes == 1L) "Un seul axe existe : le décalage vertical du graphique est illustratif." else ""
+)
+writeLines(rapport, file.path(dossier_sortie, "00_rapport_afc.txt"), useBytes = TRUE)
+cat("AFC FactoMineR terminée. ", effectif_final, " observations analysées.\n", sep = "")

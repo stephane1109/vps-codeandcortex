@@ -1,0 +1,9 @@
+[server]
+headless = true
+maxUploadSize = 100
+maxMessageSize = 200
+enableCORS = true
+enableXsrfProtection = true
+
+[theme]
+base = "light"
