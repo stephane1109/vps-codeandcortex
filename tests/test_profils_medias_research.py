@@ -186,6 +186,36 @@ class TestsProfilsMediasResearch(unittest.TestCase):
                     self.assertIn("profils_medias.csv", sauvegarde.namelist())
                     self.assertIn("profils_medias.json", sauvegarde.namelist())
 
+    def test_options_abonnes_auteurs_immediatement_sous_profil(self):
+        """Les trois options de l'auteur précèdent les profils médias et l'ID."""
+        import ast
+        fichier = Path(__file__).resolve().parents[1] / "streamlit_app.py"
+        page = fichier.read_text(encoding="utf-8")
+        ast.parse(page)
+        debut = page.index('            for nom in ("date", "profil", "id"):')
+        fin = page.index('            st.caption("Catégorie du compte :', debut)
+        fragment = page[debut:fin]
+        positions = [
+            fragment.index('if nom == "profil":'),
+            fragment.index('"Récupérer le nombre d\'abonnés des auteurs (follower_count)"'),
+            fragment.index('"Abonnés : valeur numérique réelle dans le TXT"'),
+            fragment.index('"Abonnés : recoder la variable continue en variable catégorielle "'),
+            fragment.index('if nom == "profil" and source == "presse":'),
+        ]
+        self.assertEqual(positions, sorted(positions))
+        for cle in (
+            "collecter_follower_count", "follower_count_illustratif",
+            "abonnes_classe_illustratif",
+        ):
+            self.assertEqual(
+                page.count('key="' + cle + '"'), 1,
+                "Chaque case doit être présente une seule fois.")
+        self.assertIn('or not st.session_state.get("collecter_follower_count", False)', fragment)
+        self.assertIn("≥1 000 000", fragment)
+        # La collecte Research et les paramètres transmis restent identiques.
+        self.assertIn('valeurs["collecter_follower_count"] = bool(', page)
+        self.assertIn('valeurs["abonnes_classe_illustratif"] = bool(', page)
+
     def test_cases_deux_colonnes_sous_profil_et_export(self):
         """Vérifier la position et la propagation des huit cases Streamlit."""
         page = (Path(__file__).resolve().parents[1] /
