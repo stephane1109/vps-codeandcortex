@@ -24,7 +24,7 @@ COMPTES_NOUVEAUX = {
 
 COMPTES_NATIONAUX_TELEVISION = {
     "tf1info", "bfmtv", "francetvpolitique", "france.tv",
-    "m6info", "lci", "cnews", "artefr",
+    "m6info_", "lci", "cnews", "artefr",
 }
 
 COMPTES_NATIONAUX_ECRITS = {
@@ -65,8 +65,8 @@ class TestsGroupesPresse(unittest.TestCase):
             with self.subTest(compte=compte):
                 self.assertEqual(regionaux.count(compte), 1)
         self.assertEqual(len(regionaux), 21)
-        # Seul @liberationfr a été supprimé à la demande de l'utilisateur.
-        self.assertEqual(len(inventaire), 63)
+        # Les variantes @liberationfr et @m6info ont été retirées séparément.
+        self.assertEqual(len(inventaire), 62)
 
     def test_nationaux_tv_et_presse_ecrite_conserves(self):
         """Compléter les deux listes sans supprimer les anciens médias."""
@@ -84,10 +84,10 @@ class TestsGroupesPresse(unittest.TestCase):
                     handles[compte]["categorie"], "presse_nationale")
                 self.assertEqual(
                     handles[compte]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(handles), 63)
+        self.assertEqual(len(handles), 62)
         self.assertEqual(
             len([m for m in inventaire
-                 if m["categorie"] == "presse_nationale"]), 26)
+                 if m["categorie"] == "presse_nationale"]), 25)
 
     def test_cnews_avec_le_compte_corrige(self):
         """Conserver l'ID de sélection CNews et corriger le compte TikTok."""
@@ -101,7 +101,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(cnews[0]["url"], "https://www.tiktok.com/@cnews")
         self.assertNotIn(
             "cnewsofficiel", {m["compte"] for m in inventaire})
-        self.assertEqual(len(inventaire), 63)
+        self.assertEqual(len(inventaire), 62)
 
     def test_lhumanite_dans_presse_ecrite_nationale(self):
         """Ajouter L'Humanité sans créer de doublon ni modifier ses voisins."""
@@ -120,7 +120,7 @@ class TestsGroupesPresse(unittest.TestCase):
         """Ajouter un compte indépendant et reclasser Mediapart sans suppression."""
         inventaire = charger_inventaire()
         handles = {m["compte"]: m for m in inventaire}
-        self.assertEqual(len(inventaire), 63)
+        self.assertEqual(len(inventaire), 62)
         info = handles["iuzdrmqevnu"]
         self.assertEqual(info["nom"], "L’info en 60 secondes")
         self.assertEqual(info["categorie"], "presse_independante")
@@ -135,7 +135,7 @@ class TestsGroupesPresse(unittest.TestCase):
             7)
         self.assertEqual(
             sum(m["categorie"] == "presse_nationale" for m in inventaire),
-            26)
+            25)
 
     def test_politis_deplace_en_presse_nationale(self):
         """Conserver le compte Politis et le ranger parmi les titres nationaux."""
@@ -146,7 +146,7 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertEqual(politis[0]["categorie"], "presse_nationale")
         self.assertEqual(
             politis[0]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(inventaire), 63)
+        self.assertEqual(len(inventaire), 62)
 
     def test_noahdecrypte_dans_autres_medias(self):
         """Ajouter Noah Décrypte sans supprimer ni renommer d'autres médias."""
@@ -159,7 +159,7 @@ class TestsGroupesPresse(unittest.TestCase):
             comptes[0]["url"], "https://www.tiktok.com/@noahdecrypte")
         self.assertEqual(
             sum(m["categorie"] == "autres_medias" for m in inventaire), 9)
-        self.assertEqual(len(inventaire), 63)
+        self.assertEqual(len(inventaire), 62)
 
     def test_liberation_variante_supprimee_compte_original_conserve(self):
         """Ne supprimer que @liberationfr sans toucher aux autres comptes."""
@@ -167,11 +167,15 @@ class TestsGroupesPresse(unittest.TestCase):
         handles = {m["compte"] for m in inventaire}
         self.assertIn("liberation.fr", handles)
         self.assertNotIn("liberationfr", handles)
-        self.assertTrue({"m6info", "m6info_"}.issubset(handles))
+        self.assertIn("m6info_", handles)
+        self.assertNotIn("m6info", handles)
+        original_m6 = next(m for m in inventaire
+                           if m["compte"] == "m6info_")
+        self.assertEqual(original_m6["id"], "m6info_")
+        self.assertEqual(original_m6["url"], "https://www.tiktok.com/@m6info_")
+        self.assertEqual(original_m6["categorie"], "presse_nationale")
         self.assertEqual(
-            next(m["statut"] for m in inventaire
-                 if m["compte"] == "m6info"),
-            "declare_utilisateur")
+            original_m6["sous_categorie"], "television_nationale")
 
     def test_quatre_medias_reclasses_independants(self):
         """Les quatre comptes changent de groupe sans changer d'identifiant."""
@@ -185,7 +189,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(
                     groupes[compte]["categorie"], "presse_independante")
                 self.assertNotIn("sous_categorie", groupes[compte])
-        self.assertEqual(len(inventaire), 63)
+        self.assertEqual(len(inventaire), 62)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
             7)
