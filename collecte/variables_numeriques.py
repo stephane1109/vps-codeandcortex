@@ -101,6 +101,10 @@ def classer_compteur(nom, valeur):
             modalite = "10_99"
         elif valeur < 1000:
             modalite = "100_999"
+        elif nom == "likes" and valeur < 10000:
+            modalite = "1000_9999"
+        elif nom == "likes":
+            modalite = "plus_10000"
         else:
             modalite = "plus_1k"
     return f"{prefixe}_{modalite}"
