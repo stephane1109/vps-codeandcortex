@@ -112,6 +112,45 @@ class TestsResearch(unittest.TestCase):
         self.assertIn("@parismatch ET #24octobre", etat["requete_recherche"])
         self.assertEqual(etat["auteurs_ecartes"], 2)
 
+    def test_multi_hashtags_query_research_et_ou_et_dedoublonnage(self):
+        """IN et AND conservent username et excluent les vidéos non conformes."""
+        videos = [
+            {**v(1), "hashtag_names": ["manifestation"]},
+            {**v(2), "hashtag_names": ["blocage"]},
+            {**v(3), "hashtag_names": ["blocage", "manifestation"]},
+            {**v(4), "hashtag_names": ["autre"]},
+            {**v(5, "franceinfo"), "hashtag_names": ["blocage", "manifestation"]},
+        ]
+        for operateur, nombre in (("OR", 3), ("AND", 1)):
+            with self.subTest(operateur=operateur):
+                demandes = []
+                def serveur(url, *, data, headers):
+                    demandes.append(json.loads(data))
+                    return {"data": {"videos": videos + [videos[0]],
+                                     "has_more": False}}
+                resultat = {}
+                urls = collecter_videos_presse_research(
+                    "lemondefr", 10, resultat, jeton="jeton_de_test",
+                    requete=serveur, hashtags=["#manifestation", "#blocage"],
+                    operateur=operateur,
+                    debut="2026-10-01", fin="2026-10-25",
+                    aujourd_hui=date(2026, 10, 25), pause=lambda _: None)
+                self.assertEqual(len(urls), nombre)
+                conditions = demandes[0]["query"]["and"]
+                self.assertEqual(conditions[0], {
+                    "field_name": "username", "operation": "EQ",
+                    "field_values": ["lemondefr"]})
+                if operateur == "OR":
+                    self.assertEqual(conditions[1], {
+                        "field_name": "hashtag_name", "operation": "IN",
+                        "field_values": ["manifestation", "blocage"]})
+                else:
+                    self.assertEqual([c["field_values"] for c in conditions[1:]],
+                                     [["manifestation"], ["blocage"]])
+                self.assertEqual(resultat["hashtags_recherches"],
+                                 ["manifestation", "blocage"])
+                self.assertEqual(resultat["operateur_hashtags"], operateur)
+
     def test_mode_automatique_depasse_ancien_plafond_pages(self):
         appels = []
 
