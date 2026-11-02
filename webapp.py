@@ -363,16 +363,32 @@ def correspondance_hashtag(description, hashtag, *, rechercher_dans_texte=False,
     return re.search(r"(?<!\w)" + motif + r"(?!\w)", texte) is not None
 
 
-def matches_hashtags(description, settings):
+def hashtags_correspondants_presse(description, settings, hashtags_observes=None):
+    """Identifier précisément les hashtags recherchés présents dans une publication."""
+    if not settings.croiser_hashtag_presse:
+        return []
+    # Le tableau issu de Research contient les hashtags officiels.
+    # La légende sert de repli pour les moteurs qui ne les fournissent pas.
+    observations = (
+        {str(tag).lstrip("#").casefold() for tag in hashtags_observes
+         if isinstance(tag, str)}
+        if isinstance(hashtags_observes, (list, tuple)) and hashtags_observes else None
+    )
+    return [
+        hashtag for hashtag in settings.hashtags_presse
+        if (hashtag.casefold() in observations if observations is not None
+            else correspondance_hashtag(description, hashtag))
+    ]
+
+
+def matches_hashtags(description, settings, *, hashtags_observes=None):
     if settings.source_collecte == "presse":
         if not settings.croiser_hashtag_presse:
             return True
-        correspondances = [
-            correspondance_hashtag(description, hashtag)
-            for hashtag in settings.hashtags_presse
-        ]
-        return (all(correspondances) if settings.operator_presse == "AND"
-                else any(correspondances)) if correspondances else False
+        concordances = hashtags_correspondants_presse(
+            description, settings, hashtags_observes)
+        return (len(concordances) == len(settings.hashtags_presse)
+                if settings.operator_presse == "AND" else bool(concordances))
     resultats = [
         correspondance_hashtag(description, tag,
             rechercher_dans_texte=settings.rechercher_dans_texte,
@@ -1388,7 +1404,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                 and not (job.settings.source_collecte == "presse"
                                          and moteur_actif == "tikhub"
                                          and job.settings.croiser_hashtag_presse
-                                         and not matches_hashtags(record.get("description", ""), job.settings))):
+                                         and not matches_hashtags(
+                                             record.get("description", ""), job.settings,
+                                             hashtags_observes=record.get("hashtags")))):
                             # La case IA demande une lecture du résumé affiché ; les API
                             # de métadonnées ne le fournissent pas. Garder leurs données.
                             job.pause(args.delay)
@@ -1512,8 +1530,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             nom for nom in recherches if correspondance_hashtag(
                                 record.get("description", ""), nom)
                         ]
+                        if recherches:
+                            presents = hashtags_correspondants_presse(
+                                record.get("description", ""), job.settings,
+                                record.get("hashtags"))
                         record["hashtags_recherches"] = list(recherches)
                         record["hashtags_correspondants"] = presents
+                        record["operateur_hashtags"] = (
+                            job.settings.operator_presse if recherches else None)
                     if job.settings.telecharger_mp4:
                         from telechargement_videos import correspondance_video
                         record.update(correspondance_video(record))
@@ -1541,7 +1565,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
                             job.publications.append(record)
                         if str(record.get("description") or "").strip():
-                            matches = matches_hashtags(record["description"], job.settings)
+                            matches = matches_hashtags(
+                                record["description"], job.settings,
+                                hashtags_observes=record.get("hashtags"))
                             # Compter sur la même légende et dans la même période que le filtre.
                             with job.lock:
                                 for hashtag in job.bilan_hashtags:
