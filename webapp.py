@@ -108,6 +108,13 @@ class StartRequest(BaseModel):
     collecter_reponses: bool = False
     collecter_follower_count: bool = False
     collecter_is_verified: bool = False
+    # Indicateurs agrégés des médias : distincts des métriques par vidéo.
+    profils_medias_variables: list[Literal[
+        "following_count", "follower_count", "likes_count", "video_count"
+    ]] = Field(default_factory=list, max_length=4)
+    profils_medias_classes: list[Literal[
+        "following_count", "follower_count", "likes_count", "video_count"
+    ]] = Field(default_factory=list, max_length=4)
     follower_count_illustratif: bool = False
     abonnes_classe_illustratif: bool = False
     variables_classes_txt: list[Literal["vues", "likes", "commentaires", "partages", "favoris", "duree"]] = Field(default_factory=list, max_length=6)
@@ -199,6 +206,21 @@ class StartRequest(BaseModel):
         # L'indicateur de contenu IA fourni par l'API ne constitue pas ce texte.
         if self.filtrer_texte_ia_tiktok:
             self.inclure_texte_genere_ia = True
+        # Les métriques de comptes ne sont pas un export de vidéos et ne
+        # peuvent être collectées sur un moteur non officiel.
+        self.profils_medias_variables = list(dict.fromkeys(
+            self.profils_medias_variables))
+        self.profils_medias_classes = list(dict.fromkeys(
+            self.profils_medias_classes))
+        if self.profils_medias_classes and not set(
+                self.profils_medias_classes).issubset(self.profils_medias_variables):
+            raise ValueError(
+                "Une segmentation de profil nécessite la collecte du compteur correspondant.")
+        if (self.profils_medias_variables and
+                (self.source_collecte != "presse" or self.presse_moteur != "research")):
+            raise ValueError(
+                "Les métriques des profils médias sont réservées à Presse et médias "
+                "avec Research API officielle.")
         if (self.collecter_republications_research and
                 (self.source_collecte != "presse" or self.presse_moteur != "research")):
             raise ValueError(
@@ -737,6 +759,7 @@ class Job:
         self.publications = []
         self.commentaires = []
         self.republications = []
+        self.profils_medias = []
         self.bilan_republications = {}
         self.journal = []
         self.archive_prete = False
@@ -804,6 +827,12 @@ class Job:
                     "hashtags_presse": list(self.settings.hashtags_presse),
                     "operator_presse": self.settings.operator_presse,
                     "collecter_republications_research": self.settings.collecter_republications_research,
+                    "profils_medias_variables": self.settings.profils_medias_variables,
+                    "profils_medias_classes": self.settings.profils_medias_classes,
+                    "nombre_profils_medias": len(self.profils_medias),
+                    "bilan_profils_medias": [
+                        {"compte": p["compte"], "statut": p["statut_profil"]}
+                        for p in self.profils_medias],
                     "maximum_republications_par_compte": self.settings.maximum_republications_par_compte,
                     "nombre_republications": len(self.republications),
                     "bilan_republications": dict(self.bilan_republications),
@@ -931,7 +960,8 @@ class Job:
                     "compteurs_collecte": {"decouvertes": len(self.decouvertes_ids), "retenues": self.discovered,
                         "traitees": self.processed, "exportees": self.exportees},
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
-                    "action_error": self.action_error, "can_download": bool(self.records or self.republications),
+                    "action_error": self.action_error, "can_download": bool(
+                        self.records or self.republications or self.profils_medias),
                     "apercu_filtrage": [{
                         "auteur": r.get("author", ""),
                         "url": r.get("url", ""),
@@ -1386,6 +1416,40 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
         sources = connexion.preparer_sources(job.settings)
         driver = connexion.ouvrir()
+        if job.settings.profils_medias_variables and moteur_actif == "research":
+            # Une ligne par média choisi, même s'il n'a aucune vidéo retenue.
+            # La collecte est indépendante du nombre de publications et du
+            # filtre de hashtags appliqué à leur description.
+            from collecte.profils_medias import ligne_profil_media
+            from collecte.researchapi import (
+                collecter_metriques_profil_media_research,
+                ResearchErreur, ResearchAccesRefuse)
+            quota_profils_refuse = False
+            for media in sources:
+                job.check()
+                compte = media["compte"]
+                donnees, statut = {}, "indisponible"
+                job.update(status="collecting",
+                           message="Lecture des métriques du profil @" + compte + "…")
+                if quota_profils_refuse:
+                    statut = "acces_refuse"
+                else:
+                    try:
+                        donnees = collecter_metriques_profil_media_research(
+                            compte, job.settings.profils_medias_variables,
+                            verifier=job.check,
+                            credentiels=connexion.research_credentiels)
+                        statut = ("ok" if any(v is not None for v in donnees.values())
+                                  else "indisponible")
+                    except ResearchAccesRefuse:
+                        quota_profils_refuse = True
+                        statut = "acces_refuse"
+                    except ResearchErreur:
+                        statut = "indisponible"
+                job.profils_medias.append(ligne_profil_media(
+                    media, job.settings.profils_medias_variables,
+                    job.settings.profils_medias_classes, donnees=donnees,
+                    statut=statut, date_collecte=scraper.utc_now()))
         hors_selection = 0
         medias_par_compte = {s["compte"]: s for s in sources if "compte" in s}
         links = []
@@ -2122,7 +2186,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             finally:
                 contexte_mp4.clear()
         if job.base and (job.settings.source_collecte != "presse"
-                         or job.publications or job.settings.collecter_republications_research):
+                         or job.publications or job.settings.collecter_republications_research
+                         or job.settings.profils_medias_variables):
             try:
                 from corpus.construction import construire_exports
                 from corpus.export_zip import exporter_zip
@@ -2137,7 +2202,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                      republications=(job.republications
                                      if job.settings.collecter_republications_research
                                      else None),
-                     inclure_commentaires_txt=job.settings.inclure_commentaires_txt)
+                     inclure_commentaires_txt=job.settings.inclure_commentaires_txt,
+                     profils_medias=(job.profils_medias if
+                                     job.settings.profils_medias_variables else None),
+                     profils_medias_variables=job.settings.profils_medias_variables,
+                     profils_medias_classes=job.settings.profils_medias_classes)
                 # Le mode Profils conserve les vidéos découvertes sans légende.
                 # Le mode Presse n'archive QUE des publications réellement lues
                 # et jamais une référence brute issue d'un embed ou d'une API 429.
@@ -2282,6 +2351,10 @@ class Manager:
             raise HTTPException(422,
                 "Les republications Research sont disponibles dans les collectes "
                 "ponctuelles, pas encore dans les collectes programmées.")
+        if parametres.profils_medias_variables:
+            raise HTTPException(422,
+                "Les métriques des comptes médias sont réservées aux collectes "
+                "ponctuelles Research, pas aux collectes programmées.")
         if (parametres.telecharger_mp4 or parametres.inclure_texte_genere_ia
                 or parametres.filtrer_texte_ia_tiktok):
             raise HTTPException(422, "La collecte Research programmée ne lance "
@@ -2416,6 +2489,7 @@ class Manager:
             job.records=[p for p in job.publications if p.get("retenue")]
             job.commentaires=charger("commentaires.json")
             job.republications=charger("republications.json")
+            job.profils_medias=charger("profils_medias.json")
             job.processed=int(manifeste.get("traites",0))
             job.busy=False
             job.status=ligne["statut"]
