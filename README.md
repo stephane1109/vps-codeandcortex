@@ -492,11 +492,12 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 60 comptes
+L’inventaire `config/comptes_presse.json` contient désormais 61 comptes
 sélectionnables, après suppression explicite de la seule variante
 `@liberationfr`. Le compte `@liberation.fr` et tous les autres médias
-restent présents. L'interface regroupe les comptes en presse nationale
-(23, avec deux sous-groupes TV et presse écrite), presse régionale (21),
+restent présents. L'Humanité (`@lhumanitefr`) est ajouté dans la presse
+écrite nationale. L'interface regroupe les comptes en presse nationale
+(24, avec deux sous-groupes TV et presse écrite), presse régionale (21),
 presse indépendante (8) et autres
 médias ou statut à confirmer (8). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
