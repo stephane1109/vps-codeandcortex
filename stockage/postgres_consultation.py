@@ -12,17 +12,14 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
+from corpus.publications_csv import COLONNES_PUBLICATIONS_CSV, ligne_publication_csv
 
 JOURNAL = logging.getLogger(__name__)
 IDENTIFIANT = re.compile(r"[0-9a-f]{32}\Z")
 TYPES = {"collecte", "research"}
 CATEGORIES = {"publications", "commentaires"}
-CHAMPS_PUBLICATIONS = (
-    "id", "url", "author", "created_at", "collected_at", "description",
-    "retenue", "motif_non_retenue", "langue_detection", "region_code",
-    "is_verified", "follower_count", "video_duration", "taux_engagement",
-    "vues", "likes", "commentaires", "partages", "favoris", "hashtags",
-)
+# Une même liste complète pour les archives, Research et la consultation SQL.
+CHAMPS_PUBLICATIONS = COLONNES_PUBLICATIONS_CSV
 CHAMPS_COMMENTAIRES = (
     "id", "publication_id", "auteur", "texte", "parent_id", "est_reponse",
     "date_brute", "likes", "source", "observe_le",
@@ -377,7 +374,7 @@ def valeur_colonne(donnees, nom):
     """Construire une cellule CSV sans perdre les nombres ni les valeurs nulles."""
     if nom in ("vues", "likes", "commentaires", "partages", "favoris"):
         mesure = (donnees.get("engagement") or {}).get(nom)
-        valeur = mesure.get("valeur") if isinstance(mesure, dict) else None
+        valeur = mesure.get("valeur") if isinstance(mesure, dict) else donnees.get(nom)
     else:
         valeur = donnees.get(nom)
     if valeur is None:
@@ -414,8 +411,11 @@ def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_
             for ligne in page["lignes"]:
                 if format_ == "csv":
                     flux = io.StringIO()
+                    cellules = (
+                        ligne_publication_csv(ligne)
+                        if categorie == "publications" else ligne)
                     csv.writer(flux).writerow([
-                        valeur_colonne(ligne, champ) for champ in entetes])
+                        valeur_colonne(cellules, champ) for champ in entetes])
                     yield flux.getvalue()
                 else:
                     yield ("" if premier else ",") + json.dumps(
