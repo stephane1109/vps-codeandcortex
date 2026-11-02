@@ -88,7 +88,7 @@ class CroisementPresseTests(unittest.TestCase):
         self.assertIn("_ET_", conjonction.filename)
         with self.assertRaises(ValueError):
             web.StartRequest(**{**commun, "hashtags_presse": [
-                "tag" + str(indice) for indice in range(11)]))
+                "tag" + str(indice) for indice in range(11)]})
         with self.assertRaises(ValueError):
             web.StartRequest(**{**commun, "hashtags_exclus": ["blocage"]})
 
