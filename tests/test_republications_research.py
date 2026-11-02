@@ -55,6 +55,8 @@ class TestsRepublicationsResearch(unittest.TestCase):
             nom_sauvegarde="Test republications",
             presse_moteur="research",
             collecter_republications_research=True,
+            research_client_key="cle_fictive",
+            research_client_secret="secret_fictif",
             date_debut="2026-10-01", date_fin="2026-10-15",
         )
         manager = object.__new__(Manager)
