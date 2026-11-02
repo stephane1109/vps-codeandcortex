@@ -567,6 +567,16 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@marianne.lemag"
+    },
+    {
+      "id": "lhumanitefr",
+      "nom": "L'Humanité",
+      "compte": "lhumanitefr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lhumanitefr"
     }
   ]
 }
