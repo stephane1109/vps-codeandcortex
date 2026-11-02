@@ -15,7 +15,7 @@ VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": 
                  "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
                  "duree": "Durée vidéo", "region_code": "Region Code",
                  "is_verified": "Is Verified",
-                 "hashtags": "Hashtags sous le texte"}
+                 "hashtags": "Htag dans le csv"}
 
 # Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
 st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
@@ -163,7 +163,12 @@ if "initialise" not in st.session_state:
         )
     variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
     for variable in VARIABLES_TXT:
-        valeurs["txt_" + variable] = variable in variables
+        if variable != "hashtags":
+            valeurs["txt_" + variable] = variable in variables
+    # Les anciennes collectes peuvent avoir sélectionné le déplacement des
+    # hashtags dans le TXT. Leur choix est repris pour la nouvelle case CSV.
+    valeurs["csv_hashtags"] = ancienne.get(
+        "inclure_hashtags_csv", "hashtags" in variables)
     # Toutes les classes sont actives pour une nouvelle collecte ; une ancienne
     # collecte conserve ses cases cochées et décochées.
     for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
@@ -1085,9 +1090,13 @@ with onglet_collecte:
             key="export_profil_sans_arobase",
             help="S'applique immédiatement à l'aperçu, au TXT et au ZIP "
                  "sans relancer une collecte.")
-        st.checkbox(VARIABLES_TXT["hashtags"], key="txt_hashtags",
+        st.checkbox(VARIABLES_TXT["hashtags"], key="csv_hashtags",
             disabled=occupe,
-            help="Déplace les hashtags sous le texte. Décoché, la légende reste inchangée.")
+            help="Ajoute les hashtags réellement présents dans chaque publication "
+                 "à la colonne hashtags des exports CSV, sans le caractère #. "
+                 "Les valeurs sont séparées par des virgules. "
+                 "Décoché : la colonne reste vide dans les nouvelles collectes. "
+                 "Le texte des légendes et les fichiers TXT ne sont pas modifiés.")
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
             disabled=occupe,
             help="Ajoute un second segment **** *source_ia uniquement si le résumé "
@@ -1205,10 +1214,12 @@ with onglet_collecte:
                 valeurs["enrichir"] = True
                 valeurs["variables_txt"] = [
                     v for v in VARIABLES_TXT
-                    if st.session_state["txt_" + v]
+                    if v != "hashtags" and st.session_state["txt_" + v]
                     and (moteur_selectionne == "research"
                          or v not in ("region_code", "is_verified"))
                 ]
+                valeurs["inclure_hashtags_csv"] = bool(
+                    st.session_state.get("csv_hashtags", False))
                 valeurs.update(
                     hashtag=liste_hashtags[0] if liste_hashtags else "",
                     second_hashtag=liste_hashtags[1] if len(liste_hashtags) > 1 else "",
