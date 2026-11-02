@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "comptes": [
     {
       "id": "lemonde",
@@ -286,7 +286,7 @@
       "id": "actucaen",
       "nom": "Actu Caen",
       "compte": "actucaen",
-      "categorie": "presse_locale",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@actucaen"
@@ -295,7 +295,7 @@
       "id": "actubordeaux",
       "nom": "Actu Bordeaux",
       "compte": "actubordeaux",
-      "categorie": "presse_locale",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@actubordeaux"
@@ -304,7 +304,7 @@
       "id": "actutoulouse",
       "nom": "Actu Toulouse",
       "compte": "actutoulouse",
-      "categorie": "presse_locale",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@actutoulouse"
