@@ -492,7 +492,7 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 62 comptes
+L’inventaire `config/comptes_presse.json` contient désormais 63 comptes
 sélectionnables, après suppression explicite de la seule variante
 `@liberationfr` lors d'une demande antérieure. Le compte `@liberation.fr`
 et tous les autres médias sont conservés. L'Humanité (`@lhumanitefr`) est
@@ -505,7 +505,7 @@ L'interface regroupe les comptes en presse nationale
 (25, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
 et « Presse nationale »), presse régionale (21), presse indépendante (7)
 et autres
-médias ou statut à confirmer (9), dont @noahdecrypte (Noah Décrypte). Les comptes @lehuffpostfr, @cquoilinfo,
+médias ou statut à confirmer (10), dont @noahdecrypte (Noah Décrypte) et @marc.verdenet (Marc Verdenet). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
 suppression ni changement d'identifiant. La liste des comptes est affichée
 sans interligne entre les cases à cocher dans chaque groupe. Les six références éditoriales initiales
