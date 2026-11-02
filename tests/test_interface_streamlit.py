@@ -48,9 +48,11 @@ class TestsInterface(unittest.TestCase):
                 return {'medias': charger_inventaire()}
             raise RuntimeError(chemin)
 
-        with patch('streamlit.context', SimpleNamespace(
-                cookies={'scraptiktok_session': 'a' * 64}, headers={})), \\
-             patch('interface.client.appeler_api', side_effect=repondre):
+        with (
+            patch('streamlit.context', SimpleNamespace(
+                cookies={'scraptiktok_session': 'a' * 64}, headers={})),
+            patch('interface.client.appeler_api', side_effect=repondre),
+        ):
             page = AppTest.from_file(str(
                 Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
             self.assertFalse(page.exception)
