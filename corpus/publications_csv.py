@@ -38,7 +38,7 @@ def hashtags_pour_csv(publication):
     # sans extraire les fragments d'URL externes.
     description = publication.get("description") or ""
     if isinstance(description, str):
-        motif = r"https?://\\S+|#(\\w+)"
+        motif = r"https?://\S+|#(\w+)"
         valeurs.extend(
             occurrence.group(1) for occurrence in re.finditer(motif, description)
             if occurrence.group(1))
@@ -47,7 +47,7 @@ def hashtags_pour_csv(publication):
         if not isinstance(valeur, str):
             continue
         nom = valeur.strip().lstrip("#").strip()
-        if re.fullmatch(r"\\w+", nom):
+        if re.fullmatch(r"\w+", nom):
             uniques.setdefault(nom.casefold(), nom)
     return ", ".join(uniques.values())
 
