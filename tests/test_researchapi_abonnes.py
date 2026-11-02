@@ -72,13 +72,15 @@ class TestsNombreAbonnesResearch(unittest.TestCase):
         inconnu = text_export(
             texte, False, variables_txt=[],
             follower_count_illustratif=True)
-        self.assertEqual(inconnu,
-                         "*follower_count_indetermine\nManifestation observée\n")
+        self.assertIn("*follower_count_indetermine", inconnu.splitlines()[0])
+        self.assertIn("*presse_nationale", inconnu.splitlines()[0])
+        self.assertTrue(inconnu.endswith("Manifestation observée\n"))
         texte[0]["follower_count"] = 0
         zero = text_export(
             texte, False, variables_txt=[],
             follower_count_illustratif=True)
-        self.assertIn("*follower_count_0\n", zero)
+        self.assertIn("*follower_count_0", zero.splitlines()[0])
+        self.assertIn("*presse_nationale", zero.splitlines()[0])
         ia = text_export(
             texte, False, variables_txt=["id"], inclure_texte_genere_ia=True,
             follower_count_illustratif=True)
