@@ -10,7 +10,7 @@ def charger_inventaire(chemin=None):
     identifiants = set()
     noms_comptes = set()
     categories = {
-        "presse_nationale", "presse_regionale",
+        "presse_nationale", "presse_regionale", "presse_locale",
         "presse_independante", "autres_medias",
     }
     for compte in comptes:
@@ -38,6 +38,7 @@ from functools import lru_cache
 CODES_CATEGORIES_PRESSE = {
     "presse_nationale": "presse_nationale",
     "presse_regionale": "presse_regio_dpt",
+    "presse_locale": "presse_locale",
     "presse_independante": "presse_indep",
     "autres_medias": "presse_autre",
 }
@@ -67,7 +68,7 @@ def code_presse_publication(publication):
 
 
 def colonnes_categories_presse(publication):
-    """Produire quatre colonnes : 1 pour la catégorie, 0 pour les autres, vide si inconnue."""
+    """Produire une colonne par catégorie : 1 si présente, 0 sinon, vide si inconnue."""
     code = code_presse_publication(publication)
     return {variable: (int(variable == code) if code else None)
             for variable in CODES_CATEGORIES_PRESSE.values()}
