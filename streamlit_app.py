@@ -124,7 +124,8 @@ if "initialise" not in st.session_state:
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
-        "sauvegarde_progressive":ancienne.get("sauvegarde_progressive",False),
+        # L'option a été supprimée : les futures collectes n'activent pas ce ZIP.
+        "sauvegarde_progressive": False,
         "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",True),
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True),
@@ -186,7 +187,8 @@ if "initialise" not in st.session_state:
     st.session_state["initialise"] = True
 
 st.session_state.setdefault("telecharger_mp4", False)
-st.session_state.setdefault("sauvegarde_progressive", False)
+# Ignorer également l'ancienne valeur éventuellement conservée en session.
+st.session_state["sauvegarde_progressive"] = False
 st.session_state.setdefault("presse_moteur", "api")
 st.session_state.setdefault("hashtag_moteur", "navigateur")
 st.session_state.setdefault("profil_moteur", "navigateur")
@@ -773,14 +775,6 @@ with onglet_collecte:
                 )
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
             help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
-        st.checkbox("Sauvegarde progressive ZIP (toutes les 10 publications)",
-            key="sauvegarde_progressive", disabled=occupe,
-            help="Facultatif, désactivé par défaut. Indépendant de la sauvegarde PostgreSQL automatique. Conserve sur le VPS un ZIP de récupération "
-                 "avec les légendes, publications, commentaires et données de sélection. "
-                 "Le ZIP est remplacé toutes les 10 publications traitées et à la fin de la collecte, "
-                 "même partielle. Il reste disponible après redémarrage pendant 7 jours par défaut, "
-                 "si /app/data est un volume persistant. Les MP4 ne sont pas copiés. "
-                 "Cela ne permet pas de reprendre automatiquement Selenium.")
         st.subheader("Période")
         with st.expander("Dates (facultatif)", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
             d1,d2 = st.columns(2)
@@ -977,7 +971,9 @@ with onglet_collecte:
                       < st.session_state["research_execution_debut"]):
                 st.error("La date de fin d'exécution doit suivre la date de début.")
             else:
-                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","sauvegarde_progressive","inclure_texte_genere_ia")}
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","inclure_texte_genere_ia")}
+                # Ne plus déclencher de sauvegarde ZIP progressive pour les nouveaux jobs.
+                valeurs["sauvegarde_progressive"] = False
                 if moteur_formulaire != "research":
                     valeurs["limite_commentaires"] = st.session_state.get("limite_commentaires", 50)
                 valeurs["nom_sauvegarde"] = st.session_state["nom_sauvegarde"].strip()
@@ -1704,7 +1700,7 @@ with onglet_collecte:
                 st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
 
 with onglet_collecte:
-    with st.expander("Sauvegardes progressives — récupérer un corpus", expanded=False):
+    with st.expander("Récupérer les anciennes archives intermédiaires", expanded=False):
         st.caption("Les ZIP sont conservés sur le volume VPS pendant 7 jours par défaut, "
                    "mais leur téléchargement depuis cette interface nécessite le cookie privé "
                    "d’origine (valable 24 h). Ils contiennent TXT et JSON, sans MP4 ni "
