@@ -146,6 +146,18 @@ if "initialise" not in st.session_state:
             "inclure_commentaires_txt",
             bool(ancienne.get("collecter_commentaires", False))),
         "collecter_follower_count":ancienne.get("collecter_follower_count",True),
+        **{
+            "profil_media_" + nom + "_brut": (
+                nom in (ancienne.get("profils_medias_variables") or [])
+                if ancienne else True)
+            for nom in ("following_count", "follower_count", "likes_count", "video_count")
+        },
+        **{
+            "profil_media_" + nom + "_classe": (
+                nom in (ancienne.get("profils_medias_classes") or [])
+                if ancienne else False)
+            for nom in ("following_count", "follower_count", "likes_count", "video_count")
+        },
         "collecter_is_verified":ancienne.get("collecter_is_verified",True),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",True),
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",True),
@@ -222,6 +234,11 @@ st.session_state.setdefault("operator_presse", "OR")
 st.session_state.setdefault("hashtags_saisis", "")
 st.session_state.setdefault("hashtags_saisis_comptes", "")
 st.session_state.setdefault("hashtags_exclus_saisis", "")
+from collecte.profils_medias import (
+    VARIABLES_PROFILS_MEDIAS, LIBELLES_PROFILS_MEDIAS)
+for variable in VARIABLES_PROFILS_MEDIAS:
+    st.session_state.setdefault("profil_media_" + variable + "_brut", True)
+    st.session_state.setdefault("profil_media_" + variable + "_classe", False)
 st.session_state.setdefault("collecter_follower_count", True)
 st.session_state.setdefault("follower_count_illustratif", True)
 st.session_state.setdefault("abonnes_classe_illustratif", True)
@@ -1013,6 +1030,33 @@ with onglet_collecte:
             # Les clés et conditions restent inchangées pour préserver les choix.
             for nom in ("date", "profil", "id"):
                 st.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
+                if nom == "profil" and source == "presse":
+                    st.caption(
+                        "Métriques des comptes médias — fichier profils_medias.csv "
+                        "(une ligne par compte sélectionné, même sans vidéo retenue). "
+                        "Disponibles avec la Research API officielle.")
+                    for variable in VARIABLES_PROFILS_MEDIAS:
+                        libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
+                        cle_brute = "profil_media_" + variable + "_brut"
+                        cle_classe = "profil_media_" + variable + "_classe"
+                        colonne_nombre, colonne_classe = st.columns(
+                            [1.05, 3.5], gap="small", vertical_alignment="top")
+                        colonne_nombre.checkbox(
+                            libelle + " : valeur numérique réelle",
+                            key=cle_brute,
+                            disabled=occupe or moteur_formulaire != "research",
+                            help="Métrique agrégée du compte public, distincte des "
+                                 "compteurs de chacune de ses vidéos. Une seule "
+                                 "requête officielle par compte et par collecte.")
+                        colonne_classe.checkbox(
+                            "Recoder en variable catégorielle (codage proposé : "
+                            + intervalles + ")",
+                            key=cle_classe,
+                            disabled=(occupe or moteur_formulaire != "research"
+                                      or not st.session_state.get(cle_brute, False)),
+                            help="Ajoute une colonne classe_" + variable
+                                 + " au CSV, en plus de la valeur numérique. "
+                                 "Donnée manquante : indetermine, jamais zéro.")
             st.caption("Catégorie du compte : *presse_nationale, *presse_regio_dpt, "
                        "*presse_indep ou *presse_autre, ajoutée automatiquement "
                        "au TXT lorsque le profil appartient à l’inventaire des médias. "
@@ -1181,6 +1225,12 @@ with onglet_collecte:
                 st.error("Décochez la collecte des republications : elle est réservée "
                          "aux collectes Research ponctuelles, et n'est pas encore "
                          "prise en charge par la programmation pluri-journalière.")
+            elif (mode_programme and source == "presse"
+                  and any(st.session_state.get("profil_media_" + nom + "_brut", False)
+                          for nom in VARIABLES_PROFILS_MEDIAS)):
+                st.error("Les métriques des comptes médias sont disponibles dans "
+                         "les collectes Research ponctuelles ; décochez-les pour "
+                         "programmer une collecte pluri-journalière.")
             elif mode_programme and (st.session_state.get("telecharger_mp4")
                                     or st.session_state.get("inclure_texte_genere_ia")
                                     or st.session_state.get("filtrer_texte_ia_tiktok")):
@@ -1242,6 +1292,15 @@ with onglet_collecte:
                     and st.session_state.get("collecter_republications_research", False))
                 valeurs["maximum_republications_par_compte"] = int(
                     st.session_state.get("maximum_republications_par_compte", 100))
+                valeurs["profils_medias_variables"] = [
+                    nom for nom in VARIABLES_PROFILS_MEDIAS
+                    if source == "presse" and moteur_selectionne == "research"
+                    and st.session_state.get("profil_media_" + nom + "_brut", False)
+                ]
+                valeurs["profils_medias_classes"] = [
+                    nom for nom in valeurs["profils_medias_variables"]
+                    if st.session_state.get("profil_media_" + nom + "_classe", False)
+                ]
                 if source == "presse" and valeurs["presse_moteur"] == "navigateur":
                     fichier_cookies = st.session_state.get("cookies_presse_fichier")
                     if fichier_cookies is not None:
@@ -1850,6 +1909,14 @@ with onglet_collecte:
                     }
                 )
 
+            if actuel.get("profils_medias_variables"):
+                st.caption(
+                    f"Profils médias : {actuel.get('nombre_profils_medias', 0)} "
+                    "compte(s) consignés dans profils_medias.csv "
+                    "(les valeurs indisponibles restent vides).")
+                with st.expander("Disponibilité des métriques par compte"):
+                    st.dataframe(actuel.get("bilan_profils_medias") or [],
+                                 hide_index=True)
             if actuel.get("collecter_commentaires"):
                 st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
                 st.caption(
