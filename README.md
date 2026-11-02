@@ -492,7 +492,7 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 63 comptes
+L’inventaire `config/comptes_presse.json` contient désormais 64 comptes
 sélectionnables, après suppression explicite de la seule variante
 `@liberationfr` lors d'une demande antérieure. Le compte `@liberation.fr`
 et tous les autres médias sont conservés. L'Humanité (`@lhumanitefr`) est
@@ -501,8 +501,9 @@ reclassé en presse nationale, sous-groupe presse écrite. "L’info en 60
 secondes" (`@iuzdrmqevnu`) a été ajouté à la presse indépendante.
 Politis (`@politis_fr`) a été reclassé en presse nationale, dans le
 sous-groupe affiché « Presse nationale », sans modification d'identifiant.
+France 24 (`@france24`) a été ajouté dans les chaînes de télévision nationales.
 L'interface regroupe les comptes en presse nationale
-(25, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
+(26, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
 et « Presse nationale »), presse régionale (21), presse indépendante (7)
 et autres
 médias ou statut à confirmer (10), dont @noahdecrypte (Noah Décrypte) et @marc.verdenet (Marc Verdenet). Les comptes @lehuffpostfr, @cquoilinfo,
