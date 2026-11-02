@@ -128,7 +128,7 @@ def construire_tableau_complet(session, dossier):
 
     colonnes = list(dict.fromkeys([
         "publication_id", "url", "statut", "contenu_genere_ia", *colonnes_source,
-        "presse_nationale", "presse_regio_dpt", "presse_locale", "presse_indep", "presse_autre",
+        "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
         "hashtags",
         "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags",
         "violence_visible",
