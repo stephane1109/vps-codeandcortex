@@ -10,6 +10,10 @@ import streamlit.components.v1 as components
 from interface.client import appeler_api
 from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, normaliser_liste_hashtags
 from collecte.presse import cle_tri_media
+from collecte.suivi_sources import (
+    etablir_bilan_medias, medias_a_reprendre, exporter_bilan_medias_csv,
+    importer_bilan_medias_csv,
+)
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
@@ -370,6 +374,16 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
+def cocher_uniquement_medias(identifiants):
+    """Sélectionner uniquement les médias à reprendre, sans maintenir les anciens cochages."""
+    selection = set(identifiants).intersection(medias)
+    for identifiant in medias:
+        st.session_state["media_" + identifiant] = identifiant in selection
+    st.session_state["medias"] = [
+        identifiant for identifiant in medias if identifiant in selection
+    ]
+
+
 onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
     ["Collecte", "Base de données", "Annotation/analyse", "Analyse sociométrique", "Corpus fusionné", "Aide"]
 )
@@ -497,6 +511,51 @@ with onglet_collecte:
             "Tout cocher", key="tous_medias",
             on_click=cocher_tous_les_medias, disabled=occupe,
         )
+        dernier_bilan = ((st.session_state.get("collecte") or {}).get("bilan_medias") or [])
+        derniere_collecte = st.session_state.get("collecte") or {}
+        if (derniere_collecte.get("source_collecte") == "presse"
+                and dernier_bilan and not derniere_collecte.get("busy")):
+            ids_reprise = medias_a_reprendre(dernier_bilan)
+            st.caption(
+                f"Dernière collecte : {len(dernier_bilan)} média(s) prévu(s), "
+                f"{len(ids_reprise)} à reprendre (non commencés, interrompus "
+                "ou partiellement traités)."
+            )
+            if ids_reprise:
+                st.button(
+                    f"Cocher uniquement les {len(ids_reprise)} médias à reprendre",
+                    key="cocher_medias_derniere_collecte",
+                    on_click=cocher_uniquement_medias,
+                    args=(ids_reprise,), disabled=occupe,
+                )
+        fichier_bilan = st.file_uploader(
+            "Importer un bilan de médias CSV d'une collecte précédente",
+            type=["csv"], key="bilan_reprise_csv", disabled=occupe,
+            help="Réimportez le fichier bilan_medias.csv téléchargé la veille. "
+                 "Seuls les médias absents, interrompus ou partiels sont cochés.",
+        )
+        if fichier_bilan is not None:
+            try:
+                ids_importes, ids_inconnus = importer_bilan_medias_csv(
+                    fichier_bilan.getvalue(), medias)
+            except ValueError as erreur:
+                st.error(str(erreur))
+            else:
+                st.caption(
+                    f"{len(ids_importes)} média(s) à reprendre dans ce bilan ; "
+                    f"{len(ids_inconnus)} identifiant(s) ne figurent plus "
+                    "dans l'inventaire actuel."
+                )
+                if ids_inconnus:
+                    st.warning("Identifiants absents de l'inventaire : "
+                               + ", ".join(ids_inconnus))
+                if ids_importes:
+                    st.button(
+                        f"Cocher uniquement les {len(ids_importes)} médias du bilan importé",
+                        key="cocher_medias_depuis_csv",
+                        on_click=cocher_uniquement_medias,
+                        args=(ids_importes,), disabled=occupe,
+                    )
         categories_medias = (
             ("presse_nationale", "Presse nationale"),
             ("presse_regionale", "Presse Régionale/départementale"),
@@ -1498,6 +1557,51 @@ with onglet_collecte:
                 with st.expander("Diagnostic des republications par média"):
                     st.json(actuel.get("bilan_republications") or {})
             if actuel.get("source_collecte") == "presse":
+                bilan_medias = actuel.get("bilan_medias") or []
+                if bilan_medias:
+                    comptes_etats = {etat: sum(ligne["etat"] == etat for ligne in bilan_medias)
+                                     for etat in ("traitee", "partielle", "interrompue",
+                                                 "echec", "non_commencee", "en_cours", "en_attente")}
+                    st.write(
+                        "Suivi des sources médias : "
+                        f"{comptes_etats['traitee']} recherches terminées, "
+                        f"{comptes_etats['partielle']} partielles, "
+                        f"{comptes_etats['interrompue']} interrompues, "
+                        f"{comptes_etats['echec']} en erreur, "
+                        f"{comptes_etats['non_commencee']} non commencées."
+                    )
+                    a_reprendre = [
+                        ligne for ligne in bilan_medias
+                        if ligne["etat"] in ("partielle", "interrompue",
+                                             "echec", "non_commencee")
+                    ]
+                    if a_reprendre:
+                        with st.expander(
+                            f"Médias à reprendre : {len(a_reprendre)}",
+                            expanded=not actuel.get("busy", True),
+                        ):
+                            st.dataframe([
+                                {"Média": ligne["nom"], "Compte": "@" + ligne["compte"],
+                                 "État": ligne["etat"].replace("_", " "),
+                                 "Liens": ligne["liens"], "Diagnostic": ligne["motif"]}
+                                for ligne in a_reprendre
+                            ], hide_index=True, use_container_width=True)
+                    if not actuel.get("busy"):
+                        st.download_button(
+                            "Télécharger le bilan des médias (CSV réimportable)",
+                            data=exporter_bilan_medias_csv(bilan_medias),
+                            file_name="bilan_medias_" + re.sub(
+                                r"[^a-zA-Z0-9_-]+", "_",
+                                actuel.get("nom_sauvegarde") or actuel.get("id") or "collecte"
+                            )[:60] + ".csv",
+                            mime="text/csv", key="telecharger_bilan_medias",
+                        )
+                        st.caption(
+                            "Conservez ce CSV pour demain. Importez-le au-dessus de "
+                            "la liste des médias, puis cochez uniquement les sources "
+                            "à reprendre. Une recherche terminée signifie que le "
+                            "moteur a fini son parcours, sans garantie d'exhaustivité TikTok."
+                        )
                 selection_moteur = actuel.get("medias", [])
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
                     for identifiant in selection_moteur:
