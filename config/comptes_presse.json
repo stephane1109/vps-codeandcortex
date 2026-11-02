@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "comptes": [
     {
       "id": "lemonde",
@@ -476,17 +476,6 @@
       "source": "https://www.francetvpro.fr/contenu-de-presse/2341672",
       "statut": "reference_editoriale",
       "url": "https://www.tiktok.com/@france.tv"
-    },
-    {
-      "id": "m6info",
-      "nom": "M6 Info — variante à vérifier",
-      "compte": "m6info",
-      "categorie": "presse_nationale",
-      "sous_categorie": "television_nationale",
-      "source": "fourni_par_utilisateur",
-      "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@m6info",
-      "note": "@m6info_ est indiqué comme compte TikTok dans une publication officielle M6 Info ; ne pas confondre les deux identifiants."
     },
     {
       "id": "lci",
