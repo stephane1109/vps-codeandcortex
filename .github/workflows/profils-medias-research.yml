@@ -7,6 +7,7 @@ on:
       - "collecte/profils_medias.py"
       - "collecte/researchapi.py"
       - "corpus/construction.py"
+      - "stockage/historique_analyses.py"
       - "streamlit_app.py"
       - "webapp.py"
       - "tests/test_profils_medias_research.py"
