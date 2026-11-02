@@ -44,6 +44,10 @@ class TestsCategoriesPresseIllustratives(unittest.TestCase):
             "france3occitanie": "presse_regio_dpt",
             "@f3cvdl": "presse_regio_dpt",
             "@clpress": "presse_indep",
+            "@loopsider": "presse_indep",
+            "@actucaen": "presse_regio_dpt",
+            "@actubordeaux": "presse_regio_dpt",
+            "@actutoulouse": "presse_regio_dpt",
             "@noahdecrypte": "presse_autre",
         }
         for compte, attendu in exemples.items():
@@ -58,6 +62,7 @@ class TestsCategoriesPresseIllustratives(unittest.TestCase):
                     valeur == 0 for cle, valeur in colonnes.items()
                     if cle != attendu))
         self.assertEqual(len(CODES_CATEGORIES_PRESSE), 4)
+        self.assertNotIn("presse_locale", CODES_CATEGORIES_PRESSE)
         self.assertEqual(categorie_presse_publication(
             self.publication("@CLPRESS")), "presse_independante")
 
@@ -85,6 +90,17 @@ class TestsCategoriesPresseIllustratives(unittest.TestCase):
         texte_minimal = text_export([publication], include_sources=False,
                                     variables_txt=())
         self.assertIn("*presse_regio_dpt", texte_minimal)
+        for auteur in ("actucaen", "actubordeaux", "actutoulouse"):
+            with self.subTest(auteur=auteur):
+                texte_local = text_export(
+                    [self.publication(auteur)], include_sources=False,
+                    variables_txt=("profil",))
+                self.assertIn("*presse_regio_dpt", texte_local)
+                self.assertNotIn("*presse_locale", texte_local)
+        texte_independant = text_export(
+            [self.publication("loopsider")], include_sources=False,
+            variables_txt=("profil",))
+        self.assertIn("*presse_indep", texte_independant)
 
     def test_colonnes_csv_publications_et_engagement(self):
         """Les quatre indicatrices apparaissent dans les deux formats de CSV."""
