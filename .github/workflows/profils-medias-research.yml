@@ -10,6 +10,7 @@ on:
       - "streamlit_app.py"
       - "webapp.py"
       - "tests/test_profils_medias_research.py"
+      - "tests/test_researchapi_abonnes.py"
       - ".github/workflows/profils-medias-research.yml"
   workflow_dispatch:
 
