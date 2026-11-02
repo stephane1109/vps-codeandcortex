@@ -120,7 +120,9 @@ def construire_tableau_complet(session, dossier):
         if publication.get("inclure_hashtags_csv"):
             lignes[identifiant]["hashtags"] = hashtags_pour_csv(publication)
         for nom in ("hashtags_recherches", "hashtags_correspondants",
-                    "operateur_hashtags"):
+                    "operateur_hashtags", "type_publication", "compte_reposteur",
+                    "comptes_reposteurs", "auteur_original", "id_video_originale",
+                    "republication_confirmee", "date_republication"):
             valeur = publication.get(nom)
             if valeur is not None:
                 lignes[identifiant][nom] = (
@@ -131,6 +133,9 @@ def construire_tableau_complet(session, dossier):
         "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
         "hashtags",
         "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags",
+        "type_publication", "compte_reposteur", "comptes_reposteurs",
+        "auteur_original", "id_video_originale", "republication_confirmee",
+        "date_republication",
         "violence_visible",
         *noms, *CHAMPS_PROVENANCE,
     ]))
