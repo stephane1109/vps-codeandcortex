@@ -492,10 +492,12 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 61 comptes
-sélectionnables, sans suppression des 49 entrées précédentes. L'interface
-regroupe les comptes en presse nationale (24, avec deux sous-groupes TV
-et presse écrite), presse régionale (21), presse indépendante (8) et autres
+L’inventaire `config/comptes_presse.json` contient désormais 60 comptes
+sélectionnables, après suppression explicite de la seule variante
+`@liberationfr`. Le compte `@liberation.fr` et tous les autres médias
+restent présents. L'interface regroupe les comptes en presse nationale
+(23, avec deux sous-groupes TV et presse écrite), presse régionale (21),
+presse indépendante (8) et autres
 médias ou statut à confirmer (8). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
 suppression ni changement d'identifiant. La liste des comptes est affichée
@@ -503,8 +505,9 @@ sans interligne entre les cases à cocher dans chaque groupe. Les six référenc
 et les identifiants historiques sont préservés. Les comptes fournis par
 l’utilisateur sont signalés comme tels lorsque leur propriété sur TikTok
 n’a pas été vérifiée. Les identifiants différents sont conservés comme
-entrées distinctes : `@m6info_` et `@m6info`, `@liberation.fr` et
-`@liberationfr`. Les liens fournis pour `@m6info`, `@liberationfr`
+entrées distinctes : `@m6info_` et `@m6info`. Le compte
+`@liberation.fr` demeure présent ; la variante `@liberationfr` a été
+retirée à la demande de l'utilisateur. Les liens fournis pour `@m6info`
 et `@lobs` pointaient vers d’autres comptes : leur propriété doit être
 vérifiée avant exploitation scientifique. Une collecte peut sélectionner
 jusqu'au nombre de médias présents dans l’inventaire ; les autres bornes
