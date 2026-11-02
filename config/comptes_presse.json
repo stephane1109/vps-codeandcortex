@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "comptes": [
     {
       "id": "lemonde",
@@ -14,7 +14,7 @@
       "id": "franceinfo",
       "nom": "franceinfo",
       "compte": "franceinfo",
-      "categorie": "audiovisuel_public",
+      "categorie": "presse_nationale",
       "source": "https://www.radiofrance.com/presse/franceinfo-les-coulisses-de-linfo?page=1",
       "statut": "reference_editoriale",
       "consulte_le": "2026-10-09"
@@ -41,7 +41,7 @@
       "id": "brut",
       "nom": "Brut",
       "compte": "brutofficiel",
-      "categorie": "media_numerique",
+      "categorie": "presse_nationale",
       "source": "https://www.brut.media/fr",
       "statut": "reference_editoriale",
       "consulte_le": "2026-10-09"
@@ -50,7 +50,7 @@
       "id": "huffpost",
       "nom": "Le HuffPost",
       "compte": "lehuffpostfr",
-      "categorie": "media_numerique",
+      "categorie": "presse_nationale",
       "source": "https://www.huffingtonpost.fr/",
       "statut": "reference_editoriale",
       "consulte_le": "2026-10-09"
@@ -59,7 +59,7 @@
       "id": "parismatch",
       "nom": "Paris Match",
       "compte": "parismatch",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@parismatch"
@@ -68,7 +68,7 @@
       "id": "cquoilinfo",
       "nom": "C quoi l’info",
       "compte": "cquoilinfo",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@cquoilinfo"
@@ -77,7 +77,7 @@
       "id": "m6info_",
       "nom": "M6 Info",
       "compte": "m6info_",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@m6info_"
@@ -86,7 +86,7 @@
       "id": "hugodecrypte",
       "nom": "HugoDécrypte",
       "compte": "hugodecrypte",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@hugodecrypte"
@@ -95,7 +95,7 @@
       "id": "lavoixdunord",
       "nom": "La Voix du Nord",
       "compte": "lavoixdunord",
-      "categorie": "indetermine",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lavoixdunord"
@@ -104,7 +104,7 @@
       "id": "bfmtv",
       "nom": "BFMTV",
       "compte": "bfmtv",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@bfmtv"
@@ -113,7 +113,7 @@
       "id": "tf1info",
       "nom": "TF1 Info",
       "compte": "tf1info",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@tf1info"
@@ -122,7 +122,7 @@
       "id": "le_progres_",
       "nom": "Le Progrès",
       "compte": "le_progres_",
-      "categorie": "indetermine",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@le_progres_"
@@ -131,7 +131,7 @@
       "id": "reporterre_media",
       "nom": "Reporterre",
       "compte": "reporterre_media",
-      "categorie": "indetermine",
+      "categorie": "presse_independante",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@reporterre_media"
@@ -140,7 +140,7 @@
       "id": "actufrancereelle",
       "nom": "Actu France Réelle",
       "compte": "actufrancereelle",
-      "categorie": "indetermine",
+      "categorie": "autres_medias",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@actufrancereelle"
@@ -149,7 +149,7 @@
       "id": "le20hfrancetelevisions",
       "nom": "Le 20h France Télévisions",
       "compte": "le20hfrancetelevisions",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@le20hfrancetelevisions"
@@ -158,7 +158,7 @@
       "id": "flashinfosoff",
       "nom": "Flash Infos",
       "compte": "flashinfosoff",
-      "categorie": "indetermine",
+      "categorie": "autres_medias",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@flashinfosoff"
@@ -167,7 +167,7 @@
       "id": "lereplay2",
       "nom": "Le Replay",
       "compte": "lereplay2",
-      "categorie": "indetermine",
+      "categorie": "autres_medias",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lereplay2"
@@ -176,7 +176,7 @@
       "id": "ladepechedumidi",
       "nom": "La Dépêche du Midi",
       "compte": "ladepechedumidi",
-      "categorie": "indetermine",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@ladepechedumidi"
@@ -185,7 +185,7 @@
       "id": "rtl_officiel",
       "nom": "RTL",
       "compte": "rtl.officiel",
-      "categorie": "indetermine",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@rtl.officiel"
@@ -194,7 +194,7 @@
       "id": "streetpress",
       "nom": "StreetPress",
       "compte": "streetpress_",
-      "categorie": "indetermine",
+      "categorie": "presse_independante",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@streetpress_"
@@ -203,7 +203,7 @@
       "id": "lapressedelamanche",
       "nom": "La Presse de la Manche",
       "compte": "lapressedelamanche",
-      "categorie": "indetermine",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lapressedelamanche"
@@ -212,7 +212,7 @@
       "id": "clpress",
       "nom": "CLPRESS",
       "compte": "clpress",
-      "categorie": "indetermine",
+      "categorie": "autres_medias",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@clpress"
@@ -221,7 +221,7 @@
       "id": "lanouvellerepublique",
       "nom": "La Nouvelle République",
       "compte": "lanouvellerepublique",
-      "categorie": "indetermine",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lanouvellerepublique"
@@ -230,7 +230,7 @@
       "id": "sofino",
       "nom": "Sofino",
       "compte": ".sofino",
-      "categorie": "indetermine",
+      "categorie": "autres_medias",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@.sofino"
@@ -239,7 +239,7 @@
       "id": "abacapress",
       "nom": "Abaca Press",
       "compte": "abacapress",
-      "categorie": "indetermine",
+      "categorie": "autres_medias",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@abacapress"
@@ -248,7 +248,7 @@
       "id": "politis_fr",
       "nom": "Politis",
       "compte": "politis_fr",
-      "categorie": "indetermine",
+      "categorie": "presse_independante",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@politis_fr"
@@ -257,10 +257,100 @@
       "id": "france3occitanie",
       "nom": "France 3 Occitanie",
       "compte": "france3occitanie",
-      "categorie": "indetermine",
+      "categorie": "presse_regionale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@france3occitanie"
+    },
+    {
+      "id": "mediapartfr",
+      "nom": "Mediapart",
+      "compte": "mediapartfr",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@mediapartfr"
+    },
+    {
+      "id": "actutoulouse",
+      "nom": "Actu Toulouse",
+      "compte": "actutoulouse",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actutoulouse"
+    },
+    {
+      "id": "lefigaro",
+      "nom": "Le Figaro",
+      "compte": "lefigaro",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lefigaro"
+    },
+    {
+      "id": "valeursactuelles",
+      "nom": "Valeurs actuelles",
+      "compte": "valeursactuelles",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@valeursactuelles"
+    },
+    {
+      "id": "liberation_fr",
+      "nom": "Libération",
+      "compte": "liberation.fr",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@liberation.fr"
+    },
+    {
+      "id": "loopsider",
+      "nom": "Loopsider",
+      "compte": "loopsider",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@loopsider"
+    },
+    {
+      "id": "lejournaldefrance",
+      "nom": "Le Journal de France",
+      "compte": "lejournaldefrance",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lejournaldefrance"
+    },
+    {
+      "id": "actu_paris",
+      "nom": "Actu Paris",
+      "compte": "actu.paris",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actu.paris"
+    },
+    {
+      "id": "ledauphinelibere",
+      "nom": "Le Dauphiné libéré",
+      "compte": "ledauphinelibere",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@ledauphinelibere"
+    },
+    {
+      "id": "letelegramme",
+      "nom": "Le Télégramme",
+      "compte": "letelegramme",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@letelegramme"
     }
   ]
 }
