@@ -22,6 +22,17 @@ COMPTES_NOUVEAUX = {
     "franceinfo": "presse_nationale",
 }
 
+COMPTES_NATIONAUX_TELEVISION = {
+    "tf1info", "bfmtv", "francetvpolitique", "france.tv",
+    "m6info", "lci", "cnewsofficiel", "artefr",
+}
+
+COMPTES_NATIONAUX_ECRITS = {
+    "lemondefr", "lefigaro", "liberationfr", "lequipe",
+    "lesechos", "lobs", "lepoint.fr", "marianne.lemag",
+}
+
+
 COMPTES_REGIONAUX = {
     "ouestfrance", "leparisien", "journalsudouest", "letelegramme",
     "lavoixdunord", "ledauphinelibere", "lanouvellerepublique",
@@ -53,7 +64,45 @@ class TestsGroupesPresse(unittest.TestCase):
             with self.subTest(compte=compte):
                 self.assertEqual(regionaux.count(compte), 1)
         self.assertEqual(len(regionaux), 21)
-        self.assertEqual(len(inventaire), 49)
+        # Les 12 nouveaux comptes nationaux n'ont pas supprimé les 49 précédents.
+        self.assertEqual(len(inventaire), 61)
+
+    def test_nationaux_tv_et_presse_ecrite_conserves(self):
+        """Compléter les deux listes sans supprimer les anciens médias."""
+        inventaire = charger_inventaire()
+        handles = {media["compte"]: media for media in inventaire}
+        for compte in COMPTES_NATIONAUX_TELEVISION:
+            with self.subTest(compte=compte):
+                self.assertEqual(
+                    handles[compte]["categorie"], "presse_nationale")
+                self.assertEqual(
+                    handles[compte]["sous_categorie"], "television_nationale")
+        for compte in COMPTES_NATIONAUX_ECRITS:
+            with self.subTest(compte=compte):
+                self.assertEqual(
+                    handles[compte]["categorie"], "presse_nationale")
+                self.assertEqual(
+                    handles[compte]["sous_categorie"], "presse_ecrite_nationale")
+        self.assertEqual(len(handles), 61)
+        self.assertEqual(
+            len([m for m in inventaire
+                 if m["categorie"] == "presse_nationale"]), 28)
+
+    def test_les_variantes_m6_et_liberation_ne_sont_pas_effacees(self):
+        """Deux identifiants distincts ne doivent pas être fusionnés."""
+        inventaire = charger_inventaire()
+        handles = {m["compte"] for m in inventaire}
+        self.assertTrue({
+            "m6info", "m6info_", "liberation.fr", "liberationfr",
+        }.issubset(handles))
+        self.assertEqual(
+            next(m["statut"] for m in inventaire
+                 if m["compte"] == "m6info"),
+            "declare_utilisateur")
+        self.assertEqual(
+            next(m["statut"] for m in inventaire
+                 if m["compte"] == "liberationfr"),
+            "declare_utilisateur")
 
     def test_comptes_sans_profil_distinct_non_ajoutes(self):
         """Ne pas inventer de profil pour les cas particuliers."""
@@ -108,6 +157,9 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertIn('"cocher_categorie_" + categorie', interface)
         self.assertIn('"decocher_categorie_" + categorie', interface)
         self.assertIn('key=cle, disabled=occupe, on_change=memoriser_medias', interface)
+        self.assertIn('"Chaînes de télévision nationales"', interface)
+        self.assertIn('"Presse écrite nationale"', interface)
+        self.assertIn('"Autres médias nationaux"', interface)
 
 
 if __name__ == "__main__":
