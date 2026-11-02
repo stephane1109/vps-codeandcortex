@@ -116,6 +116,11 @@ if "initialise" not in st.session_state:
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
         "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
         "hashtag_presse":ancienne.get("hashtag_presse",""),
+        "hashtags_presse_saisis": ", ".join(
+            "#" + str(tag).lstrip("#") for tag in (
+                ancienne.get("hashtags_presse") or
+                ([ancienne.get("hashtag_presse")] if ancienne.get("hashtag_presse") else []))),
+        "operator_presse": ancienne.get("operator_presse", "OR"),
         "presse_moteur":ancienne.get("presse_moteur","research"),
         "hashtag_moteur":ancienne.get("hashtag_moteur","research"),
         "profil_moteur":ancienne.get("profil_moteur","research"),
@@ -194,6 +199,10 @@ st.session_state.setdefault("hashtag_moteur", "research")
 st.session_state.setdefault("profil_moteur", "research")
 st.session_state.setdefault("croiser_hashtag_presse", False)
 st.session_state.setdefault("hashtag_presse", "")
+st.session_state.setdefault("hashtags_presse_saisis",
+    "#" + st.session_state["hashtag_presse"]
+    if st.session_state.get("hashtag_presse") else "")
+st.session_state.setdefault("operator_presse", "OR")
 st.session_state.setdefault("hashtags_saisis", "")
 st.session_state.setdefault("hashtags_saisis_comptes", "")
 st.session_state.setdefault("hashtags_exclus_saisis", "")
@@ -547,22 +556,40 @@ with onglet_collecte:
         if len(selection)>max_sources_admin:
             st.warning("Trop de médias sélectionnés pour une même collecte : "
                        f"maximum {max_sources_admin}.")
-        st.checkbox("Croisement avec un hashtag", key="croiser_hashtag_presse",
-            disabled=occupe, help="Filtrer les publications des médias cochés avec un #hashtag exact. "
-            "Le filtre s'applique après la découverte des vidéos, sans lancer une recherche générale.")
+        liste_hashtags_presse = []
+        erreur_hashtags_presse = ""
+        st.checkbox("Croisement avec des hashtags", key="croiser_hashtag_presse",
+            disabled=occupe, help="Restreindre les vidéos des médias sélectionnés à un ou plusieurs "
+            "hashtags exacts, sans recherche générale sur d'autres comptes.")
         if st.session_state.get("croiser_hashtag_presse"):
-            st.text_input("Hashtag du croisement", key="hashtag_presse",
-                placeholder="#manifestation", disabled=occupe,
-                help="Un seul hashtag, avec ou sans #. Seules les publications portant ce hashtag "
-                     "dans leur légende seront retenues pour les exports et les analyses.")
+            saisie_presse = st.text_area(
+                "Hashtags du croisement (1 à 10)", key="hashtags_presse_saisis",
+                placeholder="#manifestation, #lyceens, #blocage", height=95,
+                disabled=occupe,
+                help="Séparez les hashtags par des virgules, espaces, points-virgules ou "
+                     "retours à la ligne. Le signe # est facultatif ; les doublons sont supprimés.")
+            try:
+                liste_hashtags_presse = normaliser_liste_hashtags(
+                    separer_saisie_hashtags(saisie_presse))
+            except ValueError as erreur:
+                erreur_hashtags_presse = str(erreur)
+                st.error(erreur_hashtags_presse)
+            if not erreur_hashtags_presse:
+                st.caption(
+                    f"{len(liste_hashtags_presse)}/{MAX_HASHTAGS} hashtags distincts. "
+                    + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags_presse)
+                       if liste_hashtags_presse else "Saisissez au moins un hashtag."))
+            st.radio(
+                "Combiner les hashtags de presse", ["AND", "OR"],
+                format_func=lambda valeur: (
+                    "ET — tous les hashtags" if valeur == "AND"
+                    else "OU — au moins un hashtag"),
+                key="operator_presse", horizontal=True, disabled=occupe)
             st.caption(
-                "Croisement : comptes sélectionnés ET hashtag indiqué. "
-                "Avec la Research API officielle, les deux critères sont "
-                "envoyés ensemble à TikTok (AND) puis vérifiés localement. "
-                "Les filtres de période et de langue peuvent encore exclure "
-                "certaines publications. Un hashtag ne garantit pas que le "
-                "contenu visuel traite effectivement du sujet."
-            )
+                "Croisement : comptes sélectionnés ET (hashtags combinés selon ET/OU). "
+                "Research API : conditions appliquées dès la découverte, puis vérifiées "
+                "localement. Autres moteurs : filtrage après lecture des publications. "
+                "Les autres filtres de période et de langue restent applicables.")
         # Une seule ligne d'information Streamlit : plusieurs st.caption,
         # st.warning ou st.error consécutifs créent des espaces vides inutiles.
         # Les messages sont assemblés sans saut de paragraphe ; une alerte
@@ -1069,9 +1096,11 @@ with onglet_collecte:
                 st.error("Renseignez au moins un hashtag pour lancer la collecte.")
             elif source == "presse" and not st.session_state.get("medias"):
                 st.error("Sélectionnez au moins un média.")
+            elif source == "presse" and erreur_hashtags_presse:
+                st.error("Corrigez les hashtags du croisement avant de lancer la collecte.")
             elif (source == "presse" and st.session_state.get("croiser_hashtag_presse")
-                  and not st.session_state.get("hashtag_presse", "").strip()):
-                st.error("Saisissez le hashtag à croiser avec les médias.")
+                  and not liste_hashtags_presse):
+                st.error("Saisissez au moins un hashtag à croiser avec les médias.")
             elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
             elif mode_programme and (not debut or not fin):
                 st.error("Définissez la période des publications avant de programmer la collecte.")
@@ -1122,9 +1151,11 @@ with onglet_collecte:
                     "comptes": "profil_moteur"}[source]]
                 valeurs["croiser_hashtag_presse"] = (
                     bool(st.session_state.get("croiser_hashtag_presse", False)) if source == "presse" else False)
+                valeurs["hashtags_presse"] = (
+                    liste_hashtags_presse if valeurs["croiser_hashtag_presse"] else [])
                 valeurs["hashtag_presse"] = (
-                    st.session_state.get("hashtag_presse", "").strip()
-                    if valeurs["croiser_hashtag_presse"] else "")
+                    valeurs["hashtags_presse"][0] if valeurs["hashtags_presse"] else "")
+                valeurs["operator_presse"] = st.session_state.get("operator_presse", "OR")
                 if source == "presse" and valeurs["presse_moteur"] == "navigateur":
                     fichier_cookies = st.session_state.get("cookies_presse_fichier")
                     if fichier_cookies is not None:
@@ -1268,17 +1299,20 @@ with onglet_collecte:
             if actuel.get("source_collecte") == "presse":
                 if actuel.get("croiser_hashtag_presse"):
                     st.caption(
-                        "Croisement appliqué : médias sélectionnés ET "
-                        f"#{actuel.get('hashtag_presse', '')}. "
-                        "Une vidéo ne doit être retenue que si ce hashtag figure "
-                        "parmi ses hashtags. Le tag ne garantit pas la pertinence "
-                        "thématique du contenu audiovisuel."
+                        "Croisement appliqué : médias sélectionnés ET ("
+                        + (" OU " if actuel.get("operator_presse", "AND") == "OR"
+                           else " ET ").join(
+                            "#" + h for h in (
+                                actuel.get("hashtags_presse")
+                                or [actuel.get("hashtag_presse", "")]))
+                        + "). Les hashtags doivent figurer dans les publications "
+                        "retenues ; ils ne garantissent pas leur pertinence thématique."
                     )
                 else:
                     st.caption(
                         "Aucun filtre de hashtag n'est activé pour cette collecte "
                         "par médias : leurs vidéos peuvent porter sur n'importe "
-                        "quel sujet. Activez « Croisement avec un hashtag » "
+                        "quel sujet. Activez « Croisement avec des hashtags » "
                         "pour restreindre la recherche."
                     )
             if actuel.get("comptes_filtres"):
