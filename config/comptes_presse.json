@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "comptes": [
     {
       "id": "lemonde",
@@ -604,6 +604,105 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@france24"
+    },
+    {
+      "id": "france3nouvelleaquitaine",
+      "nom": "France 3 Nouvelle-Aquitaine",
+      "compte": "france3nouvelleaquitaine",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3nouvelleaquitaine"
+    },
+    {
+      "id": "france3grandest",
+      "nom": "France 3 Grand Est",
+      "compte": "france3grandest",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3grandest"
+    },
+    {
+      "id": "france3bretagne",
+      "nom": "France 3 Bretagne",
+      "compte": "france3bretagne",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3bretagne"
+    },
+    {
+      "id": "france3bfc",
+      "nom": "France 3 Bourgogne-Franche-Comté",
+      "compte": "france3bfc",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3bfc"
+    },
+    {
+      "id": "france3normandie",
+      "nom": "France 3 Normandie",
+      "compte": "france3normandie",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3normandie"
+    },
+    {
+      "id": "f3cvdl",
+      "nom": "France 3 Centre-Val de Loire",
+      "compte": "f3cvdl",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@f3cvdl"
+    },
+    {
+      "id": "france3hautsdefrance",
+      "nom": "France 3 Hauts-de-France",
+      "compte": "france3hautsdefrance",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3hautsdefrance"
+    },
+    {
+      "id": "france3paris_idf",
+      "nom": "France 3 Paris Île-de-France",
+      "compte": "france3paris_idf",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3paris_idf"
+    },
+    {
+      "id": "france3pdl",
+      "nom": "France 3 Pays de la Loire",
+      "compte": "france3pdl",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3pdl"
+    },
+    {
+      "id": "france3paca",
+      "nom": "France 3 Provence-Alpes-Côte d’Azur",
+      "compte": "france3paca",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3paca"
+    },
+    {
+      "id": "france_3_aura",
+      "nom": "France 3 Auvergne-Rhône-Alpes",
+      "compte": "france_3_aura",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france_3_aura"
     }
   ]
 }
