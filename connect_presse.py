@@ -39,6 +39,10 @@ class ConnexionPresse(SessionNavigateur):
         self.research_hashtag = (
             getattr(parametres, "hashtag_presse", "")
             if getattr(parametres, "croiser_hashtag_presse", False) else None)
+        self.research_hashtags = (
+            list(getattr(parametres, "hashtags_presse", ()))
+            if getattr(parametres, "croiser_hashtag_presse", False) else [])
+        self.research_operateur = getattr(parametres, "operator_presse", "AND")
         self.hashtags_exclus = tuple(getattr(parametres, "hashtags_exclus", ()))
         self.commentaires_research = bool(getattr(parametres, "collecter_commentaires", False))
         self.resume_research = bool(getattr(parametres, "inclure_texte_genere_ia", False))
@@ -132,6 +136,8 @@ class ConnexionPresse(SessionNavigateur):
                 "research_debut": self.research_debut,
                 "research_fin": self.research_fin,
                 "research_hashtag": self.research_hashtag,
+                "research_hashtags": self.research_hashtags,
+                "research_operateur": self.research_operateur,
                 "research_credentiels": self.research_credentiels,
                 "research_exclusions": self.hashtags_exclus}
 
