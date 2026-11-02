@@ -87,6 +87,8 @@ class StartRequest(BaseModel):
     profil_moteur: Literal["api", "navigateur", "research", "gallerydl", "tikhub"] = "navigateur"
     croiser_hashtag_presse: bool = False
     hashtag_presse: str = Field(default="", max_length=100)
+    hashtags_presse: list[str] = Field(default_factory=list, max_length=10)
+    operator_presse: Literal["AND", "OR"] = "AND"
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
     # ni exposés par snapshot(), model_dump() ou les diagnostics.
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
@@ -171,7 +173,7 @@ class StartRequest(BaseModel):
     def valid_second_hashtag(cls, value):
         return cls.valid_hashtag(value) if value.strip() else ""
 
-    @field_validator("hashtags_saisis", "hashtags_exclus")
+    @field_validator("hashtags_saisis", "hashtags_exclus", "hashtags_presse")
     @classmethod
     def valider_hashtags_saisis(cls, valeurs):
         return normaliser_liste_hashtags(valeurs)
@@ -213,13 +215,20 @@ class StartRequest(BaseModel):
             self.hashtags_saisis = []
             self.rechercher_dans_texte = False
             self.variantes_accents = False
-            if self.croiser_hashtag_presse and not self.hashtag_presse:
-                raise ValueError("Saisissez le hashtag à croiser avec les médias sélectionnés.")
-            if not self.croiser_hashtag_presse:
+            if self.croiser_hashtag_presse:
+                # La liste prévaut ; le champ unique assure la compatibilité historique.
+                if not self.hashtags_presse and self.hashtag_presse:
+                    self.hashtags_presse = [self.hashtag_presse]
+                if not self.hashtags_presse:
+                    raise ValueError("Saisissez au moins un hashtag à croiser avec les médias.")
+                self.hashtag_presse = self.hashtags_presse[0]
+            else:
                 self.hashtag_presse = ""
+                self.hashtags_presse = []
         else:
             self.croiser_hashtag_presse = False
             self.hashtag_presse = ""
+            self.hashtags_presse = []
             # Préserver les anciens clients utilisant hashtag et second_hashtag.
             # Lorsqu'une liste est fournie, elle constitue la sélection de référence.
             if not self.hashtags_saisis:
@@ -236,7 +245,8 @@ class StartRequest(BaseModel):
             raise ValueError("Renseignez au moins un compte TikTok.")
         inclus = ({nom.casefold() for nom in self.hashtags_saisis}
                   if self.source_collecte != "presse" else
-                  ({self.hashtag_presse.casefold()} if self.croiser_hashtag_presse else set()))
+                  ({nom.casefold() for nom in self.hashtags_presse}
+                   if self.croiser_hashtag_presse else set()))
         conflits = inclus.intersection(nom.casefold() for nom in self.hashtags_exclus)
         if conflits:
             raise ValueError("Un hashtag ne peut pas être recherché et exclu : "
@@ -283,7 +293,7 @@ class StartRequest(BaseModel):
             return (" OU " if self.operator == "OR" else " ET ").join("#" + h for h in self.hashtags)
         libelle = ", ".join("@" + s["compte"] for s in self.sources)
         if self.source_collecte == "presse" and self.croiser_hashtag_presse:
-            libelle += " × #" + self.hashtag_presse
+            libelle += " × (" + (" OU " if self.operator_presse == "OR" else " ET ").join("#" + h for h in self.hashtags_presse) + ")"
         return libelle
 
     @property
@@ -307,7 +317,7 @@ class StartRequest(BaseModel):
         nom = (joiner.join(self.hashtags) if self.source_collecte == "hashtags"
                else "comptes_" + "_".join(s["compte"] for s in self.sources)[:100])
         if self.source_collecte == "presse" and self.croiser_hashtag_presse:
-            nom += "_hashtag_" + self.hashtag_presse
+            nom += "_hashtag_" + ("_OU_" if self.operator_presse == "OR" else "_ET_").join(self.hashtags_presse)
         # Dix hashtags longs peuvent dépasser la limite de nom du système de fichiers.
         if len(nom.encode("utf-8")) > 160:
             empreinte = hashlib.sha256(nom.encode("utf-8")).hexdigest()[:12]
@@ -357,7 +367,12 @@ def matches_hashtags(description, settings):
     if settings.source_collecte == "presse":
         if not settings.croiser_hashtag_presse:
             return True
-        return correspondance_hashtag(description, settings.hashtag_presse)
+        correspondances = [
+            correspondance_hashtag(description, hashtag)
+            for hashtag in settings.hashtags_presse
+        ]
+        return (all(correspondances) if settings.operator_presse == "AND"
+                else any(correspondances)) if correspondances else False
     resultats = [
         correspondance_hashtag(description, tag,
             rechercher_dans_texte=settings.rechercher_dans_texte,
@@ -645,7 +660,7 @@ class Job:
         self.errors = 0
         self.filtered = 0
         hashtags_a_compter = (settings.hashtags if settings.source_collecte != "presse"
-            else [settings.hashtag_presse] if settings.croiser_hashtag_presse else [])
+            else settings.hashtags_presse if settings.croiser_hashtag_presse else [])
         self.bilan_hashtags = {h: 0 for h in hashtags_a_compter}
         self.correspondances_hashtags = 0
         self.legendes_vides = 0
@@ -734,6 +749,8 @@ class Job:
                     "operator": self.settings.operator,
                     "croiser_hashtag_presse": self.settings.croiser_hashtag_presse,
                     "hashtag_presse": self.settings.hashtag_presse,
+                    "hashtags_presse": list(self.settings.hashtags_presse),
+                    "operator_presse": self.settings.operator_presse,
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "variantes_accents": self.settings.variantes_accents,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
@@ -905,7 +922,7 @@ class Job:
                 abonnes_classe_illustratif=self.settings.abonnes_classe_illustratif,
                 variables_classes_txt=self.settings.variables_classes_txt,
                 taux_engagement_txt=self.settings.taux_engagement_txt,
-                themes=([self.settings.hashtag_presse] if self.settings.croiser_hashtag_presse
+                themes=(self.settings.hashtags_presse if self.settings.croiser_hashtag_presse
                         else self.settings.hashtags))
 
     def sauvegarder_postgres(self, *, progressif=False):
@@ -1487,6 +1504,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record.update(colonnes_categories_presse(record))
                     from collecte.variables_numeriques import indicateurs_numeriques
                     record.update(indicateurs_numeriques(record))
+                    if job.settings.source_collecte == "presse":
+                        # Conserver le filtre demandé et les hashtags réellement rencontrés.
+                        recherches = (job.settings.hashtags_presse
+                                      if job.settings.croiser_hashtag_presse else [])
+                        presents = [
+                            nom for nom in recherches if correspondance_hashtag(
+                                record.get("description", ""), nom)
+                        ]
+                        record["hashtags_recherches"] = list(recherches)
+                        record["hashtags_correspondants"] = presents
                     if job.settings.telecharger_mp4:
                         from telechargement_videos import correspondance_video
                         record.update(correspondance_video(record))
