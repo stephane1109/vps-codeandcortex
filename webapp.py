@@ -2231,6 +2231,17 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             except Exception:
                 LOG.exception("Export enrichi impossible")
                 final_message += " L’archive enrichie n’a pas pu être finalisée ; le TXT reste disponible."
+        if job.profils_medias:
+            reussis = sum(
+                fiche["statut_profil"] == "ok" for fiche in job.profils_medias)
+            final_message += (
+                f" Profils médias : {reussis}/{len(job.profils_medias)} "
+                "compte(s) renseigné(s) ; consultez profils_medias.csv "
+                "pour les valeurs exactes et les absences.")
+            if final_status == "failed" and reussis and job.archive_prete:
+                # La collecte des vidéos est vide, mais les profils constituent
+                # des résultats scientifiques réels à conserver.
+                final_status = "partial"
         job.update(status=final_status, message=final_message, busy=False,
                    finished=time.monotonic(), frame=b"")
         # Archiver même les vidéos dont les légendes ont été écartées du TXT.
