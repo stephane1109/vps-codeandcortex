@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "version": 16,
   "comptes": [
     {
       "id": "lemonde",
@@ -759,6 +759,114 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@france_3_aura"
+    },
+    {
+      "id": "basta_media",
+      "nom": "Basta!",
+      "compte": "basta_media",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@basta_media"
+    },
+    {
+      "id": "blast_officiel",
+      "nom": "Blast",
+      "compte": "blast_officiel",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@blast_officiel"
+    },
+    {
+      "id": "lemediatv",
+      "nom": "Le Média",
+      "compte": "lemediatv",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lemediatv"
+    },
+    {
+      "id": "climax_media",
+      "nom": "Climax",
+      "compte": "climax_media",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@climax_media"
+    },
+    {
+      "id": "contre_attaque",
+      "nom": "Contre Attaque",
+      "compte": "contre_attaque",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@contre_attaque"
+    },
+    {
+      "id": "frustrationmagazine",
+      "nom": "Frustration Magazine",
+      "compte": "frustrationmagazine",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@frustrationmagazine"
+    },
+    {
+      "id": "au_poste",
+      "nom": "Au Poste",
+      "compte": "au.poste",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@au.poste"
+    },
+    {
+      "id": "revpermanente",
+      "nom": "Révolution Permanente",
+      "compte": "revpermanente",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@revpermanente"
+    },
+    {
+      "id": "altereco_",
+      "nom": "AlterEco",
+      "compte": "altereco_",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@altereco_"
+    },
+    {
+      "id": "clementlanot",
+      "nom": "Clément Lanot",
+      "compte": "clementlanot",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@clementlanot"
+    },
+    {
+      "id": "remybuisine",
+      "nom": "Rémy Buisine",
+      "compte": "remybuisine",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@remybuisine"
+    },
+    {
+      "id": "lereporterindependant",
+      "nom": "Le Reporter Indépendant",
+      "compte": "lereporterindependant",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lereporterindependant"
     }
   ]
 }
