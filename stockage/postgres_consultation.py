@@ -421,6 +421,29 @@ def valeur_colonne(donnees, nom):
     return cellule_csv(valeur)
 
 
+
+def obtenir_nom_collecte(cookie, type_sauvegarde, identifiant):
+    """Lire le nom d'une collecte PostgreSQL appartenant à la session privée."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Collecte inconnue ou non autorisée.")
+    parent, _, cle, _ = description_table(type_sauvegarde, "publications")
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Collecte Research inconnue.")
+            curseur.execute(
+                f"SELECT nom_sauvegarde FROM {parent} "
+                f"WHERE {cle}=%s AND proprietaire_hash=%s",
+                (identifiant, empreinte(cookie)),
+            )
+            ligne = curseur.fetchone()
+    if ligne is None:
+        raise ValueError("Collecte inconnue ou non autorisée.")
+    return str(ligne[0])
+
+
+
 def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
     """Exporter tout le corpus depuis PostgreSQL en CSV ou JSON, par pages."""
     if format_ not in ("csv", "json"):
