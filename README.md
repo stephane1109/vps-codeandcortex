@@ -492,7 +492,7 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 63 comptes
+L’inventaire `config/comptes_presse.json` contient désormais 62 comptes
 sélectionnables, après suppression explicite de la seule variante
 `@liberationfr` lors d'une demande antérieure. Le compte `@liberation.fr`
 et tous les autres médias sont conservés. L'Humanité (`@lhumanitefr`) est
@@ -502,7 +502,7 @@ secondes" (`@iuzdrmqevnu`) a été ajouté à la presse indépendante.
 Politis (`@politis_fr`) a été reclassé en presse nationale, dans le
 sous-groupe affiché « Presse nationale », sans modification d'identifiant.
 L'interface regroupe les comptes en presse nationale
-(26, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
+(25, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
 et « Presse nationale »), presse régionale (21), presse indépendante (7)
 et autres
 médias ou statut à confirmer (9), dont @noahdecrypte (Noah Décrypte). Les comptes @lehuffpostfr, @cquoilinfo,
@@ -512,13 +512,14 @@ sans interligne entre les cases à cocher dans chaque groupe. Les six référenc
 et les identifiants historiques sont préservés. Les comptes fournis par
 l’utilisateur sont signalés comme tels lorsque leur propriété sur TikTok
 n’a pas été vérifiée. Les identifiants différents sont conservés comme
-entrées distinctes : `@m6info_` et `@m6info`. Le compte
-Le compte CNews utilise désormais `@cnews` ; son identifiant interne
-`cnewsofficiel` demeure inchangé pour préserver les sélections antérieures.
+entrées distinctes conservées lorsque cela est pertinent. Pour M6 Info,
+seul `@m6info_` est conservé ; la variante `@m6info` a été retirée à la
+demande de l'utilisateur. Le compte CNews utilise `@cnews` ; son identifiant
+interne `cnewsofficiel` demeure inchangé pour préserver les sélections antérieures.
 `@liberation.fr` demeure présent ; la variante `@liberationfr` a été
-retirée à la demande de l'utilisateur. Les liens fournis pour `@m6info`
-et `@lobs` pointaient vers d’autres comptes : leur propriété doit être
-vérifiée avant exploitation scientifique. Une collecte peut sélectionner
+retirée à la demande de l'utilisateur. Les liens fournis pour `@lobs`
+pointaient vers d’autres comptes : leur propriété doit être vérifiée avant
+exploitation scientifique. Une collecte peut sélectionner
 jusqu'au nombre de médias présents dans l’inventaire ; les autres bornes
 techniques et le traitement séquentiel restent inchangés.
 
