@@ -587,12 +587,24 @@ with onglet_collecte:
             if st.session_state.get("media_" + identifiant, False)
         ]
         st.session_state["medias"] = selection
-        st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
-                   f"Borne technique : {max_sources_admin} source(s) par collecte. "
-                   "Seules les publications des comptes cochés sont retenues.")
-        if len(selection)>max_sources_admin:
-            st.warning("Trop de médias sélectionnés pour une même collecte : "
-                       f"maximum {max_sources_admin}.")
+        if st.session_state.get("presse_moteur") == "research":
+            st.caption(
+                f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
+                "Research API : aucune limite locale sur le nombre de médias ; "
+                "les quotas et restrictions de TikTok restent applicables. "
+                "Seules les publications des comptes cochés sont retenues."
+            )
+        else:
+            st.caption(
+                f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
+                f"Borne technique : {max_sources_admin} source(s) par collecte. "
+                "Seules les publications des comptes cochés sont retenues."
+            )
+            if len(selection) > max_sources_admin:
+                st.warning(
+                    "Trop de médias sélectionnés pour une même collecte : "
+                    f"maximum {max_sources_admin}."
+                )
         liste_hashtags_presse = []
         erreur_hashtags_presse = ""
         st.checkbox("Croisement avec des hashtags", key="croiser_hashtag_presse",
@@ -1198,7 +1210,8 @@ with onglet_collecte:
                 "Programmer la collecte Research" if mode_programme else "Lancer la collecte",
                 type="primary",
                                  disabled=occupe or api_tiktok_suspendue
-                                          or (source=="presse" and len(st.session_state.get("medias",[]))>max_sources_admin),
+                                          or (source == "presse" and moteur_formulaire != "research"
+                                              and len(st.session_state.get("medias", [])) > max_sources_admin),
                                  on_click=respecter_choix_commentaires):
             debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
             if not st.session_state.get("nom_sauvegarde", "").strip():
