@@ -513,6 +513,8 @@ et les identifiants historiques sont préservés. Les comptes fournis par
 l’utilisateur sont signalés comme tels lorsque leur propriété sur TikTok
 n’a pas été vérifiée. Les identifiants différents sont conservés comme
 entrées distinctes : `@m6info_` et `@m6info`. Le compte
+Le compte CNews utilise désormais `@cnews` ; son identifiant interne
+`cnewsofficiel` demeure inchangé pour préserver les sélections antérieures.
 `@liberation.fr` demeure présent ; la variante `@liberationfr` a été
 retirée à la demande de l'utilisateur. Les liens fournis pour `@m6info`
 et `@lobs` pointaient vers d’autres comptes : leur propriété doit être
