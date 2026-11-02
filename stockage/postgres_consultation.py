@@ -309,6 +309,45 @@ def lister_sauvegardes(cookie, filtre=""):
     return sorted(resultats, key=lambda r: r["date"], reverse=True)
 
 
+
+def supprimer_collecte_postgres(cookie, type_sauvegarde, identifiant, nom_confirmation):
+    """Supprimer une collecte précise et ses lignes liées, jamais les tables.
+
+    L'identité privée, l'identifiant et le nom exact sont vérifiés dans
+    la transaction. Les clés étrangères ON DELETE CASCADE suppriment les
+    publications et commentaires de cette seule collecte.
+    """
+    if (not cookie or not IDENTIFIANT.fullmatch(str(identifiant))
+            or type_sauvegarde not in TYPES):
+        raise ValueError("Collecte introuvable ou non autorisée.")
+    parent, _, cle, _ = description_table(type_sauvegarde, "publications")
+    with ouvrir_connexion() as connexion:
+        with connexion.cursor() as curseur:
+            if type_sauvegarde == "research" and not tables_disponibles(curseur):
+                raise ValueError("Collecte Research introuvable.")
+            curseur.execute(
+                f"SELECT nom_sauvegarde FROM {parent} "
+                f"WHERE {cle}=%s AND proprietaire_hash=%s FOR UPDATE",
+                (identifiant, empreinte(cookie)),
+            )
+            ligne = curseur.fetchone()
+            if ligne is None:
+                raise ValueError("Collecte introuvable ou non autorisée.")
+            nom = str(ligne[0])
+            if nom_confirmation != nom:
+                raise ValueError("Le nom de confirmation ne correspond pas.")
+            curseur.execute(
+                f"DELETE FROM {parent} WHERE {cle}=%s "
+                "AND proprietaire_hash=%s RETURNING nom_sauvegarde",
+                (identifiant, empreinte(cookie)),
+            )
+            resultat = curseur.fetchone()
+            if resultat is None:
+                raise ValueError("Collecte introuvable ou non autorisée.")
+    return {"statut": "supprime", "nom": nom, "type": type_sauvegarde}
+
+
+
 def description_table(type_sauvegarde, categorie):
     """Choisir exclusivement des noms de tables définis par l'application."""
     if type_sauvegarde not in TYPES or categorie not in CATEGORIES:
