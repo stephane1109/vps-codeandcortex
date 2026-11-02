@@ -104,6 +104,7 @@ def enregistrer(job, owner_cookie):
     maintenant = int(time.time())
     manifeste = {"id": job.id, "parametres": job.settings.model_dump(),
                  "statut": job.status, "traites": job.processed,
+                 "source_en_cours_id": getattr(job, "source_en_cours_id", None),
                  "legendes": len(job.records), "publications": len(job.publications)}
     (destination / "parametres_historique.json").write_text(
         json.dumps(manifeste, ensure_ascii=False), encoding="utf-8")
