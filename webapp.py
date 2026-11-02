@@ -120,6 +120,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
+    filtrer_texte_ia_tiktok: bool = False
     supprimer_arobase_profil: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
     variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "region_code", "is_verified", "hashtags"]] | None = Field(default=None, max_length=12)
@@ -188,6 +189,10 @@ class StartRequest(BaseModel):
     def valider_sources(self):
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
+        # Le filtrage implique la lecture effective du résumé natif de TikTok.
+        # L'indicateur de contenu IA fourni par l'API ne constitue pas ce texte.
+        if self.filtrer_texte_ia_tiktok:
+            self.inclure_texte_genere_ia = True
         if self.source_collecte == "presse" and self.presse_moteur == "apify":
             from collecte.presse_apify import cle_disponible
             jeton = self.apify_api_token.get_secret_value().strip() if self.apify_api_token else ""
@@ -457,6 +462,17 @@ def normaliser_variables_txt(variables):
                              for v in variables if v != "contenu_genere_ia"))
 
 
+def texte_ia_tiktok_exploitable(publication):
+    """Ne retenir qu'un résumé TikTok effectivement lu et distinct de la légende."""
+    resume = publication.get("resume_ia_tiktok")
+    if not isinstance(resume, str) or not resume.strip():
+        return False
+    if publication.get("statut_resume_ia") in ("erreur_lecture", "non_trouve", "desactive", "absent"):
+        return False
+    nettoyer = lambda texte: re.sub(r"\\s+", " ", str(texte or "")).strip().casefold()
+    return nettoyer(resume) != nettoyer(publication.get("description"))
+
+
 def entete_publication(publication: dict, variables=None, supprimer_arobase_profil=False,
                        follower_count_illustratif=False,
                        abonnes_classe_illustratif=False,
@@ -677,6 +693,7 @@ class Job:
         self.processed = 0
         self.errors = 0
         self.filtered = 0
+        self.exclus_sans_texte_ia = 0
         hashtags_a_compter = (settings.hashtags if settings.source_collecte != "presse"
             else settings.hashtags_presse if settings.croiser_hashtag_presse else [])
         self.bilan_hashtags = {h: 0 for h in hashtags_a_compter}
@@ -834,6 +851,8 @@ class Job:
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "variables_txt": self.settings.variables_txt,
                     "inclure_texte_genere_ia": self.settings.inclure_texte_genere_ia,
+                    "filtrer_texte_ia_tiktok": self.settings.filtrer_texte_ia_tiktok,
+                    "exclus_sans_texte_ia": self.exclus_sans_texte_ia,
                     "supprimer_arobase_profil": self.settings.supprimer_arobase_profil,
                     "bilan_textes_ia": {
                         "publications": len(self.records),
@@ -1562,6 +1581,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             else: job.dates_indeterminees += 1
                         job.journal.append({"publication_id":record["id"], "created_at":record.get("created_at"), "filtre_date":periode})
                     else:
+                        # Filtre positif appliqué après lecture du contenu IA :
+                        # ne jamais confondre une étiquette IA avec un résumé.
+                        if (job.settings.filtrer_texte_ia_tiktok
+                                and not texte_ia_tiktok_exploitable(record)):
+                            record["motif_non_retenue"] = "sans_texte_ia_tiktok"
+                            with job.lock:
+                                job.exclus_sans_texte_ia += 1
+                            job.journal.append({
+                                "publication_id": record.get("id"),
+                                "filtre": "sans_texte_ia_tiktok",
+                                "statut_resume_ia": record.get("statut_resume_ia") or "non_renseigne",
+                            })
+                            job.update(processed=index)
+                            if job.settings.sauvegarde_progressive and index % 10 == 0:
+                                job.sauvegarder_point()
+                            continue
                         if job.settings.enrichie:
                             media = medias_par_compte.get(record["author"].lower(), {})
                             record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
@@ -1823,6 +1858,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
         final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
+        if job.settings.filtrer_texte_ia_tiktok:
+            final_message += (
+                f" Filtre texte IA TikTok : {job.exclus_sans_texte_ia} publication(s) "
+                "écartée(s), car aucun résumé natif exploitable n'a été récupéré."
+            )
         if job.settings.test_research_10_publications:
             final_message += (
                 f" Mode test Research : {job.processed}/10 publication(s) consultée(s). "
@@ -1839,7 +1879,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += (
                     " Consultez le diagnostic du test pour connaître les légendes "
                     "absentes et les motifs d'exclusion.")
-            if job.filtered and job.processed:
+            if job.settings.filtrer_texte_ia_tiktok and job.exclus_sans_texte_ia:
+                final_message = (
+                    "Aucun texte IA TikTok exploitable parmi les publications consultées. "
+                    f"{job.exclus_sans_texte_ia} publication(s) écartée(s) : "
+                    "résumé non trouvé ou lecture inaccessible."
+                )
+            elif job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
         if job.settings.french_only and job.processed:
             if not job.records and job.non_french:
@@ -2112,7 +2158,8 @@ class Manager:
             raise HTTPException(422, "Précisez les dates des publications à rechercher.")
         if parametres.test_research_10_publications:
             raise HTTPException(422, "Désactivez le test sur 10 publications pour programmer une collecte.")
-        if parametres.telecharger_mp4 or parametres.inclure_texte_genere_ia:
+        if (parametres.telecharger_mp4 or parametres.inclure_texte_genere_ia
+                or parametres.filtrer_texte_ia_tiktok):
             raise HTTPException(422, "La collecte Research programmée ne lance "
                 "ni téléchargement MP4 ni navigation Selenium.")
         if len([p for p in lister_plans(self.data_dir, proprietaire_historique)
