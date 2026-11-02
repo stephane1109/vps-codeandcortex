@@ -211,7 +211,8 @@ class TestsGroupesPresse(unittest.TestCase):
         self.assertIn('if indice % 2 != numero_colonne:', interface)
         self.assertIn('on_change=memoriser_medias,', interface)
         self.assertIn('"Chaînes de télévision nationales"', interface)
-        self.assertIn('"Presse écrite nationale"', interface)
+        self.assertIn('("presse_ecrite_nationale", "Presse nationale")', interface)
+        self.assertNotIn('"Presse écrite nationale"', interface)
         self.assertIn('"Autres médias nationaux"', interface)
 
 
