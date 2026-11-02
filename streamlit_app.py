@@ -472,7 +472,6 @@ with onglet_collecte:
         categories_medias = (
             ("presse_nationale", "Presse nationale"),
             ("presse_regionale", "Presse Régionale/départementale"),
-            ("presse_locale", "Presse locale"),
             ("presse_independante", "Presse indépendante"),
             ("autres_medias", "Autres médias ou statut à confirmer"),
         )
