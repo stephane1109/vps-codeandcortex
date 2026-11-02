@@ -924,7 +924,7 @@ class Job:
                     "compteurs_collecte": {"decouvertes": len(self.decouvertes_ids), "retenues": self.discovered,
                         "traitees": self.processed, "exportees": self.exportees},
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
-                    "action_error": self.action_error, "can_download": bool(self.records),
+                    "action_error": self.action_error, "can_download": bool(self.records or self.republications),
                     "apercu_filtrage": [{
                         "auteur": r.get("author", ""),
                         "url": r.get("url", ""),
@@ -1977,6 +1977,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 )
             elif job.filtered and job.processed:
                 final_message = "Aucun texte ne correspond à cette combinaison dans les publications consultées."
+        if not job.records and job.republications:
+            final_message = (
+                "Aucune vidéo originale des médias retenue, mais "
+                f"{len(job.republications)} relation(s) de republication "
+                "sont accessibles dans republications.csv et republications.json."
+            )
         if job.settings.french_only and job.processed:
             if not job.records and job.non_french:
                 final_message = ("Aucun texte retenu par le filtre français parmi "
