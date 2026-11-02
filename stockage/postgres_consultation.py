@@ -94,6 +94,37 @@ def preparer_tables(connexion):
                 donnees JSONB NOT NULL,
                 PRIMARY KEY(collecte_id, commentaire_id)
             )""")
+        curseur.execute("""
+            CREATE TABLE IF NOT EXISTS scraptiktok_republications (
+                collecte_id TEXT NOT NULL REFERENCES scraptiktok_collectes(collecte_id)
+                    ON DELETE CASCADE,
+                compte_reposteur TEXT NOT NULL,
+                publication_id TEXT NOT NULL,
+                donnees JSONB NOT NULL,
+                PRIMARY KEY(collecte_id, compte_reposteur, publication_id)
+            )""")
+        curseur.execute(
+            "CREATE INDEX IF NOT EXISTS scraptiktok_republications_video "
+            "ON scraptiktok_republications(collecte_id, publication_id)")
+        # Lecture tabulaire directe dans pgAdmin, sans décodage manuel du JSONB.
+        curseur.execute("""
+            CREATE OR REPLACE VIEW v_scraptiktok_republications AS
+            SELECT r.collecte_id, r.compte_reposteur,
+                   r.publication_id AS id_video_originale,
+                   r.donnees->>'auteur_original' AS auteur_original,
+                   r.donnees->>'url' AS url,
+                   r.donnees->>'description' AS description,
+                   r.donnees->>'created_at' AS date_creation_video,
+                   r.donnees->>'date_republication' AS date_republication,
+                   r.donnees->>'region_code' AS region_code,
+                   r.donnees->>'video_duration' AS video_duration,
+                   r.donnees->>'republication_confirmee' AS republication_confirmee,
+                   r.donnees->'engagement'->'vues'->>'valeur' AS vues,
+                   r.donnees->'engagement'->'likes'->>'valeur' AS likes,
+                   r.donnees->'engagement'->'commentaires'->>'valeur' AS commentaires,
+                   r.donnees->'engagement'->'partages'->>'valeur' AS partages,
+                   r.donnees->'engagement'->'favoris'->>'valeur' AS favoris
+            FROM scraptiktok_republications r""")
         curseur.execute(
             "CREATE INDEX IF NOT EXISTS scraptiktok_collectes_owner "
             "ON scraptiktok_collectes(proprietaire_hash, actualise_le DESC)")
@@ -133,6 +164,7 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
     with job.lock:
         publications = list(job.publications or job.records)
         commentaires = list(job.commentaires)
+        republications = list(getattr(job, "republications", []))
         publications = publications[max(0, a_partir_publications):]
         commentaires = commentaires[max(0, a_partir_commentaires):]
         parametres = nettoyer_parametres(job.settings.model_dump())
@@ -173,6 +205,19 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
                         retenue=EXCLUDED.retenue, donnees=EXCLUDED.donnees
                 """, (identifiant, code, bool(publication.get("retenue")),
                       Jsonb(publication)))
+            for relation in republications:
+                video_id = str(relation.get("id_video_originale")
+                               or relation.get("id") or "")
+                reposteur = str(relation.get("compte_reposteur") or "")
+                if not video_id or not reposteur:
+                    continue
+                curseur.execute("""
+                    INSERT INTO scraptiktok_republications (
+                        collecte_id, compte_reposteur, publication_id, donnees)
+                    VALUES (%s,%s,%s,%s)
+                    ON CONFLICT(collecte_id,compte_reposteur,publication_id)
+                    DO UPDATE SET donnees=EXCLUDED.donnees
+                """, (identifiant, reposteur, video_id, Jsonb(relation)))
             for commentaire in commentaires:
                 code = str(commentaire.get("id") or "")
                 if not code:
@@ -188,7 +233,8 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
                       str(commentaire.get("publication_id") or ""),
                       Jsonb(commentaire)))
     return {"statut": "synchronise", "publications": len(publications),
-            "commentaires": len(commentaires)}
+            "commentaires": len(commentaires),
+            "republications": len(republications)}
 
 
 def importer_historique(dossier, cookie):
@@ -213,13 +259,18 @@ def importer_historique(dossier, cookie):
         try:
             chemin_publications = Path(repertoire) / "publications.json"
             chemin_commentaires = Path(repertoire) / "commentaires.json"
+            chemin_republications = Path(repertoire) / "republications.json"
+            republications = (
+                json.loads(chemin_republications.read_text(encoding="utf-8"))
+                if chemin_republications.is_file() else [])
             publications = (
                 json.loads(chemin_publications.read_text(encoding="utf-8"))
                 if chemin_publications.is_file() else [])
             commentaires = (
                 json.loads(chemin_commentaires.read_text(encoding="utf-8"))
                 if chemin_commentaires.is_file() else [])
-            if not isinstance(publications, list) or not isinstance(commentaires, list):
+            if not all(isinstance(lignes, list) for lignes in
+                       (publications, commentaires, republications)):
                 raise ValueError("Format d'archive incorrect.")
             parametres = nettoyer_parametres(manifeste.get("parametres") or {})
             nom = parametres.get("nom_sauvegarde") or entree.get("titre") or entree["id"]
@@ -243,7 +294,8 @@ def importer_historique(dossier, cookie):
                 lock=RLock(), owner_historique=cookie, id=entree["id"],
                 settings=ParametresImportes(),
                 publications=publications, records=publications,
-                commentaires=commentaires, processed=manifeste.get("traites", 0),
+                commentaires=commentaires, republications=republications,
+                processed=manifeste.get("traites", 0),
                 status=entree.get("statut") or "termine")
             resultat = archiver_collecte(travail)
             comptes["imports"] += 1
