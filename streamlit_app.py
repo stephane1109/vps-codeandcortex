@@ -1728,22 +1728,33 @@ with onglet_collecte:
 
 
 with onglet_base_donnees:
-    st.subheader("Sauvegardes PostgreSQL")
+    st.subheader("PostgreSQL — archives et consultation")
     st.caption(
-        "Consultez vos collectes par nom, y compris les tests sur dix publications, "
-        "puis récupérez les données en CSV ou JSON. Les données sont enregistrées "
-        "dans PostgreSQL indépendamment des fichiers temporaires SQLite. "
-        "Pour les collectes ponctuelles, une entrée apparaît dès le lancement, "
-        "puis les publications sont ajoutées progressivement pendant la collecte."
+        "PostgreSQL conserve les collectes pour leur consultation en tableau et "
+        "leur export CSV ou JSON. Les collectes ponctuelles y sont sauvegardées "
+        "automatiquement au fil de leur exécution. SQLite reste utilisé en "
+        "parallèle pour les traitements et la reprise des collectes Research "
+        "programmées."
+    )
+    st.caption(
+        "Deux opérations distinctes : le bouton ci-dessous copie vers PostgreSQL "
+        "les fichiers JSON des anciennes collectes ponctuelles conservées dans "
+        "l'historique local (30 jours par défaut). Il ne lit pas directement "
+        "les bases SQLite et ne concerne pas les programmes Research. "
+        "Pour ces derniers, utilisez « Synchroniser vers PostgreSQL » dans "
+        "« Collecte → Afficher mes collectes Research programmées »."
     )
     if not cookie_historique:
         st.warning("Rechargez la page d'accueil pour retrouver votre historique privé.")
     else:
         if st.button(
-                "Importer mes anciennes sauvegardes dans PostgreSQL",
+                "Copier les anciennes collectes de l'historique local vers PostgreSQL",
                 key="base_pg_importer_historique",
-                help="Importer les collectes encore présentes dans votre historique "
-                     "privé de 30 jours, sans supprimer les fichiers originaux."):
+                help="Copie les publications.json et commentaires.json des archives "
+                     "locales encore conservées dans PostgreSQL. Les archives "
+                     "originales ne sont pas effacées. Si une collecte existe déjà, "
+                     "ses enregistrements sont actualisés. Cette opération ne "
+                     "synchronise pas les programmes Research enregistrés en SQLite."):
             try:
                 resultat_import = api("/api/base-donnees/importer-historique", {})
             except RuntimeError as erreur:
@@ -1753,13 +1764,15 @@ with onglet_base_donnees:
         if st.session_state.get("bdd_dernier_import"):
             import_precedent = st.session_state["bdd_dernier_import"]
             st.success(
-                f"Import historique : {import_precedent['imports']} sauvegarde(s), "
-                f"{import_precedent['publications']} publication(s), "
-                f"{import_precedent['commentaires']} commentaire(s)."
+                f"Historique local vers PostgreSQL : "
+                f"{import_precedent['imports']} archive(s) traitée(s) "
+                "(création ou mise à jour éventuelle), "
+                f"{import_precedent['publications']} publication(s) et "
+                f"{import_precedent['commentaires']} commentaire(s) parcouru(s)."
             )
             if import_precedent.get("erreurs"):
                 st.warning(
-                    f"{import_precedent['erreurs']} archive(s) n'ont pas pu être importées.")
+                    f"{import_precedent['erreurs']} archive(s) n'ont pas pu être copiées.")
         from urllib.parse import quote as encoder_recherche
         recherche_nom_bdd = st.text_input(
             "Rechercher une sauvegarde par nom",
