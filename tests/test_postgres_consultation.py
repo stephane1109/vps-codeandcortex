@@ -130,6 +130,46 @@ class TestsPostgresConsultation(unittest.TestCase):
         self.assertFalse(any(
             commande.startswith("ALTER TABLE") for commande, _ in curseur.executions))
 
+    def test_archive_republications_et_vue_pgadmin(self):
+        """Sauver chaque relation compte–vidéo et exposer les champs de la vue."""
+        connexion = ConnexionFictive()
+        preparer_tables(connexion)
+        commandes = [sql for sql, _ in connexion.curseur.executions]
+        self.assertTrue(any(
+            "CREATE TABLE IF NOT EXISTS scraptiktok_republications" in sql
+            for sql in commandes))
+        vue = next(sql for sql in commandes
+                   if "CREATE OR REPLACE VIEW v_scraptiktok_republications" in sql)
+        for champ in ("compte_reposteur", "auteur_original", "id_video_originale",
+                      "vues", "likes", "commentaires", "partages", "favoris"):
+            self.assertIn(champ, vue)
+        travail = SimpleNamespace(
+            lock=RLock(), id="f" * 32, owner_historique="cookie_prive",
+            settings=ParametresFictifs(), status="completed", processed=0,
+            publications=[], records=[], commentaires=[],
+            republications=[
+                {"id": "123", "id_video_originale": "123",
+                 "auteur_original": "autre_auteur",
+                 "compte_reposteur": "lemondefr",
+                 "republication_confirmee": 1},
+                {"id": "123", "id_video_originale": "123",
+                 "auteur_original": "autre_auteur",
+                 "compte_reposteur": "brutofficiel",
+                 "republication_confirmee": 1},
+            ])
+        connexion = ConnexionFictive()
+        with patch("stockage.postgres_consultation.ouvrir_connexion",
+                   return_value=connexion):
+            resultat = archiver_collecte(travail)
+        self.assertEqual(resultat["republications"], 2)
+        lignes = [
+            parametres for sql, parametres in connexion.curseur.executions
+            if "INSERT INTO scraptiktok_republications" in sql]
+        self.assertEqual(len(lignes), 2)
+        self.assertEqual(
+            {(ligne[1], ligne[2]) for ligne in lignes},
+            {("lemondefr", "123"), ("brutofficiel", "123")})
+
     def test_archiver_test_sans_texte_retenu_et_sans_secrets(self):
         """Les vidéos rejetées sont archivées, même si le TXT est vide."""
         identifiant = "b" * 32
