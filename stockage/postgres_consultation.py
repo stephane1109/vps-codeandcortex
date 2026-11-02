@@ -12,7 +12,9 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from corpus.publications_csv import COLONNES_PUBLICATIONS_CSV, ligne_publication_csv
+from corpus.publications_csv import (
+    COLONNES_PUBLICATIONS_CSV, ligne_publication_csv, cellule_csv,
+)
 
 JOURNAL = logging.getLogger(__name__)
 IDENTIFIANT = re.compile(r"[0-9a-f]{32}\Z")
@@ -377,11 +379,7 @@ def valeur_colonne(donnees, nom):
         valeur = mesure.get("valeur") if isinstance(mesure, dict) else donnees.get(nom)
     else:
         valeur = donnees.get(nom)
-    if valeur is None:
-        return ""
-    if isinstance(valeur, (list, dict)):
-        return json.dumps(valeur, ensure_ascii=False)
-    return str(valeur)
+    return cellule_csv(valeur)
 
 
 def exporter_sauvegarde(cookie, type_sauvegarde, identifiant, categorie, format_):
