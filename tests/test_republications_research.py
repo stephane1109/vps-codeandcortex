@@ -44,6 +44,29 @@ class TestsRepublicationsResearch(unittest.TestCase):
                 presse_moteur="research", collecter_republications_research=True,
                 maximum_republications_par_compte=1001)
 
+    def test_programmation_research_refuse_une_option_non_executee(self):
+        """Ne jamais programmer silencieusement un lot sans ses republications."""
+        from datetime import date
+        from fastapi import HTTPException
+        from webapp import Manager
+
+        parametres = StartRequest(
+            source_collecte="presse", medias=["lemonde"],
+            nom_sauvegarde="Test republications",
+            presse_moteur="research",
+            collecter_republications_research=True,
+            date_debut="2026-10-01", date_fin="2026-10-15",
+        )
+        manager = object.__new__(Manager)
+        with patch("collecte.researchapi.identifiants_disponibles",
+                   return_value=True):
+            with self.assertRaises(HTTPException) as erreur:
+                manager.programmer_research(
+                    "proprietaire", parametres,
+                    date(2026, 10, 1), date(2026, 10, 15))
+        self.assertEqual(erreur.exception.status_code, 422)
+        self.assertIn("ponctuelles", erreur.exception.detail)
+
     def test_pagination_avec_deux_noms_de_champs_et_auteur_original(self):
         """Les versions documentées de la liste et le curseur fonctionnent."""
         appels = []
