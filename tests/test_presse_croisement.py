@@ -191,9 +191,10 @@ class CroisementPresseTests(unittest.TestCase):
                     self.assertEqual(csv_engagement["hashtags_recherches"],
                                      ["manifestation", "blocage"])
                     self.assertEqual(csv_engagement["operateur_hashtags"], operateur)
-                self.assertIn("Une #manifestation", travail.texte_a_exporter()
-                              if operateur == "OR" else
-                              "Une #manifestation et un #blocage")
+                self.assertIn(
+                    "Des jeunes #manifestation" if operateur == "OR"
+                    else "#manifestation et #blocage",
+                    travail.texte_a_exporter())
                 self.assertEqual(travail.snapshot()["hashtags_presse"],
                                  ["manifestation", "blocage"])
                 self.assertEqual(travail.snapshot()["operator_presse"], operateur)
