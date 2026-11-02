@@ -178,6 +178,13 @@ class TestsProfilsMediasResearch(unittest.TestCase):
                 self.assertNotIn("secret_de_test", texte)
             self.assertNotIn(
                 "secret_de_test", (job.directory / "profils_medias.json").read_text())
+            # La sauvegarde « collecte » reste réimportable avec les métriques.
+            from stockage.historique_analyses import exporter_sauvegarde_distincte
+            with exporter_sauvegarde_distincte(
+                    job.directory, "collecte") as flux:
+                with ZipFile(flux) as sauvegarde:
+                    self.assertIn("profils_medias.csv", sauvegarde.namelist())
+                    self.assertIn("profils_medias.json", sauvegarde.namelist())
 
     def test_cases_deux_colonnes_sous_profil_et_export(self):
         """Vérifier la position et la propagation des huit cases Streamlit."""
