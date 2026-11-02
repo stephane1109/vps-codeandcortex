@@ -1,5 +1,5 @@
 {
-  "version": 16,
+  "version": 17,
   "comptes": [
     {
       "id": "lemonde",
@@ -867,6 +867,15 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lereporterindependant"
+    },
+    {
+      "id": "complementdenquete_off",
+      "nom": "Complément d'enquête",
+      "compte": "complementdenquete_off",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@complementdenquete_off"
     }
   ]
 }
