@@ -28,7 +28,7 @@ COMPTES_NATIONAUX_TELEVISION = {
 }
 
 COMPTES_NATIONAUX_ECRITS = {
-    "lemondefr", "lefigaro", "liberationfr", "lequipe",
+    "lemondefr", "lefigaro", "liberation.fr", "lequipe",
     "lesechos", "lobs", "lepoint.fr", "marianne.lemag",
 }
 
@@ -64,8 +64,8 @@ class TestsGroupesPresse(unittest.TestCase):
             with self.subTest(compte=compte):
                 self.assertEqual(regionaux.count(compte), 1)
         self.assertEqual(len(regionaux), 21)
-        # Les 12 nouveaux comptes nationaux n'ont pas supprimé les 49 précédents.
-        self.assertEqual(len(inventaire), 61)
+        # Seul @liberationfr a été supprimé à la demande de l'utilisateur.
+        self.assertEqual(len(inventaire), 60)
 
     def test_nationaux_tv_et_presse_ecrite_conserves(self):
         """Compléter les deux listes sans supprimer les anciens médias."""
@@ -83,25 +83,21 @@ class TestsGroupesPresse(unittest.TestCase):
                     handles[compte]["categorie"], "presse_nationale")
                 self.assertEqual(
                     handles[compte]["sous_categorie"], "presse_ecrite_nationale")
-        self.assertEqual(len(handles), 61)
+        self.assertEqual(len(handles), 60)
         self.assertEqual(
             len([m for m in inventaire
                  if m["categorie"] == "presse_nationale"]), 24)
 
-    def test_les_variantes_m6_et_liberation_ne_sont_pas_effacees(self):
-        """Deux identifiants distincts ne doivent pas être fusionnés."""
+    def test_liberation_variante_supprimee_compte_original_conserve(self):
+        """Ne supprimer que @liberationfr sans toucher aux autres comptes."""
         inventaire = charger_inventaire()
         handles = {m["compte"] for m in inventaire}
-        self.assertTrue({
-            "m6info", "m6info_", "liberation.fr", "liberationfr",
-        }.issubset(handles))
+        self.assertIn("liberation.fr", handles)
+        self.assertNotIn("liberationfr", handles)
+        self.assertTrue({"m6info", "m6info_"}.issubset(handles))
         self.assertEqual(
             next(m["statut"] for m in inventaire
                  if m["compte"] == "m6info"),
-            "declare_utilisateur")
-        self.assertEqual(
-            next(m["statut"] for m in inventaire
-                 if m["compte"] == "liberationfr"),
             "declare_utilisateur")
 
     def test_quatre_medias_reclasses_independants(self):
@@ -116,7 +112,7 @@ class TestsGroupesPresse(unittest.TestCase):
                 self.assertEqual(
                     groupes[compte]["categorie"], "presse_independante")
                 self.assertNotIn("sous_categorie", groupes[compte])
-        self.assertEqual(len(inventaire), 61)
+        self.assertEqual(len(inventaire), 60)
         self.assertEqual(
             sum(m["categorie"] == "presse_independante" for m in inventaire),
             8)
