@@ -48,6 +48,7 @@ class TestsCategoriesPresseIllustratives(unittest.TestCase):
             "@actucaen": "presse_regio_dpt",
             "@actubordeaux": "presse_regio_dpt",
             "@actutoulouse": "presse_regio_dpt",
+            "@actu.fr.officiel": "presse_regio_dpt",
             "@noahdecrypte": "presse_autre",
         }
         for compte, attendu in exemples.items():
@@ -90,7 +91,7 @@ class TestsCategoriesPresseIllustratives(unittest.TestCase):
         texte_minimal = text_export([publication], include_sources=False,
                                     variables_txt=())
         self.assertIn("*presse_regio_dpt", texte_minimal)
-        for auteur in ("actucaen", "actubordeaux", "actutoulouse"):
+        for auteur in ("actucaen", "actubordeaux", "actutoulouse", "actu.fr.officiel"):
             with self.subTest(auteur=auteur):
                 texte_local = text_export(
                     [self.publication(auteur)], include_sources=False,
