@@ -232,12 +232,17 @@ def construire_archive_postgres(
                         cible,
                         _source_historique(dossier_local, identifiant, cookie),
                         noms)
-                elif dossier_local is not None:
-                    # Le ZIP Research original est disponible si la base
-                    # opérationnelle SQLite existe encore sur le VPS.
+                elif (dossier_local is not None
+                      and (Path(dossier_local) / "collectes_research.sqlite3").is_file()):
+                    # Ne pas créer une nouvelle base SQLite vide si l'ancienne
+                    # n'existe plus : PostgreSQL demeure exportable seul.
+                    import sqlite3
                     from stockage.collectes_research import exporter
-                    source_sqlite = exporter(
-                        dossier_local, identifiant, cookie, "zip")
+                    try:
+                        source_sqlite = exporter(
+                            dossier_local, identifiant, cookie, "zip")
+                    except (sqlite3.Error, ValueError, KeyError):
+                        source_sqlite = None
                     if source_sqlite is not None:
                         from tempfile import NamedTemporaryFile
                         with NamedTemporaryFile(suffix=".zip") as temporaire:
