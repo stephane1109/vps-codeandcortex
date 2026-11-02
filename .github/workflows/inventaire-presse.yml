@@ -6,6 +6,10 @@ on:
     paths:
       - "config/comptes_presse.json"
       - "tests/test_groupes_presse.py"
+      - "tests/test_categories_presse_illustratives.py"
+      - "streamlit_app.py"
+      - "corpus/publications_csv.py"
+      - "corpus/construction.py"
       - "collecte/presse.py"
       - ".github/workflows/inventaire-presse.yml"
   workflow_dispatch:
