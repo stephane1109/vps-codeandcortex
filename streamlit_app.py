@@ -1911,7 +1911,7 @@ with onglet_base_donnees:
             st.download_button(
                 "Télécharger le CSV concaténé",
                 resultat_concat["csv"],
-                file_name="scraptiktok_publications_concatenees.csv",
+                file_name=f"fusion_publications_{datetime.now():%Y%m%d}.csv",
                 mime="text/csv",
                 key="base_telecharger_concat",
                 use_container_width=True,
@@ -2511,7 +2511,7 @@ with onglet_corpus:
             st.download_button(
                 "Télécharger le corpus fusionné (CSV)",
                 fusion["csv"].encode("utf-8"),
-                file_name="scraptiktok_corpus_fusionne.csv", mime="text/csv",
+                file_name=f"fusion_analyses_{datetime.now():%Y%m%d}.csv", mime="text/csv",
             )
             import pandas as pd
             tableau_fusionne = pd.DataFrame(fusion["lignes"])
