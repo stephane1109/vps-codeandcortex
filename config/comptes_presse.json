@@ -500,14 +500,13 @@
     },
     {
       "id": "cnewsofficiel",
-      "nom": "CNews — identifiant à vérifier",
-      "compte": "cnewsofficiel",
+      "nom": "CNews",
+      "compte": "cnews",
       "categorie": "presse_nationale",
       "sous_categorie": "television_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@cnewsofficiel",
-      "note": "L'identifiant peut correspondre à une autre plateforme ; propriété TikTok non vérifiée."
+      "url": "https://www.tiktok.com/@cnews"
     },
     {
       "id": "artefr",
