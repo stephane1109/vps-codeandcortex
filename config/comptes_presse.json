@@ -44,7 +44,7 @@
       "id": "brut",
       "nom": "Brut",
       "compte": "brutofficiel",
-      "categorie": "presse_nationale",
+      "categorie": "presse_independante",
       "source": "https://www.brut.media/fr",
       "statut": "reference_editoriale",
       "consulte_le": "2026-10-09"
@@ -53,11 +53,10 @@
       "id": "huffpost",
       "nom": "Le HuffPost",
       "compte": "lehuffpostfr",
-      "categorie": "presse_nationale",
+      "categorie": "presse_independante",
       "source": "https://www.huffingtonpost.fr/",
       "statut": "reference_editoriale",
-      "consulte_le": "2026-10-09",
-      "sous_categorie": "presse_ecrite_nationale"
+      "consulte_le": "2026-10-09"
     },
     {
       "id": "parismatch",
@@ -73,11 +72,10 @@
       "id": "cquoilinfo",
       "nom": "C quoi l’info",
       "compte": "cquoilinfo",
-      "categorie": "presse_nationale",
+      "categorie": "presse_independante",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@cquoilinfo",
-      "sous_categorie": "television_nationale"
+      "url": "https://www.tiktok.com/@cquoilinfo"
     },
     {
       "id": "m6info_",
@@ -93,7 +91,7 @@
       "id": "hugodecrypte",
       "nom": "HugoDécrypte",
       "compte": "hugodecrypte",
-      "categorie": "presse_nationale",
+      "categorie": "presse_independante",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@hugodecrypte"
