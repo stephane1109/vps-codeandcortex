@@ -456,7 +456,7 @@ with onglet_collecte:
         )
         categories_medias = (
             ("presse_nationale", "Presse nationale"),
-            ("presse_regionale", "Presse régionale"),
+            ("presse_regionale", "Presse Régionale/départementale"),
             ("presse_independante", "Presse indépendante"),
             ("autres_medias", "Autres médias ou statut à confirmer"),
         )
@@ -930,6 +930,10 @@ with onglet_collecte:
             # Les clés et conditions restent inchangées pour préserver les choix.
             for nom in ("date", "profil", "id"):
                 st.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
+            st.caption("Catégorie du compte : *presse_nationale, *presse_regio_dpt, "
+                       "*presse_indep ou *presse_autre, ajoutée automatiquement "
+                       "au TXT lorsque le profil appartient à l’inventaire des médias. "
+                       "Quatre colonnes indicatrices correspondantes figurent dans les CSV.")
             st.checkbox(
                 "Region Code (pays d'enregistrement du compte)",
                 key="txt_region_code",
