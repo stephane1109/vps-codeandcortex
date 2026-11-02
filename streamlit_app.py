@@ -140,6 +140,11 @@ if "initialise" not in st.session_state:
         "filtrer_texte_ia_tiktok":ancienne.get("filtrer_texte_ia_tiktok",False),
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True),
+        # Les anciennes collectes conservent leurs textes ; les nouvelles
+        # demandent explicitement l'export TXT des commentaires.
+        "inclure_commentaires_txt": ancienne.get(
+            "inclure_commentaires_txt",
+            bool(ancienne.get("collecter_commentaires", False))),
         "collecter_follower_count":ancienne.get("collecter_follower_count",True),
         "collecter_is_verified":ancienne.get("collecter_is_verified",True),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",True),
@@ -254,7 +259,8 @@ st.session_state.setdefault("variantes_accents", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "hashtags_saisis", "hashtags_saisis_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
-            "collecter_commentaires", "collecter_reponses", "limite_commentaires", "telecharger_mp4",
+            "collecter_commentaires", "inclure_commentaires_txt",
+            "collecter_reponses", "limite_commentaires", "telecharger_mp4",
             "date_debut", "date_fin", "comptes"):
     # Streamlit peut effacer les clés des widgets masqués au changement de mode.
     # Ne pas provoquer de KeyError avant même d'afficher le formulaire Médias.
@@ -1053,13 +1059,24 @@ with onglet_collecte:
         # Cette option collecte les textes des commentaires ; elle est distincte
         # de la variable numérique « Nombre de commentaires » du TXT.
         st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
-            help="Ajoute les commentaires récupérés au corpus TXT et aux exports "
-                 "commentaires.csv et commentaires.json. Le nombre total de commentaires "
-                 "reste une variable numérique indépendante.")
-        with st.expander("Options des commentaires"):
+            help="Récupère les commentaires dans commentaires.csv. "
+                 "L'ajout des textes au TXT est une option indépendante. "
+                 "La variable numérique « Nombre de commentaires » reste disponible.")
+        with st.expander("Options des commentaires", expanded=bool(
+                st.session_state.get("collecter_commentaires", False))):
             def respecter_choix_commentaires():
                 if not st.session_state["collecter_commentaires"]:
                     st.session_state["collecter_reponses"] = False
+                    st.session_state["inclure_commentaires_txt"] = False
+            st.checkbox(
+                "Inclure les textes des commentaires dans le fichier TXT",
+                key="inclure_commentaires_txt",
+                disabled=occupe or not st.session_state.get("collecter_commentaires", False),
+                help="Coché : commentaires ajoutés au TXT des publications et "
+                     "corpus TXT des commentaires accessible dans le ZIP. "
+                     "Décoché : commentaires exportés uniquement dans commentaires.csv ; "
+                     "les données de travail restent enregistrées pour l'historique "
+                     "et les analyses sociométriques.")
             st.checkbox("Inclure les réponses accessibles", key="collecter_reponses",
                 disabled=occupe or not st.session_state.get("collecter_commentaires", False),
                 help="Collecter les réponses uniquement lorsque la collecte des "
@@ -1175,6 +1192,9 @@ with onglet_collecte:
                 st.error("La date de fin d'exécution doit suivre la date de début.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","inclure_texte_genere_ia","filtrer_texte_ia_tiktok")}
+                valeurs["inclure_commentaires_txt"] = bool(
+                    valeurs["collecter_commentaires"]
+                    and st.session_state.get("inclure_commentaires_txt", False))
                 if valeurs["filtrer_texte_ia_tiktok"]:
                     valeurs["inclure_texte_genere_ia"] = True
                 # Ne plus déclencher de sauvegarde ZIP progressive pour les nouveaux jobs.
@@ -1832,6 +1852,11 @@ with onglet_collecte:
 
             if actuel.get("collecter_commentaires"):
                 st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
+                st.caption(
+                    "Export des commentaires : "
+                    + ("TXT et CSV" if actuel.get("inclure_commentaires_txt", True)
+                       else "CSV uniquement, sans insertion des textes dans les TXT.")
+                )
                 if actuel.get("commentaires_indisponibles"):
                     st.warning(f"Commentaires non récupérés ou collecte interrompue pour {actuel['commentaires_indisponibles']} publication(s). Voir le détail ci-dessous.")
                 if actuel.get("bilan_commentaires"):
