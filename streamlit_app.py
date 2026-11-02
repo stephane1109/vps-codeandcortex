@@ -1045,31 +1045,31 @@ with onglet_collecte:
                 if nom == "profil":
                     # Options d'abonnés des auteurs immédiatement sous Profil,
                     # dans tous les modes, en conservant leurs clés et conditions.
-            st.checkbox(
-                "Récupérer le nombre d'abonnés des auteurs (follower_count)",
-                key="collecter_follower_count",
-                disabled=occupe or moteur_formulaire != "research",
-                help="Disponible uniquement avec la Research API officielle. "
-                     "Une seule requête par auteur distinct ; valeur à la date de collecte. "
-                     "Les autres moteurs et options conservent leur comportement.")
-            st.checkbox(
-                "Abonnés : valeur numérique réelle dans le TXT",
-                key="follower_count_illustratif",
-                disabled=occupe or moteur_formulaire != "research"
-                         or not st.session_state.get("collecter_follower_count", False),
-                help="Valeur numérique exacte, par exemple : *follower_count_12345.")
-            st.checkbox(
-                "Abonnés : recoder la variable continue en variable catégorielle "
-                "(codage proposé : 0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
-                "100 000–999 999 ; ≥1 000 000)",
-                key="abonnes_classe_illustratif",
-                disabled=occupe or moteur_formulaire != "research"
-                         or not st.session_state.get("collecter_follower_count", False),
-                help="Variable supplémentaire, en plus du nombre réel d'abonnés. "
-                     "Les deux modalités peuvent figurer dans le TXT. "
-                     "La valeur exacte reste dans les exports CSV. "
-                     "Classe possible : *abonnes_10k_100k ; "
-                     "absence de donnée : *abonnes_indetermine.")
+                    st.checkbox(
+                        "Récupérer le nombre d'abonnés des auteurs (follower_count)",
+                        key="collecter_follower_count",
+                        disabled=occupe or moteur_formulaire != "research",
+                        help="Disponible uniquement avec la Research API officielle. "
+                             "Une seule requête par auteur distinct ; valeur à la date de collecte. "
+                             "Les autres moteurs et options conservent leur comportement.")
+                    st.checkbox(
+                        "Abonnés : valeur numérique réelle dans le TXT",
+                        key="follower_count_illustratif",
+                        disabled=occupe or moteur_formulaire != "research"
+                                 or not st.session_state.get("collecter_follower_count", False),
+                        help="Valeur numérique exacte, par exemple : *follower_count_12345.")
+                    st.checkbox(
+                        "Abonnés : recoder la variable continue en variable catégorielle "
+                        "(codage proposé : 0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
+                        "100 000–999 999 ; ≥1 000 000)",
+                        key="abonnes_classe_illustratif",
+                        disabled=occupe or moteur_formulaire != "research"
+                                 or not st.session_state.get("collecter_follower_count", False),
+                        help="Variable supplémentaire, en plus du nombre réel d'abonnés. "
+                             "Les deux modalités peuvent figurer dans le TXT. "
+                             "La valeur exacte reste dans les exports CSV. "
+                             "Classe possible : *abonnes_10k_100k ; "
+                             "absence de donnée : *abonnes_indetermine.")
                 if nom == "profil" and source == "presse":
                     st.caption(
                         "Métriques des comptes médias — fichier profils_medias.csv "
