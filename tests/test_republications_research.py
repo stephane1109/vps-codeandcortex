@@ -67,7 +67,9 @@ class TestsRepublicationsResearch(unittest.TestCase):
         self.assertEqual(appels[0][1]["max_count"], 10)
         self.assertEqual(appels[1][1]["cursor"], 2)
         self.assertEqual(diagnostic["doublons"], 1)
-        self.assertTrue(diagnostic["exhaustif"])
+        self.assertTrue(diagnostic["pagination_terminee"])
+        self.assertFalse(diagnostic["exhaustif"])
+        # Pagination achevée ne signifie pas recensement intégral sur TikTok.
         self.assertEqual(lignes[0]["author"], "autrecreateur")
         self.assertEqual(lignes[0]["compte_reposteur"], "lemondefr")
         self.assertEqual(lignes[0]["auteur_original"], "autrecreateur")
@@ -160,6 +162,7 @@ class TestsRepublicationsResearch(unittest.TestCase):
             self.assertEqual(job.records[0]["republication_confirmee"], 1)
             self.assertEqual(job.records[0]["comptes_reposteurs"], ["lemondefr"])
             self.assertEqual(job.republications[1]["auteur_original"], "autreauteur")
+            self.assertFalse(job.republications[1]["inclure_hashtags_csv"])
             self.assertTrue(job.archive_prete, job.message)
             with ZipFile(job.directory / "archive.zip") as archive:
                 self.assertIn("republications.csv", archive.namelist())
@@ -169,6 +172,12 @@ class TestsRepublicationsResearch(unittest.TestCase):
                 self.assertIn("autreauteur", texte)
                 self.assertIn("lemondefr", texte)
                 self.assertNotIn("secret_test", texte)
+                # L'option « Htag dans le csv » vaut aussi pour les republications.
+                import csv
+                import io
+                lignes_csv = list(csv.DictReader(io.StringIO(texte), delimiter=";"))
+                self.assertTrue(lignes_csv)
+                self.assertTrue(all(ligne["hashtags"] == "" for ligne in lignes_csv))
                 corpus = archive.read("publications.csv").decode("utf-8")
                 self.assertNotIn("autreauteur", corpus)
                 self.assertIn("republication_confirmee", corpus)
