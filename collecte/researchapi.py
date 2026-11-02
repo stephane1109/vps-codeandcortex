@@ -26,6 +26,10 @@ CHAMPS = ("id,username,video_description,create_time,region_code,like_count,"
           "comment_count,share_count,view_count,favorites_count,video_duration,hashtag_names,video_tag")
 CHAMPS_COMMENTAIRES = "id,video_id,text,like_count,reply_count,parent_comment_id,create_time"
 CHAMPS_PROFIL = "follower_count"
+CHAMPS_PROFIL_AUTORISES = (
+    "is_verified", "follower_count", "following_count",
+    "likes_count", "video_count",
+)
 MAX_PAGES = 60
 TAILLE_MAX = 4_000_000
 _cache_token = {"valeur": None, "expire": 0.0, "identite": None}
@@ -48,8 +52,16 @@ def identifiants_disponibles():
 def _requete(url, *, data, headers):
     """POST vers deux URL officielles fixes, sans redirection vers un tiers."""
     from .republications_research import url_republications
+    # Les champs de profil peuvent varier selon les cases activées, mais
+    # ils restent strictement limités à ceux reconnus par la Research API.
+    profil_autorise = False
+    if url.startswith(URL_PROFIL + "?fields="):
+        champs = url.split("?fields=", 1)[1].split(",")
+        profil_autorise = bool(champs) and all(
+            champ in CHAMPS_PROFIL_AUTORISES for champ in champs
+        ) and len(champs) == len(set(champs))
     if url not in (URL_TOKEN, _url_videos(), _url_commentaires(),
-                   _url_profil(), url_republications()):
+                   url_republications()) and not profil_autorise:
         raise ResearchErreur("Endpoint Research non autorisé.")
     # Budget quotidien partagé par les collectes Research de cette instance.
     # Les jetons OAuth ne comptent pas parmi les recherches de données.
@@ -399,6 +411,36 @@ def collecter_profil_research(compte, *, inclure_abonnes=True,
         "is_verified": (verification if inclure_verification
                         and isinstance(verification, bool) else None),
     }
+
+
+def collecter_metriques_profil_media_research(
+        compte, variables, *, verifier=None, requete=_requete,
+        jeton=None, credentiels=None):
+    """Lire les compteurs choisis en une requête officielle par compte média.
+
+    La réponse est une photographie du profil à la date de la requête ;
+    les valeurs manquantes ne sont jamais imputées à zéro.
+    """
+    from .profils_medias import VARIABLES_PROFILS_MEDIAS
+    variables = tuple(dict.fromkeys(variables))
+    if not variables or any(v not in VARIABLES_PROFILS_MEDIAS for v in variables):
+        raise ValueError("Sélection de métriques de profil invalide.")
+    compte = normaliser_compte(compte)
+    (verifier or (lambda: None))()
+    acces = jeton if jeton is not None else _jeton(
+        requete=requete, credentiels=credentiels)
+    if not isinstance(acces, str) or not acces:
+        raise ResearchAccesRefuse("Research API : jeton absent pour les métriques du profil.")
+    resultat = requete(
+        URL_PROFIL + "?fields=" + ",".join(variables),
+        data=json.dumps({"username": compte}).encode("utf-8"),
+        headers={"Authorization": "Bearer " + acces,
+                 "Content-Type": "application/json"})
+    donnees = resultat.get("data") if isinstance(resultat, dict) else None
+    if not isinstance(donnees, dict):
+        raise ResearchErreur("Research API : métriques du profil absentes.")
+    return {variable: _entier_non_negatif(donnees.get(variable))
+            for variable in variables}
 
 
 def collecter_abonnes_research(compte, *, verifier=None, requete=_requete,
