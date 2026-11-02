@@ -2528,7 +2528,10 @@ def create_app(manager=None):
         plan = detail_plan(manager.data_dir, identifiant, owner_historique(request))
         libelle = (plan or {}).get("nom_sauvegarde") or "research"
         nom_nettoye = re.sub(r"[^\w-]+", "_", libelle, flags=re.UNICODE).strip("_")[:80] or "research"
-        nom_fichier = f"{nom_nettoye}_{identifiant[:8]}.{format_}"
+        nom_fichier = (
+            f"{nom_nettoye}.zip" if format_ == "zip"
+            else f"{nom_nettoye}_{identifiant[:8]}.{format_}"
+        )
         return Response(contenu, media_type=media, headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(nom_fichier)}"})
 
