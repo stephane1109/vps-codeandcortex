@@ -103,13 +103,13 @@ COLONNES_PUBLICATIONS_CSV = (
     "partages_brut", "favoris_brut",
     "hashtags", "htag_collecte", "hashtags_correspondants",
     "operateur_hashtags", "media_id", "categorie_media",
-    "type_publication", "compte_reposteur", "comptes_reposteurs",
+    "type_publication", "compte_reposteur",
     "auteur_original", "id_video_originale",
     "republication_confirmee", "date_republication",
     "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
     "source", "status",
     "error", "groupe_visuel", "reemploi_visuel",
-    "contenu_genere_ia", "statut_resume_ia", "resume_ia_tiktok",
+    "statut_resume_ia", "resume_ia_tiktok",
     "video_id", "video_url", "video_fichier",
     "video_statut", "video_message", "video_diagnostic",
     "commentaires_collecte_statut", "commentaires_collecte_recuperes",
@@ -131,6 +131,16 @@ def ligne_publication_csv(publication):
     ligne.update(colonnes_categories_presse(publication))
     ligne["hashtags"] = hashtags_pour_csv(publication)
     ligne["htag_collecte"] = hashtags_collecte_pour_csv(publication)
+    # Une colonne lisible suffit dans le CSV : conserver les listes structurées
+    # uniquement dans les données JSONB et les fichiers JSON de la collecte.
+    reposteurs = ligne.get("compte_reposteur")
+    if not reposteurs:
+        liste = publication.get("comptes_reposteurs") or []
+        if isinstance(liste, (list, tuple, set)):
+            reposteurs = ", ".join(sorted(set(str(c).strip() for c in liste if c)))
+        else:
+            reposteurs = str(liste).strip()
+    ligne["compte_reposteur"] = reposteurs or ""
     ligne["id"] = _premiere_valeur(publication, "id", "publication_id")
     ligne["publication_id"] = ligne["id"]
     ligne["author"] = _premiere_valeur(publication, "author", "profil")
