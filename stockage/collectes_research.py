@@ -499,7 +499,12 @@ def exporter(dossier, identifiant, proprietaire, format_):
                 "commentaires.csv": texte_csv(retenues, commentaires, "commentaires").encode("utf-8-sig"),
                 "collecte.json": json.dumps({"publications": publications, "commentaires": commentaires},
                                              ensure_ascii=False).encode("utf-8"),
-                "textes.txt": exporter(dossier, identifiant, proprietaire, "txt")
+                "textes.txt": exporter(dossier, identifiant, proprietaire, "txt"),
+                # La base SQLite était auparavant proposée via un bouton séparé.
+                "corpus.sqlite3": exporter(dossier, identifiant, proprietaire, "sqlite3"),
+                "journal_research.json": json.dumps(
+                    journal_plan(dossier, identifiant, proprietaire),
+                    ensure_ascii=False, indent=2).encode("utf-8"),
             }.items():
                 archive.writestr(nom, contenu)
         return flux.getvalue()
