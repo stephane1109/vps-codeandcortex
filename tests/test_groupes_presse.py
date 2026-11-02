@@ -332,7 +332,7 @@ class TestsGroupesPresse(unittest.TestCase):
     def test_compte_actufr_officiel_et_tri_alphabetique(self):
         """Le compte officiel est sélectionnable et l'affichage reste alphabétique."""
         from collecte.presse import code_presse_publication
-        from unicodedata import normalize
+        from unicodedata import combining, normalize
 
         inventaire = charger_inventaire()
         comptes = {media["compte"]: media for media in inventaire}
@@ -353,7 +353,7 @@ class TestsGroupesPresse(unittest.TestCase):
             texte = normalize("NFKD", nom)
             return "".join(
                 caractere for caractere in texte
-                if not __import__("unicodedata").combining(caractere)
+                if not combining(caractere)
             ).casefold().strip()
 
         for categorie in (
