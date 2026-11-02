@@ -64,6 +64,7 @@ class TestsExportCommentairesCSVouTXT(unittest.TestCase):
         self.assertTrue(pour_csv.collecter_reponses)
         self.assertFalse(pour_csv.inclure_commentaires_txt)
         sans_collecte = StartRequest(
+            hashtag="lyceens",
             collecter_commentaires=False, collecter_reponses=True,
             inclure_commentaires_txt=True)
         self.assertFalse(sans_collecte.collecter_reponses)
