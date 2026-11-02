@@ -116,10 +116,17 @@ def construire_tableau_complet(session, dossier):
             lignes[identifiant]["url"] = publication.get("url") or ""
         lignes[identifiant]["contenu_genere_ia"] = publication.get("contenu_genere_ia") or "non_renseigne"
         lignes[identifiant].update(colonnes_categories_presse(publication))
+        for nom in ("hashtags_recherches", "hashtags_correspondants",
+                    "operateur_hashtags"):
+            valeur = publication.get(nom)
+            if valeur is not None:
+                lignes[identifiant][nom] = (
+                    ", ".join(valeur) if isinstance(valeur, list) else valeur)
 
     colonnes = list(dict.fromkeys([
         "publication_id", "url", "statut", "contenu_genere_ia", *colonnes_source,
         "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
+        "hashtags_recherches", "hashtags_correspondants", "operateur_hashtags",
         "violence_visible",
         *noms, *CHAMPS_PROVENANCE,
     ]))
