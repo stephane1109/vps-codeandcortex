@@ -257,10 +257,11 @@
       "id": "politis_fr",
       "nom": "Politis",
       "compte": "politis_fr",
-      "categorie": "presse_independante",
+      "categorie": "presse_nationale",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@politis_fr"
+      "url": "https://www.tiktok.com/@politis_fr",
+      "sous_categorie": "presse_ecrite_nationale"
     },
     {
       "id": "france3occitanie",
