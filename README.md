@@ -492,9 +492,9 @@ automatique de CAPTCHA n’est effectuée. Une erreur d’accès reste distincte
 filtre qui ne trouve aucune correspondance.
 Le filtre français conserve son fonctionnement et son caractère facultatif.
 
-L’inventaire `config/comptes_presse.json` contient désormais 64 comptes
-sélectionnables, après suppression explicite de la seule variante
-`@liberationfr` lors d'une demande antérieure. Le compte `@liberation.fr`
+L’inventaire `config/comptes_presse.json` contient désormais 75 comptes
+sélectionnables, après retrait des variantes `@liberationfr` et `@m6info`
+lors de demandes antérieures. Le compte `@liberation.fr`
 et tous les autres médias sont conservés. L'Humanité (`@lhumanitefr`) est
 présent dans la presse écrite nationale. Mediapart (`@mediapartfr`) a été
 reclassé en presse nationale, sous-groupe presse écrite. "L’info en 60
@@ -502,9 +502,15 @@ secondes" (`@iuzdrmqevnu`) a été ajouté à la presse indépendante.
 Politis (`@politis_fr`) a été reclassé en presse nationale, dans le
 sous-groupe affiché « Presse nationale », sans modification d'identifiant.
 France 24 (`@france24`) a été ajouté dans les chaînes de télévision nationales.
+Onze comptes France 3 ont été ajoutés à la presse régionale :
+`@france3nouvelleaquitaine`, `@france3grandest`, `@france3bretagne`,
+`@france3bfc`, `@france3normandie`, `@f3cvdl`,
+`@france3hautsdefrance`, `@france3paris_idf`, `@france3pdl`,
+`@france3paca` et `@france_3_aura`. Le compte `@france3occitanie`
+déjà présent a été conservé.
 L'interface regroupe les comptes en presse nationale
 (26, avec les deux sous-groupes affichés « Chaînes de télévision nationales »
-et « Presse nationale »), presse régionale (21), presse indépendante (7)
+et « Presse nationale »), presse régionale (32), presse indépendante (7)
 et autres
 médias ou statut à confirmer (10), dont @noahdecrypte (Noah Décrypte) et @marc.verdenet (Marc Verdenet). Les comptes @lehuffpostfr, @cquoilinfo,
 @hugodecrypte et @brutofficiel sont classés en presse indépendante sans
