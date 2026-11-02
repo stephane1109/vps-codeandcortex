@@ -70,7 +70,7 @@ class TestsExportCommentairesCSVouTXT(unittest.TestCase):
         self.assertFalse(sans_collecte.collecter_reponses)
         self.assertFalse(sans_collecte.inclure_commentaires_txt)
         ancien = StartRequest(
-            collecter_commentaires=True)
+            hashtag="lyceens", collecter_commentaires=True)
         self.assertTrue(ancien.inclure_commentaires_txt)
 
     def test_txt_decoche_commentaires_absents_compteurs_presents(self):
