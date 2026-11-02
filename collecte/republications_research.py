@@ -43,7 +43,8 @@ def collecter_republications_research(compte, limite=100, *, debut=None, fin=Non
     controle = verifier or (lambda: None)
     diagnostic = rapport if rapport is not None else {}
     diagnostic.update(compte=compte, requetes=0, pages=0, candidats=0,
-                      retenues=0, doublons=0, statut="en_cours", exhaustif=False)
+                      retenues=0, doublons=0, statut="en_cours",
+                      pagination_terminee=False, exhaustif=False)
     controle()
     acces = jeton if jeton is not None else _jeton(
         requete=requete, credentiels=credentiels)
@@ -109,7 +110,9 @@ def collecter_republications_research(compte, limite=100, *, debut=None, fin=Non
             break
         if not donnees.get("has_more"):
             diagnostic["statut"] = "termine"
-            diagnostic["exhaustif"] = True
+            diagnostic["pagination_terminee"] = True
+            # Une pagination complète ne garantit pas l'exhaustivité :
+            # TikTok peut omettre des vidéos supprimées ou privées.
             break
         nouveau = donnees.get("cursor")
         if not isinstance(nouveau, int) or nouveau < 0 or nouveau == curseur or nouveau in curseurs_vus:
