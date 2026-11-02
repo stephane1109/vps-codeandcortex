@@ -424,20 +424,85 @@ with onglet_collecte:
                 st.caption("Sans fichier, la collecte utilise une session anonyme, sauf cookies configurés par l’administrateur. "
                            "Une session importée peut expirer ou nécessiter une vérification TikTok.")
         st.write("Choisir les médias à collecter")
+        st.caption(
+            "Les catégories distinguent la portée éditoriale des titres. "
+            "Les comptes dont le statut ne peut pas être établi figurent dans "
+            "« Autres médias ou statut à confirmer ». Cette classification "
+            "n'atteste pas la propriété officielle des comptes TikTok."
+        )
+
         def memoriser_medias():
-            st.session_state["medias"] = [m for m in medias if st.session_state.get("media_" + m, False)]
+            """Maintenir la sélection dans l'ordre de l'inventaire."""
+            st.session_state["medias"] = [
+                identifiant for identifiant in medias
+                if st.session_state.get("media_" + identifiant, False)
+            ]
+
         def cocher_tous_les_medias():
-            st.session_state["medias"] = list(medias)
+            """Conserver le comportement historique de sélection globale."""
             for identifiant in medias:
                 st.session_state["media_" + identifiant] = True
-        st.button("Tout cocher", key="tous_medias", on_click=cocher_tous_les_medias, disabled=occupe)
-        colonnes_medias = st.columns(2)
-        for indice,(identifiant,media) in enumerate(medias.items()):
-            cle = "media_" + identifiant
-            st.session_state.setdefault(cle, identifiant in st.session_state.get("medias", []))
-            colonnes_medias[indice % 2].checkbox(media["nom"] + " (@" + media["compte"] + ")",
-                key=cle, disabled=occupe, on_change=memoriser_medias)
-        selection = [m for m in medias if st.session_state.get("media_" + m, False)]
+            memoriser_medias()
+
+        def cocher_categorie_medias(identifiants, cocher):
+            """Sélectionner ou désélectionner une catégorie sans toucher aux autres."""
+            for identifiant in identifiants:
+                st.session_state["media_" + identifiant] = cocher
+            memoriser_medias()
+
+        st.button(
+            "Tout cocher", key="tous_medias",
+            on_click=cocher_tous_les_medias, disabled=occupe,
+        )
+        categories_medias = (
+            ("presse_nationale", "Presse nationale"),
+            ("presse_regionale", "Presse régionale"),
+            ("presse_independante", "Presse indépendante"),
+            ("autres_medias", "Autres médias ou statut à confirmer"),
+        )
+        for categorie, libelle_categorie in categories_medias:
+            comptes_categorie = [
+                (identifiant, media) for identifiant, media in medias.items()
+                if media.get("categorie") == categorie
+            ]
+            if not comptes_categorie:
+                continue
+            identifiants_categorie = tuple(
+                identifiant for identifiant, _ in comptes_categorie
+            )
+            with st.expander(
+                f"{libelle_categorie} ({len(comptes_categorie)})",
+                expanded=categorie == "presse_nationale",
+            ):
+                controles = st.columns(2)
+                controles[0].button(
+                    "Tout cocher dans cette catégorie",
+                    key="cocher_categorie_" + categorie,
+                    on_click=cocher_categorie_medias,
+                    args=(identifiants_categorie, True),
+                    disabled=occupe,
+                )
+                controles[1].button(
+                    "Tout décocher dans cette catégorie",
+                    key="decocher_categorie_" + categorie,
+                    on_click=cocher_categorie_medias,
+                    args=(identifiants_categorie, False),
+                    disabled=occupe,
+                )
+                colonnes_medias = st.columns(2)
+                for indice, (identifiant, media) in enumerate(comptes_categorie):
+                    cle = "media_" + identifiant
+                    st.session_state.setdefault(
+                        cle, identifiant in st.session_state.get("medias", []),
+                    )
+                    colonnes_medias[indice % 2].checkbox(
+                        media["nom"] + " (@" + media["compte"] + ")",
+                        key=cle, disabled=occupe, on_change=memoriser_medias,
+                    )
+        selection = [
+            identifiant for identifiant in medias
+            if st.session_state.get("media_" + identifiant, False)
+        ]
         st.session_state["medias"] = selection
         st.caption(f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
                    f"Borne technique : {max_sources_admin} source(s) par collecte. "
