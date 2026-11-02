@@ -1160,6 +1160,10 @@ with onglet_collecte:
                 st.error("Définissez la période des publications avant de programmer la collecte.")
             elif mode_programme and st.session_state.get("test_research_10_publications", False):
                 st.error("Décochez le test sur 10 publications pour programmer une collecte pluri-journalière.")
+            elif mode_programme and st.session_state.get("collecter_republications_research", False):
+                st.error("Décochez la collecte des republications : elle est réservée "
+                         "aux collectes Research ponctuelles, et n'est pas encore "
+                         "prise en charge par la programmation pluri-journalière.")
             elif mode_programme and (st.session_state.get("telecharger_mp4")
                                     or st.session_state.get("inclure_texte_genere_ia")
                                     or st.session_state.get("filtrer_texte_ia_tiktok")):
