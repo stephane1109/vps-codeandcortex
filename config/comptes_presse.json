@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "comptes": [
     {
       "id": "lemonde",
@@ -309,6 +309,15 @@
       "statut": "reference_editoriale",
       "url": "https://www.tiktok.com/@actu.fr.officiel",
       "note": "Compte TikTok mentionné par actu.fr dans sa fiche d'application officielle"
+    },
+    {
+      "id": "actulyon",
+      "nom": "Actu Lyon",
+      "compte": "actulyon",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actulyon"
     },
     {
       "id": "actutoulouse",
