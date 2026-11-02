@@ -3024,9 +3024,13 @@ def create_app(manager=None):
         except ValueError as erreur:
             raise HTTPException(422, str(erreur)) from erreur
         media = "text/csv; charset=utf-8" if format_.endswith(".csv") else "application/xml"
+        extension_reseau = (
+            format_.rsplit(".", 1)[1] if "." in format_ else format_)
+        nature_reseau = (
+            Path(format_).stem if "." in format_ else format_)
         nom = nom_fichier_telechargement(
-            job.settings.nom_sauvegarde, f"sociometrie_{mode}_{Path(format_).stem}",
-            Path(format_).suffix)
+            job.settings.nom_sauvegarde,
+            f"sociometrie_{mode}_{nature_reseau}", extension_reseau)
         return Response(contenu, media_type=media,
                         headers=entete_telechargement(nom))
 
