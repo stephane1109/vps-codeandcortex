@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "comptes": [
     {
       "id": "lemonde",
@@ -587,6 +587,15 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@iuzdrmqevnu"
+    },
+    {
+      "id": "noahdecrypte",
+      "nom": "Noah Décrypte",
+      "compte": "noahdecrypte",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@noahdecrypte"
     }
   ]
 }
