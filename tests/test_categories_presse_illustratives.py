@@ -45,6 +45,7 @@ class TestsCategoriesPresseIllustratives(unittest.TestCase):
             "@f3cvdl": "presse_regio_dpt",
             "@clpress": "presse_indep",
             "@loopsider": "presse_indep",
+            "@complementdenquete_off": "presse_indep",
             "@actucaen": "presse_regio_dpt",
             "@actubordeaux": "presse_regio_dpt",
             "@actutoulouse": "presse_regio_dpt",
