@@ -260,7 +260,7 @@ class TestsGroupesPresse(unittest.TestCase):
             8)
         self.assertEqual(
             sum(m["categorie"] == "presse_regionale" for m in inventaire),
-            32)
+            33)
 
     def test_comptes_sans_profil_distinct_non_ajoutes(self):
         """Ne pas inventer de profil pour les cas particuliers."""
