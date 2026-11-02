@@ -68,7 +68,7 @@ COLONNES_PUBLICATIONS_CSV = (
     "partages_brut", "favoris_brut",
     "hashtags", "hashtags_recherches", "hashtags_correspondants",
     "operateur_hashtags", "media_id", "categorie_media",
-    "presse_nationale", "presse_regio_dpt", "presse_locale", "presse_indep", "presse_autre",
+    "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre",
     "source", "status",
     "error", "groupe_visuel", "reemploi_visuel",
     "contenu_genere_ia", "statut_resume_ia", "resume_ia_tiktok",
