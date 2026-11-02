@@ -1705,51 +1705,53 @@ with onglet_collecte:
 
 
 with onglet_base_donnees:
-    st.subheader("PostgreSQL — archives et consultation")
+    st.subheader("1. PostgreSQL — archives durables")
     st.caption(
-        "PostgreSQL conserve les collectes pour leur consultation en tableau et "
-        "leur export CSV ou JSON. Les collectes ponctuelles y sont sauvegardées "
-        "automatiquement au fil de leur exécution. SQLite reste utilisé en "
-        "parallèle pour les traitements et la reprise des collectes Research "
-        "programmées."
+        "Conservation : sans suppression automatique par ScrapTikTok. "
+        "Une collecte ponctuelle est copiée automatiquement dans PostgreSQL. "
+        "Une collecte Research programmée doit être synchronisée depuis SQLite."
     )
     st.caption(
-        "Deux opérations distinctes : le bouton ci-dessous copie vers PostgreSQL "
-        "les fichiers JSON des anciennes collectes ponctuelles conservées dans "
-        "l'historique local (30 jours par défaut). Il ne lit pas directement "
-        "les bases SQLite et ne concerne pas les programmes Research. "
-        "Pour ces derniers, utilisez « Synchroniser vers PostgreSQL » dans "
-        "« Collecte → Afficher mes collectes Research programmées »."
+        "Pour récupérer une collecte PostgreSQL, sélectionnez son nom "
+        "puis cliquez sur « Télécharger cette collecte (ZIP) ». "
+        "Le ZIP contient les publications et commentaires en CSV et JSON. "
+        "Ce n'est pas un fichier de sauvegarde physique pg_dump."
     )
     if not cookie_historique:
         st.warning("Rechargez la page d'accueil pour retrouver votre historique privé.")
     else:
-        if st.button(
-                "Copier les anciennes collectes de l'historique local vers PostgreSQL",
-                key="base_pg_importer_historique",
-                help="Copie les publications.json et commentaires.json des archives "
-                     "locales encore conservées dans PostgreSQL. Les archives "
-                     "originales ne sont pas effacées. Si une collecte existe déjà, "
-                     "ses enregistrements sont actualisés. Cette opération ne "
-                     "synchronise pas les programmes Research enregistrés en SQLite."):
-            try:
-                resultat_import = api("/api/base-donnees/importer-historique", {})
-            except RuntimeError as erreur:
-                st.error(str(erreur))
-            else:
-                st.session_state["bdd_dernier_import"] = resultat_import
-        if st.session_state.get("bdd_dernier_import"):
-            import_precedent = st.session_state["bdd_dernier_import"]
-            st.success(
-                f"Historique local vers PostgreSQL : "
-                f"{import_precedent['imports']} archive(s) traitée(s) "
-                "(création ou mise à jour éventuelle), "
-                f"{import_precedent['publications']} publication(s) et "
-                f"{import_precedent['commentaires']} commentaire(s) parcouru(s)."
+        with st.expander("Opération exceptionnelle : recopier un ancien historique local"):
+            st.caption(
+                "Cette commande copie les fichiers JSON des archives locales "
+                "encore conservées (30 jours par défaut) vers PostgreSQL. "
+                "Elle ne restaure pas un fichier SQLite ni un export pg_dump."
             )
-            if import_precedent.get("erreurs"):
-                st.warning(
-                    f"{import_precedent['erreurs']} archive(s) n'ont pas pu être copiées.")
+            if st.button(
+                    "Copier les anciennes collectes de l'historique local vers PostgreSQL",
+                    key="base_pg_importer_historique",
+                    help="Copie les publications.json et commentaires.json des archives "
+                         "locales encore conservées dans PostgreSQL. Les archives "
+                         "originales ne sont pas effacées. Si une collecte existe déjà, "
+                         "ses enregistrements sont actualisés. Cette opération ne "
+                         "synchronise pas les programmes Research enregistrés en SQLite."):
+                try:
+                    resultat_import = api("/api/base-donnees/importer-historique", {})
+                except RuntimeError as erreur:
+                    st.error(str(erreur))
+                else:
+                    st.session_state["bdd_dernier_import"] = resultat_import
+            if st.session_state.get("bdd_dernier_import"):
+                import_precedent = st.session_state["bdd_dernier_import"]
+                st.success(
+                    f"Historique local vers PostgreSQL : "
+                    f"{import_precedent['imports']} archive(s) traitée(s) "
+                    "(création ou mise à jour éventuelle), "
+                    f"{import_precedent['publications']} publication(s) et "
+                    f"{import_precedent['commentaires']} commentaire(s) parcouru(s)."
+                )
+                if import_precedent.get("erreurs"):
+                    st.warning(
+                        f"{import_precedent['erreurs']} archive(s) n'ont pas pu être copiées.")
         from urllib.parse import quote as encoder_recherche
         recherche_nom_bdd = st.text_input(
             "Rechercher une sauvegarde par nom",
@@ -1801,16 +1803,24 @@ with onglet_base_donnees:
                         f"/api/base-donnees/{sauvegarde_bdd['type']}/"
                         f"{sauvegarde_bdd['id']}"
                     )
-                    colonnes_exports = st.columns(4)
-                    for colonne, nom, libelle in zip(
-                            colonnes_exports,
-                            ("publications.csv", "publications.json",
-                             "commentaires.csv", "commentaires.json"),
-                            ("Publications CSV", "Publications JSON",
-                             "Commentaires CSV", "Commentaires JSON")):
-                        colonne.link_button(
-                            libelle, adresse_bdd + "/export/" + nom,
-                            use_container_width=True)
+                    st.link_button(
+                        "Télécharger cette collecte (ZIP)",
+                        adresse_bdd + "/archive.zip",
+                        use_container_width=True,
+                        help="Contient toutes les publications et tous les commentaires "
+                             "de la collecte, en CSV et JSON."
+                    )
+                    with st.expander("Téléchargements séparés (facultatifs)"):
+                        colonnes_exports = st.columns(4)
+                        for colonne, nom, libelle in zip(
+                                colonnes_exports,
+                                ("publications.csv", "publications.json",
+                                 "commentaires.csv", "commentaires.json"),
+                                ("Publications CSV", "Publications JSON",
+                                 "Commentaires CSV", "Commentaires JSON")):
+                            colonne.link_button(
+                                libelle, adresse_bdd + "/export/" + nom,
+                                use_container_width=True)
                     categorie_bdd = st.radio(
                         "Table à consulter", ("publications", "commentaires"),
                         format_func=lambda valeur: (
