@@ -221,7 +221,7 @@
       "id": "clpress",
       "nom": "CLPRESS",
       "compte": "clpress",
-      "categorie": "autres_medias",
+      "categorie": "presse_independante",
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@clpress"
@@ -262,15 +262,6 @@
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@politis_fr",
       "sous_categorie": "presse_ecrite_nationale"
-    },
-    {
-      "id": "france3occitanie",
-      "nom": "France 3 Occitanie",
-      "compte": "france3occitanie",
-      "categorie": "presse_regionale",
-      "source": "fourni_par_utilisateur",
-      "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@france3occitanie"
     },
     {
       "id": "mediapartfr",
@@ -604,6 +595,15 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@france24"
+    },
+    {
+      "id": "france3occitanie",
+      "nom": "France 3 Occitanie",
+      "compte": "france3occitanie",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3occitanie"
     },
     {
       "id": "france3nouvelleaquitaine",
