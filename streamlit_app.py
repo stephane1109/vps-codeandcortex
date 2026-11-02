@@ -493,7 +493,7 @@ with onglet_collecte:
                 # à la catégorie principale ni aux clés de sélection.
                 groupes_nationaux = (
                     ("television_nationale", "Chaînes de télévision nationales"),
-                    ("presse_ecrite_nationale", "Presse écrite nationale"),
+                    ("presse_ecrite_nationale", "Presse nationale"),
                     ("autres", "Autres médias nationaux"),
                 )
                 regroupements = (
