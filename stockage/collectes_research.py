@@ -17,9 +17,12 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ETATS_ACTIFS = {"programme", "en_cours"}
 ETATS_FINAUX = {"termine", "arrete", "date_limite"}
-CHAMPS_CSV = ("id", "url", "author", "create_time", "description", "region_code",
-              "is_verified", "vues", "likes", "commentaires", "partages",
-              "favoris", "date_premiere_collecte", "date_derniere_collecte")
+from corpus.publications_csv import (
+    COLONNES_PUBLICATIONS_CSV, lignes_publications_csv,
+)
+
+# Préserver les colonnes historiques et ajouter toutes les variables de l'interface.
+CHAMPS_CSV = COLONNES_PUBLICATIONS_CSV
 
 
 def maintenant():
@@ -438,22 +441,7 @@ def texte_csv(publications, commentaires, categorie):
     lignes = publications if categorie == "publications" else commentaires
     if categorie == "publications":
         colonnes = CHAMPS_CSV
-        resultat = []
-        for p in lignes:
-            engagement = p.get("engagement") or {}
-            def mesure(nom):
-                v = engagement.get(nom)
-                return v.get("valeur") if isinstance(v, dict) else v
-            resultat.append({
-                "id": p.get("id"), "url": p.get("url"),
-                "author": p.get("author"), "create_time": p.get("create_time"),
-                "description": p.get("description"), "region_code": p.get("region_code"),
-                "is_verified": p.get("is_verified"),
-                **{nom: mesure(nom) for nom in
-                   ("vues", "likes", "commentaires", "partages", "favoris")},
-                "date_premiere_collecte": p.get("_premiere_collecte"),
-                "date_derniere_collecte": p.get("_derniere_collecte"),
-            })
+        resultat = lignes_publications_csv(lignes)
     else:
         colonnes = ("id", "publication_id", "auteur", "texte", "parent_id", "est_reponse")
         resultat = [{nom: ligne.get(nom) for nom in colonnes} for ligne in lignes]
