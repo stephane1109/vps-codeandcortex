@@ -10,6 +10,20 @@ from collecte.presse import charger_inventaire
 from webapp import StartRequest
 
 class TestsInterface(unittest.TestCase):
+    def test_historique_30_jours_distinct_de_postgres_et_sqlite(self):
+        """La période de rétention locale ne qualifie pas PostgreSQL."""
+        source = (Path(__file__).resolve().parents[1] /
+                  "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn("Historique temporaire — collectes et analyses", source)
+        self.assertIn(
+            "Cette durée ne s'applique PAS à PostgreSQL", source)
+        self.assertIn(
+            "n'ont pas d'expiration automatique dans ScrapTikTok", source)
+        self.assertIn(
+            "téléchargez le ZIP d'une collecte, extrayez corpus.sqlite3", source)
+        self.assertNotIn("Aucune analyse enregistrée.", source)
+
+
     def test_case_arobase_reactive_et_transmise_au_lancement(self):
         envois = []
         def repondre(chemin, session, autorisation, donnees=None, **options):
