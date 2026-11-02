@@ -72,7 +72,7 @@ class TestsHashtagsCSV(unittest.TestCase):
         texte_ancien = application.text_export(
             [publication], True, variables_txt=["profil", "hashtags"])
         self.assertIn("#manifestation", texte_ancien)
-        self.assertIn("#lycéens", texte_ancien)
+        self.assertIn("#Lycéens", texte_ancien)
         self.assertNotEqual(texte, texte_ancien)
 
     def test_collecte_transmet_le_choix_jusqu_aux_csv(self):
