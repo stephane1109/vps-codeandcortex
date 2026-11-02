@@ -247,7 +247,7 @@ occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
 # L'historique est identifié par un cookie privé distinct de la session de
 # collecte ; la session peut expirer sans effacer les analyses des 30 jours.
 with st.sidebar:
-    st.subheader("Sauvegardes : collecte et analyse")
+    st.subheader("Historique temporaire — collectes et analyses")
     if not cookie_historique:
         st.caption("Rechargez la page d'accueil pour activer l'historique privé.")
     else:
@@ -258,10 +258,19 @@ with st.sidebar:
         else:
             analyses_passees = historique_reponse.get("analyses", [])
             duree_historique = historique_reponse.get("retention_jours", 30)
-            st.caption(f"Deux sauvegardes distinctes conservées {duree_historique} jours : "
-                       "données de collecte réimportables et résultats d'analyse, sans MP4.")
+            st.caption(
+                f"Historique local temporaire : {duree_historique} jours par défaut "
+                "pour les copies de collecte et d'analyse (sans MP4). "
+                "Cette durée ne s'applique PAS à PostgreSQL ni à la base "
+                "opérationnelle SQLite Research. Les collectes PostgreSQL "
+                "n'ont pas d'expiration automatique dans ScrapTikTok."
+            )
             if not analyses_passees:
-                st.caption("Aucune analyse enregistrée.")
+                st.caption(
+                    "Aucune collecte ni analyse disponible dans cet historique "
+                    "temporaire. Consultez vos archives PostgreSQL et SQLite "
+                    "Research dans l'onglet « Base de données »."
+                )
             else:
                 index_analyses = {ligne["id"]:ligne for ligne in analyses_passees}
                 def afficher_entree_historique(identifiant):
@@ -1796,10 +1805,13 @@ with onglet_base_donnees:
     st.divider()
     st.subheader("2. SQLite — collectes Research programmées")
     st.caption(
-        "SQLite conserve le calendrier et la reprise des programmes Research. "
-        "La copie SQLite proposée dans le ZIP est un export des données : "
-        "elle ne réinstalle pas un programme de collecte. "
-        "Le stockage opérationnel reste sur le volume du VPS."
+        "SQLite Research ne relève pas de la limite des 30 jours de "
+        "l'historique temporaire. Pour consulter les données sur Mac, "
+        "téléchargez le ZIP d'une collecte, extrayez corpus.sqlite3, "
+        "puis ouvrez ce fichier dans DBeaver avec une connexion SQLite. "
+        "Ce fichier exporté contient publications et commentaires ; "
+        "il ne contient pas le calendrier du programme, conservé dans "
+        "collectes_research.sqlite3 sur le VPS."
     )
     if not cookie_historique:
         st.warning("Historique privé indisponible : rechargez la page.")
