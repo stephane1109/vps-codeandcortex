@@ -3,6 +3,7 @@ from pathlib import Path
 from telechargement_videos import CHAMPS_VIDEO, correspondance_video
 from .export_json import exporter_json
 from .export_csv import exporter_csv
+from .publications_csv import COLONNES_PUBLICATIONS_CSV, lignes_publications_csv
 from .export_iramuteq import exporter_iramuteq
 from .corpus_legendes import construire_legendes
 from .corpus_commentaires import construire_commentaires
@@ -46,6 +47,9 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     correspondances = {str(p["id"]): correspondance_video(p) for p in publications}
     commentaires = [{**c, **correspondances.get(str(c.get("publication_id")), {})} for c in commentaires]
     exporter_json(dossier / "publications.json", publications)
+    # La table complète est disponible aussi pour les collectes ponctuelles.
+    exporter_csv(dossier / "publications.csv",
+                 lignes_publications_csv(publications), COLONNES_PUBLICATIONS_CSV)
     if (journal.get("parametres") or {}).get("telecharger_mp4") or any("video_statut" in p for p in publications):
         videos = [{**correspondance_video(p), "video_statut": p.get("video_statut", "non_retenue"),
                    "video_message": p.get("video_message"), "video_diagnostic": p.get("video_diagnostic")} for p in publications]
