@@ -489,16 +489,45 @@ with onglet_collecte:
                     args=(identifiants_categorie, False),
                     disabled=occupe,
                 )
-                colonnes_medias = st.columns(2)
-                for indice, (identifiant, media) in enumerate(comptes_categorie):
-                    cle = "media_" + identifiant
-                    st.session_state.setdefault(
-                        cle, identifiant in st.session_state.get("medias", []),
-                    )
-                    colonnes_medias[indice % 2].checkbox(
-                        media["nom"] + " (@" + media["compte"] + ")",
-                        key=cle, disabled=occupe, on_change=memoriser_medias,
-                    )
+                # Sous-groupes uniquement pour le national, sans toucher
+                # à la catégorie principale ni aux clés de sélection.
+                groupes_nationaux = (
+                    ("television_nationale", "Chaînes de télévision nationales"),
+                    ("presse_ecrite_nationale", "Presse écrite nationale"),
+                    ("autres", "Autres médias nationaux"),
+                )
+                regroupements = (
+                    groupes_nationaux if categorie == "presse_nationale"
+                    else ((None, None),)
+                )
+                for sous_categorie, titre in regroupements:
+                    if sous_categorie == "autres":
+                        comptes_affiches = [
+                            element for element in comptes_categorie
+                            if element[1].get("sous_categorie") not in (
+                                "television_nationale", "presse_ecrite_nationale")
+                        ]
+                    elif sous_categorie is None:
+                        comptes_affiches = comptes_categorie
+                    else:
+                        comptes_affiches = [
+                            element for element in comptes_categorie
+                            if element[1].get("sous_categorie") == sous_categorie
+                        ]
+                    if not comptes_affiches:
+                        continue
+                    if titre:
+                        st.markdown("**" + titre + "**")
+                    colonnes_medias = st.columns(2)
+                    for indice, (identifiant, media) in enumerate(comptes_affiches):
+                        cle = "media_" + identifiant
+                        st.session_state.setdefault(
+                            cle, identifiant in st.session_state.get("medias", []),
+                        )
+                        colonnes_medias[indice % 2].checkbox(
+                            media["nom"] + " (@" + media["compte"] + ")",
+                            key=cle, disabled=occupe, on_change=memoriser_medias,
+                        )
         selection = [
             identifiant for identifiant in medias
             if st.session_state.get("media_" + identifiant, False)
