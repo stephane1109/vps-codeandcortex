@@ -965,7 +965,7 @@ L'onglet **Base de données** rassemble désormais trois opérations distinctes.
 **1. PostgreSQL — archives durables.** Les collectes ponctuelles sont
 archivées automatiquement. Les collectes Research n'apparaissent dans
 PostgreSQL qu'après synchronisation depuis SQLite. Choisir une collecte,
-puis sélectionner **Télécharger cette collecte (ZIP)**. Un seul fichier
+puis sélectionner **Télécharger tous les résultats (ZIP)**. Un seul fichier
 regroupe les tableaux et variables des publications et commentaires en
 CSV et JSON, les métriques (`engagement.csv`, `ratios_engagement.csv`,
 `comparaison_medias.csv`), les corpus TXT, une version tabulaire SQLite
@@ -984,11 +984,31 @@ restaurable de l'instance PostgreSQL. Effectuer séparément des sauvegardes
 physiques/logiques (par exemple `pg_dump`, puis `pg_restore`) pour la
 reprise après une panne.
 
-L'import de l'ancien historique local reste disponible sous
-**Opération exceptionnelle : recopier un ancien historique local**. Il
-copie les `publications.json` et `commentaires.json` des archives locales
-encore conservées dans PostgreSQL, sans supprimer les originaux. Il ne
-restaure ni un dump PostgreSQL ni une base SQLite.
+L'onglet PostgreSQL est volontairement réduit à trois opérations :
+**choisir une collecte**, **télécharger tous ses résultats dans un ZIP**
+et, si nécessaire, **supprimer la collecte** avec confirmation de son nom
+exact. L'ancienne consultation paginée (publications/commentaires),
+les champs de recherche et la commande de migration exceptionnelle de
+l'historique local ne sont plus affichés. Les API de compatibilité restent
+disponibles pour ne pas casser les autres fonctions.
+
+Une collecte nommée `sauvegarde_test_3` n'est **pas** une table :
+c'est un enregistrement de `scraptiktok_collectes` (ou de
+`research_plans` pour une collecte Research). Pour supprimer une
+collecte précise, sélectionner cette collecte dans l'application,
+déplier **Supprimer cette collecte de PostgreSQL**, saisir son nom exact
+et confirmer. Seul son identifiant est ciblé. Ses publications et ses
+commentaires sont effacés par les relations `ON DELETE CASCADE`,
+sans supprimer les tables ni les autres collectes. La suppression
+n'affecte pas les éventuelles archives locales ou SQLite encore présentes.
+Un programme Research en cours doit être arrêté avant de supprimer sa copie
+PostgreSQL, afin d'éviter sa recréation immédiate.
+
+Dans pgAdmin, la suppression manuelle équivalente s'effectue en
+recherchant d'abord `collecte_id` dans `scraptiktok_collectes`,
+puis en supprimant la seule ligne correspondant à cet identifiant.
+Ne jamais utiliser `DROP TABLE` pour supprimer une collecte.
+
 
 **2. SQLite — collectes Research programmées.** Cocher
 **Afficher mes collectes SQLite Research**, choisir un programme, puis
