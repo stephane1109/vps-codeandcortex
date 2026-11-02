@@ -1,0 +1,30 @@
+name: ScrapTikTok - Inventaire des comptes Presse
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "config/comptes_presse.json"
+      - "tests/test_groupes_presse.py"
+      - "collecte/presse.py"
+      - ".github/workflows/inventaire-presse.yml"
+  workflow_dispatch:
+
+jobs:
+  inventaire-presse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances des tests
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier le JSON et la syntaxe Python
+        run: |
+          python -m json.tool config/comptes_presse.json >/dev/null
+          python -m compileall -q collecte/presse.py tests/test_groupes_presse.py
+      - name: Tester les regroupements des comptes Presse
+        run: python -m unittest discover -s tests -p test_groupes_presse.py -v
+      - name: Tester les catégories dans les exports
+        run: python -m unittest discover -s tests -p test_categories_presse_illustratives.py -v
