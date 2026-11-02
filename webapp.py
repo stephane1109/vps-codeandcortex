@@ -43,6 +43,22 @@ COOKIE = "scraptiktok_session"
 HISTORIQUE_COOKIE = "scraptiktok_historique"
 
 
+def nom_fichier_telechargement(nom_collecte, type_export, extension):
+    """Nommer chaque export avec la collecte et son contenu, sans chemin local."""
+    def nettoyer(texte, maximum):
+        return re.sub(r"[^\w-]+", "_", str(texte or ""), flags=re.UNICODE).strip("_")[:maximum]
+    nom = nettoyer(nom_collecte, 80) or "collecte"
+    nature = nettoyer(type_export, 50) or "resultats"
+    ext = nettoyer(str(extension).lstrip("."), 12) or "csv"
+    return f"{nom}_{nature}.{ext}"
+
+
+def entete_telechargement(nom):
+    """Respecter les accents dans le nom proposé au navigateur."""
+    return {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(nom)}"}
+
+
+
 def texte_commentaires_collectes(job):
     """Restituer les commentaires dans le ZIP et dans le TXT individuel."""
     with job.lock:
@@ -2746,7 +2762,8 @@ def create_app(manager=None):
             texte=fichier.read_text(encoding="utf-8")
         return Response(texte,media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition":
-                     f'attachment; filename="scraptiktok_tableau_complet_{job.id}.csv"'})
+                     entete_telechargement(nom_fichier_telechargement(
+                         job.settings.nom_sauvegarde, "tableau_complet", "csv"))})
 
     @app.post("/api/jobs/{job_id}/desordre/sauvegarder")
     def enregistrer_analyse_desordre(job_id: str, request: Request):
@@ -2854,7 +2871,8 @@ def create_app(manager=None):
             publications=publications_annotables(lire_publications(job.directory),[])
             texte=export_csv(publications,lire(job.directory),lire_annotations(job.directory))
         return Response(texte,media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition":'attachment; filename="codages_videos.csv"'})
+            headers=entete_telechargement(nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, "codages_videos", "csv")))
 
     @app.get("/api/jobs/{job_id}/desordre/annotations.csv")
     def export_annotations_desordre(job_id: str, request: Request):
@@ -2872,7 +2890,8 @@ def create_app(manager=None):
         publications=publications_annotables(lire_publications(job.directory),lignes)
         texte=exporter_annotations_csv(publications,codes)
         return Response(texte,media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition":'attachment; filename="annotations_violence.csv"'})
+            headers=entete_telechargement(nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, "annotations", "csv")))
 
     @app.get("/api/jobs/{job_id}/desordre/correlations_violence.csv")
     def export_correlations_violence(job_id: str, request: Request):
@@ -2890,7 +2909,8 @@ def create_app(manager=None):
         correlations=correlations_violence(dossier/'indicateurs_engagement.csv',codes)
         return Response(exporter_correlations_csv(correlations),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition":'attachment; filename="correlations_violence.csv"'})
+            headers=entete_telechargement(nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, "correlations", "csv")))
 
     @app.get("/api/jobs/{job_id}/desordre/export/{nom}")
     def exporter_desordre(job_id: str, nom: str, request: Request):
@@ -2901,7 +2921,10 @@ def create_app(manager=None):
             raise HTTPException(404, 'Export indisponible')
         chemin=dossier/nom
         if not chemin.is_file() or chemin.is_symlink(): raise HTTPException(404, 'Export indisponible')
-        return FileResponse(chemin,filename=nom)
+        return FileResponse(
+            chemin,
+            filename=nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, Path(nom).stem, Path(nom).suffix))
 
     @app.post("/api/jobs/{job_id}/video/stop")
     def arreter_analyse_video(job_id: str, request: Request):
@@ -2962,7 +2985,8 @@ def create_app(manager=None):
                 } for p in publications]
             contenu = serialiser_csv(lignes_engagement(publications), COLONNES_ENGAGEMENT)
         return Response(contenu.encode("utf-8-sig"), media_type="text/csv",
-            headers={"Content-Disposition": 'attachment; filename="engagement.csv"'})
+            headers=entete_telechargement(nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, "engagement", "csv")))
 
     @app.get("/api/jobs/{job_id}/sociometrie")
     def consulter_sociometrie(job_id: str, request: Request,
@@ -3001,15 +3025,18 @@ def create_app(manager=None):
         except ValueError as erreur:
             raise HTTPException(422, str(erreur)) from erreur
         media = "text/csv; charset=utf-8" if format_.endswith(".csv") else "application/xml"
-        nom = f"sociometrie_{mode}_{format_}"
+        nom = nom_fichier_telechargement(
+            job.settings.nom_sauvegarde, f"sociometrie_{mode}_{Path(format_).stem}",
+            Path(format_).suffix)
         return Response(contenu, media_type=media,
-                        headers={"Content-Disposition": f'attachment; filename="{nom}"'})
+                        headers=entete_telechargement(nom))
 
     @app.get("/api/jobs/{job_id}/commentaires.txt")
     def telecharger_commentaires(job_id: str, request: Request):
         job = manager.get(owner(request), job_id)
         return Response(texte_commentaires_collectes(job), media_type="text/plain",
-            headers={"Content-Disposition": 'attachment; filename="commentaires.txt"'})
+            headers=entete_telechargement(nom_fichier_telechargement(
+                job.settings.nom_sauvegarde, "commentaires", "txt")))
 
     @app.get("/api/historique")
     def historique_analyses(request: Request):
@@ -3031,7 +3058,8 @@ def create_app(manager=None):
             raise HTTPException(404, "Analyse introuvable.")
         flux=exporter_zip(archive[1])
         return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="scraptiktok_analyse_{identifiant}.zip"'},
+            headers=entete_telechargement(nom_fichier_telechargement(
+                archive[0].get("titre") or identifiant, "analyse_complete", "zip")),
             background=BackgroundTask(flux.close))
 
     @app.get("/api/historique/{identifiant}/sauvegarde/{categorie}")
@@ -3044,7 +3072,8 @@ def create_app(manager=None):
             raise HTTPException(404, "Sauvegarde introuvable.")
         flux = exporter_sauvegarde_distincte(archive[1], categorie)
         return StreamingResponse(iter(lambda: flux.read(65536), b""), media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="scraptiktok_{categorie}_{identifiant}.zip"'},
+            headers=entete_telechargement(nom_fichier_telechargement(
+                archive[0].get("titre") or identifiant, categorie, "zip")),
             background=BackgroundTask(flux.close))
 
     @app.get("/api/sauvegardes")
