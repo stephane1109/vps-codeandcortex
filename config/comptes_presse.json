@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "comptes": [
     {
       "id": "lemonde",
@@ -585,6 +585,15 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@noahdecrypte"
+    },
+    {
+      "id": "marc_verdenet",
+      "nom": "Marc Verdenet",
+      "compte": "marc.verdenet",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@marc.verdenet"
     }
   ]
 }
