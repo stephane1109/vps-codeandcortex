@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "comptes": [
     {
       "id": "lemonde",
@@ -299,6 +299,16 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@actubordeaux"
+    },
+    {
+      "id": "actu_fr_officiel",
+      "nom": "Actu.fr",
+      "compte": "actu.fr.officiel",
+      "categorie": "presse_regionale",
+      "source": "https://apps.apple.com/fr/app/actu/id1574151598",
+      "statut": "reference_editoriale",
+      "url": "https://www.tiktok.com/@actu.fr.officiel",
+      "note": "Compte TikTok mentionné par actu.fr dans sa fiche d'application officielle"
     },
     {
       "id": "actutoulouse",
