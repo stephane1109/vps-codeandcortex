@@ -1,6 +1,8 @@
 """Inventaire éditorial explicite et sélection de médias."""
 import json
 from pathlib import Path
+import unicodedata
+
 from .verification_comptes import normaliser_compte
 CONFIG = Path(__file__).resolve().parents[1] / "config"
 
@@ -24,6 +26,18 @@ def charger_inventaire(chemin=None):
         identifiants.add(compte["id"])
         noms_comptes.add(compte["compte"])
     return comptes
+
+def cle_tri_media(media):
+    """Trier les noms affichés alphabétiquement, sans accent ni différence de casse."""
+    def normaliser_texte(texte):
+        texte = unicodedata.normalize("NFKD", str(texte or ""))
+        return "".join(caractere for caractere in texte
+                       if not unicodedata.combining(caractere)).casefold().strip()
+
+    return (normaliser_texte(media.get("nom")),
+            normaliser_texte(media.get("compte")),
+            normaliser_texte(media.get("id")))
+
 
 def selectionner_medias(identifiants, inventaire=None):
     table = {m["id"]: m for m in (inventaire if inventaire is not None else charger_inventaire())}
