@@ -159,6 +159,8 @@ class TestsProfilsMediasResearch(unittest.TestCase):
             self.assertEqual(job.profils_medias[1]["statut_profil"], "indisponible")
             self.assertEqual(job.profils_medias[1]["classe_video_count"], "indetermine")
             self.assertTrue(job.archive_prete, job.message)
+            self.assertEqual(job.status, "partial")
+            self.assertIn("Profils médias : 1/2", job.message)
             self.assertTrue(job.snapshot()["can_download"])
             self.assertEqual(job.snapshot()["nombre_profils_medias"], 2)
             zipfile = job.directory / "archive.zip"
