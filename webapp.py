@@ -1904,6 +1904,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         accepter=accepter_republication, rapport=diagnostic)
                     for ligne in lignes:
                         ligne["media_id"] = media["id"]
+                        # Même choix de colonnes que dans publications.csv.
+                        ligne["inclure_hashtags_csv"] = job.settings.inclure_hashtags_csv
                     job.republications.extend(lignes)
                 except (ResearchErreur, ValueError) as erreur:
                     diagnostic.update(statut="erreur_research",
