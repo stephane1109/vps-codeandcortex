@@ -390,7 +390,7 @@ def clore_dates(dossier):
 
 def reserver_requete(dossier):
     """Budget local atomique pour tous les appels Research de cette application."""
-    maximum = max(1, min(1000, int(os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "900"))))
+    maximum = max(1, min(1000, int(os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "1000"))))
     jour = maintenant().date().isoformat()
     avec = connexion(dossier)
     try:
@@ -414,7 +414,7 @@ def reserver_requete(dossier):
 
 def etat_quota(dossier):
     jour = maintenant().date().isoformat()
-    maximum = max(1, min(1000, int(os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "900"))))
+    maximum = max(1, min(1000, int(os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "1000"))))
     with connexion(dossier) as base:
         row = base.execute("SELECT appels FROM quotas WHERE jour_utc=?", (jour,)).fetchone()
     nombre = row[0] if row else 0
