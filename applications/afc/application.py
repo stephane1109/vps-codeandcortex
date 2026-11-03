@@ -154,7 +154,8 @@ def afficher_resultats(resultats: dict) -> None:
     )
     st.caption(
         "Résultats issus de FactoMineR::CA() et FactoMineR::descfreq(). "
-        "Le rapport méthodologique contient le résumé natif de FactoMineR."
+        "Le rapport méthodologique utilise le résumé natif de FactoMineR "
+        "ou, pour une AFC à un seul axe, les matrices natives de CA()."
     )
 
     onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
