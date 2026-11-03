@@ -985,6 +985,14 @@ class Job:
                         "version_collecteur": entree.get("rapport", {}).get("version_collecteur"),
                         "presse_moteur": entree.get("rapport", {}).get("presse_moteur"),
                         "message": entree.get("message", "Recherche terminée."),
+                        "candidats_examines": entree.get("rapport", {}).get(
+                            "candidats_examines", 0),
+                        "pages_research": entree.get("rapport", {}).get(
+                            "pages_research", 0),
+                        "requetes_tentees": entree.get("rapport", {}).get(
+                            "requetes_tentees", 0),
+                        "ecartes_hashtags_api": entree.get("rapport", {}).get(
+                            "ecartes_hashtags_api", 0),
                         "ecartes_combinaison_hashtags": entree.get("rapport", {}).get(
                             "ecartes_combinaison_hashtags", 0),
                         "ecartes_metadonnees_absentes": entree.get("rapport", {}).get(
@@ -2517,9 +2525,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 "relation(s) compte–vidéo identifiée(s) dans la collecte séparée. "
                 "Une absence n'est pas une preuve de non-republication."
             )
+        if (job.settings.source_collecte == "hashtags" and moteur_actif == "research"):
+            final_message += (
+                f" Research Hashtags : {job.candidats_research_lot} candidat(s) "
+                f"renvoyé(s) par TikTok, {len(unique_links)} vidéo(s) "
+                f"conforme(s) retenue(s) pour lecture, "
+                f"{job.requetes_research_lot} requête(s) de recherche. "
+                f"{job.ecartes_hashtags_research_lot} candidat(s) "
+                "sans correspondance exacte dans les métadonnées.")
         if job.settings.test_research_10_publications:
             final_message += (
-                f" Mode test Research : {job.processed}/10 publication(s) consultée(s). "
+                f" Mode test Research : {job.processed}/10 publication(s) "
+                "conforme(s) consultée(s) au maximum. Les vidéos écartées "
+                "dès la découverte ne sont pas comptées comme traitées. "
                 "Décochez « Faire un test sur 10 publications » pour lancer "
                 "la collecte complète."
             )
