@@ -1429,6 +1429,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
     limitation_tiktok = False
     limitation_research = False
+    echecs_serveur_research_consecutifs = 0
     limitation_commentaires_research = False
     limitation_abonnes_research = False
     cache_abonnes_research = {}
@@ -1908,6 +1909,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
                 rapport["discovered_urls"] = found
+                # Une découverte réussie réinitialise le compteur de pannes 5xx.
+                echecs_serveur_research_consecutifs = 0
                 if (job.settings.source_collecte in {"presse", "comptes", "hashtags"}
                         and moteur_actif in {"api", "research", "gallerydl", "tikhub", "apify"}):
                     for identifiant, donnees in (rapport.get("metadonnees_api") or {}).items():
@@ -1950,6 +1953,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 from collecte.presse_research import ResearchErreur
                 from collecte.quotas_exploitation import QuotaScrapingAtteint
                 if isinstance(erreur, ResearchErreur):
+                    from collecte.researchapi import (
+                        ResearchErreurServeur, poursuivre_apres_erreur_serveur)
                     for identifiant, fiche in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(fiche, dict):
                             metadonnees_api.setdefault(str(identifiant), fiche)
@@ -1960,10 +1965,49 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     and len(unique_links) >= 10):
                                 break
                             unique_links.setdefault(identite[0], identite[1])
+                    job.update(search_errors=job.search_errors + 1)
+                    if isinstance(erreur, ResearchErreurServeur):
+                        echecs_serveur_research_consecutifs += 1
+                        poursuivre = poursuivre_apres_erreur_serveur(
+                            erreur,
+                            source_collecte=job.settings.source_collecte,
+                            moteur_actif=moteur_actif,
+                            echecs_consecutifs=echecs_serveur_research_consecutifs)
+                        job.diagnostics.append({
+                            "code": "research_erreur_serveur",
+                            "source": etiquette,
+                            "http_status": erreur.statut_http,
+                            "echecs_consecutifs": echecs_serveur_research_consecutifs,
+                            "poursuite_autorisee": poursuivre,
+                        })
+                        if poursuivre:
+                            # Le média reste en erreur dans le bilan, mais la
+                            # recherche peut continuer sur les autres comptes.
+                            job.update(
+                                status="discovering",
+                                message=(
+                                    f"{etiquette} : HTTP {erreur.statut_http} côté TikTok. "
+                                    "Source à reprendre ultérieurement ; "
+                                    "poursuite des autres médias."
+                                ),
+                            )
+                            job.pause(2.0)
+                            continue
+                        limitation_research = True
+                        job.update(
+                            status="finalizing",
+                            message=(
+                                "Research API : trois erreurs HTTP 5xx consécutives "
+                                "ou erreur serveur hors collecte Presse ; "
+                                "arrêt de précaution du lot."
+                            ),
+                        )
+                        break
                     limitation_research = True
-                    job.update(search_errors=job.search_errors + 1,
-                               status="finalizing",
-                               message="Research API : erreur ou accès refusé ; lot interrompu.")
+                    job.update(
+                        status="finalizing",
+                        message="Research API : refus d'accès, quota ou erreur non transitoire ; lot interrompu.",
+                    )
                     break
                 if isinstance(erreur, QuotaScrapingAtteint):
                     limitation_budget = True
@@ -2183,8 +2227,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if final_status == "completed":
                 final_status = "partial"
         if limitation_research:
-            final_message += (" Research API : lot arrêté dès le premier refus ; "
-                              "données déjà reçues conservées. Vérifier droits et quotas.")
+            final_message += (
+                " Research API : lot arrêté après un refus, une erreur non "
+                "transitoire ou plusieurs erreurs HTTP 5xx consécutives. "
+                "Données déjà reçues conservées ; consulter le diagnostic.")
             final_status = "partial" if links else "failed"
         if limitation_tiktok:
             final_message += (" TikTok HTTP 429 : découverte arrêtée immédiatement. "
