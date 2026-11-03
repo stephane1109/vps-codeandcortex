@@ -107,8 +107,8 @@ class TestsRepriseHashtags(unittest.TestCase):
             hashtags_saisis=["17octobre"], nom_sauvegarde="Période stable",
             research_client_key="cle_test", research_client_secret="secret_test",
         )
-        self.assertRegex(options.date_debut, r"^\\d{4}-\\d{2}-\\d{2}$")
-        self.assertRegex(options.date_fin, r"^\\d{4}-\\d{2}-\\d{2}$")
+        self.assertRegex(options.date_debut, r"^\d{4}-\d{2}-\d{2}$")
+        self.assertRegex(options.date_fin, r"^\d{4}-\d{2}-\d{2}$")
         ancien = options.model_dump()
         reouvert = StartRequest.model_validate(
             ancien, context={"reprise_historique": True})
