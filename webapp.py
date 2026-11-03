@@ -2638,7 +2638,9 @@ class Manager:
         if archive is None:
             raise HTTPException(404, "Collecte absente de l'historique privé.")
         ligne, dossier, manifeste = archive
-        parametres = dict(manifeste.get("parametres") or {})
+        from collecte.presse import filtrer_medias_archives
+        parametres = filtrer_medias_archives(
+            manifeste.get("parametres") or {})
         if parametres.get("source_collecte") != "presse":
             raise HTTPException(422, "La reprise par sources concerne les collectes Presse et médias.")
         if parametres.get("presse_moteur") != "research":
@@ -2740,7 +2742,9 @@ class Manager:
                 raise HTTPException(409, "Cette collecte est active dans une autre session.")
             if job is not None and job.owner == owner and (not job.historique or job.busy or job.reprise):
                 return job
-            params = StartRequest.model_validate(manifeste["parametres"])
+            from collecte.presse import filtrer_medias_archives
+            params = StartRequest.model_validate(
+                filtrer_medias_archives(manifeste["parametres"]))
             job = Job(owner, params, self.data_dir, identifiant=identifiant,
                       archive_directory=dossier, owner_historique=cookie)
             def charger(nom):
