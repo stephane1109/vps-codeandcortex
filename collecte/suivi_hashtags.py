@@ -142,6 +142,30 @@ def exporter_bilan_hashtags_csv(bilan):
     return ("\ufeff" + tampon.getvalue()).encode("utf-8")
 
 
+def identifier_collecte_bilan_hashtags_csv(contenu):
+    """Identifier un corpus à rouvrir sans autoriser sa consultation par le CSV."""
+    import re
+    if not isinstance(contenu, bytes) or len(contenu) > 2_000_000:
+        raise ValueError("Bilan hashtags invalide ou supérieur à 2 Mo.")
+    try:
+        texte = contenu.decode("utf-8-sig")
+    except UnicodeDecodeError as erreur:
+        raise ValueError("Le CSV doit être encodé en UTF-8.") from erreur
+    lecteur = csv.DictReader(io.StringIO(texte), delimiter=";")
+    if not lecteur.fieldnames or not set(COLONNES).issubset(lecteur.fieldnames):
+        raise ValueError("Le fichier n'est pas un bilan hashtags ScrapTikTok.")
+    identifiants = {
+        str(ligne.get("collecte_id") or "").strip()
+        for ligne in lecteur
+    }
+    if len(identifiants) != 1:
+        raise ValueError("Le bilan doit appartenir à une seule collecte.")
+    identifiant = next(iter(identifiants))
+    if not re.fullmatch(r"[a-f0-9]{32}", identifiant):
+        raise ValueError("Identifiant du corpus invalide.")
+    return identifiant
+
+
 def importer_bilan_hashtags_csv(contenu, *, collecte_id, hashtags_autorises):
     """Valider identité et statuts sans faire confiance à un CSV externe."""
     if not isinstance(contenu, bytes) or len(contenu) > 2_000_000:
