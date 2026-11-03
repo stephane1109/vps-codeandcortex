@@ -136,6 +136,35 @@ def ajouter_type_media(donnees: pd.DataFrame) -> pd.DataFrame:
 
 
 
+def preparer_tableau_inerties(contenu: bytes) -> pd.DataFrame:
+    """Présenter sans recalcul les inerties des axes produites par FactoMineR."""
+    if not contenu:
+        raise ValueError("Le tableau des inerties FactoMineR est vide.")
+    try:
+        inerties = pd.read_csv(
+            io.BytesIO(contenu), sep=";", decimal=",", encoding="utf-8-sig"
+        )
+    except (ValueError, pd.errors.ParserError, UnicodeError) as erreur:
+        raise ValueError(
+            "Impossible de lire le tableau des inerties FactoMineR."
+        ) from erreur
+    # FactoMineR::CA retourne, dans cet ordre : valeur propre,
+    # pourcentage d'inertie et pourcentage cumulé.
+    if inerties.empty or inerties.shape[1] < 4:
+        raise ValueError("Le tableau des inerties FactoMineR est incomplet.")
+    valeurs = inerties.iloc[:, 1:4].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    if valeurs.isna().any().any():
+        raise ValueError("Certaines valeurs d'inertie FactoMineR sont invalides.")
+    return pd.DataFrame({
+        "Axe": [f"Axe {numero}" for numero in range(1, len(valeurs) + 1)],
+        "Valeur propre": valeurs.iloc[:, 0].round(4).to_numpy(),
+        "Inertie (%)": valeurs.iloc[:, 1].round(2).to_numpy(),
+        "Inertie cumulée (%)": valeurs.iloc[:, 2].round(2).to_numpy(),
+    })
+
+
 def decrire_variables(donnees: pd.DataFrame, maximum_modalites: int = 40) -> pd.DataFrame:
     """Établit l'inventaire des colonnes et distingue les variables à recoder."""
     descriptions = []
