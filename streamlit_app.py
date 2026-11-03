@@ -940,9 +940,11 @@ with onglet_collecte:
             )
             st.markdown(
                 "**Mode test.** L'option \"Faire un test sur 10 publications\" "
-                "arrête la collecte après 10 publications consultées au total. "
-                "Les commentaires et les exports sélectionnés sont conservés ; "
-                "décochez la case pour lancer ensuite la collecte complète."
+                "limite à dix le nombre de publications conformes examinées. "
+                "TikTok peut retourner davantage de candidats qui ne respectent "
+                "pas les hashtags ou les autres critères ; ils sont comptabilisés "
+                "séparément. Une recherche peut se terminer avec moins de dix "
+                "textes exploitables. Les exports sélectionnés sont conservés."
             )
             st.markdown(
                 "**Arrêts et limites.** Une erreur, un refus d'accès, un quota "
@@ -1051,22 +1053,26 @@ with onglet_collecte:
             st.checkbox(
                 "Faire un test sur 10 publications",
                 key="test_research_10_publications", disabled=occupe,
-                help="Facultatif. Limite la collecte à 10 publications consultées "
-                     "au total, tous comptes ou hashtags confondus. Les filtres, "
-                     "les commentaires et les exports sélectionnés sont conservés. "
-                     "Décochez cette option pour lancer le scraping complet."
+                help="Facultatif. Limite la lecture à dix publications conformes "
+                     "aux hashtags, toutes sources confondues. Le nombre brut "
+                     "de candidats renvoyés par l'API peut être supérieur. "
+                     "Les langues et les autres filtres peuvent encore exclure "
+                     "des textes. Les exports restent disponibles."
             )
             if st.session_state.get("test_research_10_publications", False):
                 st.caption(
-                    "Mode test : 10 publications au maximum, toutes sources confondues. "
-                    "Les résultats sont exportables ; la collecte complète "
-                    "ne démarre pas automatiquement."
+                    "Mode test : au maximum 10 publications conformes aux hashtags "
+                    "sont examinées. Les candidats API non conformes sont comptés "
+                    "séparément. Les résultats sont exportables ; la collecte "
+                    "complète ne démarre pas automatiquement."
                 )
             else:
                 st.caption(
-                    "Research API : collecte automatique des publications accessibles, "
-                    "sans plafond local de posts ou de pages. La durée du traitement "
-                    "et les quotas officiels de TikTok restent applicables."
+                    "Research API : les vidéos conformes sont traitées à chaque "
+                    "page reçue (100 candidats maximum par requête), sans attendre "
+                    "la fin de la pagination. Il n'existe pas de plafond local "
+                    "de vidéos ; le budget d'appels Research partagé reste limité "
+                    "et les données sont enregistrées progressivement."
                 )
         else:
             st.number_input(
@@ -1834,6 +1840,30 @@ with onglet_collecte:
                            + "Les autres filtres peuvent réduire le nombre de publications exportées.")
             else:
                 st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
+            if (actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"):
+                st.caption(
+                    f"Research API : {actuel.get('candidats_research_lot', 0)} "
+                    f"vidéo(s) reçue(s), "
+                    f"{compteurs.get('retenues', 0) if compteurs else 0} "
+                    f"conforme(s) aux hashtags, "
+                    f"{actuel.get('processed', 0)} traitée(s), "
+                    f"{actuel.get('captions', 0)} texte(s) retenu(s) dans le TXT, "
+                    f"{actuel.get('requetes_research_lot', 0)} requête(s) de recherche.")
+                quota_local = actuel.get("quota_research_local") or {}
+                if quota_local:
+                    st.caption(
+                        f"Budget Research local partagé aujourd'hui (UTC) : "
+                        f"{quota_local.get('appels_enregistres', 0)} / "
+                        f"{quota_local.get('plafond_local', 1000)} appel(s) ; "
+                        f"{quota_local.get('reste_local', 0)} restant(s). "
+                        "Ce chiffre ne mesure pas les appels effectués "
+                        "en dehors de cette instance ScrapTikTok.")
+                if actuel.get('ecartes_hashtags_research_lot', 0):
+                    st.caption(
+                        f"{actuel['ecartes_hashtags_research_lot']} candidat(s) "
+                        "écarté(s) car les métadonnées ne correspondent pas "
+                        "à la recherche stricte des hashtags.")
             if (actuel.get("test_research_10_publications")
                     and actuel.get("moteur_actif") == "research"
                     and not actuel.get("busy")):
