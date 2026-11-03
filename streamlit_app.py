@@ -106,12 +106,15 @@ if "initialise" not in st.session_state:
         st.error(str(erreur))
         st.stop()
 
-    # Préserver les collectes enrichies terminées (notamment Presse et médias)
-    # pour les exploiter dans Multimodale après rechargement de l'interface.
+    # Préserver les résultats déjà récupérés même si le ZIP complet
+    # n'a pas été finalisé avant une reconnexion Streamlit.
     if ancienne and not (
         ancienne.get("busy", False)
         or ancienne.get("video_busy", False)
         or ancienne.get("archive_prete", False)
+        or ancienne.get("can_download", False)
+        or int(ancienne.get("sauvegarde_postgres_publications") or 0) > 0
+        or int(ancienne.get("processed") or 0) > 0
     ):
         ancienne = None
 
@@ -1508,6 +1511,36 @@ with onglet_collecte:
                     lancer("/api/jobs",valeurs)
 
 with onglet_collecte:
+    if not collecte and cookie_historique:
+        # La perte de la session Streamlit ne doit pas rendre les
+        # publications PostgreSQL impossibles à télécharger.
+        try:
+            sauvegardes_recuperables = (
+                api("/api/base-donnees").get("sauvegardes") or []
+            )
+        except RuntimeError as erreur:
+            st.warning("Récupération PostgreSQL indisponible : " + str(erreur))
+        else:
+            collectes_recuperables = [
+                ligne for ligne in sauvegardes_recuperables
+                if ligne.get("type") == "collecte"
+                and int(ligne.get("publications") or 0) > 0
+            ]
+            if collectes_recuperables:
+                derniere_pg = collectes_recuperables[0]
+                st.info(
+                    "Une collecte est enregistrée dans PostgreSQL, "
+                    "même si la session Streamlit ne l'affiche plus."
+                )
+                st.caption(
+                    f"Dernière collecte : {derniere_pg['nom']} — "
+                    f"{derniere_pg['publications']} publication(s) conservée(s)."
+                )
+                st.link_button(
+                    "Récupérer la dernière collecte (ZIP PostgreSQL)",
+                    f"/api/base-donnees/collecte/{derniere_pg['id']}/archive.zip",
+                    use_container_width=True,
+                )
     if st.session_state.get("recherche_plan_cree"):
         st.success("Collecte Research programmée : données enregistrées dans SQLite.")
         st.session_state.pop("recherche_plan_cree", None)
@@ -2168,6 +2201,17 @@ with onglet_collecte:
                         else:
                             st.success("La sauvegarde a été enregistrée dans PostgreSQL.")
                             st.rerun()
+            if (not actuel.get("archive_prete")
+                    and int(actuel.get("sauvegarde_postgres_publications") or 0) > 0):
+                st.warning(
+                    "Le ZIP local n'est pas encore disponible. Les publications "
+                    "déjà enregistrées dans PostgreSQL sont récupérables."
+                )
+                st.link_button(
+                    "Récupérer les publications sauvegardées (ZIP PostgreSQL)",
+                    f"/api/base-donnees/collecte/{actuel['id']}/archive.zip",
+                    use_container_width=True,
+                )
             if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]):
                 st.link_button(
                     "Télécharger les résultats",
