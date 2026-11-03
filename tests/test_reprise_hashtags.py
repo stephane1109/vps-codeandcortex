@@ -125,6 +125,22 @@ class TestsRepriseHashtags(unittest.TestCase):
             [ligne["etat"] for ligne in bilan],
             ["non_commencee", "non_commencee"])
 
+    def test_interface_importe_fonctions_suivi_hashtags(self):
+        """Les fonctions du bilan et de la reprise doivent être importées."""
+        import ast
+        racine = Path(__file__).resolve().parents[1]
+        arbre = ast.parse((racine / "streamlit_app.py").read_text("utf-8"))
+        noms_importes = {
+            alias.name
+            for noeud in ast.walk(arbre)
+            if isinstance(noeud, ast.ImportFrom)
+            and noeud.module == "collecte.suivi_hashtags"
+            for alias in noeud.names
+        }
+        self.assertTrue({
+            "hashtags_a_reprendre", "exporter_bilan_hashtags_csv"
+        }.issubset(noms_importes))
+
     def test_moteur_et_interface_disposent_du_meme_export(self):
         racine = Path(__file__).resolve().parents[1]
         interface = (racine / "streamlit_app.py").read_text("utf-8")
