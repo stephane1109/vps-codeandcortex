@@ -47,6 +47,7 @@ def initialiser_donnees_reprise(job, dossier, manifeste, medias_selectionnes):
     if not isinstance(evenements, list):
         raise ValueError("Le journal des sources est absent : reprise automatique impossible.")
     job.publications = publications
+    job.publications_avant_reprise = len(publications)
     job.records = [p for p in publications if isinstance(p, dict) and p.get("retenue")]
     for nom, attribut in (
         ("commentaires.json", "commentaires"),
