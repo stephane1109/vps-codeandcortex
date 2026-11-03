@@ -1807,13 +1807,10 @@ with onglet_collecte:
             if compteurs:
                 aides_retenues = {
                     "hashtags": (
-                        "Nombre de publications TikTok distinctes retenues pour lecture, avant vérification "
-                        "des hashtags dans les légendes et avant les autres filtres. La limite est GLOBALE : "
-                        "avec 50 posts et plusieurs hashtags, au plus 50 vidéos distinctes peuvent être retenues, "
-                        "en mode OU comme en mode ET. La collecte répartit ce budget entre les hashtags. "
-                        "Les variantes accentuées partagent le quota du hashtag initial ; les doublons "
-                        "entre hashtags ne sont lus qu'une fois. Le choix ET/OU s'applique ensuite "
-                        "aux légendes pour déterminer les textes exportés."
+                        "En Research, nombre de vidéos dont les hashtags ont été "
+                        "vérifiés dès la découverte, avant les filtres de langue, "
+                        "de date et de texte IA. Les doublons ne sont lus qu'une fois. "
+                        "Les autres moteurs appliquent aussi le filtrage après lecture."
                     ),
                     "comptes": (
                         "Nombre de publications distinctes trouvées sur les profils choisis, avant filtrage "
@@ -1828,11 +1825,26 @@ with onglet_collecte:
                     ),
                 }
                 colonnes = st.columns(4)
-                for colonne, cle, titre in zip(colonnes,
-                        ("decouvertes", "retenues", "traitees", "exportees"),
-                        ("Découvertes", "Retenues pour lecture", "Traitées", "Exportées dans le TXT")):
-                    colonne.metric(titre, compteurs[cle],
-                        help=aides_retenues.get(actuel.get("source_collecte")) if cle == "retenues" else None)
+                mode_research_hashtags = (
+                    actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research")
+                titres = (
+                    ("Candidats API", "Conformes aux hashtags", "Traitées",
+                     "Exportées dans le TXT")
+                    if mode_research_hashtags else
+                    ("Découvertes", "Retenues pour lecture", "Traitées",
+                     "Exportées dans le TXT"))
+                for colonne, cle, titre in zip(
+                        colonnes, ("decouvertes", "retenues", "traitees", "exportees"),
+                        titres):
+                    valeur = (
+                        actuel.get("candidats_research_lot", 0)
+                        if mode_research_hashtags and cle == "decouvertes"
+                        else compteurs[cle])
+                    colonne.metric(
+                        titre, valeur,
+                        help=aides_retenues.get(actuel.get("source_collecte"))
+                        if cle == "retenues" else None)
                 st.caption(("Découvertes : publications des médias sélectionnés ; retenues : auteur vérifié. Aucun filtre par hashtag. "
                             if actuel.get("source_collecte") == "presse" else
                             "Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues : auteur conforme ; filtrage hashtags/texte effectué après lecture. "
@@ -1871,10 +1883,14 @@ with onglet_collecte:
                         "Diagnostic du test Research — textes retenus et exclus",
                         expanded=not bool(actuel.get("captions"))):
                     st.caption(
-                        "Les dix publications sont réparties entre les médias choisis. "
-                        "Le filtre français évalue chaque légende et non la nationalité "
-                        "du média. Une légende courte de langue indéterminée est "
-                        "désormais conservée dans le TXT et identifiée comme telle."
+                        ("En mode Hashtags, les candidats non conformes sont "
+                         "écartés avant lecture. Le nombre de vidéos reçues "
+                         "par l'API peut donc dépasser le nombre traité. "
+                         if actuel.get("source_collecte") == "hashtags" else
+                         "Le test répartit les publications entre les médias choisis. ")
+                        + "Le filtre français évalue chaque légende, et non "
+                        "la nationalité du compte. Une légende courte dont "
+                        "la langue reste indéterminée est conservée dans le TXT."
                     )
                     details = actuel.get("apercu_filtrage") or []
                     if details:
