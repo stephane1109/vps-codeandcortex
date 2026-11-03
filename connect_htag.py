@@ -63,6 +63,21 @@ class ConnexionHashtag(ConnexionPresse):
                 })
         self.hashtags = tuple(s["hashtag"] for s in sources)
         self.configurer_moteur(parametres, getattr(parametres, "hashtag_moteur", "navigateur"))
+        # Lorsque seuls les hashtags exacts comptent, Research peut faire
+        # directement une requête ET : inutile de parcourir leur union.
+        self._recherche_et_stricte = (
+            self.moteur_collecte == "research"
+            and getattr(parametres, "operator", "AND") == "AND"
+            and len(demandes) > 1
+            and not getattr(parametres, "rechercher_dans_texte", False)
+            and not getattr(parametres, "variantes_accents", False))
+        self._hashtags_et = demandes if self._recherche_et_stricte else ()
+        self._recherche_et_executee = False
+        if self._recherche_et_stricte:
+            # La requête unique dispose du budget global et non d'une
+            # fraction réservée artificiellement à chaque hashtag.
+            self._quota_hashtag = {
+                demande: self._budget_decouverte for demande in demandes}
         self._cache_profils = set()
         self._metadonnees_profils = {}
         self._limite_profils_api = 10
@@ -128,6 +143,16 @@ class ConnexionHashtag(ConnexionPresse):
         if hashtag not in getattr(self, "hashtags", ()):
             raise ValueError("Ce hashtag ne fait pas partie de la recherche.")
         rapport["hashtag_url"] = "https://www.tiktok.com/tag/" + quote(hashtag)
+        if (self.moteur_collecte == "research"
+                and getattr(self, "_recherche_et_stricte", False)
+                and self._recherche_et_executee):
+            rapport.update(
+                discovered_urls=[],
+                discovery_stop="recherche_et_deja_effectuee",
+                bilan_recherche=(
+                    "Les hashtags sont déjà couverts par la recherche "
+                    "Research conjointe ET ; aucune requête supplémentaire."))
+            return []
         demande = source.get("hashtag_demande", hashtag)
         retenus = self._ids_par_hashtag.setdefault(demande, set())
         objectif_tag = self._quota_hashtag.get(demande, self.arguments.limit)
@@ -149,12 +174,38 @@ class ConnexionHashtag(ConnexionPresse):
                            min(restant, max(1, math.ceil(restant / nombre_variantes))))
         if self.moteur_collecte == "research":
             from collecte.presse_research import collecter_videos_presse_research
+            requete_conjointe = getattr(self, "_recherche_et_stricte", False)
             trouves = collecter_videos_presse_research(
-                None, arguments.limit, rapport, hashtag=hashtag,
+                None, arguments.limit, rapport,
+                hashtag=None if requete_conjointe else hashtag,
+                hashtags=list(self._hashtags_et) if requete_conjointe else None,
+                operateur="AND",
                 debut=self.research_debut, fin=self.research_fin,
                 check=self.verifier, progress=progression,
                 credentiels=self.research_credentiels,
                 exclusions=self.hashtags_exclus)
+            if requete_conjointe:
+                self._recherche_et_executee = True
+            # Filtrer immédiatement les métadonnées officielles avant de
+            # consommer le budget de vidéos distinctes à traiter.
+            valider = getattr(self, "valider_fiche_hashtags_research", None)
+            if valider is not None:
+                fiches = rapport.get("metadonnees_api") or {}
+                conformes = []
+                hors_criteres = 0
+                sans_metadonnees = 0
+                for lien in trouves:
+                    identite = canonical_post(lien)
+                    fiche = fiches.get(str(identite[0])) if identite else None
+                    if not isinstance(fiche, dict):
+                        sans_metadonnees += 1
+                    elif not valider(fiche):
+                        hors_criteres += 1
+                    else:
+                        conformes.append(lien)
+                trouves = conformes
+                rapport["ecartes_combinaison_hashtags"] = hors_criteres
+                rapport["ecartes_metadonnees_absentes"] = sans_metadonnees
         else:
             trouves = collecter_hashtag(
                 self.obtenir_navigateur(), arguments, rapport,
