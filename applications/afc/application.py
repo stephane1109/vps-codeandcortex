@@ -574,11 +574,9 @@ def construire_interface_acm(
         st.info("Sélectionnez au moins trois variables pour l'ACM.")
         return
 
-    st.subheader("Variable supplémentaire")
     st.caption(
-        "Choisissez une ou plusieurs variables à afficher sur les axes de "
-        "l'ACM, sans participer à leur construction. Laissez ce champ vide "
-        "si vous n'en souhaitez pas."
+        "Choisissez une ou plusieurs variables à projeter sur l'ACM "
+        "sans modifier les axes."
     )
     options_supplementaires = [
         nom for nom in noms_variables if nom not in variables_actives
