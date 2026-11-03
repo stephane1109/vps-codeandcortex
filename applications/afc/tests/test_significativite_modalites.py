@@ -35,22 +35,22 @@ class TestsSignificativiteModalites(unittest.TestCase):
         source = MOTEUR_R.read_text(encoding="utf-8")
         interface = (DOSSIER_AFC / "application.py").read_text(
             encoding="utf-8")
-        self.assertIn("stats::chisq.test(", source)
+        self.assertIn("FactoMineR::CA(", source)
+        self.assertIn("FactoMineR::descfreq(", source)
         self.assertIn('type_modalite == "ligne"', source)
-        self.assertIn('effectifs_autres <- colSums(tableau) - effectifs_modalite',
-                      source)
-        self.assertIn('effectifs_autres <- rowSums(tableau) - effectifs_modalite',
-                      source)
-        self.assertIn("significativite_modalites$p_value <= 0.05", source)
+        self.assertIn("significativite_modalites$significative_005", source)
+        self.assertIn("p_values <= 0.05", source)
         self.assertIn('if (deux_axes) {', source)
         self.assertIn("abscisses_lignes[visibles_lignes]", source)
         self.assertIn("abscisses_colonnes[visibles_colonnes]", source)
         self.assertIn("resultat$row$coord", source)
         self.assertIn("resultat$col$coord", source)
-        self.assertIn("18_significativite_modalites.csv", source)
-        self.assertIn("18_significativite_modalites.csv", interface)
+        self.assertIn("significativite_modalites_factominer.csv", source)
+        self.assertIn("significativite_modalites_factominer.csv", interface)
         self.assertIn("p ≤ 0,05", interface)
-        self.assertIn('p.adjust(', source)
+        self.assertNotIn("p.adjust(", source)
+        self.assertNotIn("p_ajustee_bh", source)
+        self.assertNotIn("tester_modalite <- function(", source)
 
     @unittest.skipUnless(
         environnement_r_disponible(),
@@ -82,7 +82,7 @@ class TestsSignificativiteModalites(unittest.TestCase):
             self.assertEqual(
                 processus.returncode, 0,
                 processus.stderr or processus.stdout)
-            with (sorties / "18_significativite_modalites.csv").open(
+            with (sorties / "significativite_modalites_factominer.csv").open(
                     encoding="utf-8", newline="") as fichier:
                 resultats = list(csv.DictReader(fichier, delimiter=";"))
             self.assertEqual(len(resultats), 7)
@@ -91,8 +91,7 @@ class TestsSignificativiteModalites(unittest.TestCase):
                 if ligne["type_modalite"] == "ligne"
                 and ligne["modalite"] == "D"
             )
-            self.assertGreater(
-                float(ligne_neutre["p_value"].replace(",", ".")), 0.05)
+            self.assertEqual(ligne_neutre["p_value_min"], "")
             self.assertEqual(ligne_neutre["significative_005"], "FALSE")
             ligne_associee = next(
                 ligne for ligne in resultats
@@ -100,8 +99,11 @@ class TestsSignificativiteModalites(unittest.TestCase):
                 and ligne["modalite"] == "A"
             )
             self.assertLessEqual(
-                float(ligne_associee["p_value"].replace(",", ".")), 0.05)
+                float(ligne_associee["p_value_min"].replace(",", ".")), 0.05)
             self.assertEqual(ligne_associee["significative_005"], "TRUE")
+            self.assertEqual(
+                ligne_associee["methode"],
+                "FactoMineR::descfreq (test hypergéométrique)")
             self.assertTrue((sorties / "13_plan_factoriel.png").is_file())
             self.assertTrue((sorties / "14_plan_factoriel.pdf").is_file())
             self.assertTrue((sorties / "07_coordonnees_lignes.csv").is_file())
