@@ -6,7 +6,7 @@ Cette application Streamlit importe un fichier CSV puis calcule **une analyse fa
 
 Importer un CSV (détection des séparateurs `;`, `,`, tabulation ou `|`, avec choix manuel possible), puis choisir une variable en lignes et une variable en colonnes. Les classes catégorielles de ScrapTikTok sont déjà prises en charge, notamment `vues_classe`, `likes_classe`, `commentaires_classe`, `partages_classe`, `favoris_classe`, `classe_taux_engagement`, `classe_abonnes`, `is_verified`, `region_code`, `type_media`.
 
-Un mode de simulation (effectif et graine configurables) permet également de tester l'AFC sur des données fictives, sans les confondre avec le corpus empirique.
+L'analyse s'effectue exclusivement à partir d'un fichier CSV ou TXT importé par l'utilisateur. Aucun corpus de démonstration ni générateur de données fictives n'est proposé dans l'interface.
 
 Le panneau de paramétrage permet de conserver uniquement les lignes `retenue`, de supprimer les doublons selon `publication_id`, d'exclure les modalités indéterminées, de traiter les cellules vides comme une modalité ou de les exclure, de filtrer sur une troisième variable, de limiter la cardinalité, et de régler le nombre de simulations Monte-Carlo.
 
