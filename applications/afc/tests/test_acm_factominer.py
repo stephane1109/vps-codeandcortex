@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import math
 import os
 import shutil
 import subprocess
@@ -129,6 +130,14 @@ class TestsACM(unittest.TestCase):
         self.assertIn("FactoMineR::MCA(", moteur_acm)
         self.assertIn("FactoMineR::descfreq(", moteur_afc)
         self.assertIn("FactoMineR::dimdesc(", moteur_acm)
+        self.assertIn("matrice_vtest <- as.matrix(resultat$var$v.test)", moteur_acm)
+        self.assertIn("stats::pnorm(-abs(valeurs_vtest))", moteur_acm)
+        self.assertIn('"20_diagnostic_filtre_pvalue.csv"', moteur_acm)
+        self.assertIn('"20_diagnostic_filtre_pvalue.csv"', interface)
+        self.assertIn("Contrôler les p-values de toutes les modalités", interface)
+        self.assertNotIn(
+            "match(rownames(caracteristiques), noms_modalites)", moteur_acm
+        )
         self.assertIn('method = methode_calcul', moteur_acm)
         self.assertIn('"Tableau disjonctif complet (TDC)"', interface)
         self.assertIn('"Tableau de Burt"', interface)
@@ -204,6 +213,7 @@ class TestsACM(unittest.TestCase):
                 "14_plan_factoriel_significatif.pdf",
                 "15_inerties.png",
                 "19_couleurs_variables.csv",
+                "20_diagnostic_filtre_pvalue.csv",
                 "significativite_modalites_factominer.csv",
             ]:
                 self.assertTrue((sorties / nom).is_file(), f"Fichier absent : {nom}")
@@ -219,8 +229,21 @@ class TestsACM(unittest.TestCase):
             self.assertTrue(
                 any(m["significative_005"] == "TRUE" for m in modalites),
                 "Le filtre ACM doit reconnaître les modalités associées "
-                "aux axes avec FactoMineR::dimdesc.",
+                "aux axes avec les valeurs-tests FactoMineR.",
             )
+            for ligne in modalites:
+                self.assertNotEqual(
+                    ligne["p_value_min"], "",
+                    "Chaque modalité doit avoir une p-value calculée.",
+                )
+                p_1 = float(ligne["p_value_axe_1"].replace(",", "."))
+                v_1 = float(ligne["v_test_axe_1"].replace(",", "."))
+                attendu = math.erfc(abs(v_1) / math.sqrt(2))
+                self.assertAlmostEqual(p_1, attendu, places=8)
+                self.assertEqual(
+                    ligne["significative_005"] == "TRUE",
+                    float(ligne["p_value_min"].replace(",", ".")) <= 0.05,
+                )
             with (
                 sorties / "06_valeurs_propres_inerties.csv"
             ).open(encoding="utf-8", newline="") as fichier:
@@ -268,6 +291,7 @@ class TestsACM(unittest.TestCase):
                 "13_plan_factoriel_significatif.png",
                 "18_comparaison_inerties_tdc_burt.csv",
                 "19_couleurs_variables.csv",
+                "20_diagnostic_filtre_pvalue.csv",
                 "significativite_modalites_factominer.csv",
             ]:
                 self.assertTrue(
@@ -284,6 +308,15 @@ class TestsACM(unittest.TestCase):
             )
             self.assertIn("COMPARAISON DES INERTIES", rapport_burt)
             self.assertIn("dim 1", rapport_burt)
+            self.assertIn("VALEURS-TESTS DE FactoMineR::MCA", rapport_burt)
+            with (
+                sorties_burt / "significativite_modalites_factominer.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                modalites_burt = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(len(modalites_burt), 9)
+            self.assertTrue(all(
+                ligne["p_value_min"] for ligne in modalites_burt
+            ))
             with (sorties_burt / "19_couleurs_variables.csv").open(
                 encoding="utf-8", newline=""
             ) as fichier:
@@ -364,6 +397,7 @@ class TestsACM(unittest.TestCase):
                 "15_inerties.png",
                 "18_comparaison_inerties_tdc_burt.csv",
                 "19_couleurs_variables.csv",
+                "20_diagnostic_filtre_pvalue.csv",
             ):
                 self.assertTrue((sortie / nom).is_file(), nom)
             with (sortie / "19_couleurs_variables.csv").open(
