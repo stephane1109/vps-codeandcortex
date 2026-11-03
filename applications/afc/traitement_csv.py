@@ -381,6 +381,71 @@ class PreparationACM:
     effectif_final: int
     effectif_avant_exclusion_modalites: int
     modalites_exclues: dict[str, list[str]]
+    variables_actives: tuple[str, ...] = ()
+    variables_supplementaires_qualitatives: tuple[str, ...] = ()
+    variables_supplementaires_quantitatives: tuple[str, ...] = ()
+
+
+def convertir_supplementaire_quantitative(
+    valeurs: pd.Series, nom: str
+) -> pd.Series:
+    """Préparer une mesure numérique pour quali.sup/quanti.sup de FactoMineR.
+
+    Les données non renseignées restent manquantes. Aucun calcul
+    statistique ni remplacement de valeur manquante n'est réalisé ici.
+    """
+    texte = (
+        valeurs.fillna("").astype(str).str.strip()
+        .str.replace("\u00a0", "", regex=False)
+        .str.replace("\u202f", "", regex=False)
+        .str.replace(" ", "", regex=False)
+        .str.replace("%", "", regex=False)
+    )
+    # Gérer les décimales françaises et les séparateurs de milliers.
+    mixtes = texte.str.contains(",", regex=False) & texte.str.contains(
+        ".", regex=False
+    )
+    virgule_decimale = mixtes & (
+        texte.str.rfind(",") > texte.str.rfind(".")
+    )
+    point_decimal = mixtes & ~virgule_decimale
+    texte.loc[virgule_decimale] = (
+        texte.loc[virgule_decimale].str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    texte.loc[point_decimal] = texte.loc[point_decimal].str.replace(
+        ",", "", regex=False
+    )
+    seuls_milliers = (
+        ~mixtes
+        & texte.str.fullmatch(r"[+-]?\d{1,3}(?:[.,]\d{3})+")
+        .fillna(False)
+    )
+    texte.loc[seuls_milliers] = (
+        texte.loc[seuls_milliers].str.replace(",", "", regex=False)
+        .str.replace(".", "", regex=False)
+    )
+    texte = texte.str.replace(",", ".", regex=False)
+    manquantes = texte.str.lower().isin({
+        "", "na", "n/a", "nan", "null", "none", "indisponible",
+        "nonrenseigné", "non_renseigné", "non évaluée", "inconnu",
+    })
+    nombres = pd.to_numeric(texte.mask(manquantes), errors="coerce")
+    invalides = ~manquantes & nombres.isna()
+    if invalides.any():
+        exemple = valeurs.loc[invalides].iloc[0]
+        raise ValueError(
+            f"Variable quantitative supplémentaire '{nom}' : "
+            f"valeur non numérique '{exemple}'. "
+            "Sélectionner une mesure numérique ou corriger le CSV."
+        )
+    if nombres.notna().sum() < 3 or nombres.nunique(dropna=True) < 2:
+        raise ValueError(
+            f"Variable quantitative supplémentaire '{nom}' : "
+            "au moins trois valeurs valides et deux valeurs distinctes "
+            "sont nécessaires pour la projection."
+        )
+    return nombres.astype(float)
 
 
 def preparer_acm(
@@ -394,6 +459,8 @@ def preparer_acm(
     variable_filtre: str | None = None,
     modalites_filtre: list[str] | None = None,
     modalites_a_exclure: dict[str, list[str]] | None = None,
+    variables_supplementaires_qualitatives: list[str] | None = None,
+    variables_supplementaires_quantitatives: list[str] | None = None,
 ) -> PreparationACM:
     """Préparer au moins trois variables qualitatives sans calcul statistique.
 
@@ -404,9 +471,26 @@ def preparer_acm(
         raise ValueError(
             "L'ACM exige au moins trois variables catégorielles distinctes."
         )
-    inconnues = [nom for nom in variables if nom not in donnees.columns]
+    supplementaires_qualitatives = list(
+        dict.fromkeys(variables_supplementaires_qualitatives or [])
+    )
+    supplementaires_quantitatives = list(
+        dict.fromkeys(variables_supplementaires_quantitatives or [])
+    )
+    toutes_variables = [
+        *variables, *supplementaires_qualitatives,
+        *supplementaires_quantitatives,
+    ]
+    inconnues = [
+        nom for nom in toutes_variables if nom not in donnees.columns
+    ]
     if inconnues:
         raise ValueError("Variables absentes du CSV : " + ", ".join(inconnues))
+    if len(set(toutes_variables)) != len(toutes_variables):
+        raise ValueError(
+            "Une variable ne peut pas être simultanément active et "
+            "supplémentaire, ni posséder deux statuts supplémentaires."
+        )
 
     observations = donnees
     effectif_initial = len(observations)
@@ -481,12 +565,45 @@ def preparer_acm(
                 f"ACM impossible : '{nom}' possède {nombre} modalités "
                 f"(maximum : {maximum_modalites})."
             )
+    # Les valeurs supplémentaires sont ajoutées seulement après les
+    # exclusions actives : une variable illustrative ne retranche jamais
+    # d'observation et ne transforme pas les axes par filtrage indirect.
+    supplementaires = observations.loc[categories.index, [
+        *supplementaires_qualitatives,
+        *supplementaires_quantitatives,
+    ]].copy()
+    for nom in supplementaires_qualitatives:
+        supplementaires[nom] = (
+            supplementaires[nom].fillna("").astype(str).str.strip()
+            .replace("", "Valeur manquante")
+        )
+        nombre = supplementaires[nom].nunique()
+        if nombre < 2 or nombre > 100:
+            raise ValueError(
+                f"Variable qualitative supplémentaire '{nom}' : "
+                f"{nombre} modalités ; entre 2 et 100 sont nécessaires."
+            )
+    for nom in supplementaires_quantitatives:
+        supplementaires[nom] = convertir_supplementaire_quantitative(
+            supplementaires[nom], nom
+        )
+    donnees_acm = pd.concat(
+        [categories, supplementaires], axis=1
+    ).reset_index(drop=True)
+
     return PreparationACM(
-        donnees=categories.reset_index(drop=True),
+        donnees=donnees_acm,
         effectif_initial=effectif_initial,
         effectif_apres_filtre=effectif_apres_filtre,
         effectif_apres_dedoublonnage=effectif_apres_dedoublonnage,
         effectif_final=len(categories),
         effectif_avant_exclusion_modalites=effectif_avant_exclusion_modalites,
         modalites_exclues=exclusions_validees,
+        variables_actives=tuple(variables),
+        variables_supplementaires_qualitatives=tuple(
+            supplementaires_qualitatives
+        ),
+        variables_supplementaires_quantitatives=tuple(
+            supplementaires_quantitatives
+        ),
     )
