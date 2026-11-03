@@ -10,6 +10,7 @@ from unittest.mock import patch
 from stockage.postgres_consultation import (
     IDENTIFIANT, adresse_configuree, empreinte, valeur_colonne,
     archiver_collecte, importer_historique, preparer_tables,
+    compter_publications_collecte,
 )
 from stockage.colonnes_publications import (
     colonnes_publications, preparer_colonnes_publications,
@@ -66,6 +67,32 @@ class TestsPostgresConsultation(unittest.TestCase):
         self.assertFalse(IDENTIFIANT.fullmatch("a" * 31))
         self.assertFalse(IDENTIFIANT.fullmatch("a" * 32 + "_"))
         self.assertEqual(len(empreinte("cookie_prive")), 64)
+
+    def test_nombre_publications_pg_avant_reprise(self):
+        """Comparer une archive à ses lignes PostgreSQL, sans les modifier."""
+        connexion = ConnexionFictive()
+        connexion.curseur.fetchone = lambda: (895,)
+        with patch("stockage.postgres_consultation.ouvrir_connexion",
+                   return_value=connexion):
+            nombre = compter_publications_collecte("cookie_prive", "e" * 32)
+        self.assertEqual(nombre, 895)
+        requetes = [
+            (sql, valeurs) for sql, valeurs in connexion.curseur.executions
+            if "SELECT COUNT(p.publication_id)" in sql
+        ]
+        self.assertEqual(len(requetes), 1)
+        self.assertEqual(requetes[0][1],
+                         ("e" * 32, empreinte("cookie_prive")))
+        self.assertFalse(any("INSERT" in sql or "UPDATE" in sql
+                             for sql, _ in connexion.curseur.executions))
+
+    def test_compteur_pg_refuse_corpus_inconnu(self):
+        connexion = ConnexionFictive()
+        connexion.curseur.fetchone = lambda: None
+        with patch("stockage.postgres_consultation.ouvrir_connexion",
+                   return_value=connexion):
+            with self.assertRaisesRegex(ValueError, "introuvable"):
+                compter_publications_collecte("cookie_prive", "e" * 32)
 
     def test_extraction_compteurs_exacte(self):
         self.assertEqual(valeur_colonne(
