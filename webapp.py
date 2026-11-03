@@ -502,16 +502,13 @@ def hashtags_correspondants_publication(description, settings, hashtags_observes
             or (settings.variantes_accents
                 and normaliser_terme_texte(cle) in observations_normalisees)
         )
-        # Sans métadonnées, conserver le filtrage historique de la légende.
-        # Avec métadonnées, les mots du texte ne s'ajoutent que si l'option
-        # « Rechercher aussi dans le texte » a été cochée.
-        trouve_texte = (
-            (not observations or settings.rechercher_dans_texte)
-            and correspondance_hashtag(
-                description, hashtag,
-                rechercher_dans_texte=settings.rechercher_dans_texte,
-                variantes_accents=settings.variantes_accents)
-        )
+        # Un #hashtag explicitement écrit dans la légende reste une
+        # correspondance exacte, même si hashtag_names est incomplet.
+        # Seuls les mots sans # nécessitent l'option complémentaire.
+        trouve_texte = correspondance_hashtag(
+            description, hashtag,
+            rechercher_dans_texte=settings.rechercher_dans_texte,
+            variantes_accents=settings.variantes_accents)
         if trouve_api or trouve_texte:
             correspondants.append(hashtag)
     return correspondants
