@@ -93,6 +93,13 @@ class ReprendreCollectePayload(BaseModel):
     research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
 
 
+class ReprendreHashtagsPayload(BaseModel):
+    """Hashtags inachevés à compléter dans le corpus PostgreSQL original."""
+    hashtags: list[str] = Field(min_length=1, max_length=10)
+    research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
+
+
 class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
@@ -238,10 +245,11 @@ class StartRequest(BaseModel):
             raise ValueError(
                 "Une segmentation de profil nécessite la collecte du compteur correspondant.")
         if (self.profils_medias_variables and
-                (self.source_collecte != "presse" or self.presse_moteur != "research")):
+                (self.source_collecte not in {"presse", "hashtags"}
+                 or self.moteur_actif != "research")):
             raise ValueError(
-                "Les métriques des profils médias sont réservées à Presse et médias "
-                "avec Research API officielle.")
+                "Les métriques des profils sont disponibles en modes Presse et "
+                "Hashtags avec la Research API officielle.")
         if (self.collecter_republications_research and
                 (self.source_collecte != "presse" or self.presse_moteur != "research")):
             raise ValueError(
@@ -728,6 +736,8 @@ class Job:
         self.historique = archive_directory is not None
         self.reprise = bool(reprise)
         self.medias_reprise = []
+        self.hashtags_reprise = []
+        self.sources_reprise_hashtags = []
         self.reprise_decalage = 0
         self.publications_avant_reprise = 0
         self.settings = settings
@@ -965,6 +975,14 @@ class Job:
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "reprise": self.reprise, "medias_reprise": list(self.medias_reprise),
+                    "hashtags_reprise": list(self.hashtags_reprise),
+                    "bilan_hashtags_sources": (
+                        __import__("collecte.suivi_hashtags", fromlist=[
+                            "etablir_bilan_hashtags"]).etablir_bilan_hashtags(
+                            self.settings.hashtags, self.settings.variantes_accents,
+                            self.journal, source_en_cours=self.source_en_cours_id,
+                            termine=not self.busy, collecte_id=self.id)
+                        if self.settings.source_collecte == "hashtags" else []),
                     "publications_avant_reprise": self.publications_avant_reprise,
                     "publications_ajoutees": max(0, len(self.publications) - self.publications_avant_reprise) if self.reprise else 0,
                     "diagnostics": list(self.diagnostics),
@@ -1477,15 +1495,23 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
         sources = connexion.preparer_sources(job.settings)
         if job.reprise:
-            index_sources = {source.get("id"): source for source in sources}
-            sources = [
-                index_sources[media_id] for media_id in job.medias_reprise
-                if media_id in index_sources
-            ]
+            if job.settings.source_collecte == "presse":
+                index_sources = {source.get("id"): source for source in sources}
+                sources = [
+                    index_sources[media_id] for media_id in job.medias_reprise
+                    if media_id in index_sources
+                ]
+            elif job.settings.source_collecte == "hashtags":
+                autorisees = set(job.sources_reprise_hashtags)
+                sources = [
+                    source for source in sources
+                    if source.get("hashtag") in autorisees
+                ]
             if not sources:
-                raise ValueError("Aucun média à reprendre.")
+                raise ValueError("Aucune source inachevée à reprendre.")
         driver = connexion.ouvrir()
-        if job.settings.profils_medias_variables and moteur_actif == "research":
+        if (job.settings.profils_medias_variables and moteur_actif == "research"
+                and job.settings.source_collecte == "presse"):
             # Une ligne par média choisi, même s'il n'a aucune vidéo retenue.
             # La collecte est indépendante du nombre de publications et du
             # filtre de hashtags appliqué à leur description.
@@ -1775,7 +1801,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             continue
                         if job.settings.enrichie:
                             media = medias_par_compte.get(record["author"].lower(), {})
-                            record.update(media_id=media.get("id"), categorie_media=media.get("categorie"), retenue=False)
+                            record.update(
+                                media_id=media.get("id") or record.get("media_id"),
+                                categorie_media=(
+                                    media.get("categorie")
+                                    or record.get("categorie_media")),
+                                retenue=False)
                             if not job.settings.filtrer_texte_ia_tiktok:
                                 job.publications.append(record)
                         if str(record.get("description") or "").strip():
@@ -1908,7 +1939,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if (job.settings.source_collecte == "hashtags" and plafond_decouverte is not None
                     and len(unique_links) >= plafond_decouverte):
                 break
-            job.source_en_cours_id = source.get("id") if job.settings.source_collecte == "presse" else None
+            job.source_en_cours_id = (
+                source.get("id") if job.settings.source_collecte == "presse"
+                else "#" + source["hashtag"]
+                if job.settings.source_collecte == "hashtags" else None)
             etiquette = "#" + source["hashtag"] if "hashtag" in source else "@" + source["compte"]
             entree_source = None
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
@@ -1985,7 +2019,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             metadonnees_api.setdefault(str(identifiant), fiche)
                     for url in rapport.get("discovered_urls", []):
                         identite = scraper.canonical_post(url)
-                        if identite and identite[2].casefold() in medias_par_compte:
+                        if identite and (
+                                job.settings.source_collecte == "hashtags"
+                                or identite[2].casefold() in medias_par_compte):
                             if (job.settings.test_research_10_publications
                                     and len(unique_links) >= 10):
                                 break
