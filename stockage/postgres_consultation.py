@@ -178,6 +178,16 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
     with ouvrir_connexion() as connexion:
         preparer_tables(connexion)
         with connexion.cursor() as curseur:
+            if getattr(job, "reprise", False):
+                # Verrouiller la collecte d'origine et interdire la création
+                # accidentelle d'un second corpus sous un identifiant repris.
+                curseur.execute(
+                    "SELECT 1 FROM scraptiktok_collectes "
+                    "WHERE collecte_id=%s AND proprietaire_hash=%s FOR UPDATE",
+                    (identifiant, empreinte(job.owner_historique)))
+                if curseur.fetchone() is None:
+                    raise RuntimeError(
+                        "Collecte d'origine absente de PostgreSQL : reprise arrêtée.")
             curseur.execute("""
                 INSERT INTO scraptiktok_collectes (
                     collecte_id, proprietaire_hash, nom_sauvegarde,
