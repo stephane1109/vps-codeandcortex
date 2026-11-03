@@ -1,4 +1,5 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
+import hashlib
 import json
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -585,30 +586,48 @@ with onglet_collecte:
         fichier_bilan = st.file_uploader(
             "Importer un bilan de médias CSV d'une collecte précédente",
             type=["csv"], key="bilan_reprise_csv", disabled=occupe,
-            help="Réimportez le fichier bilan_medias.csv téléchargé la veille. "
-                 "Seuls les médias absents, interrompus ou partiels sont cochés.",
+            help="L'import sélectionne automatiquement les médias non commencés, "
+                 "interrompus, partiels ou en échec, et décoche les autres. "
+                 "Les modifications manuelles restent ensuite possibles.",
         )
-        if fichier_bilan is not None:
+        if fichier_bilan is None:
+            # Autoriser le réimport du même fichier après son retrait explicite.
+            st.session_state.pop("empreinte_dernier_bilan_medias", None)
+        else:
+            contenu_bilan = fichier_bilan.getvalue()
             try:
                 ids_importes, ids_inconnus = importer_bilan_medias_csv(
-                    fichier_bilan.getvalue(), medias)
+                    contenu_bilan, medias)
             except ValueError as erreur:
                 st.error(str(erreur))
             else:
-                st.caption(
-                    f"{len(ids_importes)} média(s) à reprendre dans ce bilan ; "
-                    f"{len(ids_inconnus)} identifiant(s) ne figurent plus "
-                    "dans l'inventaire actuel."
-                )
-                if ids_inconnus:
-                    st.warning("Identifiants absents de l'inventaire : "
-                               + ", ".join(ids_inconnus))
+                empreinte_bilan = hashlib.sha256(contenu_bilan).hexdigest()
+                if (ids_importes and not occupe
+                        and st.session_state.get("empreinte_dernier_bilan_medias")
+                            != empreinte_bilan):
+                    # Les cases sont modifiées avant la création des widgets,
+                    # uniquement lors de l'import d'un nouveau bilan.
+                    cocher_uniquement_medias(ids_importes)
+                    st.session_state["empreinte_dernier_bilan_medias"] = empreinte_bilan
                 if ids_importes:
-                    st.button(
-                        f"Cocher uniquement les {len(ids_importes)} médias du bilan importé",
-                        key="cocher_medias_depuis_csv",
-                        on_click=cocher_uniquement_medias,
-                        args=(ids_importes,), disabled=occupe,
+                    st.success(
+                        f"{len(ids_importes)} média(s) à reprendre sélectionné(s) "
+                        "automatiquement dans les cases ci-dessous. "
+                        "Les autres médias sont décochés."
+                    )
+                    st.caption(
+                        "Vous pouvez modifier les cases manuellement : "
+                        "elles ne seront pas réinitialisées à chaque actualisation."
+                    )
+                else:
+                    st.warning(
+                        "Ce bilan ne contient aucun média restant à collecter "
+                        "dans l'inventaire actuel."
+                    )
+                if ids_inconnus:
+                    st.warning(
+                        f"{len(ids_inconnus)} média(s) du bilan sont absents "
+                        "de l'inventaire actuel : " + ", ".join(ids_inconnus)
                     )
         categories_medias = (
             ("presse_nationale", "Presse nationale"),
