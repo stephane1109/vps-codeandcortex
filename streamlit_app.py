@@ -58,18 +58,18 @@ def lancer(chemin, donnees):
         st.error(str(erreur)); return
     if "id" in resultat:
         st.session_state["collecte"] = resultat
-        if chemin == "/api/jobs" and donnees.get("cookies_tiktok"):
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and donnees.get("cookies_tiktok"):
             st.session_state["_effacer_cookies_apres_requete"] = True
         methode = donnees.get({
             "presse": "presse_moteur", "hashtags": "hashtag_moteur",
             "comptes": "profil_moteur"}.get(donnees.get("source_collecte"), "presse_moteur"))
-        if chemin == "/api/jobs" and methode == "research":
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and methode == "research":
             # Effacer les champs sensibles avant le prochain affichage,
             # sans écraser un widget déjà instancié pendant cette exécution.
             st.session_state["_effacer_research_apres_requete"] = True
-        if chemin == "/api/jobs" and methode == "tikhub":
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and methode == "tikhub":
             st.session_state["_effacer_tikhub_apres_requete"] = True
-        if chemin == "/api/jobs" and donnees.get("presse_moteur") == "apify":
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and donnees.get("presse_moteur") == "apify":
             st.session_state["_effacer_apify_apres_requete"] = True
     st.rerun()
 
@@ -529,6 +529,59 @@ with onglet_collecte:
                     on_click=cocher_uniquement_medias,
                     args=(ids_reprise,), disabled=occupe,
                 )
+        if (derniere_collecte.get("source_collecte") == "presse"
+                and derniere_collecte.get("presse_moteur") == "research"
+                and dernier_bilan and not derniere_collecte.get("busy")
+                and not derniere_collecte.get("video_busy")):
+            disponibles_reprise = set(medias_a_reprendre(dernier_bilan))
+            options_reprise = [
+                identifiant for identifiant in ordre_medias_visibles
+                if identifiant in disponibles_reprise
+            ]
+            if options_reprise:
+                with st.expander(
+                    "Reprendre cette collecte existante dans PostgreSQL",
+                    expanded=False,
+                ):
+                    st.caption(
+                        "Reprise du même corpus et du même identifiant de collecte. "
+                        "Les publications antérieures sont conservées et les doublons "
+                        "sont écartés par identifiant TikTok. Les dates, hashtags, "
+                        "filtres et variables restent ceux du premier lancement. "
+                        "L'archive doit encore être présente dans l'historique privé "
+                        "et le corpus d'origine dans PostgreSQL."
+                    )
+                    selection_pour_reprise = st.multiselect(
+                        "Médias encore à parcourir",
+                        options=options_reprise,
+                        default=options_reprise,
+                        format_func=lambda identifiant: (
+                            medias[identifiant]["nom"] + " (@"
+                            + medias[identifiant]["compte"] + ")"),
+                        key="reprendre_selection_" + derniere_collecte["id"],
+                        disabled=occupe,
+                    )
+                    if st.button(
+                        "Reprendre cette collecte (même corpus PostgreSQL)",
+                        key="reprendre_collecte_existante_" + derniere_collecte["id"],
+                        disabled=occupe or not selection_pour_reprise,
+                        type="primary",
+                    ):
+                        requete_reprise = {
+                            "medias": selection_pour_reprise,
+                            "presse_moteur": "research",
+                        }
+                        cle_reprise = st.session_state.get(
+                            "research_client_key", "").strip()
+                        secret_reprise = st.session_state.get(
+                            "research_client_secret", "").strip()
+                        if cle_reprise or secret_reprise:
+                            requete_reprise["research_client_key"] = cle_reprise
+                            requete_reprise["research_client_secret"] = secret_reprise
+                        lancer(
+                            "/api/historique/" + derniere_collecte["id"] + "/reprendre",
+                            requete_reprise,
+                        )
         fichier_bilan = st.file_uploader(
             "Importer un bilan de médias CSV d'une collecte précédente",
             type=["csv"], key="bilan_reprise_csv", disabled=occupe,
