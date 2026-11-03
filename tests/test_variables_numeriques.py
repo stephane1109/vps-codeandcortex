@@ -171,6 +171,96 @@ class TestsVariablesNumeriques(unittest.TestCase):
         with self.assertRaises(ValueError):
             StartRequest(hashtag="mobilisation", variables_classes_txt=["inconnu"])
 
+    def test_filtre_hashtags_research_exploite_les_metadonnees(self):
+        """Les hashtags officiels sont valides même sans # dans la légende."""
+        from webapp import matches_hashtags, hashtags_correspondants_publication
+
+        parametres = {
+            "source_collecte": "hashtags",
+            "hashtag_moteur": "research",
+            "hashtags_saisis": ["17octobre", "24octobre", "31octobre"],
+            "research_client_key": "CLE_TEST",
+            "research_client_secret": "SECRET_TEST",
+            "rechercher_dans_texte": False,
+        }
+        options_ou = StartRequest(operator="OR", **parametres)
+        options_et = StartRequest(operator="AND", **parametres)
+        legende = "Mobilisation lycéenne à Paris"
+
+        self.assertTrue(matches_hashtags(
+            legende, options_ou, hashtags_observes=["17octobre"]))
+        self.assertEqual(hashtags_correspondants_publication(
+            legende, options_ou, ["17octobre"]), ["17octobre"])
+        self.assertFalse(matches_hashtags(
+            legende, options_et, hashtags_observes=["17octobre"]))
+        self.assertTrue(matches_hashtags(
+            legende, options_et,
+            hashtags_observes=["17octobre", "24octobre", "31octobre"]))
+        self.assertTrue(matches_hashtags(
+            "Manifestation #17octobre", options_ou, hashtags_observes=[]))
+        self.assertFalse(matches_hashtags(
+            "Mobilisation 17 octobre", options_ou, hashtags_observes=["autre"]))
+        options_texte = StartRequest(
+            **{**parametres, "rechercher_dans_texte": True}, operator="OR")
+        self.assertTrue(matches_hashtags(
+            "Mobilisation 17 octobre", options_texte, hashtags_observes=["autre"]))
+
+    def test_pipeline_hashtags_research_retenue_texte_officiel(self):
+        """Le pipeline Hashtags conserve TXT et CSV comme le moteur Presse."""
+        from datetime import datetime, timezone
+        from collecte.researchapi import _fiche
+
+        video = {
+            "id": "7702367667616746785", "username": "compte_lyceen",
+            "video_description": "Mobilisation lycéenne à Paris",
+            "create_time": int(datetime.now(timezone.utc).timestamp()) - 3600,
+            "view_count": 1200, "like_count": 125,
+            "comment_count": 4, "share_count": 8,
+            "favorites_count": 7, "video_duration": 24,
+            "hashtag_names": ["17octobre"],
+        }
+        fiche = _fiche(video, None)
+
+        def recherche(compte, limite, rapport, **options):
+            self.assertIsNone(compte)
+            trouve = options.get("hashtag") == "17octobre"
+            rapport.update(
+                discovered_urls=[fiche["url"]] if trouve else [],
+                metadonnees_api={fiche["id"]: fiche} if trouve else {},
+                candidats_examines=int(trouve), pages_research=1,
+                navigation_publications="research_officielle",
+                discovery_stop="fin_des_periodes")
+            return list(rapport["discovered_urls"])
+
+        with tempfile.TemporaryDirectory() as dossier:
+            job = Job("h" * 64, StartRequest(
+                source_collecte="hashtags",
+                hashtag_moteur="research",
+                hashtags_saisis=["17octobre", "24octobre", "31octobre"],
+                operator="OR", rechercher_dans_texte=False,
+                french_only=False, collecter_commentaires=False,
+                collecter_follower_count=False, collecter_is_verified=False,
+                inclure_texte_genere_ia=False,
+                variables_txt=["id"], variables_classes_txt=["likes"],
+                research_client_key="CLE_TEST",
+                research_client_secret="SECRET_TEST"
+            ), Path(dossier))
+            navigateur = Mock(side_effect=AssertionError(
+                "Chrome ne doit pas être ouvert pour les métadonnées Research"))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=recherche):
+                execute_job(job, driver_factory=navigateur)
+            navigateur.assert_not_called()
+            self.assertEqual(job.processed, 1)
+            self.assertEqual(len(job.records), 1)
+            self.assertEqual(job.filtered, 0)
+            self.assertEqual(job.bilan_hashtags["17octobre"], 1)
+            self.assertEqual(job.records[0]["hashtags_correspondants"], ["17octobre"])
+            self.assertEqual(job.records[0]["description"], video["video_description"])
+            self.assertIn("Mobilisation lycéenne à Paris", job.texte_a_exporter())
+            self.assertIn("*likes_classe_100_999", job.texte_a_exporter())
+
+
     def test_pipeline_research_sans_navigation_et_compteurs_absents(self):
         from collecte.researchapi import _fiche
         video = {
