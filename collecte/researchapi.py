@@ -44,6 +44,25 @@ class ResearchAccesRefuse(ResearchErreur):
     """Clés absentes, droits insuffisants ou quota officiel atteint."""
 
 
+class ResearchErreurServeur(ResearchErreur):
+    """Réponse transitoire HTTP 5xx du serveur officiel TikTok."""
+
+    def __init__(self, statut_http):
+        self.statut_http = int(statut_http)
+        super().__init__(f"Research API HTTP {self.statut_http}.")
+
+
+def poursuivre_apres_erreur_serveur(
+        erreur, *, source_collecte, moteur_actif, echecs_consecutifs, seuil=3):
+    """Poursuivre une collecte Presse sauf en cas de pannes 5xx répétées."""
+    return (
+        isinstance(erreur, ResearchErreurServeur)
+        and source_collecte == "presse"
+        and moteur_actif == "research"
+        and echecs_consecutifs < seuil
+    )
+
+
 def identifiants_disponibles():
     return bool(os.getenv("TIKTOK_RESEARCH_CLIENT_KEY", "").strip()
                 and os.getenv("TIKTOK_RESEARCH_CLIENT_SECRET", "").strip())
@@ -85,6 +104,10 @@ def _requete(url, *, data, headers):
             raise ResearchAccesRefuse(
                 f"Research API HTTP {erreur.code} : autorisation, droits ou quota officiel à vérifier."
             ) from erreur
+        if erreur.code in (500, 502, 503, 504):
+            # Une panne du serveur TikTok n'est pas un refus de droits ou de quota.
+            # Le pilote de collecte décide de poursuivre ou d'interrompre le lot.
+            raise ResearchErreurServeur(erreur.code) from erreur
         raise ResearchErreur(f"Research API HTTP {erreur.code}.") from erreur
     except (URLError, OSError, TimeoutError) as erreur:
         raise ResearchErreur("Research API : erreur réseau ou expiration du délai.") from erreur
