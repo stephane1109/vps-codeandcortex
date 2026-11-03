@@ -39,6 +39,31 @@ def cle_tri_media(media):
             normaliser_texte(media.get("id")))
 
 
+
+def ordre_affichage_medias(catalogue):
+    """Restituer l'ordre visible des cases Presse et médias dans Streamlit."""
+    elements = list(catalogue.values()) if isinstance(catalogue, dict) else list(catalogue)
+    categories = ("presse_nationale", "presse_regionale",
+                  "presse_independante", "autres_medias")
+    groupes_nationaux = ("television_nationale", "presse_ecrite_nationale", "autres")
+    resultats = []
+    for categorie in categories:
+        comptes = sorted(
+            (media for media in elements if media.get("categorie") == categorie),
+            key=cle_tri_media,
+        )
+        if categorie != "presse_nationale":
+            resultats.extend(media["id"] for media in comptes)
+            continue
+        for groupe in groupes_nationaux:
+            for media in comptes:
+                sous_categorie = media.get("sous_categorie")
+                if (sous_categorie == groupe if groupe != "autres"
+                        else sous_categorie not in groupes_nationaux[:2]):
+                    resultats.append(media["id"])
+    return resultats
+
+
 def selectionner_medias(identifiants, inventaire=None):
     table = {m["id"]: m for m in (inventaire if inventaire is not None else charger_inventaire())}
     if any(i not in table for i in identifiants):
