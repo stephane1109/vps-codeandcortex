@@ -136,7 +136,9 @@ class StartRequest(BaseModel):
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
-    limit: int = Field(default=50, ge=1, le=1000)
+    # None signifie une recherche Research paginée sans plafond local.
+    # Les moteurs non Research conservent leur limite numérique.
+    limit: int | None = Field(default=50, ge=1, le=1000)
     collecte_research_complete: bool = False
     test_research_10_publications: bool = False
     include_sources: bool = True
@@ -309,10 +311,14 @@ class StartRequest(BaseModel):
         if not self.collecter_commentaires:
             self.collecter_reponses = False
             self.inclure_commentaires_txt = False
-        # Le mode test Research prend le pas sur la collecte automatique.
-        if self.moteur_actif == "research" and self.test_research_10_publications:
+        # Research API : pagination sans plafond local de publications.
+        # Le mode test explicite reste limité à dix vidéos au total.
+        if self.moteur_actif == "research":
             self.collecte_research_complete = True
-            self.limit = 10
+            self.limit = 10 if self.test_research_10_publications else None
+        elif self.limit is None:
+            raise ValueError(
+                "Une limite numérique est nécessaire avec un moteur non Research.")
         # Les compteurs de profils ne sont demandés que sur le moteur officiel.
         if self.moteur_actif != "research":
             self.test_research_10_publications = False
@@ -1413,9 +1419,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
         hashtag=job.settings.hashtag,
-        limit=(10 if job.settings.test_research_10_publications
-               else None if job.settings.moteur_actif == "research"
-               and job.settings.collecte_research_complete else job.settings.limit),
+        limit=job.settings.limit,
         inclure_texte_genere_ia=job.settings.inclure_texte_genere_ia,
         max_scrolls=max_defilements(),
         idle_rounds=3, delay=3.0, timeout=20.0, interactive=True,
@@ -2595,8 +2599,8 @@ class Manager:
         if settings.collecter_commentaires and settings.limite_commentaires > max_commentaires():
             raise HTTPException(422, f"Borne technique du moteur : "
                 f"{max_commentaires()} commentaires par publication.")
-        if (settings.limit > max_publications()
-                and not (settings.moteur_actif == "research" and settings.collecte_research_complete)):
+        if (settings.limit is not None and settings.limit > max_publications()
+                and settings.moteur_actif != "research"):
             raise HTTPException(422,
                 f"Borne technique du moteur : {max_publications()} publications par source.")
         nombre_sources = (len(settings.medias) if settings.source_collecte=="presse"
@@ -2826,7 +2830,11 @@ class Manager:
                         job.demander_arret('inactivite')
                 if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
                     job.video_stop.set()
-                if not job.busy and not job.video_busy and job.finished is not None and now - job.finished > self.retention:
+                if (not job.busy and not job.video_busy
+                        and job.finished is not None
+                        and now - max(job.finished, job.last_seen) > self.retention):
+                    # Une collecte terminée et encore consultée reste ouverte.
+                    # Le nettoyage ne concerne que les sessions réellement inactives.
                     self.jobs.pop(job.id)
                     if not job.historique:
                         shutil.rmtree(job.directory, ignore_errors=True)
