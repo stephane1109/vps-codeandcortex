@@ -2,17 +2,16 @@
 # Entrées : tableau de contingence TSV, dossier de sortie et paramètres.
 
 arguments <- commandArgs(trailingOnly = TRUE)
-if (length(arguments) < 8L) {
+if (length(arguments) < 7L) {
   stop("Arguments insuffisants pour le calcul AFC.")
 }
 chemin_tableau <- arguments[[1L]]
 dossier_sortie <- arguments[[2L]]
-repetitions <- as.integer(arguments[[3L]])
-variable_lignes <- arguments[[4L]]
-variable_colonnes <- arguments[[5L]]
-nom_source <- arguments[[6L]]
-effectif_initial <- as.integer(arguments[[7L]])
-effectif_final <- as.integer(arguments[[8L]])
+variable_lignes <- arguments[[3L]]
+variable_colonnes <- arguments[[4L]]
+nom_source <- arguments[[5L]]
+effectif_initial <- as.integer(arguments[[6L]])
+effectif_final <- as.integer(arguments[[7L]])
 
 if (!requireNamespace("FactoMineR", quietly = TRUE)) {
   stop("FactoMineR n'est pas installé dans l'environnement R.")
@@ -53,23 +52,15 @@ resultat <- FactoMineR::CA(
   graph = FALSE
 )
 
-# L'estimation Monte-Carlo est utilisée dès qu'une cellule attendue est inférieure à 5.
-test_asymptotique <- suppressWarnings(stats::chisq.test(tableau, correct = FALSE))
-cellules_faibles <- sum(test_asymptotique$expected < 5)
-utiliser_monte_carlo <- cellules_faibles > 0L && repetitions >= 100L
-if (utiliser_monte_carlo) {
-  set.seed(2026L)
-  test_retenu <- suppressWarnings(stats::chisq.test(
-    tableau, simulate.p.value = TRUE, B = repetitions
-  ))
-  methode_test <- paste0("Chi-deux de Pearson ; p estimée par Monte-Carlo (B=", repetitions, ")")
-} else {
-  test_retenu <- test_asymptotique
-  methode_test <- "Chi-deux de Pearson ; p asymptotique"
+# Vérifier l'inertie directement dans les valeurs propres FactoMineR.
+# Aucun test de significativité n'est calculé en dehors de FactoMineR.
+if (sum(resultat$eig[, 1L]) < 1e-12) {
+  stop("L'AFC FactoMineR ne présente aucune inertie à représenter.")
 }
-chi2 <- unname(as.numeric(test_asymptotique$statistic))
-n <- sum(tableau)
-v_cramer <- sqrt(chi2 / (n * min(nrow(tableau) - 1L, ncol(tableau) - 1L)))
+# Utiliser le résumé natif de FactoMineR pour les résultats globaux.
+resume_factominer <- capture.output(
+  summary(resultat, nbelements = Inf, ncp = nombre_axes)
+)
 
 # Toutes les matrices sont exportées dans un CSV lisible avec Excel en français.
 exporter_matrice <- function(matrice, nom_fichier) {
@@ -90,8 +81,6 @@ exporter_matrice <- function(matrice, nom_fichier) {
 }
 
 exporter_matrice(tableau, "01_tableau_contingence.csv")
-exporter_matrice(test_asymptotique$expected, "02_effectifs_attendus.csv")
-exporter_matrice(test_asymptotique$residuals, "03_residus_pearson.csv")
 exporter_matrice(prop.table(tableau, 1L) * 100, "04_profils_lignes_pourcent.csv")
 exporter_matrice(prop.table(tableau, 2L) * 100, "05_profils_colonnes_pourcent.csv")
 exporter_matrice(resultat$eig, "06_valeurs_propres_inerties.csv")
@@ -280,23 +269,22 @@ grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 12, h
 tryCatch(dessiner_plan(), finally = grDevices::dev.off())
 gg("15_inerties.png", dessiner_inerties)
 
+# Indicateurs issus des résultats FactoMineR, sans nouveau test.
 statistiques <- data.frame(
   indicateur = c(
-    "Source", "Variable en lignes", "Variable en colonnes", "Observations initiales",
-    "Observations analysées", "Modalités lignes", "Modalités colonnes",
-    "Axes factoriels", "Chi-deux de Pearson", "Degrés de liberté",
-    "Valeur p", "Méthode du test", "V de Cramér",
-    "Cellules attendues inférieures à 5", "Nombre total de cellules",
+    "Source", "Variable en lignes", "Variable en colonnes",
+    "Observations initiales", "Observations analysées",
+    "Modalités lignes", "Modalités colonnes", "Axes factoriels",
+    "Inertie totale (FactoMineR)",
     "Modalités significatives (p <= 0,05)", "Modalités au total",
     "Méthode de significativité des modalités"
   ),
   valeur = c(
     nom_source, variable_lignes, variable_colonnes,
     as.character(effectif_initial), as.character(effectif_final),
-    as.character(nrow(tableau)), as.character(ncol(tableau)), as.character(nombre_axes),
-    format(chi2, digits = 9), as.character(unname(test_asymptotique$parameter)),
-    format(test_retenu$p.value, digits = 9), methode_test, format(v_cramer, digits = 7),
-    as.character(cellules_faibles), as.character(length(test_asymptotique$expected)),
+    as.character(nrow(tableau)), as.character(ncol(tableau)),
+    as.character(nombre_axes),
+    format(sum(resultat$eig[, 1L]), digits = 9),
     as.character(nombre_significatives),
     as.character(nrow(significativite_modalites)),
     "FactoMineR::descfreq, test hypergéométrique, seuil p <= 0,05"
@@ -314,11 +302,7 @@ rapport <- c(
   paste("Observations initiales :", effectif_initial),
   paste("Observations analysées :", effectif_final),
   paste("Dimensions du tableau :", nrow(tableau), "x", ncol(tableau)),
-  paste("Chi-deux de Pearson :", signif(chi2, 7)),
-  paste("Valeur p :", signif(test_retenu$p.value, 7)),
-  paste("Méthode :", methode_test),
-  paste("V de Cramér :", signif(v_cramer, 5)),
-  paste("Cellules avec effectif théorique < 5 :", cellules_faibles),
+  paste("Inertie totale FactoMineR :", signif(sum(resultat$eig[, 1L]), 7)),
   paste("Modalités significatives (p <= 0,05) :", nombre_significatives,
         "/", nrow(significativite_modalites)),
   "Modalités retenues par FactoMineR::descfreq (test hypergéométrique, p <= 0,05).",
@@ -330,11 +314,13 @@ rapport <- c(
   "VALEURS PROPRES ET INERTIES (%)",
   capture.output(print(round(resultat$eig, 4))),
   "",
+  "RÉSUMÉ NATIF DE L'AFC PAR FACTOMINER",
+  resume_factominer,
+  "",
   "AVERTISSEMENTS METHODOLOGIQUES",
   "L'AFC décrit des associations entre variables catégorielles sans établir de causalité.",
   "La position des modalités de groupes différents n'est pas une mesure directe de leur proximité.",
   "Lire les contributions, cos2 et profils avant de conclure.",
-  "La valeur p obtenue par Monte-Carlo est une estimation, et non une p-value asymptotique.",
   "Vues et taux d'engagement partagent un dénominateur : association mécanique possible.",
   if (effectif_final < 30) "Effectif inférieur à 30 : interprétation exploratoire uniquement." else "",
   if (nombre_axes == 1L) "Un seul axe existe : le décalage vertical du graphique est illustratif." else ""
