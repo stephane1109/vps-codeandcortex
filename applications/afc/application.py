@@ -17,7 +17,7 @@ import streamlit as st
 
 from traitement_csv import (
     decrire_variables, exclure_modalites_contingence, lire_csv,
-    preparer_contingence, preparer_tableau_inerties,
+    preparer_acm, preparer_contingence, preparer_tableau_inerties,
 )
 
 
@@ -125,14 +125,14 @@ def executer_moteur_r(
         }
 
 
-def afficher_resultats(resultats: dict) -> None:
+def afficher_resultats(resultats: dict, methode: str = "AFC") -> None:
     """Présente les graphiques, mesures et exports calculés par R."""
     fichiers = resultats["fichiers"]
-    st.subheader("Résultats de l'AFC")
+    st.subheader(f"Résultats de l'{methode}")
     st.download_button(
         "Télécharger tous les résultats (ZIP)",
         data=resultats["archive"],
-        file_name="resultats_afc_factominer.zip",
+        file_name=f"resultats_{methode.lower()}_factominer.zip",
         mime="application/zip",
         type="primary",
     )
@@ -152,30 +152,55 @@ def afficher_resultats(resultats: dict) -> None:
         "Inertie totale",
         valeurs.get("Inertie totale (FactoMineR)", "—"),
     )
-    st.caption(
-        "Résultats issus de FactoMineR::CA() et FactoMineR::descfreq(). "
-        "Le rapport méthodologique utilise le résumé natif de FactoMineR "
-        "ou, pour une AFC à un seul axe, les matrices natives de CA()."
-    )
+    if methode == "AFC":
+        st.caption(
+            "Résultats issus de FactoMineR::CA() et FactoMineR::descfreq(). "
+            "Le rapport méthodologique utilise le résumé natif de FactoMineR "
+            "ou, pour une AFC à un seul axe, les matrices natives de CA()."
+        )
+    else:
+        st.caption(
+            "Résultats de FactoMineR::MCA() ; les modalités caractéristiques "
+            "des axes 1 et 2 sont identifiées par FactoMineR::dimdesc()."
+        )
 
     onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
         ["Plan factoriel", "Inerties", "Tableaux", "Rapport méthodologique"]
     )
     with onglet_plan:
-        st.image(fichiers["13_plan_factoriel.png"], use_container_width=True)
+        filtrer_modalites = st.checkbox(
+            "Afficher uniquement les modalités significatives (p ≤ 0,05)",
+            value=False,
+            key=f"filtrer_modalites_{methode.lower()}",
+            help=(
+                "Décochez pour voir toutes les modalités actives ; "
+                "cochez pour afficher uniquement les modalités significatives. "
+                "Les calculs, inerties et exports restent inchangés."
+            ),
+        )
+        nom_graphique = (
+            "13_plan_factoriel_significatif.png"
+            if filtrer_modalites
+            else "13_plan_factoriel.png"
+        )
+        st.image(fichiers[nom_graphique], use_container_width=True)
         st.caption(
-            "Sur un plan à deux axes, seules les modalités associées "
-            "significativement à au moins une modalité de l'autre variable "
-            "(p ≤ 0,05) sont affichées. Les associations sont déterminées "
-            "exclusivement par FactoMineR::descfreq (test hypergéométrique), "
-            "et non par un test de position sur les axes."
+            "Plan complet : toutes les modalités actives."
+            if not filtrer_modalites
+            else (
+                "Plan filtré : modalités associées significativement à une "
+                "autre modalité selon FactoMineR::descfreq (AFC)."
+                if methode == "AFC"
+                else (
+                    "Plan filtré : modalités caractéristiques d'au moins un "
+                    "des axes 1 et 2 selon FactoMineR::dimdesc (ACM)."
+                )
+            )
         )
         st.caption(
-            "Les coordonnées, contributions et cos² de toutes les modalités "
-            "restent disponibles dans les tableaux CSV. Le fichier "
-            "significativite_modalites_factominer.csv récapitule les "
-            "associations significatives identifiées par FactoMineR. "
-            "Sur un plan à un seul axe, le filtrage n'est pas appliqué."
+            "Cette case ne modifie pas le calcul factoriel. "
+            "Les deux graphiques sont disponibles dans le ZIP. "
+            "Lorsque l'analyse ne comporte qu'un axe, le filtre n'est pas appliqué."
         )
     with onglet_inertie:
         st.image(fichiers["15_inerties.png"], use_container_width=True)
@@ -224,17 +249,34 @@ def afficher_resultats(resultats: dict) -> None:
             mime="text/csv",
         )
     with onglet_rapport:
-        st.text(fichiers["00_rapport_afc.txt"].decode("utf-8"))
+        nom_rapport = (
+            "00_rapport_afc.txt" if methode == "AFC"
+            else "00_rapport_acm.txt"
+        )
+        st.text(fichiers[nom_rapport].decode("utf-8"))
 
 
 def construire_interface() -> None:
     """Présente les paramètres de l'analyse et déclenche le calcul sur demande."""
-    st.title("Analyse factorielle des correspondances")
-    st.caption("AFC calculée par FactoMineR (R) — import CSV, sélection des variables et export des résultats")
-    st.markdown(
-        "Chaque ligne du CSV représente une observation. L'application construit un tableau "
-        "de contingence en croisant **deux variables catégorielles** que vous choisissez."
+    st.title("Analyses des correspondances — FactoMineR")
+    methode = st.radio(
+        "Méthode d'analyse",
+        options=["AFC", "ACM"],
+        horizontal=True,
+        help=(
+            "AFC : croisement de deux variables qualitatives. "
+            "ACM : analyse simultanée de trois variables qualitatives ou davantage."
+        ),
     )
+    if methode == "AFC":
+        st.caption(
+            "AFC avec FactoMineR::CA() : deux variables catégorielles croisées."
+        )
+    else:
+        st.caption(
+            "ACM avec FactoMineR::MCA() : plusieurs variables catégorielles "
+            "analysées simultanément."
+        )
 
     st.subheader("1. Importer le fichier CSV")
     colonne_choix, colonne_fichier = st.columns([1, 2])
@@ -268,12 +310,16 @@ def construire_interface() -> None:
         st.caption("Le diagnostic des variables sert uniquement à aider la sélection ; il ne recode pas les valeurs.")
         st.dataframe(decrire_variables(donnees), use_container_width=True, hide_index=True)
 
-    st.subheader("2. Sélectionner les variables de l'AFC")
     noms_variables = list(donnees.columns)
     variables_adaptees = decrire_variables(donnees)
     candidates = variables_adaptees.loc[
         variables_adaptees["Diagnostic"].eq("Catégorielle possible"), "Variable"
     ].tolist()
+    if methode == "ACM":
+        construire_interface_acm(donnees, contenu, nom_source, noms_variables, candidates)
+        return
+
+    st.subheader("2. Sélectionner les variables de l'AFC")
     defaut_lignes = candidates[0] if candidates else noms_variables[0]
     defaut_colonnes = candidates[1] if len(candidates) > 1 else noms_variables[min(1, len(noms_variables)-1)]
     col_lignes, col_colonnes = st.columns(2)
@@ -501,7 +547,7 @@ def construire_interface() -> None:
 
     if "dernier_resultat" in st.session_state:
         if st.session_state.get("signature_resultat") == signature:
-            afficher_resultats(st.session_state["dernier_resultat"])
+            afficher_resultats(st.session_state["dernier_resultat"], methode="AFC")
         else:
             st.info("Les paramètres ont changé depuis le dernier calcul. Relancer l'AFC pour actualiser les résultats.")
 
