@@ -2060,6 +2060,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             entree_source = None
             job.update(status="discovering", message=f"Source {numero_source}/{len(sources)} : recherche des publications de {etiquette}…")
             rapport = {}
+            if job.settings.source_collecte == "hashtags" and moteur_actif == "research":
+                # Inscrire la source avant la première page. Une interruption
+                # manuelle ou une erreur 5xx préserve ainsi son état partiel
+                # pour une reprise sans perdre les textes déjà enregistrés.
+                entree_source = {
+                    "source": etiquette, "date": scraper.utc_now(),
+                    "rapport": rapport, "statut_source": "en_cours",
+                    "message": "Recherche Research en cours : données partielles."}
+                job.journal.append(entree_source)
             # Limiter chaque source à la quantité restante du test global.
             limite_initiale = args.limit
             if job.settings.test_research_10_publications:
@@ -2175,11 +2184,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     job.update(search_errors=job.search_errors + 1)
                 message_source = rapport.get("bilan_recherche") or ("Recherche partielle : une recherche TikTok a échoué."
                                   if rapport.get("recherches_en_echec") else "Recherche terminée.")
-                entree_source = {"source": etiquette, "date": scraper.utc_now(),
-                    "rapport": rapport, "statut_source": "en_cours",
-                    "message": message_source if found or rapport.get("bilan_recherche") else ("Collecte partielle : aucune publication du compte trouvée dans les résultats accessibles. Cela ne signifie pas que le compte est vide."
-                        if job.settings.source_collecte != "hashtags" else "Aucune publication correspondant à cette recherche n’a été trouvée. Cela ne signifie pas que le compte est vide.")}
-                job.journal.append(entree_source)
+                message_rapport = (
+                    message_source if found or rapport.get("bilan_recherche") else
+                    "Collecte partielle : aucune publication du compte trouvée "
+                    "dans les résultats accessibles. Cela ne signifie pas que "
+                    "le compte est vide."
+                    if job.settings.source_collecte != "hashtags" else
+                    "Aucune publication correspondant à cette recherche n’a "
+                    "été trouvée. Cela ne signifie pas que le compte est vide.")
+                if entree_source is None:
+                    entree_source = {
+                        "source": etiquette, "date": scraper.utc_now(),
+                        "rapport": rapport, "statut_source": "en_cours",
+                        "message": message_rapport}
+                    job.journal.append(entree_source)
+                else:
+                    entree_source["message"] = message_rapport
                 for url in found:
                     identity = scraper.canonical_post(url)
                     if identity and (job.settings.source_collecte == "hashtags"
@@ -2201,9 +2221,16 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 from collecte.quotas_exploitation import QuotaScrapingAtteint
                 statut_echec = ("partielle" if rapport.get("discovered_urls") else "interrompue") if isinstance(
                     erreur, (ResearchErreur, PresseRateLimitError, PresseCooldownError, QuotaScrapingAtteint)) else "echec"
-                job.journal.append({"source": etiquette, "statut": "inaccessible",
-                    "statut_source": statut_echec, "date": scraper.utc_now(), "rapport": rapport,
-                    "message": expliquer_echec_source(rapport, erreur)})
+                message_echec = expliquer_echec_source(rapport, erreur)
+                if entree_source is not None:
+                    entree_source.update(
+                        statut="inaccessible", statut_source=statut_echec,
+                        date=scraper.utc_now(), message=message_echec)
+                else:
+                    job.journal.append({
+                        "source": etiquette, "statut": "inaccessible",
+                        "statut_source": statut_echec, "date": scraper.utc_now(),
+                        "rapport": rapport, "message": message_echec})
                 from collecte.presse_api import PresseRateLimitError, PresseCooldownError
                 from collecte.presse_research import ResearchErreur
                 from collecte.quotas_exploitation import QuotaScrapingAtteint
@@ -2331,7 +2358,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.sauvegarder_postgres(progressif=True)
             if filtre_dates_hashtags and args.limit is not None and len(job.records) >= args.limit:
                 break
-            if entree_source is not None:
+            if entree_source is not None and entree_source.get("statut") != "inaccessible":
                 incomplete = bool(rapport.get("collecte_partielle") or rapport.get("recherches_en_echec")
                     or any(r.get("collecte_partielle") or r.get("recherches_en_echec")
                         for r in rapport.get("recherches_compte", [])))
