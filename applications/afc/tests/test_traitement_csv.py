@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from traitement_csv import generer_donnees_simulees, lire_csv, preparer_contingence
+from traitement_csv import lire_csv, preparer_contingence
 
 
 BASE = Path(__file__).resolve().parent.parent
@@ -77,13 +77,17 @@ class TestTraitementCSV(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Trop de modalités"):
             preparer_contingence(donnees, "a", "b")
 
-    def test_donnees_simulees(self):
-        donnees = generer_donnees_simulees(400, 2026)
-        self.assertEqual(len(donnees), 400)
-        self.assertTrue(donnees["publication_id"].str.startswith("SIMULATION_").all())
-        resultat = preparer_contingence(donnees, "vues_classe", "classe_taux_engagement")
-        self.assertEqual(resultat.effectif_final, 400)
-        self.assertEqual(resultat.tableau.shape, (4, 4))
+    def test_interface_sans_donnees_fictives(self):
+        """L'interface doit exiger un CSV et ignorer les modes de démonstration."""
+        interface = (BASE / "application.py").read_text(encoding="utf-8")
+        traitement = (BASE / "traitement_csv.py").read_text(encoding="utf-8")
+        self.assertIn('if fichier is None:', interface)
+        self.assertIn('donnees = importer_donnees(contenu, separateur, encodage)', interface)
+        self.assertNotIn("Utiliser l'échantillon de démonstration", interface)
+        self.assertNotIn("Utiliser des données simulées (test uniquement)", interface)
+        self.assertNotIn("generer_donnees_simulees", traitement)
+        self.assertIn('preparer_contingence(', interface)
+        self.assertIn('afficher_resultats(', interface)
 
     def test_variable_identique(self):
         donnees = pd.DataFrame({"a": ["X", "Y"]})
