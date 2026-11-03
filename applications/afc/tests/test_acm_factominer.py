@@ -151,10 +151,14 @@ class TestsACM(unittest.TestCase):
                 ecrivain.writerow(["vues_classe", "likes_classe", "type_media"])
                 for i in range(120):
                     profil = i % 3
+                    # Quelques décalages évitent une structure parfaitement
+                    # déterministe tout en conservant des associations.
+                    profil_likes = (profil + (i % 11 == 0)) % 3
+                    profil_media = (profil + (i % 7 == 0)) % 3
                     ecrivain.writerow([
                         ["faibles", "moyennes", "fortes"][profil],
-                        ["0-9", "10-99", "100-999"][profil],
-                        ["presse", "autres", "local"][profil],
+                        ["0-9", "10-99", "100-999"][profil_likes],
+                        ["presse", "autres", "local"][profil_media],
                     ])
             processus = subprocess.run(
                 [shutil.which("Rscript"), str(MOTEUR_ACM),
