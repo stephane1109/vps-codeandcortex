@@ -118,5 +118,76 @@ class TestsSignificativiteModalites(unittest.TestCase):
             self.assertTrue((sorties / "08_coordonnees_colonnes.csv").is_file())
 
 
+    def test_rapport_factoriel_avec_un_seul_axe(self):
+        """Le rapport ne doit pas appeler summary.CA pour un axe unique."""
+        source = MOTEUR_R.read_text(encoding="utf-8")
+        self.assertIn("if (nombre_axes >= 2L) {", source)
+        self.assertIn("resume_factominer <- produire_resume_factominer(", source)
+        self.assertIn("capture.output(print(resultat$eig))", source)
+        self.assertIn("capture.output(print(resultat$row$coord))", source)
+        self.assertIn("capture.output(print(resultat$col$coord))", source)
+
+    @unittest.skipUnless(
+        environnement_r_disponible(),
+        "Rscript avec FactoMineR n'est pas disponible dans cet environnement",
+    )
+    def test_calcul_reel_un_axe_apres_suppression_ligne_ou_colonne(self):
+        """Une AFC 2 x 3 ou 3 x 2 doit produire le rapport et les exports."""
+        tableaux = {
+            "deux_lignes": [
+                ["modalite", "X", "Y", "Z"],
+                ["A", 40, 10, 15],
+                ["B", 10, 35, 20],
+            ],
+            "deux_colonnes": [
+                ["modalite", "X", "Y"],
+                ["A", 40, 10],
+                ["B", 10, 35],
+                ["C", 15, 20],
+            ],
+        }
+        for nom, lignes in tableaux.items():
+            with self.subTest(tableau=nom):
+                with tempfile.TemporaryDirectory(
+                        prefix="afc_un_axe_") as dossier:
+                    racine = Path(dossier)
+                    entree = racine / "contingence.tsv"
+                    sortie = racine / "sorties"
+                    sortie.mkdir()
+                    with entree.open("w", encoding="utf-8",
+                                     newline="") as fichier:
+                        csv.writer(fichier, delimiter="\t").writerows(lignes)
+                    processus = subprocess.run(
+                        [shutil.which("Rscript"), str(MOTEUR_R),
+                         str(entree), str(sortie), "Lignes", "Colonnes",
+                         "Tableau réduit", "130", "130"],
+                        capture_output=True, text=True,
+                        check=False, timeout=90,
+                    )
+                    self.assertEqual(
+                        processus.returncode, 0,
+                        processus.stderr or processus.stdout)
+                    for fichier in (
+                        "00_rapport_afc.txt",
+                        "06_valeurs_propres_inerties.csv",
+                        "07_coordonnees_lignes.csv",
+                        "08_coordonnees_colonnes.csv",
+                        "13_plan_factoriel.png",
+                        "14_plan_factoriel.pdf",
+                        "15_inerties.png",
+                        "16_resultats_statistiques.csv",
+                        "significativite_modalites_factominer.csv",
+                    ):
+                        self.assertTrue(
+                            (sortie / fichier).is_file(),
+                            f"{fichier} absent pour {nom}",
+                        )
+                    rapport = (sortie / "00_rapport_afc.txt").read_text(
+                        encoding="utf-8")
+                    self.assertIn("Un seul axe factoriel", rapport)
+                    self.assertIn("Modalités en lignes : coordonnées", rapport)
+                    self.assertIn("Modalités en colonnes : coordonnées", rapport)
+
+
 if __name__ == "__main__":
     unittest.main()
