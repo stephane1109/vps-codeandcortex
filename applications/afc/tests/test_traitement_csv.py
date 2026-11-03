@@ -220,7 +220,7 @@ class TestTraitementCSV(unittest.TestCase):
             ("a.csv", premier), ("b.csv", second)
         ])
         export = fusion.to_csv(
-            index=False, sep=";", lineterminator="\\n"
+            index=False, sep=";", lineterminator="\n"
         ).encode("utf-8-sig")
         resultat = lire_csv(export)
         pd.testing.assert_frame_equal(fusion, resultat)
