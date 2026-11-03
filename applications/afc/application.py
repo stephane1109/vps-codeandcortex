@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from interface_statistiques_descriptives import construire_onglet_statistique_descriptive
+from statistiques_descriptives import CHAMPS_ENGAGEMENT
 
 from traitement_csv import (
     concatener_fichiers_csv, decrire_variables,
@@ -224,6 +225,27 @@ def afficher_resultats(
             else "13_plan_factoriel.png"
         )
         st.image(fichiers[nom_graphique], use_container_width=True)
+        if methode == "ACM":
+            if "21_coordonnees_qualitatives_supplementaires.csv" in fichiers:
+                st.caption(
+                    "Les modalités qualitatives supplémentaires sont "
+                    "représentées par des triangles violets. Elles restent "
+                    "visibles lorsque le filtre des modalités actives "
+                    "à p ≤ 0,05 est appliqué."
+                )
+            if "26_plan_quantitatives_supplementaires.png" in fichiers:
+                st.subheader(
+                    "Projection des variables quantitatives supplémentaires"
+                )
+                st.image(
+                    fichiers["26_plan_quantitatives_supplementaires.png"],
+                    use_container_width=True,
+                )
+                st.caption(
+                    "Coordonnées de corrélation calculées par "
+                    "FactoMineR::MCA() ; représentation distincte "
+                    "des coordonnées des modalités qualitatives."
+                )
         st.caption(
             "Plan complet : toutes les modalités actives."
             if not filtrer_modalites
@@ -556,6 +578,61 @@ def construire_interface_acm(
         st.info("Sélectionnez au moins trois variables pour l'ACM.")
         return
 
+    st.subheader("Variables supplémentaires de l'ACM (facultatif)")
+    st.caption(
+        "Une variable supplémentaire est projetée après construction des "
+        "axes. Elle ne contribue pas à leur calcul. Les variables "
+        "qualitatives sont des modalités, les quantitatives des mesures "
+        "numériques. Le calcul est réalisé par les paramètres natifs "
+        "quali.sup et quanti.sup de FactoMineR::MCA()."
+    )
+    options_qualitatives = [
+        nom for nom in candidates if nom not in variables_actives
+    ]
+    variables_supplementaires_qualitatives = st.multiselect(
+        "Variables qualitatives supplémentaires",
+        options=options_qualitatives,
+        default=[],
+        key="acm_variables_quali_sup",
+        help="Exemples : type_media, presse_nationale, region_code.",
+    )
+    descriptions_variables = decrire_variables(donnees)
+    candidats_numeriques = set(
+        descriptions_variables.loc[
+            descriptions_variables["Diagnostic"].eq("À recoder (numérique)"),
+            "Variable",
+        ]
+    )
+    aliases_mesures = {
+        alias.casefold()
+        for aliases in CHAMPS_ENGAGEMENT.values()
+        for alias in aliases
+    }
+    options_quantitatives = [
+        nom for nom in noms_variables
+        if nom not in variables_actives
+        and nom not in variables_supplementaires_qualitatives
+        and (
+            nom in candidats_numeriques
+            or nom.casefold() in aliases_mesures
+        )
+        and not nom.lower().endswith(("_id", "_code"))
+        and nom.lower() not in {
+            "publication_id", "video_id", "create_time", "created_at"
+        }
+    ]
+    variables_supplementaires_quantitatives = st.multiselect(
+        "Variables quantitatives supplémentaires",
+        options=options_quantitatives,
+        default=[],
+        key="acm_variables_quanti_sup",
+        help=(
+            "Exemples : vues, likes, follower_count, taux_engagement. "
+            "Les valeurs absentes restent manquantes et sont traitées "
+            "par FactoMineR."
+        ),
+    )
+
     choix_methode = st.radio(
         "Formulation de l'ACM",
         options=[
@@ -628,6 +705,12 @@ def construire_interface_acm(
     options_preparation = dict(
         donnees=donnees,
         variables=variables_actives,
+        variables_supplementaires_qualitatives=(
+            variables_supplementaires_qualitatives
+        ),
+        variables_supplementaires_quantitatives=(
+            variables_supplementaires_quantitatives
+        ),
         uniquement_retenues=uniquement_retenues,
         dedoublonner=dedoublonner,
         exclure_indeterminees=exclure_indeterminees,
@@ -651,6 +734,12 @@ def construire_interface_acm(
     portee = {
         "empreinte_sha256": hashlib.sha256(contenu).hexdigest(),
         "variables_actives": variables_actives,
+        "variables_supplementaires_qualitatives": (
+            variables_supplementaires_qualitatives
+        ),
+        "variables_supplementaires_quantitatives": (
+            variables_supplementaires_quantitatives
+        ),
         "filtres": {
             "retenues": uniquement_retenues,
             "dedoublonner": dedoublonner,
@@ -725,6 +814,16 @@ def construire_interface_acm(
         "Modalités actives",
         sum(preparation.donnees[nom].nunique() for nom in variables_actives),
     )
+    if (
+        variables_supplementaires_qualitatives
+        or variables_supplementaires_quantitatives
+    ):
+        st.caption(
+            f"Variables supplémentaires : "
+            f"{len(variables_supplementaires_qualitatives)} qualitatives, "
+            f"{len(variables_supplementaires_quantitatives)} quantitatives. "
+            "Elles ne contribuent pas aux inerties ni aux axes."
+        )
     tableau_effectifs = pd.concat(
         [
             pd.DataFrame({
@@ -785,6 +884,12 @@ def construire_interface_acm(
                     effectif_final=preparation.effectif_final,
                     parametres=parametres,
                     methode_calcul=methode_calcul,
+                    variables_supplementaires_qualitatives=(
+                        variables_supplementaires_qualitatives
+                    ),
+                    variables_supplementaires_quantitatives=(
+                        variables_supplementaires_quantitatives
+                    ),
                 )
         except (RuntimeError, OSError) as erreur:
             st.session_state.pop("dernier_resultat_acm", None)
