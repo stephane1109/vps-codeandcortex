@@ -173,51 +173,92 @@ utils::write.csv2(
 deux_axes <- ncol(coordonnees) >= 2L
 axes_description <- seq_len(min(2L, ncol(coordonnees)))
 
-# Utiliser les v.test natifs de FactoMineR::MCA : chaque ligne correspond
-# directement à une modalité du plan, ce qui évite les rapprochements
-# fragiles entre les étiquettes de dimdesc() et celles des coordonnées.
-# Sous l'approximation normale de la valeur-test, p est bilatérale :
-# p = 2 * Phi(-abs(v.test)). Ce seuil est descriptif/exploratoire,
-# sans correction des comparaisons multiples ni inférence indépendante.
-# dimdesc() est conservé ci-dessous pour la description méthodologique.
+# Utiliser exclusivement les p-values produites par FactoMineR::dimdesc().
+# La fonction native condes(), appelée par dimdesc(), nomme les catégories
+# "variable=modalité". Les noms des coordonnées MCA peuvent se limiter à
+# la modalité (avec adaptation des réponses y/n). La correspondance est donc
+# établie à partir de la variable et de son niveau, jamais par rapprochement
+# approximatif de chaînes ni par recalcul de statistiques.
+#
+# proba = 1 fournit toutes les p-values natives pour le diagnostic ;
+# proba = 0.05 fournit la description native au seuil pour le rapport.
+description_complete <- FactoMineR::dimdesc(
+  resultat, axes = axes_description, proba = 1
+)
 description <- FactoMineR::dimdesc(
   resultat, axes = axes_description, proba = 0.05
 )
 noms_modalites <- rownames(coordonnees)
+niveaux_modalites <- unlist(
+  lapply(variables_actives, levels), use.names = FALSE
+)
+if (length(niveaux_modalites) != length(noms_modalites)) {
+  stop(
+    "Le nombre de niveaux des variables actives ne correspond pas ",
+    "au nombre de coordonnées des modalités FactoMineR."
+  )
+}
+identifiants_dimdesc <- paste0(
+  variables_modalites, "=", niveaux_modalites
+)
+if (anyDuplicated(identifiants_dimdesc)) {
+  stop(
+    "Identifiants de modalités non uniques : impossible de lire ",
+    "les p-values natives de FactoMineR de façon univoque."
+  )
+}
+
+# Conserver également les valeurs-tests natives, sans en déduire de
+# nouvelles p-values. Elles sont utiles pour le contrôle méthodologique.
 matrice_vtest <- as.matrix(resultat$var$v.test)
 if (is.null(rownames(matrice_vtest)) ||
     anyDuplicated(rownames(matrice_vtest)) ||
-    anyDuplicated(noms_modalites) ||
     !setequal(rownames(matrice_vtest), noms_modalites)) {
-  stop(
-    "Les noms des modalités dans var$v.test ne correspondent pas ",
-    "à ceux des coordonnées de l'ACM. Filtrage interrompu."
-  )
+  stop("Les valeurs-tests natives et les coordonnées ACM ne concordent pas.")
 }
-if (ncol(matrice_vtest) < length(axes_description)) {
-  stop(
-    "FactoMineR ne fournit pas les valeurs-tests pour les axes ",
-    "nécessaires au filtrage."
-  )
-}
-indices_modalites <- match(noms_modalites, rownames(matrice_vtest))
 valeurs_vtest <- matrice_vtest[
-  indices_modalites, axes_description, drop = FALSE
+  match(noms_modalites, rownames(matrice_vtest)),
+  axes_description, drop = FALSE
 ]
-p_bilaterales <- 2 * stats::pnorm(-abs(valeurs_vtest))
-p_bilaterales[!is.finite(valeurs_vtest)] <- NA_real_
 v_axe_1 <- as.numeric(valeurs_vtest[, 1L])
-p_axe_1 <- as.numeric(p_bilaterales[, 1L])
 v_axe_2 <- if (deux_axes) {
   as.numeric(valeurs_vtest[, 2L])
 } else {
   rep(NA_real_, length(noms_modalites))
 }
-p_axe_2 <- if (deux_axes) {
-  as.numeric(p_bilaterales[, 2L])
-} else {
-  rep(NA_real_, length(noms_modalites))
+
+# Affecter les résultats natifs à chaque modalité par sa clé unique.
+p_axe_1 <- rep(NA_real_, length(noms_modalites))
+p_axe_2 <- rep(NA_real_, length(noms_modalites))
+liste_p <- list(p_axe_1, p_axe_2)
+for (i in seq_along(axes_description)) {
+  caracteristiques <- description_complete[[i]]$category
+  if (is.null(caracteristiques) || nrow(as.matrix(caracteristiques)) == 0L) {
+    next
+  }
+  caracteristiques <- as.matrix(caracteristiques)
+  if (!("p.value" %in% colnames(caracteristiques))) {
+    stop("FactoMineR::dimdesc ne fournit pas de colonne p.value.")
+  }
+  cles <- rownames(caracteristiques)
+  if (is.null(cles) || anyDuplicated(cles)) {
+    stop("FactoMineR::dimdesc renvoie des catégories sans clé unique.")
+  }
+  indices <- match(cles, identifiants_dimdesc)
+  if (anyNA(indices)) {
+    stop(
+      "Impossible de relier certaines catégories de dimdesc() aux modalités ",
+      "de l'ACM : ",
+      paste(cles[is.na(indices)], collapse = " ; ")
+    )
+  }
+  liste_p[[i]][indices] <- as.numeric(
+    caracteristiques[, "p.value"]
+  )
 }
+p_axe_1 <- liste_p[[1L]]
+p_axe_2 <- liste_p[[2L]]
+
 p_minimale <- apply(
   cbind(p_axe_1, p_axe_2), 1L,
   function(ligne) {
@@ -229,20 +270,21 @@ est_significative <- is.finite(p_minimale) & p_minimale <= 0.05
 nombre_p_valides <- sum(is.finite(p_minimale))
 if (nombre_p_valides == 0L) {
   stop(
-    "Aucune p-value exploitable dans les valeurs-tests FactoMineR. ",
-    "Le filtre ne peut pas être calculé."
+    "FactoMineR::dimdesc n'a fourni aucune p-value exploitable. ",
+    "Vérifier les catégories et le rapport méthodologique."
   )
 }
 tableau_significativite <- data.frame(
   variable = variables_modalites,
   modalite = noms_modalites,
+  identifiant_dimdesc = identifiants_dimdesc,
   v_test_axe_1 = v_axe_1,
   p_value_axe_1 = p_axe_1,
   v_test_axe_2 = v_axe_2,
   p_value_axe_2 = p_axe_2,
   p_value_min = p_minimale,
   significative_005 = est_significative,
-  methode = "FactoMineR::MCA var$v.test ; p bilatérale normale",
+  methode = "FactoMineR::dimdesc, p.value native",
   stringsAsFactors = FALSE
 )
 utils::write.csv2(
@@ -251,8 +293,6 @@ utils::write.csv2(
   row.names = FALSE, fileEncoding = "UTF-8", na = ""
 )
 
-# Exposer les effectifs et la p-value minimale pour diagnostiquer
-# une véritable absence de modalités significatives.
 p_minimale_globale <- min(p_minimale[is.finite(p_minimale)])
 diagnostic_filtre <- data.frame(
   indicateur = c(
@@ -261,7 +301,7 @@ diagnostic_filtre <- data.frame(
     "p-value minimale", "Axes utilisés"
   ),
   valeur = c(
-    "v.test de FactoMineR::MCA, p bilatérale sous approximation normale",
+    "FactoMineR::dimdesc, p.value native, axes 1 et 2",
     as.character(effectif_final),
     as.character(length(noms_modalites)),
     as.character(nombre_p_valides),
@@ -352,7 +392,7 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   if (filtrer_modalites && deux_axes) {
     mtext(
       sprintf(
-        "Modalites axes 1/2 : p <= 0,05 (%d/%d), v.test de FactoMineR::MCA.",
+        "Modalites axes 1/2 : p <= 0,05 (%d/%d), FactoMineR::dimdesc.",
         sum(visibles), length(visibles)
       ), side = 1, line = 4.3, cex = 0.7
     )
@@ -436,7 +476,7 @@ statistiques <- data.frame(
     format(sum(resultat$eig[, 1L]), digits = 9),
     as.character(sum(est_significative)), as.character(nrow(coordonnees)),
     format(p_minimale_globale, digits = 9),
-    "FactoMineR::MCA var$v.test, p bilatérale normale, axes 1 et 2"
+    "FactoMineR::dimdesc, p-values natives, axes 1 et 2"
   ),
   stringsAsFactors = FALSE
 )
@@ -481,8 +521,8 @@ rapport <- c(
   if (export_burt) "Tableau de Burt : burt.csv." else
     "Burt non exporté : plus de 1 000 000 cellules.",
   "",
-  "FILTRE DES MODALITES - VALEURS-TESTS DE FactoMineR::MCA",
-  "p = 2 * Phi(-abs(v.test)) ; approximation normale bilatérale.",
+  "FILTRE DES MODALITES - p-values natives de FactoMineR::dimdesc",
+  "dimdesc(proba=1) : p-values de toutes les modalités.",
   paste("Modalités avec p-value valide :", nombre_p_valides),
   paste("Modalités à p <= 0,05 :", sum(est_significative)),
   paste("p-value minimale :", signif(p_minimale_globale, 7)),
@@ -494,8 +534,8 @@ rapport <- c(
   "AVERTISSEMENTS MÉTHODOLOGIQUES",
   "L'ACM repose exclusivement sur les variables qualitatives actives.",
   "Les inerties TDC et Burt ne se comparent pas comme deux estimations d'une même proportion.",
-  "Le filtre concerne les modalités avec p bilatérale <= 0,05 sur l'axe 1 ou 2.",
-  "Les valeurs-tests et les axes sont définis à partir des données analysées.",
+  "Le filtre concerne les modalités avec p native <= 0,05 sur l'axe 1 ou 2.",
+  "Les p-values proviennent directement de FactoMineR::dimdesc.",
   "Ces p-values exploratoires ne sont pas corrigées pour comparaisons multiples.",
   "Les deux versions du plan utilisent les mêmes coordonnées FactoMineR.",
   "Toutes les modalités d'une variable partagent une couleur sur les deux plans.",
