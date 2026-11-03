@@ -1465,9 +1465,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 collecter_metriques_profil_media_research,
                 ResearchErreur, ResearchAccesRefuse)
             quota_profils_refuse = False
+            profils_anterieurs = {
+                p["compte"]: p for p in job.profils_medias if p.get("compte")
+            } if job.reprise else {}
             for media in sources:
                 job.check()
                 compte = media["compte"]
+                if profils_anterieurs.get(compte, {}).get("statut_profil") == "ok":
+                    # La métrique du compte était déjà acquise : quota épargné.
+                    continue
                 donnees, statut = {}, "indisponible"
                 job.update(status="collecting",
                            message="Lecture des métriques du profil @" + compte + "…")
@@ -1486,6 +1492,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         statut = "acces_refuse"
                     except ResearchErreur:
                         statut = "indisponible"
+                if job.reprise:
+                    # Une seule ligne par compte après actualisation du profil.
+                    job.profils_medias = [
+                        p for p in job.profils_medias if p.get("compte") != compte
+                    ]
                 job.profils_medias.append(ligne_profil_media(
                     media, job.settings.profils_medias_variables,
                     job.settings.profils_medias_classes, donnees=donnees,
