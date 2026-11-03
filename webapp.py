@@ -532,6 +532,34 @@ def matches_hashtags(description, settings, *, hashtags_observes=None):
             if settings.operator == "AND" else bool(correspondants))
 
 
+def filtrer_decouverte_hashtags_research(liens, metadonnees, parametres):
+    """Écarter avant lecture les vidéos Research ne correspondant pas aux hashtags.
+
+    La découverte par hashtag peut retourner une vidéo portant uniquement le
+    premier hashtag, y compris lorsque ET est sélectionné. Les métadonnées de
+    la Research API permettent de vérifier immédiatement tous les critères,
+    avec les mêmes règles que l'export TXT, sans ouvrir la vidéo.
+    """
+    conserves = []
+    ecartes = 0
+    indetermines = 0
+    for url in liens:
+        identite = scraper.canonical_post(url)
+        fiche = (metadonnees.get(str(identite[0]))
+                 if identite and isinstance(metadonnees, dict) else None)
+        if not isinstance(fiche, dict):
+            # Une vidéo non vérifiable ne peut pas être déclarée conforme.
+            indetermines += 1
+            continue
+        if not matches_hashtags(
+                fiche.get("description") or "", parametres,
+                hashtags_observes=fiche.get("hashtags")):
+            ecartes += 1
+            continue
+        conserves.append(url)
+    return conserves, ecartes, indetermines
+
+
 class CodageViolence(BaseModel):
     publication_id: str = Field(min_length=1, max_length=32, pattern=r"^[0-9]+$")
     violence_visible: Literal[0, 1] | None
@@ -2013,13 +2041,35 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 requete = rapport.get("requete_recherche") or etiquette
                 objectif = (f"{nombre}/{args.limit}" if args.limit is not None
                             and job.settings.source_collecte != "hashtags" else str(nombre))
+                message_progression = (
+                    f"{objectif} candidat(s) trouvés pour vérification ET/OU…"
+                    if job.settings.source_collecte == "hashtags"
+                    else f"{objectif} retenue(s) pour ce compte…")
                 job.update(message=f"Source {numero_source}/{len(sources)} — recherche {requete} : "
                     f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), "
-                    f"{objectif} retenue(s) pour ce compte…")
+                    + message_progression)
             try:
                 found = connexion.decouvrir(source, rapport,
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
+                if (job.settings.source_collecte == "hashtags"
+                        and moteur_actif == "research"):
+                    # Contrôler ET/OU dès la découverte, et non seulement
+                    # après avoir ouvert des vidéos hors sujet.
+                    found, ecartes, indetermines = filtrer_decouverte_hashtags_research(
+                        found, rapport.get("metadonnees_api") or {},
+                        job.settings)
+                    rapport["ecartes_combinaison_hashtags"] = ecartes
+                    rapport["ecartes_metadonnees_absentes"] = indetermines
+                    if ecartes or indetermines:
+                        job.diagnostics.append({
+                            "code": "preselection_hashtags_research",
+                            "source": etiquette,
+                            "hors_criteres": ecartes,
+                            "sans_metadonnees": indetermines,
+                            "retenues_pour_lecture": len(found),
+                            "operateur": job.settings.operator,
+                        })
                 rapport["discovered_urls"] = found
                 # Une découverte réussie réinitialise le compteur de pannes 5xx.
                 echecs_serveur_research_consecutifs = 0
