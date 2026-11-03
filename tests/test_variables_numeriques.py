@@ -200,6 +200,9 @@ class TestsVariablesNumeriques(unittest.TestCase):
             "Manifestation #17octobre", options_ou, hashtags_observes=[]))
         self.assertFalse(matches_hashtags(
             "Mobilisation 17 octobre", options_ou, hashtags_observes=["autre"]))
+        self.assertTrue(matches_hashtags(
+            "Mobilisation #17octobre", options_ou,
+            hashtags_observes=["autre"]))
         options_texte = StartRequest(
             **{**parametres, "rechercher_dans_texte": True}, operator="OR")
         self.assertTrue(matches_hashtags(
@@ -382,8 +385,10 @@ class TestsVariablesNumeriques(unittest.TestCase):
                 "videos": [{
                     "id": identifiants[indice],
                     "username": "exemple_lyceen",
-                    "video_description": "Manifestation des lycéens à Paris",
-                    "hashtag_names": ["manifestation", "lyceen"],
+                    "video_description": "Manifestation à Paris #manifestation #lyceen",
+                    "hashtag_names": (
+                        ["manifestation"] if indice == 0
+                        else ["manifestation", "lyceen"]),
                     "create_time": 1793534400,
                 }],
                 "has_more": indice == 0,
@@ -414,6 +419,7 @@ class TestsVariablesNumeriques(unittest.TestCase):
         self.assertEqual(len(liens), 2)
         self.assertEqual(bilan["pages_research"], 2)
         self.assertEqual(bilan["requetes_tentees"], 2)
+        self.assertEqual(bilan["ecartes_hashtags_api"], 0)
 
     def test_textes_research_enregistres_avant_la_fin_des_pages(self):
         """Le TXT et les compteurs avancent avant la dernière page TikTok."""
