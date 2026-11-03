@@ -834,6 +834,10 @@ class Job:
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.diagnostics = []
+        self.requetes_research_lot = 0
+        self.candidats_research_lot = 0
+        self.ecartes_hashtags_research_lot = 0
+        self.quota_research_local = None
         self.exclus_hashtags = 0
         self.cause_arret = None
         self.evenements_debug = []
@@ -1095,6 +1099,10 @@ class Job:
                     "limite_commentaires":self.settings.limite_commentaires,
                     "collecte_research_complete":self.settings.collecte_research_complete,
                     "test_research_10_publications":self.settings.test_research_10_publications,
+                    "requetes_research_lot": self.requetes_research_lot,
+                    "candidats_research_lot": self.candidats_research_lot,
+                    "ecartes_hashtags_research_lot": self.ecartes_hashtags_research_lot,
+                    "quota_research_local": self.quota_research_local,
                     "archive_prete": self.archive_prete, "video_busy": self.video_busy,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
@@ -2005,7 +2013,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         job.update(processed=index)
                         raise
                 job.update(processed=index)
-                job.save()
+                if (job.settings.source_collecte != "hashtags"
+                        or moteur_actif != "research"
+                        or index % 20 == 0 or index == len(links)):
+                    # Les écritures complètes du TXT à chaque publication
+                    # deviennent quadratiques sur plusieurs milliers de vidéos.
+                    # En Research Hashtags, sauvegarder par lot et en fin de
+                    # page ; le finally effectue toujours l'écriture finale.
+                    job.save()
                 if job.base and (not job.settings.filtrer_texte_ia_tiktok
                                  or record.get("retenue")):
                     job.base.enregistrer(job.id, job.publications[-1:], job.commentaires)
