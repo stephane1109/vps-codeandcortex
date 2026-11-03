@@ -2584,7 +2584,8 @@ class Manager:
             initialiser_donnees_reprise, lire_archive_json, preparer_reprise_medias)
         from stockage.historique_analyses import retrouver
         from stockage.postgres_consultation import (
-            adresse_configuree, obtenir_nom_collecte, verifier_disponibilite)
+            adresse_configuree, compter_publications_collecte,
+            obtenir_nom_collecte, verifier_disponibilite)
         if not cookie:
             raise HTTPException(403, "Historique privé indisponible.")
         archive = retrouver(self.data_dir, identifiant, cookie)
@@ -2610,6 +2611,25 @@ class Manager:
             raise HTTPException(503, "PostgreSQL indisponible : reprise non lancée.") from None
         if nom_pg != (parametres.get("nom_sauvegarde") or nom_pg):
             raise HTTPException(409, "Le nom de la collecte PostgreSQL ne correspond plus à l'archive.")
+        try:
+            publications_archivees = lire_archive_json(
+                dossier, "publications.json", obligatoire=True)
+            if not isinstance(publications_archivees, list):
+                raise ValueError("Format de publications.json invalide.")
+            publications_sql = compter_publications_collecte(cookie, identifiant)
+        except ValueError:
+            raise HTTPException(409,
+                "Archive et base d'origine inaccessibles : reprise bloquée pour protéger les données.") from None
+        except RuntimeError:
+            raise HTTPException(503,
+                "Vérification PostgreSQL impossible : reprise non lancée.") from None
+        if publications_sql > len(publications_archivees):
+            raise HTTPException(409,
+                "Reprise bloquée : PostgreSQL conserve "
+                f"{publications_sql} publications, mais l'archive locale n'en contient "
+                f"que {len(publications_archivees)}. "
+                "Le corpus original est protégé. Exportez d'abord les données "
+                "PostgreSQL pour reconstituer l'archive avant toute reprise.")
         try:
             journal = lire_archive_json(dossier, "journal.json", obligatoire=True)
         except ValueError:
@@ -2688,6 +2708,14 @@ class Manager:
             journal_archive = charger("journal.json")
             if isinstance(journal_archive, dict):
                 job.journal = list(journal_archive.get("evenements") or [])
+                anciens_compteurs = journal_archive.get("compteurs_collecte") or {}
+                if isinstance(anciens_compteurs, dict):
+                    # Restaurer les indicateurs observés, sans les confondre avec
+                    # les nouvelles requêtes effectuées par une reprise.
+                    job.discovered = int(anciens_compteurs.get("retenues") or 0)
+                    job.exportees = int(
+                        anciens_compteurs.get("exportees")
+                        or sum(bool(p.get("description")) for p in job.records))
             job.processed=int(manifeste.get("traites",0))
             job.source_en_cours_id = manifeste.get("source_en_cours_id")
             job.busy=False
