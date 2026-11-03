@@ -136,39 +136,6 @@ def ajouter_type_media(donnees: pd.DataFrame) -> pd.DataFrame:
 
 
 
-def generer_donnees_simulees(effectif: int = 400, graine: int = 2026) -> pd.DataFrame:
-    """Crée un corpus fictif pour éprouver la mécanique AFC, sans données réelles."""
-    if effectif < 20:
-        raise ValueError("Une simulation doit comporter au moins 20 observations.")
-    generateur = np.random.default_rng(graine)
-    classes_vues = ["Moins de 10k", "10k-100k", "100k-1M", "Plus de 1M"]
-    classes_engagement = ["Moins de 1%", "1-3%", "3-5%", "Plus de 5%"]
-    probabilites_vues = np.array([0.25, 0.35, 0.25, 0.15])
-    probabilites_engagement = np.array([
-        [0.20, 0.25, 0.30, 0.25],
-        [0.25, 0.35, 0.25, 0.15],
-        [0.38, 0.37, 0.18, 0.07],
-        [0.48, 0.35, 0.13, 0.04],
-    ])
-    indices_vues = generateur.choice(4, size=effectif, p=probabilites_vues)
-    indices_engagement = np.array([
-        generateur.choice(4, p=probabilites_engagement[classe])
-        for classe in indices_vues
-    ])
-    return pd.DataFrame({
-        "publication_id": [f"SIMULATION_{indice}" for indice in range(1, effectif + 1)],
-        "retenue": ["True"] * effectif,
-        "vues_classe": np.array(classes_vues)[indices_vues],
-        "classe_taux_engagement": np.array(classes_engagement)[indices_engagement],
-        "type_media": generateur.choice(
-            ["Presse nationale", "Presse régionale", "Presse indépendante", "Autres médias"],
-            size=effectif,
-        ),
-        "violence_annotee": generateur.choice(["Violence", "Pacifique"], size=effectif, p=[0.4, 0.6]),
-        "symboles_etat": generateur.choice(["Présents", "Absents"], size=effectif),
-    }).astype(str)
-
-
 def decrire_variables(donnees: pd.DataFrame, maximum_modalites: int = 40) -> pd.DataFrame:
     """Établit l'inventaire des colonnes et distingue les variables à recoder."""
     descriptions = []
