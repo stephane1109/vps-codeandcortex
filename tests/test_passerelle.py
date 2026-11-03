@@ -60,6 +60,59 @@ class TestsPasserelle(unittest.TestCase):
                     self.assertEqual(client.get('/static/controle.js').status_code,200)
                     self.assertEqual(client.get('/static/navigateur.js').status_code,200)
 
+    def test_depot_csv_streamlit_put_est_relaye(self):
+        """Un fichier CSV est transmis avec PUT sans réponse 405 du relais."""
+        with tempfile.TemporaryDirectory() as d, patch.dict(
+                webapp.os.environ, {"STREAMLIT_PORT": "65431"}):
+            with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
+                with patch("interface.passerelle.httpx.AsyncClient") as fabrique:
+                    serveur = fabrique.return_value.__aenter__.return_value
+                    serveur.request = AsyncMock(
+                        return_value=httpx.Response(204))
+                    chemin = "/_stcore/upload_file/session123/file456"
+                    transfert = client.put(
+                        chemin, content=b"media_id;etat\\nfrance_tv;non_commencee\\n",
+                        headers={"origin": "http://testserver"})
+                    self.assertEqual(transfert.status_code, 204)
+                    arguments = serveur.request.call_args
+                    self.assertEqual(arguments.args[0], "PUT")
+                    self.assertEqual(
+                        arguments.args[1],
+                        "http://127.0.0.1:65431" + chemin)
+                    self.assertEqual(
+                        arguments.kwargs["content"],
+                        b"media_id;etat\\nfrance_tv;non_commencee\\n")
+                    self.assertEqual(
+                        arguments.kwargs["headers"]["origin"],
+                        "http://127.0.0.1:65431")
+
+    def test_put_restreint_a_upload_file_streamlit(self):
+        """Ne pas autoriser les mutations PUT sur les autres routes HTTP."""
+        with tempfile.TemporaryDirectory() as d:
+            with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
+                self.assertEqual(client.put("/une-autre-route").status_code, 405)
+                self.assertEqual(
+                    client.put("/_stcore/upload_file/abc",
+                               headers={"origin": "https://externe.test"}).status_code,
+                    403,
+                )
+
+    def test_csv_de_plus_d_un_mo_accepte_sur_la_route_streamlit(self):
+        """La limite de 1 Mo des API ne doit plus bloquer les imports CSV."""
+        with tempfile.TemporaryDirectory() as d, patch.dict(
+                webapp.os.environ, {"STREAMLIT_PORT": "65431"}):
+            with TestClient(webapp.create_app(webapp.Manager(data_dir=d))) as client:
+                with patch("interface.passerelle.httpx.AsyncClient") as fabrique:
+                    serveur = fabrique.return_value.__aenter__.return_value
+                    serveur.request = AsyncMock(return_value=httpx.Response(204))
+                    transfert = client.put(
+                        "/_stcore/upload_file/session123/file456",
+                        content=b"a" * (1024**2 + 1))
+                    self.assertEqual(transfert.status_code, 204)
+                    self.assertEqual(
+                        len(serveur.request.call_args.kwargs["content"]),
+                        1024**2 + 1)
+
     def test_controle_detecte_cookie_different_sans_donner_acces_a_la_collecte(self):
         """Le navigateur CAPTCHA ne doit jamais obtenir la collecte d'une autre session."""
         import hashlib
