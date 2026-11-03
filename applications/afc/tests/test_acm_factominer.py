@@ -379,7 +379,7 @@ class TestsACM(unittest.TestCase):
             )
             self.assertEqual(
                 sum(int(ligne["nombre_modalites"]) for ligne in palette),
-                23,
+                24,
                 "Chaque variable active doit contribuer ses modalités.",
             )
             rapport = (sortie / "00_rapport_acm.txt").read_text(
