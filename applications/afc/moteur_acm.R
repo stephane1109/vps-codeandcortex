@@ -129,6 +129,47 @@ coordonnees <- as.matrix(resultat$var$coord)
 if (is.null(rownames(coordonnees))) {
   stop("FactoMineR ne fournit pas les noms des modalités actives.")
 }
+# FactoMineR conserve le regroupement des modalités dans l'ordre des
+# variables actives. Le nombre de modalités provient de son propre
+# tableau factoriel, pour ne pas associer de mauvaises couleurs en cas
+# de modalités portant le même nom dans plusieurs variables.
+variables_actives <- resultat$call$X
+noms_variables_actives <- names(variables_actives)
+effectifs_modalites <- vapply(variables_actives, nlevels, integer(1))
+variables_modalites <- rep(
+  noms_variables_actives, times = effectifs_modalites
+)
+if (length(variables_modalites) != nrow(coordonnees)) {
+  stop(
+    "Impossible d'associer les modalités aux variables de FactoMineR : ",
+    "le nombre de modalités ne correspond pas aux coordonnées."
+  )
+}
+
+# Une couleur par variable, commune à toutes ses modalités et conservée
+# sur les plans complets et filtrés. La palette est déterministe.
+couleurs_variables <- stats::setNames(
+  grDevices::hcl.colors(
+    length(noms_variables_actives), palette = "Dark 3"
+  ),
+  noms_variables_actives
+)
+couleurs_modalites <- unname(couleurs_variables[variables_modalites])
+if (anyNA(couleurs_modalites)) {
+  stop("Une modalité active ne possède pas de couleur de variable.")
+}
+tableau_couleurs <- data.frame(
+  variable = noms_variables_actives,
+  couleur_hex = unname(couleurs_variables),
+  nombre_modalites = unname(as.integer(effectifs_modalites)),
+  stringsAsFactors = FALSE
+)
+utils::write.csv2(
+  tableau_couleurs,
+  file.path(dossier_sortie, "19_couleurs_variables.csv"),
+  row.names = FALSE, fileEncoding = "UTF-8"
+)
+
 deux_axes <- ncol(coordonnees) >= 2L
 axes_description <- seq_len(min(2L, ncol(coordonnees)))
 
@@ -227,7 +268,12 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   } else {
     "Aucun axe 2"
   }
-  par(mar = c(6.5, 5, 4, 2))
+  # Préserver une zone exclusivement réservée à la légende des variables :
+  # celle-ci ne recouvre ni les points ni les étiquettes des modalités.
+  graphics::layout(
+    matrix(c(1L, 2L), nrow = 1L), widths = c(3.8, 1.9)
+  )
+  par(mar = c(6.5, 5, 4, 1))
   plot(
     NA_real_, NA_real_, type = "n", xlim = xlim, ylim = ylim,
     xlab = etiquette_x, ylab = etiquette_y,
@@ -235,11 +281,15 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
   if (any(visibles)) {
-    points(x[visibles], y[visibles], pch = 16, col = "#2166AC", cex = 1.1)
+    points(
+      x[visibles], y[visibles], pch = 16,
+      col = couleurs_modalites[visibles], cex = 1.1
+    )
     text(
       x[visibles], y[visibles],
       libelles_graphiques(noms_modalites[visibles]),
-      pos = 3, cex = 0.72, col = "#2166AC", xpd = TRUE
+      pos = 3, cex = 0.72,
+      col = couleurs_modalites[visibles], xpd = TRUE
     )
   }
   if (filtrer_modalites && deux_axes) {
@@ -260,6 +310,24 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
     mtext("Plan complet : toutes les modalites actives sont affichees.",
           side = 1, line = 4.3, cex = 0.7)
   }
+
+  # Conserver dans les deux plans la même association variable/couleur.
+  par(mar = c(6.5, 0.5, 4, 0.5))
+  plot.new()
+  taille_legende <- if (length(noms_variables_actives) > 20L) {
+    0.54
+  } else if (length(noms_variables_actives) > 12L) {
+    0.66
+  } else {
+    0.82
+  }
+  legend(
+    "topleft",
+    legend = libelles_graphiques(noms_variables_actives),
+    col = unname(couleurs_variables),
+    pch = 16, bty = "n", cex = taille_legende,
+    title = "Variables actives"
+  )
 }
 dessiner_inerties <- function() {
   inerties <- resultat$eig[, 2L]
@@ -273,13 +341,13 @@ dessiner_inerties <- function() {
 dessiner_png <- function(nom, action) {
   grDevices::png(
     file.path(dossier_sortie, nom),
-    width = 1600, height = 1100, res = 160
+    width = 1900, height = 1100, res = 160
   )
   tryCatch(action(), finally = grDevices::dev.off())
 }
 dessiner_png("13_plan_factoriel.png", function() dessiner_plan(FALSE))
 grDevices::pdf(
-  file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 12, height = 8.5
+  file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 14, height = 8.5
 )
 tryCatch(dessiner_plan(FALSE), finally = grDevices::dev.off())
 dessiner_png(
@@ -287,7 +355,7 @@ dessiner_png(
 )
 grDevices::pdf(
   file.path(dossier_sortie, "14_plan_factoriel_significatif.pdf"),
-  width = 12, height = 8.5
+  width = 14, height = 8.5
 )
 tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
 dessiner_png("15_inerties.png", dessiner_inerties)
@@ -361,7 +429,9 @@ rapport <- c(
   "L'ACM repose exclusivement sur les variables qualitatives actives.",
   "Les inerties TDC et Burt ne se comparent pas comme deux estimations d'une même proportion.",
   "Le filtre optionnel concerne les modalités caractéristiques des axes 1 et 2.",
-  "Les deux versions du plan utilisent les mêmes coordonnées FactoMineR."
+  "Les deux versions du plan utilisent les mêmes coordonnées FactoMineR.",
+  "Toutes les modalités d'une variable partagent une couleur sur les deux plans.",
+  "Correspondance variable / couleur : 19_couleurs_variables.csv."
 )
 writeLines(
   rapport, file.path(dossier_sortie, "00_rapport_acm.txt"), useBytes = TRUE
