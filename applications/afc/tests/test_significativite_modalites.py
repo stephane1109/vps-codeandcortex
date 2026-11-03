@@ -51,6 +51,14 @@ class TestsSignificativiteModalites(unittest.TestCase):
         self.assertNotIn("p.adjust(", source)
         self.assertNotIn("p_ajustee_bh", source)
         self.assertNotIn("tester_modalite <- function(", source)
+        self.assertNotIn("stats::chisq.test(", source)
+        self.assertNotIn("simulate.p.value", source)
+        self.assertNotIn("V de Cramér", source)
+        self.assertNotIn("repetitions <-", source)
+        self.assertIn("summary(resultat, nbelements = Inf", source)
+        self.assertNotIn('"02_effectifs_attendus.csv"', source)
+        self.assertNotIn('"03_residus_pearson.csv"', source)
+
 
     @unittest.skipUnless(
         environnement_r_disponible(),
@@ -74,7 +82,7 @@ class TestsSignificativiteModalites(unittest.TestCase):
                 ])
             processus = subprocess.run(
                 [shutil.which("Rscript"), str(MOTEUR_R),
-                 str(donnees), str(sorties), "999",
+                 str(donnees), str(sorties),
                  "Variable ligne", "Variable colonne", "Corpus test",
                  "300", "300"],
                 capture_output=True, text=True, check=False, timeout=90,
