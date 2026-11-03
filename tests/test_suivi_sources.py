@@ -112,6 +112,21 @@ class TestsSuiviSourcesMedias(unittest.TestCase):
             interface.index('for categorie, libelle_categorie in categories_medias:', debut),
         )
 
+    def test_ancien_bilan_ignore_francetvpolitique_retiré(self):
+        """Un bilan ancien doit conserver les médias actifs sans relancer le compte retiré."""
+        from collecte.presse import charger_inventaire
+        inventaire = {media["id"]: media for media in charger_inventaire()}
+        bilan = [
+            {"media_id": "francetvpolitique", "etat": "interrompue",
+             "nom": "France Télévisions — Politique", "compte": "francetvpolitique"},
+            {"media_id": "lci", "etat": "non_commencee",
+             "nom": "LCI", "compte": "lci"},
+        ]
+        selection, absents = importer_bilan_medias_csv(
+            exporter_bilan_medias_csv(bilan), inventaire)
+        self.assertEqual(selection, ["lci"])
+        self.assertEqual(absents, ["francetvpolitique"])
+
     def test_media_supprime_du_catalogue_est_signale(self):
         bilan = etablir_bilan_medias(self.sources, [], termine=True)
         selection, absents = importer_bilan_medias_csv(
