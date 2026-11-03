@@ -387,6 +387,8 @@ def executer_moteur_acm(
     effectif_final: int,
     parametres: dict,
     methode_calcul: str = "Indicator",
+    variables_supplementaires_qualitatives: list[str] | None = None,
+    variables_supplementaires_quantitatives: list[str] | None = None,
 ) -> dict:
     """Exécuter l'ACM native sur TDC ou sur le tableau de Burt."""
     if methode_calcul not in {"Indicator", "Burt"}:
@@ -397,6 +399,34 @@ def executer_moteur_acm(
             "Rscript est introuvable. Déployer l'application avec le Dockerfile "
             "pour installer R et FactoMineR."
         )
+    supplementaires_qualitatives = (
+        variables_supplementaires_qualitatives or []
+    )
+    supplementaires_quantitatives = (
+        variables_supplementaires_quantitatives or []
+    )
+    toutes_supplementaires = [
+        *supplementaires_qualitatives, *supplementaires_quantitatives
+    ]
+    if (
+        len(set(toutes_supplementaires)) != len(toutes_supplementaires)
+        or any(nom not in donnees for nom in toutes_supplementaires)
+    ):
+        raise ValueError(
+            "Variables supplémentaires absentes ou sélectionnées deux fois."
+        )
+    colonnes_entree = list(donnees.columns)
+    indices_quali_sup = [
+        colonnes_entree.index(nom) + 1
+        for nom in supplementaires_qualitatives
+    ]
+    indices_quanti_sup = [
+        colonnes_entree.index(nom) + 1
+        for nom in supplementaires_quantitatives
+    ]
+    if len(colonnes_entree) - len(toutes_supplementaires) < 3:
+        raise ValueError("L'ACM nécessite au moins trois variables actives.")
+
     with tempfile.TemporaryDirectory(prefix="acm_factominer_") as temporaire:
         dossier = Path(temporaire)
         chemin_donnees = dossier / "categories.tsv"
@@ -414,6 +444,8 @@ def executer_moteur_acm(
             str(effectif_initial),
             str(effectif_final),
             methode_calcul,
+            ",".join(map(str, indices_quali_sup)),
+            ",".join(map(str, indices_quanti_sup)),
         ]
         try:
             processus = subprocess.run(
@@ -458,6 +490,19 @@ def executer_moteur_acm(
             "19_couleurs_variables.csv",
             "20_diagnostic_filtre_pvalue.csv",
         }
+        if supplementaires_qualitatives:
+            attendus.update({
+                "21_coordonnees_qualitatives_supplementaires.csv",
+                "22_cos2_qualitatives_supplementaires.csv",
+                "23_vtest_qualitatives_supplementaires.csv",
+                "24_eta2_qualitatives_supplementaires.csv",
+            })
+        if supplementaires_quantitatives:
+            attendus.update({
+                "25_coordonnees_quantitatives_supplementaires.csv",
+                "26_plan_quantitatives_supplementaires.png",
+                "27_plan_quantitatives_supplementaires.pdf",
+            })
         manquants = sorted(attendus.difference(fichiers))
         if manquants:
             raise RuntimeError(
