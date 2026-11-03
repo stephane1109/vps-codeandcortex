@@ -4,6 +4,8 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     AFC_TIMEOUT_SECONDS=180
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
