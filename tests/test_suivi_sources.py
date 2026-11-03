@@ -1,5 +1,6 @@
 """Tests du bilan des médias et de la sélection de reprise du lendemain."""
 import unittest
+from pathlib import Path
 
 from collecte.suivi_sources import (
     etablir_bilan_medias, exporter_bilan_medias_csv,
@@ -93,6 +94,23 @@ class TestsSuiviSourcesMedias(unittest.TestCase):
             fichier, {s["id"]: s for s in self.sources})
         self.assertEqual(selection, ["media_2", "media_3", "media_4"])
         self.assertEqual(absents, [])
+
+    def test_import_csv_coche_automatiquement_les_cases_avant_leur_affichage(self):
+        """Une sélection importée est appliquée sans second bouton ni remise à zéro."""
+        interface = (Path(__file__).resolve().parents[1] /
+                     "streamlit_app.py").read_text(encoding="utf-8")
+        debut = interface.index('fichier_bilan = st.file_uploader(')
+        fin = interface.index('categories_medias = (', debut)
+        importation = interface[debut:fin]
+        self.assertIn('cocher_uniquement_medias(ids_importes)', importation)
+        self.assertIn('hashlib.sha256(contenu_bilan)', importation)
+        self.assertIn('empreinte_dernier_bilan_medias', importation)
+        self.assertIn('if fichier_bilan is None:', importation)
+        self.assertNotIn('cocher_medias_depuis_csv', importation)
+        self.assertLess(
+            interface.index('cocher_uniquement_medias(ids_importes)', debut),
+            interface.index('for categorie, libelle_categorie in categories_medias:', debut),
+        )
 
     def test_media_supprime_du_catalogue_est_signale(self):
         bilan = etablir_bilan_medias(self.sources, [], termine=True)
