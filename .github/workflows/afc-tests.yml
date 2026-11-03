@@ -1,0 +1,29 @@
+name: AFC FactoMineR - tests
+
+on:
+  push:
+    branches: [deploy-afc]
+    paths:
+      - "applications/afc/**"
+      - ".github/workflows/afc-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  tests-afc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer FactoMineR et ses dépendances R
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends r-base-core r-cran-factominer
+      - name: Installer les dépendances Python
+        run: python -m pip install -r applications/afc/requirements.txt
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q applications/afc/application.py applications/afc/traitement_csv.py applications/afc/tests
+      - name: Exécuter les tests AFC et FactoMineR
+        working-directory: applications/afc
+        run: python -m unittest discover -s tests -v
