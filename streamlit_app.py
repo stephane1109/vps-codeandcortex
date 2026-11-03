@@ -1929,6 +1929,15 @@ with onglet_collecte:
                     for numero_source, bilan in enumerate(actuel["bilan_sources"], 1):
                         details_source = []
                         ajouter_detail_source(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        if actuel.get("source_collecte") == "hashtags":
+                            exclus_criteres = bilan.get("ecartes_combinaison_hashtags") or 0
+                            exclus_non_verifies = bilan.get("ecartes_metadonnees_absentes") or 0
+                            if exclus_criteres or exclus_non_verifies:
+                                ajouter_detail_source(
+                                    f"Préfiltrage Research ET/OU : {exclus_criteres} vidéo(s) "
+                                    "sans correspondance avec tous les critères ; "
+                                    f"{exclus_non_verifies} vidéo(s) sans métadonnées "
+                                    "vérifiables, non transmises au corpus.")
                         informations_source = []
                         if actuel.get("source_collecte") == "presse":
                             version_source=bilan.get("version_collecteur")
