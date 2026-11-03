@@ -45,6 +45,32 @@ def choisir_defaut(variables: list[str], nom_souhaite: str, position: int = 0) -
     return variables.index(nom_souhaite) if nom_souhaite in variables else min(position, len(variables) - 1)
 
 
+def diagnostiquer_echec_r(
+    sortie_erreur: str, sortie_standard: str
+) -> str:
+    """Prioriser le message d'erreur R plutôt que les avertissements graphiques."""
+    messages = "\n".join(
+        morceau for morceau in (sortie_erreur, sortie_standard) if morceau
+    ).splitlines()
+    indices = [
+        indice for indice, ligne in enumerate(messages)
+        if ligne.lstrip().startswith(("Error in ", "Error:", "Erreur", "ERROR"))
+    ]
+    if indices:
+        debut = indices[-1]
+        # Conserver les lignes explicatives qui suivent l'erreur R.
+        extrait = messages[debut:debut + 8]
+        arret = next(
+            (i for i, ligne in enumerate(extrait)
+             if ligne.lstrip().startswith("Execution halted")),
+            None,
+        )
+        return "\n".join(extrait[:arret + 1] if arret is not None else extrait)[:3500]
+    return "\n".join(messages[-18:])[-3500:] or (
+        "Le processus R s'est arrêté sans message exploitable."
+    )
+
+
 def executer_moteur_r(
     tableau: pd.DataFrame,
     variable_lignes: str,
@@ -339,8 +365,12 @@ def executer_moteur_acm(
                 "Réduire le nombre de variables ou ajuster AFC_TIMEOUT_SECONDS."
             ) from erreur
         if processus.returncode != 0:
-            details = (processus.stderr or processus.stdout).strip()
-            raise RuntimeError(f"Erreur dans FactoMineR::MCA : {details[:2500]}")
+            details = diagnostiquer_echec_r(
+                processus.stderr, processus.stdout
+            )
+            raise RuntimeError(
+                "Échec du calcul ou des exports ACM (R) : " + details
+            )
         (dossier_sortie / "17_parametres_analyse.json").write_text(
             json.dumps(parametres, ensure_ascii=False, indent=2),
             encoding="utf-8",
