@@ -505,10 +505,6 @@ def construire_interface() -> None:
         else:
             st.info("Les paramètres ont changé depuis le dernier calcul. Relancer l'AFC pour actualiser les résultats.")
 
-    st.caption(
-        "Précaution méthodologique : l'AFC est descriptive et ne permet pas d'inférer "
-        "une causalité. Les annotations de violence doivent provenir de données explicites."
-    )
 
 
 if __name__ == "__main__":
