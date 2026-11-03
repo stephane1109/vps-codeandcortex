@@ -37,6 +37,9 @@ from language_filter import classify_description
 from collecte.dates import normaliser_date, evaluer_periode
 from collecte.selection_hashtags import normaliser_liste_hashtags
 from collecte.suivi_sources import etablir_bilan_medias, exporter_bilan_medias_csv
+from collecte.suivi_hashtags import (
+    etablir_bilan_hashtags, exporter_bilan_hashtags_csv,
+    preparer_reprise_hashtags)
 
 LOG = logging.getLogger("scraptiktok.web")
 TERMINAL = {"completed", "partial", "failed", "stopped"}
@@ -977,8 +980,7 @@ class Job:
                     "reprise": self.reprise, "medias_reprise": list(self.medias_reprise),
                     "hashtags_reprise": list(self.hashtags_reprise),
                     "bilan_hashtags_sources": (
-                        __import__("collecte.suivi_hashtags", fromlist=[
-                            "etablir_bilan_hashtags"]).etablir_bilan_hashtags(
+                        etablir_bilan_hashtags(
                             self.settings.hashtags, self.settings.variantes_accents,
                             self.journal, source_en_cours=self.source_en_cours_id,
                             termine=not self.busy, collecte_id=self.id)
@@ -2178,6 +2180,67 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if (job.settings.source_collecte == "hashtags" and not filtre_dates_hashtags
                 and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
             lire_decouvertes()
+        if (job.settings.source_collecte == "hashtags" and moteur_actif == "research"
+                and job.settings.profils_medias_variables):
+            # Même tableau de métriques que Presse, mais une ligne par auteur
+            # distinct effectivement présent dans le corpus hashtags.
+            from collecte.profils_medias import ligne_profil_media
+            from collecte.researchapi import (
+                collecter_metriques_profil_media_research,
+                ResearchErreur, ResearchAccesRefuse)
+            deja_recuperes = {
+                str(fiche.get("compte") or "").casefold(): fiche
+                for fiche in job.profils_medias if isinstance(fiche, dict)
+            }
+            auteurs = dict.fromkeys(
+                str(publication.get("author") or "").strip().lstrip("@").casefold()
+                for publication in job.publications
+                if isinstance(publication, dict) and publication.get("author")
+            )
+            quota_profils_refuse = limitation_research or limitation_abonnes_research
+            for auteur in auteurs:
+                if deja_recuperes.get(auteur, {}).get("statut_profil") == "ok":
+                    continue
+                job.check()
+                donnees, etat = {}, "indisponible"
+                job.update(status="collecting",
+                           message="Lecture des métriques du compte @" + auteur + "…")
+                if quota_profils_refuse:
+                    etat = "acces_refuse"
+                else:
+                    try:
+                        donnees = collecter_metriques_profil_media_research(
+                            auteur, job.settings.profils_medias_variables,
+                            verifier=job.check,
+                            credentiels=connexion.research_credentiels)
+                        etat = ("ok" if any(valeur is not None
+                                         for valeur in donnees.values())
+                                else "indisponible")
+                    except ResearchAccesRefuse:
+                        quota_profils_refuse = True
+                        limitation_abonnes_research = True
+                        etat = "acces_refuse"
+                    except ResearchErreur:
+                        etat = "indisponible"
+                from collecte.presse import categorie_presse_publication
+                fiche_auteur = {
+                    "compte": auteur, "nom": auteur,
+                    "categorie": categorie_presse_publication({"author": auteur}),
+                    "url": "https://www.tiktok.com/@" + auteur,
+                }
+                ligne = ligne_profil_media(
+                    fiche_auteur, job.settings.profils_medias_variables,
+                    job.settings.profils_medias_classes,
+                    donnees=donnees, statut=etat)
+                if auteur in deja_recuperes:
+                    position = next(
+                        (i for i, valeur in enumerate(job.profils_medias)
+                         if valeur.get("compte") == auteur), None)
+                    if position is not None:
+                        job.profils_medias[position] = ligne
+                else:
+                    job.profils_medias.append(ligne)
+                deja_recuperes[auteur] = ligne
         exclus_decouverte = set().union(*(set(e.get("rapport", {}).get("auteurs_ecartes_ids", [])) for e in job.journal))
         recherche_partielle = any(e.get("rapport", {}).get("collecte_partielle") for e in job.journal)
         if job.settings.test_research_10_publications:
@@ -2409,6 +2472,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         source_en_cours=job.source_en_cours_id, termine=True)
                     (job.directory / "bilan_medias.csv").write_bytes(
                         exporter_bilan_medias_csv(bilan))
+                elif job.settings.source_collecte == "hashtags":
+                    bilan = etablir_bilan_hashtags(
+                        job.settings.hashtags, job.settings.variantes_accents,
+                        job.journal, source_en_cours=job.source_en_cours_id,
+                        termine=True, collecte_id=job.id)
+                    (job.directory / "bilan_hashtags.csv").write_bytes(
+                        exporter_bilan_hashtags_csv(bilan))
                 # Le mode Profils conserve les vidéos découvertes sans légende.
                 # Le mode Presse n'archive QUE des publications réellement lues
                 # et jamais une référence brute issue d'un embed ou d'une API 429.
@@ -2434,7 +2504,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             reussis = sum(
                 fiche["statut_profil"] == "ok" for fiche in job.profils_medias)
             final_message += (
-                f" Profils médias : {reussis}/{len(job.profils_medias)} "
+                f" Profils auteurs : {reussis}/{len(job.profils_medias)} "
                 "compte(s) renseigné(s) ; consultez profils_medias.csv "
                 "pour les valeurs exactes et les absences.")
             if final_status == "failed" and reussis and job.archive_prete:
