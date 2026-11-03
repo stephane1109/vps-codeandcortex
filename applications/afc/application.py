@@ -42,7 +42,6 @@ def choisir_defaut(variables: list[str], nom_souhaite: str, position: int = 0) -
 
 def executer_moteur_r(
     tableau: pd.DataFrame,
-    repetitions: int,
     variable_lignes: str,
     variable_colonnes: str,
     nom_source: str,
@@ -70,7 +69,6 @@ def executer_moteur_r(
             str(DOSSIER_APPLICATION / "moteur_afc.R"),
             str(fichier_tableau),
             str(dossier_sortie),
-            str(repetitions),
             variable_lignes,
             variable_colonnes,
             nom_source,
@@ -90,7 +88,7 @@ def executer_moteur_r(
         except subprocess.TimeoutExpired as erreur:
             raise RuntimeError(
                 f"Le calcul R a dépassé la limite de {DELAI_CALCUL} secondes. "
-                "Réduire le nombre de modalités ou les simulations Monte-Carlo."
+                "Réduire le nombre de modalités ou augmenter AFC_TIMEOUT_SECONDS."
             ) from erreur
         if processus.returncode != 0:
             details = (processus.stderr or processus.stdout).strip()
@@ -142,10 +140,19 @@ def afficher_resultats(resultats: dict) -> None:
     valeurs = dict(zip(statistiques["indicateur"], statistiques["valeur"]))
     indicateurs = st.columns(4)
     indicateurs[0].metric("Observations", valeurs.get("Observations analysées", "—"))
-    indicateurs[1].metric("Chi-deux", valeurs.get("Chi-deux de Pearson", "—"))
-    indicateurs[2].metric("Valeur p", valeurs.get("Valeur p", "—"))
-    indicateurs[3].metric("V de Cramér", valeurs.get("V de Cramér", "—"))
-    st.caption(valeurs.get("Méthode du test", ""))
+    indicateurs[1].metric("Axes factoriels", valeurs.get("Axes factoriels", "—"))
+    indicateurs[2].metric(
+        "Modalités significatives",
+        valeurs.get("Modalités significatives (p <= 0,05)", "—"),
+    )
+    indicateurs[3].metric(
+        "Inertie totale",
+        valeurs.get("Inertie totale (FactoMineR)", "—"),
+    )
+    st.caption(
+        "Résultats issus de FactoMineR::CA() et FactoMineR::descfreq(). "
+        "Le rapport méthodologique contient le résumé natif de FactoMineR."
+    )
 
     onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
         ["Plan factoriel", "Inerties", "Tableaux", "Rapport méthodologique"]
@@ -301,10 +308,6 @@ def construire_interface() -> None:
             "Nombre maximal de modalités par variable", min_value=2, max_value=100,
             value=40, step=1,
         )
-        repetitions = st.number_input(
-            "Répétitions Monte-Carlo si effectifs théoriques faibles",
-            min_value=999, max_value=19999, value=1999, step=1000,
-        )
         options_filtre = ["(Aucun)"] + noms_variables
         variable_filtre_choisie = st.selectbox("Filtrer sur une variable (facultatif)", options_filtre)
         variable_filtre = None if variable_filtre_choisie == "(Aucun)" else variable_filtre_choisie
@@ -336,15 +339,12 @@ def construire_interface() -> None:
         return
 
     st.subheader("4. Vérifier le tableau avant l'AFC")
-    controles = st.columns(4)
+    controles = st.columns(3)
     controles[0].metric("Observations analysables", preparation.effectif_final)
     controles[1].metric("Modalités en lignes", len(preparation.tableau.index))
     controles[2].metric("Modalités en colonnes", len(preparation.tableau.columns))
-    controles[3].metric("Cellules attendues < 5", preparation.cellules_attendues_faibles)
     if preparation.effectif_final < 30:
-        st.warning("Effectif inférieur à 30 : résultats exploratoires, non concluants statistiquement.")
-    if preparation.cellules_attendues_faibles:
-        st.info("Des effectifs attendus sont inférieurs à 5 ; le test Chi-deux utilisera une estimation Monte-Carlo.")
+        st.warning("Effectif inférieur à 30 : interprétation exploratoire.")
     if min(preparation.tableau.shape) == 2:
         st.info("Le tableau ne comporte qu'un axe factoriel : aucun plan en deux dimensions n'est possible.")
     st.dataframe(preparation.tableau, use_container_width=True)
@@ -354,10 +354,6 @@ def construire_interface() -> None:
         f"après dédoublonnage : {preparation.effectif_apres_dedoublonnage} ; "
         f"après exclusion des valeurs inutilisables : {preparation.effectif_final}."
     )
-    if preparation.inertie_nulle:
-        st.warning("Le tableau présente une indépendance parfaite : aucune inertie à représenter.")
-        return
-
     parametres = {
         "source": nom_source,
         "empreinte_sha256": hashlib.sha256(contenu).hexdigest(),
@@ -368,7 +364,6 @@ def construire_interface() -> None:
         "exclure_indeterminees": exclure_indeterminees,
         "inclure_manquantes": inclure_manquantes,
         "maximum_modalites": int(maximum_modalites),
-        "repetitions_monte_carlo": int(repetitions),
         "variable_filtre": variable_filtre,
         "modalites_filtre": modalites_filtre,
         "effectif_initial": preparation.effectif_initial,
@@ -382,7 +377,6 @@ def construire_interface() -> None:
             with st.spinner("Calcul de l'AFC dans R et préparation des graphiques..."):
                 resultats = executer_moteur_r(
                     tableau=preparation.tableau,
-                    repetitions=int(repetitions),
                     variable_lignes=variable_lignes,
                     variable_colonnes=variable_colonnes,
                     nom_source=nom_source,
