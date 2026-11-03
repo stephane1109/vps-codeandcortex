@@ -2148,21 +2148,31 @@ with onglet_collecte:
                                   else "texte_export_avec_arobase")
                     st.text(publication.get(cle_apercu, publication.get("texte_export", publication["description"])))
             if actuel.get("apercu_engagement"):
-                st.caption(f"{len(actuel['apercu_engagement'])} publications enregistrées · {actuel.get('captions',0)} textes retenus après les filtres.")
+                st.caption(
+                    f"{len(actuel['apercu_engagement'])} publications examinées · "
+                    f"{actuel.get('captions', 0)} textes retenus après les filtres.")
 
                 def compteur(mesure):
                     if mesure.get("valeur") is None:
                         return "Indisponible"
                     return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
 
-                lignes = []
+                lignes_retenues = []
+                lignes_ecartees = []
+                motifs_exclusion = {
+                    "filtre_hashtags": "Hashtags ET/OU non satisfaits",
+                    "autre_langue": "Langue étrangère détectée",
+                    "hors_periode": "Publication hors période",
+                    "date_indeterminee": "Date non déterminée",
+                    "sans_texte_ia_tiktok": "Texte IA demandé absent",
+                    "legende_vide": "Légende vide",
+                }
                 for publication in actuel["apercu_engagement"]:
                     ligne = {
                         "Auteur": "@" + publication["author"],
                         "Publication": publication["url"],
                         "URL TikTok": publication["url"]
                     }
-
                     for cle, titre in (
                         ("likes", "Likes"),
                         ("vues", "Vues"),
@@ -2173,33 +2183,48 @@ with onglet_collecte:
                         ligne[titre] = compteur(
                             publication.get("engagement", {}).get(cle, {})
                         )
-
                     ligne["Retenue dans le TXT"] = (
                         "Oui" if publication.get("retenue_txt", True) else "Non"
                     )
-
                     ligne["Langue"] = {
                         "fr": "Français",
                         "other": "Autre langue",
                         "unknown": "Indéterminée",
                         None: "Non évaluée"
                     }.get(publication.get("langue_detection"), "Non évaluée")
+                    ligne["Motif d'exclusion"] = motifs_exclusion.get(
+                        publication.get("motif_non_retenue"),
+                        publication.get("motif_non_retenue") or "")
+                    if publication.get("retenue_txt", True):
+                        lignes_retenues.append(ligne)
+                    else:
+                        lignes_ecartees.append(ligne)
 
-                    lignes.append(ligne)
-
-                st.dataframe(
-                    lignes,
-                    hide_index=True,
-                    column_config={
-                        "Publication": st.column_config.LinkColumn(
-                            "Publication", display_text="Ouvrir"
-                        ),
-                        "Langue": st.column_config.TextColumn("Langue de la légende",
-                            help="Langue du texte écrit, sans les hashtags ni les mentions. La voix de la vidéo n’est pas analysée."),
-                        "Retenue dans le TXT": st.column_config.TextColumn("Retenue dans le TXT",
-                            help="Les publications exclues restent visibles dans ce tableau avec Non ; elles ne sont pas exportées dans le TXT.")
-                    }
-                )
+                configuration_colonnes = {
+                    "Publication": st.column_config.LinkColumn(
+                        "Publication", display_text="Ouvrir"),
+                    "Langue": st.column_config.TextColumn(
+                        "Langue de la légende",
+                        help="Langue du texte écrit, sans les hashtags ni les mentions. "
+                             "La voix de la vidéo n'est pas analysée."),
+                    "Retenue dans le TXT": st.column_config.TextColumn(
+                        "Retenue dans le TXT",
+                        help="Oui : texte conservé après les filtres ; Non : exclu du TXT."),
+                }
+                if lignes_retenues:
+                    st.caption("Publications retenues dans le corpus TXT")
+                    st.dataframe(lignes_retenues, hide_index=True,
+                                 column_config=configuration_colonnes)
+                else:
+                    st.info("Aucune publication retenue dans le TXT avec les critères sélectionnés.")
+                if lignes_ecartees:
+                    with st.expander(
+                            f"Publications écartées des textes : {len(lignes_ecartees)}"):
+                        st.caption(
+                            "Conservées dans les données brutes pour diagnostic, "
+                            "mais exclues du corpus TXT.")
+                        st.dataframe(lignes_ecartees, hide_index=True,
+                                     column_config=configuration_colonnes)
 
             if actuel.get("profils_medias_variables"):
                 st.caption(
