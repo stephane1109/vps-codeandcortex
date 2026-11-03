@@ -1,5 +1,5 @@
 {
-  "version": 18,
+  "version": 19,
   "comptes": [
     {
       "id": "lemonde",
@@ -484,16 +484,6 @@
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@lalsacefr",
       "note": "Compte L'Alsace communiqué pour DNA ; l'identité avec Dernières Nouvelles d'Alsace n'est pas établie."
-    },
-    {
-      "id": "francetvpolitique",
-      "nom": "France Télévisions — Politique",
-      "compte": "francetvpolitique",
-      "categorie": "presse_nationale",
-      "sous_categorie": "television_nationale",
-      "source": "fourni_par_utilisateur",
-      "statut": "declare_utilisateur",
-      "url": "https://www.tiktok.com/@francetvpolitique"
     },
     {
       "id": "france_tv",
