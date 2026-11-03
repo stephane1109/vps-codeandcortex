@@ -15,7 +15,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from traitement_csv import decrire_variables, lire_csv, preparer_contingence, preparer_tableau_inerties
+from traitement_csv import (
+    decrire_variables, exclure_modalites_contingence, lire_csv,
+    preparer_contingence, preparer_tableau_inerties,
+)
 
 
 DOSSIER_APPLICATION = Path(__file__).resolve().parent
@@ -322,7 +325,7 @@ def construire_interface() -> None:
             )
 
     try:
-        preparation = preparer_contingence(
+        preparation_initiale = preparer_contingence(
             donnees=donnees,
             variable_lignes=variable_lignes,
             variable_colonnes=variable_colonnes,
@@ -338,7 +341,84 @@ def construire_interface() -> None:
         st.warning(str(erreur))
         return
 
-    st.subheader("4. Vérifier le tableau avant l'AFC")
+    st.subheader("4. Vérifier et modifier le tableau de contingence")
+    # Les exclusions concernent ce tableau, et non le fichier CSV importé.
+    # Changer de corpus, de variables ou de filtres réinitialise la sélection.
+    empreinte_csv = hashlib.sha256(contenu).hexdigest()
+    portee_modalites = {
+        "empreinte_csv": empreinte_csv,
+        "variable_lignes": variable_lignes,
+        "variable_colonnes": variable_colonnes,
+        "uniquement_retenues": uniquement_retenues,
+        "dedoublonner": dedoublonner,
+        "exclure_indeterminees": exclure_indeterminees,
+        "inclure_manquantes": inclure_manquantes,
+        "maximum_modalites": int(maximum_modalites),
+        "variable_filtre": variable_filtre,
+        "modalites_filtre": sorted(modalites_filtre) if modalites_filtre is not None else None,
+    }
+    identifiant_portee = hashlib.sha256(
+        json.dumps(portee_modalites, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("afc_portee_modalites") != identifiant_portee:
+        st.session_state["afc_portee_modalites"] = identifiant_portee
+        st.session_state["afc_lignes_exclues"] = []
+        st.session_state["afc_colonnes_exclues"] = []
+        st.session_state["afc_selection_exclusions_precedente"] = (
+            identifiant_portee, (), ()
+        )
+
+    st.caption(
+        "Supprimez une ou plusieurs modalités en lignes ou en colonnes, "
+        "par exemple 'modalité_nontrouvé'. L'AFC FactoMineR, ses inerties, "
+        "son plan et ses exports seront recalculés automatiquement après "
+        "chaque modification. Le CSV importé reste intact."
+    )
+    if st.button(
+        "Rétablir toutes les lignes et colonnes",
+        disabled=not (
+            st.session_state["afc_lignes_exclues"]
+            or st.session_state["afc_colonnes_exclues"]
+        ),
+    ):
+        st.session_state["afc_lignes_exclues"] = []
+        st.session_state["afc_colonnes_exclues"] = []
+        st.rerun()
+
+    col_exclure_lignes, col_exclure_colonnes = st.columns(2)
+    with col_exclure_lignes:
+        lignes_exclues = st.multiselect(
+            "Supprimer des lignes (modalités)",
+            options=preparation_initiale.tableau.index.tolist(),
+            key="afc_lignes_exclues",
+            help="Les observations de ces modalités ne participeront plus à l'AFC.",
+        )
+    with col_exclure_colonnes:
+        colonnes_exclues = st.multiselect(
+            "Supprimer des colonnes (modalités)",
+            options=preparation_initiale.tableau.columns.tolist(),
+            key="afc_colonnes_exclues",
+            help="Les observations de ces modalités ne participeront plus à l'AFC.",
+        )
+
+    selection_exclusions = (
+        identifiant_portee, tuple(sorted(lignes_exclues)),
+        tuple(sorted(colonnes_exclues)),
+    )
+    recalcul_automatique = (
+        selection_exclusions
+        != st.session_state.get("afc_selection_exclusions_precedente")
+    )
+    st.session_state["afc_selection_exclusions_precedente"] = selection_exclusions
+    try:
+        preparation = exclure_modalites_contingence(
+            preparation_initiale, lignes_exclues, colonnes_exclues
+        )
+    except ValueError as erreur:
+        st.warning(str(erreur))
+        st.dataframe(preparation_initiale.tableau, use_container_width=True)
+        return
+
     controles = st.columns(3)
     controles[0].metric("Observations analysables", preparation.effectif_final)
     controles[1].metric("Modalités en lignes", len(preparation.tableau.index))
@@ -348,15 +428,26 @@ def construire_interface() -> None:
     if min(preparation.tableau.shape) == 2:
         st.info("Le tableau ne comporte qu'un axe factoriel : aucun plan en deux dimensions n'est possible.")
     st.dataframe(preparation.tableau, use_container_width=True)
+    if preparation.modalites_vides_lignes or preparation.modalites_vides_colonnes:
+        st.info(
+            "Les modalités devenues vides après exclusion ont également été "
+            "retirées du tableau : "
+            + ", ".join(
+                list(preparation.modalites_vides_lignes)
+                + list(preparation.modalites_vides_colonnes)
+            )
+            + "."
+        )
     st.caption(
         f"Import : {preparation.effectif_initial} lignes ; "
         f"après filtres : {preparation.effectif_apres_filtre} ; "
         f"après dédoublonnage : {preparation.effectif_apres_dedoublonnage} ; "
-        f"après exclusion des valeurs inutilisables : {preparation.effectif_final}."
+        f"avant suppression des modalités : {preparation.effectif_avant_exclusion_modalites} ; "
+        f"observations conservées pour l'AFC : {preparation.effectif_final}."
     )
     parametres = {
         "source": nom_source,
-        "empreinte_sha256": hashlib.sha256(contenu).hexdigest(),
+        "empreinte_sha256": empreinte_csv,
         "variable_lignes": variable_lignes,
         "variable_colonnes": variable_colonnes,
         "uniquement_retenues": uniquement_retenues,
@@ -367,14 +458,24 @@ def construire_interface() -> None:
         "variable_filtre": variable_filtre,
         "modalites_filtre": modalites_filtre,
         "effectif_initial": preparation.effectif_initial,
+        "effectif_avant_exclusion_modalites": preparation.effectif_avant_exclusion_modalites,
+        "modalites_exclues_lignes": list(preparation.modalites_exclues_lignes),
+        "modalites_exclues_colonnes": list(preparation.modalites_exclues_colonnes),
+        "modalites_vides_lignes": list(preparation.modalites_vides_lignes),
+        "modalites_vides_colonnes": list(preparation.modalites_vides_colonnes),
         "effectif_analyse": preparation.effectif_final,
     }
     signature = hashlib.sha256(
         json.dumps(parametres, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
-    if st.button("Lancer l'AFC avec FactoMineR", type="primary"):
+    lancement_manuel = st.button("Lancer l'AFC avec FactoMineR", type="primary")
+    if lancement_manuel or recalcul_automatique:
         try:
-            with st.spinner("Calcul de l'AFC dans R et préparation des graphiques..."):
+            with st.spinner(
+                "Recalcul automatique de l'AFC avec FactoMineR..."
+                if recalcul_automatique and not lancement_manuel
+                else "Calcul de l'AFC dans R et préparation des graphiques..."
+            ):
                 resultats = executer_moteur_r(
                     tableau=preparation.tableau,
                     variable_lignes=variable_lignes,
@@ -385,11 +486,17 @@ def construire_interface() -> None:
                     parametres=parametres,
                 )
         except (RuntimeError, OSError) as erreur:
+            st.session_state.pop("dernier_resultat", None)
+            st.session_state.pop("signature_resultat", None)
             st.error(str(erreur))
         else:
             st.session_state["dernier_resultat"] = resultats
             st.session_state["signature_resultat"] = signature
-            st.success("AFC calculée par FactoMineR. Les exports sont disponibles ci-dessous.")
+            st.success(
+                "AFC recalculée automatiquement après la suppression de modalités."
+                if recalcul_automatique and not lancement_manuel
+                else "AFC calculée par FactoMineR. Les exports sont disponibles ci-dessous."
+            )
 
     if "dernier_resultat" in st.session_state:
         if st.session_state.get("signature_resultat") == signature:
