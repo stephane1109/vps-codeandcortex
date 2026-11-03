@@ -2038,6 +2038,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 if job.settings.sauvegarde_progressive and index % 10 == 0:
                     job.sauvegarder_point()
 
+        # Les compteurs sont cumulés entre sources sans confondre une
+        # vidéo trouvée par l'API et une publication valide pour le TXT.
+        requetes_sources_terminees = 0
+        candidats_sources_termines = 0
+        ecartes_sources_termines = 0
         for numero_source, source in enumerate(sources, 1):
             job.check()
             if job.settings.test_research_10_publications and len(unique_links) >= 10:
@@ -2063,9 +2068,68 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 restant = max(0, 10 - len(unique_links))
                 nombre_sources_restantes = len(sources) - numero_source + 1
                 args.limit = (restant + nombre_sources_restantes - 1) // nombre_sources_restantes
+            # Les URL sélectionnées au cours des pages successives de cette
+            # source sont ajoutées immédiatement au corpus et non après
+            # plusieurs milliers de résultats accumulés dans la pagination.
+            liens_verifies_source = {}
             def suivre_decouverte(nombre):
-                job.actualiser_decouverte(rapport)
                 requete = rapport.get("requete_recherche") or etiquette
+                if (job.settings.source_collecte == "hashtags"
+                        and moteur_actif == "research"
+                        and "liens_page_research" in rapport):
+                    fiches_page = rapport.get("metadonnees_api") or {}
+                    for adresse in rapport.get("liens_page_research") or []:
+                        identite = scraper.canonical_post(adresse)
+                        fiche = (fiches_page.get(str(identite[0]))
+                                 if identite else None)
+                        if not isinstance(fiche, dict):
+                            continue
+                        if not matches_hashtags(
+                                fiche.get("description") or "", job.settings,
+                                hashtags_observes=fiche.get("hashtags")):
+                            continue
+                        identifiant = str(identite[0])
+                        liens_verifies_source.setdefault(identifiant, identite[1])
+                        unique_links.setdefault(identifiant, identite[1])
+                        metadonnees_api.setdefault(identifiant, fiche)
+                    # Le bilan par source reflète seulement les vidéos
+                    # conformes aux critères ; les candidats restent comptés
+                    # séparément par la Research API.
+                    rapport["discovered_urls"] = list(liens_verifies_source.values())
+                    job.actualiser_decouverte(rapport)
+                    requetes_lot = (
+                        requetes_sources_terminees
+                        + int(rapport.get("requetes_tentees") or 0))
+                    candidats_lot = (
+                        candidats_sources_termines
+                        + int(rapport.get("candidats_examines") or 0))
+                    ecartes_lot = (
+                        ecartes_sources_termines
+                        + int(rapport.get("ecartes_hashtags_api") or 0))
+                    quota_local = None
+                    try:
+                        from stockage.collectes_research import etat_quota
+                        quota_local = etat_quota(
+                            Path(os.getenv("DATA_DIR", "data")))
+                    except (OSError, RuntimeError, ValueError):
+                        # Une panne du diagnostic de quota n'interrompt
+                        # jamais les vidéos déjà accessibles.
+                        pass
+                    job.update(
+                        requetes_research_lot=requetes_lot,
+                        candidats_research_lot=candidats_lot,
+                        ecartes_hashtags_research_lot=ecartes_lot,
+                        quota_research_local=quota_local,
+                        message=(
+                            f"{etiquette} : {candidats_lot} vidéo(s) reçue(s) "
+                            f"de TikTok, {len(unique_links)} conforme(s) "
+                            f"aux hashtags, {job.processed} traitée(s), "
+                            f"{len(job.records)} texte(s) retenu(s) ; "
+                            f"{requetes_lot} requête(s) Research."))
+                    if len(unique_links) > job.processed:
+                        lire_decouvertes()
+                    return
+                job.actualiser_decouverte(rapport)
                 objectif = (f"{nombre}/{args.limit}" if args.limit is not None
                             and job.settings.source_collecte != "hashtags" else str(nombre))
                 message_progression = (
@@ -2244,6 +2308,18 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 job.update(search_errors=job.search_errors + 1)
             finally:
                 args.limit = limite_initiale
+                if (job.settings.source_collecte == "hashtags"
+                        and moteur_actif == "research"):
+                    requetes_sources_terminees += int(
+                        rapport.get("requetes_tentees") or 0)
+                    candidats_sources_termines += int(
+                        rapport.get("candidats_examines") or 0)
+                    ecartes_sources_termines += int(
+                        rapport.get("ecartes_hashtags_api") or 0)
+                    job.update(
+                        requetes_research_lot=requetes_sources_terminees,
+                        candidats_research_lot=candidats_sources_termines,
+                        ecartes_hashtags_research_lot=ecartes_sources_termines)
                 job.actualiser_decouverte(rapport)
             job.update(discovered=len(unique_links))
             # Exporter chaque compte aussitôt sa découverte terminée.
