@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from traitement_csv import decrire_variables, lire_csv, preparer_contingence
+from traitement_csv import decrire_variables, lire_csv, preparer_contingence, preparer_tableau_inerties
 
 
 DOSSIER_APPLICATION = Path(__file__).resolve().parent
@@ -168,6 +168,36 @@ def afficher_resultats(resultats: dict) -> None:
         )
     with onglet_inertie:
         st.image(fichiers["15_inerties.png"], use_container_width=True)
+        st.subheader("Inertie des axes factoriels (%)")
+        tableau_inerties = preparer_tableau_inerties(
+            fichiers["06_valeurs_propres_inerties.csv"]
+        )
+        st.dataframe(
+            tableau_inerties,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Valeur propre": st.column_config.NumberColumn(
+                    "Valeur propre", format="%.4f"
+                ),
+                "Inertie (%)": st.column_config.NumberColumn(
+                    "Inertie (%)", format="%.2f"
+                ),
+                "Inertie cumulée (%)": st.column_config.NumberColumn(
+                    "Inertie cumulée (%)", format="%.2f"
+                ),
+            },
+        )
+        st.caption(
+            "Les pourcentages et les inerties cumulées proviennent "
+            "directement des valeurs propres calculées par FactoMineR::CA()."
+        )
+        st.download_button(
+            "Télécharger le tableau des inerties (CSV)",
+            data=fichiers["06_valeurs_propres_inerties.csv"],
+            file_name="06_valeurs_propres_inerties.csv",
+            mime="text/csv",
+        )
     with onglet_matrices:
         choix = [nom for nom in fichiers if nom.lower().endswith(".csv")]
         tableau_selectionne = st.selectbox("Tableau statistique", choix)
