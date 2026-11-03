@@ -128,6 +128,14 @@ class TestsACM(unittest.TestCase):
         self.assertIn("FactoMineR::MCA(", moteur_acm)
         self.assertIn("FactoMineR::descfreq(", moteur_afc)
         self.assertIn("FactoMineR::dimdesc(", moteur_acm)
+        self.assertIn('method = methode_calcul', moteur_acm)
+        self.assertIn('"Tableau disjonctif complet (TDC)"', interface)
+        self.assertIn('"Tableau de Burt"', interface)
+        self.assertIn('methode_calcul=methode_calcul', interface)
+        self.assertIn('methode_calcul,', interface)
+        self.assertIn('"18_comparaison_inerties_tdc_burt.csv"', moteur_acm)
+        self.assertIn('"tdc.csv"', moteur_acm)
+        self.assertIn('"burt.csv"', moteur_acm)
         self.assertIn('dessiner_plan(FALSE)', moteur_afc)
         self.assertIn('dessiner_plan(TRUE)', moteur_afc)
         self.assertIn('dessiner_plan(FALSE)', moteur_acm)
@@ -197,6 +205,56 @@ class TestsACM(unittest.TestCase):
                 "Le filtre ACM doit reconnaître les modalités associées "
                 "aux axes avec FactoMineR::dimdesc.",
             )
+            with (
+                sorties / "06_valeurs_propres_inerties.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                inerties_tdc = list(csv.DictReader(fichier, delimiter=";"))
+            with (
+                sorties / "18_comparaison_inerties_tdc_burt.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                comparaison = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(len(comparaison), len(inerties_tdc))
+            self.assertTrue((sorties / "tdc.csv").is_file())
+            self.assertTrue((sorties / "burt.csv").is_file())
+
+            # Calculer également l'ACM Burt avec les mêmes observations.
+            sorties_burt = racine / "resultats_burt"
+            sorties_burt.mkdir()
+            processus_burt = subprocess.run(
+                [shutil.which("Rscript"), str(MOTEUR_ACM),
+                 str(entree), str(sorties_burt), "Corpus test",
+                 "120", "120", "Burt"],
+                capture_output=True, text=True, check=False, timeout=90,
+            )
+            self.assertEqual(
+                processus_burt.returncode, 0,
+                processus_burt.stderr or processus_burt.stdout,
+            )
+            for nom in [
+                "06_valeurs_propres_inerties.csv",
+                "07_coordonnees_modalites.csv",
+                "13_plan_factoriel.png",
+                "13_plan_factoriel_significatif.png",
+                "18_comparaison_inerties_tdc_burt.csv",
+                "significativite_modalites_factominer.csv",
+            ]:
+                self.assertTrue(
+                    (sorties_burt / nom).is_file(),
+                    f"Export Burt absent : {nom}",
+                )
+            with (
+                sorties_burt / "06_valeurs_propres_inerties.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                inerties_burt = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(len(inerties_tdc), len(inerties_burt))
+            for tdc, burt in zip(inerties_tdc, inerties_burt):
+                valeur_tdc = float(tdc["eigenvalue"].replace(",", "."))
+                valeur_burt = float(burt["eigenvalue"].replace(",", "."))
+                self.assertAlmostEqual(
+                    valeur_burt, valeur_tdc**2, places=5,
+                    msg="Les valeurs propres Burt doivent être les carrés "
+                        "des valeurs propres du TDC.",
+                )
 
 
 if __name__ == "__main__":
