@@ -64,7 +64,8 @@ def lancer(chemin, donnees):
         methode = donnees.get({
             "presse": "presse_moteur", "hashtags": "hashtag_moteur",
             "comptes": "profil_moteur"}.get(donnees.get("source_collecte"), "presse_moteur"))
-        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and methode == "research":
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")
+                or chemin.endswith("/reprendre-hashtags")) and methode == "research":
             # Effacer les champs sensibles avant le prochain affichage,
             # sans écraser un widget déjà instancié pendant cette exécution.
             st.session_state["_effacer_research_apres_requete"] = True
@@ -444,6 +445,9 @@ with onglet_collecte:
                        "Avec TikHub, chaque profil interrogé peut entraîner des frais.")
         if source == "hashtags" and moteur_courant == "navigateur":
             st.caption("Découverte et lecture par Selenium, comme dans la version précédente.")
+        if source == "hashtags" and moteur_courant == "research":
+            from interface.reprise_hashtags_ui import afficher_reprise_hashtags
+            afficher_reprise_hashtags(api, lancer, occupe)
     if source == "presse":
         if st.session_state.get("presse_moteur") == "playwright":
             st.session_state["presse_moteur"] = "gallerydl"
@@ -1205,11 +1209,15 @@ with onglet_collecte:
                              "La valeur exacte reste dans les exports CSV. "
                              "Classe possible : *abonnes_10k_100k ; "
                              "absence de donnée : *abonnes_indetermine.")
-                if nom == "profil" and source == "presse":
+                if nom == "profil" and source in {"presse", "hashtags"}:
                     st.caption(
-                        "Métriques des comptes médias — fichier profils_medias.csv "
-                        "(une ligne par compte sélectionné, même sans vidéo retenue). "
-                        "Disponibles avec la Research API officielle.")
+                        ("Métriques des comptes médias — fichier profils_medias.csv "
+                         "(une ligne par compte sélectionné, même sans vidéo retenue). "
+                         if source == "presse" else
+                         "Métriques des comptes auteurs — fichier profils_medias.csv "
+                         "(une ligne par auteur distinct des vidéos collectées). ")
+                        + "Disponibles avec la Research API officielle. "
+                          "Une requête par auteur distinct utilise le quota Research.")
                     for variable in VARIABLES_PROFILS_MEDIAS:
                         libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
                         cle_brute = "profil_media_" + variable + "_brut"
@@ -1375,7 +1383,7 @@ with onglet_collecte:
                 st.error("Décochez la collecte des republications : elle est réservée "
                          "aux collectes Research ponctuelles, et n'est pas encore "
                          "prise en charge par la programmation pluri-journalière.")
-            elif (mode_programme and source == "presse"
+            elif (mode_programme and source in {"presse", "hashtags"}
                   and any(st.session_state.get("profil_media_" + nom + "_brut", False)
                           for nom in VARIABLES_PROFILS_MEDIAS)):
                 st.error("Les métriques des comptes médias sont disponibles dans "
@@ -1450,7 +1458,7 @@ with onglet_collecte:
                     st.session_state.get("maximum_republications_par_compte", 100))
                 valeurs["profils_medias_variables"] = [
                     nom for nom in VARIABLES_PROFILS_MEDIAS
-                    if source == "presse" and moteur_selectionne == "research"
+                    if source in {"presse", "hashtags"} and moteur_selectionne == "research"
                     and st.session_state.get("profil_media_" + nom + "_brut", False)
                 ]
                 valeurs["profils_medias_classes"] = [
