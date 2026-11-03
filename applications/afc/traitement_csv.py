@@ -398,6 +398,8 @@ def preparer_acm(
     for nom in variables:
         modalites = list(dict.fromkeys(exclusions.get(nom, [])))
         if modalites:
+            # Vérifier toutes les modalités sur le même corpus initial,
+            # avant de supprimer une observation liée à plusieurs variables.
             inconnues_modalites = set(modalites).difference(
                 categories[nom].unique()
             )
@@ -405,8 +407,12 @@ def preparer_acm(
                 raise ValueError(
                     f"Certaines modalités à supprimer sont absentes de {nom}."
                 )
-            categories = categories.loc[~categories[nom].isin(modalites)]
         exclusions_validees[nom] = modalites
+    masque = pd.Series(True, index=categories.index)
+    for nom, modalites in exclusions_validees.items():
+        if modalites:
+            masque &= ~categories[nom].isin(modalites)
+    categories = categories.loc[masque]
 
     if categories.empty:
         raise ValueError("Aucune observation ne subsiste pour l'ACM.")
