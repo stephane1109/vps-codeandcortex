@@ -45,9 +45,11 @@ def etats_variantes(hashtags, avec_accents, journal, *, source_en_cours=None,
         for variante in variantes:
             entree = dernier.get(variante.casefold())
             if entree is None:
-                etat = ("interrompue" if termine and
-                        source_en_cours == "#" + variante else
-                        "non_commencee" if termine else "en_attente")
+                etat = (
+                    ("interrompue" if termine else "en_cours")
+                    if source_en_cours == "#" + variante
+                    else ("non_commencee" if termine else "en_attente")
+                )
                 motif, liens = "", 0
             else:
                 rapport = entree.get("rapport") or {}
