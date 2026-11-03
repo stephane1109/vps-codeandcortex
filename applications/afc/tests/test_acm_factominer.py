@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import csv
-import math
 import os
 import shutil
 import subprocess
@@ -131,7 +130,12 @@ class TestsACM(unittest.TestCase):
         self.assertIn("FactoMineR::descfreq(", moteur_afc)
         self.assertIn("FactoMineR::dimdesc(", moteur_acm)
         self.assertIn("matrice_vtest <- as.matrix(resultat$var$v.test)", moteur_acm)
-        self.assertIn("stats::pnorm(-abs(valeurs_vtest))", moteur_acm)
+        self.assertIn("description_complete <- FactoMineR::dimdesc(", moteur_acm)
+        self.assertIn("proba = 1", moteur_acm)
+        self.assertIn("proba = 0.05", moteur_acm)
+        self.assertIn("identifiants_dimdesc <- paste0(", moteur_acm)
+        self.assertIn('methode = "FactoMineR::dimdesc, p.value native"', moteur_acm)
+        self.assertNotIn("stats::pnorm(", moteur_acm)
         self.assertIn('"20_diagnostic_filtre_pvalue.csv"', moteur_acm)
         self.assertIn('"20_diagnostic_filtre_pvalue.csv"', interface)
         self.assertIn("Contrôler les p-values de toutes les modalités", interface)
@@ -229,17 +233,26 @@ class TestsACM(unittest.TestCase):
             self.assertTrue(
                 any(m["significative_005"] == "TRUE" for m in modalites),
                 "Le filtre ACM doit reconnaître les modalités associées "
-                "aux axes avec les valeurs-tests FactoMineR.",
+                "aux axes avec les p-values natives de dimdesc().",
             )
             for ligne in modalites:
                 self.assertNotEqual(
                     ligne["p_value_min"], "",
                     "Chaque modalité doit avoir une p-value calculée.",
                 )
+                self.assertEqual(
+                    ligne["identifiant_dimdesc"],
+                    ligne["variable"] + "=" +
+                    ligne["modalite"].removeprefix(ligne["variable"] + "."),
+                ) if ligne["modalite"].startswith(
+                    ligne["variable"] + "."
+                ) else self.assertEqual(
+                    ligne["identifiant_dimdesc"].split("=", 1)[0],
+                    ligne["variable"],
+                )
                 p_1 = float(ligne["p_value_axe_1"].replace(",", "."))
-                v_1 = float(ligne["v_test_axe_1"].replace(",", "."))
-                attendu = math.erfc(abs(v_1) / math.sqrt(2))
-                self.assertAlmostEqual(p_1, attendu, places=8)
+                self.assertGreaterEqual(p_1, 0.0)
+                self.assertLessEqual(p_1, 1.0)
                 self.assertEqual(
                     ligne["significative_005"] == "TRUE",
                     float(ligne["p_value_min"].replace(",", ".")) <= 0.05,
