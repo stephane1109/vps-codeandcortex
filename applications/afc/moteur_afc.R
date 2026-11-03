@@ -102,73 +102,65 @@ exporter_matrice(resultat$col$contrib, "10_contributions_colonnes.csv")
 exporter_matrice(resultat$row$cos2, "11_cos2_lignes.csv")
 exporter_matrice(resultat$col$cos2, "12_cos2_colonnes.csv")
 
-# Une p-value globale ne renseigne pas la significativité de chaque modalité.
-# Pour chaque modalité, comparer son profil à celui de toutes les autres
-# modalités de la même variable par un test du Chi-deux sur un tableau 2 x K.
-# Ce test concerne l'association entre variables, pas la position sur un axe.
-tester_modalite <- function(type_modalite, indice) {
+# Sélection statistique avec la méthode native de FactoMineR.
+# descfreq() utilise un test hypergéométrique pour caractériser les
+# associations entre les modalités de lignes et de colonnes.
+# Une modalité est conservée si au moins une association a p <= 0,05.
+# Cette significativité n'est pas celle d'une coordonnée factorielle.
+caracterisations_lignes <- FactoMineR::descfreq(
+  as.data.frame(tableau, check.names = FALSE), proba = 0.05
+)
+caracterisations_colonnes <- FactoMineR::descfreq(
+  as.data.frame(t(tableau), check.names = FALSE), proba = 0.05
+)
+
+resumer_modalite <- function(type_modalite, indice, caracterisations) {
   if (type_modalite == "ligne") {
-    effectifs_modalite <- tableau[indice, ]
-    effectifs_autres <- colSums(tableau) - effectifs_modalite
-    comparaison <- rbind(effectifs_modalite, effectifs_autres)
     nom_modalite <- rownames(tableau)[[indice]]
     nom_variable <- variable_lignes
+    effectif <- as.integer(rowSums(tableau)[[indice]])
   } else {
-    effectifs_modalite <- tableau[, indice]
-    effectifs_autres <- rowSums(tableau) - effectifs_modalite
-    comparaison <- rbind(effectifs_modalite, effectifs_autres)
     nom_modalite <- colnames(tableau)[[indice]]
     nom_variable <- variable_colonnes
+    effectif <- as.integer(colSums(tableau)[[indice]])
   }
-  test_reference <- suppressWarnings(stats::chisq.test(
-    comparaison, correct = FALSE
-  ))
-  cellules_faibles_modalite <- any(test_reference$expected < 5)
-  if (cellules_faibles_modalite && repetitions >= 100L) {
-    # Graine stable pour rendre les p-values Monte-Carlo reproductibles.
-    set.seed(2026L + indice + if (type_modalite == "ligne") 0L else 10000L)
-    test_modalite <- suppressWarnings(stats::chisq.test(
-      comparaison, simulate.p.value = TRUE, B = repetitions
-    ))
-    methode_modalite <- paste0("Monte-Carlo (B=", repetitions, ")")
+  caracterisation <- caracterisations[[indice]]
+  if (is.null(caracterisation)) {
+    p_values <- numeric(0)
+    noms_associes <- character(0)
   } else {
-    test_modalite <- test_reference
-    methode_modalite <- "Chi-deux asymptotique"
+    caracterisation <- as.matrix(caracterisation)
+    p_values <- as.numeric(caracterisation[, "p.value"])
+    noms_associes <- rownames(caracterisation)
   }
+  retenues <- is.finite(p_values) & p_values <= 0.05
+  p_minimale <- if (any(retenues)) min(p_values[retenues]) else NA_real_
   data.frame(
     variable = nom_variable,
     type_modalite = type_modalite,
     modalite = nom_modalite,
-    effectif = as.integer(sum(effectifs_modalite)),
-    chi_deux = as.numeric(test_reference$statistic),
-    degres_liberte = as.integer(test_reference$parameter),
-    p_value = as.numeric(test_modalite$p.value),
-    methode = methode_modalite,
-    cellules_attendues_faibles = cellules_faibles_modalite,
+    effectif = effectif,
+    p_value_min = p_minimale,
+    associations_significatives = paste(noms_associes[retenues], collapse = " ; "),
+    methode = "FactoMineR::descfreq (test hypergéométrique)",
+    significative_005 = any(retenues),
     stringsAsFactors = FALSE
   )
 }
 
 significativite_modalites <- do.call(rbind, c(
-  lapply(seq_len(nrow(tableau)), function(i) tester_modalite("ligne", i)),
-  lapply(seq_len(ncol(tableau)), function(i) tester_modalite("colonne", i))
+  lapply(seq_len(nrow(tableau)), function(i) {
+    resumer_modalite("ligne", i, caracterisations_lignes)
+  }),
+  lapply(seq_len(ncol(tableau)), function(i) {
+    resumer_modalite("colonne", i, caracterisations_colonnes)
+  })
 ))
-significativite_modalites$p_ajustee_bh <- stats::p.adjust(
-  significativite_modalites$p_value, method = "BH"
-)
-significativite_modalites$significative_005 <- (
-  !is.na(significativite_modalites$p_value) &
-    significativite_modalites$p_value <= 0.05
-)
-significativite_modalites$significative_bh_005 <- (
-  !is.na(significativite_modalites$p_ajustee_bh) &
-    significativite_modalites$p_ajustee_bh <= 0.05
-)
 nombre_significatives <- sum(significativite_modalites$significative_005)
-# Ce CSV contient toutes les modalités, y compris celles masquées sur le plan.
+# Exporter toutes les modalités, y compris celles masquées du plan.
 utils::write.csv2(
   significativite_modalites,
-  file.path(dossier_sortie, "18_significativite_modalites.csv"),
+  file.path(dossier_sortie, "significativite_modalites_factominer.csv"),
   row.names = FALSE, fileEncoding = "UTF-8", na = ""
 )
 
@@ -258,7 +250,7 @@ dessiner_plan <- function() {
     mtext(
       paste0("Modalités affichées : p <= 0,05 (",
              nombre_significatives, "/", nrow(significativite_modalites),
-             "). Test Chi-deux modalité contre les autres."),
+             "). FactoMineR::descfreq (hypergéométrique)."),
       side = 1, line = 4.3, cex = 0.7
     )
     if (!nombre_significatives) {
@@ -307,7 +299,7 @@ statistiques <- data.frame(
     as.character(cellules_faibles), as.character(length(test_asymptotique$expected)),
     as.character(nombre_significatives),
     as.character(nrow(significativite_modalites)),
-    "Chi-deux 2 x K (modalité contre autres) ; Monte-Carlo si effectifs faibles"
+    "FactoMineR::descfreq, test hypergéométrique, seuil p <= 0,05"
   ),
   stringsAsFactors = FALSE
 )
@@ -329,11 +321,11 @@ rapport <- c(
   paste("Cellules avec effectif théorique < 5 :", cellules_faibles),
   paste("Modalités significatives (p <= 0,05) :", nombre_significatives,
         "/", nrow(significativite_modalites)),
-  "Significativité par modalité : Chi-deux sur un tableau modalité contre autres.",
-  "Si effectif théorique < 5 : p-value Monte-Carlo au même nombre de répétitions.",
-  "Les p-values brutes déterminent l'affichage ; les p-values corrigées BH sont exportées.",
-  "Le test par modalité concerne une association globale, non une coordonnée ou un axe particulier.",
-  "Fichier 18_significativite_modalites.csv : toutes les modalités et leurs p-values.",
+  "Modalités retenues par FactoMineR::descfreq (test hypergéométrique, p <= 0,05).",
+  "Le seuil porte sur l'association entre modalités, pas sur leur position factorielle.",
+  "La p-value minimale est celle des associations significatives renvoyées par FactoMineR.",
+  "Aucune correction Benjamini-Hochberg ni test Chi-deux par modalité ajouté.",
+  "Fichier significativite_modalites_factominer.csv : toutes les modalités.",
   "",
   "VALEURS PROPRES ET INERTIES (%)",
   capture.output(print(round(resultat$eig, 4))),
