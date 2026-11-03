@@ -2366,15 +2366,27 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         elif args.limit is not None and len(links) < args.limit and not job.settings.second_hashtag:
             final_message += f" La recherche a fourni {len(links)} lien(s), pour un objectif de {args.limit}."
         if job.reprise:
-            from collecte.suivi_sources import etablir_bilan_medias, medias_a_reprendre
-            bilan_actuel = etablir_bilan_medias(
-                job.settings.sources, job.journal,
-                source_en_cours=job.source_en_cours_id, termine=True)
-            encore_a_traiter = medias_a_reprendre(bilan_actuel)
+            if job.settings.source_collecte == "presse":
+                from collecte.suivi_sources import (
+                    etablir_bilan_medias, medias_a_reprendre)
+                bilan_actuel = etablir_bilan_medias(
+                    job.settings.sources, job.journal,
+                    source_en_cours=job.source_en_cours_id, termine=True)
+                encore_a_traiter = medias_a_reprendre(bilan_actuel)
+                nom_source = "média(s)"
+            else:
+                from collecte.suivi_hashtags import (
+                    etablir_bilan_hashtags, hashtags_a_reprendre)
+                bilan_actuel = etablir_bilan_hashtags(
+                    job.settings.hashtags, job.settings.variantes_accents,
+                    job.journal, source_en_cours=job.source_en_cours_id,
+                    termine=True, collecte_id=job.id)
+                encore_a_traiter = hashtags_a_reprendre(bilan_actuel)
+                nom_source = "hashtag(s)"
             if encore_a_traiter:
                 final_message += (
                     f" Reprise du même corpus : {len(encore_a_traiter)} "
-                    "média(s) restent à parcourir ou sont en erreur.")
+                    f"{nom_source} restent à parcourir ou sont en erreur.")
                 if final_status == "completed":
                     final_status = "partial"
             elif (final_status == "partial" and not (
