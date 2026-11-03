@@ -137,6 +137,13 @@ class TestsACM(unittest.TestCase):
         self.assertIn('"18_comparaison_inerties_tdc_burt.csv"', moteur_acm)
         self.assertIn('"tdc.csv"', moteur_acm)
         self.assertIn('"burt.csv"', moteur_acm)
+        self.assertIn('"19_couleurs_variables.csv"', moteur_acm)
+        self.assertIn('"19_couleurs_variables.csv"', interface)
+        self.assertIn("variables_modalites <- rep(", moteur_acm)
+        self.assertIn("resultat$call$X", moteur_acm)
+        self.assertIn("palette = \"Dark 3\"", moteur_acm)
+        self.assertIn("col = couleurs_modalites[visibles]", moteur_acm)
+        self.assertIn('title = "Variables actives"', moteur_acm)
         self.assertIn("colonnes_numeriques <- vapply(", moteur_acm)
         self.assertIn("print(comparaison_formatee, row.names = FALSE)", moteur_acm)
         self.assertNotIn("round(comparaison_inerties, 4)", moteur_acm)
@@ -196,6 +203,7 @@ class TestsACM(unittest.TestCase):
                 "14_plan_factoriel.pdf",
                 "14_plan_factoriel_significatif.pdf",
                 "15_inerties.png",
+                "19_couleurs_variables.csv",
                 "significativite_modalites_factominer.csv",
             ]:
                 self.assertTrue((sorties / nom).is_file(), f"Fichier absent : {nom}")
@@ -224,6 +232,21 @@ class TestsACM(unittest.TestCase):
             self.assertEqual(len(comparaison), len(inerties_tdc))
             self.assertTrue((sorties / "tdc.csv").is_file())
             self.assertTrue((sorties / "burt.csv").is_file())
+            with (sorties / "19_couleurs_variables.csv").open(
+                encoding="utf-8", newline=""
+            ) as fichier:
+                couleurs_tdc = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(
+                [ligne["variable"] for ligne in couleurs_tdc],
+                ["vues_classe", "likes_classe", "type_media"],
+            )
+            self.assertEqual(
+                len({ligne["couleur_hex"] for ligne in couleurs_tdc}), 3
+            )
+            self.assertEqual(
+                [int(ligne["nombre_modalites"]) for ligne in couleurs_tdc],
+                [3, 3, 3],
+            )
 
             # Calculer également l'ACM Burt avec les mêmes observations.
             sorties_burt = racine / "resultats_burt"
@@ -244,6 +267,7 @@ class TestsACM(unittest.TestCase):
                 "13_plan_factoriel.png",
                 "13_plan_factoriel_significatif.png",
                 "18_comparaison_inerties_tdc_burt.csv",
+                "19_couleurs_variables.csv",
                 "significativite_modalites_factominer.csv",
             ]:
                 self.assertTrue(
@@ -260,6 +284,14 @@ class TestsACM(unittest.TestCase):
             )
             self.assertIn("COMPARAISON DES INERTIES", rapport_burt)
             self.assertIn("dim 1", rapport_burt)
+            with (sorties_burt / "19_couleurs_variables.csv").open(
+                encoding="utf-8", newline=""
+            ) as fichier:
+                couleurs_burt = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(
+                couleurs_tdc, couleurs_burt,
+                "Les méthodes TDC et Burt doivent garder les mêmes couleurs.",
+            )
             for tdc, burt in zip(inerties_tdc, inerties_burt):
                 valeur_tdc = float(tdc["eigenvalue"].replace(",", "."))
                 valeur_burt = float(burt["eigenvalue"].replace(",", "."))
@@ -331,8 +363,25 @@ class TestsACM(unittest.TestCase):
                 "14_plan_factoriel_significatif.pdf",
                 "15_inerties.png",
                 "18_comparaison_inerties_tdc_burt.csv",
+                "19_couleurs_variables.csv",
             ):
                 self.assertTrue((sortie / nom).is_file(), nom)
+            with (sortie / "19_couleurs_variables.csv").open(
+                encoding="utf-8", newline=""
+            ) as fichier:
+                palette = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(
+                [ligne["variable"] for ligne in palette], variables
+            )
+            self.assertEqual(
+                len({ligne["couleur_hex"] for ligne in palette}),
+                len(variables),
+            )
+            self.assertEqual(
+                sum(int(ligne["nombre_modalites"]) for ligne in palette),
+                23,
+                "Chaque variable active doit contribuer ses modalités.",
+            )
             rapport = (sortie / "00_rapport_acm.txt").read_text(
                 encoding="utf-8"
             )
