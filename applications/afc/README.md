@@ -2,6 +2,18 @@
 
 Cette application Streamlit importe un fichier CSV puis calcule une **analyse factorielle des correspondances (AFC)** avec `FactoMineR::CA()` ou une **analyse des correspondances multiples (ACM)** avec `FactoMineR::MCA()`. Les données peuvent provenir de ScrapTikTok ou de tout autre tableau où une observation est représentée par une ligne.
 
+## Onglet "Statistique descriptive"
+
+L'interface propose un onglet indépendant **Statistique descriptive**, accessible dès l'importation du CSV, sans exécuter de calcul R. L'onglet **AFC / ACM** conserve les analyses factorielles existantes, les méthodes TDC et Burt, les exclusions interactives de modalités et le filtre de significativité des plans.
+
+L'onglet descriptif travaille sur un **échantillon explicite** : publications retenues (si `retenue` figure dans le CSV), dédoublonnage facultatif par `publication_id` et filtrage optionnel sur les variables catégorielles présentes. Les réglages sont indépendants de ceux de l'AFC et de l'ACM, sans modification du fichier original.
+
+Les indicateurs reconnus comprennent les vues, likes, commentaires, partages, favoris, abonnés et taux d'engagement, ainsi que leurs appellations usuelles d'API. Les valeurs manquantes restent distinctes de zéro. Pour chaque mesure, le tableau présente l'effectif valide, le nombre de valeurs absentes, la proportion d'absences, les zéros, la somme, la moyenne, la médiane, l'écart-type, les quartiles, les percentiles 90 et 95 ainsi que les valeurs extrêmes. Si le taux d'engagement est absent ou partiellement manquant, il est calculé exclusivement lorsque les quatre composantes d'interaction et un nombre de vues strictement positif sont disponibles : **(likes + commentaires + partages + favoris) / vues × 100**. Les valeurs préexistantes du CSV sont conservées.
+
+Les graphiques comprennent les volumes d'interactions, les données absentes, les histogrammes individuels à nombre de classes paramétrable, la représentation logarithmique facultative `log(1 + x)`, les répartitions des classes d'engagement, les médianes par type de média ou autres catégories disponibles, un nuage vues–interactions et des séries temporelles (volume quotidien et médiane). La date de collecte est explicitement distinguée d'une date de publication. Le nuage est limité à un sous-échantillon reproductible de 5 000 points lorsque le corpus est très volumineux ; tous les autres résultats descriptifs portent sur les observations filtrées.
+
+Les tableaux `statistiques_descriptives_engagement.csv`, `mesures_engagement_normalisees.csv` et `echantillon_descriptif_filtre.csv` sont téléchargeables. Les graphiques et comparaisons sont descriptifs : ils ne démontrent ni significativité, ni causalité. Les filtres et les variables quantitatives utilisées dans ces graphiques ne changent pas les calculs des onglets AFC et ACM.
+
 ## Deux méthodes complémentaires : AFC et ACM
 
 L'interface propose **AFC** et **ACM**, avec deux formulations pour l'ACM : **tableau disjonctif complet (TDC)** et **tableau de Burt**. L'AFC conserve le croisement de deux variables catégorielles et son tableau de contingence, avec suppression interactive des lignes et colonnes. Elle utilise exclusivement `FactoMineR::CA()` et `FactoMineR::descfreq()`.
