@@ -2865,6 +2865,105 @@ class Manager:
             job.thread.start()
             return job
 
+    def reprendre_hashtags_historique(self, owner, identifiant, cookie, payload):
+        """Reprendre les hashtags inachevés dans le même corpus PostgreSQL."""
+        from collecte.reprise_collecte import (
+            initialiser_donnees_reprise, lire_archive_json)
+        from stockage.historique_analyses import retrouver
+        from stockage.postgres_consultation import (
+            adresse_configuree, compter_publications_collecte,
+            obtenir_nom_collecte, verifier_disponibilite)
+        if not cookie:
+            raise HTTPException(403, "Historique privé indisponible.")
+        archive = retrouver(self.data_dir, identifiant, cookie)
+        if archive is None:
+            raise HTTPException(404, "Collecte absente de l'historique privé.")
+        _, dossier, manifeste = archive
+        parametres = dict(manifeste.get("parametres") or {})
+        if (parametres.get("source_collecte") != "hashtags"
+                or parametres.get("hashtag_moteur") != "research"):
+            raise HTTPException(
+                422, "La reprise des hashtags exige une collecte Research API.")
+        if parametres.get("test_research_10_publications"):
+            raise HTTPException(422, "Le mode test de dix publications ne peut pas être repris.")
+        if not adresse_configuree():
+            raise HTTPException(503, "PostgreSQL doit être configuré pour reprendre le corpus.")
+        try:
+            verifier_disponibilite()
+            nom_pg = obtenir_nom_collecte(cookie, "collecte", identifiant)
+            nombre_pg = compter_publications_collecte(cookie, identifiant)
+        except ValueError:
+            raise HTTPException(
+                404, "Collecte d'origine absente de PostgreSQL : reprise refusée.") from None
+        except RuntimeError:
+            raise HTTPException(503, "PostgreSQL indisponible : reprise non lancée.") from None
+        if nom_pg != (parametres.get("nom_sauvegarde") or nom_pg):
+            raise HTTPException(409, "Le nom de la collecte PostgreSQL ne correspond plus.")
+        try:
+            publications = lire_archive_json(
+                dossier, "publications.json", obligatoire=True)
+            journal = lire_archive_json(
+                dossier, "journal.json", obligatoire=True)
+        except ValueError:
+            raise HTTPException(
+                409, "Archive locale incomplète : reprise bloquée pour protéger le corpus.") from None
+        if not isinstance(publications, list) or not isinstance(journal, dict):
+            raise HTTPException(409, "Archive scientifique invalide.")
+        if not isinstance(journal.get("evenements"), list):
+            raise HTTPException(409, "Journal des hashtags absent.")
+        if nombre_pg > len(publications):
+            raise HTTPException(
+                409, f"PostgreSQL contient {nombre_pg} publications, "
+                f"mais l'archive locale n'en contient que {len(publications)}. "
+                "Reprise bloquée pour protéger le corpus original.")
+        credentials = {}
+        for cle in ("research_client_key", "research_client_secret"):
+            secret = getattr(payload, cle, None)
+            if secret:
+                credentials[cle] = secret.get_secret_value()
+        try:
+            settings = StartRequest.model_validate({**parametres, **credentials})
+        except ValueError:
+            raise HTTPException(
+                422, "Paramètres historiques invalides ou identifiants Research manquants.") from None
+        try:
+            selection, variantes, _ = preparer_reprise_hashtags(
+                settings.hashtags, settings.variantes_accents,
+                journal["evenements"], payload.hashtags,
+                source_en_cours=manifeste.get("source_en_cours_id"))
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+        with self.lock:
+            if any(tache.busy or tache.video_busy for tache in self.jobs.values()):
+                raise HTTPException(409, "Un traitement est déjà en cours sur le serveur.")
+            ancien = self.jobs.get(identifiant)
+            if ancien is not None and ancien.owner != owner:
+                raise HTTPException(403, "Cette collecte appartient à une autre session.")
+            job = Job(
+                owner, settings, self.data_dir, identifiant=identifiant,
+                archive_directory=dossier, owner_historique=cookie, reprise=True)
+            try:
+                initialiser_donnees_reprise(job, dossier, manifeste, [])
+            except (ValueError, TypeError, OSError) as erreur:
+                raise HTTPException(409, str(erreur)) from None
+            job.hashtags_reprise = list(selection)
+            job.sources_reprise_hashtags = list(variantes)
+            job.journal.append({
+                "reprise_hashtags": True,
+                "date": scraper.utc_now(),
+                "hashtags_a_reprendre": list(selection),
+                "variantes_a_interroger": list(variantes),
+                "publications_anterieures": len(job.publications),
+            })
+            job.limites_debug = {
+                "inactivite_max_s": self.idle_timeout,
+                "duree_max_s": self.max_duration}
+            self.jobs[identifiant] = job
+            job.thread = threading.Thread(
+                target=self.runner, args=(job,), daemon=True)
+            job.thread.start()
+            return job
+
     def reouvrir_historique(self, owner, identifiant, cookie):
         from stockage.historique_analyses import retrouver
         recupere = retrouver(self.data_dir, identifiant, cookie)
@@ -3807,6 +3906,15 @@ def create_app(manager=None):
         """Reprendre exclusivement les médias manquants dans le même corpus PostgreSQL."""
         exiger_ticket(request)
         travail = manager.reprendre_historique(
+            owner(request), identifiant, owner_historique(request), payload)
+        return travail.snapshot()
+
+    @app.post("/api/historique/{identifiant}/reprendre-hashtags", status_code=202)
+    def reprendre_hashtags_existants(
+            identifiant: str, payload: ReprendreHashtagsPayload, request: Request):
+        """Continuer une collecte hashtags Research sans nouveau corpus."""
+        exiger_ticket(request)
+        travail = manager.reprendre_hashtags_historique(
             owner(request), identifiant, owner_historique(request), payload)
         return travail.snapshot()
 
