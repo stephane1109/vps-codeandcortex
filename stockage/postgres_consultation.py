@@ -484,6 +484,29 @@ def valeur_colonne(donnees, nom):
 
 
 
+
+def compter_publications_collecte(cookie, identifiant):
+    """Contrôler le corpus PostgreSQL avant reprise, sans modifier les données."""
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Collecte inconnue ou non autorisée.")
+    with ouvrir_connexion() as connexion:
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT COUNT(p.publication_id) "
+                "FROM scraptiktok_collectes AS c "
+                "LEFT JOIN scraptiktok_publications AS p "
+                "ON p.collecte_id=c.collecte_id "
+                "WHERE c.collecte_id=%s AND c.proprietaire_hash=%s "
+                "GROUP BY c.collecte_id",
+                (identifiant, empreinte(cookie)),
+            )
+            resultat = curseur.fetchone()
+    if resultat is None:
+        raise ValueError("Collecte PostgreSQL introuvable ou non autorisée.")
+    return int(resultat[0])
+
+
+
 def obtenir_nom_collecte(cookie, type_sauvegarde, identifiant):
     """Lire le nom d'une collecte PostgreSQL appartenant à la session privée."""
     if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
