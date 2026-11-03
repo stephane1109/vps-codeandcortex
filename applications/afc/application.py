@@ -125,14 +125,19 @@ def executer_moteur_r(
         }
 
 
-def afficher_resultats(resultats: dict, methode: str = "AFC") -> None:
+def afficher_resultats(
+    resultats: dict, methode: str = "AFC", mode_acm: str = "Indicator"
+) -> None:
     """Présente les graphiques, mesures et exports calculés par R."""
     fichiers = resultats["fichiers"]
     st.subheader(f"Résultats de l'{methode}")
+    suffixe_methode = (
+        "_burt" if methode == "ACM" and mode_acm == "Burt" else ""
+    )
     st.download_button(
         "Télécharger tous les résultats (ZIP)",
         data=resultats["archive"],
-        file_name=f"resultats_{methode.lower()}_factominer.zip",
+        file_name=f"resultats_{methode.lower()}{suffixe_methode}_factominer.zip",
         mime="application/zip",
         type="primary",
     )
@@ -159,9 +164,14 @@ def afficher_resultats(resultats: dict, methode: str = "AFC") -> None:
             "ou, pour une AFC à un seul axe, les matrices natives de CA()."
         )
     else:
+        libelle_mode = (
+            "tableau de Burt" if mode_acm == "Burt"
+            else "tableau disjonctif complet (TDC)"
+        )
         st.caption(
-            "Résultats de FactoMineR::MCA() ; les modalités caractéristiques "
-            "des axes 1 et 2 sont identifiées par FactoMineR::dimdesc()."
+            f"Résultats de FactoMineR::MCA() selon le {libelle_mode} ; "
+            "les modalités caractéristiques des axes 1 et 2 "
+            "sont identifiées par FactoMineR::dimdesc()."
         )
 
     onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
@@ -224,10 +234,33 @@ def afficher_resultats(resultats: dict, methode: str = "AFC") -> None:
                 ),
             },
         )
-        st.caption(
-            "Les pourcentages et les inerties cumulées proviennent "
-            "directement des valeurs propres calculées par FactoMineR::CA()."
-        )
+        if methode == "AFC":
+            st.caption(
+                "Les valeurs propres, les pourcentages et les inerties cumulées "
+                "proviennent de FactoMineR::CA()."
+            )
+        else:
+            st.caption(
+                "Pour le TDC, les inerties sont rapportées à la somme des "
+                "valeurs propres du tableau disjonctif. Pour Burt, les valeurs "
+                "propres sont leurs carrés ; les pourcentages changent."
+            )
+            nom_comparaison = "18_comparaison_inerties_tdc_burt.csv"
+            if nom_comparaison in fichiers:
+                st.subheader("Comparaison des inerties : TDC et Burt")
+                comparaison = pd.read_csv(
+                    io.BytesIO(fichiers[nom_comparaison]),
+                    sep=";", decimal=",", encoding="utf-8",
+                )
+                st.dataframe(
+                    comparaison, hide_index=True, use_container_width=True
+                )
+                st.download_button(
+                    "Télécharger la comparaison TDC–Burt (CSV)",
+                    data=fichiers[nom_comparaison],
+                    file_name=nom_comparaison,
+                    mime="text/csv",
+                )
         st.download_button(
             "Télécharger le tableau des inerties (CSV)",
             data=fichiers["06_valeurs_propres_inerties.csv"],
@@ -263,8 +296,11 @@ def executer_moteur_acm(
     effectif_initial: int,
     effectif_final: int,
     parametres: dict,
+    methode_calcul: str = "Indicator",
 ) -> dict:
-    """Exécuter FactoMineR::MCA sur les catégories des variables sélectionnées."""
+    """Exécuter l'ACM native sur TDC ou sur le tableau de Burt."""
+    if methode_calcul not in {"Indicator", "Burt"}:
+        raise ValueError("Méthode ACM invalide : Indicator ou Burt attendu.")
     executable = shutil.which("Rscript")
     if executable is None:
         raise RuntimeError(
@@ -287,6 +323,7 @@ def executer_moteur_acm(
             nom_source,
             str(effectif_initial),
             str(effectif_final),
+            methode_calcul,
         ]
         try:
             processus = subprocess.run(
@@ -323,6 +360,7 @@ def executer_moteur_acm(
             "14_plan_factoriel_significatif.pdf",
             "15_inerties.png", "16_resultats_statistiques.csv",
             "significativite_modalites_factominer.csv",
+            "18_comparaison_inerties_tdc_burt.csv",
         }
         manquants = sorted(attendus.difference(fichiers))
         if manquants:
@@ -376,6 +414,32 @@ def construire_interface_acm(
     if len(variables_actives) < 3:
         st.info("Sélectionnez au moins trois variables pour l'ACM.")
         return
+
+    choix_methode = st.radio(
+        "Formulation de l'ACM",
+        options=[
+            "Tableau disjonctif complet (TDC)",
+            "Tableau de Burt",
+        ],
+        horizontal=True,
+        key="acm_methode_calcul",
+        help=(
+            "Les deux calculs sont réalisés avec FactoMineR::MCA(), "
+            "respectivement method='Indicator' et method='Burt'. "
+            "Le tableau de Burt produit des valeurs propres au carré "
+            "et une répartition différente de l'inertie."
+        ),
+    )
+    methode_calcul = (
+        "Indicator"
+        if choix_methode == "Tableau disjonctif complet (TDC)"
+        else "Burt"
+    )
+    st.caption(
+        "Les coordonnées, contributions et cos² sont ceux de la méthode "
+        "sélectionnée. Un tableau comparatif distingue les deux "
+        "normalisations de l'inertie."
+    )
 
     st.subheader("3. Paramètres de préparation et de calcul")
     col_param, col_filtre = st.columns(2)
@@ -490,6 +554,7 @@ def construire_interface_acm(
 
     selection_exclusions = (
         identifiant_portee,
+        methode_calcul,
         tuple(
             (nom, tuple(sorted(valeurs)))
             for nom, valeurs in exclusions.items()
@@ -551,6 +616,7 @@ def construire_interface_acm(
     parametres = dict(
         portee,
         methode="ACM",
+        methode_calcul=methode_calcul,
         modalites_exclues=preparation.modalites_exclues,
         effectif_initial=preparation.effectif_initial,
         effectif_avant_exclusion_modalites=(
@@ -577,6 +643,7 @@ def construire_interface_acm(
                     effectif_initial=preparation.effectif_initial,
                     effectif_final=preparation.effectif_final,
                     parametres=parametres,
+                    methode_calcul=methode_calcul,
                 )
         except (RuntimeError, OSError) as erreur:
             st.session_state.pop("dernier_resultat_acm", None)
@@ -590,7 +657,8 @@ def construire_interface_acm(
     if "dernier_resultat_acm" in st.session_state:
         if st.session_state.get("signature_resultat_acm") == signature:
             afficher_resultats(
-                st.session_state["dernier_resultat_acm"], methode="ACM"
+                st.session_state["dernier_resultat_acm"],
+                methode="ACM", mode_acm=methode_calcul,
             )
         else:
             st.info(
@@ -616,8 +684,9 @@ def construire_interface() -> None:
         )
     else:
         st.caption(
-            "ACM avec FactoMineR::MCA() : plusieurs variables catégorielles "
-            "analysées simultanément."
+            "ACM avec FactoMineR::MCA() : choisir le tableau disjonctif "
+            "complet (TDC) ou le tableau de Burt pour plusieurs variables "
+            "catégorielles analysées simultanément."
         )
 
     st.subheader("1. Importer le fichier CSV")
