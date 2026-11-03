@@ -328,15 +328,30 @@ for (i in seq_along(axes_description)) {
     stop("FactoMineR::dimdesc renvoie des catégories sans clé unique.")
   }
   indices <- match(cles, identifiants_dimdesc)
-  if (anyNA(indices)) {
-    stop(
-      "Impossible de relier certaines catégories de dimdesc() aux modalités ",
-      "de l'ACM : ",
-      paste(cles[is.na(indices)], collapse = " ; ")
-    )
+  # dimdesc() décrit également les catégories qualitatives illustratives.
+  # Le filtre du plan concerne uniquement les modalités actives ; ignorer
+  # les autres résultats natifs sans les confondre avec des valeurs actives.
+  non_actives <- is.na(indices)
+  if (any(non_actives)) {
+    cles_qualitatives_sup <- if (length(indices_quali_sup)) {
+      unlist(lapply(
+        colnames(donnees)[indices_quali_sup],
+        function(nom) paste0(nom, "=", levels(donnees[[nom]]))
+      ), use.names = FALSE)
+    } else {
+      character(0)
+    }
+    inconnues <- cles[non_actives & !cles %in% cles_qualitatives_sup]
+    if (length(inconnues)) {
+      stop(
+        "FactoMineR::dimdesc contient des catégories non identifiées : ",
+        paste(inconnues, collapse = " ; ")
+      )
+    }
   }
-  liste_p[[i]][indices] <- as.numeric(
-    caracteristiques[, "p.value"]
+  conservees <- !is.na(indices)
+  liste_p[[i]][indices[conservees]] <- as.numeric(
+    caracteristiques[conservees, "p.value"]
   )
 }
 p_axe_1 <- liste_p[[1L]]
