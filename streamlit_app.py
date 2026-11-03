@@ -1741,6 +1741,42 @@ with onglet_collecte:
                     for identifiant in selection_moteur:
                         media = medias.get(identifiant)
                         st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
+            if actuel.get("source_collecte") == "hashtags":
+                bilan_sources = actuel.get("bilan_hashtags_sources") or []
+                if bilan_sources:
+                    a_reprendre = hashtags_a_reprendre(bilan_sources)
+                    st.write(
+                        f"Suivi des hashtags : {len(bilan_sources)} hashtag(s) "
+                        f"demandé(s), {len(a_reprendre)} restant à reprendre."
+                    )
+                    if a_reprendre:
+                        with st.expander(
+                                f"Hashtags à reprendre : {len(a_reprendre)}",
+                                expanded=not actuel.get("busy", True)):
+                            st.dataframe([
+                                {
+                                    "Hashtag": "#" + ligne["hashtag"],
+                                    "État": ligne["etat"].replace("_", " "),
+                                    "Liens": ligne["liens"],
+                                    "Diagnostic": ligne["motif"],
+                                }
+                                for ligne in bilan_sources
+                            ], hide_index=True, use_container_width=True)
+                    if not actuel.get("busy"):
+                        st.download_button(
+                            "Télécharger le bilan des hashtags (CSV réimportable)",
+                            data=exporter_bilan_hashtags_csv(bilan_sources),
+                            file_name="bilan_hashtags_" + re.sub(
+                                r"[^a-zA-Z0-9_-]+", "_",
+                                actuel.get("nom_sauvegarde")
+                                or actuel.get("id") or "collecte"
+                            )[:60] + ".csv",
+                            mime="text/csv", key="telecharger_bilan_hashtags",
+                        )
+                        st.caption(
+                            "Conservez ce bilan pour reprendre les hashtags "
+                            "interrompus par quota dans le même corpus PostgreSQL."
+                        )
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
                 st.info("Une invitation à se connecter est visible. Si un CAPTCHA apparaît, résolvez-le dans la fenêtre ci-dessous. Sinon, fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
             elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
