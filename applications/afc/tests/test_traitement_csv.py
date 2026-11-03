@@ -81,9 +81,9 @@ class TestTraitementCSV(unittest.TestCase):
         """Afficher les pourcentages exacts fournis par FactoMineR::CA."""
         export_factominer = (
             "modalite;eigenvalue;percentage of variance;"
-            "cumulative percentage of variance\\n"
-            "dim 1;0,25;62,5;62,5\\n"
-            "dim 2;0,15;37,5;100\\n"
+            "cumulative percentage of variance\n"
+            "dim 1;0,25;62,5;62,5\n"
+            "dim 2;0,15;37,5;100\n"
         ).encode("utf-8")
         tableau = preparer_tableau_inerties(export_factominer)
         self.assertEqual(
@@ -100,8 +100,8 @@ class TestTraitementCSV(unittest.TestCase):
         """Un tableau à un axe est également lisible."""
         export_factominer = (
             "modalite;eigenvalue;percentage of variance;"
-            "cumulative percentage of variance\\n"
-            "dim 1;0,18;100;100\\n"
+            "cumulative percentage of variance\n"
+            "dim 1;0,18;100;100\n"
         ).encode("utf-8")
         tableau = preparer_tableau_inerties(export_factominer)
         self.assertEqual(len(tableau), 1)
@@ -112,7 +112,7 @@ class TestTraitementCSV(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "vide"):
             preparer_tableau_inerties(b"")
         with self.assertRaisesRegex(ValueError, "incomplet"):
-            preparer_tableau_inerties(b"axe;inertie\\n1;25\\n")
+            preparer_tableau_inerties(b"axe;inertie\n1;25\n")
 
     def test_graphique_et_tableau_inerties_dans_le_meme_onglet(self):
         """Le tableau complète l'histogramme, sans le remplacer."""
