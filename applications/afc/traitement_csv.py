@@ -34,6 +34,62 @@ class PreparationAFC:
     effectif_apres_filtre: int
     effectif_apres_dedoublonnage: int
     effectif_final: int
+    effectif_avant_exclusion_modalites: int | None = None
+    modalites_exclues_lignes: tuple[str, ...] = ()
+    modalites_exclues_colonnes: tuple[str, ...] = ()
+    modalites_vides_lignes: tuple[str, ...] = ()
+    modalites_vides_colonnes: tuple[str, ...] = ()
+
+
+def exclure_modalites_contingence(
+    preparation: PreparationAFC,
+    lignes_a_exclure: list[str] | tuple[str, ...] = (),
+    colonnes_a_exclure: list[str] | tuple[str, ...] = (),
+) -> PreparationAFC:
+    """Retirer des modalités du tableau avant un nouveau calcul FactoMineR.
+
+    Les observations associées aux lignes ou colonnes exclues ne sont plus
+    comptées. Le tableau initial reste inchangé et les marges nulles créées
+    par l'exclusion disparaissent, car elles ne sont pas utilisables en AFC.
+    """
+    from dataclasses import replace
+
+    initial = preparation.tableau
+    lignes = tuple(dict.fromkeys(lignes_a_exclure))
+    colonnes = tuple(dict.fromkeys(colonnes_a_exclure))
+    inconnues_lignes = set(lignes).difference(initial.index)
+    inconnues_colonnes = set(colonnes).difference(initial.columns)
+    if inconnues_lignes or inconnues_colonnes:
+        raise ValueError(
+            "Une ou plusieurs modalités à supprimer sont absentes "
+            "du tableau de contingence."
+        )
+
+    tableau = initial.drop(index=list(lignes), columns=list(colonnes))
+    # Une ligne ou colonne sans observation doit également être retirée.
+    lignes_vides = tuple(tableau.index[tableau.sum(axis=1).eq(0)].tolist())
+    colonnes_vides = tuple(tableau.columns[tableau.sum(axis=0).eq(0)].tolist())
+    tableau = tableau.drop(
+        index=list(lignes_vides), columns=list(colonnes_vides)
+    )
+    if tableau.shape[0] < 2 or tableau.shape[1] < 2:
+        raise ValueError(
+            "L'AFC nécessite au moins deux modalités actives en lignes "
+            "et deux en colonnes. Rétablissez une modalité supprimée."
+        )
+
+    # Les effectifs sont comptés dans le tableau effectivement transmis à R,
+    # sans réimputation ni nouveau calcul statistique.
+    return replace(
+        preparation,
+        tableau=tableau,
+        effectif_final=int(tableau.to_numpy().sum()),
+        effectif_avant_exclusion_modalites=preparation.effectif_final,
+        modalites_exclues_lignes=lignes,
+        modalites_exclues_colonnes=colonnes,
+        modalites_vides_lignes=lignes_vides,
+        modalites_vides_colonnes=colonnes_vides,
+    )
 
 
 def detecter_encodage(contenu: bytes, choix: str = "Automatique") -> str:
