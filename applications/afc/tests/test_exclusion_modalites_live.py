@@ -90,6 +90,24 @@ class TestsExclusionModalites(unittest.TestCase):
                 self.initiale, colonnes_a_exclure=["inconnue"]
             )
 
+    def test_supprimer_une_modalite_non_trouvee_presente_dans_le_csv(self):
+        """Une modalité textuelle accentuée peut être écartée en lignes."""
+        donnees = pd.DataFrame({
+            "lignes": [
+                "modalité_nontrouvé", "modalité_nontrouvé",
+                "catégorie A", "catégorie A",
+                "catégorie B", "catégorie B",
+            ],
+            "colonnes": ["X", "Y", "X", "Y", "X", "Y"],
+        })
+        initiale = preparer_contingence(donnees, "lignes", "colonnes")
+        resultat = exclure_modalites_contingence(
+            initiale, lignes_a_exclure=["modalité_nontrouvé"]
+        )
+        self.assertNotIn("modalité_nontrouvé", resultat.tableau.index)
+        self.assertEqual(resultat.effectif_final, 4)
+        self.assertIn("modalité_nontrouvé", initiale.tableau.index)
+
     def test_dedoublonner_une_modalite_supprimee(self):
         resultat = exclure_modalites_contingence(
             self.initiale, ["A", "A"], ["Z", "Z"]
