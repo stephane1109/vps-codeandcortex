@@ -393,6 +393,7 @@ def executer_moteur_acm(
             "15_inerties.png", "16_resultats_statistiques.csv",
             "significativite_modalites_factominer.csv",
             "18_comparaison_inerties_tdc_burt.csv",
+            "19_couleurs_variables.csv",
         }
         manquants = sorted(attendus.difference(fichiers))
         if manquants:
