@@ -238,7 +238,7 @@ class TestsVariablesNumeriques(unittest.TestCase):
                 hashtag_moteur="research",
                 hashtags_saisis=["17octobre", "24octobre", "31octobre"],
                 operator="OR", rechercher_dans_texte=False,
-                french_only=False, collecter_commentaires=False,
+                french_only=True, collecter_commentaires=False,
                 collecter_follower_count=False, collecter_is_verified=False,
                 inclure_texte_genere_ia=False,
                 variables_txt=["id"], variables_classes_txt=["likes"],
@@ -254,6 +254,10 @@ class TestsVariablesNumeriques(unittest.TestCase):
             self.assertEqual(job.processed, 1)
             self.assertEqual(len(job.records), 1)
             self.assertEqual(job.filtered, 0)
+            self.assertEqual(job.non_french, 0)
+            self.assertEqual(job.language_unknown, 1)
+            self.assertEqual(
+                job.records[0]["motif_non_retenue"], "retenue_langue_indeterminee")
             self.assertEqual(job.bilan_hashtags["17octobre"], 1)
             self.assertEqual(job.records[0]["hashtags_correspondants"], ["17octobre"])
             self.assertEqual(job.records[0]["description"], video["video_description"])
