@@ -140,7 +140,7 @@ if "initialise" not in st.session_state:
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", True),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
-        "limit":ancienne.get("limit",50), "french_only":ancienne.get("french_only",True),
+        "limit":ancienne.get("limit") or 50, "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
         # L'option a été supprimée : les futures collectes n'activent pas ce ZIP.
         "sauvegarde_progressive": False,
@@ -1392,6 +1392,12 @@ with onglet_collecte:
                 st.error("La date de fin d'exécution doit suivre la date de début.")
             else:
                 valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","inclure_texte_genere_ia","filtrer_texte_ia_tiktok")}
+                # Aucun plafond local pour une collecte Research complète ;
+                # null est transmis et conservé dans les paramètres PostgreSQL.
+                if moteur_formulaire == "research":
+                    valeurs["limit"] = (
+                        10 if st.session_state.get("test_research_10_publications")
+                        else None)
                 valeurs["inclure_commentaires_txt"] = bool(
                     valeurs["collecter_commentaires"]
                     and st.session_state.get("inclure_commentaires_txt", False))
@@ -1620,9 +1626,14 @@ with onglet_collecte:
                     lancer(f"/api/jobs/{actuel['id']}/stop", {})
             elif "TikTok HTTP 429" in actuel.get("message", ""):
                 st.info("Collecte terminée après HTTP 429 : aucun nouvel appel TikTok n'est lancé par ce traitement.")
-            # Les changements d’étape recréent l’interface ; les images et gestes restent dans leur iframe stable.
-            if any(precedent.get(k)!=actuel.get(k) for k in ("busy","video_busy")) or (precedent.get("status")=="attention") != (actuel.get("status")=="attention"):
-                st.rerun()
+            # La fin de la collecte ne doit jamais relancer toute la page.
+            # Le fragment conserve les résultats et les boutons de téléchargement.
+            if (not actuel.get("busy") and not actuel.get("video_busy")
+                    and actuel.get("status") in ("completed", "partial", "stopped")):
+                st.success(
+                    "Collecte terminée : les résultats restent affichés "
+                    "et les fichiers peuvent être téléchargés ci-dessous."
+                )
             if actuel.get("source_collecte") == "presse":
                 if actuel.get("croiser_hashtag_presse"):
                     st.caption(
