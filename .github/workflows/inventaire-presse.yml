@@ -16,6 +16,9 @@ on:
       - "collecte/suivi_sources.py"
       - "tests/test_suivi_sources.py"
       - "tests/test_ordre_medias_interface.py"
+      - "collecte/reprise_collecte.py"
+      - "tests/test_reprise_collecte.py"
+      - "stockage/historique_analyses.py"
       - ".github/workflows/inventaire-presse.yml"
   workflow_dispatch:
 
@@ -32,7 +35,7 @@ jobs:
       - name: Vérifier le JSON et la syntaxe Python
         run: |
           python -m json.tool config/comptes_presse.json >/dev/null
-          python -m compileall -q collecte/presse.py collecte/suivi_sources.py webapp.py streamlit_app.py tests/test_groupes_presse.py tests/test_presse_research_sans_limite_medias.py tests/test_suivi_sources.py tests/test_ordre_medias_interface.py
+          python -m compileall -q collecte/presse.py collecte/suivi_sources.py webapp.py streamlit_app.py tests/test_groupes_presse.py tests/test_presse_research_sans_limite_medias.py tests/test_suivi_sources.py tests/test_ordre_medias_interface.py collecte/reprise_collecte.py tests/test_reprise_collecte.py
       - name: Tester les regroupements des comptes Presse
         run: python -m unittest discover -s tests -p test_groupes_presse.py -v
       - name: Tester les 93 médias et l'absence de plafond Research
@@ -43,3 +46,5 @@ jobs:
         run: python -m unittest discover -s tests -p test_suivi_sources.py -v
       - name: Vérifier l'ordre visuel et le parcours de collecte
         run: python -m unittest discover -s tests -p test_ordre_medias_interface.py -v
+      - name: Vérifier la reprise du même corpus
+        run: python -m unittest discover -s tests -p test_reprise_collecte.py -v
