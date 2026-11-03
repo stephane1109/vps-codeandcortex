@@ -1111,6 +1111,7 @@ class Job:
                     if self.settings.test_research_10_publications else [],
                     "apercu_engagement": [{"id": r["id"], "author": r["author"], "url": r["url"],
                         "engagement": r.get("engagement", {}), "langue_detection": r.get("langue_detection"),
+                        "motif_non_retenue": r.get("motif_non_retenue"),
                         "retenue_txt": bool(r.get("retenue", r in self.records))}
                         for r in (self.publications or self.records)],
                     "preview": [{"author": r["author"], "description": r["description"],
