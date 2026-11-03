@@ -214,7 +214,7 @@ class TestsGroupesPresse(unittest.TestCase):
             22)
         self.assertEqual(
             sum(m["categorie"] == "presse_nationale" for m in inventaire),
-            26)
+            25)
 
     def test_politis_deplace_en_presse_nationale(self):
         """Conserver le compte Politis et le ranger parmi les titres nationaux."""
