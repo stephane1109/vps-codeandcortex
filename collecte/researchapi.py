@@ -282,7 +282,8 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                    requetes_tentees=0, candidats_examines=0, auteurs_ecartes=0,
                    collecte_partielle=True, exhaustif=False,
                    fournisseur_donnees="TikTok Research API",
-                   hashtags_exclus=list(hashtags_exclus), exclus_hashtags_api=0)
+                   hashtags_exclus=list(hashtags_exclus), exclus_hashtags_api=0,
+                   ecartes_hashtags_api=0, liens_page_research=[])
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
@@ -291,6 +292,9 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
         raise ResearchAccesRefuse("Research API : jeton absent.")
     contenus = {}
     vus = set()
+    # Conserver les références vivantes des données : les réécritures
+    # intégrales à chaque page ralentissaient les collectes importantes.
+    rapport["metadonnees_api"] = contenus
     for borne_debut, borne_fin in periodes:
         curseur = None
         search_id = None
@@ -343,6 +347,7 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             rapport["pages_research"] += 1
             videos = donnees["videos"]
             rapport["candidats_examines"] += len(videos)
+            liens_page = []
             for video in videos:
                 identifiant = str(video.get("id") or video.get("video_id") or "") if isinstance(video, dict) else ""
                 if identifiant in vus:
@@ -363,12 +368,17 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                           else any(concordances)) if concordances else True
                 if fiche and valide:
                     contenus[identifiant] = fiche
+                    liens_page.append(fiche["url"])
                 else:
                     rapport["auteurs_ecartes"] += 1
+                    if fiche and not valide:
+                        rapport["ecartes_hashtags_api"] += 1
                 if not automatique and len(contenus) >= limite:
                     break
-            rapport["metadonnees_api"] = contenus.copy()
-            rapport["discovered_urls"] = [f["url"] for f in contenus.values()]
+            # Publier immédiatement les nouveaux liens et leurs métadonnées,
+            # afin que le pilote puisse lire/exporter chaque page reçue.
+            rapport["liens_page_research"] = liens_page
+            rapport["discovered_urls"].extend(liens_page)
             rapport["retenues_par_compte"] = {compte: len(contenus)}
             if progress:
                 progress(len(contenus))
