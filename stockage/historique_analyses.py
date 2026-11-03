@@ -178,7 +178,7 @@ def exporter_sauvegarde_distincte(dossier, categorie):
         "engagement.csv", "ratios_engagement.csv", "comparaison_medias.csv",
         "commentaires.csv", "videos.csv", "videos.json",
         "profils_medias.csv", "profils_medias.json",
-        "bilan_medias.csv", "parametres_historique.json",
+        "bilan_medias.csv", "bilan_hashtags.csv", "parametres_historique.json",
     }
     flux = BytesIO()
     with ZipFile(flux, "w", compression=ZIP_DEFLATED, compresslevel=5) as archive:
