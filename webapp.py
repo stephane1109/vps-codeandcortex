@@ -2529,8 +2529,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         if job.profils_medias:
             reussis = sum(
                 fiche["statut_profil"] == "ok" for fiche in job.profils_medias)
+            libelle_profils = (
+                "Profils médias" if job.settings.source_collecte == "presse"
+                else "Profils auteurs")
             final_message += (
-                f" Profils auteurs : {reussis}/{len(job.profils_medias)} "
+                f" {libelle_profils} : {reussis}/{len(job.profils_medias)} "
                 "compte(s) renseigné(s) ; consultez profils_medias.csv "
                 "pour les valeurs exactes et les absences.")
             if final_status == "failed" and reussis and job.archive_prete:
