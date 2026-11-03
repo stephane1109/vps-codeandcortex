@@ -179,6 +179,25 @@ utils::write.csv2(
   row.names = FALSE, fileEncoding = "UTF-8", na = ""
 )
 
+# Éviter les avertissements mbcsToSbcs du moteur graphique en locale C.
+# La translittération concerne seulement les légendes ; le corpus, les
+# coordonnées et les exports conservent les intitulés UTF-8 d'origine.
+libelles_graphiques <- function(texte) {
+  valeurs <- iconv(
+    enc2utf8(as.character(texte)),
+    from = "UTF-8",
+    to = "ASCII//TRANSLIT",
+    sub = "?"
+  )
+  valeurs[is.na(valeurs)] <- "?"
+  valeurs
+}
+titre_graphique <- sprintf(
+  "ACM - %s (%d variables actives)",
+  if (methode_calcul == "Burt") "Burt" else "TDC",
+  ncol(donnees)
+)
+
 # Dessiner les modalités de toutes les variables actives sur les mêmes axes.
 limites_axes <- function(valeurs, proportion = 0.22) {
   bornes <- range(valeurs, finite = TRUE)
@@ -212,31 +231,33 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   plot(
     NA_real_, NA_real_, type = "n", xlim = xlim, ylim = ylim,
     xlab = etiquette_x, ylab = etiquette_y,
-    main = paste("ACM —", libelle_methode, ":",
-                 paste(colnames(donnees), collapse = " × "))
+    main = titre_graphique
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
   if (any(visibles)) {
     points(x[visibles], y[visibles], pch = 16, col = "#2166AC", cex = 1.1)
-    text(x[visibles], y[visibles], noms_modalites[visibles],
-         pos = 3, cex = 0.72, col = "#2166AC", xpd = TRUE)
+    text(
+      x[visibles], y[visibles],
+      libelles_graphiques(noms_modalites[visibles]),
+      pos = 3, cex = 0.72, col = "#2166AC", xpd = TRUE
+    )
   }
   if (filtrer_modalites && deux_axes) {
     mtext(
       sprintf(
-        "Modalités caractéristiques des axes 1 et 2 : p <= 0,05 (%d/%d). FactoMineR::dimdesc.",
+        "Modalites des axes 1 et 2 : p <= 0,05 (%d/%d). FactoMineR::dimdesc.",
         sum(visibles), length(visibles)
       ), side = 1, line = 4.3, cex = 0.7
     )
     if (!any(visibles)) {
-      text(0, 0, "Aucune modalité significative (p <= 0,05)",
+      text(0, 0, "Aucune modalite significative (p <= 0,05)",
            pos = 3, cex = 0.85, col = "grey35")
     }
   } else if (!deux_axes) {
-    mtext("Un seul axe factoriel : aucune sélection de modalités appliquée.",
+    mtext("Un seul axe factoriel : aucun filtre applique.",
           side = 1, line = 4.3, cex = 0.7)
   } else {
-    mtext("Plan complet : toutes les modalités actives des variables sont affichées.",
+    mtext("Plan complet : toutes les modalites actives sont affichees.",
           side = 1, line = 4.3, cex = 0.7)
   }
 }
