@@ -64,6 +64,26 @@ def ordre_affichage_medias(catalogue):
     return resultats
 
 
+def filtrer_medias_archives(parametres, inventaire=None):
+    """Conserver les anciens corpus tout en écartant les comptes retirés du catalogue.
+
+    Cette migration s'applique exclusivement aux paramètres des archives :
+    le contrôle strict des nouvelles collectes reste inchangé.
+    """
+    copie = dict(parametres)
+    if copie.get("source_collecte") != "presse":
+        return copie
+    autorises = {
+        media["id"] for media in (
+            inventaire if inventaire is not None else charger_inventaire())
+    }
+    copie["medias"] = [
+        identifiant for identifiant in copie.get("medias", [])
+        if identifiant in autorises
+    ]
+    return copie
+
+
 def selectionner_medias(identifiants, inventaire=None):
     table = {m["id"]: m for m in (inventaire if inventaire is not None else charger_inventaire())}
     if any(i not in table for i in identifiants):
