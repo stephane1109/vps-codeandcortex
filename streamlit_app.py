@@ -1610,6 +1610,15 @@ with onglet_collecte:
                     "L'absence dans l'API ne signifie pas non-republication.")
                 with st.expander("Diagnostic des republications par média"):
                     st.json(actuel.get("bilan_republications") or {})
+            if actuel.get("reprise"):
+                st.caption(
+                    "Reprise de la collecte d'origine : "
+                    f"{actuel.get('publications_avant_reprise', 0)} "
+                    "publication(s) déjà enregistrée(s), "
+                    f"{actuel.get('publications_ajoutees', 0)} "
+                    "nouvelle(s) publication(s). "
+                    "Même identifiant de collecte et même corpus PostgreSQL."
+                )
             if actuel.get("source_collecte") == "presse":
                 bilan_medias = actuel.get("bilan_medias") or []
                 if bilan_medias:
