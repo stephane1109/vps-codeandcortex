@@ -77,6 +77,13 @@ class SupprimerCollectePostgresPayload(BaseModel):
     nom_confirmation: str = Field(min_length=1, max_length=160)
 
 
+class ReprendreCollectePayload(BaseModel):
+    """Paramètres de reprise sans modification des critères scientifiques."""
+    medias: list[str] = Field(default_factory=list)
+    research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
+
+
 class StartRequest(BaseModel):
     hashtag: str = Field(default="", max_length=100)
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
@@ -696,11 +703,14 @@ CAUSES_ARRET = {
 
 class Job:
     def __init__(self, owner: str, settings: StartRequest, data_dir: Path, *,
-                 identifiant=None, archive_directory=None, owner_historique=""):
+                 identifiant=None, archive_directory=None, owner_historique="", reprise=False):
         self.id = identifiant or uuid.uuid4().hex
         self.owner = owner
         self.owner_historique = owner_historique
         self.historique = archive_directory is not None
+        self.reprise = bool(reprise)
+        self.medias_reprise = []
+        self.reprise_decalage = 0
         self.settings = settings
         self.racine = data_dir
         if archive_directory is not None:
@@ -774,7 +784,7 @@ class Job:
         self.video_debut = None
         self.base = None
         self.plan_research_id = None
-        if settings.enrichie and not self.historique:
+        if settings.enrichie and (not self.historique or self.reprise):
             from stockage.base_donnees import BaseDonnees
             self.base = BaseDonnees(data_dir / "scraptiktok.sqlite")
             self.base.creer_session(self.id, owner, scraper.utc_now(), settings.model_dump())
@@ -798,7 +808,7 @@ class Job:
                 'duree_ecoulee_s':round((self.finished or time.monotonic())-self.created),
                 'limites':dict(self.limites_debug),
                 'compteurs':{'decouvertes':len(self.decouvertes_ids),'retenues_lecture':self.discovered,
-                    'traitees':self.processed,'restantes':max(0,self.discovered-self.processed),
+                    'traitees':self.processed + self.reprise_decalage,'restantes':max(0,self.discovered-self.processed),
                     'publications_enregistrees':len(self.publications),'exportees_txt':self.exportees,
                     'hors_hashtags':self.filtered,'exclus_hashtags':self.exclus_hashtags,
                     'autre_langue':self.non_french,
@@ -935,6 +945,7 @@ class Job:
                     "comptes_filtres": ([source["compte"] for source in self.settings.sources]
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
+                    "reprise": self.reprise, "medias_reprise": list(self.medias_reprise),
                     "diagnostics": list(self.diagnostics),
                     "telecharger_mp4": self.settings.telecharger_mp4,
                     "sauvegarde_progressive": self.settings.sauvegarde_progressive,
@@ -965,9 +976,9 @@ class Job:
                     "archive_prete": self.archive_prete, "video_busy": self.video_busy,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
-                    "processed": self.processed, "captions": len(self.records),
+                    "processed": self.processed + self.reprise_decalage, "captions": len(self.records),
                     "compteurs_collecte": {"decouvertes": len(self.decouvertes_ids), "retenues": self.discovered,
-                        "traitees": self.processed, "exportees": self.exportees},
+                        "traitees": self.processed + self.reprise_decalage, "exportees": self.exportees},
                     "errors": self.errors, "has_frame": bool(self.frame), "type_intervention": self.type_intervention,
                     "action_error": self.action_error, "can_download": bool(
                         self.records or self.republications or self.profils_medias),
@@ -1028,7 +1039,7 @@ class Job:
 
     def sauvegarder_postgres(self, *, progressif=False):
         """Archiver automatiquement les nouvelles données sans réécrire le corpus."""
-        if self.historique:
+        if self.historique and not self.reprise:
             return False
         if self.plan_research_id:
             # Les lots programmés utilisent leur propre stockage SQLite/PostgreSQL.
@@ -1081,7 +1092,7 @@ class Job:
 
     def sauvegarder_historique(self):
         """Synchroniser les résultats et codages dans l'historique privé de 30 jours."""
-        if self.historique:
+        if self.historique and not self.reprise:
             # Les analyses rouvertes pointent déjà sur leur dossier d'archive.
             return True
         if not self.owner_historique or not self.archive_prete:
@@ -1401,6 +1412,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
     connexion = None
     moteur_actif = job.settings.moteur_actif
     unique_links = {}
+    if job.reprise:
+        # Les vidéos existantes sont connues : aucune nouvelle lecture TikTok.
+        for publication in job.publications:
+            url_ancienne = publication.get("url")
+            if not url_ancienne:
+                continue
+            identite = scraper.canonical_post(url_ancienne)
+            if identite:
+                unique_links.setdefault(str(identite[0]), identite[1])
     metadonnees_api = {}
     dernier_debut_lecture = None
     final_status, final_message = "failed", "La collecte n’a pas pu aboutir."
@@ -1427,6 +1447,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         connexion = parcours(args, fabrique=driver_factory, verifier=job.check,
             interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
         sources = connexion.preparer_sources(job.settings)
+        if job.reprise:
+            autorises = set(job.medias_reprise)
+            sources = [source for source in sources if source.get("id") in autorises]
+            if not sources:
+                raise ValueError("Aucun média à reprendre.")
         driver = connexion.ouvrir()
         if job.settings.profils_medias_variables and moteur_actif == "research":
             # Une ligne par média choisi, même s'il n'a aucune vidéo retenue.
@@ -2046,7 +2071,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if args.limit is not None and not job.settings.test_research_10_publications:
                 recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
         final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
-        final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed} publication(s) consultée(s)."
+        final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed + job.reprise_decalage} publication(s) consultée(s)."
         if job.settings.filtrer_texte_ia_tiktok:
             final_message += (
                 f" Filtre texte IA TikTok : {job.exclus_sans_texte_ia} publication(s) "
