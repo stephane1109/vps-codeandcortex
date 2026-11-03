@@ -9,6 +9,15 @@ dossier_sortie <- arguments[[2L]]
 nom_source <- arguments[[3L]]
 effectif_initial <- as.integer(arguments[[4L]])
 effectif_final <- as.integer(arguments[[5L]])
+methode_calcul <- if (length(arguments) >= 6L) arguments[[6L]] else "Indicator"
+if (!(methode_calcul %in% c("Indicator", "Burt"))) {
+  stop("Méthode ACM invalide : utiliser Indicator ou Burt.")
+}
+libelle_methode <- if (methode_calcul == "Indicator") {
+  "Tableau disjonctif complet (TDC)"
+} else {
+  "Tableau de Burt"
+}
 
 if (!requireNamespace("FactoMineR", quietly = TRUE)) {
   stop("FactoMineR n'est pas installé dans l'environnement R.")
@@ -36,7 +45,9 @@ if (any(nombre_modalites < 2L)) {
 nombre_axes <- min(
   5L, nrow(donnees) - 1L, sum(nombre_modalites) - ncol(donnees)
 )
-resultat <- FactoMineR::MCA(donnees, ncp = nombre_axes, graph = FALSE)
+resultat <- FactoMineR::MCA(
+  donnees, ncp = nombre_axes, graph = FALSE, method = methode_calcul
+)
 if (sum(resultat$eig[, 1L]) < 1e-12) {
   stop("Aucune inertie ne peut être représentée dans cette ACM.")
 }
@@ -67,6 +78,52 @@ exporter_matrice(resultat$var$cos2, "09_cos2_modalites.csv")
 exporter_matrice(resultat$var$v.test, "10_vtest_modalites.csv")
 exporter_matrice(resultat$var$eta2, "11_rapports_correlation_variables.csv", "variable")
 exporter_matrice(resultat$ind$coord, "12_coordonnees_individus.csv", "individu")
+
+# Exporter les deux représentations du corpus lorsque leur volume le permet.
+# Ces tableaux ne remplacent jamais l'analyse native FactoMineR::MCA().
+nombre_colonnes_tdc <- sum(nombre_modalites)
+export_tdc <- as.double(nrow(donnees)) * nombre_colonnes_tdc <= 2000000
+export_burt <- as.double(nombre_colonnes_tdc)^2 <= 1000000
+if (export_tdc || export_burt) {
+  tableau_tdc <- FactoMineR::tab.disjonctif(donnees)
+  if (export_tdc) {
+    utils::write.csv2(
+      as.data.frame(tableau_tdc, check.names = FALSE),
+      file.path(dossier_sortie, "tdc.csv"),
+      row.names = FALSE, fileEncoding = "UTF-8"
+    )
+  }
+  if (export_burt) {
+    tableau_burt <- crossprod(as.matrix(tableau_tdc))
+    exporter_matrice(tableau_burt, "burt.csv")
+  }
+}
+
+# FactoMineR définit les valeurs propres du tableau de Burt comme les
+# carrés de celles du tableau disjonctif. Montrer les deux conventions
+# sans effectuer de second test statistique ni recalculer les axes.
+valeurs_propres_tdc <- as.numeric(resultat$eig[, 1L])
+if (methode_calcul == "Burt") {
+  valeurs_propres_tdc <- sqrt(pmax(valeurs_propres_tdc, 0))
+}
+valeurs_propres_burt <- valeurs_propres_tdc^2
+pourcentages_tdc <- 100 * valeurs_propres_tdc / sum(valeurs_propres_tdc)
+pourcentages_burt <- 100 * valeurs_propres_burt / sum(valeurs_propres_burt)
+comparaison_inerties <- data.frame(
+  axe = rownames(resultat$eig),
+  valeur_propre_tdc = valeurs_propres_tdc,
+  inertie_tdc_pourcentage = pourcentages_tdc,
+  inertie_tdc_cumulee = cumsum(pourcentages_tdc),
+  valeur_propre_burt = valeurs_propres_burt,
+  inertie_burt_pourcentage = pourcentages_burt,
+  inertie_burt_cumulee = cumsum(pourcentages_burt),
+  stringsAsFactors = FALSE
+)
+utils::write.csv2(
+  comparaison_inerties,
+  file.path(dossier_sortie, "18_comparaison_inerties_tdc_burt.csv"),
+  row.names = FALSE, fileEncoding = "UTF-8"
+)
 
 coordonnees <- as.matrix(resultat$var$coord)
 if (is.null(rownames(coordonnees))) {
@@ -155,7 +212,8 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   plot(
     NA_real_, NA_real_, type = "n", xlim = xlim, ylim = ylim,
     xlab = etiquette_x, ylab = etiquette_y,
-    main = paste("ACM :", paste(colnames(donnees), collapse = " × "))
+    main = paste("ACM —", libelle_methode, ":",
+                 paste(colnames(donnees), collapse = " × "))
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
   if (any(visibles)) {
@@ -223,7 +281,7 @@ statistiques <- data.frame(
     "Modalités au total", "Méthode de significativité des modalités"
   ),
   valeur = c(
-    nom_source, "ACM (FactoMineR::MCA)",
+    nom_source, paste0("ACM — ", libelle_methode, " (FactoMineR::MCA)"),
     paste(colnames(donnees), collapse = " ; "),
     as.character(effectif_initial), as.character(effectif_final),
     as.character(ncol(donnees)), as.character(nrow(coordonnees)),
@@ -243,6 +301,8 @@ utils::write.csv2(
 rapport <- c(
   "ANALYSE DES CORRESPONDANCES MULTIPLES — FactoMineR",
   paste("Source :", nom_source),
+  paste("Méthode de calcul :", libelle_methode),
+  paste("Appel natif : FactoMineR::MCA(method =", methode_calcul, ")"),
   paste("Variables actives :", paste(colnames(donnees), collapse = " ; ")),
   paste("Observations initiales :", effectif_initial),
   paste("Observations analysées :", effectif_final),
@@ -252,11 +312,23 @@ rapport <- c(
   "VALEURS PROPRES ET INERTIES (%)",
   capture.output(print(round(resultat$eig, 4))),
   "",
+  "COMPARAISON DES INERTIES — TDC ET BURT",
+  "Les valeurs propres de Burt sont les carrés des valeurs propres du TDC.",
+  "Les pourcentages d'inertie ont donc des dénominateurs différents.",
+  capture.output(print(round(comparaison_inerties, 4))),
+  "",
+  "REPRÉSENTATIONS EXPORTÉES",
+  if (export_tdc) "Tableau disjonctif complet : tdc.csv." else
+    "TDC non exporté : plus de 2 000 000 cellules.",
+  if (export_burt) "Tableau de Burt : burt.csv." else
+    "Burt non exporté : plus de 1 000 000 cellules.",
+  "",
   "DESCRIPTION DES AXES PAR FactoMineR::dimdesc (p <= 0,05)",
   capture.output(print(description)),
   "",
   "AVERTISSEMENTS MÉTHODOLOGIQUES",
   "L'ACM repose exclusivement sur les variables qualitatives actives.",
+  "Les inerties TDC et Burt ne se comparent pas comme deux estimations d'une même proportion.",
   "Le filtre optionnel concerne les modalités caractéristiques des axes 1 et 2.",
   "Les deux versions du plan utilisent les mêmes coordonnées FactoMineR."
 )
