@@ -1104,7 +1104,7 @@ def construire_interface() -> None:
             "Télécharger le corpus fusionné (CSV)",
             data=donnees.to_csv(
                 index=False, sep=";", encoding="utf-8",
-                lineterminator="\\n",
+                lineterminator="\n",
             ).encode("utf-8-sig"),
             file_name="corpus_csv_fusionne.csv",
             mime="text/csv",
