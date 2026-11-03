@@ -315,3 +315,119 @@ def preparer_contingence(
         effectif_apres_dedoublonnage=effectif_apres_dedoublonnage,
         effectif_final=int(tableau.to_numpy().sum()),
     )
+
+
+@dataclass
+class PreparationACM:
+    """Conserve les observations catégorielles destinées à FactoMineR::MCA."""
+
+    donnees: pd.DataFrame
+    effectif_initial: int
+    effectif_apres_filtre: int
+    effectif_apres_dedoublonnage: int
+    effectif_final: int
+    effectif_avant_exclusion_modalites: int
+    modalites_exclues: dict[str, list[str]]
+
+
+def preparer_acm(
+    donnees: pd.DataFrame,
+    variables: list[str],
+    uniquement_retenues: bool = True,
+    dedoublonner: bool = False,
+    exclure_indeterminees: bool = True,
+    inclure_manquantes: bool = False,
+    maximum_modalites: int = 40,
+    variable_filtre: str | None = None,
+    modalites_filtre: list[str] | None = None,
+    modalites_a_exclure: dict[str, list[str]] | None = None,
+) -> PreparationACM:
+    """Préparer au moins trois variables qualitatives sans calcul statistique.
+
+    Les exclusions retirent des observations ; elles ne suppriment ni une
+    colonne de la source ni les modalités présentes dans le fichier importé.
+    """
+    if len(variables) < 3 or len(set(variables)) != len(variables):
+        raise ValueError(
+            "L'ACM exige au moins trois variables catégorielles distinctes."
+        )
+    inconnues = [nom for nom in variables if nom not in donnees.columns]
+    if inconnues:
+        raise ValueError("Variables absentes du CSV : " + ", ".join(inconnues))
+
+    observations = donnees
+    effectif_initial = len(observations)
+    if uniquement_retenues and "retenue" in observations.columns:
+        observations = observations.loc[
+            observations["retenue"].str.lower().isin(VALEURS_VRAIES)
+        ]
+    if variable_filtre:
+        if variable_filtre not in observations.columns:
+            raise ValueError("La variable de filtrage est absente du CSV.")
+        if modalites_filtre is not None:
+            observations = observations.loc[
+                observations[variable_filtre].isin(modalites_filtre)
+            ]
+    effectif_apres_filtre = len(observations)
+    if dedoublonner and "publication_id" in observations.columns:
+        identifiants = observations["publication_id"]
+        observations = observations.loc[
+            identifiants.eq("") | ~identifiants.duplicated()
+        ]
+    effectif_apres_dedoublonnage = len(observations)
+    categories = observations.loc[:, variables].copy()
+    for nom in variables:
+        if inclure_manquantes:
+            categories[nom] = categories[nom].replace(
+                "", "Valeur manquante"
+            )
+        if exclure_indeterminees:
+            categories = categories.loc[
+                ~categories[nom].str.contains(MOTIFS_INDETERMINES, na=False)
+            ]
+    if not inclure_manquantes:
+        categories = categories.loc[categories[variables].ne("").all(axis=1)]
+    effectif_avant_exclusion_modalites = len(categories)
+
+    exclusions = modalites_a_exclure or {}
+    if set(exclusions).difference(variables):
+        raise ValueError(
+            "Une variable exclue n'appartient pas aux variables actives de l'ACM."
+        )
+    exclusions_validees = {}
+    for nom in variables:
+        modalites = list(dict.fromkeys(exclusions.get(nom, [])))
+        if modalites:
+            inconnues_modalites = set(modalites).difference(
+                categories[nom].unique()
+            )
+            if inconnues_modalites:
+                raise ValueError(
+                    f"Certaines modalités à supprimer sont absentes de {nom}."
+                )
+            categories = categories.loc[~categories[nom].isin(modalites)]
+        exclusions_validees[nom] = modalites
+
+    if categories.empty:
+        raise ValueError("Aucune observation ne subsiste pour l'ACM.")
+    for nom in variables:
+        nombre = int(categories[nom].nunique())
+        if nombre < 2:
+            raise ValueError(
+                f"ACM impossible : la variable '{nom}' ne possède plus "
+                "au moins deux modalités actives."
+            )
+        if nombre > maximum_modalites:
+            raise ValueError(
+                f"ACM impossible : '{nom}' possède {nombre} modalités "
+                f"(maximum : {maximum_modalites})."
+            )
+    return PreparationACM(
+        donnees=categories.reset_index(drop=True),
+        effectif_initial=effectif_initial,
+        effectif_apres_filtre=effectif_apres_filtre,
+        effectif_apres_dedoublonnage=effectif_apres_dedoublonnage,
+        effectif_final=len(categories),
+        effectif_avant_exclusion_modalites=effectif_avant_exclusion_modalites,
+        modalites_exclues=exclusions_validees,
+    )
