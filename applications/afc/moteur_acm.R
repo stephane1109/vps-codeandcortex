@@ -319,6 +319,16 @@ utils::write.csv2(
   row.names = FALSE, fileEncoding = "UTF-8"
 )
 
+# Arrondir uniquement les colonnes numériques pour le rapport texte.
+# La colonne "axe" contient les libellés "dim 1", "dim 2", etc. :
+# round() appliqué au data.frame entier déclenche Math.data.frame.
+comparaison_formatee <- comparaison_inerties
+colonnes_numeriques <- vapply(comparaison_formatee, is.numeric, logical(1))
+comparaison_formatee[colonnes_numeriques] <- lapply(
+  comparaison_formatee[colonnes_numeriques],
+  function(colonne) round(colonne, digits = 4L)
+)
+
 rapport <- c(
   "ANALYSE DES CORRESPONDANCES MULTIPLES — FactoMineR",
   paste("Source :", nom_source),
@@ -336,7 +346,7 @@ rapport <- c(
   "COMPARAISON DES INERTIES — TDC ET BURT",
   "Les valeurs propres de Burt sont les carrés des valeurs propres du TDC.",
   "Les pourcentages d'inertie ont donc des dénominateurs différents.",
-  capture.output(print(round(comparaison_inerties, 4))),
+  capture.output(print(comparaison_formatee, row.names = FALSE)),
   "",
   "REPRÉSENTATIONS EXPORTÉES",
   if (export_tdc) "Tableau disjonctif complet : tdc.csv." else
