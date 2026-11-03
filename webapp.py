@@ -1448,8 +1448,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
         sources = connexion.preparer_sources(job.settings)
         if job.reprise:
-            autorises = set(job.medias_reprise)
-            sources = [source for source in sources if source.get("id") in autorises]
+            index_sources = {source.get("id"): source for source in sources}
+            sources = [
+                index_sources[media_id] for media_id in job.medias_reprise
+                if media_id in index_sources
+            ]
             if not sources:
                 raise ValueError("Aucun média à reprendre.")
         driver = connexion.ouvrir()
@@ -2593,7 +2596,10 @@ class Manager:
             raise HTTPException(503, "PostgreSQL indisponible : reprise non lancée.") from None
         if nom_pg != (parametres.get("nom_sauvegarde") or nom_pg):
             raise HTTPException(409, "Le nom de la collecte PostgreSQL ne correspond plus à l'archive.")
-        journal = lire_archive_json(dossier, "journal.json", obligatoire=True)
+        try:
+            journal = lire_archive_json(dossier, "journal.json", obligatoire=True)
+        except ValueError:
+            raise HTTPException(409, "Le journal d'origine est illisible ou absent.") from None
         if not isinstance(journal, dict) or not isinstance(journal.get("evenements"), list):
             raise HTTPException(409, "Le journal d'origine est absent : impossible de reprendre les sources.")
         credentials = {}
@@ -2626,6 +2632,13 @@ class Manager:
                 initialiser_donnees_reprise(job, dossier, manifeste, selection)
             except (ValueError, TypeError, OSError) as erreur:
                 raise HTTPException(409, str(erreur)) from None
+            job.journal.append({
+                "reprise_collecte": True,
+                "date": scraper.utc_now(),
+                "medias_a_reprendre": list(selection),
+                "publications_anterieures": len(job.publications),
+                "traitees_anterieures": job.processed + job.reprise_decalage,
+            })
             job.limites_debug = {
                 "inactivite_max_s": self.idle_timeout,
                 "duree_max_s": self.max_duration}
@@ -2643,6 +2656,8 @@ class Manager:
         ligne, dossier, manifeste = recupere
         with self.lock:
             job = self.jobs.get(identifiant)
+            if job is not None and (job.busy or job.video_busy) and job.owner != owner:
+                raise HTTPException(409, "Cette collecte est active dans une autre session.")
             if job is not None and job.owner == owner and (not job.historique or job.busy or job.reprise):
                 return job
             params = StartRequest.model_validate(manifeste["parametres"])
