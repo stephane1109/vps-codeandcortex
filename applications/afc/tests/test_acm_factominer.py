@@ -137,6 +137,9 @@ class TestsACM(unittest.TestCase):
         self.assertIn('"18_comparaison_inerties_tdc_burt.csv"', moteur_acm)
         self.assertIn('"tdc.csv"', moteur_acm)
         self.assertIn('"burt.csv"', moteur_acm)
+        self.assertIn("colonnes_numeriques <- vapply(", moteur_acm)
+        self.assertIn("print(comparaison_formatee, row.names = FALSE)", moteur_acm)
+        self.assertNotIn("round(comparaison_inerties, 4)", moteur_acm)
         self.assertIn('dessiner_plan(FALSE)', moteur_afc)
         self.assertIn('dessiner_plan(TRUE)', moteur_afc)
         self.assertIn('dessiner_plan(FALSE)', moteur_acm)
@@ -252,6 +255,11 @@ class TestsACM(unittest.TestCase):
             ).open(encoding="utf-8", newline="") as fichier:
                 inerties_burt = list(csv.DictReader(fichier, delimiter=";"))
             self.assertEqual(len(inerties_tdc), len(inerties_burt))
+            rapport_burt = (sorties_burt / "00_rapport_acm.txt").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("COMPARAISON DES INERTIES", rapport_burt)
+            self.assertIn("dim 1", rapport_burt)
             for tdc, burt in zip(inerties_tdc, inerties_burt):
                 valeur_tdc = float(tdc["eigenvalue"].replace(",", "."))
                 valeur_burt = float(burt["eigenvalue"].replace(",", "."))
