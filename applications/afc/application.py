@@ -18,8 +18,9 @@ import streamlit as st
 from interface_statistiques_descriptives import construire_onglet_statistique_descriptive
 
 from traitement_csv import (
-    decrire_variables, exclure_modalites_contingence, lire_csv,
-    preparer_acm, preparer_contingence, preparer_tableau_inerties,
+    concatener_fichiers_csv, decrire_variables,
+    exclure_modalites_contingence, lire_csv, preparer_acm,
+    preparer_contingence, preparer_tableau_inerties,
 )
 
 
@@ -1007,9 +1008,9 @@ def construire_interface_afc(
 
 
 def construire_interface() -> None:
-    """Importer le CSV et proposer trois vues distinctes du même corpus."""
+    """Importer un ou plusieurs CSV et proposer les analyses conservées."""
     st.title("Analyses des correspondances — FactoMineR")
-    st.subheader("1. Importer le fichier CSV")
+    st.subheader("1. Importer un ou plusieurs fichiers CSV")
     colonne_choix, colonne_fichier = st.columns([1, 2])
     with colonne_choix:
         separateur = st.selectbox(
@@ -1017,24 +1018,98 @@ def construire_interface() -> None:
         )
         encodage = st.selectbox("Encodage", ["Automatique", "UTF-8", "Windows-1252", "Latin-1"])
     with colonne_fichier:
-        fichier = st.file_uploader("Fichier CSV", type=["csv", "txt"], accept_multiple_files=False)
+        fichiers = st.file_uploader(
+            "Fichiers CSV (un ou plusieurs)",
+            type=["csv", "txt"],
+            accept_multiple_files=True,
+            help=(
+                "Tous les fichiers doivent contenir les mêmes noms de colonnes. "
+                "L'ordre des colonnes peut varier ; les lignes sont réunies "
+                "sans dédoublonnage automatique."
+            ),
+        )
 
-    if fichier is None:
-        st.info("Importer un fichier CSV pour commencer l'analyse.")
+    if not fichiers:
+        st.info("Importer un ou plusieurs fichiers CSV pour commencer l'analyse.")
         return
 
-    contenu = fichier.getvalue()
-    nom_source = fichier.name
+    # Conserver un suivi de chaque fichier et identifier sans ambiguïté le
+    # corpus réuni pour la réinitialisation des paramètres AFC et ACM.
+    tableaux_sources = []
+    contenu_total = 0
+    empreinte_import = hashlib.sha256()
+    bilan_sources = []
+    for fichier in fichiers:
+        contenu_fichier = fichier.getvalue()
+        try:
+            tableau_source = importer_donnees(
+                contenu_fichier, separateur, encodage
+            )
+        except (ValueError, UnicodeError) as erreur:
+            st.error(f"Erreur dans '{fichier.name}' : {erreur}")
+            return
+        tableaux_sources.append((fichier.name, tableau_source))
+        contenu_total += len(contenu_fichier)
+        bilan_sources.append({
+            "Fichier": fichier.name,
+            "Observations": len(tableau_source),
+            "Variables": len(tableau_source.columns),
+            "Taille (Mo)": round(len(contenu_fichier) / (1024**2), 3),
+        })
+        nom_octets = fichier.name.encode("utf-8")
+        empreinte_import.update(len(nom_octets).to_bytes(8, "big"))
+        empreinte_import.update(nom_octets)
+        empreinte_import.update(len(contenu_fichier).to_bytes(8, "big"))
+        empreinte_import.update(contenu_fichier)
+
     try:
-        donnees = importer_donnees(contenu, separateur, encodage)
-    except (ValueError, UnicodeError) as erreur:
+        donnees = concatener_fichiers_csv(tableaux_sources)
+    except ValueError as erreur:
         st.error(str(erreur))
         return
 
-    mesures = st.columns(3)
-    mesures[0].metric("Observations importées", f"{len(donnees):,}".replace(",", " "))
+    # Les deux interfaces factorielles se servent de 'contenu' uniquement
+    # pour calculer la signature du corpus. L'empreinte évite de reproduire
+    # intégralement le CSV concaténé à chaque interaction Streamlit.
+    contenu = (
+        fichiers[0].getvalue() if len(fichiers) == 1
+        else empreinte_import.digest()
+    )
+    nom_source = (
+        fichiers[0].name if len(fichiers) == 1
+        else f"Fusion de {len(fichiers)} CSV : "
+        + " ; ".join(fichier.name for fichier in fichiers)
+    )
+
+    mesures = st.columns(4 if len(fichiers) > 1 else 3)
+    mesures[0].metric(
+        "Observations importées", f"{len(donnees):,}".replace(",", " ")
+    )
     mesures[1].metric("Variables disponibles", len(donnees.columns))
-    mesures[2].metric("Taille du fichier", f"{len(contenu) / (1024**2):.2f} Mo")
+    mesures[2].metric("Taille totale", f"{contenu_total / (1024**2):.2f} Mo")
+    if len(fichiers) > 1:
+        mesures[3].metric("Fichiers réunis", len(fichiers))
+        st.caption(
+            "Les observations ont été concaténées dans l'ordre des fichiers. "
+            "Les colonnes ont été alignées par leur nom. Les doublons "
+            "éventuels sont conservés ; les options de dédoublonnage "
+            "restent disponibles dans les analyses."
+        )
+        with st.expander("Détail des fichiers importés", expanded=False):
+            st.dataframe(
+                pd.DataFrame(bilan_sources),
+                use_container_width=True, hide_index=True,
+            )
+        st.download_button(
+            "Télécharger le corpus fusionné (CSV)",
+            data=donnees.to_csv(
+                index=False, sep=";", encoding="utf-8",
+                lineterminator="\\n",
+            ).encode("utf-8-sig"),
+            file_name="corpus_csv_fusionne.csv",
+            mime="text/csv",
+            key="telecharger_corpus_fusionne",
+        )
     with st.expander("Aperçu des données et inventaire des variables", expanded=False):
         st.dataframe(donnees.head(NOMBRE_LIGNES_APERCU), use_container_width=True)
         st.caption("Le diagnostic des variables sert uniquement à aider la sélection ; il ne recode pas les valeurs.")
