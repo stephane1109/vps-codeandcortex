@@ -15,6 +15,9 @@ from collecte.suivi_sources import (
     etablir_bilan_medias, medias_a_reprendre, exporter_bilan_medias_csv,
     importer_bilan_medias_csv,
 )
+from collecte.suivi_hashtags import (
+    hashtags_a_reprendre, exporter_bilan_hashtags_csv,
+)
 
 VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
                  "likes": "Nombre de likes", "partages": "Nombre de partages",
