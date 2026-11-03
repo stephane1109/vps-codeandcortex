@@ -27,6 +27,7 @@ on:
       - "tests/test_research_erreur_serveur.py"
       - "tests/test_recuperation_collecte.py"
       - "tests/test_fin_collecte_sans_reinitialisation.py"
+      - "stockage/collectes_research.py"
       - ".github/workflows/inventaire-presse.yml"
   workflow_dispatch:
 
