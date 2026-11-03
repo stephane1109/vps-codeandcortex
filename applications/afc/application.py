@@ -228,23 +228,19 @@ def afficher_resultats(
         if methode == "ACM":
             if "21_coordonnees_qualitatives_supplementaires.csv" in fichiers:
                 st.caption(
-                    "Les modalités qualitatives supplémentaires sont "
-                    "représentées par des triangles violets. Elles restent "
-                    "visibles lorsque le filtre des modalités actives "
-                    "à p ≤ 0,05 est appliqué."
+                    "Les modalités des variables supplémentaires apparaissent "
+                    "en triangles violets et restent visibles lorsque le "
+                    "filtre à p ≤ 0,05 des modalités actives est appliqué."
                 )
             if "26_plan_quantitatives_supplementaires.png" in fichiers:
-                st.subheader(
-                    "Projection des variables quantitatives supplémentaires"
-                )
+                st.subheader("Projection des variables supplémentaires")
                 st.image(
                     fichiers["26_plan_quantitatives_supplementaires.png"],
                     use_container_width=True,
                 )
                 st.caption(
-                    "Coordonnées de corrélation calculées par "
-                    "FactoMineR::MCA() ; représentation distincte "
-                    "des coordonnées des modalités qualitatives."
+                    "Projection calculée par FactoMineR : les variables "
+                    "numériques sont représentées sur un graphique séparé."
                 )
         st.caption(
             "Plan complet : toutes les modalités actives."
@@ -578,24 +574,31 @@ def construire_interface_acm(
         st.info("Sélectionnez au moins trois variables pour l'ACM.")
         return
 
-    st.subheader("Variables supplémentaires de l'ACM (facultatif)")
+    st.subheader("Variable supplémentaire")
     st.caption(
-        "Une variable supplémentaire est projetée après construction des "
-        "axes. Elle ne contribue pas à leur calcul. Les variables "
-        "qualitatives sont des modalités, les quantitatives des mesures "
-        "numériques. Le calcul est réalisé par les paramètres natifs "
-        "quali.sup et quanti.sup de FactoMineR::MCA()."
+        "Choisissez une ou plusieurs variables à afficher sur les axes de "
+        "l'ACM, sans participer à leur construction. Laissez ce champ vide "
+        "si vous n'en souhaitez pas."
     )
-    options_qualitatives = [
-        nom for nom in candidates if nom not in variables_actives
+    options_supplementaires = [
+        nom for nom in noms_variables if nom not in variables_actives
     ]
-    variables_supplementaires_qualitatives = st.multiselect(
-        "Variables qualitatives supplémentaires",
-        options=options_qualitatives,
+    variables_supplementaires = st.multiselect(
+        "Variable supplémentaire",
+        options=options_supplementaires,
         default=[],
-        key="acm_variables_quali_sup",
-        help="Exemples : type_media, presse_nationale, region_code.",
+        key="acm_variables_supplementaires",
+        placeholder="Choisir une variable dans le CSV",
+        help=(
+            "Vous pouvez sélectionner plusieurs colonnes. "
+            "FactoMineR les projette sans modifier les axes de l'ACM."
+        ),
     )
+
+    # La distinction exigée par FactoMineR est faite automatiquement.
+    # Les mesures numériques explicites restent numériques, y compris
+    # lorsqu'elles ont peu de valeurs différentes. Une variable codée
+    # par quelques nombres (0/1, classes...) reste une catégorie.
     descriptions_variables = decrire_variables(donnees)
     candidats_numeriques = set(
         descriptions_variables.loc[
@@ -605,33 +608,18 @@ def construire_interface_acm(
     )
     aliases_mesures = {
         alias.casefold()
-        for aliases in CHAMPS_ENGAGEMENT.values()
-        for alias in aliases
+        for noms_alias in CHAMPS_ENGAGEMENT.values()
+        for alias in noms_alias
     }
-    options_quantitatives = [
-        nom for nom in noms_variables
-        if nom not in variables_actives
-        and nom not in variables_supplementaires_qualitatives
-        and (
-            nom in candidats_numeriques
-            or nom.casefold() in aliases_mesures
-        )
-        and not nom.lower().endswith(("_id", "_code"))
-        and nom.lower() not in {
-            "publication_id", "video_id", "create_time", "created_at"
-        }
+    variables_supplementaires_quantitatives = [
+        nom for nom in variables_supplementaires
+        if nom.casefold() in aliases_mesures
+        or nom in candidats_numeriques
     ]
-    variables_supplementaires_quantitatives = st.multiselect(
-        "Variables quantitatives supplémentaires",
-        options=options_quantitatives,
-        default=[],
-        key="acm_variables_quanti_sup",
-        help=(
-            "Exemples : vues, likes, follower_count, taux_engagement. "
-            "Les valeurs absentes restent manquantes et sont traitées "
-            "par FactoMineR."
-        ),
-    )
+    variables_supplementaires_qualitatives = [
+        nom for nom in variables_supplementaires
+        if nom not in variables_supplementaires_quantitatives
+    ]
 
     choix_methode = st.radio(
         "Formulation de l'ACM",
@@ -814,15 +802,11 @@ def construire_interface_acm(
         "Modalités actives",
         sum(preparation.donnees[nom].nunique() for nom in variables_actives),
     )
-    if (
-        variables_supplementaires_qualitatives
-        or variables_supplementaires_quantitatives
-    ):
+    if variables_supplementaires:
         st.caption(
-            f"Variables supplémentaires : "
-            f"{len(variables_supplementaires_qualitatives)} qualitatives, "
-            f"{len(variables_supplementaires_quantitatives)} quantitatives. "
-            "Elles ne contribuent pas aux inerties ni aux axes."
+            "Variables supplémentaires : "
+            + " ; ".join(variables_supplementaires)
+            + ". Elles ne contribuent pas à la construction des axes."
         )
     tableau_effectifs = pd.concat(
         [
