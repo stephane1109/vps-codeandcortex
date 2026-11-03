@@ -180,5 +180,57 @@ class TestsStatistiquesDescriptives(unittest.TestCase):
         self.assertIn("st.download_button(", module)
 
 
+    def test_analyses_disponibles_selon_la_variable(self):
+        """Le second menu dépend du caractère numérique ou catégoriel."""
+        from interface_statistiques_descriptives import (
+            analyses_adaptees, repertorier_variables, tableau_statistiques_variable,
+        )
+        mesures, _ = preparer_mesures_engagement(self.donnees)
+        variables = repertorier_variables(self.donnees, mesures)
+        self.assertEqual(variables["Vues"], ("numérique", "Vues"))
+        self.assertEqual(
+            variables["type_media"], ("catégorielle", "type_media")
+        )
+        self.assertNotIn("publication_id", variables)
+        numeriques = analyses_adaptees(
+            "numérique", ["type_media"], list(mesures), ["date_publication"]
+        )
+        self.assertIn("Résumé statistique", numeriques)
+        self.assertIn("Histogramme", numeriques)
+        self.assertIn("Boîte à moustaches", numeriques)
+        self.assertIn("Nuage de points", numeriques)
+        self.assertIn("Comparaison par catégorie", numeriques)
+        self.assertIn("Évolution temporelle", numeriques)
+        categories = analyses_adaptees(
+            "catégorielle", ["type_media"], list(mesures), []
+        )
+        self.assertIn("Répartition en effectifs", categories)
+        self.assertIn("Répartition en pourcentages", categories)
+        self.assertIn("Engagement selon les modalités", categories)
+        self.assertNotIn("Histogramme", categories)
+        ensemble = analyses_adaptees("ensemble", [], list(mesures), [])
+        self.assertIn("Données manquantes", ensemble)
+        tableau = tableau_statistiques_variable(
+            resumer_engagement(mesures, len(self.donnees)), "Vues"
+        )
+        self.assertEqual(list(tableau), ["Statistique", "Valeur"])
+        self.assertIn("Médiane", tableau["Statistique"].to_list())
+
+    def test_deux_menus_et_un_seul_bloc_resultat(self):
+        """L'interface ne doit plus afficher tous les graphiques à la fois."""
+        code = (
+            DOSSIER_AFC / "interface_statistiques_descriptives.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"Variable à analyser"', code)
+        self.assertIn('"Test / analyse descriptive"', code)
+        self.assertIn("def afficher_resultat(", code)
+        self.assertIn("**Tableau des résultats**", code)
+        self.assertIn("**Graphique des résultats**", code)
+        self.assertEqual(code.count("    afficher_resultat("), 1)
+        self.assertNotIn("onglet_synthese, onglet_distributions", code)
+        self.assertIn("Filtres de l'échantillon", code)
+        self.assertIn("Exports complémentaires et provenance", code)
+
+
 if __name__ == "__main__":
     unittest.main()
