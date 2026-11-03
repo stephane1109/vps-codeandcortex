@@ -956,7 +956,6 @@ def construire_interface() -> None:
         encodage = st.selectbox("Encodage", ["Automatique", "UTF-8", "Windows-1252", "Latin-1"])
     with colonne_fichier:
         fichier = st.file_uploader("Fichier CSV", type=["csv", "txt"], accept_multiple_files=False)
-        st.caption("Les identifiants sont lus comme du texte ; les résultats ne sont pas enregistrés en base.")
 
     if fichier is None:
         st.info("Importer un fichier CSV pour commencer l'analyse.")
