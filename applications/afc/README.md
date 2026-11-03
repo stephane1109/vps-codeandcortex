@@ -1,6 +1,6 @@
 # Application web AFC et ACM (TDC et Burt) — FactoMineR
 
-Cette application Streamlit importe un fichier CSV puis calcule une **analyse factorielle des correspondances (AFC)** avec `FactoMineR::CA()` ou une **analyse des correspondances multiples (ACM)** avec `FactoMineR::MCA()`. Les données peuvent provenir de ScrapTikTok ou de tout autre tableau où une observation est représentée par une ligne.
+Cette application Streamlit importe un ou plusieurs fichiers CSV de même structure, les concatène si nécessaire, puis calcule une **analyse factorielle des correspondances (AFC)** avec `FactoMineR::CA()` ou une **analyse des correspondances multiples (ACM)** avec `FactoMineR::MCA()`. Les données peuvent provenir de ScrapTikTok ou de tout autre tableau où une observation est représentée par une ligne.
 
 ## Onglet "Statistique descriptive"
 
@@ -30,9 +30,9 @@ Chaque méthode possède ses propres exports de coordonnées, contributions, cos
 
 ## Fonctionnement
 
-Importer un CSV (détection des séparateurs `;`, `,`, tabulation ou `|`, avec choix manuel possible), puis choisir une variable en lignes et une variable en colonnes. Les classes catégorielles de ScrapTikTok sont déjà prises en charge, notamment `vues_classe`, `likes_classe`, `commentaires_classe`, `partages_classe`, `favoris_classe`, `classe_taux_engagement`, `classe_abonnes`, `is_verified`, `region_code`, `type_media`.
+Importer un ou plusieurs CSV de même structure (détection des séparateurs `;`, `,`, tabulation ou `|`, avec choix manuel possible). Chaque fichier est lu séparément et les noms de colonnes sont comparés à ceux du premier fichier. L'ordre peut différer : les colonnes sont réalignées par leur nom avant concaténation. Si un fichier présente une colonne manquante ou supplémentaire, le traitement s'interrompt et affiche le fichier et les colonnes en cause. Toutes les observations sont conservées, y compris les doublons éventuels ; le dédoublonnage reste une option au stade de l'analyse. Un tableau donne le nombre de lignes et la taille de chaque fichier. Le corpus fusionné peut être téléchargé en CSV. Après importation, choisir une variable en lignes et une variable en colonnes. Les classes catégorielles de ScrapTikTok sont déjà prises en charge, notamment `vues_classe`, `likes_classe`, `commentaires_classe`, `partages_classe`, `favoris_classe`, `classe_taux_engagement`, `classe_abonnes`, `is_verified`, `region_code`, `type_media`.
 
-L'analyse s'effectue exclusivement à partir d'un fichier CSV ou TXT importé par l'utilisateur. Aucun corpus de démonstration ni générateur de données fictives n'est proposé dans l'interface.
+L'analyse s'effectue exclusivement à partir d'un ou plusieurs fichiers CSV ou TXT importés par l'utilisateur. Aucun corpus de démonstration ni générateur de données fictives n'est proposé dans l'interface.
 
 Le panneau de paramétrage permet de conserver uniquement les lignes `retenue`, de supprimer les doublons selon `publication_id`, d'exclure les modalités indéterminées, de traiter les cellules vides comme une modalité ou de les exclure, de filtrer sur une troisième variable, de limiter la cardinalité.
 
