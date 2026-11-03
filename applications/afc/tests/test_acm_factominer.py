@@ -241,12 +241,6 @@ class TestsACM(unittest.TestCase):
                     "Chaque modalité doit avoir une p-value calculée.",
                 )
                 self.assertEqual(
-                    ligne["identifiant_dimdesc"],
-                    ligne["variable"] + "=" +
-                    ligne["modalite"].removeprefix(ligne["variable"] + "."),
-                ) if ligne["modalite"].startswith(
-                    ligne["variable"] + "."
-                ) else self.assertEqual(
                     ligne["identifiant_dimdesc"].split("=", 1)[0],
                     ligne["variable"],
                 )
