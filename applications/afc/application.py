@@ -15,6 +15,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from interface_statistiques_descriptives import construire_onglet_statistique_descriptive
+
 from traitement_csv import (
     decrire_variables, exclure_modalites_contingence, lire_csv,
     preparer_acm, preparer_contingence, preparer_tableau_inerties,
@@ -666,70 +668,14 @@ def construire_interface_acm(
                 "pour actualiser les résultats."
             )
 
-def construire_interface() -> None:
-    """Présente les paramètres de l'analyse et déclenche le calcul sur demande."""
-    st.title("Analyses des correspondances — FactoMineR")
-    methode = st.radio(
-        "Méthode d'analyse",
-        options=["AFC", "ACM"],
-        horizontal=True,
-        help=(
-            "AFC : croisement de deux variables qualitatives. "
-            "ACM : analyse simultanée de trois variables qualitatives ou davantage."
-        ),
-    )
-    if methode == "AFC":
-        st.caption(
-            "AFC avec FactoMineR::CA() : deux variables catégorielles croisées."
-        )
-    else:
-        st.caption(
-            "ACM avec FactoMineR::MCA() : choisir le tableau disjonctif "
-            "complet (TDC) ou le tableau de Burt pour plusieurs variables "
-            "catégorielles analysées simultanément."
-        )
-
-    st.subheader("1. Importer le fichier CSV")
-    colonne_choix, colonne_fichier = st.columns([1, 2])
-    with colonne_choix:
-        separateur = st.selectbox(
-            "Séparateur", ["Automatique", "Point-virgule (;)", "Virgule (, )", "Tabulation", "Barre verticale (|)"],
-        )
-        encodage = st.selectbox("Encodage", ["Automatique", "UTF-8", "Windows-1252", "Latin-1"])
-    with colonne_fichier:
-        fichier = st.file_uploader("Fichier CSV", type=["csv", "txt"], accept_multiple_files=False)
-        st.caption("Les identifiants sont lus comme du texte ; les résultats ne sont pas enregistrés en base.")
-
-    if fichier is None:
-        st.info("Importer un fichier CSV pour commencer l'analyse.")
-        return
-
-    contenu = fichier.getvalue()
-    nom_source = fichier.name
-    try:
-        donnees = importer_donnees(contenu, separateur, encodage)
-    except (ValueError, UnicodeError) as erreur:
-        st.error(str(erreur))
-        return
-
-    mesures = st.columns(3)
-    mesures[0].metric("Observations importées", f"{len(donnees):,}".replace(",", " "))
-    mesures[1].metric("Variables disponibles", len(donnees.columns))
-    mesures[2].metric("Taille du fichier", f"{len(contenu) / (1024**2):.2f} Mo")
-    with st.expander("Aperçu des données et inventaire des variables", expanded=False):
-        st.dataframe(donnees.head(NOMBRE_LIGNES_APERCU), use_container_width=True)
-        st.caption("Le diagnostic des variables sert uniquement à aider la sélection ; il ne recode pas les valeurs.")
-        st.dataframe(decrire_variables(donnees), use_container_width=True, hide_index=True)
-
-    noms_variables = list(donnees.columns)
-    variables_adaptees = decrire_variables(donnees)
-    candidates = variables_adaptees.loc[
-        variables_adaptees["Diagnostic"].eq("Catégorielle possible"), "Variable"
-    ].tolist()
-    if methode == "ACM":
-        construire_interface_acm(donnees, contenu, nom_source, noms_variables, candidates)
-        return
-
+def construire_interface_afc(
+    donnees: pd.DataFrame,
+    contenu: bytes,
+    nom_source: str,
+    noms_variables: list[str],
+    candidates: list[str],
+) -> None:
+    """Conserver l'interface AFC et tous ses filtres originaux."""
     st.subheader("2. Sélectionner les variables de l'AFC")
     defaut_lignes = candidates[0] if candidates else noms_variables[0]
     defaut_colonnes = candidates[1] if len(candidates) > 1 else noms_variables[min(1, len(noms_variables)-1)]
@@ -965,6 +911,83 @@ def construire_interface() -> None:
             afficher_resultats(st.session_state["dernier_resultat"], methode="AFC")
         else:
             st.info("Les paramètres ont changé depuis le dernier calcul. Relancer l'AFC pour actualiser les résultats.")
+
+
+def construire_interface() -> None:
+    """Importer le CSV et proposer trois vues distinctes du même corpus."""
+    st.title("Analyses des correspondances — FactoMineR")
+    st.subheader("1. Importer le fichier CSV")
+    colonne_choix, colonne_fichier = st.columns([1, 2])
+    with colonne_choix:
+        separateur = st.selectbox(
+            "Séparateur", ["Automatique", "Point-virgule (;)", "Virgule (, )", "Tabulation", "Barre verticale (|)"],
+        )
+        encodage = st.selectbox("Encodage", ["Automatique", "UTF-8", "Windows-1252", "Latin-1"])
+    with colonne_fichier:
+        fichier = st.file_uploader("Fichier CSV", type=["csv", "txt"], accept_multiple_files=False)
+        st.caption("Les identifiants sont lus comme du texte ; les résultats ne sont pas enregistrés en base.")
+
+    if fichier is None:
+        st.info("Importer un fichier CSV pour commencer l'analyse.")
+        return
+
+    contenu = fichier.getvalue()
+    nom_source = fichier.name
+    try:
+        donnees = importer_donnees(contenu, separateur, encodage)
+    except (ValueError, UnicodeError) as erreur:
+        st.error(str(erreur))
+        return
+
+    mesures = st.columns(3)
+    mesures[0].metric("Observations importées", f"{len(donnees):,}".replace(",", " "))
+    mesures[1].metric("Variables disponibles", len(donnees.columns))
+    mesures[2].metric("Taille du fichier", f"{len(contenu) / (1024**2):.2f} Mo")
+    with st.expander("Aperçu des données et inventaire des variables", expanded=False):
+        st.dataframe(donnees.head(NOMBRE_LIGNES_APERCU), use_container_width=True)
+        st.caption("Le diagnostic des variables sert uniquement à aider la sélection ; il ne recode pas les valeurs.")
+        st.dataframe(decrire_variables(donnees), use_container_width=True, hide_index=True)
+
+    noms_variables = list(donnees.columns)
+    variables_adaptees = decrire_variables(donnees)
+    candidates = variables_adaptees.loc[
+        variables_adaptees["Diagnostic"].eq("Catégorielle possible"), "Variable"
+    ].tolist()
+
+    onglet_descriptif, onglet_factoriel = st.tabs(
+        ["Statistique descriptive", "AFC / ACM"]
+    )
+    with onglet_descriptif:
+        construire_onglet_statistique_descriptive(donnees)
+
+    with onglet_factoriel:
+        methode = st.radio(
+            "Méthode d'analyse",
+            options=["AFC", "ACM"],
+            horizontal=True,
+            help=(
+                "AFC : croisement de deux variables qualitatives. "
+                "ACM : analyse simultanée de trois variables qualitatives ou davantage."
+            ),
+        )
+        if methode == "AFC":
+            st.caption(
+                "AFC avec FactoMineR::CA() : deux variables catégorielles croisées."
+            )
+        else:
+            st.caption(
+                "ACM avec FactoMineR::MCA() : choisir le tableau disjonctif "
+                "complet (TDC) ou le tableau de Burt pour plusieurs variables "
+                "catégorielles analysées simultanément."
+            )
+        if methode == "ACM":
+            construire_interface_acm(
+                donnees, contenu, nom_source, noms_variables, candidates
+            )
+        else:
+            construire_interface_afc(
+                donnees, contenu, nom_source, noms_variables, candidates
+            )
 
 
 
