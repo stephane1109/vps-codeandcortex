@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from traitement_csv import lire_csv, preparer_contingence
+from traitement_csv import lire_csv, preparer_contingence, preparer_tableau_inerties
 
 
 BASE = Path(__file__).resolve().parent.parent
@@ -76,6 +76,54 @@ class TestTraitementCSV(unittest.TestCase):
         donnees = pd.DataFrame({"a": [str(x) for x in range(100)], "b": ["I", "J"] * 50})
         with self.assertRaisesRegex(ValueError, "Trop de modalités"):
             preparer_contingence(donnees, "a", "b")
+
+    def test_inertie_des_axes_et_inertie_cumulee(self):
+        """Afficher les pourcentages exacts fournis par FactoMineR::CA."""
+        export_factominer = (
+            "modalite;eigenvalue;percentage of variance;"
+            "cumulative percentage of variance\\n"
+            "dim 1;0,25;62,5;62,5\\n"
+            "dim 2;0,15;37,5;100\\n"
+        ).encode("utf-8")
+        tableau = preparer_tableau_inerties(export_factominer)
+        self.assertEqual(
+            list(tableau.columns),
+            ["Axe", "Valeur propre", "Inertie (%)", "Inertie cumulée (%)"]
+        )
+        self.assertEqual(tableau["Axe"].tolist(), ["Axe 1", "Axe 2"])
+        self.assertEqual(tableau["Inertie (%)"].tolist(), [62.5, 37.5])
+        self.assertEqual(
+            tableau["Inertie cumulée (%)"].tolist(), [62.5, 100.0])
+        self.assertEqual(tableau["Valeur propre"].tolist(), [0.25, 0.15])
+
+    def test_inertie_factominer_a_un_seul_axe(self):
+        """Un tableau à un axe est également lisible."""
+        export_factominer = (
+            "modalite;eigenvalue;percentage of variance;"
+            "cumulative percentage of variance\\n"
+            "dim 1;0,18;100;100\\n"
+        ).encode("utf-8")
+        tableau = preparer_tableau_inerties(export_factominer)
+        self.assertEqual(len(tableau), 1)
+        self.assertEqual(tableau.loc[0, "Inertie (%)"], 100)
+
+    def test_tableau_inerties_invalide(self):
+        """Ne pas afficher des pourcentages absents ou non numériques."""
+        with self.assertRaisesRegex(ValueError, "vide"):
+            preparer_tableau_inerties(b"")
+        with self.assertRaisesRegex(ValueError, "incomplet"):
+            preparer_tableau_inerties(b"axe;inertie\\n1;25\\n")
+
+    def test_graphique_et_tableau_inerties_dans_le_meme_onglet(self):
+        """Le tableau complète l'histogramme, sans le remplacer."""
+        interface = (BASE / "application.py").read_text(encoding="utf-8")
+        fragment = interface.split("with onglet_inertie:", 1)[1].split(
+            "with onglet_matrices:", 1)[0]
+        self.assertIn('st.image(fichiers["15_inerties.png"]', fragment)
+        self.assertIn('preparer_tableau_inerties(', fragment)
+        self.assertIn('st.dataframe(', fragment)
+        self.assertIn("Inertie cumulée (%)", fragment)
+        self.assertIn("Télécharger le tableau des inerties (CSV)", fragment)
 
     def test_interface_sans_donnees_fictives(self):
         """L'interface doit exiger un CSV et ignorer les modes de démonstration."""
