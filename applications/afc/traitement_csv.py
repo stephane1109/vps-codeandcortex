@@ -34,9 +34,6 @@ class PreparationAFC:
     effectif_apres_filtre: int
     effectif_apres_dedoublonnage: int
     effectif_final: int
-    effectifs_attendus: pd.DataFrame
-    cellules_attendues_faibles: int
-    inertie_nulle: bool
 
 
 def detecter_encodage(contenu: bytes, choix: str = "Automatique") -> str:
@@ -253,17 +250,12 @@ def preparer_contingence(
         rownames=[variable_lignes], colnames=[variable_colonnes],
         dropna=False,
     )
-    observés = tableau.to_numpy(dtype=float)
-    attendus = np.outer(observés.sum(axis=1), observés.sum(axis=0)) / observés.sum()
-    effectifs_attendus = pd.DataFrame(attendus, index=tableau.index, columns=tableau.columns)
-    chi2 = float((np.square(observés - attendus) / attendus).sum())
+    # Aucun test statistique dans Python : FactoMineR réalise l'analyse
+    # et évalue l'inertie à partir du tableau de contingence complet.
     return PreparationAFC(
         tableau=tableau,
         effectif_initial=effectif_initial,
         effectif_apres_filtre=effectif_apres_filtre,
         effectif_apres_dedoublonnage=effectif_apres_dedoublonnage,
         effectif_final=int(tableau.to_numpy().sum()),
-        effectifs_attendus=effectifs_attendus,
-        cellules_attendues_faibles=int((attendus < 5).sum()),
-        inertie_nulle=chi2 < 1e-12,
     )
