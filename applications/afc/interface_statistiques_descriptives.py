@@ -126,9 +126,10 @@ def construire_onglet_statistique_descriptive(donnees: pd.DataFrame) -> None:
             "Likes totaux",
             formatter_nombre(lire_statistique("Likes", "Somme")),
         )
+        taux_median = lire_statistique("Taux d'engagement (%)", "Médiane")
         indicateurs[3].metric(
             "Taux d'engagement médian",
-            f"{formatter_nombre(lire_statistique('Taux d\'engagement (%)', 'Médiane'), 2)} %"
+            f"{formatter_nombre(taux_median, 2)} %"
             if "Taux d'engagement (%)" in mesures else "—",
         )
         st.subheader("Statistiques des principales métriques")
