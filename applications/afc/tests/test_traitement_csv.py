@@ -30,7 +30,7 @@ class TestTraitementCSV(unittest.TestCase):
         self.assertEqual(resultat.tableau.shape, (2, 2))
         self.assertEqual(resultat.effectif_final, 3)
         self.assertEqual(resultat.tableau.to_numpy().sum(), 3)
-        self.assertGreater(resultat.cellules_attendues_faibles, 0)
+        self.assertEqual(resultat.effectif_initial, 3)
 
     def test_import_virgules(self):
         donnees = lire_csv(b"groupe,classe\na,x\nb,y\n")
@@ -76,6 +76,20 @@ class TestTraitementCSV(unittest.TestCase):
         donnees = pd.DataFrame({"a": [str(x) for x in range(100)], "b": ["I", "J"] * 50})
         with self.assertRaisesRegex(ValueError, "Trop de modalités"):
             preparer_contingence(donnees, "a", "b")
+
+    def test_preparation_sans_statistique_supplementaire(self):
+        """Les filtres Python préparent le corpus, FactoMineR réalise l'AFC."""
+        source = (BASE / "traitement_csv.py").read_text(encoding="utf-8")
+        interface = (BASE / "application.py").read_text(encoding="utf-8")
+        self.assertNotIn("np.outer(", source)
+        self.assertNotIn("chi2 =", source)
+        self.assertNotIn("effectifs_attendus:", source)
+        self.assertNotIn("cellules_attendues_faibles:", source)
+        self.assertNotIn("Répétitions Monte-Carlo", interface)
+        self.assertNotIn("repetitions_monte_carlo", interface)
+        self.assertNotIn("cellules_attendues_faibles", interface)
+        self.assertIn("FactoMineR::CA()", interface)
+        self.assertIn("FactoMineR::descfreq()", interface)
 
     def test_inertie_des_axes_et_inertie_cumulee(self):
         """Afficher les pourcentages exacts fournis par FactoMineR::CA."""
