@@ -100,6 +100,31 @@ class TestsRepriseHashtags(unittest.TestCase):
         self.assertEqual(options.model_dump()["profils_medias_classes"], variables)
         self.assertTrue(len(charger_inventaire()) >= 1)
 
+    def test_fenetre_utc_reste_identique_apres_reouverture(self):
+        """Une reprise le lendemain doit conserver les bornes de la collecte."""
+        options = StartRequest(
+            source_collecte="hashtags", hashtag_moteur="research",
+            hashtags_saisis=["17octobre"], nom_sauvegarde="Période stable",
+            research_client_key="cle_test", research_client_secret="secret_test",
+        )
+        self.assertRegex(options.date_debut, r"^\\d{4}-\\d{2}-\\d{2}$")
+        self.assertRegex(options.date_fin, r"^\\d{4}-\\d{2}-\\d{2}$")
+        ancien = options.model_dump()
+        reouvert = StartRequest.model_validate(
+            ancien, context={"reprise_historique": True})
+        self.assertEqual(
+            (reouvert.date_debut, reouvert.date_fin),
+            (options.date_debut, options.date_fin))
+
+    def test_hashtags_avec_variantes_communes_ont_un_etat_reel(self):
+        """Ne pas considérer automatiquement un alias accentué comme terminé."""
+        bilan = etablir_bilan_hashtags(
+            ["lyceen", "lycéen"], True, [],
+            collecte_id=self.identifiant, termine=True)
+        self.assertEqual(
+            [ligne["etat"] for ligne in bilan],
+            ["non_commencee", "non_commencee"])
+
     def test_moteur_et_interface_disposent_du_meme_export(self):
         racine = Path(__file__).resolve().parents[1]
         interface = (racine / "streamlit_app.py").read_text("utf-8")
