@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import hashlib
 import signal
+import sqlite3
 import subprocess
 import sys
 import argparse
@@ -2128,7 +2129,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                         from stockage.collectes_research import etat_quota
                         quota_local = etat_quota(
                             Path(os.getenv("DATA_DIR", "data")))
-                    except (OSError, RuntimeError, ValueError):
+                    except (OSError, RuntimeError, ValueError, sqlite3.Error):
                         # Une panne du diagnostic de quota n'interrompt
                         # jamais les vidéos déjà accessibles.
                         pass
