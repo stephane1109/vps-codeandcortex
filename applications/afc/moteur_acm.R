@@ -64,7 +64,9 @@ for (indice in c(indices_actifs, indices_quali_sup)) {
 }
 for (indice in indices_quanti_sup) {
   valeurs <- as.character(donnees[[indice]])
-  valeurs[!nzchar(valeurs) | valeurs == "NA"] <- NA_character_
+  manquantes <- is.na(valeurs) | !nzchar(trimws(valeurs))
+  manquantes[is.na(manquantes)] <- TRUE
+  valeurs[manquantes] <- NA_character_
   nombres <- suppressWarnings(as.numeric(valeurs))
   if (any(!is.na(valeurs) & is.na(nombres))) {
     stop("Variable quantitative supplémentaire non numérique : ",
@@ -336,7 +338,7 @@ for (i in seq_along(axes_description)) {
     cles_qualitatives_sup <- if (length(indices_quali_sup)) {
       unlist(lapply(
         colnames(donnees)[indices_quali_sup],
-        function(nom) paste0(nom, "=", levels(donnees[[nom]]))
+        function(nom) paste0(nom, "=", levels(resultat$call$X[[nom]]))
       ), use.names = FALSE)
     } else {
       character(0)
