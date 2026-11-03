@@ -28,7 +28,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator, model_validator
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
@@ -209,7 +209,7 @@ class StartRequest(BaseModel):
         return list(dict.fromkeys(normaliser_compte(v) for v in valeurs))
 
     @model_validator(mode="after")
-    def valider_sources(self):
+    def valider_sources(self, info: ValidationInfo):
         if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
             raise ValueError("La date de début doit précéder ou égaler la date de fin.")
         # Le filtrage implique la lecture effective du résumé natif de TikTok.
@@ -253,7 +253,10 @@ class StartRequest(BaseModel):
             if bool(cle) != bool(secret):
                 raise ValueError("Research API : saisir les deux identifiants ensemble.")
             from collecte.presse_research import identifiants_disponibles
-            if not (cle and secret) and not identifiants_disponibles():
+            # Une archive peut être consultée sans fournir de nouveau
+            # les secrets ; tout nouveau lancement conserve la règle stricte.
+            consultation = bool((info.context or {}).get("consultation_historique"))
+            if not (cle and secret) and not identifiants_disponibles() and not consultation:
                 raise ValueError("Research API : renseigner Client key et Client secret dans l'application.")
         if self.source_collecte == "presse":
             # Les anciens champs de recherche ne s'appliquent pas aux médias.
@@ -1098,7 +1101,16 @@ class Job:
         if self.historique and not self.reprise:
             # Les analyses rouvertes pointent déjà sur leur dossier d'archive.
             return True
-        if not self.owner_historique or not self.archive_prete:
+        if not self.owner_historique:
+            return False
+        # Même si le ZIP n'a pas été finalisé, les fichiers JSON déjà écrits
+        # doivent rester disponibles dans l'historique privé.
+        fichiers_minimaux = (
+            self.publications
+            and (self.directory / "publications.json").is_file()
+            and (self.directory / "journal.json").is_file()
+        )
+        if not self.archive_prete and not fichiers_minimaux:
             return False
         try:
             # L'historique contient directement un tableau prêt à être réimporté,
@@ -2380,11 +2392,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 # La collecte des vidéos est vide, mais les profils constituent
                 # des résultats scientifiques réels à conserver.
                 final_status = "partial"
-        job.update(status=final_status, message=final_message, busy=False,
-                   finished=time.monotonic(), frame=b"")
-        # Archiver même les vidéos dont les légendes ont été écartées du TXT.
-        job.sauvegarder_postgres()
-        job.sauvegarder_historique()
+        # Ne signaler la fin au navigateur qu'une fois les tentatives
+        # d'archivage PostgreSQL et historique local effectuées.
+        job.update(status=final_status, message=final_message)
+        try:
+            # Archiver aussi les vidéos dont les légendes ont été écartées.
+            job.sauvegarder_postgres()
+            job.sauvegarder_historique()
+        finally:
+            job.update(busy=False, finished=time.monotonic(), frame=b"")
         if job.settings.sauvegarde_progressive:
             try:
                 job.sauvegarder_point(final_status)
@@ -2744,7 +2760,8 @@ class Manager:
                 return job
             from collecte.presse import filtrer_medias_archives
             params = StartRequest.model_validate(
-                filtrer_medias_archives(manifeste["parametres"]))
+                filtrer_medias_archives(manifeste["parametres"]),
+                context={"consultation_historique": True})
             job = Job(owner, params, self.data_dir, identifiant=identifiant,
                       archive_directory=dossier, owner_historique=cookie)
             def charger(nom):
