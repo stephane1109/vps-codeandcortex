@@ -1573,6 +1573,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             raise ValueError("Mode de collecte inconnu.")
         connexion = parcours(args, fabrique=driver_factory, verifier=job.check,
             interaction=lambda navigateur, message: wait_for_user(navigateur, job, message))
+        if job.settings.source_collecte == "hashtags" and moteur_actif == "research":
+            # Le connecteur utilise exactement la même correspondance que
+            # le TXT, avant de réserver les identifiants de vidéos.
+            connexion.valider_fiche_hashtags_research = (
+                lambda fiche: matches_hashtags(
+                    fiche.get("description") or "", job.settings,
+                    hashtags_observes=fiche.get("hashtags")))
         sources = connexion.preparer_sources(job.settings)
         if job.reprise:
             if job.settings.source_collecte == "presse":
@@ -2060,8 +2067,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     found, ecartes, indetermines = filtrer_decouverte_hashtags_research(
                         found, rapport.get("metadonnees_api") or {},
                         job.settings)
-                    rapport["ecartes_combinaison_hashtags"] = ecartes
-                    rapport["ecartes_metadonnees_absentes"] = indetermines
+                    rapport["ecartes_combinaison_hashtags"] = (
+                        rapport.get("ecartes_combinaison_hashtags", 0) + ecartes)
+                    rapport["ecartes_metadonnees_absentes"] = (
+                        rapport.get("ecartes_metadonnees_absentes", 0) + indetermines)
                     if ecartes or indetermines:
                         job.diagnostics.append({
                             "code": "preselection_hashtags_research",
