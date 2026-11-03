@@ -1959,6 +1959,15 @@ with onglet_collecte:
                     for numero_source, bilan in enumerate(actuel["bilan_sources"], 1):
                         details_source = []
                         ajouter_detail_source(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        if (actuel.get("source_collecte") == "hashtags"
+                                and actuel.get("moteur_actif") == "research"):
+                            ajouter_detail_source(
+                                f"Research : {bilan.get('candidats_examines', 0)} "
+                                f"candidat(s) reçus, "
+                                f"{bilan.get('ecartes_hashtags_api', 0)} "
+                                f"écarté(s) par les hashtags officiels, "
+                                f"{bilan.get('requetes_tentees', 0)} "
+                                "requête(s) vidéo envoyée(s).")
                         if actuel.get("source_collecte") == "hashtags":
                             exclus_criteres = bilan.get("ecartes_combinaison_hashtags") or 0
                             exclus_non_verifies = bilan.get("ecartes_metadonnees_absentes") or 0
