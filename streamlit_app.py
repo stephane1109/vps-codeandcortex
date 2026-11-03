@@ -1563,7 +1563,7 @@ with onglet_collecte:
             quota = donnees.get("quota") or {}
             st.caption(
                 f"Budget Research local (UTC) : {quota.get('appels_enregistres', 0)} / "
-                f"{quota.get('plafond_local', 900)} requêtes aujourd'hui. "
+                f"{quota.get('plafond_local', 1000)} requêtes aujourd'hui. "
                 "Le quota officiel restant de l'organisation ne peut pas "
                 "être garanti à partir de ce compteur."
             )
