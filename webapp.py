@@ -378,6 +378,7 @@ class StartRequest(BaseModel):
     @property
     def enrichie(self):
         return (self.enrichir or self.source_collecte != "hashtags"
+                or self.moteur_actif == "research"
                 or self.collecter_commentaires or self.telecharger_mp4
                 or self.filtrer_texte_ia_tiktok)
 
