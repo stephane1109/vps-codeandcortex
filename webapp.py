@@ -2541,6 +2541,75 @@ class Manager:
             job.thread.start()
             return job
 
+    def reprendre_historique(self, owner, identifiant, cookie, payload):
+        """Compléter la collecte et son identifiant PostgreSQL, sans nouveau corpus."""
+        from collecte.reprise_collecte import (
+            initialiser_donnees_reprise, lire_archive_json, preparer_reprise_medias)
+        from stockage.historique_analyses import retrouver
+        from stockage.postgres_consultation import (
+            adresse_configuree, obtenir_nom_collecte, verifier_disponibilite)
+        if not cookie:
+            raise HTTPException(403, "Historique privé indisponible.")
+        archive = retrouver(self.data_dir, identifiant, cookie)
+        if archive is None:
+            raise HTTPException(404, "Collecte absente de l'historique privé.")
+        ligne, dossier, manifeste = archive
+        parametres = dict(manifeste.get("parametres") or {})
+        if parametres.get("source_collecte") != "presse":
+            raise HTTPException(422, "La reprise par sources concerne les collectes Presse et médias.")
+        if parametres.get("presse_moteur") != "research":
+            raise HTTPException(422, "La reprise dans le même corpus est actuellement réservée à Research API.")
+        if parametres.get("test_research_10_publications"):
+            raise HTTPException(422, "Une collecte de test ne peut pas être prolongée.")
+        if not adresse_configuree():
+            raise HTTPException(503, "PostgreSQL doit être configuré pour reprendre le même corpus.")
+        try:
+            verifier_disponibilite()
+            nom_pg = obtenir_nom_collecte(cookie, "collecte", identifiant)
+        except ValueError:
+            raise HTTPException(404,
+                "La collecte d'origine est absente de PostgreSQL : aucune nouvelle collecte ne sera créée.") from None
+        except RuntimeError:
+            raise HTTPException(503, "PostgreSQL indisponible : reprise non lancée.") from None
+        if nom_pg != (parametres.get("nom_sauvegarde") or nom_pg):
+            raise HTTPException(409, "Le nom de la collecte PostgreSQL ne correspond plus à l'archive.")
+        journal = lire_archive_json(dossier, "journal.json", obligatoire=True)
+        if not isinstance(journal, dict) or not isinstance(journal.get("evenements"), list):
+            raise HTTPException(409, "Le journal d'origine est absent : impossible de reprendre les sources.")
+        credentials = {}
+        for cle in ("research_client_key", "research_client_secret"):
+            valeur = getattr(payload, cle, None)
+            if valeur:
+                credentials[cle] = valeur.get_secret_value()
+        try:
+            settings = StartRequest.model_validate({**parametres, **credentials})
+            selection, _ = preparer_reprise_medias(
+                settings.sources, journal["evenements"], payload.medias,
+                source_en_cours=manifeste.get("source_en_cours_id"))
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+        with self.lock:
+            if any(tache.busy or tache.video_busy for tache in self.jobs.values()):
+                raise HTTPException(409, "Un traitement est déjà en cours sur le serveur.")
+            existant = self.jobs.get(identifiant)
+            if existant is not None and existant.owner != owner:
+                raise HTTPException(403, "Collecte détenue par une autre session.")
+            job = Job(owner, settings, self.data_dir,
+                      identifiant=identifiant, archive_directory=dossier,
+                      owner_historique=cookie, reprise=True)
+            try:
+                initialiser_donnees_reprise(job, dossier, manifeste, selection)
+            except (ValueError, TypeError, OSError) as erreur:
+                raise HTTPException(409, str(erreur)) from None
+            job.limites_debug = {
+                "inactivite_max_s": self.idle_timeout,
+                "duree_max_s": self.max_duration}
+            self.jobs[identifiant] = job
+            job.thread = threading.Thread(
+                target=self.runner, args=(job,), daemon=True)
+            job.thread.start()
+            return job
+
     def reouvrir_historique(self, owner, identifiant, cookie):
         from stockage.historique_analyses import retrouver
         recupere = retrouver(self.data_dir, identifiant, cookie)
