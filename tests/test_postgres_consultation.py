@@ -170,6 +170,54 @@ class TestsPostgresConsultation(unittest.TestCase):
             {(ligne[1], ligne[2]) for ligne in lignes},
             {("lemondefr", "123"), ("brutofficiel", "123")})
 
+    def test_reprise_verrouille_la_meme_collecte_et_conserve_le_total(self):
+        """La reprise ne doit pas créer de second corpus ni réduire les compteurs."""
+        travail = SimpleNamespace(
+            lock=RLock(), id="e" * 32, owner_historique="cookie_prive",
+            settings=ParametresFictifs(), status="collecting",
+            processed=2, reprise=True, reprise_decalage=3,
+            publications=[{"id": "111", "retenue": True}], records=[],
+            commentaires=[],
+        )
+        connexion = ConnexionFictive()
+        connexion.curseur.fetchone = lambda: (1,)
+        with patch("stockage.postgres_consultation.ouvrir_connexion",
+                   return_value=connexion):
+            archiver_collecte(travail)
+        lignes_verrou = [
+            (sql, valeurs) for sql, valeurs in connexion.curseur.executions
+            if "SELECT 1 FROM scraptiktok_collectes" in sql
+            and "FOR UPDATE" in sql
+        ]
+        self.assertEqual(len(lignes_verrou), 1)
+        self.assertEqual(lignes_verrou[0][1],
+                         (travail.id, empreinte("cookie_prive")))
+        lignes_metadonnees = [
+            valeurs for sql, valeurs in connexion.curseur.executions
+            if "INSERT INTO scraptiktok_collectes" in sql
+        ]
+        self.assertEqual(len(lignes_metadonnees), 1)
+        self.assertEqual(lignes_metadonnees[0][0], travail.id)
+        self.assertEqual(lignes_metadonnees[0][8], 5)
+
+    def test_reprise_refuse_une_collecte_pg_absente(self):
+        """Ne pas créer un corpus sous l'ancien identifiant après suppression."""
+        travail = SimpleNamespace(
+            lock=RLock(), id="e" * 32, owner_historique="cookie_prive",
+            settings=ParametresFictifs(), status="collecting",
+            processed=2, reprise=True, reprise_decalage=0,
+            publications=[], records=[], commentaires=[],
+        )
+        connexion = ConnexionFictive()
+        connexion.curseur.fetchone = lambda: None
+        with patch("stockage.postgres_consultation.ouvrir_connexion",
+                   return_value=connexion):
+            with self.assertRaisesRegex(RuntimeError, "origine absente"):
+                archiver_collecte(travail)
+        self.assertFalse(any(
+            "INSERT INTO scraptiktok_collectes" in sql
+            for sql, _ in connexion.curseur.executions))
+
     def test_archiver_test_sans_texte_retenu_et_sans_secrets(self):
         """Les vidéos rejetées sont archivées, même si le TXT est vide."""
         identifiant = "b" * 32
