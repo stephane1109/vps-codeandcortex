@@ -947,6 +947,8 @@ class Job:
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
                     "reprise": self.reprise, "medias_reprise": list(self.medias_reprise),
+                    "publications_avant_reprise": self.publications_avant_reprise,
+                    "publications_ajoutees": max(0, len(self.publications) - self.publications_avant_reprise) if self.reprise else 0,
                     "diagnostics": list(self.diagnostics),
                     "telecharger_mp4": self.settings.telecharger_mp4,
                     "sauvegarde_progressive": self.settings.sauvegarde_progressive,
