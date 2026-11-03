@@ -198,10 +198,9 @@ def afficher_resultats(
         )
         st.caption(
             f"Résultats de FactoMineR::MCA() selon le {libelle_mode} ; "
-            "le filtre à p ≤ 0,05 repose sur les valeurs-tests "
-            "des modalités fournies par FactoMineR::MCA(). "
-            "La fonction dimdesc() reste utilisée dans le rapport "
-            "pour interpréter les dimensions."
+            "le filtre à p ≤ 0,05 utilise directement les p-values "
+            "de FactoMineR::dimdesc(). Les valeurs-tests et les "
+            "coordonnées proviennent de FactoMineR::MCA()."
         )
 
     onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
@@ -232,9 +231,9 @@ def afficher_resultats(
                 "autre modalité selon FactoMineR::descfreq (AFC)."
                 if methode == "AFC"
                 else (
-                    "Plan filtré : modalités dont la valeur-test sur l'axe 1 "
-                    "ou 2 donne p ≤ 0,05 (approximation normale bilatérale "
-                    "de FactoMineR::MCA, sans correction multiple)."
+                    "Plan filtré : modalités caractérisant l'axe 1 ou 2 "
+                    "avec p ≤ 0,05 selon FactoMineR::dimdesc(), "
+                    "sans correction multiple."
                 )
             )
         )
@@ -281,7 +280,7 @@ def afficher_resultats(
                 expanded=False,
             ):
                 colonnes_p = [
-                    "variable", "modalite", "v_test_axe_1",
+                    "variable", "modalite", "identifiant_dimdesc", "v_test_axe_1",
                     "p_value_axe_1", "v_test_axe_2", "p_value_axe_2",
                     "p_value_min", "significative_005",
                 ]
