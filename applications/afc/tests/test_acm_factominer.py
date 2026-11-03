@@ -171,6 +171,94 @@ class TestsACM(unittest.TestCase):
         self.assertNotIn('main = paste("ACM —"', moteur_acm)
         self.assertIn("def diagnostiquer_echec_r(", interface)
 
+    def test_preparer_variables_supplementaires_sans_modifier_les_axes(self):
+        """Les variables illustratives sont conservées et restent inactives."""
+        donnees = self.donnees.copy()
+        donnees["type_violence"] = [
+            "physique", "pacifique", "physique", "pacifique",
+            "physique", "", "pacifique", "physique",
+        ]
+        donnees["vues"] = [
+            "1 200", "2 500", "", "3 000",
+            "1 500", "600", "4 100", "2 700",
+        ]
+        variables = ["vues_classe", "likes_classe", "type_media"]
+        original = preparer_acm(donnees, variables)
+        supplementaires = preparer_acm(
+            donnees, variables,
+            variables_supplementaires_qualitatives=["type_violence"],
+            variables_supplementaires_quantitatives=["vues"],
+        )
+        self.assertEqual(supplementaires.effectif_final, original.effectif_final)
+        self.assertEqual(
+            supplementaires.donnees.columns.tolist(),
+            variables + ["type_violence", "vues"],
+        )
+        pd.testing.assert_frame_equal(
+            supplementaires.donnees[variables], original.donnees
+        )
+        self.assertEqual(
+            supplementaires.donnees.loc[5, "type_violence"],
+            "Valeur manquante",
+        )
+        self.assertTrue(pd.isna(supplementaires.donnees.loc[2, "vues"]))
+        self.assertEqual(supplementaires.donnees.loc[0, "vues"], 1200.0)
+        self.assertEqual(
+            supplementaires.variables_supplementaires_qualitatives,
+            ("type_violence",),
+        )
+        self.assertEqual(
+            supplementaires.variables_supplementaires_quantitatives,
+            ("vues",),
+        )
+
+    def test_rejeter_variable_supplementaire_active_ou_invalide(self):
+        """Le statut actif et les types supplémentaires restent disjoints."""
+        variables = ["vues_classe", "likes_classe", "type_media"]
+        with self.assertRaisesRegex(ValueError, "simultanément active"):
+            preparer_acm(
+                self.donnees, variables,
+                variables_supplementaires_qualitatives=["vues_classe"],
+            )
+        with self.assertRaisesRegex(ValueError, "absentes"):
+            preparer_acm(
+                self.donnees, variables,
+                variables_supplementaires_qualitatives=["inconnue"],
+            )
+        donnees = self.donnees.copy()
+        donnees["vues"] = ["0", "10", "pas un nombre", "20"] * 2
+        with self.assertRaisesRegex(ValueError, "non numérique"):
+            preparer_acm(
+                donnees, variables,
+                variables_supplementaires_quantitatives=["vues"],
+            )
+        donnees["vues"] = ["10"] * len(donnees)
+        with self.assertRaisesRegex(ValueError, "valeurs distinctes"):
+            preparer_acm(
+                donnees, variables,
+                variables_supplementaires_quantitatives=["vues"],
+            )
+
+    def test_interface_variables_supplementaires_natives(self):
+        """Les sélecteurs transmettent les noms à la fonction R native."""
+        interface = (DOSSIER_AFC / "application.py").read_text(
+            encoding="utf-8"
+        )
+        moteur = MOTEUR_ACM.read_text(encoding="utf-8")
+        self.assertIn('"Variables qualitatives supplémentaires"', interface)
+        self.assertIn('"Variables quantitatives supplémentaires"', interface)
+        self.assertIn("variables_supplementaires_qualitatives=(", interface)
+        self.assertIn("variables_supplementaires_quantitatives=(", interface)
+        self.assertIn('"21_coordonnees_qualitatives_supplementaires.csv"', moteur)
+        self.assertIn('"25_coordonnees_quantitatives_supplementaires.csv"', moteur)
+        self.assertIn('"26_plan_quantitatives_supplementaires.png"', moteur)
+        self.assertIn("quali.sup = if (length(indices_quali_sup))", moteur)
+        self.assertIn("quanti.sup = if (length(indices_quanti_sup))", moteur)
+        self.assertIn("donnees_actives", moteur)
+        self.assertIn("resultat$quali.sup$coord", moteur)
+        self.assertIn("resultat$quanti.sup$coord", moteur)
+        self.assertNotIn("stats::pnorm(", moteur)
+
     @unittest.skipUnless(
         factominer_disponible(),
         "Rscript avec FactoMineR non disponible dans cet environnement",
@@ -505,6 +593,93 @@ class TestsACM(unittest.TestCase):
             self.assertTrue(
                 (sortie / "13_plan_factoriel_significatif.png").is_file()
             )
+
+
+    @unittest.skipUnless(
+        factominer_disponible(),
+        "Rscript avec FactoMineR non disponible dans cet environnement",
+    )
+    def test_integration_supplementaires_indicatrices_et_burt(self):
+        """Les axes et inerties sont inchangés avec variables illustratives."""
+        with tempfile.TemporaryDirectory(prefix="acm_sup_") as repertoire:
+            racine = Path(repertoire)
+            sans = racine / "sans.tsv"
+            avec = racine / "avec.tsv"
+            with sans.open("w", encoding="utf-8", newline="") as fichier_sans, (
+                avec.open("w", encoding="utf-8", newline="")
+            ) as fichier_avec:
+                auteur_sans = csv.writer(fichier_sans, delimiter="\t")
+                auteur_avec = csv.writer(fichier_avec, delimiter="\t")
+                en_tete = ["vues_classe", "likes_classe", "type_media"]
+                auteur_sans.writerow(en_tete)
+                auteur_avec.writerow(en_tete + ["violence", "vues"])
+                for i in range(120):
+                    groupe = i % 3
+                    ligne = [
+                        ("faibles", "moyennes", "fortes")[groupe],
+                        ("0-9", "10-99", "100-999")[
+                            (groupe + (i % 13 == 0)) % 3
+                        ],
+                        ("nationale", "independante", "locale")[
+                            (groupe + (i % 17 == 0)) % 3
+                        ],
+                    ]
+                    auteur_sans.writerow(ligne)
+                    auteur_avec.writerow(
+                        ligne + [
+                            ("présente", "absente")[(i // 2) % 2],
+                            str(100 + i * 17) if i % 19 else "",
+                        ]
+                    )
+            for methode in ("Indicator", "Burt"):
+                resultats = []
+                for description, entree, options in [
+                    ("base", sans, ["", ""]),
+                    ("supplementaire", avec, ["4", "5"]),
+                ]:
+                    destination = racine / (description + methode)
+                    destination.mkdir()
+                    commande = [
+                        shutil.which("Rscript"), str(MOTEUR_ACM),
+                        str(entree), str(destination), "Corpus test",
+                        "120", "120", methode, *options,
+                    ]
+                    processus = subprocess.run(
+                        commande, capture_output=True, text=True,
+                        check=False, timeout=120,
+                    )
+                    self.assertEqual(
+                        processus.returncode, 0,
+                        processus.stderr or processus.stdout,
+                    )
+                    resultats.append(destination)
+                for nom in (
+                    "06_valeurs_propres_inerties.csv",
+                    "07_coordonnees_modalites.csv",
+                ):
+                    donnees_sans = pd.read_csv(
+                        resultats[0] / nom, sep=";", decimal=","
+                    )
+                    donnees_avec = pd.read_csv(
+                        resultats[1] / nom, sep=";", decimal=","
+                    )
+                    pd.testing.assert_frame_equal(
+                        donnees_sans, donnees_avec, check_exact=False,
+                        rtol=1e-7, atol=1e-7,
+                    )
+                for nom in (
+                    "21_coordonnees_qualitatives_supplementaires.csv",
+                    "22_cos2_qualitatives_supplementaires.csv",
+                    "23_vtest_qualitatives_supplementaires.csv",
+                    "24_eta2_qualitatives_supplementaires.csv",
+                    "25_coordonnees_quantitatives_supplementaires.csv",
+                    "26_plan_quantitatives_supplementaires.png",
+                    "27_plan_quantitatives_supplementaires.pdf",
+                ):
+                    self.assertTrue(
+                        (resultats[1] / nom).is_file(),
+                        f"Export manquant : {nom} ({methode})",
+                    )
 
 
 if __name__ == "__main__":
