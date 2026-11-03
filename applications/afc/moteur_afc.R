@@ -102,6 +102,76 @@ exporter_matrice(resultat$col$contrib, "10_contributions_colonnes.csv")
 exporter_matrice(resultat$row$cos2, "11_cos2_lignes.csv")
 exporter_matrice(resultat$col$cos2, "12_cos2_colonnes.csv")
 
+# Une p-value globale ne renseigne pas la significativité de chaque modalité.
+# Pour chaque modalité, comparer son profil à celui de toutes les autres
+# modalités de la même variable par un test du Chi-deux sur un tableau 2 x K.
+# Ce test concerne l'association entre variables, pas la position sur un axe.
+tester_modalite <- function(type_modalite, indice) {
+  if (type_modalite == "ligne") {
+    effectifs_modalite <- tableau[indice, ]
+    effectifs_autres <- colSums(tableau) - effectifs_modalite
+    comparaison <- rbind(effectifs_modalite, effectifs_autres)
+    nom_modalite <- rownames(tableau)[[indice]]
+    nom_variable <- variable_lignes
+  } else {
+    effectifs_modalite <- tableau[, indice]
+    effectifs_autres <- rowSums(tableau) - effectifs_modalite
+    comparaison <- rbind(effectifs_modalite, effectifs_autres)
+    nom_modalite <- colnames(tableau)[[indice]]
+    nom_variable <- variable_colonnes
+  }
+  test_reference <- suppressWarnings(stats::chisq.test(
+    comparaison, correct = FALSE
+  ))
+  cellules_faibles_modalite <- any(test_reference$expected < 5)
+  if (cellules_faibles_modalite && repetitions >= 100L) {
+    # Graine stable pour rendre les p-values Monte-Carlo reproductibles.
+    set.seed(2026L + indice + if (type_modalite == "ligne") 0L else 10000L)
+    test_modalite <- suppressWarnings(stats::chisq.test(
+      comparaison, simulate.p.value = TRUE, B = repetitions
+    ))
+    methode_modalite <- paste0("Monte-Carlo (B=", repetitions, ")")
+  } else {
+    test_modalite <- test_reference
+    methode_modalite <- "Chi-deux asymptotique"
+  }
+  data.frame(
+    variable = nom_variable,
+    type_modalite = type_modalite,
+    modalite = nom_modalite,
+    effectif = as.integer(sum(effectifs_modalite)),
+    chi_deux = as.numeric(test_reference$statistic),
+    degres_liberte = as.integer(test_reference$parameter),
+    p_value = as.numeric(test_modalite$p.value),
+    methode = methode_modalite,
+    cellules_attendues_faibles = cellules_faibles_modalite,
+    stringsAsFactors = FALSE
+  )
+}
+
+significativite_modalites <- do.call(rbind, c(
+  lapply(seq_len(nrow(tableau)), function(i) tester_modalite("ligne", i)),
+  lapply(seq_len(ncol(tableau)), function(i) tester_modalite("colonne", i))
+))
+significativite_modalites$p_ajustee_bh <- stats::p.adjust(
+  significativite_modalites$p_value, method = "BH"
+)
+significativite_modalites$significative_005 <- (
+  !is.na(significativite_modalites$p_value) &
+    significativite_modalites$p_value <= 0.05
+)
+significativite_modalites$significative_bh_005 <- (
+  !is.na(significativite_modalites$p_ajustee_bh) &
+    significativite_modalites$p_ajustee_bh <= 0.05
+)
+nombre_significatives <- sum(significativite_modalites$significative_005)
+# Ce CSV contient toutes les modalités, y compris celles masquées sur le plan.
+utils::write.csv2(
+  significativite_modalites,
+  file.path(dossier_sortie, "18_significativite_modalites.csv"),
+  row.names = FALSE, fileEncoding = "UTF-8", na = ""
+)
+
 # Mise en forme du plan factoriel, y compris si un seul axe est disponible.
 limites_axes <- function(valeurs, proportion = 0.22) {
   bornes <- range(valeurs, finite = TRUE)
@@ -125,25 +195,78 @@ dessiner_plan <- function() {
   } else {
     "Disposition illustrative (aucun axe 2)"
   }
+  # La sélection ne porte que sur le plan à deux dimensions demandé.
+  # Les coordonnées et les inerties proviennent toujours de l'AFC complète.
+  visibles_lignes <- if (deux_axes) {
+    significativite_modalites$significative_005[
+      significativite_modalites$type_modalite == "ligne"
+    ]
+  } else {
+    rep(TRUE, nrow(lignes))
+  }
+  visibles_colonnes <- if (deux_axes) {
+    significativite_modalites$significative_005[
+      significativite_modalites$type_modalite == "colonne"
+    ]
+  } else {
+    rep(TRUE, nrow(colonnes))
+  }
+  x_visibles <- c(
+    abscisses_lignes[visibles_lignes],
+    abscisses_colonnes[visibles_colonnes]
+  )
+  y_visibles <- c(
+    ordonnees_lignes[visibles_lignes],
+    ordonnees_colonnes[visibles_colonnes]
+  )
+  # Aucun point significatif : conserver un plan lisible avec axes à l'origine.
+  if (!length(x_visibles)) {
+    x_visibles <- c(-1, 1)
+    y_visibles <- c(-1, 1)
+  }
   par(mar = c(6.5, 5, 4, 2))
   plot(
     NA_real_, NA_real_, type = "n",
-    xlim = limites_axes(c(abscisses_lignes, abscisses_colonnes)),
-    ylim = limites_axes(c(ordonnees_lignes, ordonnees_colonnes), 0.3),
+    xlim = limites_axes(c(0, x_visibles)),
+    ylim = limites_axes(c(0, y_visibles), 0.3),
     xlab = nom_x, ylab = nom_y,
     main = paste("AFC :", variable_lignes, "x", variable_colonnes)
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
-  points(abscisses_lignes, ordonnees_lignes, col = "#2166AC", pch = 16, cex = 1.2)
-  points(abscisses_colonnes, ordonnees_colonnes, col = "#B2182B", pch = 17, cex = 1.25)
-  text(abscisses_lignes, ordonnees_lignes, rownames(lignes),
-       pos = 3, cex = 0.75, col = "#2166AC", xpd = TRUE)
-  text(abscisses_colonnes, ordonnees_colonnes, rownames(colonnes),
-       pos = if (deux_axes) 3 else 1, cex = 0.75, col = "#B2182B", xpd = TRUE)
-  legend("topright", c("Modalités en lignes", "Modalités en colonnes"),
-         pch = c(16, 17), col = c("#2166AC", "#B2182B"), bty = "n")
-  if (!deux_axes) {
-    mtext("Décalage vertical artificiel : ne pas interpréter la hauteur des points.",
+  if (any(visibles_lignes)) {
+    points(abscisses_lignes[visibles_lignes], ordonnees_lignes[visibles_lignes],
+           col = "#2166AC", pch = 16, cex = 1.2)
+    text(abscisses_lignes[visibles_lignes], ordonnees_lignes[visibles_lignes],
+         rownames(lignes)[visibles_lignes], pos = 3, cex = 0.75,
+         col = "#2166AC", xpd = TRUE)
+  }
+  if (any(visibles_colonnes)) {
+    points(abscisses_colonnes[visibles_colonnes],
+           ordonnees_colonnes[visibles_colonnes],
+           col = "#B2182B", pch = 17, cex = 1.25)
+    text(abscisses_colonnes[visibles_colonnes],
+         ordonnees_colonnes[visibles_colonnes],
+         rownames(colonnes)[visibles_colonnes],
+         pos = if (deux_axes) 3 else 1, cex = 0.75,
+         col = "#B2182B", xpd = TRUE)
+  }
+  if (any(visibles_lignes) || any(visibles_colonnes)) {
+    legend("topright", c("Modalités en lignes", "Modalités en colonnes"),
+           pch = c(16, 17), col = c("#2166AC", "#B2182B"), bty = "n")
+  }
+  if (deux_axes) {
+    mtext(
+      paste0("Modalités affichées : p <= 0,05 (",
+             nombre_significatives, "/", nrow(significativite_modalites),
+             "). Test Chi-deux modalité contre les autres."),
+      side = 1, line = 4.3, cex = 0.7
+    )
+    if (!nombre_significatives) {
+      text(0, 0, "Aucune modalité significative (p <= 0,05)",
+           pos = 3, cex = 0.9, col = "grey35")
+    }
+  } else {
+    mtext("Un seul axe : les modalités ne sont pas filtrées ; décalage vertical artificiel.",
           side = 1, line = 4.3, cex = 0.7)
   }
 }
@@ -171,7 +294,9 @@ statistiques <- data.frame(
     "Observations analysées", "Modalités lignes", "Modalités colonnes",
     "Axes factoriels", "Chi-deux de Pearson", "Degrés de liberté",
     "Valeur p", "Méthode du test", "V de Cramér",
-    "Cellules attendues inférieures à 5", "Nombre total de cellules"
+    "Cellules attendues inférieures à 5", "Nombre total de cellules",
+    "Modalités significatives (p <= 0,05)", "Modalités au total",
+    "Méthode de significativité des modalités"
   ),
   valeur = c(
     nom_source, variable_lignes, variable_colonnes,
@@ -179,7 +304,10 @@ statistiques <- data.frame(
     as.character(nrow(tableau)), as.character(ncol(tableau)), as.character(nombre_axes),
     format(chi2, digits = 9), as.character(unname(test_asymptotique$parameter)),
     format(test_retenu$p.value, digits = 9), methode_test, format(v_cramer, digits = 7),
-    as.character(cellules_faibles), as.character(length(test_asymptotique$expected))
+    as.character(cellules_faibles), as.character(length(test_asymptotique$expected)),
+    as.character(nombre_significatives),
+    as.character(nrow(significativite_modalites)),
+    "Chi-deux 2 x K (modalité contre autres) ; Monte-Carlo si effectifs faibles"
   ),
   stringsAsFactors = FALSE
 )
@@ -199,6 +327,13 @@ rapport <- c(
   paste("Méthode :", methode_test),
   paste("V de Cramér :", signif(v_cramer, 5)),
   paste("Cellules avec effectif théorique < 5 :", cellules_faibles),
+  paste("Modalités significatives (p <= 0,05) :", nombre_significatives,
+        "/", nrow(significativite_modalites)),
+  "Significativité par modalité : Chi-deux sur un tableau modalité contre autres.",
+  "Si effectif théorique < 5 : p-value Monte-Carlo au même nombre de répétitions.",
+  "Les p-values brutes déterminent l'affichage ; les p-values corrigées BH sont exportées.",
+  "Le test par modalité concerne une association globale, non une coordonnée ou un axe particulier.",
+  "Fichier 18_significativite_modalites.csv : toutes les modalités et leurs p-values.",
   "",
   "VALEURS PROPRES ET INERTIES (%)",
   capture.output(print(round(resultat$eig, 4))),
