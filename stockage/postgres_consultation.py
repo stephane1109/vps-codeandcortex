@@ -169,7 +169,7 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
         commentaires = commentaires[max(0, a_partir_commentaires):]
         parametres = nettoyer_parametres(job.settings.model_dump())
         statut = job.status
-        traitees = job.processed
+        traitees = job.processed + getattr(job, "reprise_decalage", 0)
         identifiant = job.id
         nom = job.settings.nom_sauvegarde or job.settings.libelle
         source = job.settings.source_collecte
