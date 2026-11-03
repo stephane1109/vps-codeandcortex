@@ -13,6 +13,24 @@ methode_calcul <- if (length(arguments) >= 6L) arguments[[6L]] else "Indicator"
 if (!(methode_calcul %in% c("Indicator", "Burt"))) {
   stop("Méthode ACM invalide : utiliser Indicator ou Burt.")
 }
+lire_indices_supplementaires <- function(texte) {
+  if (!nzchar(texte)) return(integer(0))
+  indices <- as.integer(strsplit(texte, ",", fixed = TRUE)[[1L]])
+  if (anyNA(indices) || anyDuplicated(indices)) {
+    stop("Indices des variables supplémentaires invalides.")
+  }
+  indices
+}
+indices_quali_sup <- if (length(arguments) >= 7L) {
+  lire_indices_supplementaires(arguments[[7L]])
+} else {
+  integer(0)
+}
+indices_quanti_sup <- if (length(arguments) >= 8L) {
+  lire_indices_supplementaires(arguments[[8L]])
+} else {
+  integer(0)
+}
 libelle_methode <- if (methode_calcul == "Indicator") {
   "Tableau disjonctif complet (TDC)"
 } else {
@@ -32,21 +50,45 @@ donnees <- read.delim(
   stringsAsFactors = FALSE, fileEncoding = "UTF-8",
   na.strings = NULL, quote = "\""
 )
-if (ncol(donnees) < 3L || nrow(donnees) < 3L) {
-  stop("L'ACM nécessite trois variables et trois observations au minimum.")
+indices_non_actifs <- c(indices_quali_sup, indices_quanti_sup)
+if (anyDuplicated(indices_non_actifs) ||
+    any(indices_non_actifs < 1L | indices_non_actifs > ncol(donnees))) {
+  stop("Indices des variables supplémentaires incompatibles avec le CSV.")
 }
-for (nom in colnames(donnees)) {
-  donnees[[nom]] <- factor(donnees[[nom]])
+indices_actifs <- setdiff(seq_len(ncol(donnees)), indices_non_actifs)
+if (length(indices_actifs) < 3L || nrow(donnees) < 3L) {
+  stop("L'ACM nécessite trois variables actives et trois observations.")
 }
-nombre_modalites <- vapply(donnees, nlevels, integer(1))
+for (indice in c(indices_actifs, indices_quali_sup)) {
+  donnees[[indice]] <- factor(donnees[[indice]])
+}
+for (indice in indices_quanti_sup) {
+  valeurs <- as.character(donnees[[indice]])
+  valeurs[!nzchar(valeurs) | valeurs == "NA"] <- NA_character_
+  nombres <- suppressWarnings(as.numeric(valeurs))
+  if (any(!is.na(valeurs) & is.na(nombres))) {
+    stop("Variable quantitative supplémentaire non numérique : ",
+         colnames(donnees)[[indice]])
+  }
+  if (sum(is.finite(nombres)) < 3L || length(unique(nombres[is.finite(nombres)])) < 2L) {
+    stop("Variable quantitative supplémentaire sans dispersion suffisante : ",
+         colnames(donnees)[[indice]])
+  }
+  donnees[[indice]] <- nombres
+}
+donnees_actives <- donnees[, indices_actifs, drop = FALSE]
+nombre_modalites <- vapply(donnees_actives, nlevels, integer(1))
 if (any(nombre_modalites < 2L)) {
   stop("Chaque variable active de l'ACM doit avoir au moins deux modalités.")
 }
 nombre_axes <- min(
-  5L, nrow(donnees) - 1L, sum(nombre_modalites) - ncol(donnees)
+  5L, nrow(donnees) - 1L,
+  sum(nombre_modalites) - ncol(donnees_actives)
 )
 resultat <- FactoMineR::MCA(
-  donnees, ncp = nombre_axes, graph = FALSE, method = methode_calcul
+  donnees, ncp = nombre_axes, graph = FALSE, method = methode_calcul,
+  quali.sup = if (length(indices_quali_sup)) indices_quali_sup else NULL,
+  quanti.sup = if (length(indices_quanti_sup)) indices_quanti_sup else NULL
 )
 if (sum(resultat$eig[, 1L]) < 1e-12) {
   stop("Aucune inertie ne peut être représentée dans cette ACM.")
@@ -79,13 +121,40 @@ exporter_matrice(resultat$var$v.test, "10_vtest_modalites.csv")
 exporter_matrice(resultat$var$eta2, "11_rapports_correlation_variables.csv", "variable")
 exporter_matrice(resultat$ind$coord, "12_coordonnees_individus.csv", "individu")
 
+# Les variables supplémentaires sont projetées nativement par MCA().
+# Aucune contribution aux axes n'est calculée pour ces variables.
+if (length(indices_quali_sup)) {
+  exporter_matrice(
+    resultat$quali.sup$coord,
+    "21_coordonnees_qualitatives_supplementaires.csv"
+  )
+  exporter_matrice(
+    resultat$quali.sup$cos2,
+    "22_cos2_qualitatives_supplementaires.csv"
+  )
+  exporter_matrice(
+    resultat$quali.sup$v.test,
+    "23_vtest_qualitatives_supplementaires.csv"
+  )
+  exporter_matrice(
+    resultat$quali.sup$eta2,
+    "24_eta2_qualitatives_supplementaires.csv", "variable"
+  )
+}
+if (length(indices_quanti_sup)) {
+  exporter_matrice(
+    resultat$quanti.sup$coord,
+    "25_coordonnees_quantitatives_supplementaires.csv", "variable"
+  )
+}
+
 # Exporter les deux représentations du corpus lorsque leur volume le permet.
 # Ces tableaux ne remplacent jamais l'analyse native FactoMineR::MCA().
 nombre_colonnes_tdc <- sum(nombre_modalites)
 export_tdc <- as.double(nrow(donnees)) * nombre_colonnes_tdc <= 2000000
 export_burt <- as.double(nombre_colonnes_tdc)^2 <= 1000000
 if (export_tdc || export_burt) {
-  tableau_tdc <- FactoMineR::tab.disjonctif(donnees)
+  tableau_tdc <- FactoMineR::tab.disjonctif(donnees_actives)
   if (export_tdc) {
     utils::write.csv2(
       as.data.frame(tableau_tdc, check.names = FALSE),
@@ -133,7 +202,7 @@ if (is.null(rownames(coordonnees))) {
 # variables actives. Le nombre de modalités provient de son propre
 # tableau factoriel, pour ne pas associer de mauvaises couleurs en cas
 # de modalités portant le même nom dans plusieurs variables.
-variables_actives <- resultat$call$X
+variables_actives <- resultat$call$X[, resultat$call$quali, drop = FALSE]
 noms_variables_actives <- names(variables_actives)
 effectifs_modalites <- vapply(variables_actives, nlevels, integer(1))
 variables_modalites <- rep(
@@ -333,7 +402,7 @@ libelles_graphiques <- function(texte) {
 titre_graphique <- sprintf(
   "ACM - %s (%d variables actives)",
   if (methode_calcul == "Burt") "Burt" else "TDC",
-  ncol(donnees)
+  ncol(donnees_actives)
 )
 
 # Dessiner les modalités de toutes les variables actives sur les mêmes axes.
@@ -469,9 +538,9 @@ statistiques <- data.frame(
   ),
   valeur = c(
     nom_source, paste0("ACM — ", libelle_methode, " (FactoMineR::MCA)"),
-    paste(colnames(donnees), collapse = " ; "),
+    paste(colnames(donnees_actives), collapse = " ; "),
     as.character(effectif_initial), as.character(effectif_final),
-    as.character(ncol(donnees)), as.character(nrow(coordonnees)),
+    as.character(ncol(donnees_actives)), as.character(nrow(coordonnees)),
     as.character(ncol(coordonnees)),
     format(sum(resultat$eig[, 1L]), digits = 9),
     as.character(sum(est_significative)), as.character(nrow(coordonnees)),
@@ -501,7 +570,19 @@ rapport <- c(
   paste("Source :", nom_source),
   paste("Méthode de calcul :", libelle_methode),
   paste("Appel natif : FactoMineR::MCA(method =", methode_calcul, ")"),
-  paste("Variables actives :", paste(colnames(donnees), collapse = " ; ")),
+  paste("Variables actives :", paste(colnames(donnees_actives), collapse = " ; ")),
+  paste(
+    "Variables qualitatives supplémentaires :",
+    if (length(indices_quali_sup)) paste(
+      colnames(donnees)[indices_quali_sup], collapse = " ; "
+    ) else "Aucune"
+  ),
+  paste(
+    "Variables quantitatives supplémentaires :",
+    if (length(indices_quanti_sup)) paste(
+      colnames(donnees)[indices_quanti_sup], collapse = " ; "
+    ) else "Aucune"
+  ),
   paste("Observations initiales :", effectif_initial),
   paste("Observations analysées :", effectif_final),
   paste("Modalités actives :", nrow(coordonnees)),
