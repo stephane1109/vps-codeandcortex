@@ -109,7 +109,7 @@ class TestsRepriseHashtags(unittest.TestCase):
             "Reprendre les hashtags (même corpus PostgreSQL)",
             (racine / "interface" / "reprise_hashtags_ui.py").read_text("utf-8"))
         self.assertIn("bilan_hashtags.csv", moteur)
-        self.assertIn('"/reprendre-hashtags"', moteur)
+        self.assertIn("def reprendre_hashtags_existants(", moteur)
         self.assertIn("initialiser_donnees_reprise(job, dossier, manifeste, [])",
                       moteur)
 
