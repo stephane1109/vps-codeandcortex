@@ -361,6 +361,13 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                 hashtags_observes = (
                     {str(tag).lstrip("#").casefold() for tag in fiche.get("hashtags", [])}
                     if fiche else set())
+                if fiche:
+                    # Les hashtags explicitement présents dans la légende
+                    # complètent le tableau officiel si celui-ci est incomplet.
+                    # Ne pas confondre un mot ordinaire avec un hashtag.
+                    hashtags_observes.update(
+                        tag.casefold() for tag in re.findall(
+                            r"#(\w+)", fiche.get("description") or ""))
                 concordances = [
                     nom.casefold() in hashtags_observes for nom in liste_hashtags
                 ]
