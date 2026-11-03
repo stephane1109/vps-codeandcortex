@@ -242,6 +242,20 @@ utils::write.csv2(
 deux_axes <- ncol(coordonnees) >= 2L
 axes_description <- seq_len(min(2L, ncol(coordonnees)))
 
+# Coordonnées natives des variables illustratives : elles n'interviennent
+# ni dans les valeurs propres ni dans le calcul de la significativité
+# des modalités actives.
+coordonnees_quali_sup <- if (length(indices_quali_sup)) {
+  as.matrix(resultat$quali.sup$coord)
+} else {
+  NULL
+}
+coordonnees_quanti_sup <- if (length(indices_quanti_sup)) {
+  as.matrix(resultat$quanti.sup$coord)
+} else {
+  NULL
+}
+
 # Utiliser exclusivement les p-values produites par FactoMineR::dimdesc().
 # La fonction native condes(), appelée par dimdesc(), nomme les catégories
 # "variable=modalité". Les noms des coordonnées MCA peuvent se limiter à
@@ -420,12 +434,24 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   } else {
     rep(TRUE, nrow(coordonnees))
   }
-  if (!any(visibles)) {
+  x_sup <- if (!is.null(coordonnees_quali_sup)) {
+    coordonnees_quali_sup[, 1L]
+  } else {
+    numeric(0)
+  }
+  y_sup <- if (!is.null(coordonnees_quali_sup)) {
+    if (deux_axes) coordonnees_quali_sup[, 2L] else {
+      rep(0, nrow(coordonnees_quali_sup))
+    }
+  } else {
+    numeric(0)
+  }
+  if (!any(visibles) && !length(x_sup)) {
     xlim <- c(-1, 1)
     ylim <- c(-1, 1)
   } else {
-    xlim <- limites_axes(c(0, x[visibles]))
-    ylim <- limites_axes(c(0, y[visibles]), 0.3)
+    xlim <- limites_axes(c(0, x[visibles], x_sup))
+    ylim <- limites_axes(c(0, y[visibles], y_sup), 0.3)
   }
   inerties <- resultat$eig[, 2L]
   etiquette_x <- sprintf("Axe 1 (%.1f %% d'inertie)", inerties[[1L]])
@@ -456,6 +482,19 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
       libelles_graphiques(noms_modalites[visibles]),
       pos = 3, cex = 0.72,
       col = couleurs_modalites[visibles], xpd = TRUE
+    )
+  }
+  # Les modalités supplémentaires restent visibles dans les deux plans :
+  # le seuil de p-value est réservé aux seules modalités actives.
+  if (length(x_sup)) {
+    points(
+      x_sup, y_sup, pch = 17, cex = 1.25,
+      col = "#7A1FA2"
+    )
+    text(
+      x_sup, y_sup,
+      libelles_graphiques(rownames(coordonnees_quali_sup)),
+      pos = 1, cex = 0.7, col = "#7A1FA2", xpd = TRUE
     )
   }
   if (filtrer_modalites && deux_axes) {
@@ -494,6 +533,55 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
     pch = 16, bty = "n", cex = taille_legende,
     title = "Variables actives"
   )
+  if (length(indices_quali_sup)) {
+    legend(
+      "bottomleft",
+      legend = libelles_graphiques(
+        paste("Supplementaire :", colnames(donnees)[indices_quali_sup])
+      ),
+      col = rep("#7A1FA2", length(indices_quali_sup)),
+      pch = 17, bty = "n", cex = taille_legende,
+      title = "Variables illustratives"
+    )
+  }
+}
+dessiner_quanti_sup <- function() {
+  # Corrélations calculées par FactoMineR : projection séparée des
+  # modalités actives car les deux familles n'ont pas la même échelle.
+  if (is.null(coordonnees_quanti_sup)) return(invisible(NULL))
+  graphics::layout(1L)
+  par(mar = c(5, 5, 4, 2))
+  plot(
+    NA_real_, NA_real_, type = "n",
+    xlim = c(-1.15, 1.15), ylim = c(-1.15, 1.15),
+    asp = 1,
+    xlab = "Axe 1 (correlation)",
+    ylab = "Axe 2 (correlation)",
+    main = "Variables quantitatives supplementaires"
+  )
+  symbols(
+    0, 0, circles = 1, add = TRUE, inches = FALSE,
+    fg = "grey60"
+  )
+  abline(h = 0, v = 0, col = "grey75", lty = 2)
+  xs <- coordonnees_quanti_sup[, 1L]
+  ys <- if (deux_axes) {
+    coordonnees_quanti_sup[, 2L]
+  } else {
+    rep(0, nrow(coordonnees_quanti_sup))
+  }
+  valides <- is.finite(xs) & is.finite(ys)
+  if (any(valides)) {
+    arrows(
+      0, 0, xs[valides], ys[valides],
+      col = "#087E8B", length = 0.09, lwd = 1.5
+    )
+    text(
+      xs[valides], ys[valides],
+      libelles_graphiques(rownames(coordonnees_quanti_sup)[valides]),
+      pos = 3, col = "#087E8B", cex = 0.85
+    )
+  }
 }
 dessiner_inerties <- function() {
   inerties <- resultat$eig[, 2L]
@@ -525,6 +613,16 @@ grDevices::pdf(
 )
 tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
 dessiner_png("15_inerties.png", dessiner_inerties)
+if (length(indices_quanti_sup)) {
+  dessiner_png(
+    "26_plan_quantitatives_supplementaires.png", dessiner_quanti_sup
+  )
+  grDevices::pdf(
+    file.path(dossier_sortie, "27_plan_quantitatives_supplementaires.pdf"),
+    width = 10, height = 8.5
+  )
+  tryCatch(dessiner_quanti_sup(), finally = grDevices::dev.off())
+}
 
 statistiques <- data.frame(
   indicateur = c(
@@ -620,7 +718,11 @@ rapport <- c(
   "Ces p-values exploratoires ne sont pas corrigées pour comparaisons multiples.",
   "Les deux versions du plan utilisent les mêmes coordonnées FactoMineR.",
   "Toutes les modalités d'une variable partagent une couleur sur les deux plans.",
-  "Correspondance variable / couleur : 19_couleurs_variables.csv."
+  "Correspondance variable / couleur : 19_couleurs_variables.csv.",
+  "Les variables supplementaires utilisent les parametres quali.sup et quanti.sup natifs.",
+  "Les modalites qualitatives supplementaires figurent en triangles violets sur les plans.",
+  "Les variables quantitatives supplementaires sont projetees sur un plan de correlations distinct.",
+  "Elles n'interviennent pas dans la construction des axes ni dans les inerties."
 )
 writeLines(
   rapport, file.path(dossier_sortie, "00_rapport_acm.txt"), useBytes = TRUE
