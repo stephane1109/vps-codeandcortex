@@ -256,6 +256,348 @@ def afficher_resultats(resultats: dict, methode: str = "AFC") -> None:
         st.text(fichiers[nom_rapport].decode("utf-8"))
 
 
+
+def executer_moteur_acm(
+    donnees: pd.DataFrame,
+    nom_source: str,
+    effectif_initial: int,
+    effectif_final: int,
+    parametres: dict,
+) -> dict:
+    """Exécuter FactoMineR::MCA sur les catégories des variables sélectionnées."""
+    executable = shutil.which("Rscript")
+    if executable is None:
+        raise RuntimeError(
+            "Rscript est introuvable. Déployer l'application avec le Dockerfile "
+            "pour installer R et FactoMineR."
+        )
+    with tempfile.TemporaryDirectory(prefix="acm_factominer_") as temporaire:
+        dossier = Path(temporaire)
+        chemin_donnees = dossier / "categories.tsv"
+        dossier_sortie = dossier / "resultats"
+        dossier_sortie.mkdir()
+        donnees.to_csv(
+            chemin_donnees, sep="\t", index=False, encoding="utf-8"
+        )
+        commande = [
+            executable,
+            str(DOSSIER_APPLICATION / "moteur_acm.R"),
+            str(chemin_donnees),
+            str(dossier_sortie),
+            nom_source,
+            str(effectif_initial),
+            str(effectif_final),
+        ]
+        try:
+            processus = subprocess.run(
+                commande, capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=DELAI_CALCUL, check=False,
+            )
+        except subprocess.TimeoutExpired as erreur:
+            raise RuntimeError(
+                f"Le calcul ACM a dépassé {DELAI_CALCUL} secondes. "
+                "Réduire le nombre de variables ou ajuster AFC_TIMEOUT_SECONDS."
+            ) from erreur
+        if processus.returncode != 0:
+            details = (processus.stderr or processus.stdout).strip()
+            raise RuntimeError(f"Erreur dans FactoMineR::MCA : {details[:2500]}")
+        (dossier_sortie / "17_parametres_analyse.json").write_text(
+            json.dumps(parametres, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        fichiers = {
+            chemin.name: chemin.read_bytes()
+            for chemin in sorted(dossier_sortie.iterdir())
+            if chemin.is_file()
+        }
+        attendus = {
+            "00_rapport_acm.txt", "01_donnees_acm_filtrees.csv",
+            "06_valeurs_propres_inerties.csv",
+            "07_coordonnees_modalites.csv",
+            "08_contributions_modalites.csv",
+            "09_cos2_modalites.csv",
+            "13_plan_factoriel.png",
+            "13_plan_factoriel_significatif.png",
+            "14_plan_factoriel.pdf",
+            "14_plan_factoriel_significatif.pdf",
+            "15_inerties.png", "16_resultats_statistiques.csv",
+            "significativite_modalites_factominer.csv",
+        }
+        manquants = sorted(attendus.difference(fichiers))
+        if manquants:
+            raise RuntimeError(
+                "Exports ACM FactoMineR incomplets : " + ", ".join(manquants)
+            )
+        archive = io.BytesIO()
+        with zipfile.ZipFile(
+            archive, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as fichier_zip:
+            for nom, donnees_fichier in fichiers.items():
+                fichier_zip.writestr(nom, donnees_fichier)
+        return {
+            "archive": archive.getvalue(),
+            "fichiers": fichiers,
+            "sortie_standard": processus.stdout,
+        }
+
+
+def construire_interface_acm(
+    donnees: pd.DataFrame,
+    contenu: bytes,
+    nom_source: str,
+    noms_variables: list[str],
+    candidates: list[str],
+) -> None:
+    """Construire une ACM multi-variables et actualiser ses sorties."""
+    st.subheader("2. Sélectionner les variables actives de l'ACM")
+    defaut_acm = [
+        nom for nom in [
+            "vues_classe", "classe_taux_engagement", "type_media",
+            "likes_classe", "commentaires_classe",
+        ]
+        if nom in candidates
+    ]
+    for nom in candidates:
+        if len(defaut_acm) >= 3:
+            break
+        if nom not in defaut_acm:
+            defaut_acm.append(nom)
+    variables_actives = st.multiselect(
+        "Variables catégorielles actives (trois au minimum)",
+        options=noms_variables,
+        default=defaut_acm[:3],
+        help=(
+            "FactoMineR::MCA() analyse simultanément les modalités de toutes "
+            "les variables sélectionnées, sans transformation en tableau 2 × 2."
+        ),
+        key="acm_variables_actives",
+    )
+    if len(variables_actives) < 3:
+        st.info("Sélectionnez au moins trois variables pour l'ACM.")
+        return
+
+    st.subheader("3. Paramètres de préparation et de calcul")
+    col_param, col_filtre = st.columns(2)
+    with col_param:
+        uniquement_retenues = st.checkbox(
+            "Conserver uniquement les publications retenues",
+            value="retenue" in donnees.columns,
+            disabled="retenue" not in donnees.columns,
+        )
+        dedoublonner = st.checkbox(
+            "Dédoublonner par publication_id (conserver la première occurrence)",
+            value=False,
+            disabled="publication_id" not in donnees.columns,
+        )
+        exclure_indeterminees = st.checkbox(
+            "Exclure les modalités indéterminées", value=True
+        )
+        inclure_manquantes = st.checkbox(
+            "Conserver les valeurs manquantes comme une modalité distincte",
+            value=False,
+        )
+    with col_filtre:
+        maximum_modalites = st.number_input(
+            "Nombre maximal de modalités par variable",
+            min_value=2, max_value=100, value=40, step=1,
+        )
+        options_filtre = ["(Aucun)"] + noms_variables
+        variable_filtre_choisie = st.selectbox(
+            "Filtrer sur une variable (facultatif)", options_filtre
+        )
+        variable_filtre = (
+            None if variable_filtre_choisie == "(Aucun)"
+            else variable_filtre_choisie
+        )
+        modalites_filtre = None
+        if variable_filtre:
+            modalites = sorted(donnees[variable_filtre].unique().tolist())
+            if len(modalites) > 300:
+                st.error("Cette variable possède plus de 300 modalités.")
+                return
+            modalites_filtre = st.multiselect(
+                "Modalités à conserver", modalites, default=modalites
+            )
+
+    options_preparation = dict(
+        donnees=donnees,
+        variables=variables_actives,
+        uniquement_retenues=uniquement_retenues,
+        dedoublonner=dedoublonner,
+        exclure_indeterminees=exclure_indeterminees,
+        inclure_manquantes=inclure_manquantes,
+        maximum_modalites=int(maximum_modalites),
+        variable_filtre=variable_filtre,
+        modalites_filtre=modalites_filtre,
+    )
+    try:
+        preparation_initiale = preparer_acm(**options_preparation)
+    except ValueError as erreur:
+        st.warning(str(erreur))
+        return
+
+    st.subheader("4. Vérifier et modifier les modalités de l'ACM")
+    st.caption(
+        "Les modalités exclues retirent les observations correspondantes "
+        "avant l'ACM. Les autres variables et le CSV original restent intacts. "
+        "La modification d'une exclusion relance automatiquement FactoMineR."
+    )
+    portee = {
+        "empreinte_sha256": hashlib.sha256(contenu).hexdigest(),
+        "variables_actives": variables_actives,
+        "filtres": {
+            "retenues": uniquement_retenues,
+            "dedoublonner": dedoublonner,
+            "exclure_indeterminees": exclure_indeterminees,
+            "inclure_manquantes": inclure_manquantes,
+            "maximum_modalites": int(maximum_modalites),
+            "variable_filtre": variable_filtre,
+            "modalites_filtre": sorted(modalites_filtre)
+            if modalites_filtre is not None else None,
+        },
+    }
+    identifiant_portee = hashlib.sha256(
+        json.dumps(portee, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("acm_portee") != identifiant_portee:
+        st.session_state["acm_portee"] = identifiant_portee
+        for indice in range(len(noms_variables)):
+            st.session_state.pop(f"acm_exclure_{indice}", None)
+        st.session_state["acm_exclusions_precedentes"] = (
+            identifiant_portee, ()
+        )
+
+    exclusions = {}
+    colonnes = st.columns(2)
+    for indice, nom in enumerate(variables_actives):
+        with colonnes[indice % 2]:
+            valeurs_possibles = sorted(
+                preparation_initiale.donnees[nom].unique().tolist()
+            )
+            exclusions[nom] = st.multiselect(
+                f"Supprimer des modalités — {nom}",
+                options=valeurs_possibles,
+                key=f"acm_exclure_{indice}",
+            )
+    if st.button(
+        "Rétablir toutes les modalités de l'ACM",
+        disabled=not any(exclusions.values()),
+    ):
+        for indice in range(len(variables_actives)):
+            st.session_state[f"acm_exclure_{indice}"] = []
+        st.rerun()
+
+    selection_exclusions = (
+        identifiant_portee,
+        tuple(
+            (nom, tuple(sorted(valeurs)))
+            for nom, valeurs in exclusions.items()
+        ),
+    )
+    recalcul_automatique = (
+        selection_exclusions
+        != st.session_state.get("acm_exclusions_precedentes")
+    )
+    st.session_state["acm_exclusions_precedentes"] = selection_exclusions
+    try:
+        preparation = preparer_acm(
+            **options_preparation, modalites_a_exclure=exclusions
+        )
+    except ValueError as erreur:
+        st.warning(str(erreur))
+        st.dataframe(
+            preparation_initiale.donnees.head(NOMBRE_LIGNES_APERCU),
+            use_container_width=True,
+        )
+        return
+
+    metriques = st.columns(3)
+    metriques[0].metric("Observations analysables", preparation.effectif_final)
+    metriques[1].metric("Variables actives", len(variables_actives))
+    metriques[2].metric(
+        "Modalités actives",
+        sum(preparation.donnees[nom].nunique() for nom in variables_actives),
+    )
+    tableau_effectifs = pd.concat(
+        [
+            pd.DataFrame({
+                "Variable": nom,
+                "Modalité": valeurs.index.tolist(),
+                "Effectif": valeurs.values.tolist(),
+            })
+            for nom in variables_actives
+            for valeurs in [preparation.donnees[nom].value_counts()]
+        ],
+        ignore_index=True,
+    )
+    st.dataframe(
+        tableau_effectifs, use_container_width=True, hide_index=True
+    )
+    with st.expander("Afficher les observations conservées", expanded=False):
+        st.dataframe(
+            preparation.donnees.head(NOMBRE_LIGNES_APERCU),
+            use_container_width=True, hide_index=True,
+        )
+    st.caption(
+        f"Import : {preparation.effectif_initial} ; "
+        f"après filtres : {preparation.effectif_apres_filtre} ; "
+        f"après dédoublonnage : {preparation.effectif_apres_dedoublonnage} ; "
+        f"avant exclusion des modalités : "
+        f"{preparation.effectif_avant_exclusion_modalites} ; "
+        f"observations conservées : {preparation.effectif_final}."
+    )
+
+    parametres = dict(
+        portee,
+        methode="ACM",
+        modalites_exclues=preparation.modalites_exclues,
+        effectif_initial=preparation.effectif_initial,
+        effectif_avant_exclusion_modalites=(
+            preparation.effectif_avant_exclusion_modalites
+        ),
+        effectif_analyse=preparation.effectif_final,
+    )
+    signature = hashlib.sha256(
+        json.dumps(parametres, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    lancement_manuel = st.button(
+        "Lancer l'ACM avec FactoMineR", type="primary"
+    )
+    if lancement_manuel or recalcul_automatique:
+        try:
+            with st.spinner(
+                "Recalcul automatique de l'ACM avec FactoMineR..."
+                if recalcul_automatique and not lancement_manuel
+                else "Calcul de l'ACM avec FactoMineR..."
+            ):
+                resultats = executer_moteur_acm(
+                    donnees=preparation.donnees,
+                    nom_source=nom_source,
+                    effectif_initial=preparation.effectif_initial,
+                    effectif_final=preparation.effectif_final,
+                    parametres=parametres,
+                )
+        except (RuntimeError, OSError) as erreur:
+            st.session_state.pop("dernier_resultat_acm", None)
+            st.session_state.pop("signature_resultat_acm", None)
+            st.error(str(erreur))
+        else:
+            st.session_state["dernier_resultat_acm"] = resultats
+            st.session_state["signature_resultat_acm"] = signature
+            st.success("ACM actualisée par FactoMineR. Résultats disponibles.")
+
+    if "dernier_resultat_acm" in st.session_state:
+        if st.session_state.get("signature_resultat_acm") == signature:
+            afficher_resultats(
+                st.session_state["dernier_resultat_acm"], methode="ACM"
+            )
+        else:
+            st.info(
+                "Les paramètres de l'ACM ont changé. Relancer l'analyse "
+                "pour actualiser les résultats."
+            )
+
 def construire_interface() -> None:
     """Présente les paramètres de l'analyse et déclenche le calcul sur demande."""
     st.title("Analyses des correspondances — FactoMineR")
