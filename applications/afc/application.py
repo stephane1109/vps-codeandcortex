@@ -107,6 +107,7 @@ def executer_moteur_r(
         attendus = {
             "00_rapport_afc.txt", "06_valeurs_propres_inerties.csv",
             "13_plan_factoriel.png", "16_resultats_statistiques.csv",
+            "18_significativite_modalites.csv",
         }
         manquants = sorted(attendus - fichiers.keys())
         if manquants:
@@ -152,8 +153,20 @@ def afficher_resultats(resultats: dict) -> None:
     with onglet_plan:
         st.image(fichiers["13_plan_factoriel.png"], use_container_width=True)
         st.caption(
-            "Les coordonnées, contributions et cos² doivent être examinés avant "
-            "d'interpréter les associations entre modalités."
+            "Sur un plan à deux axes, seules les modalités avec p ≤ 0,05 sont "
+            "affichées. La p-value est calculée par un test du Chi-deux comparant "
+            "chaque modalité aux autres modalités de la même variable "
+            "(Monte-Carlo si les effectifs attendus sont faibles). "
+            "Cette significativité porte sur l'association globale, "
+            "et non sur une coordonnée factorielle particulière."
+        )
+        st.caption(
+            "Les coordonnées, contributions et cos² de toutes les modalités "
+            "restent disponibles dans les tableaux CSV. Le fichier "
+            "18_significativite_modalites.csv contient les p-values brutes "
+            "et corrigées par Benjamini-Hochberg, pour contrôler les "
+            "comparaisons multiples. Sur un plan à un seul axe, "
+            "le filtrage n'est pas appliqué."
         )
     with onglet_inertie:
         st.image(fichiers["15_inerties.png"], use_container_width=True)
