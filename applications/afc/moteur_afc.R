@@ -57,10 +57,52 @@ resultat <- FactoMineR::CA(
 if (sum(resultat$eig[, 1L]) < 1e-12) {
   stop("L'AFC FactoMineR ne présente aucune inertie à représenter.")
 }
-# Utiliser le résumé natif de FactoMineR pour les résultats globaux.
-resume_factominer <- capture.output(
-  summary(resultat, nbelements = Inf, ncp = nombre_axes)
-)
+# Produire un rapport à partir des résultats natifs de FactoMineR.
+# Avec un seul axe, summary.CA() peut échouer : l'extraction d'une ligne
+# dans la matrice des valeurs propres provoque une perte de dimension.
+# Le résumé détaillé reste utilisé lorsqu'au moins deux axes existent.
+produire_resume_factominer <- function(resultat, nombre_axes) {
+  if (nombre_axes >= 2L) {
+    resume_standard <- tryCatch(
+      capture.output(
+        summary(resultat, nbelements = Inf, ncp = nombre_axes)
+      ),
+      error = function(erreur) NULL
+    )
+    if (!is.null(resume_standard) && length(resume_standard) > 0L) {
+      return(resume_standard)
+    }
+  }
+
+  # Le repli reprend directement les matrices de FactoMineR::CA().
+  # Aucun test supplémentaire ni valeur statistique n'est recalculé.
+  c(
+    "RÉSUMÉ DES RÉSULTATS DE FACTOMINER::CA()",
+    if (nombre_axes == 1L) {
+      "Un seul axe factoriel : restitution directe des résultats FactoMineR."
+    } else {
+      "Résumé standard indisponible : restitution des résultats FactoMineR."
+    },
+    "",
+    "Valeurs propres et pourcentages d'inertie",
+    capture.output(print(resultat$eig)),
+    "",
+    "Modalités en lignes : coordonnées",
+    capture.output(print(resultat$row$coord)),
+    "Modalités en lignes : contributions",
+    capture.output(print(resultat$row$contrib)),
+    "Modalités en lignes : cos²",
+    capture.output(print(resultat$row$cos2)),
+    "",
+    "Modalités en colonnes : coordonnées",
+    capture.output(print(resultat$col$coord)),
+    "Modalités en colonnes : contributions",
+    capture.output(print(resultat$col$contrib)),
+    "Modalités en colonnes : cos²",
+    capture.output(print(resultat$col$cos2))
+  )
+}
+resume_factominer <- produire_resume_factominer(resultat, nombre_axes)
 
 # Toutes les matrices sont exportées dans un CSV lisible avec Excel en français.
 exporter_matrice <- function(matrice, nom_fichier) {
