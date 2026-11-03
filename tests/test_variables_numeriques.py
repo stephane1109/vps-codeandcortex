@@ -265,6 +265,105 @@ class TestsVariablesNumeriques(unittest.TestCase):
             self.assertIn("*likes_classe_100_999", job.texte_a_exporter())
 
 
+    def test_pipeline_research_et_ecarte_video_hors_sujet_avant_lecture(self):
+        """Une vidéo ne portant que manifestation n'entre pas dans le corpus ET."""
+        from datetime import datetime, timezone
+        from collecte.researchapi import _fiche
+
+        date_video = int(datetime.now(timezone.utc).timestamp()) - 3600
+        hors_sujet = _fiche({
+            "id": "7703357015573187862",
+            "username": "drosamusolutionhome1",
+            "video_description": "Las personas conocen nuestra solución #manifestation",
+            "create_time": date_video, "hashtag_names": ["manifestation"],
+        }, None)
+        conforme = _fiche({
+            "id": "7703357015573187863",
+            "username": "exemple_lyceen",
+            "video_description": "Les lycéens manifestent pour leurs droits.",
+            "create_time": date_video,
+            "hashtag_names": ["manifestation", "lyceen"],
+            "view_count": 1200, "like_count": 120,
+            "comment_count": 5, "share_count": 2, "favorites_count": 3,
+        }, None)
+        appels = []
+
+        def recherche(compte, limite, rapport, **options):
+            appels.append(options)
+            self.assertIsNone(compte)
+            donnees = [hors_sujet, conforme]
+            rapport.update(
+                discovered_urls=[item["url"] for item in donnees],
+                metadonnees_api={item["id"]: item for item in donnees},
+                candidats_examines=2, pages_research=1,
+                navigation_publications="research_officielle",
+                discovery_stop="fin_des_periodes")
+            return list(rapport["discovered_urls"])
+
+        with tempfile.TemporaryDirectory() as dossier:
+            job = Job("e" * 64, StartRequest(
+                source_collecte="hashtags",
+                hashtag_moteur="research",
+                hashtags_saisis=["manifestation", "lyceen"],
+                operator="AND", rechercher_dans_texte=False,
+                variantes_accents=False, french_only=True,
+                collecter_commentaires=False,
+                collecter_follower_count=False,
+                collecter_is_verified=False,
+                inclure_texte_genere_ia=False,
+                research_client_key="CLE_TEST",
+                research_client_secret="SECRET_TEST",
+            ), Path(dossier))
+            navigateur = Mock(side_effect=AssertionError(
+                "Le parcours Research ne doit pas utiliser Chrome"))
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=recherche):
+                execute_job(job, driver_factory=navigateur)
+            navigateur.assert_not_called()
+            self.assertEqual(len(appels), 1)
+            self.assertEqual(appels[0]["hashtags"], ["manifestation", "lyceen"])
+            self.assertEqual(appels[0]["operateur"], "AND")
+            self.assertEqual([r["id"] for r in job.records], [conforme["id"]])
+            self.assertEqual([r["id"] for r in job.publications], [conforme["id"]])
+            self.assertEqual(job.processed, 1)
+            self.assertEqual(job.bilan_hashtags["manifestation"], 1)
+            self.assertEqual(job.bilan_hashtags["lyceen"], 1)
+            self.assertNotIn(hors_sujet["url"], job.texte_a_exporter())
+            self.assertNotIn(
+                hors_sujet["url"],
+                [r["url"] for r in job.snapshot()["apercu_engagement"]])
+            self.assertTrue(any(
+                entree.get("rapport", {}).get(
+                    "ecartes_combinaison_hashtags") == 1
+                for entree in job.journal))
+
+    def test_preselection_et_avec_recherche_dans_texte(self):
+        """La recherche textuelle reste disponible sans accepter les hors-sujet."""
+        from webapp import filtrer_decouverte_hashtags_research
+        from collecte.researchapi import _fiche
+
+        options = StartRequest(
+            source_collecte="hashtags", hashtag_moteur="research",
+            hashtags_saisis=["manifestation", "lyceen"],
+            operator="AND", rechercher_dans_texte=True,
+            research_client_key="CLE_TEST",
+            research_client_secret="SECRET_TEST")
+        a = _fiche({
+            "id": "7703357015573187862", "username": "drosamusolutionhome1",
+            "video_description": "Una empresa de soluciones #manifestation",
+            "hashtag_names": ["manifestation"]}, None)
+        b = _fiche({
+            "id": "7703357015573187863", "username": "autre_compte",
+            "video_description": "Les lycéens et les manifestations #manifestation",
+            "hashtag_names": ["manifestation"]}, None)
+        # La légende contient ici le mot lyceen au pluriel, qui n'est pas
+        # nécessairement équivalent au hashtag demandé. Le contrôle reste exact.
+        liens, exclus, absents = filtrer_decouverte_hashtags_research(
+            [a["url"], b["url"]], {a["id"]: a, b["id"]: b}, options)
+        self.assertEqual(liens, [])
+        self.assertEqual(exclus, 2)
+        self.assertEqual(absents, 0)
+
     def test_pipeline_research_sans_navigation_et_compteurs_absents(self):
         from collecte.researchapi import _fiche
         video = {
