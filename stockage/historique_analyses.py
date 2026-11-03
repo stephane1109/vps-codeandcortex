@@ -78,12 +78,14 @@ def enregistrer(job, owner_cookie):
 
     Les vidéos et les archives avec MP4 ne sont jamais dupliquées.
     """
-    if not IDENTIFIANT.fullmatch(str(job.id)) or not owner_cookie or getattr(job, "historique", False):
+    if not IDENTIFIANT.fullmatch(str(job.id)) or not owner_cookie or (getattr(job, "historique", False) and not getattr(job, "reprise", False)):
         return
     source = Path(job.directory).resolve()
     destination = chemin(job.racine, job.id)
     destination.mkdir(parents=True, exist_ok=True)
-    for dossier, dossiers, fichiers in os.walk(source):
+    # Une reprise travaille directement dans le dossier historique persistant.
+    # Ne recopier aucun fichier sur lui-même, mais actualiser le manifeste.
+    for dossier, dossiers, fichiers in (os.walk(source) if source != destination else []):
         dossiers[:] = [d for d in dossiers if d not in EXCLUS
                        and not d.startswith("desordre_sources_") and not (Path(dossier) / d).is_symlink()]
         for nom in fichiers:
