@@ -1,6 +1,16 @@
-# Application web AFC — FactoMineR
+# Application web AFC et ACM — FactoMineR
 
-Cette application Streamlit importe un fichier CSV puis calcule **une analyse factorielle des correspondances (AFC)** par la fonction **`FactoMineR::CA()`** dans R. Les données peuvent provenir de ScrapTikTok ou de tout autre tableau où une observation est représentée par une ligne.
+Cette application Streamlit importe un fichier CSV puis calcule une **analyse factorielle des correspondances (AFC)** avec `FactoMineR::CA()` ou une **analyse des correspondances multiples (ACM)** avec `FactoMineR::MCA()`. Les données peuvent provenir de ScrapTikTok ou de tout autre tableau où une observation est représentée par une ligne.
+
+## Deux méthodes complémentaires : AFC et ACM
+
+L'interface propose désormais **AFC** et **ACM**. L'AFC conserve le croisement de deux variables catégorielles et son tableau de contingence, avec suppression interactive des lignes et colonnes. Elle utilise exclusivement `FactoMineR::CA()` et `FactoMineR::descfreq()`.
+
+L'ACM permet de sélectionner **au moins trois variables catégorielles** simultanément, par exemple les classes de vues, les classes de likes, les types de médias et des modalités d'annotation. L'application conserve les filtres, le choix des valeurs manquantes, le dédoublonnage, la limite de cardinalité et une exclusion interactive des modalités de chaque variable. Son moteur statistique est `FactoMineR::MCA()`, avec `FactoMineR::dimdesc()` pour caractériser les axes 1 et 2 au seuil de p ≤ 0,05. Les observations associées aux modalités exclues sont retirées avant le calcul, sans modifier le CSV original.
+
+Dans les deux méthodes, le plan factoriel **complet est affiché par défaut**. La case **"Afficher uniquement les modalités significatives (p ≤ 0,05)"** active ou désactive un filtre d'affichage sans recalcul des coordonnées ou des inerties. Les deux versions du plan sont produites au format PNG et PDF et incluses dans l'archive ZIP. En AFC, le critère de `descfreq()` décrit des associations entre modalités des deux variables ; en ACM, celui de `dimdesc()` décrit les modalités caractéristiques de l'axe 1 ou de l'axe 2. Ces critères sont différents et ne doivent pas être assimilés.
+
+Chaque méthode possède ses propres exports de coordonnées, contributions, cos² et inerties en pourcentage et pourcentage cumulé. L'ACM exporte également les coordonnées des individus et la description significative des modalités pour les axes représentés. Les tests sont limités aux fonctions natives de FactoMineR.
 
 ## Fonctionnement
 
