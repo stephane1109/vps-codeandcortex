@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from traitement_csv import decrire_variables, generer_donnees_simulees, lire_csv, preparer_contingence
+from traitement_csv import decrire_variables, lire_csv, preparer_contingence
 
 
 DOSSIER_APPLICATION = Path(__file__).resolve().parent
@@ -36,7 +36,7 @@ def importer_donnees(contenu: bytes, separateur: str, encodage: str) -> pd.DataF
 
 
 def choisir_defaut(variables: list[str], nom_souhaite: str, position: int = 0) -> int:
-    """Choisit la variable de démonstration si elle figure dans le jeu de données."""
+    """Choisit la variable privilégiée si elle figure dans le jeu de données."""
     return variables.index(nom_souhaite) if nom_souhaite in variables else min(position, len(variables) - 1)
 
 
@@ -191,41 +191,18 @@ def construire_interface() -> None:
             "Séparateur", ["Automatique", "Point-virgule (;)", "Virgule (, )", "Tabulation", "Barre verticale (|)"],
         )
         encodage = st.selectbox("Encodage", ["Automatique", "UTF-8", "Windows-1252", "Latin-1"])
-        utiliser_exemple = st.checkbox("Utiliser l'échantillon de démonstration", value=False)
-        utiliser_simulation = st.checkbox("Utiliser des données simulées (test uniquement)", value=False)
-        if utiliser_simulation:
-            effectif_simule = st.number_input(
-                "Observations fictives", min_value=20, max_value=100000,
-                value=400, step=100,
-            )
-            graine_simulation = st.number_input(
-                "Graine de simulation", min_value=0, max_value=999999,
-                value=2026, step=1,
-            )
     with colonne_fichier:
         fichier = st.file_uploader("Fichier CSV", type=["csv", "txt"], accept_multiple_files=False)
         st.caption("Les identifiants sont lus comme du texte ; les résultats ne sont pas enregistrés en base.")
 
-    if utiliser_simulation:
-        contenu = f"SIMULATION_{effectif_simule}_{graine_simulation}".encode("utf-8")
-        nom_source = f"SIMULATION_{effectif_simule}_OBSERVATIONS"
-    elif fichier is not None:
-        contenu = fichier.getvalue()
-        nom_source = fichier.name
-    elif utiliser_exemple:
-        chemin_exemple = DOSSIER_APPLICATION / "engagement_exemple.csv"
-        contenu = chemin_exemple.read_bytes()
-        nom_source = chemin_exemple.name
-    else:
-        st.info("Importer un CSV ou activer l'échantillon de démonstration pour commencer.")
+    if fichier is None:
+        st.info("Importer un fichier CSV pour commencer l'analyse.")
         return
 
+    contenu = fichier.getvalue()
+    nom_source = fichier.name
     try:
-        if utiliser_simulation:
-            donnees = generer_donnees_simulees(int(effectif_simule), int(graine_simulation))
-            st.warning("Données simulées : ces résultats sont fictifs et ne peuvent pas étayer une hypothèse empirique.")
-        else:
-            donnees = importer_donnees(contenu, separateur, encodage)
+        donnees = importer_donnees(contenu, separateur, encodage)
     except (ValueError, UnicodeError) as erreur:
         st.error(str(erreur))
         return
