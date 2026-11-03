@@ -165,6 +165,59 @@ def lire_csv(
     return ajouter_type_media(donnees)
 
 
+def concatener_fichiers_csv(
+    fichiers: list[tuple[str, pd.DataFrame]],
+) -> pd.DataFrame:
+    """Concaténer des CSV compatibles en préservant toutes les observations.
+
+    Les colonnes sont alignées par nom, même lorsque leur ordre diffère.
+    Aucun dédoublonnage ni recodage statistique n'est réalisé à l'import.
+    """
+    if not fichiers:
+        raise ValueError("Aucun fichier CSV à réunir.")
+
+    nom_reference, premier_tableau = fichiers[0]
+    colonnes_reference = list(premier_tableau.columns)
+    if not colonnes_reference or len(set(colonnes_reference)) != len(
+        colonnes_reference
+    ):
+        raise ValueError(
+            f"Le fichier '{nom_reference}' possède des colonnes absentes "
+            "ou des noms de colonnes répétés."
+        )
+    colonnes_attendues = set(colonnes_reference)
+    morceaux = []
+
+    for nom_fichier, tableau in fichiers:
+        if tableau.empty:
+            raise ValueError(
+                f"Le fichier '{nom_fichier}' ne contient aucune observation."
+            )
+        if tableau.columns.duplicated().any():
+            raise ValueError(
+                f"Le fichier '{nom_fichier}' possède des noms de colonnes répétés."
+            )
+        colonnes_observees = set(tableau.columns)
+        manquantes = sorted(colonnes_attendues - colonnes_observees)
+        supplementaires = sorted(colonnes_observees - colonnes_attendues)
+        if manquantes or supplementaires:
+            details = []
+            if manquantes:
+                details.append("colonnes manquantes : " + ", ".join(manquantes))
+            if supplementaires:
+                details.append(
+                    "colonnes supplémentaires : " + ", ".join(supplementaires)
+                )
+            raise ValueError(
+                f"Structure incompatible dans '{nom_fichier}' par rapport "
+                f"à '{nom_reference}' : " + " ; ".join(details) + "."
+            )
+        # Réalignement explicite par nom pour éviter tout décalage de valeurs.
+        morceaux.append(tableau.loc[:, colonnes_reference].copy())
+
+    return pd.concat(morceaux, axis=0, ignore_index=True)
+
+
 def ajouter_type_media(donnees: pd.DataFrame) -> pd.DataFrame:
     """Construit une variable catégorielle à partir des indicateurs médias disponibles."""
     if "type_media" in donnees.columns:
