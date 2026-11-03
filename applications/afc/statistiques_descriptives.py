@@ -189,7 +189,7 @@ def produire_histogramme(
     bornes_originales = np.expm1(bornes) if logarithmique else bornes
     return pd.DataFrame({
         "Classe": [
-            f"{bornes_originales[i]:,.3g} – {bornes_originales[i+1]:,.3g}"
+            f"{i + 1:02d} : {bornes_originales[i]:,.3g} – {bornes_originales[i+1]:,.3g}"
             for i in range(len(effectifs))
         ],
         "Publications": effectifs.astype(int),
