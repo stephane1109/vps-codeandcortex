@@ -981,6 +981,10 @@ class Job:
                         "version_collecteur": entree.get("rapport", {}).get("version_collecteur"),
                         "presse_moteur": entree.get("rapport", {}).get("presse_moteur"),
                         "message": entree.get("message", "Recherche terminée."),
+                        "ecartes_combinaison_hashtags": entree.get("rapport", {}).get(
+                            "ecartes_combinaison_hashtags", 0),
+                        "ecartes_metadonnees_absentes": entree.get("rapport", {}).get(
+                            "ecartes_metadonnees_absentes", 0),
                         "retenues_par_compte": entree.get("rapport", {}).get("retenues_par_compte", {}),
                         "navigation_videos": entree.get("rapport", {}).get("navigation_videos", {}),
                         "navigation_videos_observee": entree.get("rapport", {}).get("navigation_videos_observee", {}),
