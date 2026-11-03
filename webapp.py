@@ -44,6 +44,15 @@ COOKIE = "scraptiktok_session"
 HISTORIQUE_COOKIE = "scraptiktok_historique"
 
 
+def session_terminee_inactive(job, maintenant, retention):
+    """Ne supprimer qu'une session terminée, non consultée depuis le délai."""
+    return (
+        not job.busy and not job.video_busy
+        and job.finished is not None
+        and maintenant - max(job.finished, job.last_seen) > retention
+    )
+
+
 def nom_fichier_telechargement(nom_collecte, type_export, extension):
     """Nommer chaque export avec la collecte et son contenu, sans chemin local."""
     def nettoyer(texte, maximum):
@@ -2830,9 +2839,7 @@ class Manager:
                         job.demander_arret('inactivite')
                 if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
                     job.video_stop.set()
-                if (not job.busy and not job.video_busy
-                        and job.finished is not None
-                        and now - max(job.finished, job.last_seen) > self.retention):
+                if session_terminee_inactive(job, now, self.retention):
                     # Une collecte terminée et encore consultée reste ouverte.
                     # Le nettoyage ne concerne que les sessions réellement inactives.
                     self.jobs.pop(job.id)
