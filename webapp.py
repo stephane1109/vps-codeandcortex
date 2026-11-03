@@ -711,6 +711,7 @@ class Job:
         self.reprise = bool(reprise)
         self.medias_reprise = []
         self.reprise_decalage = 0
+        self.publications_avant_reprise = 0
         self.settings = settings
         self.racine = data_dir
         if archive_directory is not None:
