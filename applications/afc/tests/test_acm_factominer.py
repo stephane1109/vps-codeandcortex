@@ -424,5 +424,81 @@ class TestsACM(unittest.TestCase):
 
 
 
+    @unittest.skipUnless(
+        factominer_disponible(),
+        "Rscript avec FactoMineR non disponible dans cet environnement",
+    )
+    def test_filtrage_burt_sur_900_observations(self):
+        """Écarter le faux plan vide sur un échantillon corrélé de 900 lignes."""
+        with tempfile.TemporaryDirectory(prefix="acm_900_") as dossier:
+            racine = Path(dossier)
+            entree = racine / "donnees.tsv"
+            sortie = racine / "resultats"
+            sortie.mkdir()
+            with entree.open("w", encoding="utf-8", newline="") as fichier:
+                ecrivain = csv.writer(fichier, delimiter="\t")
+                ecrivain.writerow([
+                    "vues_classe", "likes_classe", "type_media"
+                ])
+                for i in range(900):
+                    profil = i % 3
+                    ecrivain.writerow([
+                        ["faibles", "moyennes", "fortes"][profil],
+                        ["0-9", "10-99", "100-999"][
+                            (profil + (i % 17 == 0)) % 3
+                        ],
+                        ["presse", "autres", "local"][
+                            (profil + (i % 23 == 0)) % 3
+                        ],
+                    ])
+            execution = subprocess.run(
+                [
+                    shutil.which("Rscript"), str(MOTEUR_ACM),
+                    str(entree), str(sortie), "Corpus 900", "900",
+                    "900", "Burt",
+                ],
+                capture_output=True, text=True, check=False, timeout=120,
+            )
+            self.assertEqual(
+                execution.returncode, 0,
+                execution.stderr or execution.stdout,
+            )
+            with (
+                sortie / "significativite_modalites_factominer.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                lignes = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(len(lignes), 9)
+            self.assertEqual(
+                sum(ligne["significative_005"] == "TRUE" for ligne in lignes),
+                sum(
+                    float(ligne["p_value_min"].replace(",", ".")) <= 0.05
+                    for ligne in lignes
+                ),
+            )
+            self.assertGreater(
+                sum(ligne["significative_005"] == "TRUE" for ligne in lignes),
+                0,
+                "Un corpus corrélé de 900 observations ne doit pas produire "
+                "un faux plan vide par défaut de correspondance des noms.",
+            )
+            for ligne in lignes:
+                self.assertTrue(ligne["p_value_axe_1"])
+                self.assertTrue(ligne["v_test_axe_1"])
+            with (
+                sortie / "20_diagnostic_filtre_pvalue.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                diagnostic = dict(
+                    (ligne["indicateur"], ligne["valeur"])
+                    for ligne in csv.DictReader(fichier, delimiter=";")
+                )
+            self.assertEqual(diagnostic["Observations analysées"], "900")
+            self.assertEqual(
+                diagnostic["Modalités avec p-value valide"], "9"
+            )
+            self.assertTrue(
+                (sortie / "13_plan_factoriel_significatif.png").is_file()
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
