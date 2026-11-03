@@ -14,7 +14,7 @@ La table de contingence s'affiche **avant** le lancement. La préparation contr�
 
 Sur le **plan à deux dimensions**, seules les modalités présentant au moins une association significative avec l'autre variable (p ≤ **0,05**) sont affichées. L'identification des associations repose exclusivement sur `FactoMineR::descfreq()`, qui effectue le test hypergéométrique natif de FactoMineR sur les lignes, puis sur les colonnes du tableau de contingence. Aucune correction Benjamini-Hochberg, aucun test du Chi-deux par modalité ni autre méthode ajoutée ne participe à ce filtre. Le fichier `significativite_modalites_factominer.csv` conserve toutes les modalités, la p-value minimale parmi leurs associations significatives, les modalités correspondantes et la décision d'affichage. Les calculs factoriels, coordonnées, contributions, cos² et autres exports restent établis sur **le tableau complet**, y compris pour les modalités masquées. Le graphique à un seul axe reste inchangé.
 
-La p-value de `descfreq()` caractérise une **association entre modalités du tableau**, et non la significativité d'une coordonnée sur l'un des axes. La sélection est donc descriptive et exploratoire. L'application ne calcule plus de test global indépendant ni d'estimation Monte-Carlo. Le résumé natif de FactoMineR reste accessible dans le rapport méthodologique.
+La p-value de `descfreq()` caractérise une **association entre modalités du tableau**, et non la significativité d'une coordonnée sur l'un des axes. La sélection est donc descriptive et exploratoire. L'application n'effectue aucun test statistique supplémentaire : le résumé natif de FactoMineR reste accessible dans le rapport méthodologique.
 
 ## Déploiement sur VPS avec Docker Compose
 
@@ -76,4 +76,4 @@ L'AFC décrit des associations ; elle ne démontre pas de causalité. Les classe
 python -m unittest discover -s tests -v
 ```
 
-Ces tests portent sur l'importation et la préparation Python. L'exécution du moteur R dépend de l'installation effective de FactoMineR et du déploiement Docker.
+Les tests vérifient l'importation et la préparation Python, ainsi que l'absence de calculs statistiques additionnels. Les tests d'intégration du moteur R s'exécutent lorsque R et FactoMineR sont installés ; le déploiement Docker fournit ces dépendances.
