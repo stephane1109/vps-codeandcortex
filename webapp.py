@@ -2583,6 +2583,11 @@ class Manager:
                 credentials[cle] = valeur.get_secret_value()
         try:
             settings = StartRequest.model_validate({**parametres, **credentials})
+        except ValueError:
+            # Ne jamais inclure les secrets envoyés dans une erreur de validation.
+            raise HTTPException(422,
+                "Paramètres historiques invalides ou identifiants Research manquants.") from None
+        try:
             selection, _ = preparer_reprise_medias(
                 settings.sources, journal["evenements"], payload.medias,
                 source_en_cours=manifeste.get("source_en_cours_id"))
@@ -2618,7 +2623,7 @@ class Manager:
         ligne, dossier, manifeste = recupere
         with self.lock:
             job = self.jobs.get(identifiant)
-            if job is not None and job.owner == owner and not job.historique:
+            if job is not None and job.owner == owner and (not job.historique or job.busy or job.reprise):
                 return job
             params = StartRequest.model_validate(manifeste["parametres"])
             job = Job(owner, params, self.data_dir, identifiant=identifiant,
