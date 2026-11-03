@@ -364,6 +364,138 @@ class TestsVariablesNumeriques(unittest.TestCase):
         self.assertEqual(exclus, 2)
         self.assertEqual(absents, 0)
 
+    def test_research_paginer_restitue_les_videos_page_par_page(self):
+        """Les pages successives sont accessibles pendant la recherche Research."""
+        from datetime import date
+        from collecte.researchapi import collecter_videos_presse_research
+
+        identifiants = ("7703357015573187862", "7703357015573187863")
+        corps_envoyes = []
+        suivis = []
+        bilan = {}
+
+        def requete_simulee(url, *, data, headers):
+            corps = json.loads(data.decode("utf-8"))
+            corps_envoyes.append(corps)
+            indice = len(corps_envoyes) - 1
+            return {"data": {
+                "videos": [{
+                    "id": identifiants[indice],
+                    "username": "exemple_lyceen",
+                    "video_description": "Manifestation des lycéens à Paris",
+                    "hashtag_names": ["manifestation", "lyceen"],
+                    "create_time": 1793534400,
+                }],
+                "has_more": indice == 0,
+                "cursor": 100 * (indice + 1),
+                "search_id": "recherche_test",
+            }}
+
+        def suivre(nombre):
+            suivis.append((
+                nombre, len(bilan["discovered_urls"]),
+                len(bilan["metadonnees_api"]),
+                list(bilan["liens_page_research"]),
+            ))
+
+        liens = collecter_videos_presse_research(
+            None, None, bilan, debut="2026-11-01", fin="2026-11-02",
+            hashtags=["manifestation", "lyceen"], operateur="AND",
+            jeton="JETON_TEST", requete=requete_simulee,
+            pause=lambda _: None, aujourd_hui=date(2026, 11, 3),
+            progress=suivre)
+        self.assertEqual(len(corps_envoyes), 2)
+        self.assertTrue(all(
+            len(corps["query"]["and"]) == 2 for corps in corps_envoyes))
+        self.assertEqual([entree[0] for entree in suivis], [1, 2])
+        self.assertEqual([entree[1] for entree in suivis], [1, 2])
+        self.assertEqual([entree[2] for entree in suivis], [1, 2])
+        self.assertEqual([len(entree[3]) for entree in suivis], [1, 1])
+        self.assertEqual(len(liens), 2)
+        self.assertEqual(bilan["pages_research"], 2)
+        self.assertEqual(bilan["requetes_tentees"], 2)
+
+    def test_textes_research_enregistres_avant_la_fin_des_pages(self):
+        """Le TXT et les compteurs avancent avant la dernière page TikTok."""
+        from datetime import datetime, timezone
+        from collecte.researchapi import _fiche
+
+        date_video = int(datetime.now(timezone.utc).timestamp()) - 3600
+        fiches = [
+            _fiche({
+                "id": identifiant, "username": "exemple_lyceen",
+                "video_description": description,
+                "create_time": date_video,
+                "hashtag_names": ["manifestation", "lyceen"],
+                "view_count": 1000, "like_count": 10,
+                "comment_count": 1, "share_count": 1,
+                "favorites_count": 1,
+            }, None)
+            for identifiant, description in (
+                ("7703357015573187862", "Les lycéens manifestent à Paris."),
+                ("7703357015573187863", "Une manifestation de lycéens en France."))
+        ]
+        suivis = []
+
+        with tempfile.TemporaryDirectory() as dossier:
+            job = Job("p" * 64, StartRequest(
+                source_collecte="hashtags", hashtag_moteur="research",
+                hashtags_saisis=["manifestation", "lyceen"],
+                operator="AND", rechercher_dans_texte=False,
+                french_only=False, collecter_commentaires=False,
+                collecter_follower_count=False, collecter_is_verified=False,
+                inclure_texte_genere_ia=False,
+                research_client_key="CLE_TEST",
+                research_client_secret="SECRET_TEST",
+            ), Path(dossier))
+
+            def recherche(compte, limite, rapport, **options):
+                rapport.update(
+                    discovered_urls=[], metadonnees_api={},
+                    candidats_examines=0, pages_research=0,
+                    requetes_tentees=0, ecartes_hashtags_api=0,
+                    liens_page_research=[], collecte_partielle=False,
+                    discovery_stop="fin_des_periodes")
+                for i, fiche in enumerate(fiches, 1):
+                    rapport["metadonnees_api"][fiche["id"]] = fiche
+                    rapport["discovered_urls"].append(fiche["url"])
+                    rapport["liens_page_research"] = [fiche["url"]]
+                    rapport["candidats_examines"] = i
+                    rapport["requetes_tentees"] = i
+                    rapport["pages_research"] = i
+                    options["progress"](i)
+                    suivis.append({
+                        "page": i,
+                        "traites": job.processed,
+                        "textes": len(job.records),
+                        "txt_present": job.path.exists(),
+                    })
+                return list(rapport["discovered_urls"])
+
+            navigateur = Mock(side_effect=AssertionError(
+                "Aucun navigateur ne doit être lancé en Research"))
+            quota = {"appels_enregistres": 2,
+                     "plafond_local": 1000, "reste_local": 998}
+            with patch("collecte.presse_research.collecter_videos_presse_research",
+                       side_effect=recherche):
+                with patch("stockage.collectes_research.etat_quota",
+                           return_value=quota):
+                    execute_job(job, driver_factory=navigateur)
+
+            navigateur.assert_not_called()
+            self.assertEqual(
+                [(s["page"], s["traites"], s["textes"]) for s in suivis],
+                [(1, 1, 1), (2, 2, 2)])
+            self.assertTrue(all(s["txt_present"] for s in suivis))
+            self.assertEqual(job.requetes_research_lot, 2)
+            self.assertEqual(job.candidats_research_lot, 2)
+            self.assertEqual(job.snapshot()["quota_research_local"], quota)
+            self.assertEqual(len(job.records), 2)
+            self.assertEqual(len(job.publications), 2)
+            contenu = job.path.read_text("utf-8")
+            self.assertIn(fiches[0]["description"], contenu)
+            self.assertIn(fiches[1]["description"], contenu)
+
     def test_pipeline_research_sans_navigation_et_compteurs_absents(self):
         from collecte.researchapi import _fiche
         video = {
