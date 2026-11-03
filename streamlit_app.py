@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from interface.client import appeler_api
 from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, normaliser_liste_hashtags
-from collecte.presse import cle_tri_media
+from collecte.presse import cle_tri_media, ordre_affichage_medias
 from collecte.suivi_sources import (
     etablir_bilan_medias, medias_a_reprendre, exporter_bilan_medias_csv,
     importer_bilan_medias_csv,
@@ -374,13 +374,14 @@ try:
     medias = {m["id"]:m for m in api("/api/presse")["medias"]}
 except RuntimeError as erreur:
     st.error(str(erreur)); st.stop()
+ordre_medias_visibles = ordre_affichage_medias(medias)
 def cocher_uniquement_medias(identifiants):
     """Sélectionner uniquement les médias à reprendre, sans maintenir les anciens cochages."""
     selection = set(identifiants).intersection(medias)
-    for identifiant in medias:
+    for identifiant in ordre_medias_visibles:
         st.session_state["media_" + identifiant] = identifiant in selection
     st.session_state["medias"] = [
-        identifiant for identifiant in medias if identifiant in selection
+        identifiant for identifiant in ordre_medias_visibles if identifiant in selection
     ]
 
 
@@ -489,15 +490,15 @@ with onglet_collecte:
         )
 
         def memoriser_medias():
-            """Maintenir la sélection dans l'ordre de l'inventaire."""
+            """Maintenir la sélection dans l'ordre visible des cases à cocher."""
             st.session_state["medias"] = [
-                identifiant for identifiant in medias
+                identifiant for identifiant in ordre_medias_visibles
                 if st.session_state.get("media_" + identifiant, False)
             ]
 
         def cocher_tous_les_medias():
             """Conserver le comportement historique de sélection globale."""
-            for identifiant in medias:
+            for identifiant in ordre_medias_visibles:
                 st.session_state["media_" + identifiant] = True
             memoriser_medias()
 
@@ -642,7 +643,7 @@ with onglet_collecte:
                                         on_change=memoriser_medias,
                                     )
         selection = [
-            identifiant for identifiant in medias
+            identifiant for identifiant in ordre_medias_visibles
             if st.session_state.get("media_" + identifiant, False)
         ]
         st.session_state["medias"] = selection
