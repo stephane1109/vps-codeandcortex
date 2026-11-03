@@ -476,6 +476,46 @@ def hashtags_correspondants_presse(description, settings, hashtags_observes=None
     ]
 
 
+def hashtags_correspondants_publication(description, settings, hashtags_observes=None):
+    """Confronter les hashtags recherchés aux métadonnées puis à la légende.
+
+    La Research API fournit les hashtags dans un champ distinct du texte.
+    Le moteur Presse exploite déjà ce champ : le mode Hashtags doit lui aussi
+    conserver les légendes correspondantes même si elles ne répètent pas le #tag.
+    L'option de recherche dans le texte reste facultative et additive.
+    """
+    observations = (
+        {tag.lstrip("#").casefold() for tag in hashtags_observes
+         if isinstance(tag, str)}
+        if isinstance(hashtags_observes, (list, tuple)) else set()
+    )
+    observations_normalisees = (
+        {normaliser_terme_texte(tag) for tag in observations}
+        if settings.variantes_accents else set()
+    )
+    correspondants = []
+    for hashtag in settings.hashtags:
+        cle = hashtag.casefold()
+        trouve_api = (
+            cle in observations
+            or (settings.variantes_accents
+                and normaliser_terme_texte(cle) in observations_normalisees)
+        )
+        # Sans métadonnées, conserver le filtrage historique de la légende.
+        # Avec métadonnées, les mots du texte ne s'ajoutent que si l'option
+        # « Rechercher aussi dans le texte » a été cochée.
+        trouve_texte = (
+            (not observations or settings.rechercher_dans_texte)
+            and correspondance_hashtag(
+                description, hashtag,
+                rechercher_dans_texte=settings.rechercher_dans_texte,
+                variantes_accents=settings.variantes_accents)
+        )
+        if trouve_api or trouve_texte:
+            correspondants.append(hashtag)
+    return correspondants
+
+
 def matches_hashtags(description, settings, *, hashtags_observes=None):
     if settings.source_collecte == "presse":
         if not settings.croiser_hashtag_presse:
@@ -484,17 +524,12 @@ def matches_hashtags(description, settings, *, hashtags_observes=None):
             description, settings, hashtags_observes)
         return (len(concordances) == len(settings.hashtags_presse)
                 if settings.operator_presse == "AND" else bool(concordances))
-    resultats = [
-        correspondance_hashtag(description, tag,
-            rechercher_dans_texte=settings.rechercher_dans_texte,
-            variantes_accents=settings.variantes_accents)
-        for tag in settings.hashtags
-    ]
-
-    if not resultats:
+    correspondants = hashtags_correspondants_publication(
+        description, settings, hashtags_observes)
+    if not settings.hashtags:
         return False
-
-    return all(resultats) if settings.operator == "AND" else any(resultats)
+    return (len(correspondants) == len(settings.hashtags)
+            if settings.operator == "AND" else bool(correspondants))
 
 
 class CodageViolence(BaseModel):
@@ -1759,8 +1794,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     record.update(indicateurs_numeriques(record))
                     if job.settings.source_collecte != "presse":
                         # Requête par hashtags ou profils : mémoriser les
-                        # critères de collecte, et non ceux présents dans la vidéo.
+                        # critères de collecte, et les correspondances réelles
+                        # issues des métadonnées API ou du texte de la légende.
                         record["hashtags_recherches"] = list(job.settings.hashtags)
+                        record["hashtags_correspondants"] = (
+                            hashtags_correspondants_publication(
+                                record.get("description", ""), job.settings,
+                                record.get("hashtags")))
                     if job.settings.source_collecte == "presse":
                         # Conserver le filtre demandé et les hashtags réellement rencontrés.
                         recherches = (job.settings.hashtags_presse
@@ -1832,13 +1872,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             # Compter sur la même légende et dans la même période que le filtre.
                             with job.lock:
                                 for hashtag in job.bilan_hashtags:
+                                    # Un même critère sert au filtrage et au bilan,
+                                    # pour éviter un texte retenu mais non comptabilisé.
                                     correspondance = (
-                                        hashtag in record.get("hashtags_correspondants", [])
-                                        if job.settings.source_collecte == "presse" else
-                                        correspondance_hashtag(
-                                            record["description"], hashtag,
-                                            rechercher_dans_texte=job.settings.rechercher_dans_texte,
-                                            variantes_accents=job.settings.variantes_accents))
+                                        hashtag in record.get("hashtags_correspondants", []))
                                     if correspondance:
                                         job.bilan_hashtags[hashtag] += 1
                                 if matches:
