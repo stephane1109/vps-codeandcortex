@@ -54,6 +54,14 @@ class TestsFinCollecteSansReinitialisation(unittest.TestCase):
         session.busy = True
         self.assertFalse(session_terminee_inactive(session, 300.0, 50.0))
 
+    def test_quota_local_par_defaut_aligne_sur_1000(self):
+        """Le compteur local ne doit pas bloquer implicitement à 900."""
+        code = (Path(__file__).resolve().parents[1] /
+                "stockage" / "collectes_research.py").read_text(
+                    encoding="utf-8")
+        self.assertIn('os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "1000")', code)
+        self.assertNotIn('os.getenv("RESEARCH_QUOTA_LOCAL_JOUR", "900")', code)
+
     def test_finalisation_n_execute_plus_de_rechargement_global(self):
         """Le passage à terminé doit afficher les résultats sans st.rerun()."""
         interface = (Path(__file__).resolve().parents[1] /
