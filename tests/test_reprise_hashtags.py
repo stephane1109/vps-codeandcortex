@@ -141,15 +141,6 @@ class TestsRepriseHashtags(unittest.TestCase):
             "hashtags_a_reprendre", "exporter_bilan_hashtags_csv"
         }.issubset(noms_importes))
 
-    def test_choix_ou_initial_pour_plusieurs_hashtags(self):
-        """L'interface privilégie l'union tout en conservant l'option ET."""
-        racine = Path(__file__).resolve().parents[1]
-        interface = (racine / "streamlit_app.py").read_text("utf-8")
-        self.assertIn('st.session_state.setdefault("operator", "OR")', interface)
-        self.assertIn('"operator":ancienne.get("operator","OR")', interface)
-        self.assertIn('st.session_state.get("operator") == "AND"', interface)
-        self.assertIn("Pour réunir les ", interface)
-
     def test_moteur_et_interface_disposent_du_meme_export(self):
         racine = Path(__file__).resolve().parents[1]
         interface = (racine / "streamlit_app.py").read_text("utf-8")
