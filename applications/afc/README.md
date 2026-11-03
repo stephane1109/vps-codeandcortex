@@ -54,6 +54,12 @@ Les valeurs propres du tableau de Burt sont les carrés des valeurs propres du T
 
 Les plans complet et filtré restent disponibles en PNG et PDF. Le filtre à p ≤ 0,05 repose sur `FactoMineR::dimdesc()` et conserve son statut descriptif, quel que soit le mode de calcul. Les tests d'intégration sont exécutés lorsqu'un environnement R avec FactoMineR est présent.
 
+## Compatibilité graphique de l'ACM sous Docker
+
+Le moteur ACM produit des titres courts dans les graphiques : la méthode (TDC ou Burt) et le nombre de variables actives sont affichés, tandis que la liste intégrale des variables reste conservée dans le rapport méthodologique et les fichiers CSV. Les libellés accentués sont translittérés uniquement lors du dessin des graphiques afin de prévenir les avertissements `mbcsToSbcs` dans les environnements R sans locale graphique Unicode complète. Les noms des variables et des modalités sont conservés sans modification dans les résultats exportés.
+
+Le Dockerfile définit `LANG=C.UTF-8` et `LC_ALL=C.UTF-8`. **Reconstruire l'image dans Coolify** est nécessaire pour appliquer la nouvelle configuration. Si un calcul R échoue encore, l'interface met désormais en avant le message `Error in ...` plutôt que de tronquer le diagnostic sur les avertissements graphiques initiaux. Les tests incluent un scénario ACM de Burt à 11 variables sous `LC_ALL=C`.
+
 ## Déploiement sur VPS avec Docker Compose
 
 À la racine du projet :
