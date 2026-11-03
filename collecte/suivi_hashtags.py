@@ -22,6 +22,12 @@ def variantes_par_hashtag(hashtags, avec_accents=False):
             if cle not in deja_vus:
                 variantes.append(variante)
                 deja_vus.add(cle)
+        if not variantes:
+            # Deux hashtags distincts peuvent partager toutes leurs graphies
+            # accentuées. Réutiliser la source déjà demandée dans le bilan au
+            # lieu de considérer abusivement le second comme terminé.
+            variantes = [variantes_hashtag(
+                hashtag, avec_accents=avec_accents)[0]]
         resultats[hashtag] = variantes
     return resultats
 
