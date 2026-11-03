@@ -187,6 +187,16 @@ class TestsACM(unittest.TestCase):
                 encoding="utf-8"
             )
             self.assertIn("FactoMineR::dimdesc", rapport)
+            with (
+                sorties / "significativite_modalites_factominer.csv"
+            ).open(encoding="utf-8", newline="") as fichier:
+                modalites = list(csv.DictReader(fichier, delimiter=";"))
+            self.assertEqual(len(modalites), 9)
+            self.assertTrue(
+                any(m["significative_005"] == "TRUE" for m in modalites),
+                "Le filtre ACM doit reconnaître les modalités associées "
+                "aux axes avec FactoMineR::dimdesc.",
+            )
 
 
 if __name__ == "__main__":
