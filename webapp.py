@@ -3531,6 +3531,15 @@ def create_app(manager=None):
         return {"analyses":lister(manager.data_dir, owner_historique(request)),
                 "retention_jours":retention_jours()}
 
+    @app.post("/api/historique/{identifiant}/reprendre", status_code=202)
+    def reprendre_collecte_existante(
+            identifiant: str, payload: ReprendreCollectePayload, request: Request):
+        """Reprendre exclusivement les médias manquants dans le même corpus PostgreSQL."""
+        exiger_ticket(request)
+        travail = manager.reprendre_historique(
+            owner(request), identifiant, owner_historique(request), payload)
+        return travail.snapshot()
+
     @app.post("/api/historique/{identifiant}/ouvrir")
     def ouvrir_historique(identifiant: str, request: Request):
         exiger_ticket(request)
