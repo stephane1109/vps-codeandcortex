@@ -756,6 +756,10 @@ def construire_interface() -> None:
         st.session_state["afc_selection_exclusions_precedente"] = (
             identifiant_portee, (), ()
         )
+    # Streamlit peut nettoyer les clés des widgets AFC lorsque le mode ACM
+    # est sélectionné : conserver un retour à l'AFC sans erreur de session.
+    st.session_state.setdefault("afc_lignes_exclues", [])
+    st.session_state.setdefault("afc_colonnes_exclues", [])
 
     st.caption(
         "Supprimez une ou plusieurs modalités en lignes ou en colonnes, "
