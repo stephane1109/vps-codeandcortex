@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from traitement_csv import lire_csv, preparer_contingence, preparer_tableau_inerties
+from traitement_csv import (
+    concatener_fichiers_csv, lire_csv, preparer_contingence,
+    preparer_tableau_inerties,
+)
 
 
 BASE = Path(__file__).resolve().parent.parent
@@ -143,13 +146,97 @@ class TestTraitementCSV(unittest.TestCase):
         """L'interface doit exiger un CSV et ignorer les modes de démonstration."""
         interface = (BASE / "application.py").read_text(encoding="utf-8")
         traitement = (BASE / "traitement_csv.py").read_text(encoding="utf-8")
-        self.assertIn('if fichier is None:', interface)
-        self.assertIn('donnees = importer_donnees(contenu, separateur, encodage)', interface)
+        self.assertIn('if not fichiers:', interface)
+        self.assertIn("accept_multiple_files=True", interface)
+        self.assertIn('tableau_source = importer_donnees(', interface)
+        self.assertIn('donnees = concatener_fichiers_csv(tableaux_sources)', interface)
         self.assertNotIn("Utiliser l'échantillon de démonstration", interface)
         self.assertNotIn("Utiliser des données simulées (test uniquement)", interface)
         self.assertNotIn("generer_donnees_simulees", traitement)
         self.assertIn('preparer_contingence(', interface)
         self.assertIn('afficher_resultats(', interface)
+
+    def test_fusion_csv_en_conservant_les_lignes_et_identifiants(self):
+        """Les effectifs sont additionnés sans supprimer les doublons."""
+        premier = lire_csv(
+            b"publication_id;groupe;classe\n001;A;X\n002;B;Y\n"
+        )
+        second = lire_csv(
+            b"publication_id;groupe;classe\n001;B;Y\n003;A;X\n"
+        )
+        copie_premier = premier.copy(deep=True)
+        fusion = concatener_fichiers_csv([
+            ("premier.csv", premier), ("second.csv", second)
+        ])
+        self.assertEqual(len(fusion), 4)
+        self.assertEqual(
+            fusion["publication_id"].tolist(), ["001", "002", "001", "003"]
+        )
+        self.assertEqual(fusion["groupe"].tolist(), ["A", "B", "B", "A"])
+        self.assertEqual(list(fusion.columns), list(premier.columns))
+        pd.testing.assert_frame_equal(premier, copie_premier)
+        resultat_afc = preparer_contingence(
+            fusion, "groupe", "classe", dedoublonner=False
+        )
+        self.assertEqual(resultat_afc.effectif_initial, 4)
+        self.assertEqual(resultat_afc.effectif_final, 4)
+
+    def test_fusion_alignement_par_nom_si_ordre_change(self):
+        """Réordonner les colonnes sans décaler les réponses."""
+        premier = lire_csv(b"identifiant;groupe;classe\n001;A;X\n")
+        second = lire_csv(b"classe;identifiant;groupe\nY;002;B\n")
+        fusion = concatener_fichiers_csv([
+            ("a.csv", premier), ("b.csv", second)
+        ])
+        self.assertEqual(
+            list(fusion.columns), ["identifiant", "groupe", "classe"]
+        )
+        self.assertEqual(fusion.iloc[1].to_dict(), {
+            "identifiant": "002", "groupe": "B", "classe": "Y"
+        })
+
+    def test_fusion_refuse_structures_incompatibles(self):
+        """Un fichier à colonnes différentes arrête la fusion."""
+        premier = lire_csv(b"identifiant;groupe;classe\n001;A;X\n")
+        second = lire_csv(b"identifiant;groupe;autre\n002;B;Y\n")
+        with self.assertRaisesRegex(
+            ValueError,
+            r"b.csv.*colonnes manquantes : classe.*"
+            r"colonnes supplémentaires : autre",
+        ):
+            concatener_fichiers_csv([
+                ("a.csv", premier), ("b.csv", second)
+            ])
+        with self.assertRaisesRegex(ValueError, "Aucun fichier"):
+            concatener_fichiers_csv([])
+
+    def test_importation_unique_et_fusion_reimportable(self):
+        """Un seul CSV conserve sa structure ; le corpus fusionné se relit."""
+        premier = lire_csv(b"identifiant;groupe;classe\n001;A;X\n")
+        copie = concatener_fichiers_csv([("a.csv", premier)])
+        pd.testing.assert_frame_equal(premier, copie)
+        second = lire_csv(b"identifiant;groupe;classe\n002;B;Y\n")
+        fusion = concatener_fichiers_csv([
+            ("a.csv", premier), ("b.csv", second)
+        ])
+        export = fusion.to_csv(
+            index=False, sep=";", lineterminator="\\n"
+        ).encode("utf-8-sig")
+        resultat = lire_csv(export)
+        pd.testing.assert_frame_equal(fusion, resultat)
+
+    def test_interface_import_multiple_sans_perte_des_analyses(self):
+        """Vérifier les menus, la fusion et l'ensemble des sorties existantes."""
+        interface = (BASE / "application.py").read_text(encoding="utf-8")
+        self.assertIn('accept_multiple_files=True', interface)
+        self.assertIn('concatener_fichiers_csv(tableaux_sources)', interface)
+        self.assertIn('Télécharger le corpus fusionné (CSV)', interface)
+        self.assertIn('construire_onglet_statistique_descriptive(donnees)', interface)
+        self.assertIn('options=["AFC", "ACM"]', interface)
+        self.assertIn('construire_interface_afc(', interface)
+        self.assertIn('construire_interface_acm(', interface)
+        self.assertIn('empreinte_import.digest()', interface)
+        self.assertIn('mesures[3].metric("Fichiers réunis"', interface)
 
     def test_variable_identique(self):
         donnees = pd.DataFrame({"a": ["X", "Y"]})
