@@ -55,11 +55,17 @@ def installer_passerelle(app):
     def adresse():
         return "127.0.0.1:" + str(int(os.getenv("STREAMLIT_PORT", "8502")))
 
-    @app.api_route("/{chemin:path}", methods=["GET", "HEAD", "POST", "DELETE", "OPTIONS"])
+    @app.api_route("/{chemin:path}", methods=["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"])
     async def relayer_http(request: Request, chemin: str):
         # Les anciennes pages ne doivent pas être reprises par le routage de Streamlit.
         if chemin.rstrip("/") == "classique" or chemin in {"static/index.html", "static/app.js", "static/style.css"}:
             return Response(status_code=404)
+        # Streamlit utilise PUT pour transmettre les fichiers du navigateur.
+        # La passerelle doit l'accepter uniquement sur sa route interne d'import.
+        depot_streamlit = (chemin == "_stcore/upload_file"
+                            or chemin.startswith("_stcore/upload_file/"))
+        if request.method == "PUT" and not depot_streamlit:
+            return Response("Méthode non autorisée.", status_code=405)
         entetes = {k:v for k,v in request.headers.items() if k.lower() not in EXCLUS}
         entetes["accept-encoding"] = "identity"
         # La passerelle valide l'origine publique, le serveur privé voit son origine locale.
@@ -67,9 +73,13 @@ def installer_passerelle(app):
             if not origine_valide(request.headers): return Response(status_code=403)
             entetes["origin"] = "http://" + adresse()
         corps = bytearray()
+        # Une requête API ordinaire reste limitée à 1 Mo ; le dépôt CSV
+        # Streamlit accepte 20 Mo pour les exports et bilans de collecte.
+        limite_corps = 20 * 1024**2 if depot_streamlit else 1024**2
         async for morceau in request.stream():
             corps.extend(morceau)
-            if len(corps) > 1024**2: return Response("Requête trop volumineuse.", status_code=413)
+            if len(corps) > limite_corps:
+                return Response("Requête trop volumineuse.", status_code=413)
         url = "http://" + adresse() + "/" + chemin
         try:
             async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
