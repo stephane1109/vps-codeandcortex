@@ -126,7 +126,7 @@ if "initialise" not in st.session_state:
     ancienne = ancienne or {}
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
-        "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
+        "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","OR"),
         "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
         "hashtag_presse":ancienne.get("hashtag_presse",""),
         "hashtags_presse_saisis": ", ".join(
@@ -282,7 +282,7 @@ for variable in VARIABLES_TXT:
 # Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
 # rester lançable sans ce widget.
-st.session_state.setdefault("operator", "AND")
+st.session_state.setdefault("operator", "OR")
 st.session_state.setdefault("rechercher_dans_texte", True)
 st.session_state.setdefault("variantes_accents", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
@@ -995,6 +995,12 @@ with onglet_collecte:
                     else "OU — au moins un hashtag"),
                 key="operator", horizontal=True, disabled=occupe,
             )
+            if (source == "hashtags" and len(liste_hashtags) > 1
+                    and st.session_state.get("operator") == "AND"):
+                st.caption(
+                    "Mode ET : une vidéo n'est retenue que si tous les hashtags "
+                    "sont présents dans la même publication. Pour réunir les "
+                    "publications de plusieurs hashtags, choisissez OU.")
             if source == "hashtags":
                 st.checkbox("Inclure les variantes accentuées des hashtags",
                     key="variantes_accents", disabled=occupe,
@@ -1424,7 +1430,7 @@ with onglet_collecte:
                     moteur_formulaire == "research"
                     and st.session_state.get("test_research_10_publications", False))
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
-                valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
+                valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "OR")
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
                 valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
                 valeurs["collecter_is_verified"] = bool(moteur_formulaire == "research" and st.session_state.get("txt_is_verified", False))
