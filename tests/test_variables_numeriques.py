@@ -146,6 +146,21 @@ class TestsVariablesNumeriques(unittest.TestCase):
         self.assertEqual(texte.count("*abonnes_10k_100k"), 2)
         self.assertIn("*commentaires_classe_10_99", texte)
 
+    def test_entete_ia_conserve_les_deux_themes_du_filtre_et(self):
+        """Une publication ET doit porter les deux modalités IRaMuTeQ."""
+        exemple = {
+            **publication(),
+            "hashtags_correspondants": ["manifestation", "lyceen"],
+            "hashtags": ["manifestation", "lyceen"],
+            "resume_ia_tiktok": "Analyse de la manifestation",
+        }
+        contenu = text_export(
+            [exemple], False, inclure_texte_genere_ia=True)
+        self.assertEqual(contenu.count("*theme_manifestation"), 2)
+        self.assertEqual(contenu.count("*theme_lyceen"), 2)
+        self.assertIn("*source_original", contenu)
+        self.assertIn("*source_ia", contenu)
+
     def test_export_csv_garde_taux_exact_et_modalites(self):
         p = publication(vues=3, likes=1, commentaires=0, partages=0, favoris=0)
         indicateurs = indicateurs_numeriques(p)
