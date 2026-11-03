@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import os
 import shutil
 import subprocess
 import tempfile
@@ -142,6 +143,10 @@ class TestsACM(unittest.TestCase):
         self.assertIn('dessiner_plan(TRUE)', moteur_acm)
         self.assertNotIn("stats::chisq.test(", moteur_acm)
         self.assertNotIn("simulate.p.value", moteur_acm)
+        self.assertIn("libelles_graphiques(", moteur_acm)
+        self.assertIn("titre_graphique", moteur_acm)
+        self.assertNotIn('main = paste("ACM —"', moteur_acm)
+        self.assertIn("def diagnostiquer_echec_r(", interface)
 
     @unittest.skipUnless(
         factominer_disponible(),
@@ -255,6 +260,77 @@ class TestsACM(unittest.TestCase):
                     msg="Les valeurs propres Burt doivent être les carrés "
                         "des valeurs propres du TDC.",
                 )
+
+
+    @unittest.skipUnless(
+        factominer_disponible(),
+        "Rscript avec FactoMineR non disponible dans cet environnement",
+    )
+    def test_burt_onze_variables_avec_accents_en_locale_c(self):
+        """Vérifier le cas des titres longs et accents sous la locale C."""
+        variables = [
+            "vues_classe", "classe_taux_engagement", "presse_nationale",
+            "presse_regio_dpt", "presse_indep", "presse_autre",
+            "likes_classe", "commentaires_classe", "partages_classe",
+            "favoris_classe", "duree_classe",
+        ]
+        with tempfile.TemporaryDirectory(prefix="acm_locale_") as repertoire:
+            dossier = Path(repertoire)
+            entree = dossier / "observations.tsv"
+            sortie = dossier / "resultats"
+            sortie.mkdir()
+            with entree.open("w", encoding="utf-8", newline="") as fichier:
+                ecrivain = csv.writer(fichier, delimiter="\t")
+                ecrivain.writerow(variables)
+                for i in range(180):
+                    ecrivain.writerow([
+                        ("faible", "modérée", "forte")[i % 3],
+                        ("engagement faible", "engagement élevé")[(i // 2) % 2],
+                        str((i // 3) % 2),
+                        str((i // 4) % 2),
+                        str((i // 5) % 2),
+                        str((i // 7) % 2),
+                        ("0-9", "10-99", "100-999")[(i // 3) % 3],
+                        ("aucun", "présent")[(i // 5) % 2],
+                        ("0", "1-9")[(i // 7) % 2],
+                        ("0", "1-9")[(i // 11) % 2],
+                        ("courte", "longue")[(i // 13) % 2],
+                    ])
+            environnement = os.environ.copy()
+            environnement["LC_ALL"] = "C"
+            environnement["LANG"] = "C"
+            commande = [
+                shutil.which("Rscript"), str(MOTEUR_ACM),
+                str(entree), str(sortie), "Échantillon test",
+                "180", "180", "Burt",
+            ]
+            execution = subprocess.run(
+                commande,
+                capture_output=True, text=True,
+                errors="replace", timeout=120, check=False,
+                env=environnement,
+            )
+            self.assertEqual(
+                execution.returncode, 0,
+                execution.stderr + "\n" + execution.stdout,
+            )
+            self.assertNotIn("mbcsToSbcs", execution.stderr)
+            for nom in (
+                "00_rapport_acm.txt",
+                "13_plan_factoriel.png",
+                "13_plan_factoriel_significatif.png",
+                "14_plan_factoriel.pdf",
+                "14_plan_factoriel_significatif.pdf",
+                "15_inerties.png",
+                "18_comparaison_inerties_tdc_burt.csv",
+            ):
+                self.assertTrue((sortie / nom).is_file(), nom)
+            rapport = (sortie / "00_rapport_acm.txt").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("presse_regio_dpt", rapport)
+            self.assertIn("Tableau de Burt", rapport)
+
 
 
 if __name__ == "__main__":
