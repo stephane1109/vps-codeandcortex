@@ -198,8 +198,10 @@ def afficher_resultats(
         )
         st.caption(
             f"Résultats de FactoMineR::MCA() selon le {libelle_mode} ; "
-            "les modalités caractéristiques des axes 1 et 2 "
-            "sont identifiées par FactoMineR::dimdesc()."
+            "le filtre à p ≤ 0,05 repose sur les valeurs-tests "
+            "des modalités fournies par FactoMineR::MCA(). "
+            "La fonction dimdesc() reste utilisée dans le rapport "
+            "pour interpréter les dimensions."
         )
 
     onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
@@ -230,8 +232,9 @@ def afficher_resultats(
                 "autre modalité selon FactoMineR::descfreq (AFC)."
                 if methode == "AFC"
                 else (
-                    "Plan filtré : modalités caractéristiques d'au moins un "
-                    "des axes 1 et 2 selon FactoMineR::dimdesc (ACM)."
+                    "Plan filtré : modalités dont la valeur-test sur l'axe 1 "
+                    "ou 2 donne p ≤ 0,05 (approximation normale bilatérale "
+                    "de FactoMineR::MCA, sans correction multiple)."
                 )
             )
         )
@@ -240,6 +243,65 @@ def afficher_resultats(
             "Les deux graphiques sont disponibles dans le ZIP. "
             "Lorsque l'analyse ne comporte qu'un axe, le filtre n'est pas appliqué."
         )
+        if methode == "ACM":
+            # Les effectifs et p-values affichés proviennent du même export
+            # que le filtre R, sans retraitement statistique en Python.
+            nom_significativite = "significativite_modalites_factominer.csv"
+            significativites = pd.read_csv(
+                io.BytesIO(fichiers[nom_significativite]),
+                sep=";", decimal=",", encoding="utf-8",
+                low_memory=False,
+            )
+            p_values = pd.to_numeric(
+                significativites["p_value_min"], errors="coerce"
+            )
+            nombre_valides = int(p_values.notna().sum())
+            nombre_significatives = int(p_values.le(0.05).sum())
+            p_minimale = p_values.min()
+            valeur_p = (
+                f"{p_minimale:.3g}".replace(".", ",")
+                if pd.notna(p_minimale) else "indisponible"
+            )
+            diagnostic_p = (
+                f"Vérification ACM : {nombre_significatives} modalité(s) "
+                f"significative(s) sur {len(significativites)} ; "
+                f"{nombre_valides} p-value(s) exploitables ; "
+                f"p minimale = {valeur_p}."
+            )
+            if nombre_significatives == 0:
+                st.warning(
+                    diagnostic_p
+                    + " Aucune modalité n'atteint p ≤ 0,05 sur les axes "
+                    "représentés. Le plan complet reste accessible."
+                )
+            else:
+                st.caption(diagnostic_p)
+            with st.expander(
+                "Contrôler les p-values de toutes les modalités",
+                expanded=False,
+            ):
+                colonnes_p = [
+                    "variable", "modalite", "v_test_axe_1",
+                    "p_value_axe_1", "v_test_axe_2", "p_value_axe_2",
+                    "p_value_min", "significative_005",
+                ]
+                tableau_p = significativites[
+                    [nom for nom in colonnes_p if nom in significativites]
+                ].copy()
+                if "p_value_min" in tableau_p:
+                    tableau_p = tableau_p.sort_values(
+                        "p_value_min", na_position="last"
+                    )
+                st.dataframe(
+                    tableau_p, hide_index=True, use_container_width=True,
+                )
+                st.download_button(
+                    "Télécharger les p-values des modalités (CSV)",
+                    data=fichiers[nom_significativite],
+                    file_name=nom_significativite,
+                    mime="text/csv",
+                    key="telecharger_pvalues_acm",
+                )
     with onglet_inertie:
         st.image(fichiers["15_inerties.png"], use_container_width=True)
         st.subheader("Inertie des axes factoriels (%)")
@@ -394,6 +456,7 @@ def executer_moteur_acm(
             "significativite_modalites_factominer.csv",
             "18_comparaison_inerties_tdc_burt.csv",
             "19_couleurs_variables.csv",
+            "20_diagnostic_filtre_pvalue.csv",
         }
         manquants = sorted(attendus.difference(fichiers))
         if manquants:
