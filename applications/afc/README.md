@@ -12,6 +12,10 @@ Le panneau de paramétrage permet de conserver uniquement les lignes `retenue`, 
 
 La table de contingence s'affiche **avant** le lancement. Les contrôles rejettent les tableaux à une seule modalité et les cas d'inertie nulle. Le calcul rend un plan factoriel, l'histogramme des inerties, le Chi-deux, sa valeur p, le V de Cramér, les effectifs théoriques, résidus, profils, coordonnées, contributions et cos². Les résultats sont téléchargeables en ZIP et les tableaux séparément en CSV.
 
+Sur le **plan à deux dimensions**, seules les modalités présentant une p-value brute inférieure ou égale à **0,05** sont affichées. Pour chaque modalité des lignes ou des colonnes, le moteur calcule un test du Chi-deux sur un tableau opposant cette modalité à toutes les autres de la même variable ; en présence d'effectifs attendus inférieurs à cinq, il estime la p-value par Monte-Carlo. Le fichier `18_significativite_modalites.csv` conserve toutes les modalités, les p-values brutes, les p-values corrigées par Benjamini-Hochberg et les décisions au seuil de 0,05. Les calculs factoriels, coordonnées, contributions, cos² et autres exports demeurent établis sur **le tableau complet**, même pour les modalités masquées. Le graphique à un seul axe reste inchangé et ne subit pas ce filtre.
+
+Ce test par modalité évalue son **association globale** avec l'autre variable ; il **ne teste pas** la significativité de sa coordonnée sur un axe particulier. Le filtrage par p-value brute est exploratoire : les corrections de comparaisons multiples, les effectifs et les contributions doivent être examinés avant toute interprétation confirmatoire.
+
 ## Déploiement sur VPS avec Docker Compose
 
 À la racine du projet :
