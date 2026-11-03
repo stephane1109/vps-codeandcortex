@@ -203,7 +203,7 @@ limites_axes <- function(valeurs, proportion = 0.22) {
   bornes + c(-marge, marge)
 }
 
-dessiner_plan <- function() {
+dessiner_plan <- function(filtrer_modalites = FALSE) {
   lignes <- as.matrix(resultat$row$coord)
   colonnes <- as.matrix(resultat$col$coord)
   deux_axes <- ncol(lignes) >= 2L && ncol(colonnes) >= 2L
@@ -220,14 +220,14 @@ dessiner_plan <- function() {
   }
   # La sélection ne porte que sur le plan à deux dimensions demandé.
   # Les coordonnées et les inerties proviennent toujours de l'AFC complète.
-  visibles_lignes <- if (deux_axes) {
+  visibles_lignes <- if (deux_axes && filtrer_modalites) {
     significativite_modalites$significative_005[
       significativite_modalites$type_modalite == "ligne"
     ]
   } else {
     rep(TRUE, nrow(lignes))
   }
-  visibles_colonnes <- if (deux_axes) {
+  visibles_colonnes <- if (deux_axes && filtrer_modalites) {
     significativite_modalites$significative_005[
       significativite_modalites$type_modalite == "colonne"
     ]
@@ -277,7 +277,7 @@ dessiner_plan <- function() {
     legend("topright", c("Modalités en lignes", "Modalités en colonnes"),
            pch = c(16, 17), col = c("#2166AC", "#B2182B"), bty = "n")
   }
-  if (deux_axes) {
+  if (deux_axes && filtrer_modalites) {
     mtext(
       paste0("Modalités affichées : p <= 0,05 (",
              nombre_significatives, "/", nrow(significativite_modalites),
@@ -288,8 +288,11 @@ dessiner_plan <- function() {
       text(0, 0, "Aucune modalité significative (p <= 0,05)",
            pos = 3, cex = 0.9, col = "grey35")
     }
-  } else {
+  } else if (!deux_axes) {
     mtext("Un seul axe : les modalités ne sont pas filtrées ; décalage vertical artificiel.",
+          side = 1, line = 4.3, cex = 0.7)
+  } else {
+    mtext("Plan complet : toutes les modalités actives sont représentées.",
           side = 1, line = 4.3, cex = 0.7)
   }
 }
@@ -306,9 +309,12 @@ gg <- function(nom, action) {
   grDevices::png(file.path(dossier_sortie, nom), width = 1600, height = 1100, res = 160)
   tryCatch(action(), finally = grDevices::dev.off())
 }
-gg("13_plan_factoriel.png", dessiner_plan)
+gg("13_plan_factoriel.png", function() dessiner_plan(FALSE))
 grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 12, height = 8.5)
-tryCatch(dessiner_plan(), finally = grDevices::dev.off())
+tryCatch(dessiner_plan(FALSE), finally = grDevices::dev.off())
+gg("13_plan_factoriel_significatif.png", function() dessiner_plan(TRUE))
+grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel_significatif.pdf"), width = 12, height = 8.5)
+tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
 gg("15_inerties.png", dessiner_inerties)
 
 # Indicateurs issus des résultats FactoMineR, sans nouveau test.
