@@ -20,7 +20,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
@@ -353,6 +353,19 @@ class StartRequest(BaseModel):
             self.abonnes_classe_illustratif = False
         # Éviter deux fois la même modalité dans un seul en-tête.
         self.variables_classes_txt = list(dict.fromkeys(self.variables_classes_txt))
+        if (self.source_collecte == "hashtags"
+                and self.moteur_actif == "research"
+                and not (info.context or {}).get("consultation_historique")
+                and not (info.context or {}).get("reprise_historique")):
+            # Figer la fenêtre UTC lors du premier lancement : une reprise
+            # le lendemain ne doit pas déplacer le corpus de 24 heures.
+            aujourd_hui = datetime.now(timezone.utc).date()
+            borne_fin = (date.fromisoformat(self.date_fin)
+                         if self.date_fin else aujourd_hui)
+            borne_debut = (date.fromisoformat(self.date_debut)
+                           if self.date_debut else borne_fin - timedelta(days=29))
+            self.date_debut = borne_debut.isoformat()
+            self.date_fin = borne_fin.isoformat()
         return self
 
     @property
@@ -2933,8 +2946,40 @@ class Manager:
             secret = getattr(payload, cle, None)
             if secret:
                 credentials[cle] = secret.get_secret_value()
+        # Les anciennes archives pouvaient omettre la fenêtre implicite
+        # des 30 jours UTC. Retrouver la date initiale dans le journal pour
+        # ne pas déplacer le corpus vers la date de la reprise.
+        if not parametres.get("date_fin"):
+            date_archive = ""
+            for evenement in journal["evenements"]:
+                if not isinstance(evenement, dict):
+                    continue
+                plage = (evenement.get("rapport") or {}).get("plage_research") or {}
+                borne_fin = str(plage.get("fin") or "")
+                if len(borne_fin) == 8 and borne_fin.isdigit():
+                    date_archive = (borne_fin[:4] + "-" + borne_fin[4:6]
+                                    + "-" + borne_fin[6:])
+                    break
+                date_evenement = str(evenement.get("date") or "")[:10]
+                try:
+                    date.fromisoformat(date_evenement)
+                except ValueError:
+                    continue
+                date_archive = date_evenement
+                break
+            if not date_archive:
+                raise HTTPException(
+                    409, "Période de l'ancienne collecte inconnue : reprise "
+                    "bloquée pour éviter un changement de corpus.")
+            parametres["date_fin"] = date_archive
+            if not parametres.get("date_debut"):
+                parametres["date_debut"] = (
+                    date.fromisoformat(date_archive)
+                    - timedelta(days=29)).isoformat()
         try:
-            settings = StartRequest.model_validate({**parametres, **credentials})
+            settings = StartRequest.model_validate(
+                {**parametres, **credentials},
+                context={"reprise_historique": True})
         except ValueError:
             raise HTTPException(
                 422, "Paramètres historiques invalides ou identifiants Research manquants.") from None
