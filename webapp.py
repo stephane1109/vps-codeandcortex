@@ -2131,6 +2131,22 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 if isinstance(erreur, ResearchErreur):
                     from collecte.researchapi import (
                         ResearchErreurServeur, poursuivre_apres_erreur_serveur)
+                    if (job.settings.source_collecte == "hashtags"
+                            and moteur_actif == "research"):
+                        # Une erreur 500 ou un refus de quota peut survenir
+                        # après plusieurs pages. Ne jamais intégrer les liens
+                        # partiels avant leur vérification ET/OU.
+                        partiels, ecartes, indetermines = (
+                            filtrer_decouverte_hashtags_research(
+                                rapport.get("discovered_urls") or [],
+                                rapport.get("metadonnees_api") or {},
+                                job.settings))
+                        rapport["discovered_urls"] = partiels
+                        rapport["ecartes_combinaison_hashtags"] = (
+                            rapport.get("ecartes_combinaison_hashtags", 0) + ecartes)
+                        rapport["ecartes_metadonnees_absentes"] = (
+                            rapport.get("ecartes_metadonnees_absentes", 0)
+                            + indetermines)
                     for identifiant, fiche in (rapport.get("metadonnees_api") or {}).items():
                         if isinstance(fiche, dict):
                             metadonnees_api.setdefault(str(identifiant), fiche)
