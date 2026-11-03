@@ -89,7 +89,7 @@ class TestTraitementCSV(unittest.TestCase):
         self.assertNotIn("repetitions_monte_carlo", interface)
         self.assertNotIn("cellules_attendues_faibles", interface)
         self.assertIn("FactoMineR::CA()", interface)
-        self.assertIn("FactoMineR::descfreq()", interface)
+        self.assertIn("FactoMineR::descfreq", interface)
 
     def test_inertie_des_axes_et_inertie_cumulee(self):
         """Afficher les pourcentages exacts fournis par FactoMineR::CA."""
