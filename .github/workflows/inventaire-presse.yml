@@ -52,7 +52,7 @@ jobs:
           python -m compileall -q collecte/presse.py collecte/suivi_sources.py webapp.py streamlit_app.py tests/test_groupes_presse.py tests/test_presse_research_sans_limite_medias.py tests/test_suivi_sources.py tests/test_ordre_medias_interface.py collecte/reprise_collecte.py tests/test_reprise_collecte.py stockage/historique_analyses.py stockage/postgres_consultation.py tests/test_postgres_consultation.py interface/passerelle.py tests/test_passerelle.py collecte/researchapi.py tests/test_research_erreur_serveur.py tests/test_recuperation_collecte.py tests/test_fin_collecte_sans_reinitialisation.py collecte/suivi_hashtags.py interface/reprise_hashtags_ui.py tests/test_reprise_hashtags.py connect_htag.py
       - name: Tester les regroupements des comptes Presse
         run: python -m unittest discover -s tests -p test_groupes_presse.py -v
-      - name: Tester les 93 médias et l'absence de plafond Research
+      - name: Tester les médias restants et l'absence de plafond Research
         run: python -m unittest discover -s tests -p test_presse_research_sans_limite_medias.py -v
       - name: Tester les catégories dans les exports
         run: python -m unittest discover -s tests -p test_categories_presse_illustratives.py -v
