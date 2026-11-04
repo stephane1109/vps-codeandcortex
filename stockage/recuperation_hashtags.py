@@ -357,7 +357,14 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
         hashtags, bool(parametres.get("variantes_accents")))
     for tag in hashtags:
         observations = etats[tag]
-        if any(etat in ETATS_REPRISE for etat in observations):
+        positions_tag = {
+            source: position for source, position in positions.items()
+            if source in {"#" + variante for variante in variantes[tag]}
+        }
+        if positions_tag and observations and all(e == "traitee" for e in observations):
+            # Le curseur de page suivante valide prime sur l'ancien statut.
+            observations = ["partielle"]
+        if any(etat in ETATS_REPRISE | {"en_cours"} for etat in observations):
             # Les observations successives ne doivent jamais transformer
             # silencieusement une source inachevée en source terminée.
             etat = ("partielle" if any(e == "partielle" for e in observations)
@@ -368,10 +375,6 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
             etat = "traitee"
         else:
             etat = "non_commencee"
-        positions_tag = {
-            source: position for source, position in positions.items()
-            if source in {"#" + variante for variante in variantes[tag]}
-        }
         sans_curseur = (
             etat in ETATS_REPRISE
             and max(volumes[tag], default=0) > 0
