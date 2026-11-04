@@ -1659,7 +1659,7 @@ with onglet_collecte:
                     and actuel.get("source_collecte") == "hashtags"
                     and actuel.get("moteur_actif") == "research"
                     and not actuel.get("test_research_10_publications")
-                    and actuel.get("status") in {"partial", "stopped", "failed"}):
+                    and actuel.get("status") in {"completed", "partial", "stopped", "failed"}):
                 hashtags_inacheves = hashtags_a_reprendre(
                     actuel.get("bilan_hashtags_sources") or [])
                 if hashtags_inacheves:
@@ -1745,10 +1745,17 @@ with onglet_collecte:
             # Les archives restent téléchargeables quel que soit le statut final.
             if (not actuel.get("busy") and not actuel.get("video_busy")
                     and actuel.get("status") in ("completed", "partial", "stopped")):
-                if actuel["status"] == "partial":
+                hashtags_non_termines = (
+                    actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"
+                    and bool(hashtags_a_reprendre(
+                        actuel.get("bilan_hashtags_sources") or [])))
+                if actuel["status"] == "partial" or hashtags_non_termines:
                     st.info(
-                        "Séquence terminée : les résultats sont conservés et "
-                        "téléchargeables. La collecte peut encore être poursuivie.")
+                        "La collecte de hashtags n'est pas entièrement terminée. "
+                        "Les résultats sont conservés et téléchargeables. "
+                        "La poursuite reprend les hashtags inachevés "
+                        "sans importer de fichier CSV.")
                 elif actuel["status"] == "stopped":
                     st.warning(
                         "Collecte interrompue : les résultats déjà obtenus "
