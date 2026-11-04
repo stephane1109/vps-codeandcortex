@@ -451,9 +451,15 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             rapport["liens_page_research"] = liens_page
             rapport["discovered_urls"].extend(liens_page)
             rapport["retenues_par_compte"] = {compte: len(contenus)}
-            # Le point de reprise désigne toujours la prochaine page,
-            # jamais une page déjà traitée. On le construit avant de publier
-            # les résultats afin qu'une pause manuelle soit sûre.
+            # Tant que le traitement de cette page n'est pas achevé,
+            # garder son CURSEUR D'ENTRÉE comme point de reprise. Une
+            # interruption pendant la lecture ne doit perdre aucune vidéo.
+            rapport["reprise_pagination_research"] = {
+                "indice_periode": indice_periode,
+                "debut_periode": borne_debut,
+                "fin_periode": borne_fin,
+                "cursor": curseur,
+                "search_id": search_id}
             page_suivante = None
             if donnees.get("has_more"):
                 suivant = donnees.get("cursor")
@@ -474,9 +480,12 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     "debut_periode": prochaine[0],
                     "fin_periode": prochaine[1],
                     "cursor": None, "search_id": None}
-            rapport["reprise_pagination_research"] = page_suivante
             if progress:
                 progress(len(contenus))
+            # Le traitement de la page s'est terminé normalement : seulement
+            # maintenant enregistrer le curseur suivant. Si le traitement
+            # lève Stopped ou une erreur, l'entrée de la page reste mémorisée.
+            rapport["reprise_pagination_research"] = page_suivante
             # Stopper un segment après la dernière page intégralement lue.
             # Une dernière page qui termine tout le corpus n'a pas de suite.
             if (maximum_candidats is not None
