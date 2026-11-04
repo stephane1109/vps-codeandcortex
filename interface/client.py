@@ -11,7 +11,10 @@ def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historiqu
     if autorisation: entetes["Authorization"] = autorisation
     adresse = os.getenv("SCRAPTIKTOK_API_URL", "http://127.0.0.1:8501")
     try:
-        with httpx.Client(timeout=15, trust_env=False) as client:
+        # Une restauration ZIP vérifiée peut prendre plus de temps
+        # qu'une requête de collecte courante : ne pas couper l'import.
+        delai = 120 if chemin.endswith("/restaurer-zip") else 15
+        with httpx.Client(timeout=delai, trust_env=False) as client:
             resultat = client.request("GET" if donnees is None else "POST", adresse + chemin, headers=entetes, json=donnees)
     except httpx.HTTPError as erreur:
         raise RuntimeError("Le moteur de collecte ne répond pas. Réessayez dans un instant.") from erreur
