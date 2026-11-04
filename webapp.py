@@ -2427,8 +2427,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     and moteur_actif == "research"
                     and not job.settings.test_research_10_publications
                     and (rapport.get("discovery_stop") == "lot_termine"
-                         or candidats_sources_termines >=
-                         job.settings.lot_candidats_research)):
+                         or (candidats_sources_termines >=
+                             job.settings.lot_candidats_research
+                             and numero_source < len(sources)
+                             and not getattr(
+                                 connexion, "_recherche_et_stricte", False)))):
                 # Sortir réellement du travail : exporter puis libérer le
                 # worker, au lieu de le laisser en attente dans une boucle.
                 segment_research_termine = True
