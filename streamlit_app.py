@@ -1,5 +1,6 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
 import hashlib
+import csv
 import json
 import os
 from datetime import date, datetime, timedelta, timezone
