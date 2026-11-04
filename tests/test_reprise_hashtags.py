@@ -1,4 +1,6 @@
 """Vérifier les bilans, les variables et les reprises de hashtags Research."""
+import csv
+import io
 import unittest
 from pathlib import Path
 
@@ -7,6 +9,7 @@ from collecte.suivi_hashtags import (
     hashtags_a_reprendre, identifier_collecte_bilan_hashtags_csv,
     identifier_collecte_bilans_hashtags_csv, importer_bilan_hashtags_csv,
     importer_bilans_hashtags_csv, preparer_reprise_hashtags,
+    positions_pagination_bilans_csv, variantes_par_hashtag,
     regrouper_bilans_hashtags_csv,
 )
 from collecte.presse import charger_inventaire
@@ -39,6 +42,102 @@ class TestsRepriseHashtags(unittest.TestCase):
         self.assertEqual([ligne["liens"] for ligne in bilan], [1, 1, 0])
         self.assertTrue(all(ligne["collecte_id"] == self.identifiant
                             for ligne in bilan))
+
+    def test_export_csv_enregistre_cursor_search_id_et_dates(self):
+        """Le bilan téléchargeable restaure exactement la page suivante."""
+        journal = [{
+            "source": "#manifestation",
+            "statut_source": "partielle",
+            "rapport": {
+                "collecte_partielle": True,
+                "discovered_urls": ["https://www.tiktok.com/@x/video/123"],
+                "reprise_pagination_research": {
+                    "indice_periode": 0,
+                    "debut_periode": "20261001",
+                    "fin_periode": "20261025",
+                    "cursor": 521,
+                    "search_id": "recherche_tiktok_521",
+                    "pagination_invalide": False,
+                },
+            },
+        }]
+        bilan = etablir_bilan_hashtags(
+            ["manifestation", "lyceen"], False, journal,
+            termine=True, collecte_id=self.identifiant,
+            date_debut="2026-10-01", date_fin="2026-10-25")
+        contenu = exporter_bilan_hashtags_csv(bilan)
+        lignes = list(csv.DictReader(
+            io.StringIO(contenu.decode("utf-8-sig")), delimiter=";"))
+        self.assertEqual(lignes[0]["cursor"], "521")
+        self.assertEqual(lignes[0]["search_id"], "recherche_tiktok_521")
+        self.assertEqual(lignes[0]["debut_periode"], "20261001")
+        self.assertEqual(lignes[0]["fin_periode"], "20261025")
+        self.assertEqual(lignes[0]["indice_periode"], "0")
+        self.assertEqual(lignes[0]["source_pagination"], "#manifestation")
+        self.assertTrue(lignes[0]["positions_research_json"])
+        self.assertTrue(lignes[0]["exporte_le"])
+        self.assertEqual(lignes[1]["etat"], "non_commencee")
+        self.assertEqual(lignes[1]["cursor"], "")
+        positions = positions_pagination_bilans_csv(
+            [contenu], collecte_id=self.identifiant,
+            hashtags_autorises=["manifestation", "lyceen"],
+            date_debut="2026-10-01", date_fin="2026-10-25")
+        self.assertEqual(positions["#manifestation"]["cursor"], 521)
+        self.assertEqual(
+            positions["#manifestation"]["search_id"], "recherche_tiktok_521")
+        self.assertNotIn("#lyceen", positions)
+
+    def test_anciens_csv_cinq_colonnes_restent_importables_sans_curseur(self):
+        """Les bilans téléchargés avant la correction restent utilisables."""
+        contenu = (
+            "collecte_id;hashtag;etat;liens;motif\\n"
+            f"{self.identifiant};manifestation;partielle;521;HTTP 401\\n"
+            f"{self.identifiant};lyceen;non_commencee;0;\\n"
+        ).encode("utf-8")
+        self.assertEqual(
+            importer_bilans_hashtags_csv(
+                [contenu], collecte_id=self.identifiant,
+                hashtags_autorises=["manifestation", "lyceen"]),
+            ["manifestation", "lyceen"])
+        self.assertEqual(
+            positions_pagination_bilans_csv(
+                [contenu], collecte_id=self.identifiant,
+                hashtags_autorises=["manifestation", "lyceen"],
+                date_debut="2026-10-01", date_fin="2026-10-25"),
+            {})
+
+    def test_positions_par_variante_et_refus_des_periodes_modifiees(self):
+        """Chaque variante garde son curseur propre et les dates sont contrôlées."""
+        variantes = variantes_par_hashtag(["lyceen"], True)["lyceen"]
+        autre = next(v for v in variantes if v != "lyceen")
+        journal = [
+            {"source": "#lyceen", "statut_source": "traitee",
+             "rapport": {"collecte_partielle": False}},
+            {"source": "#" + autre, "statut_source": "partielle",
+             "rapport": {
+                 "collecte_partielle": True,
+                 "reprise_pagination_research": {
+                     "indice_periode": 0, "debut_periode": "20261001",
+                     "fin_periode": "20261025",
+                     "cursor": 75, "search_id": "variante_research",
+                 },
+             }},
+        ]
+        bilan = etablir_bilan_hashtags(
+            ["lyceen"], True, journal, collecte_id=self.identifiant,
+            termine=True, date_debut="2026-10-01", date_fin="2026-10-25")
+        fichier = exporter_bilan_hashtags_csv(bilan)
+        positions = positions_pagination_bilans_csv(
+            [fichier], collecte_id=self.identifiant,
+            hashtags_autorises=["lyceen"], avec_accents=True,
+            date_debut="2026-10-01", date_fin="2026-10-25")
+        self.assertEqual(positions["#" + autre]["cursor"], 75)
+        self.assertNotIn("#lyceen", positions)
+        with self.assertRaisesRegex(ValueError, "période"):
+            positions_pagination_bilans_csv(
+                [fichier], collecte_id=self.identifiant,
+                hashtags_autorises=["lyceen"], avec_accents=True,
+                date_debut="2026-09-01", date_fin="2026-10-25")
 
     def test_reprendre_uniquement_les_hashtags_inacheves(self):
         selection, graphies, _ = preparer_reprise_hashtags(
