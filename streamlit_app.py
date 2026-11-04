@@ -1798,6 +1798,68 @@ with onglet_collecte:
                     if (isinstance(diagnostic_reprise, dict)
                             and diagnostic_reprise.get("collecte_id") == actuel["id"]):
                         st.error("Poursuite impossible : " + diagnostic_reprise["message"])
+            if (not actuel.get("busy")
+                    and actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"
+                    and not actuel.get("test_research_10_publications")
+                    and actuel.get("status") in {"completed", "partial", "stopped", "failed"}):
+                with st.expander(
+                        "Reprendre la collecte d'origine à partir de bilans hashtags CSV",
+                        expanded=False):
+                    st.caption(
+                        "Importez plusieurs bilans d'une même collecte, y compris les "
+                        "anciens fichiers à cinq colonnes. Si les bilans attestent "
+                        "une interruption mais ne possèdent aucun curseur, la "
+                        "recherche réexplore les pages de la période d'origine. "
+                        "Les publications déjà enregistrées sont dédupliquées "
+                        "dans le même corpus PostgreSQL.")
+                    fichiers_bilans = st.file_uploader(
+                        "Bilans hashtags CSV de cette collecte",
+                        type=["csv"], accept_multiple_files=True,
+                        key="bilans_reprise_historique_" + actuel["id"])
+                    cle_bilans = st.text_input(
+                        "Client key Research (reprise CSV)", type="password",
+                        key="cle_bilans_" + actuel["id"])
+                    secret_bilans = st.text_input(
+                        "Client secret Research (reprise CSV)", type="password",
+                        key="secret_bilans_" + actuel["id"])
+                    if st.button(
+                            "Reprendre dans le corpus PostgreSQL d'origine",
+                            key="reprendre_bilans_" + actuel["id"],
+                            type="primary", disabled=not fichiers_bilans):
+                        import base64
+                        cle = (cle_bilans or st.session_state.get(
+                            "research_client_key") or "").strip()
+                        secret = (secret_bilans or st.session_state.get(
+                            "research_client_secret") or "").strip()
+                        try:
+                            if not cookie_historique:
+                                raise ValueError("Historique privé absent.")
+                            if bool(cle) != bool(secret):
+                                raise ValueError(
+                                    "Renseignez les deux identifiants Research ensemble.")
+                            contenus = [fichier.getvalue() for fichier in fichiers_bilans]
+                            if len(contenus) > 20 or sum(map(len, contenus)) > 10_000_000:
+                                raise ValueError("20 fichiers et 10 Mo au maximum.")
+                            donnees = {
+                                "hashtags": [],
+                                "bilans_base64": [
+                                    base64.b64encode(contenu).decode("ascii")
+                                    for contenu in contenus],
+                            }
+                            if cle:
+                                donnees["research_client_key"] = cle
+                                donnees["research_client_secret"] = secret
+                            reprise = api(
+                                "/api/historique/" + actuel["id"]
+                                + "/reprendre-hashtags", donnees)
+                        except (ValueError, RuntimeError) as erreur:
+                            st.error("Reprise CSV impossible : " + str(erreur))
+                        else:
+                            st.session_state["collecte"] = reprise
+                            actuel = reprise
+                            st.success(
+                                "Reprise lancée dans la collecte PostgreSQL d'origine.")
             # Distinguer la fin d'une séquence de la fin du corpus entier.
             # Les archives restent téléchargeables quel que soit le statut final.
             if (not actuel.get("busy") and not actuel.get("video_busy")
