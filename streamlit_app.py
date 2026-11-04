@@ -151,6 +151,7 @@ if "initialise" not in st.session_state:
         # L'option a été supprimée : les futures collectes n'activent pas ce ZIP.
         "sauvegarde_progressive": False,
         "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",True),
+        "inclure_theme_hashtag_txt": ancienne.get("inclure_theme_hashtag_txt", True),
         "filtrer_texte_ia_tiktok":ancienne.get("filtrer_texte_ia_tiktok",False),
         "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
         "collecter_commentaires":ancienne.get("collecter_commentaires",True),
@@ -246,6 +247,7 @@ st.session_state.setdefault("hashtags_presse_saisis",
     if st.session_state.get("hashtag_presse") else "")
 st.session_state.setdefault("operator_presse", "OR")
 st.session_state.setdefault("hashtags_saisis", "")
+st.session_state.setdefault("inclure_theme_hashtag_txt", True)
 st.session_state.setdefault("utiliser_groupes_hashtags", False)
 st.session_state.setdefault("groupe_hashtags_1", "manifestation, manifestations")
 st.session_state.setdefault("groupe_hashtags_2", "lyceen, lyceens, lycéen, lycéens")
@@ -1402,6 +1404,13 @@ with onglet_collecte:
                  "Les valeurs sont séparées par des virgules. "
                  "Décoché : la colonne reste vide dans les nouvelles collectes. "
                  "Le texte des légendes et les fichiers TXT ne sont pas modifiés.")
+        st.checkbox(
+            "Inclure *theme_nomduhtag dans les fichiers TXT",
+            key="inclure_theme_hashtag_txt", disabled=occupe,
+            help="Décoché : supprimer uniquement la variable *theme_ des en-têtes "
+                 "des textes originaux et des résumés IA. Les variables *source_original, "
+                 "*source_ia, les autres métadonnées, les CSV et les contenus "
+                 "textuels restent inchangés.")
         st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
             disabled=occupe,
             help="Ajoute un second segment **** *source_ia uniquement si le résumé "
@@ -1476,6 +1485,8 @@ with onglet_collecte:
                     valeurs["limit"] = (
                         10 if st.session_state.get("test_research_10_publications")
                         else None)
+                valeurs["inclure_theme_hashtag_txt"] = bool(
+                    st.session_state.get("inclure_theme_hashtag_txt", True))
                 valeurs["inclure_commentaires_txt"] = bool(
                     valeurs["collecter_commentaires"]
                     and st.session_state.get("inclure_commentaires_txt", False))
