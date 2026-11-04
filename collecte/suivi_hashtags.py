@@ -249,7 +249,10 @@ def positions_pagination_research(journal, variantes):
                 "search_id": position.get("search_id"),
                 "pagination_invalide": bool(position.get("pagination_invalide")),
             }
-        elif entree.get("statut_source") == "traitee":
+        elif (entree.get("statut_source") == "traitee"
+              or rapport.get("reprise_sans_curseur")):
+            # Un ancien CSV à cinq colonnes n'a pas de curseur fiable :
+            # l'événement de réexploration annule la position historique.
             positions.pop(source, None)
     return positions
 
