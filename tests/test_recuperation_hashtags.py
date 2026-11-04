@@ -114,6 +114,50 @@ class TestsRecuperationHashtags(unittest.TestCase):
             self.assertIsNotNone(archive)
             self.assertEqual(archive[2]["publications"], 521)
 
+    def test_restaurer_depuis_postgres_si_journal_durable_disponible(self):
+        """La perte des fichiers historiques ne force plus le redémarrage."""
+        sauvegarde = {
+            "id": self.identifiant, "nom": self.nom,
+            "statut": "partial", "traitees": 521,
+            "parametres": self.journal["parametres"],
+            "journal": self.journal["evenements"],
+            "source_en_cours_id": "#17octobre",
+            "publications": self.publications,
+            "commentaires": [], "republications": [],
+        }
+        with tempfile.TemporaryDirectory() as dossier:
+            with (
+                patch("stockage.postgres_consultation.adresse_configuree",
+                      return_value=True),
+                patch("stockage.postgres_consultation.lire_archive_reprise_hashtags",
+                      return_value=sauvegarde),
+                patch(
+                    "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                    return_value=(self.nom, 521)),
+            ):
+                archive = retrouver_ou_reconstruire(
+                    dossier, self.identifiant, self.cookie)
+            self.assertIsNotNone(archive)
+            self.assertEqual(archive[2]["publications"], 521)
+            journal = json.loads(
+                (archive[1] / "journal.json").read_text(encoding="utf-8"))
+            self.assertEqual(journal["evenements"][0]["rapport"][
+                "reprise_pagination_research"]["cursor"], 600)
+            self.assertEqual(archive[2]["source_en_cours_id"], "#17octobre")
+
+    def test_postgres_sans_journal_exige_zip_original(self):
+        """Le nombre de publications n'est pas un curseur de pagination."""
+        with tempfile.TemporaryDirectory() as dossier:
+            with (
+                patch("stockage.postgres_consultation.adresse_configuree",
+                      return_value=True),
+                patch("stockage.postgres_consultation.lire_archive_reprise_hashtags",
+                      return_value=None),
+            ):
+                archive = retrouver_ou_reconstruire(
+                    dossier, self.identifiant, self.cookie)
+            self.assertIsNone(archive)
+
     def test_zip_incomplet_ou_corpus_different_refuse(self):
         """Ne jamais reconstruire la pagination avec un simple bilan CSV."""
         with tempfile.TemporaryDirectory() as dossier:
