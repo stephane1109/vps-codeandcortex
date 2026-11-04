@@ -214,6 +214,152 @@ def restaurer_depuis_postgres(dossier_donnees, identifiant, cookie):
     return True
 
 
+def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
+    """Restaurer depuis les CSV et PostgreSQL sans inventer de curseur TikTok.
+
+    Sans position historique, le moteur recommence la lecture des pages API
+    depuis le début de la période initiale. Les identifiants des publications
+    PostgreSQL sont réinjectés avant la première requête pour dédupliquer les
+    observations ; aucune nouvelle collecte ni suppression n'est effectuée.
+    """
+    from datetime import datetime, timedelta, timezone
+    from collecte.suivi_hashtags import (
+        ETATS_REPRISE, regrouper_bilans_hashtags_csv,
+        importer_bilans_hashtags_csv)
+    from stockage.postgres_consultation import lire_archive_reprise_hashtags
+
+    groupes = regrouper_bilans_hashtags_csv(bilans)
+    if len(groupes) != 1 or identifiant not in groupes:
+        raise ValueError(
+            "Les bilans CSV doivent correspondre au même identifiant "
+            "que la collecte PostgreSQL sélectionnée.")
+    sauvegarde = lire_archive_reprise_hashtags(
+        cookie, identifiant, autoriser_sans_journal=True)
+    if sauvegarde is None:
+        raise ValueError(
+            "La collecte désignée par les CSV n'est pas une collecte "
+            "Research hashtags accessible dans PostgreSQL.")
+    if sauvegarde["journal"]:
+        raise ValueError(
+            "Un journal Research existe dans PostgreSQL. "
+            "La reprise exacte doit utiliser ce journal, pas le mode sans curseur.")
+    parametres = dict(sauvegarde.get("parametres") or {})
+    if (parametres.get("source_collecte") != "hashtags"
+            or parametres.get("hashtag_moteur") != "research"):
+        raise ValueError("Les paramètres PostgreSQL ne décrivent pas des hashtags Research.")
+    hashtags = parametres.get("hashtags_saisis") or parametres.get("hashtags") or []
+    if not isinstance(hashtags, list) or not hashtags:
+        raise ValueError(
+            "Impossible de vérifier les hashtags d'origine dans les paramètres "
+            "PostgreSQL : reprise sans curseur refusée.")
+    hashtags = [str(tag) for tag in hashtags]
+    selection = importer_bilans_hashtags_csv(
+        groupes[identifiant], collecte_id=identifiant,
+        hashtags_autorises=hashtags)
+    if not selection:
+        raise ValueError(
+            "Aucun hashtag inachevé dans les bilans : aucune réexploration nécessaire.")
+
+    # Les anciennes collectes pouvaient utiliser une fenêtre implicite.
+    # La recréer d'après l'horodatage PostgreSQL de création, et jamais
+    # d'après la date du nouvel import CSV.
+    if not parametres.get("date_fin"):
+        cree_le = sauvegarde.get("cree_le")
+        if not cree_le:
+            raise ValueError(
+                "Date de création du corpus absente de PostgreSQL : "
+                "période initiale indéterminée, reprise refusée.")
+        if isinstance(cree_le, str):
+            cree_le = datetime.fromisoformat(cree_le.replace("Z", "+00:00"))
+        date_initiale = cree_le.astimezone(timezone.utc).date()
+        parametres["date_fin"] = date_initiale.isoformat()
+        if not parametres.get("date_debut"):
+            parametres["date_debut"] = (
+                date_initiale - timedelta(days=29)).isoformat()
+    if not parametres.get("date_debut"):
+        raise ValueError(
+            "Période de recherche initiale incomplète dans PostgreSQL.")
+
+    # Chaque ligne CSV constitue une observation historique : les 521 liens
+    # déclarés ne sont pas des publications récréées. Les données conservées
+    # proviennent exclusivement de la table PostgreSQL d'origine.
+    import csv
+    import io
+    etats = {tag: [] for tag in hashtags}
+    motifs = {tag: [] for tag in hashtags}
+    volumes = {tag: [] for tag in hashtags}
+    for fichier in groupes[identifiant]:
+        for ligne in csv.DictReader(
+                io.StringIO(fichier.decode("utf-8-sig")), delimiter=";"):
+            tag = str(ligne.get("hashtag") or "")
+            if tag in etats:
+                etats[tag].append(str(ligne.get("etat") or ""))
+                motif = str(ligne.get("motif") or "")[:500]
+                if motif and motif not in motifs[tag]:
+                    motifs[tag].append(motif)
+                try:
+                    volumes[tag].append(int(ligne.get("liens") or 0))
+                except ValueError:
+                    raise ValueError(
+                        "Nombre de liens invalide dans un bilan de hashtags.") from None
+
+    evenements = []
+    for tag in hashtags:
+        observations = etats[tag]
+        if any(etat in ETATS_REPRISE for etat in observations):
+            # Les observations successives ne doivent jamais transformer
+            # silencieusement une source inachevée en source terminée.
+            etat = ("partielle" if any(e == "partielle" for e in observations)
+                    else "interrompue" if any(e == "interrompue" for e in observations)
+                    else "echec" if any(e == "echec" for e in observations)
+                    else "non_commencee")
+        elif observations and all(e == "traitee" for e in observations):
+            etat = "traitee"
+        else:
+            etat = "non_commencee"
+        evenements.append({
+            "source": "#" + tag,
+            "date": str(sauvegarde.get("cree_le") or ""),
+            "statut_source": etat,
+            "message": " | ".join(motifs[tag]),
+            "rapport": {
+                "collecte_partielle": etat != "traitee",
+                "discovered_urls": [],
+                "liens_declares_csv": max(volumes[tag], default=0),
+                "reprise_sans_curseur": True,
+                "provenance": "bilan_hashtags_csv",
+            },
+        })
+    journal = {
+        "session": identifiant, "statut": "partial",
+        "parametres": parametres,
+        "compteurs_collecte": {"traitees": sauvegarde["traitees"]},
+        "evenements": evenements,
+        "reprise_sans_curseur": True,
+        "source_en_cours_id": None,
+    }
+    with tempfile.TemporaryDirectory(
+            prefix="reprise_bilans_", dir=str(dossier_donnees)) as temporaire:
+        source = Path(temporaire)
+        for nom, donnees in (
+            ("publications.json", sauvegarde["publications"]),
+            ("commentaires.json", sauvegarde["commentaires"]),
+            ("republications.json", sauvegarde["republications"]),
+            ("journal.json", journal),
+        ):
+            (source / nom).write_text(
+                json.dumps(donnees, ensure_ascii=False, default=str),
+                encoding="utf-8")
+        reconstruire_historique(
+            source, dossier_donnees, identifiant, cookie)
+    return {
+        "id": identifiant, "mode": "reexploration_dedoublonnee",
+        "publications_conservees": len(sauvegarde["publications"]),
+        "hashtags_a_reprendre": selection,
+        "curseur_exact": False,
+    }
+
+
 def retrouver_ou_reconstruire(dossier_donnees, identifiant, cookie):
     """Chercher l'historique, puis les sauvegardes locales d'origine."""
     from stockage.historique_analyses import retrouver
