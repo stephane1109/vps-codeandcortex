@@ -168,7 +168,68 @@ class TestsZipResultats(unittest.TestCase):
                     noms = archive.namelist()
                     self.assertEqual(noms.count("bilan_hashtags.csv"), 1)
                     bilan_zip = archive.read("bilan_hashtags.csv")
-                    self.assertEqual(bilan_zip, reponse.content)
+                    lignes_zip = list(csv.DictReader(
+                        io.StringIO(bilan_zip.decode("utf-8-sig")),
+                        delimiter=";"))
+                    # Les deux téléchargements reçoivent un horodatage
+                    # d'export distinct, mais leur pagination est identique.
+                    for ligne_zip, ligne_http in zip(lignes_zip, lignes):
+                        for champ in ("collecte_id", "hashtag", "etat",
+                                      "date_debut", "date_fin", "cursor",
+                                      "search_id", "positions_research_json"):
+                            self.assertEqual(
+                                ligne_zip[champ], ligne_http[champ])
+
+    def test_arret_research_inscrit_cause_et_garde_curseur_csv(self):
+        """Un arrêt après 150 vidéos reste explicite et reprenable."""
+        from webapp import Job, signaler_arret_source_research
+        from collecte.suivi_hashtags import (
+            etablir_bilan_hashtags, exporter_bilan_hashtags_csv)
+        with tempfile.TemporaryDirectory() as dossier:
+            options = StartRequest(
+                nom_sauvegarde="Arret pendant collecte Research",
+                source_collecte="hashtags",
+                hashtag_moteur="research",
+                hashtags_saisis=["manifestation", "lyceen"],
+                date_debut="2026-10-01", date_fin="2026-10-31",
+                research_client_key="cle_test",
+                research_client_secret="secret_test",
+            )
+            job = Job("proprietaire_test", options, Path(dossier))
+            job.source_en_cours_id = "#manifestation"
+            job.journal = [{
+                "source": "#manifestation",
+                "statut_source": "en_cours",
+                "message": "Recherche Research en cours",
+                "rapport": {
+                    "collecte_partielle": True,
+                    "discovered_urls": [
+                        "https://www.tiktok.com/@x/video/7000000000000000001"],
+                    "reprise_pagination_research": {
+                        "indice_periode": 0, "debut_periode": "20261001",
+                        "fin_periode": "20261031",
+                        "cursor": 150, "search_id": "recherche_active",
+                    },
+                },
+            }]
+            job.demander_arret("duree_maximale")
+            signaler_arret_source_research(job)
+            bilan = etablir_bilan_hashtags(
+                options.hashtags, False, job.journal,
+                source_en_cours=job.source_en_cours_id,
+                termine=True, collecte_id=job.id,
+                date_debut=options.date_debut, date_fin=options.date_fin)
+            lignes = list(csv.DictReader(io.StringIO(
+                exporter_bilan_hashtags_csv(bilan).decode("utf-8-sig")),
+                delimiter=";"))
+            self.assertEqual(lignes[0]["etat"], "interrompue")
+            self.assertIn("Durée maximale", lignes[0]["motif"])
+            self.assertEqual(lignes[0]["cursor"], "150")
+            self.assertEqual(lignes[0]["search_id"], "recherche_active")
+            self.assertEqual(
+                job.journal[0]["rapport"]["discovery_stop"],
+                "arret_duree_maximale")
+            self.assertEqual(lignes[1]["etat"], "non_commencee")
 
     def test_watchdog_research_ignore_absence_de_polling_streamlit(self):
         """Une collecte Research ne doit pas s'arrêter après 5 ou 30 min."""
