@@ -640,6 +640,73 @@ class TestsVariablesNumeriques(unittest.TestCase):
         self.assertIsNone(second["reprise_pagination_research"])
         self.assertEqual(len(pages), 2)
 
+    def test_sequence_stoppe_aussi_apres_dix_requetes_meme_si_peu_de_candidats(self):
+        """Une recherche peu productive ne doit pas épuiser le quota quotidien."""
+        from datetime import date
+        from collecte.researchapi import collecter_videos_presse_research
+
+        corps = []
+        def repondre(url, *, data, headers):
+            demande = json.loads(data.decode("utf-8"))
+            corps.append(demande)
+            return {"data": {
+                "videos": [],
+                "has_more": True,
+                "cursor": len(corps) * 100,
+                "search_id": "cherche_10_pages",
+            }}
+
+        rapport = {}
+        liens = collecter_videos_presse_research(
+            None, None, rapport, debut="2026-11-01", fin="2026-11-02",
+            hashtags=["manifestation", "lyceen"], operateur="AND",
+            maximum_candidats=1000, maximum_requetes=10,
+            jeton="JETON_TEST", requete=repondre,
+            pause=lambda _: None, aujourd_hui=date(2026, 11, 3))
+        self.assertEqual(liens, [])
+        self.assertEqual(len(corps), 10)
+        self.assertEqual(rapport["candidats_examines"], 0)
+        self.assertEqual(rapport["requetes_tentees"], 10)
+        self.assertEqual(rapport["discovery_stop"], "lot_termine")
+        self.assertEqual(rapport["reprise_pagination_research"]["cursor"], 1000)
+
+    def test_interruption_en_cours_de_page_reprend_la_meme_page(self):
+        """Ne pas perdre les vidéos d'une page interrompue avant son traitement."""
+        from datetime import date
+        from collecte.researchapi import collecter_videos_presse_research
+        from webapp import Stopped
+
+        rapport = {}
+        appels = []
+        def repondre(url, *, data, headers):
+            appels.append(json.loads(data.decode("utf-8")))
+            return {"data": {
+                "videos": [{
+                    "id": "7703357015573187862",
+                    "username": "profil_lyceen",
+                    "video_description": "Manifestation lycéenne",
+                    "hashtag_names": ["manifestation", "lyceen"],
+                }],
+                "has_more": True, "cursor": 100,
+                "search_id": "recherche_interrompue",
+            }}
+
+        def interrompre(_):
+            raise Stopped()
+
+        with self.assertRaises(Stopped):
+            collecter_videos_presse_research(
+                None, None, rapport, debut="2026-11-01",
+                fin="2026-11-02", hashtags=["manifestation", "lyceen"],
+                operateur="AND", maximum_candidats=1000,
+                maximum_requetes=10, jeton="JETON_TEST",
+                requete=repondre, progress=interrompre,
+                pause=lambda _: None, aujourd_hui=date(2026, 11, 3))
+        self.assertEqual(rapport["reprise_pagination_research"]["indice_periode"], 0)
+        self.assertIsNone(rapport["reprise_pagination_research"]["cursor"])
+        self.assertIsNone(rapport["reprise_pagination_research"]["search_id"])
+        self.assertEqual(len(appels), 1)
+
     def test_recherche_reprise_depuis_journal_du_corpus_original(self):
         """Le point de reprise est extrait de la dernière source partielle."""
         from collecte.suivi_hashtags import positions_pagination_research
