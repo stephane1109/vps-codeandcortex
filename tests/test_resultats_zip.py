@@ -100,7 +100,7 @@ class TestsZipResultats(unittest.TestCase):
         interface = (Path(__file__).resolve().parents[1]
                      / "streamlit_app.py").read_text(encoding="utf-8")
         self.assertIn('"Nom de la collecte *", key="nom_sauvegarde"', interface)
-        self.assertEqual(interface.count('"Télécharger les résultats"'), 2)
+        self.assertEqual(interface.count('"Télécharger les résultats"'), 1)
         self.assertNotIn('"Télécharger l’archive ZIP"', interface)
 
 
