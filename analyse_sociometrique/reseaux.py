@@ -248,7 +248,14 @@ def gexf(reseau):
 def exporter(reseau, format_):
     """Produire un export correspondant au réseau choisi."""
     if format_ == "noeuds.csv":
-        return csv_reseau(reseau["noeuds"], ["id", "label", "type"])
+        # Exporter les métriques facultatives des vidéos importées sans
+        # modifier les trois colonnes du format historique.
+        supplementaires = ("url", "vues", "likes", "commentaires",
+                           "partages", "favoris", "taux_engagement")
+        colonnes = ["id", "label", "type"] + [
+            nom for nom in supplementaires
+            if any(nom in noeud for noeud in reseau["noeuds"])]
+        return csv_reseau(reseau["noeuds"], colonnes)
     if format_ == "liens.csv":
         return csv_reseau(reseau["liens"], ["source", "cible", "poids", "relation"])
     if format_ == "matrice.csv":
