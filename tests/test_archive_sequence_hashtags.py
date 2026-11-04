@@ -112,5 +112,98 @@ class TestsArchiveSequenceHashtags(unittest.TestCase):
                     )
 
 
+    def test_deux_hashtags_enchainent_les_sequences_jusqu_au_zip_final(self):
+        """Deux hashtags dépassent dix pages sans clic ni perte de max_count."""
+        import json
+        from collecte.researchapi import collecter_videos_presse_research
+
+        demandes = []
+        def api_tiktok(url, *, data, headers):
+            corps = json.loads(data)
+            conditions = corps["query"]["and"]
+            tags = [
+                valeur for condition in conditions
+                if condition["field_name"] == "hashtag_name"
+                for valeur in condition["field_values"]
+            ]
+            self.assertEqual(len(tags), 1)
+            hashtag = tags[0]
+            self.assertIn(hashtag, {"17octobre", "24octobre"})
+            compteur = sum(1 for nom, _ in demandes if nom == hashtag) + 1
+            demandes.append((hashtag, corps))
+            self.assertEqual(corps["max_count"], 100)
+            self.assertEqual(corps.get("cursor"), None if compteur == 1
+                             else compteur - 1)
+            total = 12 if hashtag == "17octobre" else 3
+            identifiant = 7000000000000000000 + (
+                compteur if hashtag == "17octobre" else 100 + compteur)
+            video = {
+                "id": str(identifiant),
+                "username": "exemple",
+                "video_description": f"Manifestation #{hashtag}",
+                "hashtag_names": [hashtag],
+                "region_code": "FR",
+                "create_time": 1791633600,
+                "view_count": 100,
+                "like_count": 10,
+                "comment_count": 0,
+                "share_count": 1,
+                "favorites_count": 1,
+            }
+            return {"data": {
+                "videos": [video],
+                "has_more": compteur < total,
+                "cursor": compteur,
+                "search_id": "recherche_" + hashtag,
+            }}
+
+        def collecter(compte, limite, rapport, **options):
+            return collecter_videos_presse_research(
+                compte, limite, rapport, requete=api_tiktok,
+                jeton="jeton_simule", pause=lambda _: None, **options)
+
+        with tempfile.TemporaryDirectory() as dossier:
+            options = StartRequest(
+                nom_sauvegarde="Corpus deux hashtags",
+                source_collecte="hashtags",
+                hashtag_moteur="research",
+                hashtags_saisis=["17octobre", "24octobre"],
+                operator="OR",
+                date_debut="2026-10-01",
+                date_fin="2026-10-31",
+                french_only=False,
+                collecter_commentaires=False,
+                collecter_follower_count=False,
+                variables_txt=["date", "profil", "id", "vues"],
+                research_client_key="cle_test",
+                research_client_secret="secret_test",
+            )
+            job = Job("a" * 64, options, Path(dossier))
+            with patch(
+                "collecte.presse_research.collecter_videos_presse_research",
+                side_effect=collecter
+            ):
+                execute_job(job, driver_factory=Mock(
+                    side_effect=AssertionError("Chrome ne doit pas démarrer")))
+
+            self.assertEqual(job.status, "completed", job.message)
+            self.assertFalse(job.busy)
+            self.assertTrue(job.archive_prete, job.message)
+            self.assertEqual(len(demandes), 15)
+            self.assertEqual(len(job.records), 15)
+            self.assertEqual(job.requetes_research_lot, 15)
+            self.assertEqual(
+                [x["statut_source"] for x in job.journal
+                 if "source" in x], ["traitee", "traitee"])
+            with ZipFile(job.directory / "archive.zip") as archive:
+                self.assertIn("corpus_iramuteq.txt", archive.namelist())
+                self.assertIn("publications.csv", archive.namelist())
+                self.assertIn("engagement.csv", archive.namelist())
+                self.assertIn("bilan_hashtags.csv", archive.namelist())
+                self.assertIn(
+                    b"7000000000000000103",
+                    archive.read("publications.csv"))
+
+
 if __name__ == "__main__":
     unittest.main()
