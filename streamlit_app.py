@@ -1920,7 +1920,7 @@ with onglet_collecte:
                                 data=contenu_bilan,
                                 file_name=(
                                     re.sub(
-                                        r"[^\\w-]+", "_",
+                                        r"[^\w-]+", "_",
                                         str(actuel.get("nom_sauvegarde")
                                             or "collecte_hashtags"),
                                         flags=re.UNICODE
