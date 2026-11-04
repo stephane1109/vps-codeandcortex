@@ -11,6 +11,8 @@ on:
       - "connect_htag.py"
       - "interface/reprise_hashtags_ui.py"
       - "tests/test_sequence_research_hashtags.py"
+      - "tests/test_archive_sequence_hashtags.py"
+      - "tests/test_resultats_zip.py"
       - "tests/test_reprise_hashtags.py"
       - "tests/test_presse_research.py"
       - "tests/test_export_iramuteq.py"
@@ -33,6 +35,8 @@ jobs:
       - name: Tester la pagination et la reprise des hashtags
         run: |
           python -m unittest discover -s tests -p test_sequence_research_hashtags.py -v
+          python -m unittest discover -s tests -p test_archive_sequence_hashtags.py -v
+          python -m unittest discover -s tests -p test_resultats_zip.py -v
           python -m unittest discover -s tests -p test_reprise_hashtags.py -v
           python -m unittest discover -s tests -p test_presse_research.py -v
           python -m unittest discover -s tests -p test_export_iramuteq.py -v
