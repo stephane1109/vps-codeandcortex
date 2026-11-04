@@ -223,7 +223,7 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
     PostgreSQL sont réinjectés avant la première requête pour dédupliquer les
     observations ; aucune nouvelle collecte ni suppression n'est effectuée.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import date, datetime, timedelta, timezone
     from collecte.suivi_hashtags import (
         ETATS_REPRISE, regrouper_bilans_hashtags_csv,
         importer_bilans_hashtags_csv, positions_pagination_bilans_csv,
@@ -260,7 +260,43 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
         hashtags_autorises=hashtags)
     if not selection:
         raise ValueError(
-            "Aucun hashtag inachevé dans les bilans : aucune réexploration nécessaire.")
+            "Aucun hashtag inachevé dans les bilans : aucune reprise nécessaire.")
+
+    # Les nouveaux bilans connaissent les dates UTC réellement demandées,
+    # y compris lorsque l'ancien formulaire avait des dates implicites.
+    # Deux CSV donnant des fenêtres incompatibles sont rejetés.
+    import csv
+    import io
+    fenetres_csv = set()
+    for fichier in groupes[identifiant]:
+        for ligne in csv.DictReader(
+                io.StringIO(fichier.decode("utf-8-sig")), delimiter=";"):
+            debut_csv = str(ligne.get("date_debut") or "").strip()
+            fin_csv = str(ligne.get("date_fin") or "").strip()
+            if not (debut_csv or fin_csv):
+                continue
+            if not (debut_csv and fin_csv):
+                raise ValueError("Les dates du bilan CSV sont incomplètes.")
+            try:
+                if date.fromisoformat(debut_csv) > date.fromisoformat(fin_csv):
+                    raise ValueError("La période du bilan CSV est inversée.")
+            except ValueError as erreur:
+                raise ValueError(
+                    "La période du bilan CSV est invalide.") from erreur
+            fenetres_csv.add((debut_csv, fin_csv))
+    if len(fenetres_csv) > 1:
+        raise ValueError(
+            "Les bilans CSV n'ont pas la même période Research initiale.")
+    if fenetres_csv:
+        debut_csv, fin_csv = next(iter(fenetres_csv))
+        if ((parametres.get("date_debut")
+             and parametres["date_debut"] != debut_csv)
+                or (parametres.get("date_fin")
+                    and parametres["date_fin"] != fin_csv)):
+            raise ValueError(
+                "Les dates du bilan CSV ne correspondent pas à PostgreSQL.")
+        parametres["date_debut"] = debut_csv
+        parametres["date_fin"] = fin_csv
 
     # Les anciennes collectes pouvaient utiliser une fenêtre implicite.
     # La recréer d'après l'horodatage PostgreSQL de création, et jamais
@@ -291,8 +327,6 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
     # Chaque ligne CSV constitue une observation historique : les 521 liens
     # déclarés ne sont pas des publications récréées. Les données conservées
     # proviennent exclusivement de la table PostgreSQL d'origine.
-    import csv
-    import io
     etats = {tag: [] for tag in hashtags}
     motifs = {tag: [] for tag in hashtags}
     volumes = {tag: [] for tag in hashtags}
