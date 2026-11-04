@@ -155,6 +155,7 @@ class StartRequest(BaseModel):
     limite_commentaires: int = Field(default=50, ge=1, le=500)
     second_hashtag: str = Field(default="", max_length=100)
     hashtags_saisis: list[str] = Field(default_factory=list)
+    groupes_hashtags: list[list[str]] = Field(default_factory=list)
     hashtags_exclus: list[str] = Field(default_factory=list)
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
@@ -285,6 +286,22 @@ class StartRequest(BaseModel):
             consultation = bool((info.context or {}).get("consultation_historique"))
             if not (cle and secret) and not identifiants_disponibles() and not consultation:
                 raise ValueError("Research API : renseigner Client key et Client secret dans l'application.")
+        if self.groupes_hashtags:
+            if self.source_collecte != "hashtags":
+                raise ValueError("Les groupes de hashtags sont réservés au mode Hashtags.")
+            if len(self.groupes_hashtags) != 2:
+                raise ValueError("Deux groupes de hashtags sont nécessaires.")
+            groupes = []
+            for groupe in self.groupes_hashtags:
+                if not isinstance(groupe, list) or not groupe:
+                    raise ValueError("Chaque groupe doit contenir au moins un hashtag.")
+                groupes.append(normaliser_liste_hashtags(groupe))
+            if set(groupes[0]).intersection(groupes[1]):
+                raise ValueError("Les deux groupes doivent contenir des hashtags distincts.")
+            self.groupes_hashtags = groupes
+            self.hashtags_saisis = normaliser_liste_hashtags(
+                [tag for groupe in groupes for tag in groupe])
+            self.operator = "AND"
         if self.source_collecte == "presse":
             # Les anciens champs de recherche ne s'appliquent pas aux médias.
             # Le croisement est une option indépendante, explicite et facultative.
@@ -534,6 +551,11 @@ def matches_hashtags(description, settings, *, hashtags_observes=None):
         description, settings, hashtags_observes)
     if not settings.hashtags:
         return False
+    groupes = getattr(settings, "groupes_hashtags", [])
+    if groupes:
+        presents = {tag.casefold() for tag in correspondants}
+        return all(any(tag.casefold() in presents for tag in groupe)
+                   for groupe in groupes)
     return (len(correspondants) == len(settings.hashtags)
             if settings.operator == "AND" else bool(correspondants))
 
@@ -985,7 +1007,9 @@ class Job:
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "variantes_accents": self.settings.variantes_accents,
                     "region_fr_research": self.settings.region_fr_research,
-                    "hashtags": self.settings.hashtags, "filename": self.settings.filename,
+                    "hashtags": self.settings.hashtags,
+                    "groupes_hashtags": self.settings.groupes_hashtags,
+                    "filename": self.settings.filename,
                     "nom_sauvegarde": self.settings.nom_sauvegarde,
                     "sauvegarde_postgres": self.sauvegarde_postgres,
                     "erreur_postgres": self.erreur_postgres,
