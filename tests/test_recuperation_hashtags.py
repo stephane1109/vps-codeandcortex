@@ -1,5 +1,6 @@
 """Tests de restauration des historiques manquants sans réinitialisation."""
 import base64
+from datetime import datetime, timezone
 from io import BytesIO
 import json
 from pathlib import Path
@@ -12,6 +13,8 @@ from zipfile import ZipFile
 from fastapi.testclient import TestClient
 
 import webapp as web
+from collecte.suivi_hashtags import exporter_bilan_hashtags_csv
+from interface.reprise_hashtags_ui import reprendre_depuis_bilans_csv
 from stockage.historique_analyses import retrouver
 from stockage.recuperation_hashtags import (
     reconstruire_historique, restaurer_depuis_zip,
@@ -157,6 +160,125 @@ class TestsRecuperationHashtags(unittest.TestCase):
                 archive = retrouver_ou_reconstruire(
                     dossier, self.identifiant, self.cookie)
             self.assertIsNone(archive)
+
+    def test_csv_manifestation_521_lyceen_zero_reprise_sans_zip(self):
+        """La structure réelle du CSV restaure le corpus sans curseur."""
+        parametres = web.StartRequest(
+            nom_sauvegarde=self.nom,
+            source_collecte="hashtags", hashtag_moteur="research",
+            hashtags_saisis=["manifestation", "lyceen"],
+            date_debut="2026-10-01", date_fin="2026-10-31",
+        ).model_dump(mode="json")
+        bilans = [
+            exporter_bilan_hashtags_csv([
+                {"collecte_id": self.identifiant, "hashtag": "manifestation",
+                 "etat": "partielle", "liens": 521,
+                 "motif": "Research API officielle : Research API HTTP 401 "
+                          ": autorisation, droits ou quota officiel à vérifier."},
+            ]),
+            exporter_bilan_hashtags_csv([
+                {"collecte_id": self.identifiant, "hashtag": "lyceen",
+                 "etat": "non_commencee", "liens": 0, "motif": ""},
+            ]),
+        ]
+        sauvegarde = {
+            "id": self.identifiant, "nom": self.nom,
+            "statut": "partial", "traitees": 521,
+            "parametres": parametres, "journal": [],
+            "source_en_cours_id": None,
+            "cree_le": datetime(2026, 10, 25, tzinfo=timezone.utc),
+            "publications": self.publications,
+            "commentaires": [], "republications": [],
+        }
+        termine = threading.Event()
+        resultat = {}
+
+        def sans_tiktok(job):
+            resultat.update(
+                id=job.id, publications=len(job.publications),
+                traitees=job.processed,
+                hashtags=job.hashtags_reprise,
+                sources=job.sources_reprise_hashtags,
+                positions=job.positions_reprise_research,
+                reexploration=job.reprise_sans_curseur,
+            )
+            job.update(status="partial", busy=False)
+            termine.set()
+
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = web.Manager(data_dir=dossier, runner=sans_tiktok)
+            with TestClient(web.create_app(manager)) as client:
+                client.get("/")
+                appels = []
+                def api(chemin, donnees):
+                    appels.append(chemin)
+                    reponse = client.post(
+                        chemin, json=donnees, headers={"X-ScrapTikTok": "1"})
+                    if reponse.status_code >= 400:
+                        raise RuntimeError(reponse.json().get("detail", "Erreur"))
+                    return reponse.json()
+
+                with (
+                    patch("stockage.postgres_consultation.adresse_configuree",
+                          return_value=True),
+                    patch("stockage.postgres_consultation.verifier_disponibilite"),
+                    patch("stockage.postgres_consultation.lire_archive_reprise_hashtags",
+                          return_value=sauvegarde),
+                    patch("stockage.postgres_consultation.obtenir_nom_collecte",
+                          return_value=self.nom),
+                    patch("stockage.postgres_consultation.compter_publications_collecte",
+                          return_value=521),
+                    patch("ticket_gate.verifier_session_active", return_value=True),
+                ):
+                    reprise, selection = reprendre_depuis_bilans_csv(
+                        api, bilans, cle="cle_reprise", secret="secret_reprise")
+                self.assertTrue(termine.wait(5))
+                self.assertEqual(selection, ["manifestation", "lyceen"])
+                self.assertEqual(resultat["id"], self.identifiant)
+                self.assertEqual(resultat["publications"], 521)
+                self.assertEqual(resultat["traitees"], 521)
+                self.assertEqual(resultat["positions"], {})
+                self.assertTrue(resultat["reexploration"])
+                self.assertEqual(
+                    resultat["sources"], ["manifestation", "lyceen"])
+                self.assertTrue(
+                    any(chemin.endswith("/restaurer-bilans")
+                        for chemin in appels))
+                self.assertTrue(
+                    all(chemin != "/api/jobs" for chemin in appels))
+                self.assertEqual(reprise["id"], self.identifiant)
+                self.assertTrue(reprise["reprise_sans_curseur"])
+
+    def test_csv_bloque_si_postgres_vides_malgre_521_liens(self):
+        """Ne pas annoncer une reprise si aucune publication n'est sauvée."""
+        from stockage.recuperation_hashtags import restaurer_depuis_bilans_csv
+        bilan = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "manifestation",
+             "etat": "partielle", "liens": 521, "motif": "HTTP 401"},
+            {"collecte_id": self.identifiant, "hashtag": "lyceen",
+             "etat": "non_commencee", "liens": 0, "motif": ""},
+        ])
+        parametres = web.StartRequest(
+            nom_sauvegarde=self.nom, source_collecte="hashtags",
+            hashtag_moteur="research",
+            hashtags_saisis=["manifestation", "lyceen"],
+            date_debut="2026-10-01", date_fin="2026-10-31",
+        ).model_dump(mode="json")
+        sauvegarde = {
+            "nom": self.nom, "traitees": 0,
+            "parametres": parametres, "journal": [],
+            "cree_le": datetime(2026, 10, 25, tzinfo=timezone.utc),
+            "publications": [], "commentaires": [],
+            "republications": [],
+        }
+        with tempfile.TemporaryDirectory() as dossier:
+            with patch(
+                    "stockage.postgres_consultation.lire_archive_reprise_hashtags",
+                    return_value=sauvegarde):
+                with self.assertRaisesRegex(ValueError, "aucune publication"):
+                    restaurer_depuis_bilans_csv(
+                        dossier, self.identifiant, self.cookie, [bilan])
+            self.assertIsNone(retrouver(dossier, self.identifiant, self.cookie))
 
     def test_zip_incomplet_ou_corpus_different_refuse(self):
         """Ne jamais reconstruire la pagination avec un simple bilan CSV."""
