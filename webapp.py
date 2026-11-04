@@ -411,6 +411,10 @@ class StartRequest(BaseModel):
     @property
     def libelle(self):
         if self.source_collecte == "hashtags":
+            if self.groupes_hashtags:
+                return " ET ".join(
+                    "(" + " OU ".join("#" + h for h in groupe) + ")"
+                    for groupe in self.groupes_hashtags)
             return (" OU " if self.operator == "OR" else " ET ").join("#" + h for h in self.hashtags)
         libelle = ", ".join("@" + s["compte"] for s in self.sources)
         if self.source_collecte == "presse" and self.croiser_hashtag_presse:
