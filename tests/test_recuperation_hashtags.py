@@ -168,6 +168,8 @@ class TestsRecuperationHashtags(unittest.TestCase):
             source_collecte="hashtags", hashtag_moteur="research",
             hashtags_saisis=["manifestation", "lyceen"],
             date_debut="2026-10-01", date_fin="2026-10-31",
+            research_client_key="cle_simulee",
+            research_client_secret="secret_simule",
         ).model_dump(mode="json")
         bilans = [
             exporter_bilan_hashtags_csv([
@@ -263,6 +265,8 @@ class TestsRecuperationHashtags(unittest.TestCase):
             hashtag_moteur="research",
             hashtags_saisis=["manifestation", "lyceen"],
             date_debut="2026-10-01", date_fin="2026-10-31",
+            research_client_key="cle_simulee",
+            research_client_secret="secret_simule",
         ).model_dump(mode="json")
         sauvegarde = {
             "nom": self.nom, "traitees": 0,
