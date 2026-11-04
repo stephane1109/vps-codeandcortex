@@ -100,22 +100,9 @@ def afficher_reprise_hashtags(api, lancer, occupe):
             format_func=lambda tag: "#" + tag,
             disabled=occupe,
         )
-        if st.button(
-                "Poursuivre la collecte (séquence suivante)",
-                key="reprendre_hashtags_" + collecte["id"],
-                disabled=occupe or not selection,
-                type="primary"):
-            requete = {
-                "hashtags": selection,
-                "source_collecte": "hashtags",
-                "hashtag_moteur": "research",
-            }
-            cle = st.session_state.get("research_client_key", "").strip()
-            secret = st.session_state.get("research_client_secret", "").strip()
-            if cle or secret:
-                requete["research_client_key"] = cle
-                requete["research_client_secret"] = secret
-            lancer(
-                "/api/historique/" + collecte["id"] + "/reprendre-hashtags",
-                requete,
-            )
+        st.caption(
+            "Pour poursuivre les hashtags sélectionnés, utilisez le bouton "
+            "\"Poursuivre la collecte\" affiché dans les résultats. "
+            "Une seule commande de reprise est proposée pour éviter les "
+            "relancements concurrents et les pertes d'affichage."
+        )
