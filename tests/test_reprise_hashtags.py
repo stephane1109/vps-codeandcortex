@@ -9,6 +9,7 @@ from collecte.suivi_hashtags import (
     importer_bilans_hashtags_csv, preparer_reprise_hashtags,
 )
 from collecte.presse import charger_inventaire
+from interface.reprise_hashtags_ui import reprendre_depuis_bilans_csv
 from webapp import StartRequest
 
 
@@ -159,6 +160,88 @@ class TestsRepriseHashtags(unittest.TestCase):
         self.assertIn("st.multiselect(", interface)
         self.assertNotIn('st.button("Poursuivre la collecte (séquence suivante)"',
                          interface)
+
+    def test_import_csv_declenche_reprise_originale_et_pas_un_nouveau_job(self):
+        """Deux bilans relancent l'ancien corpus avec ses 521 publications."""
+        premiere = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "17octobre",
+             "etat": "traitee", "liens": 521, "motif": ""},
+            {"collecte_id": self.identifiant, "hashtag": "24octobre",
+             "etat": "partielle", "liens": 0, "motif": ""},
+        ])
+        seconde = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "24octobre",
+             "etat": "partielle", "liens": 0, "motif": ""},
+            {"collecte_id": self.identifiant, "hashtag": "31octobre",
+             "etat": "non_commencee", "liens": 0, "motif": ""},
+        ])
+        appels = []
+        def api(chemin, donnees):
+            appels.append((chemin, donnees))
+            if chemin.endswith("/ouvrir"):
+                return {
+                    "id": self.identifiant, "source_collecte": "hashtags",
+                    "hashtag_moteur": "research", "busy": False,
+                    "hashtags_saisis": self.hashtags, "processed": 521,
+                    "bilan_hashtags_sources": [
+                        {"hashtag": "17octobre", "etat": "traitee"},
+                        {"hashtag": "24octobre", "etat": "partielle"},
+                        {"hashtag": "31octobre", "etat": "non_commencee"},
+                    ],
+                }
+            self.assertEqual(
+                chemin,
+                f"/api/historique/{self.identifiant}/reprendre-hashtags")
+            self.assertEqual(donnees, {
+                "hashtags": ["24octobre", "31octobre"],
+                "research_client_key": "cle", "research_client_secret": "secret",
+            })
+            return {"id": self.identifiant, "processed": 521, "busy": True}
+
+        reprise, selection = reprendre_depuis_bilans_csv(
+            api, [premiere, seconde], cle="cle", secret="secret")
+        self.assertEqual(selection, ["24octobre", "31octobre"])
+        self.assertEqual(reprise["id"], self.identifiant)
+        self.assertEqual(reprise["processed"], 521)
+        self.assertEqual(len(appels), 2)
+        self.assertEqual(appels[0][0],
+                         f"/api/historique/{self.identifiant}/ouvrir")
+        self.assertTrue(all("/api/jobs" not in chemin for chemin, _ in appels))
+
+    def test_import_csv_bloque_reprise_differents_corpus_ou_termines(self):
+        """Un CSV ne peut pas déplacer ou réinitialiser les publications."""
+        premiere = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "24octobre",
+             "etat": "partielle", "liens": 521, "motif": ""},
+        ])
+        autre = exporter_bilan_hashtags_csv([
+            {"collecte_id": "b" * 32, "hashtag": "24octobre",
+             "etat": "partielle", "liens": 5, "motif": ""},
+        ])
+        appels = []
+        def api(chemin, donnees):
+            appels.append(chemin)
+            return {
+                "id": self.identifiant, "source_collecte": "hashtags",
+                "hashtag_moteur": "research", "busy": False,
+                "hashtags_saisis": self.hashtags,
+                "bilan_hashtags_sources": [
+                    {"hashtag": tag, "etat": "traitee"}
+                    for tag in self.hashtags
+                ],
+            }
+
+        with self.assertRaisesRegex(ValueError, "collectes différentes"):
+            reprendre_depuis_bilans_csv(api, [premiere, autre])
+        self.assertFalse(appels)
+        with self.assertRaisesRegex(ValueError, "Aucun hashtag"):
+            reprendre_depuis_bilans_csv(api, [premiere])
+        self.assertEqual(appels, [
+            f"/api/historique/{self.identifiant}/ouvrir"])
+        interface = (Path(__file__).resolve().parents[1]
+                     / "streamlit_app.py").read_text("utf-8")
+        self.assertIn("bilans_importes_pour_reprise", interface)
+        self.assertIn("or bilans_importes_pour_reprise", interface)
 
     def test_metriques_comptes_autorisees_pour_les_hashtags(self):
         variables = ["following_count", "follower_count",
