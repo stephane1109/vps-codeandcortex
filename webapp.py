@@ -4011,6 +4011,7 @@ def create_app(manager=None):
         from collecte.presse_research import VERSION_RESEARCH, identifiants_disponibles
         return {"status": "ok", "version_presse": VERSION_PRESSE,
                 "version_research": VERSION_RESEARCH,
+                "version_reprise_hashtags": "2026-11-04-csv-cursor-v2",
                 "research_configuree": identifiants_disponibles()}
 
     @app.get("/")
