@@ -834,6 +834,7 @@ class Job:
         self.medias_reprise = []
         self.hashtags_reprise = []
         self.sources_reprise_hashtags = []
+        self.positions_reprise_research = {}
         self.reprise_decalage = 0
         self.publications_avant_reprise = 0
         self.settings = settings
@@ -1631,6 +1632,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 lambda fiche: verifier_criteres_hashtags_research(
                     fiche, job.settings))
         sources = connexion.preparer_sources(job.settings)
+        if (job.settings.source_collecte == "hashtags" and moteur_actif == "research"
+                and job.reprise):
+            # Les positions proviennent uniquement de l'archive originale,
+            # associée au même identifiant et aux critères déjà contrôlés.
+            connexion.positions_reprise_research = dict(
+                job.positions_reprise_research)
         if job.reprise:
             if job.settings.source_collecte == "presse":
                 index_sources = {source.get("id"): source for source in sources}
@@ -2081,6 +2088,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         requetes_sources_terminees = 0
         candidats_sources_termines = 0
         ecartes_sources_termines = 0
+        segment_research_termine = False
         for numero_source, source in enumerate(sources, 1):
             job.check()
             if job.settings.test_research_10_publications and len(unique_links) >= 10:
@@ -2193,6 +2201,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     f"{rapport.get('candidats_examines', nombre)} publication(s) découverte(s), "
                     + message_progression)
             try:
+                if (job.settings.source_collecte == "hashtags"
+                        and moteur_actif == "research"
+                        and not job.settings.test_research_10_publications):
+                    # Limite transversale au lot : 1 000 candidats API
+                    # pour l'ensemble des hashtags, et non par hashtag.
+                    connexion.maximum_candidats_segment = max(
+                        100, job.settings.lot_candidats_research
+                        - candidats_sources_termines)
                 found = connexion.decouvrir(source, rapport,
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
@@ -2407,6 +2423,23 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     or any(r.get("collecte_partielle") or r.get("recherches_en_echec")
                         for r in rapport.get("recherches_compte", [])))
                 entree_source["statut_source"] = "partielle" if incomplete else "traitee"
+            if (job.settings.source_collecte == "hashtags"
+                    and moteur_actif == "research"
+                    and not job.settings.test_research_10_publications
+                    and (rapport.get("discovery_stop") == "lot_termine"
+                         or candidats_sources_termines >=
+                         job.settings.lot_candidats_research)):
+                # Sortir réellement du travail : exporter puis libérer le
+                # worker, au lieu de le laisser en attente dans une boucle.
+                segment_research_termine = True
+                if entree_source is not None and (
+                        rapport.get("reprise_pagination_research") is not None):
+                    entree_source["statut_source"] = "partielle"
+                job.update(
+                    status="finalizing",
+                    message="Séquence Research terminée : archivage du corpus "
+                            "et du curseur pour une reprise ultérieure.")
+                break
             if (job.settings.test_research_10_publications
                     and (job.processed >= 10 or len(unique_links) >= 10)):
                 break
@@ -2548,8 +2581,15 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             # Chaque profil contribue indépendamment à la limite demandée.
             if args.limit is not None and not job.settings.test_research_10_publications:
                 recherche_partielle = any(nombre < args.limit for nombre in retenues_par_compte.values())
-        final_status = "partial" if job.errors or job.search_errors or recherche_partielle else "completed"
+        final_status = ("partial" if (
+            job.errors or job.search_errors or recherche_partielle
+            or segment_research_termine) else "completed")
         final_message = f"{len(job.records)} texte(s) collecté(s) sur {job.processed + job.reprise_decalage} publication(s) consultée(s)."
+        if segment_research_termine:
+            final_message += (
+                " Séquence Research achevée : les données et la position "
+                "de pagination ont été archivées. Utilisez « Reprendre "
+                "la collecte » pour poursuivre dans le même corpus.")
         if job.settings.filtrer_texte_ia_tiktok:
             final_message += (
                 f" Filtre texte IA TikTok : {job.exclus_sans_texte_ia} publication(s) "
