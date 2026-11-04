@@ -25,18 +25,29 @@ def reprendre_depuis_bilans_csv(
             "ou configurez les deux identifiants dans Coolify.")
     try:
         historique = api(f"/api/historique/{identifiant}/ouvrir", {})
-    except RuntimeError as erreur:
-        if archive_zip is None:
-            raise ValueError(
-                str(erreur) + " Si l'historique a disparu, importez également "
-                "le ZIP original des résultats contenant publications.json "
-                "et journal.json, puis relancez la reprise. "
-                "Deux bilans CSV seuls ne permettent pas de restaurer "
-                "le curseur de pagination.") from erreur
-        if len(archive_zip) > 25_000_000:
-            raise ValueError("Le ZIP original ne doit pas dépasser 25 Mo.")
-        api(f"/api/historique/{identifiant}/restaurer-zip", {
-            "archive_base64": base64.b64encode(archive_zip).decode("ascii")})
+    except RuntimeError:
+        # Restaurer les données par le fichier demandé par l'utilisateur.
+        # Le serveur retrouve les publications et les paramètres dans
+        # PostgreSQL, puis synthétise les états à partir des bilans CSV.
+        # Si aucun curseur n'existe, la réexploration déduplique par ID.
+        try:
+            api(f"/api/historique/{identifiant}/restaurer-bilans", {
+                "bilans_base64": [
+                    base64.b64encode(contenu).decode("ascii")
+                    for contenu in contenus
+                ]})
+        except RuntimeError as erreur_csv:
+            if archive_zip is None:
+                raise ValueError(
+                    "La reprise à partir des CSV n'a pas pu retrouver le "
+                    "corpus PostgreSQL d'origine : " + str(erreur_csv)
+                    + " La collecte n'a pas été réinitialisée."
+                ) from erreur_csv
+            # Le ZIP reste uniquement une méthode facultative de secours.
+            if len(archive_zip) > 25_000_000:
+                raise ValueError("Le ZIP original ne doit pas dépasser 25 Mo.")
+            api(f"/api/historique/{identifiant}/restaurer-zip", {
+                "archive_base64": base64.b64encode(archive_zip).decode("ascii")})
         historique = api(f"/api/historique/{identifiant}/ouvrir", {})
     if historique.get("id") != identifiant:
         raise ValueError("L'historique rouvert ne correspond pas au corpus des CSV.")
@@ -76,11 +87,11 @@ def afficher_reprise_hashtags(api, lancer, occupe):
     disponibles = (hashtags_a_reprendre(bilan)
                    if collecte.get("source_collecte") == "hashtags" else [])
     st.caption(
-        "Aucun fichier CSV n'est nécessaire pour reprendre une collecte déjà "
-        "affichée. Si vous l'avez fermée, sélectionnez-la dans "
-        "« Historique temporaire — collectes et analyses » à gauche, "
-        "puis cliquez sur « Rouvrir la collecte et l’analyse ». "
-        "Le bilan_hashtags.csv est également présent dans le ZIP des résultats."
+        "Importez les bilans CSV pour retrouver le corpus PostgreSQL de "
+        "la collecte d'origine et ses hashtags inachevés. Aucun ZIP n'est "
+        "nécessaire si la collecte existe dans PostgreSQL. Sans curseur "
+        "historique, les premières pages API seront réinterrogées et "
+        "les publications existantes seront dédupliquées par identifiant."
     )
     fichiers = st.file_uploader(
         "Importer plusieurs bilans de hashtags (CSV, facultatif)",
@@ -95,18 +106,18 @@ def afficher_reprise_hashtags(api, lancer, occupe):
         st.session_state.pop("empreinte_bilan_hashtags", None)
     else:
         st.caption(
-            "Si la reprise indique « Historique introuvable », importez "
-            "également le ZIP des résultats de la collecte d'origine. "
-            "Il contient le journal et les curseurs nécessaires. "
-            "La restauration n'efface pas les publications PostgreSQL."
+            "La reprise utilise uniquement les CSV et les publications "
+            "de PostgreSQL lorsqu'aucun historique temporaire n'existe. "
+            "La réexploration sans curseur peut consommer de nouvelles "
+            "requêtes TikTok, mais conserve le même identifiant de collecte."
         )
         sauvegarde_zip = st.file_uploader(
             "ZIP original des résultats (si historique perdu)",
             type=["zip"], key="reprise_hashtags_zip_origine",
             disabled=occupe,
-            help="ZIP téléchargé à l'issue de la collecte d'origine, "
-                 "contenant publications.json et journal.json. "
-                 "Les fichiers bilan_hashtags.csv seuls ne suffisent pas.",
+            help="Facultatif : méthode de secours si les fichiers CSV "
+                 "ne peuvent pas être rattachés au corpus PostgreSQL. "
+                 "La reprise CSV n'exige pas ce ZIP.",
         )
         contenus = [fichier.getvalue() for fichier in fichiers]
         try:
@@ -198,7 +209,9 @@ def afficher_reprise_hashtags(api, lancer, occupe):
                     st.success(
                         f"Poursuite lancée sur le corpus {reprise['id'][:8]} "
                         f"pour {len(selection)} hashtag(s). "
-                        "Les anciennes publications et les curseurs sont conservés."
+                        "Les anciennes publications restent conservées ; "
+                        "le curseur est réutilisé lorsqu'il existe, sinon "
+                        "les pages sont réexplorées sans doublons."
                     )
                     st.rerun()
     if not (
