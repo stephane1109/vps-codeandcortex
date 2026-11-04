@@ -11,7 +11,10 @@ from collecte.researchapi import (
     ResearchAccesRefuse, ResearchJetonInvalide,
     _requete, _url_videos, collecter_videos_presse_research,
 )
-from collecte.suivi_hashtags import positions_pagination_research
+from collecte.suivi_hashtags import (
+    etablir_bilan_hashtags, exporter_bilan_hashtags_csv,
+    positions_pagination_bilans_csv, positions_pagination_research,
+)
 
 
 DATE_FIXE = date(2026, 10, 25)
@@ -284,6 +287,54 @@ class TestsSequencesHashtagsResearch(unittest.TestCase):
             rapport["reprise_pagination_research"]["search_id"],
             "pagination_ok")
         self.assertEqual(len(rapport["discovered_urls"]), 1)
+
+    def test_401_apres_une_page_inscrit_curseur_dans_bilan_csv(self):
+        """Le bilan CSV conserve la prochaine page malgré l'arrêt HTTP 401."""
+        appels = []
+
+        def api(url, *, data, headers):
+            corps = json.loads(data)
+            appels.append(corps)
+            if len(appels) == 1:
+                return {
+                    "data": {
+                        "videos": [video(1)],
+                        "has_more": True,
+                        "cursor": 75,
+                        "search_id": "recherche_401",
+                    }
+                }
+            raise ResearchAccesRefuse(
+                "Research API HTTP 401 : droits insuffisants.")
+
+        rapport = {}
+        with self.assertRaisesRegex(ResearchAccesRefuse, "HTTP 401"):
+            interroger(api, rapport)
+        self.assertEqual(len(rapport["discovered_urls"]), 1)
+        self.assertEqual(rapport["reprise_pagination_research"]["cursor"], 75)
+
+        journal = [{
+            "source": "#17octobre",
+            "statut_source": "partielle",
+            "rapport": rapport,
+            "message": "Research API HTTP 401",
+        }]
+        bilan = etablir_bilan_hashtags(
+            ["17octobre", "24octobre"], False, journal,
+            collecte_id="a" * 32, termine=True,
+            date_debut="2026-10-01", date_fin="2026-10-25")
+        fichier = exporter_bilan_hashtags_csv(bilan)
+        entete = fichier.decode("utf-8-sig").splitlines()[0]
+        self.assertIn("cursor", entete.split(";"))
+        self.assertIn("search_id", entete.split(";"))
+        positions = positions_pagination_bilans_csv(
+            [fichier], collecte_id="a" * 32,
+            hashtags_autorises=["17octobre", "24octobre"],
+            date_debut="2026-10-01", date_fin="2026-10-25")
+        self.assertEqual(positions["#17octobre"]["cursor"], 75)
+        self.assertEqual(
+            positions["#17octobre"]["search_id"], "recherche_401")
+        self.assertNotIn("#24octobre", positions)
 
     def test_diagnostic_401_differe_du_quota_429(self):
         """Distinguer l'expiration, les droits et le dépassement du quota."""
