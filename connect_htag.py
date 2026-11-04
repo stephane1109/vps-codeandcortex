@@ -72,6 +72,8 @@ class ConnexionHashtag(ConnexionPresse):
             and not getattr(parametres, "rechercher_dans_texte", False)
             and not getattr(parametres, "variantes_accents", False))
         self._hashtags_et = demandes if self._recherche_et_stricte else ()
+        self._region_research = (
+            "FR" if getattr(parametres, "region_fr_research", False) else None)
         self._recherche_et_executee = False
         if self._recherche_et_stricte:
             # La requête unique dispose du budget global et non d'une
@@ -183,7 +185,8 @@ class ConnexionHashtag(ConnexionPresse):
                 debut=self.research_debut, fin=self.research_fin,
                 check=self.verifier, progress=progression,
                 credentiels=self.research_credentiels,
-                exclusions=self.hashtags_exclus)
+                exclusions=self.hashtags_exclus,
+                filtre_region=self._region_research)
             if requete_conjointe:
                 self._recherche_et_executee = True
             # Filtrer immédiatement les métadonnées officielles avant de
