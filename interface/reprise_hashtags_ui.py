@@ -5,7 +5,7 @@ import streamlit as st
 
 from collecte.suivi_hashtags import (
     hashtags_a_reprendre, identifier_collecte_bilans_hashtags_csv,
-    importer_bilans_hashtags_csv,
+    importer_bilans_hashtags_csv, regrouper_bilans_hashtags_csv,
 )
 
 
@@ -70,9 +70,9 @@ def afficher_reprise_hashtags(api, lancer, occupe):
         "Importer plusieurs bilans de hashtags (CSV, facultatif)",
         type=["csv"], accept_multiple_files=True,
         key="bilan_reprise_hashtags_csv", disabled=occupe,
-        help="Sélectionnez jusqu'à 20 bilans CSV d'une même collecte. "
-             "Leurs hashtags inachevés sont regroupés sans doublons ; "
-             "le journal actuel reste prioritaire. "
+        help="Sélectionnez jusqu'à 20 bilans CSV. S'ils appartiennent "
+             "à des collectes différentes, choisissez le corpus à reprendre : "
+             "leurs publications et leurs curseurs ne seront pas mélangés. "
              "Aucun CSV n'est requis pour une reprise depuis l'historique.",
     )
     if not fichiers:
@@ -80,51 +80,63 @@ def afficher_reprise_hashtags(api, lancer, occupe):
     else:
         contenus = [fichier.getvalue() for fichier in fichiers]
         try:
-            identifiant = identifier_collecte_bilans_hashtags_csv(contenus)
+            groupes = regrouper_bilans_hashtags_csv(contenus)
         except ValueError as erreur:
             st.error(str(erreur))
         else:
-            if identifiant != collecte.get("id"):
+            if len(groupes) > 1:
                 st.warning(
-                    "Les bilans désignent le corpus d'origine "
-                    + identifiant[:8]
-                    + ", et non la collecte actuellement affichée. "
-                    "Le bouton « Lancer la collecte » créerait un nouveau "
-                    "corpus et recommencerait la pagination."
+                    f"Ces fichiers correspondent à {len(groupes)} collectes "
+                    "distinctes. Leurs curseurs ne peuvent pas être fusionnés. "
+                    "Choisissez la collecte historique à poursuivre ; "
+                    "les autres corpus restent inchangés."
                 )
-            try:
-                # La sélection ne peut être appliquée qu'à l'identifiant
-                # réellement enregistré dans le journal de la collecte.
-                selection_csv = (
-                    importer_bilans_hashtags_csv(
-                        contenus, collecte_id=collecte["id"],
-                        hashtags_autorises=collecte.get("hashtags_saisis") or [])
-                    if identifiant == collecte.get("id") else [])
-            except ValueError as erreur:
-                st.error(str(erreur))
+                identifiant = st.selectbox(
+                    "Collecte d'origine à reprendre",
+                    options=list(groupes),
+                    format_func=lambda cle: (
+                        f"Corpus {cle[:8]} · {len(groupes[cle])} bilan(s) CSV"),
+                    key="bilan_hashtags_collecte_cible",
+                    disabled=occupe,
+                )
             else:
-                autorises = [
-                    tag for tag in selection_csv if tag in disponibles
-                ]
-                if identifiant == collecte.get("id"):
+                identifiant = next(iter(groupes))
+            contenus_corpus = groupes[identifiant]
+            if identifiant != collecte.get("id"):
+                st.info(
+                    "Les bilans sélectionnés concernent le corpus d'origine "
+                    + identifiant[:8]
+                    + ". Le bouton de reprise ci-dessous rouvre ce corpus "
+                    "et conserve les publications et curseurs déjà enregistrés."
+                )
+            else:
+                try:
+                    selection_csv = importer_bilans_hashtags_csv(
+                        contenus_corpus, collecte_id=collecte["id"],
+                        hashtags_autorises=collecte.get("hashtags_saisis") or [])
+                except ValueError as erreur:
+                    st.error(str(erreur))
+                else:
+                    autorises = [
+                        tag for tag in selection_csv if tag in disponibles]
                     if len(autorises) < len(selection_csv):
                         st.warning(
-                            "Des hashtags du CSV sont déjà terminés "
-                            "dans le journal actuel : ils ne sont pas relancés."
+                            "Certains hashtags des CSV sont déjà terminés "
+                            "dans le journal actuel : ils ne seront pas relancés."
                         )
-                    cle_selection = "reprendre_hashtags_selection_" + collecte["id"]
+                    cle_selection = (
+                        "reprendre_hashtags_selection_" + collecte["id"])
                     empreintes = sorted(
                         hashlib.sha256(contenu).hexdigest()
-                        for contenu in contenus)
+                        for contenu in contenus_corpus)
                     empreinte = hashlib.sha256(
                         "|".join(empreintes).encode("ascii")).hexdigest()
                     if (not occupe and st.session_state.get(
                             "empreinte_bilan_hashtags") != empreinte):
-                        # Modifier la sélection avant la création du widget.
                         st.session_state[cle_selection] = autorises
                         st.session_state["empreinte_bilan_hashtags"] = empreinte
                     st.success(
-                        f"{len(contenus)} bilan(s) importé(s) pour le même corpus ; "
+                        f"{len(contenus_corpus)} bilan(s) du corpus importé(s) ; "
                         f"{len(autorises)} hashtag(s) encore inachevé(s) "
                         "présélectionné(s), sans doublons."
                     )
@@ -142,11 +154,11 @@ def afficher_reprise_hashtags(api, lancer, occupe):
                     or "").strip()
                 try:
                     reprise, selection = reprendre_depuis_bilans_csv(
-                        api, contenus, cle=cle, secret=secret)
+                        api, contenus_corpus, cle=cle, secret=secret)
                 except (ValueError, RuntimeError) as erreur:
                     st.error(
                         "Reprise impossible : " + str(erreur)
-                        + " Le corpus n'est pas recréé à partir de zéro."
+                        + " Aucun nouveau corpus n'a été créé."
                     )
                 else:
                     st.session_state["collecte"] = reprise
