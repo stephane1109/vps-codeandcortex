@@ -251,7 +251,8 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                                     credentiels=None, hashtag=None, exclusions=(),
                                     hashtags=None, operateur="AND",
                                     filtre_region=None, maximum_candidats=None,
-                                    maximum_requetes=None, position_reprise=None):
+                                    maximum_requetes=None, position_reprise=None,
+                                    enchainement_automatique=False):
     """Recherche paginée, segmentée et reprenable sans perdre sa position."""
     compte = normaliser_compte(compte) if compte is not None else None
     from .selection_hashtags import normaliser_liste_hashtags
@@ -330,6 +331,10 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
         raise ResearchAccesRefuse("Research API : jeton absent.")
     contenus = {}
     vus = set()
+    # Ces bornes délimitent les séquences internes sans interrompre le job.
+    debut_sequence_candidats = 0
+    debut_sequence_requetes = 0
+    rapport["sequences_terminees"] = 0
     # Conserver les références vivantes des données : les réécritures
     # intégrales à chaque page ralentissaient les collectes importantes.
     rapport["metadonnees_api"] = contenus
@@ -377,7 +382,8 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                 "query": {"and": conditions},
                 "start_date": borne_debut, "end_date": borne_fin,
                 "max_count": (
-                    min(100, maximum_candidats - rapport["candidats_examines"])
+                    min(100, maximum_candidats - (
+                        rapport["candidats_examines"] - debut_sequence_candidats))
                     if maximum_candidats is not None
                     else 100 if automatique
                     else min(100, limite - len(contenus))),
@@ -521,18 +527,26 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                 rapport["plage_research"] = {
                     "debut": periodes[-1][0], "fin": periodes[0][1]}
                 return list(rapport["discovered_urls"])
-            # Stopper un segment après la dernière page intégralement lue.
-            # Une dernière page qui termine tout le corpus n'a pas de suite.
+            # Une séquence comporte au plus 1 000 candidats ou 10 appels.
+            # En mode automatique, poursuivre avec le curseur validé.
+            # Le quota quotidien est contrôlé avant chaque appel Research.
             if (page_suivante is not None
                     and ((maximum_candidats is not None
-                          and rapport["candidats_examines"] >= maximum_candidats)
+                          and rapport["candidats_examines"] - debut_sequence_candidats
+                          >= maximum_candidats)
                          or (maximum_requetes is not None
-                             and rapport["requetes_tentees"] >= maximum_requetes))):
-                rapport["discovery_stop"] = "lot_termine"
-                rapport["collecte_partielle"] = True
-                rapport["plage_research"] = {
-                    "debut": periodes[-1][0], "fin": periodes[0][1]}
-                return list(rapport["discovered_urls"])
+                             and rapport["requetes_tentees"] - debut_sequence_requetes
+                             >= maximum_requetes))):
+                rapport["sequences_terminees"] += 1
+                if enchainement_automatique:
+                    debut_sequence_candidats = rapport["candidats_examines"]
+                    debut_sequence_requetes = rapport["requetes_tentees"]
+                else:
+                    rapport["discovery_stop"] = "lot_termine"
+                    rapport["collecte_partielle"] = True
+                    rapport["plage_research"] = {
+                        "debut": periodes[-1][0], "fin": periodes[0][1]}
+                    return list(rapport["discovered_urls"])
             if not automatique and len(contenus) >= limite:
                 rapport["discovery_stop"] = "limit"
                 break
