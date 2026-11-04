@@ -69,6 +69,9 @@ class ConnexionHashtag(ConnexionPresse):
             self.moteur_collecte == "research"
             and getattr(parametres, "operator", "AND") == "AND"
             and len(demandes) > 1
+            # En mode groupes, chaque source garde son curseur autonome ;
+            # une requête ET sur les six graphies serait impossible.
+            and not getattr(parametres, "groupes_hashtags", [])
             and not getattr(parametres, "rechercher_dans_texte", False)
             and not getattr(parametres, "variantes_accents", False))
         self._hashtags_et = demandes if self._recherche_et_stricte else ()
