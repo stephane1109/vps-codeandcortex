@@ -149,7 +149,10 @@ class TestsRepriseHashtags(unittest.TestCase):
         moteur = (racine / "webapp.py").read_text("utf-8")
         self.assertIn('source in {"presse", "hashtags"}', interface)
         self.assertIn(
-            "Poursuivre la collecte (séquence suivante)",
+            "Poursuivre la collecte",
+            interface)
+        self.assertNotIn(
+            '"Poursuivre la collecte (séquence suivante)"',
             (racine / "interface" / "reprise_hashtags_ui.py").read_text("utf-8"))
         self.assertIn("bilan_hashtags.csv", moteur)
         self.assertIn("def reprendre_hashtags_existants(", moteur)
