@@ -1098,7 +1098,9 @@ class Job:
                         etablir_bilan_hashtags(
                             self.settings.hashtags, self.settings.variantes_accents,
                             self.journal, source_en_cours=self.source_en_cours_id,
-                            termine=not self.busy, collecte_id=self.id)
+                            termine=not self.busy, collecte_id=self.id,
+                            date_debut=self.settings.date_debut,
+                            date_fin=self.settings.date_fin)
                         if self.settings.source_collecte == "hashtags" else []),
                     "publications_avant_reprise": self.publications_avant_reprise,
                     "publications_ajoutees": max(0, len(self.publications) - self.publications_avant_reprise) if self.reprise else 0,
@@ -2859,7 +2861,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     bilan = etablir_bilan_hashtags(
                         job.settings.hashtags, job.settings.variantes_accents,
                         job.journal, source_en_cours=job.source_en_cours_id,
-                        termine=True, collecte_id=job.id)
+                        termine=True, collecte_id=job.id,
+                        date_debut=job.settings.date_debut,
+                        date_fin=job.settings.date_fin)
                     (job.directory / "bilan_hashtags.csv").write_bytes(
                         exporter_bilan_hashtags_csv(bilan))
                 # Le mode Profils conserve les vidéos découvertes sans légende.
@@ -4271,7 +4275,9 @@ def create_app(manager=None):
             bilan = etablir_bilan_hashtags(
                 job.settings.hashtags, job.settings.variantes_accents,
                 job.journal, source_en_cours=job.source_en_cours_id,
-                termine=True, collecte_id=job.id)
+                termine=True, collecte_id=job.id,
+                date_debut=job.settings.date_debut,
+                date_fin=job.settings.date_fin)
             ajouts["bilan_hashtags.csv"] = exporter_bilan_hashtags_csv(bilan)
         if job.commentaires and job.settings.inclure_commentaires_txt:
             ajouts["commentaires.txt"] = texte_commentaires_collectes(job).encode("utf-8")
