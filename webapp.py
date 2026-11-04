@@ -2947,6 +2947,11 @@ def telecharger_mp4_collecte(job, contexte_anonyme=None):
     return f"MP4 : {recuperes}/{len(resultats)} vidéo(s) disponible(s) dans l’archive. Voir le bilan MP4."
 
 
+class RestaurerZipHashtagsPayload(BaseModel):
+    """ZIP complet permettant de reconstruire un historique de collecte perdu."""
+    archive_base64: str = Field(min_length=1, max_length=34_000_000)
+
+
 class ProgrammerResearch(BaseModel):
     """Programmation Research ; le corps des paramètres conserve son modèle existant."""
     parametres: StartRequest
@@ -3252,15 +3257,23 @@ class Manager:
         """Reprendre les hashtags inachevés dans le même corpus PostgreSQL."""
         from collecte.reprise_collecte import (
             initialiser_donnees_reprise, lire_archive_json)
-        from stockage.historique_analyses import retrouver
+        from stockage.recuperation_hashtags import retrouver_ou_reconstruire
         from stockage.postgres_consultation import (
             adresse_configuree, compter_publications_collecte,
             obtenir_nom_collecte, verifier_disponibilite)
         if not cookie:
             raise HTTPException(403, "Historique privé indisponible.")
-        archive = retrouver(self.data_dir, identifiant, cookie)
+        try:
+            archive = retrouver_ou_reconstruire(
+                self.data_dir, identifiant, cookie)
+        except ValueError as erreur:
+            raise HTTPException(409, str(erreur)) from None
         if archive is None:
-            raise HTTPException(404, "Collecte absente de l'historique privé.")
+            raise HTTPException(
+                404, "Journal de pagination introuvable dans l'historique "
+                "et les dossiers locaux. Pour poursuivre sans repartir de "
+                "zéro, importez le ZIP de la collecte d'origine contenant "
+                "publications.json et journal.json.")
         _, dossier, manifeste = archive
         parametres = dict(manifeste.get("parametres") or {})
         if (parametres.get("source_collecte") != "hashtags"
@@ -3395,10 +3408,17 @@ class Manager:
             return job
 
     def reouvrir_historique(self, owner, identifiant, cookie):
-        from stockage.historique_analyses import retrouver
-        recupere = retrouver(self.data_dir, identifiant, cookie)
+        from stockage.recuperation_hashtags import retrouver_ou_reconstruire
+        try:
+            recupere = retrouver_ou_reconstruire(
+                self.data_dir, identifiant, cookie)
+        except ValueError as erreur:
+            raise HTTPException(409, str(erreur)) from None
         if recupere is None:
-            raise HTTPException(404, "Analyse introuvable ou expirée.")
+            raise HTTPException(
+                404, "Historique introuvable ; le journal de pagination n'est "
+                "pas dans les dossiers conservés sur le serveur. "
+                "Importez le ZIP original de la collecte pour le restaurer.")
         ligne, dossier, manifeste = recupere
         with self.lock:
             job = self.jobs.get(identifiant)
@@ -4356,6 +4376,28 @@ def create_app(manager=None):
         travail = manager.reprendre_hashtags_historique(
             owner(request), identifiant, owner_historique(request), payload)
         return travail.snapshot()
+
+    @app.post("/api/historique/{identifiant}/restaurer-zip")
+    def restaurer_historique_hashtags_zip(
+            identifiant: str, payload: RestaurerZipHashtagsPayload,
+            request: Request):
+        """Récupérer le journal Research d'un ZIP sans altérer PostgreSQL."""
+        exiger_ticket(request)
+        from stockage.recuperation_hashtags import restaurer_depuis_zip
+        from stockage.historique_analyses import retrouver
+        cookie = owner_historique(request)
+        if not cookie:
+            raise HTTPException(403, "Cookie d'historique privé absent.")
+        if retrouver(manager.data_dir, identifiant, cookie) is not None:
+            raise HTTPException(
+                409, "Cet historique existe déjà : aucune restauration ZIP nécessaire.")
+        try:
+            restaurer_depuis_zip(
+                manager.data_dir, identifiant, cookie,
+                payload.archive_base64)
+        except ValueError as erreur:
+            raise HTTPException(409, str(erreur)) from None
+        return {"id": identifiant, "restaure": True}
 
     @app.post("/api/historique/{identifiant}/ouvrir")
     def ouvrir_historique(identifiant: str, request: Request):
