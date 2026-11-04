@@ -139,6 +139,41 @@ def preparer_reprise_hashtags(hashtags, avec_accents, journal, selection=None,
     return list(selection), a_interroger, bilan
 
 
+def positions_pagination_research(journal, variantes):
+    """Retrouver la première page non explorée de chaque source inachevée.
+
+    Une position provient du journal de l'archive d'origine, jamais d'une
+    entrée fournie par l'utilisateur. La dernière exécution d'une source
+    détermine son état ; une source terminée ne garde pas d'ancien curseur.
+    """
+    autorisees = {"#" + variante for variante in variantes}
+    positions = {}
+    for entree in journal:
+        if not isinstance(entree, dict):
+            continue
+        source = entree.get("source")
+        if source not in autorisees:
+            continue
+        rapport = entree.get("rapport")
+        if not isinstance(rapport, dict):
+            continue
+        position = rapport.get("reprise_pagination_research")
+        if isinstance(position, dict) and (
+                isinstance(position.get("indice_periode"), int)
+                and isinstance(position.get("debut_periode"), str)
+                and isinstance(position.get("fin_periode"), str)):
+            positions[source] = {
+                "indice_periode": position["indice_periode"],
+                "debut_periode": position["debut_periode"],
+                "fin_periode": position["fin_periode"],
+                "cursor": position.get("cursor"),
+                "search_id": position.get("search_id"),
+            }
+        elif entree.get("statut_source") == "traitee":
+            positions.pop(source, None)
+    return positions
+
+
 def exporter_bilan_hashtags_csv(bilan):
     """Produire un CSV UTF-8 réimportable, associé au corpus initial."""
     tampon = io.StringIO()
