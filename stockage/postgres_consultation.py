@@ -542,15 +542,16 @@ def lire_archive_reprise_hashtags(cookie, identifiant, *,
         with connexion.cursor() as curseur:
             curseur.execute(
                 "SELECT nom_sauvegarde, source_collecte, moteur, statut, "
-                "traitees, parametres, journal_research, source_en_cours_id "
-                "FROM scraptiktok_collectes WHERE collecte_id=%s "
+                "traitees, parametres, journal_research, source_en_cours_id, "
+                "cree_le FROM scraptiktok_collectes WHERE collecte_id=%s "
                 "AND proprietaire_hash=%s",
                 (identifiant, empreinte(cookie)))
             resultat = curseur.fetchone()
             if resultat is None:
                 raise ValueError(
                     "Collecte PostgreSQL absente ou cookie privé différent.")
-            nom, source, moteur, statut, traitees, parametres, journal, source_en_cours = resultat
+            (nom, source, moteur, statut, traitees, parametres,
+             journal, source_en_cours, cree_le) = resultat
             if source != "hashtags" or moteur != "research":
                 return None
             if not isinstance(journal, list) or not journal:
@@ -582,6 +583,7 @@ def lire_archive_reprise_hashtags(cookie, identifiant, *,
         "id": identifiant, "nom": nom, "statut": statut,
         "traitees": int(traitees or 0), "parametres": parametres,
         "journal": journal, "source_en_cours_id": source_en_cours,
+        "cree_le": cree_le,
         "publications": publications, "commentaires": commentaires,
         "republications": republications,
     }
