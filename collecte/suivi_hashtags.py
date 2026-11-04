@@ -168,6 +168,7 @@ def positions_pagination_research(journal, variantes):
                 "fin_periode": position["fin_periode"],
                 "cursor": position.get("cursor"),
                 "search_id": position.get("search_id"),
+                "pagination_invalide": bool(position.get("pagination_invalide")),
             }
         elif entree.get("statut_source") == "traitee":
             positions.pop(source, None)
