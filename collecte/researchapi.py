@@ -275,8 +275,8 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     if maximum_candidats is not None:
         if (not isinstance(maximum_candidats, int)
                 or isinstance(maximum_candidats, bool)
-                or maximum_candidats < 100):
-            raise ResearchErreur("Un segment Research doit examiner au moins 100 candidats.")
+                or maximum_candidats < 1):
+            raise ResearchErreur("Un segment Research doit examiner au moins un candidat.")
     if maximum_requetes is not None:
         if (not isinstance(maximum_requetes, int)
                 or isinstance(maximum_requetes, bool)
@@ -367,7 +367,11 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             requete_corps = {
                 "query": {"and": conditions},
                 "start_date": borne_debut, "end_date": borne_fin,
-                "max_count": 100 if automatique else min(100, limite - len(contenus)),
+                "max_count": (
+                    min(100, maximum_candidats - rapport["candidats_examines"])
+                    if maximum_candidats is not None
+                    else 100 if automatique
+                    else min(100, limite - len(contenus))),
                 "is_random": False,
             }
             if hashtags_exclus:
