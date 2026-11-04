@@ -3384,7 +3384,15 @@ class Manager:
                 raise HTTPException(409, str(erreur)) from None
             job.hashtags_reprise = list(selection)
             job.sources_reprise_hashtags = list(variantes)
-            job.reprise_sans_curseur = bool(journal.get("reprise_sans_curseur"))
+            job.reprise_sans_curseur = bool(
+                journal.get("reprise_sans_curseur")
+                or any(
+                    isinstance(entree, dict)
+                    and isinstance(entree.get("rapport"), dict)
+                    and entree["rapport"].get("reprise_sans_curseur")
+                    for entree in job.journal
+                )
+            )
             if job.reprise_sans_curseur:
                 job.diagnostics.append({
                     "code": "reprise_csv_sans_curseur",
