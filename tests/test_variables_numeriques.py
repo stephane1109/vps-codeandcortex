@@ -548,15 +548,9 @@ class TestsVariablesNumeriques(unittest.TestCase):
                        side_effect=recherche):
                 with patch("stockage.collectes_research.etat_quota",
                            return_value=quota):
-                    # Reproduire l'autorisation de poursuite donnée après
-                    # le contrôle de la première page, sans attente réelle.
-                    with patch.object(job.continuer_research, "wait",
-                                      return_value=True) as validation:
-                        execute_job(job, driver_factory=navigateur)
-                    validation.assert_called_once()
+                    execute_job(job, driver_factory=navigateur)
 
             navigateur.assert_not_called()
-            self.assertFalse(job.attente_validation_research)
             self.assertEqual(
                 [(s["page"], s["traites"], s["textes"]) for s in suivis],
                 [(1, 1, 1), (2, 2, 2)])
@@ -570,6 +564,104 @@ class TestsVariablesNumeriques(unittest.TestCase):
             contenu = job.path.read_text("utf-8")
             self.assertIn(fiches[0]["description"], contenu)
             self.assertIn(fiches[1]["description"], contenu)
+
+    def test_sequence_research_conserve_le_curseur_et_reprend_sans_rejouer(self):
+        """Un second lot repart de cursor/search_id et conserve les critères."""
+        from datetime import date
+        from collecte.researchapi import collecter_videos_presse_research
+
+        def fiche(identifiant):
+            return {
+                "id": str(identifiant),
+                "username": "profil_lyceen",
+                "video_description": "Manifestation #manifestation #lyceen",
+                "hashtag_names": ["manifestation", "lyceen"],
+                "region_code": "FR",
+            }
+
+        # Une réponse d'une page contient 100 candidats : la collecte
+        # s'arrête donc au premier lot et conserve la page suivante.
+        pages = []
+        def reponse_premier_lot(url, *, data, headers):
+            corps = json.loads(data.decode("utf-8"))
+            pages.append(corps)
+            self.assertNotIn("cursor", corps)
+            return {"data": {
+                "videos": [fiche(7703357015573187800 + i)
+                           for i in range(100)],
+                "has_more": True,
+                "cursor": 100,
+                "search_id": "identifiant_test",
+            }}
+
+        premier = {}
+        liste_a = collecter_videos_presse_research(
+            None, None, premier,
+            debut="2026-11-01", fin="2026-11-02",
+            hashtags=["manifestation", "lyceen"], operateur="AND",
+            maximum_candidats=100,
+            jeton="JETON_TEST", requete=reponse_premier_lot,
+            pause=lambda _: None, aujourd_hui=date(2026, 11, 3))
+        self.assertEqual(len(liste_a), 100)
+        self.assertEqual(premier["discovery_stop"], "lot_termine")
+        self.assertTrue(premier["collecte_partielle"])
+        position = premier["reprise_pagination_research"]
+        self.assertEqual(position["cursor"], 100)
+        self.assertEqual(position["search_id"], "identifiant_test")
+        self.assertEqual(position["indice_periode"], 0)
+
+        def reponse_second_lot(url, *, data, headers):
+            corps = json.loads(data.decode("utf-8"))
+            pages.append(corps)
+            self.assertEqual(corps["cursor"], 100)
+            self.assertEqual(corps["search_id"], "identifiant_test")
+            self.assertEqual(corps["query"]["and"], [
+                {"field_name": "hashtag_name", "operation": "EQ",
+                 "field_values": ["manifestation"]},
+                {"field_name": "hashtag_name", "operation": "EQ",
+                 "field_values": ["lyceen"]},
+            ])
+            return {"data": {
+                "videos": [fiche(7703357015573187900)],
+                "has_more": False,
+            }}
+
+        second = {}
+        liste_b = collecter_videos_presse_research(
+            None, None, second,
+            debut="2026-11-01", fin="2026-11-02",
+            hashtags=["manifestation", "lyceen"], operateur="AND",
+            maximum_candidats=100, position_reprise=position,
+            jeton="JETON_TEST", requete=reponse_second_lot,
+            pause=lambda _: None, aujourd_hui=date(2026, 11, 3))
+        self.assertEqual(len(liste_b), 1)
+        self.assertNotIn(liste_b[0], liste_a)
+        self.assertEqual(second["discovery_stop"], "fin_des_periodes")
+        self.assertIsNone(second["reprise_pagination_research"])
+        self.assertEqual(len(pages), 2)
+
+    def test_recherche_reprise_depuis_journal_du_corpus_original(self):
+        """Le point de reprise est extrait de la dernière source partielle."""
+        from collecte.suivi_hashtags import positions_pagination_research
+        position = {
+            "indice_periode": 0, "debut_periode": "20261101",
+            "fin_periode": "20261102", "cursor": 100,
+            "search_id": "identifiant_test"}
+        historique = [{
+            "source": "#manifestation", "statut_source": "partielle",
+            "rapport": {"reprise_pagination_research": position},
+        }]
+        positions = positions_pagination_research(
+            historique, ["manifestation", "lyceen"])
+        self.assertEqual(positions["#manifestation"], position)
+        self.assertNotIn("#lyceen", positions)
+        historique.append({
+            "source": "#manifestation", "statut_source": "traitee",
+            "rapport": {"reprise_pagination_research": None},
+        })
+        self.assertNotIn(
+            "#manifestation",
+            positions_pagination_research(historique, ["manifestation"]))
 
     def test_pipeline_research_sans_navigation_et_compteurs_absents(self):
         from collecte.researchapi import _fiche
