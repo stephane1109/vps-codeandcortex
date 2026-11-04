@@ -4195,6 +4195,7 @@ def create_app(manager=None):
                 "version_reprise_bilans_historiques": "2026-11-04-multicsv-v1",
                 "version_groupes_hashtags": "2026-11-04-et-ou-v1",
                 "version_annotation_csv": "2026-11-04-autonome-v1",
+                "version_sociometrie_csv": "2026-11-04-import-multicsv-v1",
                 "research_configuree": identifiants_disponibles()}
 
     @app.get("/")
