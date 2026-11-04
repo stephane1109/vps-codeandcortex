@@ -2718,16 +2718,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             final_message += f" La recherche a fourni {len(links)} lien(s), pour un objectif de {args.limit}."
         if job.reprise:
             if job.settings.source_collecte == "presse":
-                from collecte.suivi_sources import (
-                    etablir_bilan_medias, medias_a_reprendre)
+                from collecte.suivi_sources import medias_a_reprendre
                 bilan_actuel = etablir_bilan_medias(
                     job.settings.sources, job.journal,
                     source_en_cours=job.source_en_cours_id, termine=True)
                 encore_a_traiter = medias_a_reprendre(bilan_actuel)
                 nom_source = "média(s)"
             else:
-                from collecte.suivi_hashtags import (
-                    etablir_bilan_hashtags, hashtags_a_reprendre)
+                from collecte.suivi_hashtags import hashtags_a_reprendre
                 bilan_actuel = etablir_bilan_hashtags(
                     job.settings.hashtags, job.settings.variantes_accents,
                     job.journal, source_en_cours=job.source_en_cours_id,
