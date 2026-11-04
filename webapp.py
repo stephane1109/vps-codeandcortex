@@ -2189,8 +2189,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                     break
                                 if element not in job.apercu_ecartes_research:
                                     job.apercu_ecartes_research.append(element)
+                    # Une première page peut contenir moins de 100 vidéos.
+                    # Le contrôle initial doit intervenir dès sa réception.
+                    premier_controle = (
+                        prochain_controle_research == 100
+                        and int(rapport.get("pages_research") or 0) == 1)
                     if (not job.settings.test_research_10_publications
-                            and candidats_lot >= prochain_controle_research):
+                            and (premier_controle
+                                 or candidats_lot >= prochain_controle_research)):
                         if prochain_controle_research == 100:
                             prochain_controle_research = (
                                 job.settings.lot_candidats_research)
