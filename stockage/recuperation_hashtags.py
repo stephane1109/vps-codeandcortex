@@ -103,7 +103,7 @@ def reconstruire_historique(dossier_source, dossier_donnees, identifiant, cookie
 
     evenements = journal["evenements"]
     incompletes = {"non_commencee", "interrompue", "partielle", "echec", "en_cours"}
-    source_en_cours = next(
+    source_en_cours = journal.get("source_en_cours_id") or next(
         (ev.get("source") for ev in reversed(evenements)
          if isinstance(ev, dict) and ev.get("statut_source") in incompletes
          and str(ev.get("source") or "").startswith("#")), None)
@@ -179,6 +179,41 @@ def restaurer_depuis_zip(dossier_donnees, identifiant, cookie, archive_base64):
             source, dossier_donnees, identifiant, cookie)
 
 
+def restaurer_depuis_postgres(dossier_donnees, identifiant, cookie):
+    """Réparer la perte de l'historique depuis les archives durables PostgreSQL."""
+    from stockage.postgres_consultation import (
+        adresse_configuree, lire_archive_reprise_hashtags)
+    if not adresse_configuree():
+        return False
+    sauvegarde = lire_archive_reprise_hashtags(cookie, identifiant)
+    if sauvegarde is None:
+        # Une ancienne collecte sans journal PostgreSQL a encore besoin
+        # de son archive locale ou d'un ZIP contenant journal.json.
+        return False
+    journal = {
+        "session": identifiant, "statut": sauvegarde["statut"],
+        "parametres": sauvegarde["parametres"],
+        "compteurs_collecte": {"traitees": sauvegarde["traitees"]},
+        "evenements": sauvegarde["journal"],
+        "source_en_cours_id": sauvegarde["source_en_cours_id"],
+    }
+    with tempfile.TemporaryDirectory(
+            prefix="reprise_postgres_", dir=str(dossier_donnees)) as temporaire:
+        source = Path(temporaire)
+        for nom, donnees in (
+            ("publications.json", sauvegarde["publications"]),
+            ("commentaires.json", sauvegarde["commentaires"]),
+            ("republications.json", sauvegarde["republications"]),
+            ("journal.json", journal),
+        ):
+            (source / nom).write_text(
+                json.dumps(donnees, ensure_ascii=False, default=str),
+                encoding="utf-8")
+        reconstruire_historique(
+            source, dossier_donnees, identifiant, cookie)
+    return True
+
+
 def retrouver_ou_reconstruire(dossier_donnees, identifiant, cookie):
     """Chercher l'historique, puis les sauvegardes locales d'origine."""
     from stockage.historique_analyses import retrouver
@@ -197,4 +232,6 @@ def retrouver_ou_reconstruire(dossier_donnees, identifiant, cookie):
         archive = retrouver(dossier_donnees, identifiant, cookie)
         if archive is not None:
             return archive
+    if restaurer_depuis_postgres(dossier_donnees, identifiant, cookie):
+        return retrouver(dossier_donnees, identifiant, cookie)
     return None
