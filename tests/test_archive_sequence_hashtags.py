@@ -19,7 +19,7 @@ class TestsArchiveSequenceHashtags(unittest.TestCase):
             "video_description": "Manifestation #17octobre",
             "hashtag_names": ["17octobre"],
             "region_code": "FR",
-            "create_time": 1760000000,
+            "create_time": 1791633600,
             "view_count": 100,
             "like_count": 12,
             "comment_count": 3,
