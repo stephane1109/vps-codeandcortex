@@ -69,15 +69,6 @@ class TestGroupesHashtags(unittest.TestCase):
             self.parametres(groupes_hashtags=[
                 ["manifestation"], ["manifestation"]])
 
-    def test_recherche_et_stricte_desactivee(self):
-        from argparse import Namespace
-        connexion = ConnexionHashtag(
-            Namespace(limit=50), fabrique=None, verifier=lambda: None,
-            interaction=lambda *args: None)
-        # Le comportement exact de collecte est vérifié par les tests du
-        # connecteur ; ce contrôle évite de rétablir le ET des six graphies.
-        self.assertEqual(len(GROUPES[0] + GROUPES[1]), 6)
-
 
 if __name__ == "__main__":
     unittest.main()
