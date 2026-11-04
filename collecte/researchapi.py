@@ -250,8 +250,9 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                                     jeton=None, pause=time.sleep, aujourd_hui=None,
                                     credentiels=None, hashtag=None, exclusions=(),
                                     hashtags=None, operateur="AND",
-                                    filtre_region=None):
-    """Recherche par compte et hashtags en ET/OU, région et pagination."""
+                                    filtre_region=None, maximum_candidats=None,
+                                    position_reprise=None):
+    """Recherche paginée, segmentée et reprenable sans perdre sa position."""
     compte = normaliser_compte(compte) if compte is not None else None
     from .selection_hashtags import normaliser_liste_hashtags
     liste_hashtags = normaliser_liste_hashtags(
@@ -268,6 +269,26 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             nom.casefold() for nom in hashtags_exclus):
         raise ResearchErreur("Un hashtag recherché ne peut pas être exclu.")
     verifier = check or (lambda: None)
+    # Un segment concerne les candidats reçus, et non les seules vidéos
+    # conservées : un hashtag peu productif ne peut plus consommer le quota
+    # quotidien sans atteindre la fin d'un lot.
+    if maximum_candidats is not None:
+        if (not isinstance(maximum_candidats, int)
+                or isinstance(maximum_candidats, bool)
+                or maximum_candidats < 100):
+            raise ResearchErreur("Un segment Research doit examiner au moins 100 candidats.")
+    if position_reprise is not None:
+        if not isinstance(position_reprise, dict):
+            raise ResearchErreur("Position de reprise Research invalide.")
+        indice_reprise = position_reprise.get("indice_periode")
+        curseur_reprise = position_reprise.get("cursor")
+        recherche_reprise = position_reprise.get("search_id")
+        if (not isinstance(indice_reprise, int) or indice_reprise < 0
+                or (curseur_reprise is not None and (
+                    not isinstance(curseur_reprise, int) or curseur_reprise < 0
+                    or not isinstance(recherche_reprise, str)
+                    or not recherche_reprise))):
+            raise ResearchErreur("Position de pagination Research non exploitable.")
     # La collecte automatique n’impose aucun plafond de publications local.
     automatique = limite is None
     if not automatique:
@@ -292,6 +313,13 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
+    if position_reprise is not None:
+        if position_reprise["indice_periode"] >= len(periodes):
+            raise ResearchErreur("Période de reprise Research hors du corpus initial.")
+        attendues = periodes[position_reprise["indice_periode"]]
+        if (position_reprise.get("debut_periode") != attendues[0]
+                or position_reprise.get("fin_periode") != attendues[1]):
+            raise ResearchErreur("La période de la recherche a changé depuis l'arrêt.")
     acces = jeton if jeton is not None else _jeton(requete=requete, credentiels=credentiels)
     if not isinstance(acces, str) or not acces:
         raise ResearchAccesRefuse("Research API : jeton absent.")
@@ -300,9 +328,14 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     # Conserver les références vivantes des données : les réécritures
     # intégrales à chaque page ralentissaient les collectes importantes.
     rapport["metadonnees_api"] = contenus
-    for borne_debut, borne_fin in periodes:
-        curseur = None
-        search_id = None
+    for indice_periode, (borne_debut, borne_fin) in enumerate(periodes):
+        if (position_reprise is not None
+                and indice_periode < position_reprise["indice_periode"]):
+            continue
+        reprendre_ici = (position_reprise is not None
+                        and indice_periode == position_reprise["indice_periode"])
+        curseur = position_reprise.get("cursor") if reprendre_ici else None
+        search_id = position_reprise.get("search_id") if reprendre_ici else None
         curseurs_vus = set()
         while (automatique or (rapport["pages_research"] < MAX_PAGES
                                 and len(contenus) < limite)):
@@ -418,8 +451,42 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             rapport["liens_page_research"] = liens_page
             rapport["discovered_urls"].extend(liens_page)
             rapport["retenues_par_compte"] = {compte: len(contenus)}
+            # Le point de reprise désigne toujours la prochaine page,
+            # jamais une page déjà traitée. On le construit avant de publier
+            # les résultats afin qu'une pause manuelle soit sûre.
+            page_suivante = None
+            if donnees.get("has_more"):
+                suivant = donnees.get("cursor")
+                identifiant_recherche = donnees.get("search_id")
+                if (isinstance(suivant, int) and suivant >= 0
+                        and suivant not in curseurs_vus
+                        and identifiant_recherche):
+                    page_suivante = {
+                        "indice_periode": indice_periode,
+                        "debut_periode": borne_debut,
+                        "fin_periode": borne_fin,
+                        "cursor": suivant,
+                        "search_id": str(identifiant_recherche)}
+            elif indice_periode + 1 < len(periodes):
+                prochaine = periodes[indice_periode + 1]
+                page_suivante = {
+                    "indice_periode": indice_periode + 1,
+                    "debut_periode": prochaine[0],
+                    "fin_periode": prochaine[1],
+                    "cursor": None, "search_id": None}
+            rapport["reprise_pagination_research"] = page_suivante
             if progress:
                 progress(len(contenus))
+            # Stopper un segment après la dernière page intégralement lue.
+            # Une dernière page qui termine tout le corpus n'a pas de suite.
+            if (maximum_candidats is not None
+                    and rapport["candidats_examines"] >= maximum_candidats
+                    and page_suivante is not None):
+                rapport["discovery_stop"] = "lot_termine"
+                rapport["collecte_partielle"] = True
+                rapport["plage_research"] = {
+                    "debut": periodes[-1][0], "fin": periodes[0][1]}
+                return list(rapport["discovered_urls"])
             if not automatique and len(contenus) >= limite:
                 rapport["discovery_stop"] = "limit"
                 break
