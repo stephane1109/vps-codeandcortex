@@ -2,9 +2,15 @@
 import json
 import unittest
 from datetime import date
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
+from urllib.error import HTTPError
 
-from collecte.researchapi import collecter_videos_presse_research
+from collecte.researchapi import (
+    ResearchAccesRefuse, ResearchJetonInvalide,
+    _requete, _url_videos, collecter_videos_presse_research,
+)
 from collecte.suivi_hashtags import positions_pagination_research
 
 
@@ -218,6 +224,91 @@ class TestsSequencesHashtagsResearch(unittest.TestCase):
         self.assertEqual(rapport["sequences_terminees"], 1)
         self.assertEqual(rapport["reprise_pagination_research"]["cursor"], 3)
         self.assertEqual(rapport["reprise_pagination_research"]["search_id"], "suite")
+
+    def test_jeton_recherche_renouvele_si_401_expire(self):
+        """Réessayer la même page et le même curseur après token invalide."""
+        appels = []
+        consultations = []
+
+        def jeton(**parametres):
+            consultations.append(parametres.get("renouveler", False))
+            return ("jeton_renouvele"
+                    if parametres.get("renouveler") else "jeton_initial")
+
+        def requete(url, *, data, headers):
+            corps = json.loads(data)
+            appels.append((corps, headers["Authorization"]))
+            if len(appels) == 1:
+                raise ResearchJetonInvalide(
+                    "Research API HTTP 401 : jeton expiré.")
+            return {"data": {
+                "videos": [video(1)], "has_more": False,
+            }}
+
+        with patch("collecte.researchapi._jeton", side_effect=jeton):
+            rapport = {}
+            liens = collecter_videos_presse_research(
+                None, None, rapport, hashtag="17octobre",
+                requete=requete,
+                debut="2026-10-01", fin="2026-10-25",
+                aujourd_hui=DATE_FIXE, pause=lambda _: None)
+        self.assertEqual(len(liens), 1)
+        self.assertEqual(len(appels), 2)
+        self.assertEqual(appels[0][0], appels[1][0])
+        self.assertEqual(appels[0][1], "Bearer jeton_initial")
+        self.assertEqual(appels[1][1], "Bearer jeton_renouvele")
+        self.assertIn(True, consultations)
+        self.assertEqual(rapport["renouvellements_jeton_401"], 1)
+        self.assertEqual(rapport["requetes_tentees"], 2)
+        self.assertEqual(rapport["pages_research"], 1)
+        self.assertIsNone(rapport["reprise_pagination_research"])
+
+    def test_401_droits_insuffisants_ne_relance_pas_et_garde_curseur(self):
+        """Ne pas confondre refus de scope et expiration du jeton."""
+        appels = []
+        def api(url, *, data, headers):
+            appels.append(json.loads(data))
+            if len(appels) == 1:
+                return {"data": {
+                    "videos": [video(1)], "has_more": True,
+                    "cursor": 17, "search_id": "pagination_ok"}}
+            raise ResearchAccesRefuse(
+                "Research API HTTP 401 : scope_not_authorized")
+
+        rapport = {}
+        with self.assertRaisesRegex(ResearchAccesRefuse, "scope_not_authorized"):
+            interroger(api, rapport)
+        self.assertEqual(len(appels), 2)
+        self.assertEqual(rapport["reprise_pagination_research"]["cursor"], 17)
+        self.assertEqual(
+            rapport["reprise_pagination_research"]["search_id"],
+            "pagination_ok")
+        self.assertEqual(len(rapport["discovered_urls"]), 1)
+
+    def test_diagnostic_401_differe_du_quota_429(self):
+        """Distinguer l'expiration, les droits et le dépassement du quota."""
+        def refuser(code_http, code):
+            contenu = json.dumps(
+                {"error": {"code": code, "message": "Erreur TikTok"}}).encode()
+            def ouvrir(requete, timeout):
+                raise HTTPError(
+                    requete.full_url, code_http, "Erreur", {},
+                    BytesIO(contenu))
+            with (
+                patch("collecte.researchapi.urlopen", side_effect=ouvrir),
+                patch("stockage.collectes_research.reserver_requete",
+                      return_value=True),
+            ):
+                return _requete(
+                    _url_videos(), data=b"{}",
+                    headers={"Authorization": "Bearer fictif"})
+
+        with self.assertRaisesRegex(ResearchJetonInvalide, "expiré"):
+            refuser(401, "access_token_invalid")
+        with self.assertRaisesRegex(ResearchAccesRefuse, "scope_not_authorized"):
+            refuser(401, "scope_not_authorized")
+        with self.assertRaisesRegex(ResearchAccesRefuse, "HTTP 429"):
+            refuser(429, "rate_limit_exceeded")
 
     def test_conservation_interface_et_limites_fixes(self):
         """Le contrôle intermédiaire n'est plus configurable ni affiché."""
