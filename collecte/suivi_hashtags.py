@@ -239,3 +239,45 @@ def importer_bilan_hashtags_csv(contenu, *, collecte_id, hashtags_autorises):
     if not vus:
         raise ValueError("Le bilan hashtags est vide.")
     return repris
+
+
+def identifier_collecte_bilans_hashtags_csv(contenus):
+    """Vérifier qu'un ensemble de bilans concerne un seul corpus historique."""
+    fichiers = list(contenus)
+    if not fichiers:
+        raise ValueError("Sélectionnez au moins un bilan de hashtags CSV.")
+    if len(fichiers) > 20:
+        raise ValueError("Importez au maximum 20 bilans de hashtags à la fois.")
+    if sum(len(fichier) for fichier in fichiers if isinstance(fichier, bytes)) > 10_000_000:
+        raise ValueError("Le volume total des bilans ne doit pas dépasser 10 Mo.")
+    identifiants = {
+        identifier_collecte_bilan_hashtags_csv(fichier)
+        for fichier in fichiers
+    }
+    if len(identifiants) != 1:
+        raise ValueError(
+            "Les bilans importés appartiennent à des collectes différentes. "
+            "Pour protéger les corpus PostgreSQL, importez uniquement des "
+            "bilans portant le même identifiant de collecte.")
+    return next(iter(identifiants))
+
+
+def importer_bilans_hashtags_csv(contenus, *, collecte_id, hashtags_autorises):
+    """Unir les hashtags inachevés de plusieurs bilans d'un même corpus.
+
+    Le bilan historique sélectionne les hashtags ; seul le journal actuel
+    détermine ensuite ceux qui restent effectivement à reprendre.
+    """
+    fichiers = list(contenus)
+    identifiant = identifier_collecte_bilans_hashtags_csv(fichiers)
+    if identifiant != collecte_id:
+        raise ValueError(
+            "Ces bilans appartiennent à une autre collecte PostgreSQL. "
+            "Rouvrez d'abord cette collecte dans l'historique.")
+    candidats = set()
+    for fichier in fichiers:
+        candidats.update(importer_bilan_hashtags_csv(
+            fichier, collecte_id=collecte_id,
+            hashtags_autorises=hashtags_autorises))
+    return [tag for tag in dict.fromkeys(hashtags_autorises)
+            if tag in candidats]
