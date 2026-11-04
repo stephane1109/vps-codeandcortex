@@ -528,11 +528,12 @@ def compter_publications_collecte(cookie, identifiant):
 
 
 
-def lire_archive_reprise_hashtags(cookie, identifiant):
-    """Lire la sauvegarde PostgreSQL et son journal de pagination, si présent.
+def lire_archive_reprise_hashtags(cookie, identifiant, *,
+                                   autoriser_sans_journal=False):
+    """Lire le corpus PostgreSQL, avec ou sans journal de pagination.
 
-    Les collectes archivées avant l'ajout de journal_research conservent
-    leurs publications, mais ne possèdent pas automatiquement un curseur.
+    L'absence de journal ne signifie pas la perte des publications. Elle
+    impose toutefois une réexploration des pages avec déduplication.
     """
     if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
         raise ValueError("Collecte inconnue ou non autorisée.")
@@ -553,7 +554,9 @@ def lire_archive_reprise_hashtags(cookie, identifiant):
             if source != "hashtags" or moteur != "research":
                 return None
             if not isinstance(journal, list) or not journal:
-                return None
+                if not autoriser_sans_journal:
+                    return None
+                journal = []
             curseur.execute(
                 "SELECT donnees FROM scraptiktok_publications "
                 "WHERE collecte_id=%s ORDER BY publication_id",
