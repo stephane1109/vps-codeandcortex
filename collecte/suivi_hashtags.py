@@ -241,8 +241,8 @@ def importer_bilan_hashtags_csv(contenu, *, collecte_id, hashtags_autorises):
     return repris
 
 
-def identifier_collecte_bilans_hashtags_csv(contenus):
-    """Vérifier qu'un ensemble de bilans concerne un seul corpus historique."""
+def regrouper_bilans_hashtags_csv(contenus):
+    """Classer les bilans par corpus sans mélanger les données ou curseurs."""
     fichiers = list(contenus)
     if not fichiers:
         raise ValueError("Sélectionnez au moins un bilan de hashtags CSV.")
@@ -250,16 +250,21 @@ def identifier_collecte_bilans_hashtags_csv(contenus):
         raise ValueError("Importez au maximum 20 bilans de hashtags à la fois.")
     if sum(len(fichier) for fichier in fichiers if isinstance(fichier, bytes)) > 10_000_000:
         raise ValueError("Le volume total des bilans ne doit pas dépasser 10 Mo.")
-    identifiants = {
-        identifier_collecte_bilan_hashtags_csv(fichier)
-        for fichier in fichiers
-    }
-    if len(identifiants) != 1:
+    groupes = {}
+    for fichier in fichiers:
+        identifiant = identifier_collecte_bilan_hashtags_csv(fichier)
+        groupes.setdefault(identifiant, []).append(fichier)
+    return groupes
+
+
+def identifier_collecte_bilans_hashtags_csv(contenus):
+    """Exiger un seul identifiant lorsque la reprise est sans sélection."""
+    groupes = regrouper_bilans_hashtags_csv(contenus)
+    if len(groupes) != 1:
         raise ValueError(
             "Les bilans importés appartiennent à des collectes différentes. "
-            "Pour protéger les corpus PostgreSQL, importez uniquement des "
-            "bilans portant le même identifiant de collecte.")
-    return next(iter(identifiants))
+            "Choisissez un corpus d'origine avant la reprise.")
+    return next(iter(groupes))
 
 
 def importer_bilans_hashtags_csv(contenus, *, collecte_id, hashtags_autorises):
