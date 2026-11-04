@@ -75,6 +75,8 @@ class ConnexionHashtag(ConnexionPresse):
         self._region_research = (
             "FR" if getattr(parametres, "region_fr_research", False) else None)
         self._recherche_et_executee = False
+        self.positions_reprise_research = {}
+        self.maximum_candidats_segment = None
         if self._recherche_et_stricte:
             # La requête unique dispose du budget global et non d'une
             # fraction réservée artificiellement à chaque hashtag.
@@ -186,7 +188,10 @@ class ConnexionHashtag(ConnexionPresse):
                 check=self.verifier, progress=progression,
                 credentiels=self.research_credentiels,
                 exclusions=self.hashtags_exclus,
-                filtre_region=self._region_research)
+                filtre_region=self._region_research,
+                maximum_candidats=self.maximum_candidats_segment,
+                position_reprise=self.positions_reprise_research.get(
+                    "#" + hashtag))
             if requete_conjointe:
                 self._recherche_et_executee = True
             # Filtrer immédiatement les métadonnées officielles avant de
