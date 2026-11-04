@@ -43,6 +43,9 @@ from collecte.suivi_hashtags import (
     preparer_reprise_hashtags)
 
 LOG = logging.getLogger("scraptiktok.web")
+# Séquences automatiques : aucun contrôle humain pendant la pagination.
+LIMITE_CANDIDATS_SEQUENCE_RESEARCH = 1000
+LIMITE_REQUETES_SEQUENCE_RESEARCH = 10
 TERMINAL = {"completed", "partial", "failed", "stopped"}
 COOKIE = "scraptiktok_session"
 HISTORIQUE_COOKIE = "scraptiktok_historique"
@@ -162,9 +165,6 @@ class StartRequest(BaseModel):
     limit: int | None = Field(default=50, ge=1, le=1000)
     collecte_research_complete: bool = False
     test_research_10_publications: bool = False
-    # Taille des lots de candidats API avant contrôle humain.
-    # Le max_count officiel reste fixé à 100 par requête.
-    lot_candidats_research: int = Field(default=1000, ge=100, le=5000)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
@@ -1130,7 +1130,6 @@ class Job:
                     "candidats_research_lot": self.candidats_research_lot,
                     "ecartes_hashtags_research_lot": self.ecartes_hashtags_research_lot,
                     "quota_research_local": self.quota_research_local,
-                    "lot_candidats_research": self.settings.lot_candidats_research,
                     "apercu_ecartes_research": list(self.apercu_ecartes_research[-20:]),
                     "apercu_texte_research": [{
                         "url": p.get("url", ""), "auteur": p.get("author", ""),
@@ -2207,12 +2206,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     # Limite transversale au lot : 1 000 candidats API
                     # pour l'ensemble des hashtags, et non par hashtag.
                     connexion.maximum_candidats_segment = max(
-                        1, job.settings.lot_candidats_research
+                        1, LIMITE_CANDIDATS_SEQUENCE_RESEARCH
                         - candidats_sources_termines)
                     # Dix appels vidéo au plus par séquence, même lorsque
                     # TikTok renvoie des pages nettement inférieures à 100.
                     connexion.maximum_requetes_segment = max(
-                        1, 10 - requetes_sources_terminees)
+                        1, LIMITE_REQUETES_SEQUENCE_RESEARCH
+                        - requetes_sources_terminees)
                 found = connexion.decouvrir(source, rapport,
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
@@ -2432,8 +2432,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     and not job.settings.test_research_10_publications
                     and (rapport.get("discovery_stop") == "lot_termine"
                          or ((candidats_sources_termines >=
-                              job.settings.lot_candidats_research
-                              or requetes_sources_terminees >= 10)
+                              LIMITE_CANDIDATS_SEQUENCE_RESEARCH
+                              or requetes_sources_terminees >= LIMITE_REQUETES_SEQUENCE_RESEARCH)
                              and numero_source < len(sources)
                              and not getattr(
                                  connexion, "_recherche_et_stricte", False)))):
@@ -3350,6 +3350,16 @@ class Manager:
             from collecte.suivi_hashtags import positions_pagination_research
             job.positions_reprise_research = positions_pagination_research(
                 job.journal, variantes)
+            invalides = [
+                source for source, position in job.positions_reprise_research.items()
+                if position.get("pagination_invalide")
+            ]
+            if invalides:
+                raise HTTPException(
+                    409, "Pagination Research invalide pour " + ", ".join(invalides)
+                    + ". Le curseur de la page suivante est absent ou incohérent. "
+                    "Aucune reprise depuis la première page n’est effectuée "
+                    "automatiquement pour éviter de fausser le corpus.")
             job.journal.append({
                 "reprise_hashtags": True,
                 "date": scraper.utc_now(),
