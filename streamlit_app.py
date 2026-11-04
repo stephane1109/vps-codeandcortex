@@ -125,6 +125,9 @@ if "initialise" not in st.session_state:
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
+        "utiliser_groupes_hashtags": bool(ancienne.get("groupes_hashtags")),
+        "groupe_hashtags_1": ", ".join((ancienne.get("groupes_hashtags") or [["manifestation", "manifestations"], ["lyceen", "lyceens", "lycéen", "lycéens"]])[0]),
+        "groupe_hashtags_2": ", ".join((ancienne.get("groupes_hashtags") or [["manifestation", "manifestations"], ["lyceen", "lyceens", "lycéen", "lycéens"]])[1]),
         "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
         "hashtag_presse":ancienne.get("hashtag_presse",""),
         "hashtags_presse_saisis": ", ".join(
@@ -243,6 +246,9 @@ st.session_state.setdefault("hashtags_presse_saisis",
     if st.session_state.get("hashtag_presse") else "")
 st.session_state.setdefault("operator_presse", "OR")
 st.session_state.setdefault("hashtags_saisis", "")
+st.session_state.setdefault("utiliser_groupes_hashtags", False)
+st.session_state.setdefault("groupe_hashtags_1", "manifestation, manifestations")
+st.session_state.setdefault("groupe_hashtags_2", "lyceen, lyceens, lycéen, lycéens")
 st.session_state.setdefault("hashtags_saisis_comptes", "")
 st.session_state.setdefault("hashtags_exclus_saisis", "")
 from collecte.profils_medias import (
@@ -969,7 +975,41 @@ with onglet_collecte:
     # la collecte et peuvent modifier les liens TXT sans relancer une collecte.
     with st.container(border=False):
         if source != "presse":
-            saisie = st.text_area(
+            groupes_hashtags = []
+            if source == "hashtags":
+                st.checkbox(
+                    "Deux groupes de hashtags : OU dans chaque groupe, ET entre les groupes",
+                    key="utiliser_groupes_hashtags", disabled=occupe,
+                    help="Une vidéo doit contenir au moins un hashtag de chaque groupe. "
+                         "Les six graphies sont recherchées individuellement et la "
+                         "pagination Research est conservée pour chaque source.")
+            if source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags"):
+                for indice in (1, 2):
+                    st.text_input(
+                        f"Groupe {indice} — variantes combinées par OU",
+                        key=f"groupe_hashtags_{indice}", disabled=occupe)
+                try:
+                    groupes_hashtags = [
+                        normaliser_liste_hashtags(separer_saisie_hashtags(
+                            st.session_state[f"groupe_hashtags_{indice}"]))
+                        for indice in (1, 2)
+                    ]
+                    if not all(groupes_hashtags):
+                        raise ValueError("Chaque groupe doit contenir au moins un hashtag.")
+                    liste_hashtags = normaliser_liste_hashtags(
+                        [tag for groupe in groupes_hashtags for tag in groupe])
+                    if sum(map(len, groupes_hashtags)) != len(liste_hashtags):
+                        raise ValueError("Un hashtag ne peut pas appartenir aux deux groupes.")
+                except ValueError as erreur:
+                    erreur_hashtags = str(erreur)
+                    st.error(erreur_hashtags)
+                if not erreur_hashtags:
+                    st.caption(
+                        "Critère : (" + " OU ".join("#" + h for h in groupes_hashtags[0])
+                        + ") ET (" + " OU ".join("#" + h for h in groupes_hashtags[1])
+                        + "). Chaque publication doit satisfaire les deux groupes.")
+            else:
+                saisie = st.text_area(
                 "Hashtags à rechercher (1 à 10)", key=cle_liste_hashtags,
                 placeholder="#manifestation, #lyceens, #mobilisation",
                 help="Séparez les hashtags par des virgules, des points-virgules, "
@@ -977,18 +1017,19 @@ with onglet_collecte:
                      "Le même hashtag saisi plusieurs fois ne compte qu'une fois.",
                 height=95, disabled=occupe,
             )
-            try:
-                liste_hashtags = normaliser_liste_hashtags(separer_saisie_hashtags(saisie))
-            except ValueError as erreur:
-                erreur_hashtags = str(erreur)
-                st.error(erreur_hashtags)
-            if not erreur_hashtags:
-                st.caption(
-                    f"{len(liste_hashtags)}/{MAX_HASHTAGS} hashtags distincts. "
-                    + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags)
-                       if liste_hashtags else "Saisissez au moins un hashtag.")
-                )
-            st.radio(
+                try:
+                    liste_hashtags = normaliser_liste_hashtags(separer_saisie_hashtags(saisie))
+                except ValueError as erreur:
+                    erreur_hashtags = str(erreur)
+                    st.error(erreur_hashtags)
+                if not erreur_hashtags:
+                    st.caption(
+                        f"{len(liste_hashtags)}/{MAX_HASHTAGS} hashtags distincts. "
+                        + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags)
+                           if liste_hashtags else "Saisissez au moins un hashtag.")
+                    )
+            if not (source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags")):
+                st.radio(
                 "Combiner les hashtags", ["AND", "OR"],
                 format_func=lambda valeur: (
                     "ET — tous les hashtags" if valeur == "AND"
@@ -1450,7 +1491,11 @@ with onglet_collecte:
                     moteur_formulaire == "research"
                     and st.session_state.get("test_research_10_publications", False))
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
-                valeurs["operator"] = "AND" if source == "presse" else st.session_state.get("operator", "AND")
+                valeurs["operator"] = ("AND" if source == "presse" or
+                    (source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags"))
+                    else st.session_state.get("operator", "AND"))
+                valeurs["groupes_hashtags"] = (groupes_hashtags if source == "hashtags"
+                    and st.session_state.get("utiliser_groupes_hashtags") else [])
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
                 valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
                 valeurs["collecter_is_verified"] = bool(moteur_formulaire == "research" and st.session_state.get("txt_is_verified", False))
