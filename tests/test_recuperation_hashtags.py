@@ -127,12 +127,20 @@ class TestsRecuperationHashtags(unittest.TestCase):
                     restaurer_depuis_zip(
                         dossier, self.identifiant, self.cookie,
                         base64.b64encode(tampon.getvalue()).decode("ascii"))
+            with patch(
+                "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                return_value=(self.nom, 522)):
                 with self.assertRaisesRegex(ValueError, "PostgreSQL"):
                     restaurer_depuis_zip(
                         dossier, self.identifiant, self.cookie,
                         base64.b64encode(self.zip).decode("ascii"))
-                    # La branche n'est pas atteinte avec le bon corpus :
-                    # le test d'appartenance figure ci-dessous.
+            with patch(
+                "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                side_effect=ValueError("Cookie privé non autorisé")):
+                with self.assertRaisesRegex(ValueError, "Cookie privé"):
+                    restaurer_depuis_zip(
+                        dossier, self.identifiant, self.cookie,
+                        base64.b64encode(self.zip).decode("ascii"))
             self.assertIsNone(retrouver(dossier, self.identifiant, self.cookie))
 
     def test_api_reprise_depuis_zip_garde_le_curseur_et_l_identifiant(self):
