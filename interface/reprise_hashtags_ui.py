@@ -9,6 +9,50 @@ from collecte.suivi_hashtags import (
 )
 
 
+def reprendre_depuis_bilans_csv(api, contenus, *, cle="", secret=""):
+    """Restaurer le corpus des CSV puis reprendre ses pages inachevées.
+
+    Aucun nouveau travail n'est créé par /api/jobs : la seule opération de
+    collecte autorisée ici est /reprendre-hashtags sur l'identifiant du bilan.
+    La sélection reste bornée par l'état actuel du journal de l'archive.
+    """
+    identifiant = identifier_collecte_bilans_hashtags_csv(contenus)
+    if bool(cle) != bool(secret):
+        raise ValueError(
+            "Renseignez ensemble Client key et Client secret Research, "
+            "ou configurez les deux identifiants dans Coolify.")
+    historique = api(f"/api/historique/{identifiant}/ouvrir", {})
+    if historique.get("id") != identifiant:
+        raise ValueError("L'historique rouvert ne correspond pas au corpus des CSV.")
+    if (historique.get("source_collecte") != "hashtags"
+            or historique.get("hashtag_moteur") != "research"):
+        raise ValueError(
+            "Les bilans de hashtags exigent un historique de collecte Research.")
+    if historique.get("busy") or historique.get("video_busy"):
+        raise ValueError(
+            "La collecte d'origine est déjà active ; aucune deuxième reprise lancée.")
+    autorises = historique.get("hashtags_saisis") or historique.get("hashtags") or []
+    selection_csv = importer_bilans_hashtags_csv(
+        contenus, collecte_id=identifiant, hashtags_autorises=autorises)
+    disponibles = set(hashtags_a_reprendre(
+        historique.get("bilan_hashtags_sources") or []))
+    selection = [hashtag for hashtag in selection_csv if hashtag in disponibles]
+    if not selection:
+        raise ValueError(
+            "Aucun hashtag de ces bilans n'est encore inachevé dans le journal "
+            "de la collecte d'origine. Aucun nouveau corpus n'a été créé.")
+    donnees = {"hashtags": selection}
+    if cle:
+        donnees["research_client_key"] = cle
+        donnees["research_client_secret"] = secret
+    reprise = api(
+        f"/api/historique/{identifiant}/reprendre-hashtags", donnees)
+    if reprise.get("id") != identifiant:
+        raise ValueError(
+            "La reprise n'a pas confirmé l'identifiant du corpus d'origine.")
+    return reprise, selection
+
+
 def afficher_reprise_hashtags(api, lancer, occupe):
     """Permettre une reprise sans CSV ; importation du bilan facultative."""
     collecte = st.session_state.get("collecte") or {}
@@ -41,39 +85,34 @@ def afficher_reprise_hashtags(api, lancer, occupe):
             st.error(str(erreur))
         else:
             if identifiant != collecte.get("id"):
-                st.info(
-                    "Ce fichier appartient à une autre collecte. "
-                    "Rouvrez le corpus correspondant avant la reprise."
+                st.warning(
+                    "Les bilans désignent le corpus d'origine "
+                    + identifiant[:8]
+                    + ", et non la collecte actuellement affichée. "
+                    "Le bouton « Lancer la collecte » créerait un nouveau "
+                    "corpus et recommencerait la pagination."
                 )
-                if st.button(
-                        "Rouvrir la collecte du bilan hashtags",
-                        key="ouvrir_collecte_bilan_hashtags", disabled=occupe):
-                    try:
-                        archive = api(
-                            f"/api/historique/{identifiant}/ouvrir", {})
-                    except RuntimeError as erreur:
-                        st.error("Réouverture impossible : " + str(erreur))
-                    else:
-                        st.session_state["collecte"] = archive
-                        st.rerun()
-            else:
-                try:
-                    selection_csv = importer_bilans_hashtags_csv(
+            try:
+                # La sélection ne peut être appliquée qu'à l'identifiant
+                # réellement enregistré dans le journal de la collecte.
+                selection_csv = (
+                    importer_bilans_hashtags_csv(
                         contenus, collecte_id=collecte["id"],
                         hashtags_autorises=collecte.get("hashtags_saisis") or [])
-                except ValueError as erreur:
-                    st.error(str(erreur))
-                else:
-                    autorises = [
-                        tag for tag in selection_csv if tag in disponibles
-                    ]
+                    if identifiant == collecte.get("id") else [])
+            except ValueError as erreur:
+                st.error(str(erreur))
+            else:
+                autorises = [
+                    tag for tag in selection_csv if tag in disponibles
+                ]
+                if identifiant == collecte.get("id"):
                     if len(autorises) < len(selection_csv):
                         st.warning(
                             "Des hashtags du CSV sont déjà terminés "
                             "dans le journal actuel : ils ne sont pas relancés."
                         )
-                    cle = "reprendre_hashtags_selection_" + collecte["id"]
-                    # Un changement d'ordre des fichiers ne modifie pas la sélection.
+                    cle_selection = "reprendre_hashtags_selection_" + collecte["id"]
                     empreintes = sorted(
                         hashlib.sha256(contenu).hexdigest()
                         for contenu in contenus)
@@ -81,14 +120,42 @@ def afficher_reprise_hashtags(api, lancer, occupe):
                         "|".join(empreintes).encode("ascii")).hexdigest()
                     if (not occupe and st.session_state.get(
                             "empreinte_bilan_hashtags") != empreinte):
-                        # Modifier les valeurs avant la construction du widget.
-                        st.session_state[cle] = autorises
+                        # Modifier la sélection avant la création du widget.
+                        st.session_state[cle_selection] = autorises
                         st.session_state["empreinte_bilan_hashtags"] = empreinte
                     st.success(
                         f"{len(contenus)} bilan(s) importé(s) pour le même corpus ; "
                         f"{len(autorises)} hashtag(s) encore inachevé(s) "
-                        "présélectionné(s) pour la reprise, sans doublons."
+                        "présélectionné(s), sans doublons."
                     )
+            if st.button(
+                    "Reprendre la collecte d'origine à partir des bilans CSV",
+                    key="reprendre_direct_bilans_hashtags",
+                    type="primary", disabled=occupe):
+                cle = str(
+                    st.session_state.get("research_client_key")
+                    or st.session_state.get("cle_research_sequence")
+                    or "").strip()
+                secret = str(
+                    st.session_state.get("research_client_secret")
+                    or st.session_state.get("secret_research_sequence")
+                    or "").strip()
+                try:
+                    reprise, selection = reprendre_depuis_bilans_csv(
+                        api, contenus, cle=cle, secret=secret)
+                except (ValueError, RuntimeError) as erreur:
+                    st.error(
+                        "Reprise impossible : " + str(erreur)
+                        + " Le corpus n'est pas recréé à partir de zéro."
+                    )
+                else:
+                    st.session_state["collecte"] = reprise
+                    st.success(
+                        f"Poursuite lancée sur le corpus {reprise['id'][:8]} "
+                        f"pour {len(selection)} hashtag(s). "
+                        "Les anciennes publications et les curseurs sont conservés."
+                    )
+                    st.rerun()
     if not (
         collecte.get("source_collecte") == "hashtags"
         and collecte.get("hashtag_moteur") == "research"
