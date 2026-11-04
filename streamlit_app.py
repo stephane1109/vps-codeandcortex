@@ -271,6 +271,9 @@ if st.session_state.pop("_effacer_cookies_apres_requete", False):
 if st.session_state.pop("_effacer_research_apres_requete", False):
     st.session_state.pop("research_client_key", None)
     st.session_state.pop("research_client_secret", None)
+if st.session_state.pop("_effacer_research_sequence_apres_reprise", False):
+    st.session_state.pop("cle_research_sequence", None)
+    st.session_state.pop("secret_research_sequence", None)
 if st.session_state.pop("_effacer_tikhub_apres_requete", False):
     st.session_state.pop("tikhub_api_key", None)
 if st.session_state.pop("_effacer_apify_apres_requete", False):
@@ -1712,8 +1715,7 @@ with onglet_collecte:
                             st.error("Poursuite impossible : " + str(erreur))
                         else:
                             st.session_state["collecte"] = reprise
-                            st.session_state.pop("cle_research_sequence", None)
-                            st.session_state.pop("secret_research_sequence", None)
+                            st.session_state["_effacer_research_sequence_apres_reprise"] = True
                             st.rerun()
             # La fin de la collecte ne doit jamais relancer toute la page.
             # Le fragment conserve les résultats et les boutons de téléchargement.
