@@ -249,14 +249,17 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                                     check=None, progress=None, requete=_requete,
                                     jeton=None, pause=time.sleep, aujourd_hui=None,
                                     credentiels=None, hashtag=None, exclusions=(),
-                                    hashtags=None, operateur="AND"):
-    """Recherche par compte et liste de hashtags en ET/OU, avec NOT et pagination."""
+                                    hashtags=None, operateur="AND",
+                                    filtre_region=None):
+    """Recherche par compte et hashtags en ET/OU, région et pagination."""
     compte = normaliser_compte(compte) if compte is not None else None
     from .selection_hashtags import normaliser_liste_hashtags
     liste_hashtags = normaliser_liste_hashtags(
         list(hashtags) if hashtags else [hashtag] if hashtag else [])
     if operateur not in ("AND", "OR"):
         raise ResearchErreur("Research API : opérateur de hashtags inconnu.")
+    if filtre_region not in (None, "FR"):
+        raise ResearchErreur("Research API : code de région non autorisé.")
     if compte is None and not liste_hashtags:
         raise ResearchErreur("Research API : renseigner un compte ou un hashtag.")
     from .exclusion_hashtags import hashtags_a_exclure
@@ -283,7 +286,9 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                    collecte_partielle=True, exhaustif=False,
                    fournisseur_donnees="TikTok Research API",
                    hashtags_exclus=list(hashtags_exclus), exclus_hashtags_api=0,
-                   ecartes_hashtags_api=0, liens_page_research=[])
+                   ecartes_hashtags_api=0, ecartes_region_api=0,
+                   filtre_region=filtre_region,
+                   liens_page_research=[])
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
@@ -306,6 +311,10 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             if compte is not None:
                 conditions.append({"field_name": "username", "operation": "EQ",
                                    "field_values": [compte]})
+            if filtre_region == "FR":
+                conditions.append({
+                    "field_name": "region_code", "operation": "EQ",
+                    "field_values": ["FR"]})
             if liste_hashtags:
                 if operateur == "OR" and len(liste_hashtags) > 1:
                     # IN produit le groupe (hashtag A OU hashtag B) conjoint
@@ -357,6 +366,12 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                 if fiche and hashtags_a_exclure(fiche, hashtags_exclus):
                     # Défense locale si l'API renvoie malgré tout un hashtag exclu.
                     rapport["exclus_hashtags_api"] += 1
+                    continue
+                if (filtre_region == "FR" and fiche
+                        and fiche.get("region_code") != "FR"):
+                    # Research peut utiliser une recherche approximative.
+                    # Une vidéo hors France n'entre pas dans le corpus FR.
+                    rapport["ecartes_region_api"] += 1
                     continue
                 hashtags_observes = (
                     {str(tag).lstrip("#").casefold() for tag in fiche.get("hashtags", [])}
