@@ -14,6 +14,7 @@ on:
       - "tests/test_reprise_hashtags.py"
       - "tests/test_presse_research.py"
       - "tests/test_export_iramuteq.py"
+      - "tests/test_fin_collecte_sans_reinitialisation.py"
       - ".github/workflows/reprise-research-hashtags.yml"
   workflow_dispatch:
 
