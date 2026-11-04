@@ -9,12 +9,14 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 import webapp as web
+from collecte.suivi_hashtags import exporter_bilan_hashtags_csv
+from interface.reprise_hashtags_ui import reprendre_depuis_bilans_csv
 from stockage.historique_analyses import enregistrer
 
 
 class TestsRepriseHashtagsEndpoint(unittest.TestCase):
-    def test_bouton_reprise_reutilise_les_521_publications_et_le_curseur(self):
-        """La requête de reprise retourne 202 et conserve le corpus déjà archivé."""
+    def test_deux_bilans_csv_reprennent_521_publications_et_le_curseur(self):
+        """Deux CSV sélectionnent l'ancien corpus, sans redémarrer à zéro."""
         relancee = threading.Event()
         resultats = {}
 
@@ -85,6 +87,20 @@ class TestsRepriseHashtagsEndpoint(unittest.TestCase):
                     "[]", encoding="utf-8")
                 enregistrer(ancien, cookie_historique)
                 manager.jobs[ancien.id] = ancien
+                bilan = ancien.snapshot()["bilan_hashtags_sources"]
+                deux_bilans = [
+                    exporter_bilan_hashtags_csv([bilan[0]]),
+                    exporter_bilan_hashtags_csv([bilan[1]]),
+                ]
+                appels = []
+                def appeler(chemin, donnees):
+                    appels.append(chemin)
+                    resultat = client.post(
+                        chemin, json=donnees, headers={"X-ScrapTikTok": "1"})
+                    if resultat.status_code >= 400:
+                        raise RuntimeError(resultat.text)
+                    return resultat.json()
+
                 with (
                     patch(
                         "stockage.postgres_consultation.adresse_configuree",
@@ -100,16 +116,15 @@ class TestsRepriseHashtagsEndpoint(unittest.TestCase):
                     patch("ticket_gate.verifier_session_active",
                           return_value=True),
                 ):
-                    reponse = client.post(
-                        f"/api/historique/{ancien.id}/reprendre-hashtags",
-                        json={
-                            "hashtags": ["17octobre", "24octobre"],
-                            "research_client_key": "cle_reprise",
-                            "research_client_secret": "secret_reprise",
-                        },
-                        headers={"X-ScrapTikTok": "1"},
-                    )
-                self.assertEqual(reponse.status_code, 202, reponse.text)
+                    reprise, selection = reprendre_depuis_bilans_csv(
+                        appeler, deux_bilans,
+                        cle="cle_reprise", secret="secret_reprise")
+                self.assertEqual(reprise["id"], ancien.id)
+                self.assertEqual(selection, ["17octobre", "24octobre"])
+                self.assertEqual(appels, [
+                    f"/api/historique/{ancien.id}/ouvrir",
+                    f"/api/historique/{ancien.id}/reprendre-hashtags",
+                ])
                 self.assertTrue(relancee.wait(5))
                 self.assertEqual(resultats["id"], ancien.id)
                 self.assertEqual(resultats["nombre"], 521)
