@@ -13,6 +13,7 @@ on:
       - "tests/test_sequence_research_hashtags.py"
       - "tests/test_reprise_hashtags.py"
       - "tests/test_presse_research.py"
+      - "tests/test_export_iramuteq.py"
       - ".github/workflows/reprise-research-hashtags.yml"
   workflow_dispatch:
 
