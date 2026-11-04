@@ -67,11 +67,9 @@ def lancer(chemin, donnees):
         methode = donnees.get({
             "presse": "presse_moteur", "hashtags": "hashtag_moteur",
             "comptes": "profil_moteur"}.get(donnees.get("source_collecte"), "presse_moteur"))
-        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")
-                or chemin.endswith("/reprendre-hashtags")) and methode == "research":
-            # Effacer les champs sensibles avant le prochain affichage,
-            # sans écraser un widget déjà instancié pendant cette exécution.
-            st.session_state["_effacer_research_apres_requete"] = True
+        # Les clés Research restent masquées dans la session Streamlit afin
+        # de permettre la reprise sans les ressaisir après chaque séquence.
+        # Les exports et les historiques ne conservent pas ces secrets.
         if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and methode == "tikhub":
             st.session_state["_effacer_tikhub_apres_requete"] = True
         if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and donnees.get("presse_moteur") == "apify":
@@ -267,12 +265,7 @@ for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"
         variable in st.session_state.get("variables_classes_txt", []))
 if st.session_state.pop("_effacer_cookies_apres_requete", False):
     st.session_state.pop("cookies_presse_fichier", None)
-if st.session_state.pop("_effacer_research_apres_requete", False):
-    st.session_state.pop("research_client_key", None)
-    st.session_state.pop("research_client_secret", None)
-if st.session_state.pop("_effacer_research_sequence_apres_reprise", False):
-    st.session_state.pop("cle_research_sequence", None)
-    st.session_state.pop("secret_research_sequence", None)
+# Les champs Research restent en mémoire pour les reprises de cette session.
 if st.session_state.pop("_effacer_tikhub_apres_requete", False):
     st.session_state.pop("tikhub_api_key", None)
 if st.session_state.pop("_effacer_apify_apres_requete", False):
@@ -1671,14 +1664,12 @@ with onglet_collecte:
                     actuel.get("bilan_hashtags_sources") or [])
                 if hashtags_inacheves:
                     st.caption(
-                        "Séquence terminée : le ZIP reste téléchargeable. "
-                        "La collecte n'est pas exhaustive ; vous pouvez "
-                        "poursuivre dans le même corpus PostgreSQL.")
+                        "Cette ancienne collecte est inachevée ; le ZIP reste "
+                        "téléchargeable et la reprise conserve le corpus PostgreSQL. "
+                        "Les nouvelles collectes enchaînent automatiquement les séquences.")
                     st.caption(
-                        "Les identifiants Research ne sont pas conservés après "
-                        "la séquence précédente. Renseignez à nouveau les deux "
-                        "champs ci-dessous, sauf si Client key et Client secret "
-                        "sont déjà configurés dans les variables Coolify.")
+                        "Renseignez les deux identifiants seulement s'ils ne sont "
+                        "plus présents dans cette session et si Coolify ne les fournit pas.")
                     with st.expander(
                             "Identifiants Research pour poursuivre la collecte",
                             expanded=False):
@@ -1696,7 +1687,11 @@ with onglet_collecte:
                             "Poursuivre la collecte",
                             type="primary", use_container_width=True,
                             key="poursuivre_sequence_" + actuel["id"]):
-                        options_suite = {"hashtags": hashtags_inacheves}
+                        choix_hashtags = st.session_state.get(
+                            "reprendre_hashtags_selection_" + actuel["id"])
+                        options_suite = {"hashtags": (
+                            choix_hashtags if choix_hashtags is not None
+                            else hashtags_inacheves)}
                         cle_suite = (
                             st.session_state.get("cle_research_sequence")
                             or st.session_state.get("research_client_key")
@@ -1729,7 +1724,6 @@ with onglet_collecte:
                             else:
                                 st.session_state.pop("erreur_reprise_hashtags", None)
                                 st.session_state["collecte"] = reprise
-                                st.session_state["_effacer_research_sequence_apres_reprise"] = True
                                 st.rerun()
                         if erreur_reprise:
                             # Le fragment se réactualise toutes les secondes :
