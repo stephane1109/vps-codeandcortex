@@ -90,9 +90,9 @@ class TestsRepriseHashtags(unittest.TestCase):
     def test_anciens_csv_cinq_colonnes_restent_importables_sans_curseur(self):
         """Les bilans téléchargés avant la correction restent utilisables."""
         contenu = (
-            "collecte_id;hashtag;etat;liens;motif\\n"
-            f"{self.identifiant};manifestation;partielle;521;HTTP 401\\n"
-            f"{self.identifiant};lyceen;non_commencee;0;\\n"
+            "collecte_id;hashtag;etat;liens;motif\n"
+            f"{self.identifiant};manifestation;partielle;521;HTTP 401\n"
+            f"{self.identifiant};lyceen;non_commencee;0;\n"
         ).encode("utf-8")
         self.assertEqual(
             importer_bilans_hashtags_csv(
