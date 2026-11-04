@@ -251,7 +251,7 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                                     credentiels=None, hashtag=None, exclusions=(),
                                     hashtags=None, operateur="AND",
                                     filtre_region=None, maximum_candidats=None,
-                                    position_reprise=None):
+                                    maximum_requetes=None, position_reprise=None):
     """Recherche paginée, segmentée et reprenable sans perdre sa position."""
     compte = normaliser_compte(compte) if compte is not None else None
     from .selection_hashtags import normaliser_liste_hashtags
@@ -277,6 +277,11 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                 or isinstance(maximum_candidats, bool)
                 or maximum_candidats < 100):
             raise ResearchErreur("Un segment Research doit examiner au moins 100 candidats.")
+    if maximum_requetes is not None:
+        if (not isinstance(maximum_requetes, int)
+                or isinstance(maximum_requetes, bool)
+                or maximum_requetes < 1):
+            raise ResearchErreur("Une séquence Research exige au moins une requête.")
     if position_reprise is not None:
         if not isinstance(position_reprise, dict):
             raise ResearchErreur("Position de reprise Research invalide.")
@@ -488,14 +493,19 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             rapport["reprise_pagination_research"] = page_suivante
             # Stopper un segment après la dernière page intégralement lue.
             # Une dernière page qui termine tout le corpus n'a pas de suite.
-            if (maximum_candidats is not None
-                    and rapport["candidats_examines"] >= maximum_candidats
-                    and page_suivante is not None):
-                rapport["discovery_stop"] = "lot_termine"
-                rapport["collecte_partielle"] = True
-                rapport["plage_research"] = {
-                    "debut": periodes[-1][0], "fin": periodes[0][1]}
-                return list(rapport["discovered_urls"])
+            if ((maximum_candidats is not None
+                    and rapport["candidats_examines"] >= maximum_candidats)
+                    or (maximum_requetes is not None
+                        and rapport["requetes_tentees"] >= maximum_requetes)):
+                if page_suivante is None:
+                    # La source est réellement terminée : aucune reprise.
+                    pass
+                else:
+                    rapport["discovery_stop"] = "lot_termine"
+                    rapport["collecte_partielle"] = True
+                    rapport["plage_research"] = {
+                        "debut": periodes[-1][0], "fin": periodes[0][1]}
+                    return list(rapport["discovered_urls"])
             if not automatique and len(contenus) >= limite:
                 rapport["discovery_stop"] = "limit"
                 break
