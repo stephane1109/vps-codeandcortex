@@ -1724,7 +1724,12 @@ with onglet_collecte:
                             else:
                                 st.session_state.pop("erreur_reprise_hashtags", None)
                                 st.session_state["collecte"] = reprise
-                                st.rerun()
+                                actuel = reprise
+                                # Ce fragment se rafraîchit tout seul : ne pas
+                                # recharger toute la page, ce qui provoquait
+                                # un écran blanc lors de la poursuite.
+                                st.info("Poursuite lancée dans le même corpus. "
+                                        "La progression s'actualise automatiquement.")
                         if erreur_reprise:
                             # Le fragment se réactualise toutes les secondes :
                             # conserver le diagnostic jusqu'à la prochaine tentative.
