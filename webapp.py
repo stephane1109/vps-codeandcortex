@@ -2952,6 +2952,11 @@ class RestaurerZipHashtagsPayload(BaseModel):
     archive_base64: str = Field(min_length=1, max_length=34_000_000)
 
 
+class RestaurerBilansHashtagsPayload(BaseModel):
+    """Bilans CSV d'un corpus historique Research, sans curseur ni ZIP."""
+    bilans_base64: list[str] = Field(min_length=1, max_length=20)
+
+
 class ProgrammerResearch(BaseModel):
     """Programmation Research ; le corps des paramètres conserve son modèle existant."""
     parametres: StartRequest
@@ -4376,6 +4381,43 @@ def create_app(manager=None):
         travail = manager.reprendre_hashtags_historique(
             owner(request), identifiant, owner_historique(request), payload)
         return travail.snapshot()
+
+    @app.post("/api/historique/{identifiant}/restaurer-bilans")
+    def restaurer_historique_hashtags_bilans(
+            identifiant: str, payload: RestaurerBilansHashtagsPayload,
+            request: Request):
+        """Utiliser des CSV et le corpus PostgreSQL, sans ZIP ni nouveau job.
+
+        Sans curseur dans le journal, la reprise repart de la première
+        page API ; les vidéos déjà enregistrées ne sont pas dupliquées.
+        """
+        exiger_ticket(request)
+        from stockage.historique_analyses import retrouver
+        from stockage.recuperation_hashtags import restaurer_depuis_bilans_csv
+        cookie = owner_historique(request)
+        if not cookie:
+            raise HTTPException(403, "Session d'historique privée absente.")
+        if retrouver(manager.data_dir, identifiant, cookie) is not None:
+            raise HTTPException(
+                409, "L'historique existe déjà : utilisez sa reprise exacte.")
+        import binascii
+        bilans = []
+        try:
+            for element in payload.bilans_base64:
+                if len(element) > 2_700_000:
+                    raise ValueError("Un bilan CSV dépasse la limite de 2 Mo.")
+                bilans.append(base64.b64decode(element, validate=True))
+        except (ValueError, binascii.Error) as erreur:
+            raise HTTPException(
+                422, "Un bilan CSV n'est pas un fichier UTF-8 encodé correctement.") from erreur
+        try:
+            return restaurer_depuis_bilans_csv(
+                manager.data_dir, identifiant, cookie, bilans)
+        except ValueError as erreur:
+            raise HTTPException(409, str(erreur)) from None
+        except RuntimeError:
+            raise HTTPException(
+                503, "PostgreSQL indisponible : reprise CSV bloquée sans effacer de données.") from None
 
     @app.post("/api/historique/{identifiant}/restaurer-zip")
     def restaurer_historique_hashtags_zip(
