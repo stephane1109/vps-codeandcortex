@@ -2767,10 +2767,19 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         final_message = "Aucune publication accessible pour la source choisie. Consultez le détail des sources et vérifiez que les publications sont visibles dans TikTok avant de continuer."
         if len(job.journal) == 1 and job.journal[0].get("rapport", {}).get("diagnostic", {}).get("code") == "erreur_tiktok":
             final_message = job.journal[0]["source"] + " : " + job.journal[0]["message"]
-    except Exception:
-        # Ne pas journaliser les réponses brutes du navigateur.
-        LOG.error("Échec de la collecte %s", job.id)
-        final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
+    except Exception as erreur:
+        # Ne pas journaliser les réponses brutes ni les identifiants API.
+        LOG.error("Échec de la collecte %s (%s)",
+                  job.id, type(erreur).__name__)
+        job.diagnostics.append({
+            "code": "exception_collecte",
+            "exception": type(erreur).__name__})
+        final_message = (
+            "Erreur technique de collecte Research. Les résultats déjà "
+            "obtenus sont conservés et récupérables."
+            if moteur_actif == "research" else
+            "La connexion au navigateur a échoué. Les textes déjà obtenus "
+            "sont conservés. Réessayez ou contactez l’administrateur.")
     finally:
         contexte_mp4 = {}
         if (job.settings.telecharger_mp4 and job.records and connexion is not None
