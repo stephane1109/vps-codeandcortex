@@ -225,6 +225,20 @@ class TestsRecuperationHashtags(unittest.TestCase):
                         chemin, json=donnees, headers={"X-ScrapTikTok": "1"})
                     if reponse.status_code >= 400:
                         raise RuntimeError(reponse.json().get("detail", "Erreur"))
+                    if chemin.endswith("/restaurer-bilans") or chemin.endswith("/ouvrir"):
+                        chemin_journal = (
+                            Path(dossier) / "historique_analyses" /
+                            self.identifiant / "journal.json")
+                        if chemin_journal.is_file():
+                            document = json.loads(
+                                chemin_journal.read_text(encoding="utf-8"))
+                            resultat["etape_" + chemin.rsplit("/", 1)[-1]] = {
+                                "mode": document.get("reprise_sans_curseur"),
+                                "sources": [
+                                    e.get("source") for e in
+                                    document.get("evenements", [])
+                                    if isinstance(e, dict)],
+                            }
                     return reponse.json()
 
                 with (
@@ -249,7 +263,9 @@ class TestsRecuperationHashtags(unittest.TestCase):
                 self.assertEqual(resultat["positions"], {})
                 self.assertTrue(resultat["reexploration"], str({
                     "journal_mode": resultat["journal_mode"],
-                    "evenements_mode": resultat["evenements_mode"]}))
+                    "evenements_mode": resultat["evenements_mode"],
+                    "apres_restaurer": resultat.get("etape_restaurer-bilans"),
+                    "apres_ouvrir": resultat.get("etape_ouvrir")}))
                 self.assertEqual(
                     resultat["sources"], ["manifestation", "lyceen"])
                 self.assertTrue(
