@@ -2746,6 +2746,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 # maintenir le lot comme partiel après leur résolution.
                 final_status = "completed"
                 final_message += " Toutes les sources prévues ont été parcourues."
+    except Stopped:
         final_status, final_message = "stopped", "Collecte arrêtée. " + ((job.cause_arret or {}).get("explication") or "Cause de l’arrêt non renseignée.") + " Les textes déjà obtenus restent téléchargeables."
     except scraper.WebDriverException as erreur:
         code = "erreur_session" if scraper.est_erreur_session(erreur) else "erreur_navigateur"
