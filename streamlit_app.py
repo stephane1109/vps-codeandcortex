@@ -1897,19 +1897,23 @@ with onglet_collecte:
                                 for ligne in bilan_sources
                             ], hide_index=True, use_container_width=True)
                     if not actuel.get("busy"):
-                        st.download_button(
+                        # Le serveur fabrique directement le fichier depuis
+                        # le dernier journal de pagination, sans reprendre
+                        # un ancien CSV conservé dans une archive obsolète.
+                        st.link_button(
                             "Télécharger le bilan des hashtags (CSV réimportable)",
-                            data=exporter_bilan_hashtags_csv(bilan_sources),
-                            file_name="bilan_hashtags_" + re.sub(
-                                r"[^a-zA-Z0-9_-]+", "_",
-                                actuel.get("nom_sauvegarde")
-                                or actuel.get("id") or "collecte"
-                            )[:60] + ".csv",
-                            mime="text/csv", key="telecharger_bilan_hashtags",
+                            f"/api/jobs/{actuel['id']}/bilan-hashtags.csv",
+                            use_container_width=True,
+                            help="Inclut cursor, search_id, indice_periode, "
+                                 "debut_periode, fin_periode et "
+                                 "positions_research_json.",
                         )
                         st.caption(
-                            "Conservez ce bilan pour reprendre les hashtags "
-                            "interrompus par quota dans le même corpus PostgreSQL."
+                            "Le nouveau bilan contient les cinq colonnes "
+                            "historiques ainsi que les dates et curseurs "
+                            "Research disponibles. Un ancien CSV déjà téléchargé "
+                            "ne peut pas acquérir rétroactivement un curseur "
+                            "qui n'avait pas été sauvegardé."
                         )
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
                 st.info("Une invitation à se connecter est visible. Si un CAPTCHA apparaît, résolvez-le dans la fenêtre ci-dessous. Sinon, fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
