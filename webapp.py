@@ -4194,6 +4194,7 @@ def create_app(manager=None):
                 "version_reprise_hashtags": "2026-11-04-csv-cursor-v2",
                 "version_reprise_bilans_historiques": "2026-11-04-multicsv-v1",
                 "version_groupes_hashtags": "2026-11-04-et-ou-v1",
+                "version_annotation_csv": "2026-11-04-autonome-v1",
                 "research_configuree": identifiants_disponibles()}
 
     @app.get("/")
