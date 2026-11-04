@@ -1368,10 +1368,22 @@ with onglet_collecte:
                  "et leurs modalités de lecture restent inchangés.")
         mode_programme = (moteur_formulaire == "research"
                           and st.session_state.get("programmer_research", False))
+        bilans_importes_pour_reprise = bool(
+            source == "hashtags" and moteur_formulaire == "research"
+            and st.session_state.get("bilan_reprise_hashtags_csv"))
+        if bilans_importes_pour_reprise:
+            st.warning(
+                "Des bilans CSV de hashtags sont importés : pour ne pas "
+                "recommencer la collecte à zéro, utilisez « Reprendre la "
+                "collecte d'origine à partir des bilans CSV » au-dessus. "
+                "Le bouton « Lancer la collecte » est désactivé jusqu'au "
+                "retrait des fichiers CSV."
+            )
         if st.button(
                 "Programmer la collecte Research" if mode_programme else "Lancer la collecte",
                 type="primary",
                                  disabled=occupe or api_tiktok_suspendue
+                                          or bilans_importes_pour_reprise
                                           or (source == "presse" and moteur_formulaire != "research"
                                               and len(st.session_state.get("medias", [])) > max_sources_admin),
                                  on_click=respecter_choix_commentaires):
