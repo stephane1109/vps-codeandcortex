@@ -1,0 +1,203 @@
+"""Tests de restauration des historiques manquants sans réinitialisation."""
+import base64
+from io import BytesIO
+import json
+from pathlib import Path
+import tempfile
+import threading
+import unittest
+from unittest.mock import patch
+from zipfile import ZipFile
+
+from fastapi.testclient import TestClient
+
+import webapp as web
+from stockage.historique_analyses import retrouver
+from stockage.recuperation_hashtags import (
+    reconstruire_historique, restaurer_depuis_zip,
+    retrouver_ou_reconstruire,
+)
+
+
+class TestsRecuperationHashtags(unittest.TestCase):
+    def setUp(self):
+        self.identifiant = "a" * 32
+        self.nom = "Corpus original de 521 publications"
+        self.publications = [
+            {"id": str(7000000000000000000 + i),
+             "url": "https://www.tiktok.com/@exemple/video/"
+                    + str(7000000000000000000 + i),
+             "description": "#17octobre", "author": "exemple",
+             "retenue": True, "engagement": {}}
+            for i in range(521)
+        ]
+        options = web.StartRequest(
+            nom_sauvegarde=self.nom,
+            source_collecte="hashtags",
+            hashtag_moteur="research",
+            hashtags_saisis=["17octobre", "24octobre"],
+            date_debut="2026-10-01", date_fin="2026-10-31",
+            research_client_key="cle_initiale",
+            research_client_secret="secret_initial",
+        )
+        parametres = options.model_dump(mode="json")
+        parametres["research_client_key"] = None
+        parametres["research_client_secret"] = None
+        self.journal = {
+            "session": self.identifiant, "statut": "partial",
+            "parametres": parametres,
+            "compteurs_collecte": {"traitees": 521},
+            "evenements": [{
+                "source": "#17octobre",
+                "statut_source": "partielle",
+                "rapport": {
+                    "collecte_partielle": True,
+                    "reprise_pagination_research": {
+                        "indice_periode": 0,
+                        "debut_periode": "20261001",
+                        "fin_periode": "20261031",
+                        "cursor": 600,
+                        "search_id": "page_suivante",
+                    },
+                },
+            }],
+        }
+        tampon = BytesIO()
+        with ZipFile(tampon, "w") as archive:
+            archive.writestr(
+                "publications.json",
+                json.dumps(self.publications, ensure_ascii=False))
+            archive.writestr(
+                "journal.json",
+                json.dumps(self.journal, ensure_ascii=False))
+            archive.writestr("commentaires.json", "[]")
+            archive.writestr("bilan_hashtags.csv", "collecte_id;hashtag;etat;liens;motif\n")
+        self.zip = tampon.getvalue()
+        self.cookie = "cookie_historique_prive_test"
+
+    def test_restaurer_depuis_zip_sans_perdre_521_publications(self):
+        """Recréer l'index local, le journal et le corpus original."""
+        with tempfile.TemporaryDirectory() as dossier:
+            with patch(
+                "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                return_value=(self.nom, 521)):
+                identifiant = restaurer_depuis_zip(
+                    dossier, self.identifiant, self.cookie,
+                    base64.b64encode(self.zip).decode("ascii"))
+                archive = retrouver(dossier, identifiant, self.cookie)
+            self.assertIsNotNone(archive)
+            _, emplacement, manifeste = archive
+            self.assertEqual(manifeste["id"], self.identifiant)
+            self.assertEqual(manifeste["publications"], 521)
+            self.assertEqual(
+                len(json.loads((emplacement / "publications.json").read_text())),
+                521)
+            recuperation = json.loads((emplacement / "journal.json").read_text())
+            self.assertEqual(
+                recuperation["evenements"][0]["rapport"][
+                    "reprise_pagination_research"]["cursor"], 600)
+
+    def test_retrouver_archive_locale_si_index_absent(self):
+        """Retrouver une collecte dans sessions/id même sans index SQLite."""
+        with tempfile.TemporaryDirectory() as dossier:
+            source = Path(dossier) / "sessions" / self.identifiant
+            source.mkdir(parents=True)
+            (source / "publications.json").write_text(
+                json.dumps(self.publications), encoding="utf-8")
+            (source / "journal.json").write_text(
+                json.dumps(self.journal), encoding="utf-8")
+            with patch(
+                "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                return_value=(self.nom, 521)):
+                archive = retrouver_ou_reconstruire(
+                    dossier, self.identifiant, self.cookie)
+            self.assertIsNotNone(archive)
+            self.assertEqual(archive[2]["publications"], 521)
+
+    def test_zip_incomplet_ou_corpus_different_refuse(self):
+        """Ne jamais reconstruire la pagination avec un simple bilan CSV."""
+        with tempfile.TemporaryDirectory() as dossier:
+            with patch(
+                "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                return_value=(self.nom, 521)):
+                tampon = BytesIO()
+                with ZipFile(tampon, "w") as archive:
+                    archive.writestr("bilan_hashtags.csv", "fichier seul")
+                with self.assertRaisesRegex(ValueError, "obligatoires"):
+                    restaurer_depuis_zip(
+                        dossier, self.identifiant, self.cookie,
+                        base64.b64encode(tampon.getvalue()).decode("ascii"))
+                with self.assertRaisesRegex(ValueError, "PostgreSQL"):
+                    restaurer_depuis_zip(
+                        dossier, self.identifiant, self.cookie,
+                        base64.b64encode(self.zip).decode("ascii"))
+                    # La branche n'est pas atteinte avec le bon corpus :
+                    # le test d'appartenance figure ci-dessous.
+            self.assertIsNone(retrouver(dossier, self.identifiant, self.cookie))
+
+    def test_api_reprise_depuis_zip_garde_le_curseur_et_l_identifiant(self):
+        """Parcours HTTP ZIP → historique → reprise, avec 521 publications."""
+        termine = threading.Event()
+        resultats = {}
+
+        def executer_sans_tiktok(job):
+            resultats["id"] = job.id
+            resultats["publications"] = len(job.publications)
+            resultats["cursor"] = job.positions_reprise_research[
+                "#17octobre"]["cursor"]
+            job.update(status="partial", busy=False)
+            termine.set()
+
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = web.Manager(data_dir=dossier, runner=executer_sans_tiktok)
+            with TestClient(web.create_app(manager)) as client:
+                client.get("/")
+                cookie = client.cookies[web.HISTORIQUE_COOKIE]
+                self.assertIsNone(retrouver(dossier, self.identifiant, cookie))
+                with (
+                    patch(
+                        "stockage.recuperation_hashtags.verifier_propriete_postgres",
+                        return_value=(self.nom, 521)),
+                    patch(
+                        "stockage.postgres_consultation.adresse_configuree",
+                        return_value=True),
+                    patch(
+                        "stockage.postgres_consultation.verifier_disponibilite"),
+                    patch(
+                        "stockage.postgres_consultation.obtenir_nom_collecte",
+                        return_value=self.nom),
+                    patch(
+                        "stockage.postgres_consultation.compter_publications_collecte",
+                        return_value=521),
+                    patch("ticket_gate.verifier_session_active",
+                          return_value=True),
+                ):
+                    charge = client.post(
+                        f"/api/historique/{self.identifiant}/restaurer-zip",
+                        json={"archive_base64": base64.b64encode(
+                            self.zip).decode("ascii")},
+                        headers={"X-ScrapTikTok": "1"})
+                    self.assertEqual(charge.status_code, 200, charge.text)
+                    ouvert = client.post(
+                        f"/api/historique/{self.identifiant}/ouvrir",
+                        json={}, headers={"X-ScrapTikTok": "1"})
+                    self.assertEqual(ouvert.status_code, 200, ouvert.text)
+                    self.assertEqual(ouvert.json()["id"], self.identifiant)
+                    reprise = client.post(
+                        f"/api/historique/{self.identifiant}/reprendre-hashtags",
+                        json={
+                            "hashtags": ["17octobre", "24octobre"],
+                            "research_client_key": "cle_reprise",
+                            "research_client_secret": "secret_reprise",
+                        }, headers={"X-ScrapTikTok": "1"})
+                self.assertEqual(reprise.status_code, 202, reprise.text)
+                self.assertTrue(termine.wait(5))
+                self.assertEqual(resultats, {
+                    "id": self.identifiant,
+                    "publications": 521,
+                    "cursor": 600,
+                })
+
+
+if __name__ == "__main__":
+    unittest.main()
