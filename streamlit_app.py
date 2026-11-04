@@ -144,6 +144,7 @@ if "initialise" not in st.session_state:
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "region_fr_research": ancienne.get("region_fr_research", False),
+        "lot_candidats_research": ancienne.get("lot_candidats_research", 1000),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit") or 50, "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
@@ -287,6 +288,7 @@ st.session_state.setdefault("operator", "AND")
 st.session_state.setdefault("rechercher_dans_texte", False)
 st.session_state.setdefault("variantes_accents", False)
 st.session_state.setdefault("region_fr_research", False)
+st.session_state.setdefault("lot_candidats_research", 1000)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "hashtags_saisis", "hashtags_saisis_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
@@ -1060,6 +1062,16 @@ with onglet_collecte:
         except ValueError as erreur:
             erreur_hashtags_exclus = str(erreur)
             st.error(erreur_hashtags_exclus)
+        if (source == "hashtags" and moteur_formulaire == "research"):
+            st.selectbox(
+                "Taille des lots Research à contrôler (candidats API)",
+                options=[100, 500, 1000, 2000, 5000],
+                key="lot_candidats_research", disabled=occupe,
+                help="100 vidéos maximum par requête TikTok. "
+                     "ScrapTikTok suspend la collecte après la première page "
+                     "pour vérifier les résultats, puis après chaque lot "
+                     "de ce nombre de candidats. Le bouton Poursuivre "
+                     "conserve la pagination en cours.")
         if moteur_formulaire == "research":
             st.checkbox(
                 "Faire un test sur 10 publications",
@@ -1512,6 +1524,8 @@ with onglet_collecte:
                 valeurs["region_fr_research"] = bool(
                     source == "hashtags" and moteur_selectionne == "research"
                     and st.session_state.get("region_fr_research", False))
+                valeurs["lot_candidats_research"] = int(
+                    st.session_state.get("lot_candidats_research", 1000))
                 valeurs["variantes_accents"] = (
                     bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
                 )
@@ -1656,6 +1670,23 @@ with onglet_collecte:
                 elif st.button("Arrêter la collecte", type="primary",
                                key="interrompre_collecte_active", use_container_width=True):
                     lancer(f"/api/jobs/{actuel['id']}/stop", {})
+                if actuel.get("attente_validation_research") and not (
+                        (actuel.get("debug_collecte") or {}).get("arret_demande")):
+                    st.info(
+                        "La pagination Research est suspendue. Contrôlez "
+                        "les publications retenues et écartées ci-dessous "
+                        "avant de poursuivre. Le curseur TikTok est conservé "
+                        "dans cette collecte.")
+                    if st.button(
+                            "Poursuivre la collecte — lot suivant",
+                            key="poursuivre_research_" + actuel["id"],
+                            use_container_width=True):
+                        try:
+                            api(
+                                f"/api/jobs/{actuel['id']}/research/continuer",
+                                {})
+                        except RuntimeError as erreur:
+                            st.error(str(erreur))
             elif "TikTok HTTP 429" in actuel.get("message", ""):
                 st.info("Collecte terminée après HTTP 429 : aucun nouvel appel TikTok n'est lancé par ce traitement.")
             # La fin de la collecte ne doit jamais relancer toute la page.
@@ -1891,6 +1922,58 @@ with onglet_collecte:
                         f"{actuel['ecartes_hashtags_research_lot']} candidat(s) "
                         "écarté(s) car les métadonnées ne correspondent pas "
                         "à la recherche stricte des hashtags.")
+            if (actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"):
+                if actuel.get("apercu_texte_research"):
+                    with st.expander(
+                            "Vérifier les dernières publications retenues",
+                            expanded=actuel.get("attente_validation_research", False)):
+                        st.caption(
+                            "Échantillon des 20 derniers textes retenus dans "
+                            "le TXT. Les hashtags et la région proviennent "
+                            "des métadonnées Research ; la langue est estimée "
+                            "sur la légende écrite.")
+                        st.dataframe([
+                            {
+                                "Vidéo": p.get("url", ""),
+                                "Auteur": "@" + p.get("auteur", ""),
+                                "Légende": p.get("legende", ""),
+                                "Hashtags TikTok": ", ".join(
+                                    "#" + h for h in p.get("hashtags", [])),
+                                "Hashtags correspondants": ", ".join(
+                                    "#" + h for h in p.get(
+                                        "hashtags_correspondants", [])),
+                                "Langue": p.get("langue", ""),
+                                "Région": p.get("region", ""),
+                            }
+                            for p in reversed(actuel["apercu_texte_research"])
+                        ], hide_index=True, use_container_width=True,
+                            column_config={
+                                "Vidéo": st.column_config.LinkColumn(
+                                    "Vidéo", display_text="Ouvrir")})
+                if actuel.get("apercu_ecartes_research"):
+                    with st.expander(
+                            "Contrôler des vidéos écartées par les critères",
+                            expanded=(
+                                actuel.get("attente_validation_research", False)
+                                and not actuel.get("captions"))):
+                        st.caption(
+                            "Échantillon limité de candidats renvoyés par "
+                            "TikTok mais exclus avant le traitement.")
+                        st.dataframe([
+                            {
+                                "Vidéo": p.get("url", ""),
+                                "Légende": p.get("legende", ""),
+                                "Hashtags TikTok": ", ".join(
+                                    "#" + h for h in p.get("hashtags", [])),
+                                "Région": p.get("region", ""),
+                                "Motif": p.get("motif", ""),
+                            }
+                            for p in actuel["apercu_ecartes_research"]
+                        ], hide_index=True, use_container_width=True,
+                            column_config={
+                                "Vidéo": st.column_config.LinkColumn(
+                                    "Vidéo", display_text="Ouvrir")})
             if (actuel.get("test_research_10_publications")
                     and actuel.get("moteur_actif") == "research"
                     and not actuel.get("busy")):
