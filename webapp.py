@@ -2214,12 +2214,14 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     # pour l'ensemble des hashtags, et non par hashtag.
                     connexion.maximum_candidats_segment = max(
                         1, LIMITE_CANDIDATS_SEQUENCE_RESEARCH
-                        - candidats_sources_termines)
+                        - (0 if connexion.enchainement_automatique
+                           else candidats_sources_termines))
                     # Dix appels vidéo au plus par séquence, même lorsque
                     # TikTok renvoie des pages nettement inférieures à 100.
                     connexion.maximum_requetes_segment = max(
                         1, LIMITE_REQUETES_SEQUENCE_RESEARCH
-                        - requetes_sources_terminees)
+                        - (0 if connexion.enchainement_automatique
+                           else requetes_sources_terminees))
                 found = connexion.decouvrir(source, rapport,
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
@@ -2437,6 +2439,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             if (job.settings.source_collecte == "hashtags"
                     and moteur_actif == "research"
                     and not job.settings.test_research_10_publications
+                    and not getattr(connexion, "enchainement_automatique", False)
                     and (rapport.get("discovery_stop") == "lot_termine"
                          or ((candidats_sources_termines >=
                               LIMITE_CANDIDATS_SEQUENCE_RESEARCH
