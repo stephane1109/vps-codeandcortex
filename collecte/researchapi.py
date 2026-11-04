@@ -363,6 +363,11 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
+    # Conserver les dates UTC effectives dès la première requête.
+    # Le bilan CSV doit pouvoir restaurer la même période même si
+    # l'utilisateur n'avait pas renseigné de dates explicites.
+    rapport["plage_research"] = {
+        "debut": periodes[-1][0], "fin": periodes[0][1]}
     if position_reprise is not None:
         if position_reprise["indice_periode"] >= len(periodes):
             raise ResearchErreur("Période de reprise Research hors du corpus initial.")
