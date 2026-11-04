@@ -1578,6 +1578,33 @@ def attendre_intervalle_lecture(debut_precedent, intervalle, pause):
     return time.monotonic()
 
 
+def signaler_arret_source_research(job):
+    """Inscrire la cause réelle d'interruption dans le bilan CSV du hashtag.
+
+    Conserver intégralement le rapport de pagination existant, en particulier
+    cursor et search_id, pour permettre une reprise de la page suivante.
+    """
+    if (job.settings.source_collecte != "hashtags"
+            or job.settings.moteur_actif != "research"
+            or not job.source_en_cours_id):
+        return
+    cause = (job.cause_arret or {}).get("code") or "arret_inattendu"
+    explication = (job.cause_arret or {}).get("explication") or (
+        "Recherche interrompue avant la fin de la pagination.")
+    for entree in reversed(job.journal):
+        if (not isinstance(entree, dict)
+                or entree.get("source") != job.source_en_cours_id):
+            continue
+        if entree.get("statut_source") in ("en_cours", "en_attente", None):
+            entree["statut_source"] = "interrompue"
+            entree["message"] = explication
+        rapport = entree.get("rapport")
+        if isinstance(rapport, dict):
+            rapport["collecte_partielle"] = True
+            rapport.setdefault("discovery_stop", "arret_" + cause)
+        break
+
+
 def execute_job(job: Job, driver_factory=scraper.create_driver):
     from collecte.quotas_exploitation import max_defilements
     args = argparse.Namespace(
@@ -2762,6 +2789,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_status = "completed"
                 final_message += " Toutes les sources prévues ont été parcourues."
     except Stopped:
+        signaler_arret_source_research(job)
         final_status, final_message = "stopped", "Collecte arrêtée. " + ((job.cause_arret or {}).get("explication") or "Cause de l’arrêt non renseignée.") + " Les textes déjà obtenus restent téléchargeables."
     except scraper.WebDriverException as erreur:
         code = "erreur_session" if scraper.est_erreur_session(erreur) else "erreur_navigateur"
