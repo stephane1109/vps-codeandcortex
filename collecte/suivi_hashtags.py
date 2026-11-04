@@ -15,7 +15,9 @@ COLONNES_PAGINATION = (
     "date_debut", "date_fin", "source_pagination",
     "indice_periode", "debut_periode", "fin_periode",
     "cursor", "search_id", "pagination_invalide",
-    "positions_research_json", "exporte_le",
+    "positions_research_json", "arret_research",
+    "pages_research", "requetes_tentees", "candidats_examines",
+    "exporte_le",
 )
 COLONNES = COLONNES_HISTORIQUES + COLONNES_PAGINATION
 
@@ -60,6 +62,7 @@ def etats_variantes(hashtags, avec_accents, journal, *, source_en_cours=None,
                     else ("non_commencee" if termine else "en_attente")
                 )
                 motif, liens, position = "", 0, None
+                arret, pages, requetes, candidats = "", 0, 0, 0
             else:
                 rapport = entree.get("rapport") or {}
                 etat = entree.get("statut_source")
@@ -72,11 +75,18 @@ def etats_variantes(hashtags, avec_accents, journal, *, source_en_cours=None,
                 motif = str(entree.get("message") or "")
                 liens = len(rapport.get("discovered_urls") or [])
                 position = rapport.get("reprise_pagination_research")
+                arret = str(rapport.get("discovery_stop") or "")
+                pages = int(rapport.get("pages_research") or 0)
+                requetes = int(rapport.get("requetes_tentees") or 0)
+                candidats = int(rapport.get("candidats_examines") or 0)
                 if etat == "traitee" or not isinstance(position, dict):
                     position = None
             etats[variante.casefold()] = {
                 "etat": etat, "motif": motif, "liens": liens,
-                "position": position,
+                "position": position, "arret_research": arret,
+                "pages_research": pages,
+                "requetes_tentees": requetes,
+                "candidats_examines": candidats,
             }
     return etats
 
@@ -160,6 +170,12 @@ def etablir_bilan_hashtags(hashtags, avec_accents, journal, *,
                 json.dumps(positions, ensure_ascii=False,
                            sort_keys=True, separators=(",", ":"))
                 if positions else ""),
+            "arret_research": " | ".join(dict.fromkeys(
+                o["arret_research"] for o in observations
+                if o["arret_research"])),
+            "pages_research": sum(o["pages_research"] for o in observations),
+            "requetes_tentees": sum(o["requetes_tentees"] for o in observations),
+            "candidats_examines": sum(o["candidats_examines"] for o in observations),
         })
     return bilan
 
