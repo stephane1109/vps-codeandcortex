@@ -303,6 +303,12 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
                     raise ValueError(
                         "Nombre de liens invalide dans un bilan de hashtags.") from None
 
+    if not sauvegarde["publications"] and any(
+            nombre > 0 for valeurs in volumes.values() for nombre in valeurs):
+        raise ValueError(
+            "Les bilans signalent des liens déjà découverts, mais aucune "
+            "publication n'est conservée dans le corpus PostgreSQL d'origine. "
+            "La reprise est bloquée pour éviter une réinitialisation déguisée.")
     evenements = []
     for tag in hashtags:
         observations = etats[tag]
