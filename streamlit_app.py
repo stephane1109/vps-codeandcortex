@@ -1662,6 +1662,59 @@ with onglet_collecte:
                     lancer(f"/api/jobs/{actuel['id']}/stop", {})
             elif "TikTok HTTP 429" in actuel.get("message", ""):
                 st.info("Collecte terminée après HTTP 429 : aucun nouvel appel TikTok n'est lancé par ce traitement.")
+            if (not actuel.get("busy")
+                    and actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"
+                    and not actuel.get("test_research_10_publications")
+                    and actuel.get("status") in {"partial", "stopped"}):
+                hashtags_inacheves = hashtags_a_reprendre(
+                    actuel.get("bilan_hashtags_sources") or [])
+                if hashtags_inacheves:
+                    st.caption(
+                        "Séquence terminée. Les fichiers sont sauvegardés. "
+                        "Vous pouvez vérifier les publications ci-dessous et "
+                        "poursuivre dans le même corpus PostgreSQL.")
+                    with st.expander(
+                            "Identifiants Research pour poursuivre la collecte",
+                            expanded=False):
+                        st.text_input(
+                            "Client key (reprise)", type="password",
+                            key="cle_research_sequence",
+                            help="Facultatif si la clé est déjà configurée "
+                                 "sur le serveur.")
+                        st.text_input(
+                            "Client secret (reprise)", type="password",
+                            key="secret_research_sequence",
+                            help="Facultatif si le secret est déjà configuré "
+                                 "sur le serveur.")
+                    if st.button(
+                            "Poursuivre la collecte",
+                            type="primary", use_container_width=True,
+                            key="poursuivre_sequence_" + actuel["id"]):
+                        options_suite = {"hashtags": hashtags_inacheves}
+                        cle_suite = (
+                            st.session_state.get("cle_research_sequence")
+                            or st.session_state.get("research_client_key")
+                            or "").strip()
+                        secret_suite = (
+                            st.session_state.get("secret_research_sequence")
+                            or st.session_state.get("research_client_secret")
+                            or "").strip()
+                        if cle_suite:
+                            options_suite["research_client_key"] = cle_suite
+                        if secret_suite:
+                            options_suite["research_client_secret"] = secret_suite
+                        try:
+                            reprise = api(
+                                "/api/historique/" + actuel["id"]
+                                + "/reprendre-hashtags", options_suite)
+                        except RuntimeError as erreur:
+                            st.error("Poursuite impossible : " + str(erreur))
+                        else:
+                            st.session_state["collecte"] = reprise
+                            st.session_state.pop("cle_research_sequence", None)
+                            st.session_state.pop("secret_research_sequence", None)
+                            st.rerun()
             # La fin de la collecte ne doit jamais relancer toute la page.
             # Le fragment conserve les résultats et les boutons de téléchargement.
             if (not actuel.get("busy") and not actuel.get("video_busy")
