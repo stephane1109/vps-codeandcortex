@@ -1632,6 +1632,13 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     fiche, job.settings))
         sources = connexion.preparer_sources(job.settings)
         if (job.settings.source_collecte == "hashtags" and moteur_actif == "research"
+                and not job.settings.test_research_10_publications
+                and not job.plan_research_id):
+            # Les séquences de dix appels s'enchaînent automatiquement,
+            # sans nouvelle action utilisateur tant que l'API répond.
+            # Chaque page conserve son curseur et les résultats déjà lus.
+            connexion.enchainement_automatique = True
+        if (job.settings.source_collecte == "hashtags" and moteur_actif == "research"
                 and job.reprise):
             # Les positions proviennent uniquement de l'archive originale,
             # associée au même identifiant et aux critères déjà contrôlés.
