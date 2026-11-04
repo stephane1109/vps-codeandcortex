@@ -7,6 +7,7 @@ from collecte.suivi_hashtags import (
     hashtags_a_reprendre, identifier_collecte_bilan_hashtags_csv,
     identifier_collecte_bilans_hashtags_csv, importer_bilan_hashtags_csv,
     importer_bilans_hashtags_csv, preparer_reprise_hashtags,
+    regrouper_bilans_hashtags_csv,
 )
 from collecte.presse import charger_inventaire
 from interface.reprise_hashtags_ui import reprendre_depuis_bilans_csv
@@ -160,6 +161,36 @@ class TestsRepriseHashtags(unittest.TestCase):
         self.assertIn("st.multiselect(", interface)
         self.assertNotIn('st.button("Poursuivre la collecte (séquence suivante)"',
                          interface)
+
+    def test_bilans_de_collectes_distinctes_sont_selectionnables_separement(self):
+        """Les deux identifiants demeurent disponibles sans mélange des curseurs."""
+        bilan_origine = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "17octobre",
+             "etat": "partielle", "liens": 521, "motif": ""},
+        ])
+        autre_id = "b" * 32
+        bilan_nouvelle_collecte = exporter_bilan_hashtags_csv([
+            {"collecte_id": autre_id, "hashtag": "17octobre",
+             "etat": "partielle", "liens": 4, "motif": ""},
+        ])
+        groupes = regrouper_bilans_hashtags_csv(
+            [bilan_origine, bilan_nouvelle_collecte])
+        self.assertEqual(set(groupes), {self.identifiant, autre_id})
+        self.assertEqual(groupes[self.identifiant], [bilan_origine])
+        self.assertEqual(groupes[autre_id], [bilan_nouvelle_collecte])
+        self.assertEqual(
+            importer_bilans_hashtags_csv(
+                groupes[self.identifiant],
+                collecte_id=self.identifiant,
+                hashtags_autorises=self.hashtags),
+            ["17octobre"])
+        interface = (
+            Path(__file__).resolve().parents[1] /
+            "interface" / "reprise_hashtags_ui.py").read_text("utf-8")
+        self.assertIn("regrouper_bilans_hashtags_csv", interface)
+        self.assertIn("Collecte d'origine à reprendre", interface)
+        self.assertIn("contenus_corpus", interface)
+        self.assertIn("reprendre_depuis_bilans_csv(", interface)
 
     def test_import_csv_declenche_reprise_originale_et_pas_un_nouveau_job(self):
         """Deux bilans relancent l'ancien corpus avec ses 521 publications."""
