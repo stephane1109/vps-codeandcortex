@@ -727,19 +727,12 @@ def entete_sources_ia(publication, source, themes=None, variables=""):
         texte = re.sub(r"[^\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
         return texte or "indetermine"
 
-    themes_correspondants = [
-        mot for mot in (publication.get("hashtags_correspondants") or []) if mot
-    ]
-    if not themes_correspondants:
+    theme = next(iter(publication.get("hashtags_correspondants") or []), None)
+    if not theme:
         theme = next((mot for mot in (themes or []) if mot), None)
-        if not theme:
-            theme = next(iter(publication.get("hashtags") or []), None)
-        themes_correspondants = [theme] if theme else []
-    # Une publication satisfaisant un ET de plusieurs hashtags doit porter
-    # toutes ses modalités illustratives, et non uniquement le premier thème.
-    modalites = list(dict.fromkeys(modalite(mot) for mot in themes_correspondants))
-    etiquettes = " ".join("*theme_" + nom for nom in modalites) or "*theme_indetermine"
-    return (f"**** *source_{source} " + etiquettes
+    if not theme:
+        theme = next(iter(publication.get("hashtags") or []), None)
+    return (f"**** *source_{source} *theme_{modalite(theme)}"
             + (" " + variables.strip() if variables.strip() else "") + "\n")
 
 
