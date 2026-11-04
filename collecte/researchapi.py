@@ -493,19 +493,16 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             rapport["reprise_pagination_research"] = page_suivante
             # Stopper un segment après la dernière page intégralement lue.
             # Une dernière page qui termine tout le corpus n'a pas de suite.
-            if ((maximum_candidats is not None
-                    and rapport["candidats_examines"] >= maximum_candidats)
-                    or (maximum_requetes is not None
-                        and rapport["requetes_tentees"] >= maximum_requetes)):
-                if page_suivante is None:
-                    # La source est réellement terminée : aucune reprise.
-                    pass
-                else:
-                    rapport["discovery_stop"] = "lot_termine"
-                    rapport["collecte_partielle"] = True
-                    rapport["plage_research"] = {
-                        "debut": periodes[-1][0], "fin": periodes[0][1]}
-                    return list(rapport["discovered_urls"])
+            if (page_suivante is not None
+                    and ((maximum_candidats is not None
+                          and rapport["candidats_examines"] >= maximum_candidats)
+                         or (maximum_requetes is not None
+                             and rapport["requetes_tentees"] >= maximum_requetes))):
+                rapport["discovery_stop"] = "lot_termine"
+                rapport["collecte_partielle"] = True
+                rapport["plage_research"] = {
+                    "debut": periodes[-1][0], "fin": periodes[0][1]}
+                return list(rapport["discovered_urls"])
             if not automatique and len(contenus) >= limite:
                 rapport["discovery_stop"] = "limit"
                 break
