@@ -186,9 +186,10 @@ def restaurer_depuis_postgres(dossier_donnees, identifiant, cookie):
     if not adresse_configuree():
         return False
     sauvegarde = lire_archive_reprise_hashtags(cookie, identifiant)
-    if sauvegarde is None:
-        # Une ancienne collecte sans journal PostgreSQL a encore besoin
-        # de son archive locale ou d'un ZIP contenant journal.json.
+    if sauvegarde is None or not sauvegarde.get("journal"):
+        # Ne jamais rétablir un historique prétendument reprenable avec
+        # un journal vide. Le mode CSV fournit alors les états et relance
+        # la recherche depuis les premières pages avec déduplication.
         return False
     journal = {
         "session": identifiant, "statut": sauvegarde["statut"],
