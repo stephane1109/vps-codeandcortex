@@ -170,6 +170,7 @@ class StartRequest(BaseModel):
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
+    inclure_theme_hashtag_txt: bool = True
     filtrer_texte_ia_tiktok: bool = False
     inclure_hashtags_csv: bool = False
     supprimer_arobase_profil: bool = False
@@ -766,7 +767,7 @@ def texte_et_hashtags(publication):
     return (texte + "\n" if texte else "") + " ".join(uniques.values())
 
 
-def entete_sources_ia(publication, source, themes=None, variables=""):
+def entete_sources_ia(publication, source, themes=None, variables="", inclure_theme_hashtag=True):
     """Identifier la provenance du texte dans un corpus IRaMuTeQ."""
     def modalite(valeur):
         texte = re.sub(r"[^\w-]+", "_", str(valeur or "").casefold().lstrip("@#")).strip("_")
@@ -777,13 +778,15 @@ def entete_sources_ia(publication, source, themes=None, variables=""):
         theme = next((mot for mot in (themes or []) if mot), None)
     if not theme:
         theme = next(iter(publication.get("hashtags") or []), None)
-    return (f"**** *source_{source} *theme_{modalite(theme)}"
+    balise_theme = f" *theme_{modalite(theme)}" if inclure_theme_hashtag else ""
+    return (f"**** *source_{source}" + balise_theme
             + (" " + variables.strip() if variables.strip() else "") + "\n")
 
 
 def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_txt: bool = False,
                 variables_txt=None, commentaires=None, supprimer_arobase_profil=False,
                 inclure_texte_genere_ia=False, themes=None,
+                inclure_theme_hashtag_txt=True,
                 follower_count_illustratif=False,
                 abonnes_classe_illustratif=False,
                 variables_classes_txt=None, taux_engagement_txt="aucun") -> str:
@@ -827,7 +830,9 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         if inclure_texte_genere_ia:
-            bloc = entete_sources_ia(record, "original", themes, prefix) + texte
+            bloc = entete_sources_ia(
+                record, "original", themes, prefix,
+                inclure_theme_hashtag=inclure_theme_hashtag_txt) + texte
         else:
             bloc = prefix + texte
         for numero, commentaire in enumerate(par_publication.get(str(record["id"]), []), 1):
@@ -837,7 +842,9 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
         if inclure_texte_genere_ia:
             resume_ia = (record.get("resume_ia_tiktok") or "").strip()
             if resume_ia and resume_ia != (record.get("description") or "").strip():
-                blocks.append(entete_sources_ia(record, "ia", themes, prefix) + resume_ia)
+                blocks.append(entete_sources_ia(
+                    record, "ia", themes, prefix,
+                    inclure_theme_hashtag=inclure_theme_hashtag_txt) + resume_ia)
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
@@ -1234,6 +1241,7 @@ class Job:
                                      and self.settings.inclure_commentaires_txt) else None,
                 supprimer_arobase_profil=supprimer_arobase_profil,
                 inclure_texte_genere_ia=self.settings.inclure_texte_genere_ia,
+                inclure_theme_hashtag_txt=self.settings.inclure_theme_hashtag_txt,
                 follower_count_illustratif=self.settings.follower_count_illustratif,
                 abonnes_classe_illustratif=self.settings.abonnes_classe_illustratif,
                 variables_classes_txt=self.settings.variables_classes_txt,
