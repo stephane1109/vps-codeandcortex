@@ -186,7 +186,7 @@ class TestsArchiveSequenceHashtags(unittest.TestCase):
                 execute_job(job, driver_factory=Mock(
                     side_effect=AssertionError("Chrome ne doit pas démarrer")))
 
-            self.assertEqual(job.status, "completed", job.message)
+            self.assertEqual(job.status, "completed", (job.message, job.diagnostics))
             self.assertFalse(job.busy)
             self.assertTrue(job.archive_prete, job.message)
             self.assertEqual(len(demandes), 15)
