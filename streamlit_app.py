@@ -1901,23 +1901,45 @@ with onglet_collecte:
                                 for ligne in bilan_sources
                             ], hide_index=True, use_container_width=True)
                     if not actuel.get("busy"):
-                        # Le serveur fabrique directement le fichier depuis
-                        # le dernier journal de pagination, sans reprendre
-                        # un ancien CSV conservé dans une archive obsolète.
-                        st.link_button(
-                            "Télécharger le bilan des hashtags (CSV réimportable)",
-                            f"/api/jobs/{actuel['id']}/bilan-hashtags.csv",
-                            use_container_width=True,
-                            help="Inclut cursor, search_id, indice_periode, "
-                                 "debut_periode, fin_periode et "
-                                 "positions_research_json.",
-                        )
+                        # Générer les octets dans Streamlit à partir du bilan
+                        # actuel : un lien HTTP ou une ancienne archive ZIP
+                        # peut encore fournir l'ancien format à cinq colonnes.
+                        # Le nom du fichier reste compatible avec les imports.
+                        from collecte.suivi_hashtags import COLONNES_PAGINATION
+                        contenu_bilan = exporter_bilan_hashtags_csv(bilan_sources)
+                        entete_bilan = contenu_bilan.decode(
+                            "utf-8-sig").splitlines()[0].split(";")
+                        if not set(COLONNES_PAGINATION).issubset(entete_bilan):
+                            st.error(
+                                "L'application utilise encore un ancien "
+                                "exporteur de bilan à cinq colonnes. "
+                                "Redéployez deploy-scraptiktok dans Coolify.")
+                        else:
+                            st.download_button(
+                                "Télécharger le bilan des hashtags (CSV réimportable)",
+                                data=contenu_bilan,
+                                file_name=(
+                                    re.sub(
+                                        r"[^\\w-]+", "_",
+                                        str(actuel.get("nom_sauvegarde")
+                                            or "collecte_hashtags"),
+                                        flags=re.UNICODE
+                                    ).strip("_")[:80]
+                                    + "_bilan_hashtags.csv"
+                                ),
+                                mime="text/csv",
+                                use_container_width=True,
+                                key="telecharger_bilan_hashtags_" + actuel["id"],
+                                help="Contient cursor, search_id, indice_periode, "
+                                     "debut_periode, fin_periode, date_debut, "
+                                     "date_fin et positions_research_json.",
+                            )
                         st.caption(
-                            "Le nouveau bilan contient les cinq colonnes "
-                            "historiques ainsi que les dates et curseurs "
-                            "Research disponibles. Un ancien CSV déjà téléchargé "
-                            "ne peut pas acquérir rétroactivement un curseur "
-                            "qui n'avait pas été sauvegardé."
+                            "Le nombre de liens découverts n'est pas le "
+                            "nombre de publications effectivement traitées. "
+                            "Un curseur vide signifie que la source est "
+                            "terminée ou que l'ancien journal ne contenait "
+                            "aucune position exploitable."
                         )
             if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
                 st.info("Une invitation à se connecter est visible. Si un CAPTCHA apparaît, résolvez-le dans la fenêtre ci-dessous. Sinon, fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
