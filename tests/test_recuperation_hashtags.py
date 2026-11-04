@@ -276,6 +276,100 @@ class TestsRecuperationHashtags(unittest.TestCase):
                 self.assertEqual(reprise["id"], self.identifiant)
                 self.assertTrue(reprise["reprise_sans_curseur"])
 
+    def test_reprise_directe_du_curseur_exporte_dans_le_bilan_csv(self):
+        """Le CSV du nouveau format restaure cursor et search_id sans ZIP."""
+        from collecte.suivi_hashtags import etablir_bilan_hashtags
+        parametres = web.StartRequest(
+            nom_sauvegarde=self.nom,
+            source_collecte="hashtags", hashtag_moteur="research",
+            hashtags_saisis=["manifestation", "lyceen"],
+            date_debut="2026-10-01", date_fin="2026-10-31",
+            research_client_key="cle_initiale",
+            research_client_secret="secret_initial",
+        ).model_dump(mode="json")
+        journal = [{
+            "source": "#manifestation",
+            "statut_source": "partielle",
+            "message": "Research API HTTP 401",
+            "rapport": {
+                "collecte_partielle": True,
+                "discovered_urls": [
+                    "https://www.tiktok.com/@exemple/video/7000000000000000000"],
+                "reprise_pagination_research": {
+                    "indice_periode": 0,
+                    "debut_periode": "20261002",
+                    "fin_periode": "20261031",
+                    "cursor": 600,
+                    "search_id": "research_cursor_origine",
+                },
+            },
+        }]
+        lignes = etablir_bilan_hashtags(
+            ["manifestation", "lyceen"], False, journal,
+            termine=True, collecte_id=self.identifiant,
+            date_debut="2026-10-01", date_fin="2026-10-31")
+        fichier_csv = exporter_bilan_hashtags_csv(lignes)
+        donnees_pg = {
+            "id": self.identifiant, "nom": self.nom,
+            "statut": "partial", "traitees": 521,
+            "parametres": parametres, "journal": [],
+            "source_en_cours_id": None,
+            "cree_le": datetime(2026, 10, 31, tzinfo=timezone.utc),
+            "publications": self.publications,
+            "commentaires": [], "republications": [],
+        }
+        evenement = threading.Event()
+        resultat = {}
+
+        def executer_sans_tiktok(job):
+            resultat.update(
+                identifiant=job.id,
+                publications=len(job.publications),
+                positions=dict(job.positions_reprise_research),
+                reexploration=job.reprise_sans_curseur,
+                sources=list(job.sources_reprise_hashtags),
+            )
+            job.update(status="partial", busy=False)
+            evenement.set()
+
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = web.Manager(data_dir=dossier, runner=executer_sans_tiktok)
+            with TestClient(web.create_app(manager)) as client:
+                client.get("/")
+                def api(chemin, donnees):
+                    reponse = client.post(
+                        chemin, json=donnees, headers={"X-ScrapTikTok": "1"})
+                    if reponse.status_code >= 400:
+                        raise RuntimeError(reponse.json().get("detail", "Erreur"))
+                    return reponse.json()
+                with (
+                    patch("stockage.postgres_consultation.adresse_configuree",
+                          return_value=True),
+                    patch("stockage.postgres_consultation.verifier_disponibilite"),
+                    patch("stockage.postgres_consultation.lire_archive_reprise_hashtags",
+                          return_value=donnees_pg),
+                    patch("stockage.postgres_consultation.obtenir_nom_collecte",
+                          return_value=self.nom),
+                    patch("stockage.postgres_consultation.compter_publications_collecte",
+                          return_value=521),
+                    patch("ticket_gate.verifier_session_active", return_value=True),
+                ):
+                    reprise, selection = reprendre_depuis_bilans_csv(
+                        api, [fichier_csv], cle="cle_reprise",
+                        secret="secret_reprise")
+            self.assertTrue(evenement.wait(5))
+            self.assertEqual(selection, ["manifestation", "lyceen"])
+            self.assertEqual(resultat["identifiant"], self.identifiant)
+            self.assertEqual(resultat["publications"], 521)
+            self.assertEqual(
+                resultat["positions"]["#manifestation"]["cursor"], 600)
+            self.assertEqual(
+                resultat["positions"]["#manifestation"]["search_id"],
+                "research_cursor_origine")
+            self.assertNotIn("#lyceen", resultat["positions"])
+            self.assertFalse(resultat["reexploration"])
+            self.assertFalse(reprise["reprise_sans_curseur"])
+
     def test_csv_bloque_si_postgres_vides_malgre_521_liens(self):
         """Ne pas annoncer une reprise si aucune publication n'est sauvée."""
         from stockage.recuperation_hashtags import restaurer_depuis_bilans_csv
