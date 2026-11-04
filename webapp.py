@@ -156,6 +156,7 @@ class StartRequest(BaseModel):
     operator: Literal["AND", "OR"] = "AND"
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
+    region_fr_research: bool = False
     # None signifie une recherche Research paginée sans plafond local.
     # Les moteurs non Research conservent leur limite numérique.
     limit: int | None = Field(default=50, ge=1, le=1000)
@@ -332,6 +333,10 @@ class StartRequest(BaseModel):
         if not self.collecter_commentaires:
             self.collecter_reponses = False
             self.inclure_commentaires_txt = False
+        # Le code FR concerne l'enregistrement du compte, pas la langue
+        # du texte ni nécessairement le lieu de prise de vue.
+        if self.source_collecte != "hashtags" or self.moteur_actif != "research":
+            self.region_fr_research = False
         # Research API : pagination sans plafond local de publications.
         # Le mode test explicite reste limité à dix vidéos au total.
         if self.moteur_actif == "research":
@@ -530,6 +535,18 @@ def matches_hashtags(description, settings, *, hashtags_observes=None):
             if settings.operator == "AND" else bool(correspondants))
 
 
+def verifier_criteres_hashtags_research(fiche, parametres):
+    """Vérifier les hashtags et, sur demande, le pays du compte créateur."""
+    if not isinstance(fiche, dict):
+        return False
+    if (parametres.region_fr_research
+            and str(fiche.get("region_code") or "").upper() != "FR"):
+        return False
+    return matches_hashtags(
+        fiche.get("description") or "", parametres,
+        hashtags_observes=fiche.get("hashtags"))
+
+
 def filtrer_decouverte_hashtags_research(liens, metadonnees, parametres):
     """Écarter avant lecture les vidéos Research ne correspondant pas aux hashtags.
 
@@ -549,9 +566,7 @@ def filtrer_decouverte_hashtags_research(liens, metadonnees, parametres):
             # Une vidéo non vérifiable ne peut pas être déclarée conforme.
             indetermines += 1
             continue
-        if not matches_hashtags(
-                fiche.get("description") or "", parametres,
-                hashtags_observes=fiche.get("hashtags")):
+        if not verifier_criteres_hashtags_research(fiche, parametres):
             ecartes += 1
             continue
         conserves.append(url)
@@ -963,6 +978,7 @@ class Job:
                     "bilan_republications": dict(self.bilan_republications),
                     "rechercher_dans_texte": self.settings.rechercher_dans_texte,
                     "variantes_accents": self.settings.variantes_accents,
+                    "region_fr_research": self.settings.region_fr_research,
                     "hashtags": self.settings.hashtags, "filename": self.settings.filename,
                     "nom_sauvegarde": self.settings.nom_sauvegarde,
                     "sauvegarde_postgres": self.sauvegarde_postgres,
@@ -1595,9 +1611,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             # Le connecteur utilise exactement la même correspondance que
             # le TXT, avant de réserver les identifiants de vidéos.
             connexion.valider_fiche_hashtags_research = (
-                lambda fiche: matches_hashtags(
-                    fiche.get("description") or "", job.settings,
-                    hashtags_observes=fiche.get("hashtags")))
+                lambda fiche: verifier_criteres_hashtags_research(
+                    fiche, job.settings))
         sources = connexion.preparer_sources(job.settings)
         if job.reprise:
             if job.settings.source_collecte == "presse":
@@ -2099,9 +2114,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                                  if identite else None)
                         if not isinstance(fiche, dict):
                             continue
-                        if not matches_hashtags(
-                                fiche.get("description") or "", job.settings,
-                                hashtags_observes=fiche.get("hashtags")):
+                        if not verifier_criteres_hashtags_research(
+                                fiche, job.settings):
                             continue
                         identifiant = str(identite[0])
                         liens_verifies_source.setdefault(identifiant, identite[1])
