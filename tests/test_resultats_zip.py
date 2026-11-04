@@ -46,6 +46,46 @@ class TestsZipResultats(unittest.TestCase):
                 self.assertEqual(resultat.read("commentaires.txt"),
                                  b"*id_123\n@auteur\nCommentaire\n")
 
+    def test_bouton_streamlit_produit_le_bilan_enrichi_et_non_un_csv_obsolete(self):
+        """Le bouton fournit le contenu CSV calculé, sans ancien lien HTTP."""
+        from collecte.suivi_hashtags import (
+            COLONNES_HISTORIQUES, COLONNES_PAGINATION,
+            exporter_bilan_hashtags_csv,
+        )
+        source = Path(__file__).resolve().parents[1] / "streamlit_app.py"
+        interface = source.read_text(encoding="utf-8")
+        self.assertIn("contenu_bilan = exporter_bilan_hashtags_csv(bilan_sources)",
+                      interface)
+        self.assertIn("data=contenu_bilan", interface)
+        self.assertIn('key="telecharger_bilan_hashtags_" + actuel["id"]',
+                      interface)
+        self.assertNotIn(
+            'f"/api/jobs/{actuel[\'id\']}/bilan-hashtags.csv"',
+            interface)
+        self.assertIn(
+            "set(COLONNES_PAGINATION).issubset(entete_bilan)", interface)
+        # Exemple réel du format ancien : deux hashtags signalés terminés
+        # malgré des nombres de liens très différents. Le nouveau fichier
+        # garde les observations et complète systématiquement son en-tête.
+        bilan = exporter_bilan_hashtags_csv([
+            {"collecte_id": "a" * 32, "hashtag": "manifestation",
+             "etat": "traitee", "liens": 1393,
+             "motif": "Recherche terminée."},
+            {"collecte_id": "a" * 32, "hashtag": "lyceen",
+             "etat": "traitee", "liens": 0,
+             "motif": "Recherche conjointe ET déjà effectuée."},
+        ])
+        lignes = list(csv.DictReader(
+            io.StringIO(bilan.decode("utf-8-sig")), delimiter=";"))
+        self.assertEqual(len(lignes), 2)
+        self.assertTrue(
+            set(COLONNES_HISTORIQUES + COLONNES_PAGINATION).issubset(lignes[0]))
+        self.assertEqual(lignes[0]["liens"], "1393")
+        self.assertEqual(lignes[1]["liens"], "0")
+        self.assertEqual(lignes[0]["cursor"], "")
+        self.assertEqual(lignes[0]["search_id"], "")
+        self.assertEqual(lignes[0]["positions_research_json"], "")
+
     def test_ancienne_collecte_zip_reconstruit_bilan_hashtags_sans_csv_existant(self):
         """Une ancienne archive sans bilan doit rester réimportable."""
         from fastapi.testclient import TestClient
