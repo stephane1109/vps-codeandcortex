@@ -44,6 +44,10 @@ class ResearchAccesRefuse(ResearchErreur):
     """Clés absentes, droits insuffisants ou quota officiel atteint."""
 
 
+class ResearchJetonInvalide(ResearchAccesRefuse):
+    """Jeton OAuth Research invalide ; renouvellement ponctuel autorisé."""
+
+
 class ResearchErreurServeur(ResearchErreur):
     """Réponse transitoire HTTP 5xx du serveur officiel TikTok."""
 
@@ -100,9 +104,39 @@ def _requete(url, *, data, headers):
             if len(contenu) > TAILLE_MAX:
                 raise ResearchErreur("Réponse Research trop volumineuse.")
     except HTTPError as erreur:
-        if erreur.code in (401, 403, 429):
+        if erreur.code == 401:
+            # Seul le code officiel autorise à distinguer un jeton expiré
+            # d'une permission Research réellement absente. Ne jamais
+            # conserver ni afficher la réponse complète du serveur.
+            try:
+                detail = json.loads(erreur.read(4096))
+                information = detail.get("error") or {}
+                code_erreur = (
+                    information.get("code") if isinstance(information, dict)
+                    else information if isinstance(information, str)
+                    else detail.get("code"))
+            except (ValueError, UnicodeError, AttributeError, OSError):
+                code_erreur = None
+            if code_erreur == "access_token_invalid":
+                raise ResearchJetonInvalide(
+                    "Research API HTTP 401 : jeton d'accès invalide ou expiré."
+                ) from erreur
+            if code_erreur in ("scope_not_authorized", "scope_not_authorised"):
+                raise ResearchAccesRefuse(
+                    "Research API HTTP 401 : autorisation Research insuffisante "
+                    "(scope_not_authorized)."
+                ) from erreur
             raise ResearchAccesRefuse(
-                f"Research API HTTP {erreur.code} : autorisation, droits ou quota officiel à vérifier."
+                "Research API HTTP 401 : authentification ou autorisation refusée. "
+                "Vérifier le jeton et les droits du projet Research."
+            ) from erreur
+        if erreur.code == 403:
+            raise ResearchAccesRefuse(
+                "Research API HTTP 403 : accès refusé au projet Research."
+            ) from erreur
+        if erreur.code == 429:
+            raise ResearchAccesRefuse(
+                "Research API HTTP 429 : limite de requêtes TikTok atteinte."
             ) from erreur
         if erreur.code in (500, 502, 503, 504):
             # Une panne du serveur TikTok n'est pas un refus de droits ou de quota.
@@ -120,9 +154,17 @@ def _requete(url, *, data, headers):
     code = (objet.get("error") or {}).get("code", "ok") if isinstance(objet.get("error"), dict) else "ok"
     if code not in ("ok", 0, "0", None):
         # Les détails du serveur pourraient contenir des informations de session.
-        if str(code) in ("rate_limit_exceeded", "access_token_invalid", "scope_not_authorized",
-                         "scope_not_authorised", "unauthorized", "invalid_client"):
-            raise ResearchAccesRefuse("Research API : droits, jeton ou quota refusés (" + str(code) + ").")
+        if code == "access_token_invalid":
+            raise ResearchJetonInvalide(
+                "Research API : jeton d'accès invalide ou expiré (access_token_invalid).")
+        if code == "rate_limit_exceeded":
+            raise ResearchAccesRefuse(
+                "Research API : limite de requêtes atteinte (rate_limit_exceeded).")
+        if str(code) in ("scope_not_authorized", "scope_not_authorised",
+                         "unauthorized", "invalid_client"):
+            raise ResearchAccesRefuse(
+                "Research API : autorisation ou identifiants refusés ("
+                + str(code) + ").")
         raise ResearchErreur("Research API : réponse en erreur (" + str(code)[:60] + ").")
     return objet
 
@@ -139,7 +181,8 @@ def _url_profil():
     return URL_PROFIL + "?fields=" + CHAMPS_PROFIL
 
 
-def _jeton(requete=_requete, maintenant=time.monotonic, *, credentiels=None):
+def _jeton(requete=_requete, maintenant=time.monotonic, *,
+           credentiels=None, renouveler=False):
     if credentiels is None:
         cle = os.getenv("TIKTOK_RESEARCH_CLIENT_KEY", "").strip()
         secret = os.getenv("TIKTOK_RESEARCH_CLIENT_SECRET", "").strip()
@@ -155,7 +198,8 @@ def _jeton(requete=_requete, maintenant=time.monotonic, *, credentiels=None):
         # le cache partagé entre les sessions.
         identité = hashlib.sha256((cle + "\0" + secret).encode("utf-8")).hexdigest()
         horloge = maintenant()
-        if (_cache_token["identite"] == identité and _cache_token["valeur"]
+        if (not renouveler and _cache_token["identite"] == identité
+                and _cache_token["valeur"]
                 and horloge + 90 < _cache_token["expire"]):
             return _cache_token["valeur"]
         corps = urlencode({"client_key": cle, "client_secret": secret,
@@ -398,12 +442,36 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             if curseur is not None:
                 requete_corps["cursor"] = curseur
                 requete_corps["search_id"] = search_id
-            rapport["requetes_tentees"] += 1
+            # Un hashtag peut parcourir l'API pendant plusieurs heures.
+            # Le jeton OAuth Research expire normalement après deux heures :
+            # vérifier le cache avant chaque page plutôt qu'une seule fois
+            # au lancement de la source.
             try:
-                reponse = requete(
-                    _url_videos(), data=json.dumps(requete_corps).encode("utf-8"),
-                    headers={"Authorization": "Bearer " + acces,
-                             "Content-Type": "application/json"})
+                if jeton is None:
+                    acces = _jeton(requete=requete, credentiels=credentiels)
+                corps_pagination = json.dumps(requete_corps).encode("utf-8")
+                rapport["requetes_tentees"] += 1
+                try:
+                    reponse = requete(
+                        _url_videos(), data=corps_pagination,
+                        headers={"Authorization": "Bearer " + acces,
+                                 "Content-Type": "application/json"})
+                except ResearchJetonInvalide:
+                    # Ne réessayer que si TikTok confirme access_token_invalid.
+                    # Même page, même cursor/search_id, une seule relance.
+                    # Un échec d'autorisation ou un 429 ne déclenche rien.
+                    if jeton is not None:
+                        raise
+                    acces = _jeton(
+                        requete=requete, credentiels=credentiels,
+                        renouveler=True)
+                    rapport["requetes_tentees"] += 1
+                    rapport["renouvellements_jeton_401"] = (
+                        int(rapport.get("renouvellements_jeton_401") or 0) + 1)
+                    reponse = requete(
+                        _url_videos(), data=corps_pagination,
+                        headers={"Authorization": "Bearer " + acces,
+                                 "Content-Type": "application/json"})
             except ResearchErreur:
                 rapport["discovery_stop"] = "research_refus_ou_erreur"
                 raise
