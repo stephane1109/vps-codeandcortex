@@ -203,6 +203,13 @@ class TestsRecuperationHashtags(unittest.TestCase):
                 sources=job.sources_reprise_hashtags,
                 positions=job.positions_reprise_research,
                 reexploration=job.reprise_sans_curseur,
+                journal_mode=json.loads(
+                    (job.directory / "journal.json").read_text(
+                        encoding="utf-8")).get("reprise_sans_curseur"),
+                evenements_mode=[
+                    e.get("rapport", {}).get("reprise_sans_curseur")
+                    for e in job.journal if isinstance(e, dict)
+                ],
             )
             job.update(status="partial", busy=False)
             termine.set()
@@ -240,7 +247,9 @@ class TestsRecuperationHashtags(unittest.TestCase):
                 self.assertEqual(resultat["publications"], 521)
                 self.assertEqual(resultat["traitees"], 521)
                 self.assertEqual(resultat["positions"], {})
-                self.assertTrue(resultat["reexploration"])
+                self.assertTrue(resultat["reexploration"], str({
+                    "journal_mode": resultat["journal_mode"],
+                    "evenements_mode": resultat["evenements_mode"]}))
                 self.assertEqual(
                     resultat["sources"], ["manifestation", "lyceen"])
                 self.assertTrue(
