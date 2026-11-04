@@ -2207,7 +2207,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     # Limite transversale au lot : 1 000 candidats API
                     # pour l'ensemble des hashtags, et non par hashtag.
                     connexion.maximum_candidats_segment = max(
-                        100, job.settings.lot_candidats_research
+                        1, job.settings.lot_candidats_research
                         - candidats_sources_termines)
                     # Dix appels vidéo au plus par séquence, même lorsque
                     # TikTok renvoie des pages nettement inférieures à 100.
