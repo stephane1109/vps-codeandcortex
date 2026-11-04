@@ -399,8 +399,8 @@ def cocher_uniquement_medias(identifiants):
     ]
 
 
-onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Base de données", "Annotation/analyse", "Analyse sociométrique", "Corpus fusionné", "Aide"]
+onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_annotation_csv, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Base de données", "Annotation/analyse", "Annotation", "Analyse sociométrique", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
@@ -3082,6 +3082,182 @@ with onglet_aide:
     st.markdown(AIDE_AGREGATION_DESORDRE)
 
 
+
+
+with onglet_annotation_csv:
+    st.subheader("Annotation à partir d'un fichier CSV")
+    st.caption(
+        "Importez engagement.csv ou un CSV contenant un identifiant TikTok. "
+        "Annotez les publications sans analyse vidéo ni nouvelle collecte. "
+        "Les colonnes sources restent en lecture seule ; vos annotations "
+        "sont enregistrées dans un projet privé et réexportables en CSV.")
+    if not cookie_historique:
+        st.warning("Rechargez la page d'accueil pour initialiser l'historique privé.")
+    else:
+        import base64
+        import pandas as pd
+        fichier_ann = st.file_uploader(
+            "Importer engagement.csv", type=["csv"], key="annotation_csv_importer",
+            help="Fichier UTF-8 jusqu'à 12 Mo, avec publication_id ou id.")
+        nom_ann = st.text_input(
+            "Nom du projet d'annotation", key="annotation_csv_nom",
+            placeholder="Annotations_manifestations_2026", max_chars=120)
+        if st.button("Créer le projet d'annotation", key="annotation_csv_creer"):
+            if not fichier_ann:
+                st.error("Importez d'abord un fichier CSV.")
+            elif not nom_ann.strip():
+                st.error("Renseignez le nom du projet.")
+            elif fichier_ann.size > 12_000_000:
+                st.error("Le fichier dépasse 12 Mo.")
+            else:
+                try:
+                    projet_ann = api("/api/annotation-csv/importer", {
+                        "nom": nom_ann.strip(),
+                        "contenu_base64": base64.b64encode(
+                            fichier_ann.getvalue()).decode("ascii"),
+                    })
+                except RuntimeError as erreur:
+                    st.error("Import impossible : " + str(erreur))
+                else:
+                    st.session_state["annotation_csv_projet"] = projet_ann["id"]
+                    st.success("Projet importé et enregistré sur le serveur.")
+                    st.rerun()
+
+        try:
+            projets_ann = api("/api/annotation-csv").get("projets", [])
+        except RuntimeError as erreur:
+            st.error("Liste des annotations inaccessible : " + str(erreur))
+            projets_ann = []
+        if projets_ann:
+            ids_ann = [projet["id"] for projet in projets_ann]
+            selection_ann = st.session_state.get("annotation_csv_projet")
+            if selection_ann not in ids_ann:
+                selection_ann = ids_ann[0]
+            position_ann = ids_ann.index(selection_ann)
+            identifiant_ann = st.selectbox(
+                "Projet enregistré", ids_ann, index=position_ann,
+                format_func=lambda identifiant: next(
+                    (p["nom"] + " — " + str(p["nombre"]) + " publications"
+                     for p in projets_ann if p["id"] == identifiant),
+                    identifiant),
+                key="annotation_csv_choix_projet")
+            st.session_state["annotation_csv_projet"] = identifiant_ann
+            with st.expander("Ajouter une variable d'annotation", expanded=False):
+                nom_variable_ann = st.text_input(
+                    "Nom de la variable (sans espace)", key="annotation_csv_variable_nom",
+                    placeholder="violence_policiere")
+                type_variable_ann = st.radio(
+                    "Type de codage", ["binaire", "categorielle"],
+                    key="annotation_csv_variable_type", horizontal=True,
+                    format_func=lambda v: "Binaire (0/1)" if v == "binaire"
+                    else "Catégoriel")
+                modalites_ann = ""
+                if type_variable_ann == "categorielle":
+                    modalites_ann = st.text_input(
+                        "Modalités séparées par des virgules",
+                        placeholder="pacifique, confrontation, repression",
+                        key="annotation_csv_modalites")
+                if st.button("Créer cette variable", key="annotation_csv_ajouter_variable"):
+                    try:
+                        api("/api/annotation-csv/" + identifiant_ann + "/variable", {
+                            "nom": nom_variable_ann.strip(),
+                            "type_variable": type_variable_ann,
+                            "modalites": [
+                                v.strip() for v in modalites_ann.split(",") if v.strip()],
+                        })
+                    except RuntimeError as erreur:
+                        st.error("Variable refusée : " + str(erreur))
+                    else:
+                        st.success("Variable ajoutée au projet.")
+                        st.rerun()
+
+            resume_ann = next(p for p in projets_ann if p["id"] == identifiant_ann)
+            nombre_ann = int(resume_ann["nombre"])
+            taille_ann = st.selectbox(
+                "Publications par page", [25, 50, 100, 200], index=1,
+                key="annotation_csv_taille_page")
+            maximum_ann = max(1, (nombre_ann + taille_ann - 1) // taille_ann)
+            page_ann = st.number_input(
+                "Page", min_value=1, max_value=maximum_ann, value=1,
+                step=1, key="annotation_csv_page")
+            try:
+                donnees_ann = api(
+                    f"/api/annotation-csv/{identifiant_ann}"
+                    f"?page={page_ann-1}&taille={taille_ann}")
+            except RuntimeError as erreur:
+                st.error("Lecture des annotations impossible : " + str(erreur))
+            else:
+                variables_ann = donnees_ann.get("variables") or []
+                colonnes_ann = donnees_ann.get("colonnes") or []
+                noms_annotations = [v["id"] for v in variables_ann]
+                preferees_ann = [
+                    nom for nom in (
+                        donnees_ann["colonne_id"], "url", "auteur", "legende",
+                        "date_collecte", "vues", "likes", "commentaires",
+                        "partages", "favoris", "statut_resume_ia", "resume_ia_tiktok")
+                    if nom in colonnes_ann]
+                visibles_ann = st.multiselect(
+                    "Colonnes du CSV à afficher (lecture seule)", colonnes_ann,
+                    default=list(dict.fromkeys(preferees_ann)),
+                    key="annotation_csv_colonnes_visibles")
+                if donnees_ann["colonne_id"] not in visibles_ann:
+                    visibles_ann = [donnees_ann["colonne_id"], *visibles_ann]
+                if variables_ann:
+                    tableau_ann = pd.DataFrame(
+                        donnees_ann.get("lignes") or [])
+                    colonnes_editeur = list(dict.fromkeys(
+                        [*visibles_ann, *noms_annotations]))
+                    tableau_ann = tableau_ann.reindex(columns=colonnes_editeur).fillna("")
+                    st.caption(
+                        f"Page {page_ann}/{maximum_ann} · {nombre_ann} publications. "
+                        "Les valeurs Non évaluée restent distinctes de Non (0).")
+                    with st.form("annotation_csv_formulaire_" + identifiant_ann):
+                        code_ann = {
+                            v["id"]: st.column_config.SelectboxColumn(
+                                v["nom"], options=v["modalites"], required=True)
+                            for v in variables_ann
+                        }
+                        if "url" in colonnes_editeur:
+                            code_ann["url"] = st.column_config.LinkColumn("URL TikTok")
+                        tableau_modifie_ann = st.data_editor(
+                            tableau_ann, hide_index=True, use_container_width=True,
+                            num_rows="fixed",
+                            disabled=visibles_ann,
+                            column_config=code_ann,
+                            key="annotation_csv_editeur_" + identifiant_ann
+                                + "_" + str(donnees_ann["revision"])
+                                + "_" + str(page_ann),
+                        )
+                        envoyer_ann = st.form_submit_button(
+                            "Enregistrer les annotations de cette page", type="primary")
+                    if envoyer_ann:
+                        modifications_ann = [
+                            {"publication_id": str(ligne[donnees_ann["colonne_id"]]),
+                             "codages": {
+                                 nom: str(ligne[nom]) for nom in noms_annotations}}
+                            for _, ligne in tableau_modifie_ann.iterrows()
+                        ]
+                        try:
+                            api(
+                                "/api/annotation-csv/" + identifiant_ann + "/enregistrer",
+                                {"revision": donnees_ann["revision"],
+                                 "modifications": modifications_ann})
+                        except RuntimeError as erreur:
+                            st.error("Enregistrement impossible : " + str(erreur))
+                        else:
+                            st.success("Annotations enregistrées sur le serveur.")
+                            st.rerun()
+                else:
+                    st.info(
+                        "Créez une variable d'annotation pour commencer le codage.")
+                    st.dataframe(
+                        pd.DataFrame(donnees_ann.get("lignes") or [])
+                        .reindex(columns=visibles_ann),
+                        hide_index=True, use_container_width=True)
+                st.link_button(
+                    "Télécharger le CSV avec toutes les annotations",
+                    "/api/annotation-csv/" + identifiant_ann + "/export.csv",
+                    use_container_width=True)
 
 
 with onglet_multimodale:
