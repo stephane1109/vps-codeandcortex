@@ -118,6 +118,7 @@ class TestsArchiveSequenceHashtags(unittest.TestCase):
         from collecte.researchapi import collecter_videos_presse_research
 
         demandes = []
+        erreurs_api = []
         def api_tiktok(url, *, data, headers):
             corps = json.loads(data)
             conditions = corps["query"]["and"]
@@ -126,14 +127,18 @@ class TestsArchiveSequenceHashtags(unittest.TestCase):
                 if condition["field_name"] == "hashtag_name"
                 for valeur in condition["field_values"]
             ]
-            self.assertEqual(len(tags), 1)
-            hashtag = tags[0]
-            self.assertIn(hashtag, {"17octobre", "24octobre"})
-            compteur = sum(1 for nom, _ in demandes if nom == hashtag) + 1
-            demandes.append((hashtag, corps))
-            self.assertEqual(corps["max_count"], 100)
-            self.assertEqual(corps.get("cursor"), None if compteur == 1
-                             else compteur - 1)
+            try:
+                self.assertEqual(len(tags), 1)
+                hashtag = tags[0]
+                self.assertIn(hashtag, {"17octobre", "24octobre"})
+                compteur = sum(1 for nom, _ in demandes if nom == hashtag) + 1
+                demandes.append((hashtag, corps))
+                self.assertEqual(corps["max_count"], 100)
+                self.assertEqual(corps.get("cursor"), None if compteur == 1
+                                 else compteur - 1)
+            except AssertionError as erreur:
+                erreurs_api.append(str(erreur) + " / requête=" + repr(corps))
+                raise
             total = 12 if hashtag == "17octobre" else 3
             identifiant = 7000000000000000000 + (
                 compteur if hashtag == "17octobre" else 100 + compteur)
@@ -186,7 +191,8 @@ class TestsArchiveSequenceHashtags(unittest.TestCase):
                 execute_job(job, driver_factory=Mock(
                     side_effect=AssertionError("Chrome ne doit pas démarrer")))
 
-            self.assertEqual(job.status, "completed", (job.message, job.diagnostics))
+            self.assertEqual(job.status, "completed",
+                             (job.message, job.diagnostics, erreurs_api))
             self.assertFalse(job.busy)
             self.assertTrue(job.archive_prete, job.message)
             self.assertEqual(len(demandes), 15)
