@@ -3337,6 +3337,11 @@ class Manager:
                 raise HTTPException(409, str(erreur)) from None
             job.hashtags_reprise = list(selection)
             job.sources_reprise_hashtags = list(variantes)
+            # Restaurer la page suivante de chaque recherche interrompue.
+            # Les pages déjà terminées ne doivent pas être reconsommées.
+            from collecte.suivi_hashtags import positions_pagination_research
+            job.positions_reprise_research = positions_pagination_research(
+                job.journal, variantes)
             job.journal.append({
                 "reprise_hashtags": True,
                 "date": scraper.utc_now(),
