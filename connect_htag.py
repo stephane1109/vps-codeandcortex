@@ -78,6 +78,7 @@ class ConnexionHashtag(ConnexionPresse):
         self.positions_reprise_research = {}
         self.maximum_candidats_segment = None
         self.maximum_requetes_segment = None
+        self.enchainement_automatique = False
         if self._recherche_et_stricte:
             # La requête unique dispose du budget global et non d'une
             # fraction réservée artificiellement à chaque hashtag.
@@ -192,6 +193,7 @@ class ConnexionHashtag(ConnexionPresse):
                 filtre_region=self._region_research,
                 maximum_candidats=self.maximum_candidats_segment,
                 maximum_requetes=self.maximum_requetes_segment,
+                enchainement_automatique=self.enchainement_automatique,
                 position_reprise=self.positions_reprise_research.get(
                     "#" + hashtag))
             if requete_conjointe:
