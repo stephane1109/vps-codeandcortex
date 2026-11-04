@@ -523,6 +523,62 @@ def compter_publications_collecte(cookie, identifiant):
 
 
 
+def lire_archive_reprise_hashtags(cookie, identifiant):
+    """Lire la sauvegarde PostgreSQL et son journal de pagination, si présent.
+
+    Les collectes archivées avant l'ajout de journal_research conservent
+    leurs publications, mais ne possèdent pas automatiquement un curseur.
+    """
+    if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
+        raise ValueError("Collecte inconnue ou non autorisée.")
+    with ouvrir_connexion() as connexion:
+        preparer_tables(connexion)
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT nom_sauvegarde, source_collecte, moteur, statut, "
+                "traitees, parametres, journal_research, source_en_cours_id "
+                "FROM scraptiktok_collectes WHERE collecte_id=%s "
+                "AND proprietaire_hash=%s",
+                (identifiant, empreinte(cookie)))
+            resultat = curseur.fetchone()
+            if resultat is None:
+                raise ValueError(
+                    "Collecte PostgreSQL absente ou cookie privé différent.")
+            nom, source, moteur, statut, traitees, parametres, journal, source_en_cours = resultat
+            if source != "hashtags" or moteur != "research":
+                return None
+            if not isinstance(journal, list) or not journal:
+                return None
+            curseur.execute(
+                "SELECT donnees FROM scraptiktok_publications "
+                "WHERE collecte_id=%s ORDER BY publication_id",
+                (identifiant,))
+            publications = [
+                donnees if isinstance(donnees, dict) else json.loads(donnees)
+                for (donnees,) in curseur.fetchall()]
+            curseur.execute(
+                "SELECT donnees FROM scraptiktok_commentaires "
+                "WHERE collecte_id=%s ORDER BY commentaire_id",
+                (identifiant,))
+            commentaires = [
+                donnees if isinstance(donnees, dict) else json.loads(donnees)
+                for (donnees,) in curseur.fetchall()]
+            curseur.execute(
+                "SELECT donnees FROM scraptiktok_republications "
+                "WHERE collecte_id=%s ORDER BY compte_reposteur, publication_id",
+                (identifiant,))
+            republications = [
+                donnees if isinstance(donnees, dict) else json.loads(donnees)
+                for (donnees,) in curseur.fetchall()]
+    return {
+        "id": identifiant, "nom": nom, "statut": statut,
+        "traitees": int(traitees or 0), "parametres": parametres,
+        "journal": journal, "source_en_cours_id": source_en_cours,
+        "publications": publications, "commentaires": commentaires,
+        "republications": republications,
+    }
+
+
 def obtenir_nom_collecte(cookie, type_sauvegarde, identifiant):
     """Lire le nom d'une collecte PostgreSQL appartenant à la session privée."""
     if not cookie or not IDENTIFIANT.fullmatch(str(identifiant)):
