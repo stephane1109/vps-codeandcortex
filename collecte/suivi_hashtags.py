@@ -315,7 +315,14 @@ def importer_bilan_hashtags_csv(contenu, *, collecte_id, hashtags_autorises):
         if tag not in autorises or tag in vus or etat not in ETATS_VALIDES:
             raise ValueError("Le bilan contient un hashtag ou un état invalide.")
         vus.add(tag)
-        if etat in ETATS_REPRISE | {"en_cours"}:
+        # Une ancienne version pouvait déclarer « traitee » malgré
+        # une position explicite de page suivante dans le bilan CSV.
+        position_conservee = bool(
+            str(ligne.get("positions_research_json") or "").strip()
+            or str(ligne.get("indice_periode") or "").strip()
+        )
+        if etat in ETATS_REPRISE | {"en_cours"} or (
+                etat == "traitee" and position_conservee):
             repris.append(tag)
     if not vus:
         raise ValueError("Le bilan hashtags est vide.")
@@ -403,8 +410,13 @@ def positions_pagination_bilans_csv(
         for ligne in lecteur:
             hashtag = str(ligne.get("hashtag") or "").strip()
             etat = str(ligne.get("etat") or "").strip()
+            position_presente = bool(
+                str(ligne.get("positions_research_json") or "").strip()
+                or str(ligne.get("indice_periode") or "").strip()
+            )
             if (hashtag not in graphies
-                    or etat not in ETATS_REPRISE | {"en_cours"}):
+                    or (etat not in ETATS_REPRISE | {"en_cours"}
+                        and not (etat == "traitee" and position_presente))):
                 continue
             fenetre_debut = str(ligne.get("date_debut") or "").strip()
             fenetre_fin = str(ligne.get("date_fin") or "").strip()
