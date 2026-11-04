@@ -3519,10 +3519,23 @@ class Manager:
                         job.demander_arret("acces_inactif")
                         job.video_stop.set()
                 if job.busy:
-                    job.limites_debug={'inactivite_max_s':self.idle_timeout,'duree_max_s':self.max_duration}
-                    if now-job.created > self.max_duration:
+                    # Une collecte Research officielle ne doit pas être arrêtée
+                    # parce que l'onglet Streamlit cesse de s'actualiser.
+                    # Le contrôle d'accès Redis reste appliqué ci-dessus.
+                    mode_research = job.settings.moteur_actif == "research"
+                    duree_maximale = (
+                        max(self.max_duration, 86400)
+                        if mode_research else self.max_duration)
+                    job.limites_debug = {
+                        "inactivite_max_s": (
+                            None if mode_research else self.idle_timeout),
+                        "duree_max_s": duree_maximale,
+                        "recherche_research_sans_limite_locale": mode_research,
+                    }
+                    if now-job.created > duree_maximale:
                         job.demander_arret('duree_maximale')
-                    elif not job.plan_research_id and now-job.last_seen > self.idle_timeout:
+                    elif (not mode_research and not job.plan_research_id
+                          and now-job.last_seen > self.idle_timeout):
                         job.demander_arret('inactivite')
                 if job.video_busy and (now-job.last_seen>self.idle_timeout or now-job.video_debut>7200):
                     job.video_stop.set()
@@ -4258,6 +4271,35 @@ def create_app(manager=None):
         owner(request)
         from collecte.presse import charger_inventaire
         return {"medias": charger_inventaire()}
+
+    @app.get("/api/jobs/{job_id}/bilan-hashtags.csv")
+    def telecharger_bilan_hashtags(job_id: str, request: Request):
+        """Générer le bilan de pagination directement depuis le journal du job.
+
+        Ne jamais servir un bilan CSV historique à cinq colonnes depuis un
+        ancien ZIP : le format exporté inclut les dates et les curseurs
+        Research de chaque hashtag, même en cas d'arrêt prématuré.
+        """
+        job = manager.get(owner(request), job_id)
+        if job.settings.source_collecte != "hashtags":
+            raise HTTPException(422, "Cette collecte n'est pas une collecte hashtags.")
+        with job.lock:
+            bilan = etablir_bilan_hashtags(
+                job.settings.hashtags, job.settings.variantes_accents,
+                job.journal, source_en_cours=job.source_en_cours_id,
+                termine=not job.busy, collecte_id=job.id,
+                date_debut=job.settings.date_debut,
+                date_fin=job.settings.date_fin)
+            contenu = exporter_bilan_hashtags_csv(bilan)
+        return Response(
+            content=contenu,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                **entete_telechargement(nom_fichier_telechargement(
+                    job.settings.nom_sauvegarde, "bilan_hashtags", "csv")),
+                "Cache-Control": "no-store, max-age=0",
+            },
+        )
 
     @app.get("/api/jobs/{job_id}/archive")
     def telecharger_archive(job_id: str, request: Request, supprimer_arobase_profil: bool | None = None):
