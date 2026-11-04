@@ -74,8 +74,18 @@ def preparer_tables(connexion):
                 cree_le TIMESTAMPTZ NOT NULL,
                 actualise_le TIMESTAMPTZ NOT NULL,
                 traitees INTEGER NOT NULL DEFAULT 0,
-                parametres JSONB NOT NULL DEFAULT '{}'::jsonb
+                parametres JSONB NOT NULL DEFAULT '{}'::jsonb,
+                journal_research JSONB NOT NULL DEFAULT '[]'::jsonb,
+                source_en_cours_id TEXT
             )""")
+        # Les anciennes sauvegardes n'ont pas encore ces colonnes.
+        curseur.execute(
+            "ALTER TABLE scraptiktok_collectes "
+            "ADD COLUMN IF NOT EXISTS journal_research JSONB "
+            "NOT NULL DEFAULT '[]'::jsonb")
+        curseur.execute(
+            "ALTER TABLE scraptiktok_collectes "
+            "ADD COLUMN IF NOT EXISTS source_en_cours_id TEXT")
         curseur.execute("""
             CREATE TABLE IF NOT EXISTS scraptiktok_publications (
                 collecte_id TEXT NOT NULL REFERENCES scraptiktok_collectes(collecte_id)
@@ -168,6 +178,8 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
         publications = publications[max(0, a_partir_publications):]
         commentaires = commentaires[max(0, a_partir_commentaires):]
         parametres = nettoyer_parametres(job.settings.model_dump())
+        journal_research = list(getattr(job, "journal", []) or [])
+        source_en_cours_id = getattr(job, "source_en_cours_id", None)
         statut = job.status
         traitees = job.processed + getattr(job, "reprise_decalage", 0)
         identifiant = job.id
@@ -192,17 +204,21 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
                 INSERT INTO scraptiktok_collectes (
                     collecte_id, proprietaire_hash, nom_sauvegarde,
                     source_collecte, moteur, statut, cree_le, actualise_le,
-                    traitees, parametres)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    traitees, parametres, journal_research, source_en_cours_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (collecte_id) DO UPDATE SET
                     nom_sauvegarde=EXCLUDED.nom_sauvegarde,
                     statut=EXCLUDED.statut,
                     actualise_le=EXCLUDED.actualise_le,
                     traitees=EXCLUDED.traitees,
-                    parametres=EXCLUDED.parametres
+                    parametres=EXCLUDED.parametres,
+                    journal_research=EXCLUDED.journal_research,
+                    source_en_cours_id=EXCLUDED.source_en_cours_id
             """, (
                 identifiant, empreinte(job.owner_historique), nom, source,
-                moteur, statut, maintenant, maintenant, traitees, Jsonb(parametres)))
+                moteur, statut, maintenant, maintenant, traitees,
+                Jsonb(parametres), Jsonb(journal_research),
+                source_en_cours_id))
             for publication in publications:
                 code = str(publication.get("id") or "")
                 if not code:
