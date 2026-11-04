@@ -412,6 +412,14 @@ class TestsVariablesNumeriques(unittest.TestCase):
         self.assertEqual(len(corps_envoyes), 2)
         self.assertTrue(all(
             len(corps["query"]["and"]) == 2 for corps in corps_envoyes))
+        self.assertNotIn("search_id", corps_envoyes[0])
+        self.assertNotIn("cursor", corps_envoyes[0])
+        self.assertEqual(corps_envoyes[1]["search_id"], "recherche_test")
+        self.assertEqual(corps_envoyes[1]["cursor"], 100)
+        self.assertEqual(
+            (corps_envoyes[1]["start_date"], corps_envoyes[1]["end_date"]),
+            (corps_envoyes[0]["start_date"], corps_envoyes[0]["end_date"]))
+        self.assertEqual(corps_envoyes[0]["max_count"], 100)
         self.assertEqual([entree[0] for entree in suivis], [1, 2])
         self.assertEqual([entree[1] for entree in suivis], [1, 2])
         self.assertEqual([entree[2] for entree in suivis], [1, 2])
@@ -420,6 +428,60 @@ class TestsVariablesNumeriques(unittest.TestCase):
         self.assertEqual(bilan["pages_research"], 2)
         self.assertEqual(bilan["requetes_tentees"], 2)
         self.assertEqual(bilan["ecartes_hashtags_api"], 0)
+
+    def test_recherche_fr_restrictive_par_region_de_compte(self):
+        """La région FR est facultative et contrôlée sur les données reçues."""
+        from datetime import date
+        from collecte.researchapi import collecter_videos_presse_research
+
+        requetes = []
+        resultat = {}
+
+        def requete_simulee(url, *, data, headers):
+            requetes.append(json.loads(data.decode("utf-8")))
+            return {"data": {
+                "videos": [
+                    {
+                        "id": "7703357015573187862",
+                        "username": "compte_fr",
+                        "video_description": "Manifestation des lycéens",
+                        "hashtag_names": ["manifestation", "lyceen"],
+                        "region_code": "FR",
+                    },
+                    {
+                        "id": "7703357015573187863",
+                        "username": "compte_es",
+                        "video_description": "Manifestación estudiantil",
+                        "hashtag_names": ["manifestation", "lyceen"],
+                        "region_code": "ES",
+                    },
+                ],
+                "has_more": False,
+            }}
+
+        liens = collecter_videos_presse_research(
+            None, 10, resultat, debut="2026-11-01", fin="2026-11-02",
+            hashtags=["manifestation", "lyceen"], operateur="AND",
+            filtre_region="FR", jeton="JETON_TEST",
+            requete=requete_simulee, aujourd_hui=date(2026, 11, 3))
+        self.assertIn(
+            {"field_name": "region_code", "operation": "EQ",
+             "field_values": ["FR"]}, requetes[0]["query"]["and"])
+        self.assertEqual(len(liens), 1)
+        self.assertIn("@compte_fr/", liens[0])
+        self.assertEqual(resultat["ecartes_region_api"], 1)
+        self.assertEqual(resultat["pages_research"], 1)
+        self.assertEqual(resultat["filtre_region"], "FR")
+
+    def test_entete_iramuteq_identique_apres_correction_hashtags(self):
+        """Une collecte ET ne doit pas changer le format TXT existant."""
+        from webapp import entete_sources_ia
+        entete = entete_sources_ia({
+            "hashtags_correspondants": ["manifestation", "lyceen"],
+            "hashtags": ["manifestation", "lyceen"],
+        }, "original")
+        self.assertIn("*source_original *theme_manifestation", entete)
+        self.assertNotIn("*theme_lyceen", entete)
 
     def test_textes_research_enregistres_avant_la_fin_des_pages(self):
         """Le TXT et les compteurs avancent avant la dernière page TikTok."""
