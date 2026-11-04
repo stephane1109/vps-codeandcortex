@@ -1,9 +1,12 @@
 """Vérifier le téléchargement unique des résultats ScrapTikTok."""
+import csv
 import io
 import json
 import sqlite3
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -90,6 +93,138 @@ class TestsZipResultats(unittest.TestCase):
                     self.assertEqual(
                         archive.read("publications.csv"),
                         b"id;texte\\n123;ancien\\n")
+
+    def test_bilan_hashtags_http_et_zip_conservent_les_colonnes_de_pagination(self):
+        """La réponse téléchargée, y compris dans un ancien ZIP, garde le curseur."""
+        from fastapi.testclient import TestClient
+        from webapp import Job, Manager, create_app, COOKIE
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = Manager(data_dir=dossier)
+            with TestClient(create_app(manager)) as client:
+                client.get("/")
+                proprietaire = client.cookies[COOKIE]
+                options = StartRequest(
+                    nom_sauvegarde="Bilan Research avec curseur",
+                    source_collecte="hashtags",
+                    hashtag_moteur="research",
+                    hashtags_saisis=["manifestation", "lyceen"],
+                    date_debut="2026-10-01",
+                    date_fin="2026-10-31",
+                    research_client_key="cle_test",
+                    research_client_secret="secret_test",
+                )
+                job = Job(proprietaire, options, Path(dossier))
+                job.journal = [{
+                    "source": "#manifestation",
+                    "statut_source": "partielle",
+                    "message": "Research API HTTP 401",
+                    "rapport": {
+                        "collecte_partielle": True,
+                        "discovered_urls": [
+                            "https://www.tiktok.com/@exemple/video/7000000000000000001"],
+                        "reprise_pagination_research": {
+                            "indice_periode": 0,
+                            "debut_periode": "20261001",
+                            "fin_periode": "20261031",
+                            "cursor": 150,
+                            "search_id": "recherche_sauvegardee",
+                        },
+                    },
+                }]
+                job.status = "partial"
+                job.busy = False
+                job.archive_prete = True
+                with ZipFile(job.directory / "archive.zip", "w") as archive:
+                    archive.writestr(
+                        "bilan_hashtags.csv",
+                        "collecte_id;hashtag;etat;liens;motif\\n")
+                    archive.writestr("textes.txt", "Corpus existant")
+                manager.jobs[job.id] = job
+
+                reponse = client.get(
+                    f"/api/jobs/{job.id}/bilan-hashtags.csv")
+                self.assertEqual(reponse.status_code, 200, reponse.text)
+                self.assertIn("no-store", reponse.headers["cache-control"])
+                self.assertIn("bilan_hashtags", reponse.headers[
+                    "content-disposition"])
+                lignes = list(csv.DictReader(
+                    io.StringIO(reponse.content.decode("utf-8-sig")),
+                    delimiter=";"))
+                self.assertEqual(len(lignes), 2)
+                self.assertEqual(lignes[0]["cursor"], "150")
+                self.assertEqual(
+                    lignes[0]["search_id"], "recherche_sauvegardee")
+                self.assertEqual(lignes[0]["date_debut"], "2026-10-01")
+                self.assertEqual(lignes[0]["date_fin"], "2026-10-31")
+                self.assertIn(
+                    "#manifestation", lignes[0]["positions_research_json"])
+                self.assertEqual(lignes[1]["hashtag"], "lyceen")
+                self.assertEqual(lignes[1]["cursor"], "")
+
+                reponse_zip = client.get(f"/api/jobs/{job.id}/archive")
+                self.assertEqual(
+                    reponse_zip.status_code, 200, reponse_zip.text)
+                with ZipFile(io.BytesIO(reponse_zip.content)) as archive:
+                    noms = archive.namelist()
+                    self.assertEqual(noms.count("bilan_hashtags.csv"), 1)
+                    bilan_zip = archive.read("bilan_hashtags.csv")
+                    self.assertEqual(bilan_zip, reponse.content)
+
+    def test_watchdog_research_ignore_absence_de_polling_streamlit(self):
+        """Une collecte Research ne doit pas s'arrêter après 5 ou 30 min."""
+        from webapp import Job, Manager
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = Manager(data_dir=dossier)
+            manager.idle_timeout = 300
+            manager.max_duration = 1800
+            options = StartRequest(
+                nom_sauvegarde="Research longue",
+                source_collecte="hashtags",
+                hashtag_moteur="research",
+                hashtags_saisis=["manifestation"],
+                research_client_key="cle_test",
+                research_client_secret="secret_test",
+            )
+            job = Job("proprietaire_test", options, Path(dossier))
+            job.created = time.monotonic() - 3600
+            job.last_seen = time.monotonic() - 1200
+            manager.jobs[job.id] = job
+            with patch(
+                    "ticket_gate.verifier_session_active",
+                    return_value=True):
+                manager.cleanup()
+            self.assertFalse(job.stop.is_set())
+            self.assertIsNone(job.cause_arret)
+            self.assertIsNone(
+                job.limites_debug["inactivite_max_s"])
+            self.assertGreaterEqual(
+                job.limites_debug["duree_max_s"], 86400)
+
+    def test_watchdog_navigateur_conserve_son_delai_inactivite(self):
+        """Ne pas modifier les contrôles des moteurs navigateur existants."""
+        from webapp import Job, Manager
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = Manager(data_dir=dossier)
+            manager.idle_timeout = 300
+            manager.max_duration = 1800
+            options = StartRequest(
+                nom_sauvegarde="Navigateur court",
+                source_collecte="hashtags",
+                hashtag_moteur="navigateur",
+                hashtags_saisis=["manifestation"],
+                limit=50,
+            )
+            job = Job("proprietaire_test", options, Path(dossier))
+            job.created = time.monotonic() - 400
+            job.last_seen = time.monotonic() - 350
+            manager.jobs[job.id] = job
+            with patch(
+                    "ticket_gate.verifier_session_active",
+                    return_value=True):
+                manager.cleanup()
+            self.assertTrue(job.stop.is_set())
+            self.assertEqual(
+                job.cause_arret["code"], "inactivite")
 
     def test_zip_research_contient_la_base_sqlite_et_les_autres_formats(self):
         """Le ZIP programmé intègre les six anciens téléchargements."""
