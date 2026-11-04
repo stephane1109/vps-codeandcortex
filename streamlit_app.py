@@ -144,7 +144,6 @@ if "initialise" not in st.session_state:
         "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
         "variantes_accents": ancienne.get("variantes_accents", False),
         "region_fr_research": ancienne.get("region_fr_research", False),
-        "lot_candidats_research": ancienne.get("lot_candidats_research", 1000),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit") or 50, "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
@@ -291,7 +290,6 @@ st.session_state.setdefault("operator", "AND")
 st.session_state.setdefault("rechercher_dans_texte", False)
 st.session_state.setdefault("variantes_accents", False)
 st.session_state.setdefault("region_fr_research", False)
-st.session_state.setdefault("lot_candidats_research", 1000)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "hashtags_saisis", "hashtags_saisis_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
@@ -1518,7 +1516,6 @@ with onglet_collecte:
                 valeurs["region_fr_research"] = bool(
                     source == "hashtags" and moteur_selectionne == "research"
                     and st.session_state.get("region_fr_research", False))
-                valeurs["lot_candidats_research"] = 1000
                 valeurs["variantes_accents"] = (
                     bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
                 )
@@ -1669,7 +1666,7 @@ with onglet_collecte:
                     and actuel.get("source_collecte") == "hashtags"
                     and actuel.get("moteur_actif") == "research"
                     and not actuel.get("test_research_10_publications")
-                    and actuel.get("status") in {"partial", "stopped"}):
+                    and actuel.get("status") in {"partial", "stopped", "failed"}):
                 hashtags_inacheves = hashtags_a_reprendre(
                     actuel.get("bilan_hashtags_sources") or [])
                 if hashtags_inacheves:
