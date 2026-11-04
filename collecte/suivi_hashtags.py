@@ -88,6 +88,23 @@ def etablir_bilan_hashtags(hashtags, avec_accents, journal, *,
     variantes = variantes_par_hashtag(hashtags, avec_accents)
     etats = etats_variantes(hashtags, avec_accents, journal,
                            source_en_cours=source_en_cours, termine=termine)
+    # La plage réellement interrogée est celle de la collecte originale,
+    # pas celle du moment où l'ancien bilan est réimporté.
+    debut_effectif, fin_effective = date_debut or "", date_fin or ""
+    if not debut_effectif or not fin_effective:
+        for entree in journal:
+            if not isinstance(entree, dict):
+                continue
+            plage = (entree.get("rapport") or {}).get("plage_research") or {}
+            debut = str(plage.get("debut") or "")
+            fin = str(plage.get("fin") or "")
+            if (len(debut) == len(fin) == 8
+                    and debut.isdigit() and fin.isdigit()):
+                debut_effectif = debut_effectif or (
+                    debut[:4] + "-" + debut[4:6] + "-" + debut[6:])
+                fin_effective = fin_effective or (
+                    fin[:4] + "-" + fin[4:6] + "-" + fin[6:])
+                break
     bilan = []
     for hashtag, graphies in variantes.items():
         observations = [etats[v.casefold()] for v in graphies]
@@ -126,8 +143,8 @@ def etablir_bilan_hashtags(hashtags, avec_accents, journal, *,
             "liens": sum(o["liens"] for o in observations),
             "motif": " | ".join(dict.fromkeys(
                 o["motif"] for o in observations if o["motif"])),
-            "date_debut": date_debut or "",
-            "date_fin": date_fin or "",
+            "date_debut": debut_effectif,
+            "date_fin": fin_effective,
             "source_pagination": source,
             "indice_periode": position.get("indice_periode", ""),
             "debut_periode": position.get("debut_periode", ""),
