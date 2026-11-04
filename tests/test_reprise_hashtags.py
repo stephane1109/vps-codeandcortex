@@ -111,7 +111,9 @@ class TestsRepriseHashtags(unittest.TestCase):
         self.assertRegex(options.date_fin, r"^\d{4}-\d{2}-\d{2}$")
         ancien = options.model_dump()
         reouvert = StartRequest.model_validate(
-            ancien, context={"reprise_historique": True})
+            {**ancien, "research_client_key": "cle_test",
+             "research_client_secret": "secret_test"},
+            context={"reprise_historique": True})
         self.assertEqual(
             (reouvert.date_debut, reouvert.date_fin),
             (options.date_debut, options.date_fin))
@@ -147,7 +149,7 @@ class TestsRepriseHashtags(unittest.TestCase):
         moteur = (racine / "webapp.py").read_text("utf-8")
         self.assertIn('source in {"presse", "hashtags"}', interface)
         self.assertIn(
-            "Reprendre les hashtags (même corpus PostgreSQL)",
+            "Poursuivre la collecte (séquence suivante)",
             (racine / "interface" / "reprise_hashtags_ui.py").read_text("utf-8"))
         self.assertIn("bilan_hashtags.csv", moteur)
         self.assertIn("def reprendre_hashtags_existants(", moteur)
