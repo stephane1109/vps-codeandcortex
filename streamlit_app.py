@@ -1062,16 +1062,6 @@ with onglet_collecte:
         except ValueError as erreur:
             erreur_hashtags_exclus = str(erreur)
             st.error(erreur_hashtags_exclus)
-        if (source == "hashtags" and moteur_formulaire == "research"):
-            st.selectbox(
-                "Taille des lots Research à contrôler (candidats API)",
-                options=[100, 500, 1000, 2000, 5000],
-                key="lot_candidats_research", disabled=occupe,
-                help="100 vidéos maximum par requête TikTok. "
-                     "ScrapTikTok suspend la collecte après la première page "
-                     "pour vérifier les résultats, puis après chaque lot "
-                     "de ce nombre de candidats. Le bouton Poursuivre "
-                     "conserve la pagination en cours.")
         if moteur_formulaire == "research":
             st.checkbox(
                 "Faire un test sur 10 publications",
@@ -1091,11 +1081,12 @@ with onglet_collecte:
                 )
             else:
                 st.caption(
-                    "Research API : les vidéos conformes sont traitées à chaque "
-                    "page reçue (100 candidats maximum par requête), sans attendre "
-                    "la fin de la pagination. Il n'existe pas de plafond local "
-                    "de vidéos ; le budget d'appels Research partagé reste limité "
-                    "et les données sont enregistrées progressivement."
+                    "Research API : une séquence examine jusqu'à 1 000 candidats "
+                    "(100 par requête maximum), traite immédiatement les vidéos "
+                    "conformes et se termine en enregistrant les fichiers et "
+                    "la pagination. Vous pourrez ensuite poursuivre dans le même "
+                    "corpus, sans relancer les pages déjà traitées si le curseur "
+                    "TikTok reste valide."
                 )
         else:
             st.number_input(
@@ -1524,8 +1515,7 @@ with onglet_collecte:
                 valeurs["region_fr_research"] = bool(
                     source == "hashtags" and moteur_selectionne == "research"
                     and st.session_state.get("region_fr_research", False))
-                valeurs["lot_candidats_research"] = int(
-                    st.session_state.get("lot_candidats_research", 1000))
+                valeurs["lot_candidats_research"] = 1000
                 valeurs["variantes_accents"] = (
                     bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
                 )
@@ -1670,23 +1660,6 @@ with onglet_collecte:
                 elif st.button("Arrêter la collecte", type="primary",
                                key="interrompre_collecte_active", use_container_width=True):
                     lancer(f"/api/jobs/{actuel['id']}/stop", {})
-                if actuel.get("attente_validation_research") and not (
-                        (actuel.get("debug_collecte") or {}).get("arret_demande")):
-                    st.info(
-                        "La pagination Research est suspendue. Contrôlez "
-                        "les publications retenues et écartées ci-dessous "
-                        "avant de poursuivre. Le curseur TikTok est conservé "
-                        "dans cette collecte.")
-                    if st.button(
-                            "Poursuivre la collecte — lot suivant",
-                            key="poursuivre_research_" + actuel["id"],
-                            use_container_width=True):
-                        try:
-                            api(
-                                f"/api/jobs/{actuel['id']}/research/continuer",
-                                {})
-                        except RuntimeError as erreur:
-                            st.error(str(erreur))
             elif "TikTok HTTP 429" in actuel.get("message", ""):
                 st.info("Collecte terminée après HTTP 429 : aucun nouvel appel TikTok n'est lancé par ce traitement.")
             # La fin de la collecte ne doit jamais relancer toute la page.
@@ -1927,7 +1900,7 @@ with onglet_collecte:
                 if actuel.get("apercu_texte_research"):
                     with st.expander(
                             "Vérifier les dernières publications retenues",
-                            expanded=actuel.get("attente_validation_research", False)):
+                            expanded=False):
                         st.caption(
                             "Échantillon des 20 derniers textes retenus dans "
                             "le TXT. Les hashtags et la région proviennent "
@@ -1954,9 +1927,7 @@ with onglet_collecte:
                 if actuel.get("apercu_ecartes_research"):
                     with st.expander(
                             "Contrôler des vidéos écartées par les critères",
-                            expanded=(
-                                actuel.get("attente_validation_research", False)
-                                and not actuel.get("captions"))):
+                            expanded=not bool(actuel.get("captions"))):
                         st.caption(
                             "Échantillon limité de candidats renvoyés par "
                             "TikTok mais exclus avant le traitement.")
