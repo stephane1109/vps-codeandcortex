@@ -141,8 +141,9 @@ if "initialise" not in st.session_state:
         "presse_moteur":ancienne.get("presse_moteur","research"),
         "hashtag_moteur":ancienne.get("hashtag_moteur","research"),
         "profil_moteur":ancienne.get("profil_moteur","research"),
-        "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", True),
+        "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
         "variantes_accents": ancienne.get("variantes_accents", False),
+        "region_fr_research": ancienne.get("region_fr_research", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
         "limit":ancienne.get("limit") or 50, "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
@@ -283,8 +284,9 @@ for variable in VARIABLES_TXT:
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
 # rester lançable sans ce widget.
 st.session_state.setdefault("operator", "AND")
-st.session_state.setdefault("rechercher_dans_texte", True)
+st.session_state.setdefault("rechercher_dans_texte", False)
 st.session_state.setdefault("variantes_accents", False)
+st.session_state.setdefault("region_fr_research", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "hashtags_saisis", "hashtags_saisis_comptes",
             "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
@@ -1010,12 +1012,21 @@ with onglet_collecte:
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
                 help="Décoché : seuls les #hashtags exacts de la légende comptent. "
-                     "Coché (par défaut) : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
+                     "Coché : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
                      "Par exemple, #lyceen peut correspondre à « lycéen » et #17octobre à « 17 octobre ». "
                      "Une vidéo dont la légende contient le mot correspondant est donc retenue "
                      "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
                      "et les autres filtres (langue et période). "
                      "Ce choix agit après la découverte des vidéos TikTok.")
+        if source == "hashtags" and moteur_formulaire == "research":
+            st.checkbox(
+                "Limiter aux comptes enregistrés en France (region_code = FR)",
+                key="region_fr_research", disabled=occupe,
+                help="Facultatif et désactivé par défaut. Le code FR de la "
+                     "Research API désigne le pays d'enregistrement du compte "
+                     "créateur, et non la langue de la vidéo ou son lieu de tournage. "
+                     "Le filtre est appliqué dans la requête TikTok et revérifié "
+                     "sur les métadonnées avant l'export.")
         st.checkbox(
             "Conserver uniquement les publications avec un texte généré par IA par TikTok",
             key="filtrer_texte_ia_tiktok", disabled=occupe,
@@ -1495,8 +1506,12 @@ with onglet_collecte:
                 if source == "presse" and valeurs["presse_moteur"] == "apify":
                     valeurs["apify_api_token"] = st.session_state.get("apify_api_token", "")
                 valeurs["rechercher_dans_texte"] = (
-                    bool(st.session_state.get("rechercher_dans_texte", True)) if source != "presse" else False
+                    bool(st.session_state.get("rechercher_dans_texte", False))
+                    if source != "presse" else False
                 )
+                valeurs["region_fr_research"] = bool(
+                    source == "hashtags" and moteur_selectionne == "research"
+                    and st.session_state.get("region_fr_research", False))
                 valeurs["variantes_accents"] = (
                     bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
                 )
