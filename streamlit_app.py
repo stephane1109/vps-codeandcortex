@@ -1010,13 +1010,13 @@ with onglet_collecte:
                         + "). Chaque publication doit satisfaire les deux groupes.")
             else:
                 saisie = st.text_area(
-                "Hashtags à rechercher (1 à 10)", key=cle_liste_hashtags,
-                placeholder="#manifestation, #lyceens, #mobilisation",
-                help="Séparez les hashtags par des virgules, des points-virgules, "
-                     "des espaces ou des retours à la ligne. Le signe # est facultatif. "
-                     "Le même hashtag saisi plusieurs fois ne compte qu'une fois.",
-                height=95, disabled=occupe,
-            )
+                    "Hashtags à rechercher (1 à 10)", key=cle_liste_hashtags,
+                    placeholder="#manifestation, #lyceens, #mobilisation",
+                    help="Séparez les hashtags par des virgules, des points-virgules, "
+                         "des espaces ou des retours à la ligne. Le signe # est facultatif. "
+                         "Le même hashtag saisi plusieurs fois ne compte qu'une fois.",
+                    height=95, disabled=occupe,
+                )
                 try:
                     liste_hashtags = normaliser_liste_hashtags(separer_saisie_hashtags(saisie))
                 except ValueError as erreur:
@@ -1030,12 +1030,12 @@ with onglet_collecte:
                     )
             if not (source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags")):
                 st.radio(
-                "Combiner les hashtags", ["AND", "OR"],
-                format_func=lambda valeur: (
-                    "ET — tous les hashtags" if valeur == "AND"
-                    else "OU — au moins un hashtag"),
-                key="operator", horizontal=True, disabled=occupe,
-            )
+                    "Combiner les hashtags", ["AND", "OR"],
+                    format_func=lambda valeur: (
+                        "ET — tous les hashtags" if valeur == "AND"
+                        else "OU — au moins un hashtag"),
+                    key="operator", horizontal=True, disabled=occupe,
+                )
             if source == "hashtags":
                 st.checkbox("Inclure les variantes accentuées des hashtags",
                     key="variantes_accents", disabled=occupe,
