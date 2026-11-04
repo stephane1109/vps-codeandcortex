@@ -101,8 +101,9 @@ class ReprendreCollectePayload(BaseModel):
 
 
 class ReprendreHashtagsPayload(BaseModel):
-    """Hashtags inachevés à compléter dans le corpus PostgreSQL original."""
-    hashtags: list[str] = Field(min_length=1, max_length=10)
+    """Poursuite du corpus original, avec bilans CSV historiques facultatifs."""
+    hashtags: list[str] = Field(default_factory=list, max_length=10)
+    bilans_base64: list[str] = Field(default_factory=list, max_length=20)
     research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
     research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
 
@@ -3422,10 +3423,62 @@ class Manager:
         except ValueError:
             raise HTTPException(
                 422, "Paramètres historiques invalides ou identifiants Research manquants.") from None
+        # Les anciens bilans à cinq colonnes attestent de séquences interrompues,
+        # même si la dernière tentative a marqué la source « traitee ».
+        # Aucun curseur ne peut être inventé à partir de ces fichiers.
+        selections_csv = []
+        evenements_corriges = list(journal["evenements"])
+        if payload.bilans_base64:
+            import binascii
+            from collecte.suivi_hashtags import (
+                importer_bilans_hashtags_csv, identifier_collecte_bilans_hashtags_csv,
+                variantes_par_hashtag)
+            contenus_csv = []
+            try:
+                for element in payload.bilans_base64:
+                    if len(element) > 2_700_000:
+                        raise ValueError("Bilan CSV supérieur à 2 Mo.")
+                    contenu = base64.b64decode(element, validate=True)
+                    if len(contenu) > 2_000_000:
+                        raise ValueError("Bilan CSV supérieur à 2 Mo.")
+                    contenus_csv.append(contenu)
+                if sum(map(len, contenus_csv)) > 10_000_000:
+                    raise ValueError("Le total des bilans dépasse 10 Mo.")
+                if identifier_collecte_bilans_hashtags_csv(contenus_csv) != identifiant:
+                    raise ValueError("Les CSV ne correspondent pas au corpus PostgreSQL sélectionné.")
+                selections_csv = importer_bilans_hashtags_csv(
+                    contenus_csv, collecte_id=identifiant,
+                    hashtags_autorises=settings.hashtags)
+            except (ValueError, binascii.Error) as erreur:
+                raise HTTPException(422, "Bilans hashtags invalides : " + str(erreur)) from None
+            if not selections_csv:
+                raise HTTPException(
+                    422, "Les CSV ne signalent aucun hashtag interrompu ou incomplet.")
+            # La reprise explicite est autorisée uniquement pour les hashtags
+            # signalés incomplets par au moins un des CSV de ce corpus.
+            from collecte.suivi_hashtags import variantes_par_hashtag
+            graphies = variantes_par_hashtag(
+                settings.hashtags, settings.variantes_accents)
+            for tag in selections_csv:
+                for variante in graphies[tag]:
+                    evenements_corriges.append({
+                        "source": "#" + variante,
+                        "statut_source": "partielle",
+                        "message": "Réexploration demandée à partir des bilans CSV historiques.",
+                        "rapport": {
+                            "collecte_partielle": True,
+                            "reprise_sans_curseur": True,
+                            "provenance": "bilans_hashtags_csv_historiques",
+                        },
+                    })
+        choix = payload.hashtags or selections_csv
+        if selections_csv and not set(choix).issubset(selections_csv):
+            raise HTTPException(
+                422, "Seuls les hashtags inachevés attestés par ces bilans peuvent être repris.")
         try:
             selection, variantes, _ = preparer_reprise_hashtags(
                 settings.hashtags, settings.variantes_accents,
-                journal["evenements"], payload.hashtags,
+                evenements_corriges, choix or None,
                 source_en_cours=manifeste.get("source_en_cours_id"))
         except ValueError as erreur:
             raise HTTPException(422, str(erreur)) from None
@@ -3442,10 +3495,14 @@ class Manager:
                 initialiser_donnees_reprise(job, dossier, manifeste, [])
             except (ValueError, TypeError, OSError) as erreur:
                 raise HTTPException(409, str(erreur)) from None
+            # Les événements corrigés n'altèrent pas l'archive d'origine.
+            # Ils rejoignent le journal du job uniquement après validation.
+            if selections_csv:
+                job.journal = evenements_corriges
             job.hashtags_reprise = list(selection)
             job.sources_reprise_hashtags = list(variantes)
             job.reprise_sans_curseur = bool(
-                journal.get("reprise_sans_curseur")
+                selections_csv or journal.get("reprise_sans_curseur")
                 or any(
                     isinstance(entree, dict)
                     and isinstance(entree.get("rapport"), dict)
