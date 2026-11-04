@@ -226,7 +226,8 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
     from datetime import datetime, timedelta, timezone
     from collecte.suivi_hashtags import (
         ETATS_REPRISE, regrouper_bilans_hashtags_csv,
-        importer_bilans_hashtags_csv)
+        importer_bilans_hashtags_csv, positions_pagination_bilans_csv,
+        variantes_par_hashtag)
     from stockage.postgres_consultation import lire_archive_reprise_hashtags
 
     groupes = regrouper_bilans_hashtags_csv(bilans)
@@ -280,6 +281,12 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
     if not parametres.get("date_debut"):
         raise ValueError(
             "Période de recherche initiale incomplète dans PostgreSQL.")
+    positions = positions_pagination_bilans_csv(
+        groupes[identifiant], collecte_id=identifiant,
+        hashtags_autorises=hashtags,
+        avec_accents=bool(parametres.get("variantes_accents")),
+        date_debut=parametres["date_debut"],
+        date_fin=parametres["date_fin"])
 
     # Chaque ligne CSV constitue une observation historique : les 521 liens
     # déclarés ne sont pas des publications récréées. Les données conservées
@@ -311,6 +318,9 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
             "publication n'est conservée dans le corpus PostgreSQL d'origine. "
             "La reprise est bloquée pour éviter une réinitialisation déguisée.")
     evenements = []
+    reexplorations = []
+    variantes = variantes_par_hashtag(
+        hashtags, bool(parametres.get("variantes_accents")))
     for tag in hashtags:
         observations = etats[tag]
         if any(etat in ETATS_REPRISE for etat in observations):
@@ -324,25 +334,55 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
             etat = "traitee"
         else:
             etat = "non_commencee"
+        positions_tag = {
+            source: position for source, position in positions.items()
+            if source in {"#" + variante for variante in variantes[tag]}
+        }
+        sans_curseur = (
+            etat in ETATS_REPRISE
+            and max(volumes[tag], default=0) > 0
+            and not positions_tag
+        )
+        if sans_curseur:
+            reexplorations.append(tag)
+        rapport = {
+            "collecte_partielle": etat != "traitee",
+            "discovered_urls": [],
+            "liens_declares_csv": max(volumes[tag], default=0),
+            "reprise_sans_curseur": sans_curseur,
+            "provenance": "bilan_hashtags_csv",
+        }
+        if "#" + tag in positions_tag:
+            rapport["reprise_pagination_research"] = positions_tag["#" + tag]
         evenements.append({
             "source": "#" + tag,
             "date": str(sauvegarde.get("cree_le") or ""),
             "statut_source": etat,
             "message": " | ".join(motifs[tag]),
-            "rapport": {
-                "collecte_partielle": etat != "traitee",
-                "discovered_urls": [],
-                "liens_declares_csv": max(volumes[tag], default=0),
-                "reprise_sans_curseur": True,
-                "provenance": "bilan_hashtags_csv",
-            },
+            "rapport": rapport,
         })
+        # Chaque variante accentuée dispose de son propre cursor/search_id.
+        for source, position in positions_tag.items():
+            if source == "#" + tag:
+                continue
+            evenements.append({
+                "source": source,
+                "date": str(sauvegarde.get("cree_le") or ""),
+                "statut_source": "partielle",
+                "message": "Pagination de variante rétablie depuis le CSV.",
+                "rapport": {
+                    "collecte_partielle": True,
+                    "discovered_urls": [],
+                    "reprise_pagination_research": position,
+                    "provenance": "bilan_hashtags_csv",
+                },
+            })
     journal = {
         "session": identifiant, "statut": "partial",
         "parametres": parametres,
         "compteurs_collecte": {"traitees": sauvegarde["traitees"]},
         "evenements": evenements,
-        "reprise_sans_curseur": True,
+        "reprise_sans_curseur": bool(reexplorations),
         "source_en_cours_id": None,
     }
     with tempfile.TemporaryDirectory(
@@ -360,10 +400,14 @@ def restaurer_depuis_bilans_csv(dossier_donnees, identifiant, cookie, bilans):
         reconstruire_historique(
             source, dossier_donnees, identifiant, cookie)
     return {
-        "id": identifiant, "mode": "reexploration_dedoublonnee",
+        "id": identifiant,
+        "mode": ("reprise_pagination_csv" if positions
+                 and not reexplorations else "reexploration_dedoublonnee"),
         "publications_conservees": len(sauvegarde["publications"]),
         "hashtags_a_reprendre": selection,
-        "curseur_exact": False,
+        "curseur_exact": bool(positions) and not bool(reexplorations),
+        "positions_retablies": sorted(positions),
+        "hashtags_reexplores": reexplorations,
     }
 
 
