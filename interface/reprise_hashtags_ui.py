@@ -106,19 +106,22 @@ def afficher_reprise_hashtags(api, lancer, occupe):
         st.session_state.pop("empreinte_bilan_hashtags", None)
     else:
         st.caption(
-            "La reprise utilise uniquement les CSV et les publications "
-            "de PostgreSQL lorsqu'aucun historique temporaire n'existe. "
-            "La réexploration sans curseur peut consommer de nouvelles "
-            "requêtes TikTok, mais conserve le même identifiant de collecte."
+            "Le bilan CSV récent contient cursor, search_id et les périodes "
+            "Research : il permet une reprise de la page enregistrée. "
+            "Un ancien CSV à cinq colonnes reste accepté, mais sans curseur "
+            "la recherche repart des premières pages et élimine les doublons "
+            "déjà enregistrés dans PostgreSQL."
         )
-        sauvegarde_zip = st.file_uploader(
-            "ZIP original des résultats (si historique perdu)",
-            type=["zip"], key="reprise_hashtags_zip_origine",
-            disabled=occupe,
-            help="Facultatif : méthode de secours si les fichiers CSV "
-                 "ne peuvent pas être rattachés au corpus PostgreSQL. "
-                 "La reprise CSV n'exige pas ce ZIP.",
-        )
+        with st.expander(
+                "Autre méthode de restauration (facultative)", expanded=False):
+            sauvegarde_zip = st.file_uploader(
+                "Ancienne archive ZIP (non nécessaire pour les bilans CSV)",
+                type=["zip"], key="reprise_hashtags_zip_origine",
+                disabled=occupe,
+                help="Méthode de secours conservée pour les anciennes archives. "
+                     "La reprise normale utilise les seuls bilans CSV et le "
+                     "corpus déjà enregistré dans PostgreSQL.",
+            )
         contenus = [fichier.getvalue() for fichier in fichiers]
         try:
             groupes = regrouper_bilans_hashtags_csv(contenus)
