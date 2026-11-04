@@ -88,6 +88,25 @@ def texte_commentaires_collectes(job):
     return "\n\n".join(blocs) + ("\n" if blocs else "")
 
 
+class ImporterAnnotationCSVPayload(BaseModel):
+    """Importer un CSV d'engagement sans lancer de collecte."""
+    nom: str = Field(min_length=1, max_length=120)
+    contenu_base64: str = Field(min_length=1, max_length=17_000_000)
+
+
+class VariableAnnotationCSVPayload(BaseModel):
+    """Créer une variable de codage manuel."""
+    nom: str = Field(min_length=1, max_length=120)
+    type_variable: Literal["binaire", "categorielle"] = "binaire"
+    modalites: list[str] = Field(default_factory=list, max_length=20)
+
+
+class EnregistrerAnnotationCSVPayload(BaseModel):
+    """Sauvegarder les codages d'une page du tableau."""
+    revision: int = Field(ge=0)
+    modifications: list[dict] = Field(default_factory=list, max_length=200)
+
+
 class SupprimerCollectePostgresPayload(BaseModel):
     """Confirmation explicite du nom exact avant une suppression définitive."""
     nom_confirmation: str = Field(min_length=1, max_length=160)
@@ -4093,6 +4112,74 @@ def create_app(manager=None):
         owner(request)
         from collecte.tiktok_limitation import consulter_limitation
         return consulter_limitation()
+
+    @app.get("/api/annotation-csv")
+    def liste_annotations_csv(request: Request):
+        owner(request)
+        from annotation_csv_autonome import lister_projets
+        return {"projets": lister_projets(manager.data_dir, owner_historique(request))}
+
+    @app.post("/api/annotation-csv/importer")
+    def importer_annotations_csv(payload: ImporterAnnotationCSVPayload, request: Request):
+        owner(request)
+        import binascii
+        from annotation_csv_autonome import importer_tableau
+        try:
+            contenu = base64.b64decode(payload.contenu_base64, validate=True)
+            return importer_tableau(
+                manager.data_dir, owner_historique(request), payload.nom, contenu)
+        except (ValueError, binascii.Error) as erreur:
+            raise HTTPException(422, str(erreur)) from None
+
+    @app.get("/api/annotation-csv/{identifiant}")
+    def consulter_annotations_csv(
+            identifiant: str, request: Request, page: int = 0, taille: int = 50):
+        owner(request)
+        from annotation_csv_autonome import lire_page
+        try:
+            return lire_page(
+                manager.data_dir, owner_historique(request),
+                identifiant, page, taille)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+
+    @app.post("/api/annotation-csv/{identifiant}/variable")
+    def creer_variable_annotation_csv(
+            identifiant: str, payload: VariableAnnotationCSVPayload, request: Request):
+        owner(request)
+        from annotation_csv_autonome import ajouter_variable
+        try:
+            return ajouter_variable(
+                manager.data_dir, owner_historique(request),
+                identifiant, payload.nom, payload.type_variable, payload.modalites)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+
+    @app.post("/api/annotation-csv/{identifiant}/enregistrer")
+    def sauvegarder_annotations_csv(
+            identifiant: str, payload: EnregistrerAnnotationCSVPayload, request: Request):
+        owner(request)
+        from annotation_csv_autonome import enregistrer_annotations
+        try:
+            return enregistrer_annotations(
+                manager.data_dir, owner_historique(request),
+                identifiant, payload.modifications, payload.revision)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+
+    @app.get("/api/annotation-csv/{identifiant}/export.csv")
+    def telecharger_annotations_csv(identifiant: str, request: Request):
+        owner(request)
+        from annotation_csv_autonome import exporter_tableau
+        try:
+            contenu = exporter_tableau(
+                manager.data_dir, owner_historique(request), identifiant)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+        return Response(
+            contenu, media_type="text/csv; charset=utf-8",
+            headers=entete_telechargement(
+                nom_fichier_telechargement(identifiant, "annotations", "csv")))
 
     @app.get("/healthz")
     def health():
