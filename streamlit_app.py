@@ -160,13 +160,13 @@ if "initialise" not in st.session_state:
         **{
             "profil_media_" + nom + "_brut": (
                 nom in (ancienne.get("profils_medias_variables") or [])
-                if ancienne else False)
+                if ancienne else True)
             for nom in ("following_count", "follower_count", "likes_count", "video_count")
         },
         **{
             "profil_media_" + nom + "_classe": (
                 nom in (ancienne.get("profils_medias_classes") or [])
-                if ancienne else False)
+                if ancienne else True)
             for nom in ("following_count", "follower_count", "likes_count", "video_count")
         },
         "collecter_is_verified":ancienne.get("collecter_is_verified",True),
@@ -248,8 +248,8 @@ st.session_state.setdefault("hashtags_exclus_saisis", "")
 from collecte.profils_medias import (
     VARIABLES_PROFILS_MEDIAS, LIBELLES_PROFILS_MEDIAS)
 for variable in VARIABLES_PROFILS_MEDIAS:
-    st.session_state.setdefault("profil_media_" + variable + "_brut", False)
-    st.session_state.setdefault("profil_media_" + variable + "_classe", False)
+    st.session_state.setdefault("profil_media_" + variable + "_brut", True)
+    st.session_state.setdefault("profil_media_" + variable + "_classe", True)
 st.session_state.setdefault("collecter_follower_count", True)
 st.session_state.setdefault("follower_count_illustratif", True)
 st.session_state.setdefault("abonnes_classe_illustratif", True)
