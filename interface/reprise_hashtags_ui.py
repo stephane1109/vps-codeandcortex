@@ -81,13 +81,16 @@ def afficher_reprise_hashtags(api, lancer, occupe):
     ):
         return
     with st.expander(
-            "Reprendre cette collecte hashtags dans PostgreSQL",
-            expanded=fichier is not None):
+            "Poursuivre la collecte hashtags",
+            expanded=fichier is not None or collecte.get("status") in (
+                "partial", "stopped")):
         st.caption(
-            "La reprise conserve le même identifiant de collecte, les publications "
-            "enregistrées et les critères initiaux. Seules les recherches inachevées "
-            "sont interrogées. TikTok peut exiger une nouvelle pagination lorsque "
-            "les anciens curseurs ne sont plus valides."
+            "La séquence précédente est terminée et sauvegardée. "
+            "La reprise conserve le même identifiant, les publications et "
+            "les critères initiaux. Si un curseur Research a été enregistré, "
+            "la collecte repart de la page suivante. TikTok peut toutefois "
+            "refuser un curseur devenu invalide, notamment après une longue "
+            "interruption."
         )
         selection = st.multiselect(
             "Hashtags à reprendre",
@@ -98,7 +101,7 @@ def afficher_reprise_hashtags(api, lancer, occupe):
             disabled=occupe,
         )
         if st.button(
-                "Reprendre les hashtags (même corpus PostgreSQL)",
+                "Poursuivre la collecte (séquence suivante)",
                 key="reprendre_hashtags_" + collecte["id"],
                 disabled=occupe or not selection,
                 type="primary"):
