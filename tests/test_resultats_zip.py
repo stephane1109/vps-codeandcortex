@@ -120,6 +120,10 @@ class TestsZipResultats(unittest.TestCase):
                     "message": "Research API HTTP 401",
                     "rapport": {
                         "collecte_partielle": True,
+                        "discovery_stop": "research_refus_ou_erreur",
+                        "pages_research": 1,
+                        "requetes_tentees": 2,
+                        "candidats_examines": 150,
                         "discovered_urls": [
                             "https://www.tiktok.com/@exemple/video/7000000000000000001"],
                         "reprise_pagination_research": {
@@ -156,6 +160,11 @@ class TestsZipResultats(unittest.TestCase):
                     lignes[0]["search_id"], "recherche_sauvegardee")
                 self.assertEqual(lignes[0]["date_debut"], "2026-10-01")
                 self.assertEqual(lignes[0]["date_fin"], "2026-10-31")
+                self.assertEqual(
+                    lignes[0]["arret_research"], "research_refus_ou_erreur")
+                self.assertEqual(lignes[0]["pages_research"], "1")
+                self.assertEqual(lignes[0]["requetes_tentees"], "2")
+                self.assertEqual(lignes[0]["candidats_examines"], "150")
                 self.assertIn(
                     "#manifestation", lignes[0]["positions_research_json"])
                 self.assertEqual(lignes[1]["hashtag"], "lyceen")
@@ -176,7 +185,9 @@ class TestsZipResultats(unittest.TestCase):
                     for ligne_zip, ligne_http in zip(lignes_zip, lignes):
                         for champ in ("collecte_id", "hashtag", "etat",
                                       "date_debut", "date_fin", "cursor",
-                                      "search_id", "positions_research_json"):
+                                      "search_id", "positions_research_json",
+                                      "arret_research", "pages_research",
+                                      "requetes_tentees", "candidats_examines"):
                             self.assertEqual(
                                 ligne_zip[champ], ligne_http[champ])
 
@@ -226,6 +237,8 @@ class TestsZipResultats(unittest.TestCase):
             self.assertIn("Durée maximale", lignes[0]["motif"])
             self.assertEqual(lignes[0]["cursor"], "150")
             self.assertEqual(lignes[0]["search_id"], "recherche_active")
+            self.assertEqual(
+                lignes[0]["arret_research"], "arret_duree_maximale")
             self.assertEqual(
                 job.journal[0]["rapport"]["discovery_stop"],
                 "arret_duree_maximale")
