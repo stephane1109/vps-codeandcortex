@@ -831,6 +831,7 @@ class Job:
         self.owner_historique = owner_historique
         self.historique = archive_directory is not None
         self.reprise = bool(reprise)
+        self.reprise_sans_curseur = False
         self.medias_reprise = []
         self.hashtags_reprise = []
         self.sources_reprise_hashtags = []
@@ -1089,7 +1090,9 @@ class Job:
                     "comptes_filtres": ([source["compte"] for source in self.settings.sources]
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
-                    "reprise": self.reprise, "medias_reprise": list(self.medias_reprise),
+                    "reprise": self.reprise,
+                    "reprise_sans_curseur": bool(self.reprise_sans_curseur),
+                    "medias_reprise": list(self.medias_reprise),
                     "hashtags_reprise": list(self.hashtags_reprise),
                     "bilan_hashtags_sources": (
                         etablir_bilan_hashtags(
@@ -3381,6 +3384,17 @@ class Manager:
                 raise HTTPException(409, str(erreur)) from None
             job.hashtags_reprise = list(selection)
             job.sources_reprise_hashtags = list(variantes)
+            job.reprise_sans_curseur = bool(journal.get("reprise_sans_curseur"))
+            if job.reprise_sans_curseur:
+                job.diagnostics.append({
+                    "code": "reprise_csv_sans_curseur",
+                    "message": "Réexploration depuis les premières pages API ; "
+                               "publications PostgreSQL existantes dédupliquées "
+                               "par identifiant. Cette opération consomme des "
+                               "requêtes Research supplémentaires.",
+                    "publications_anterieures": len(job.publications),
+                    "hashtags": list(selection),
+                })
             # Restaurer la page suivante de chaque recherche interrompue.
             # Les pages déjà terminées ne doivent pas être reconsommées.
             from collecte.suivi_hashtags import positions_pagination_research
@@ -3402,6 +3416,7 @@ class Manager:
                 "hashtags_a_reprendre": list(selection),
                 "variantes_a_interroger": list(variantes),
                 "publications_anterieures": len(job.publications),
+                "reprise_sans_curseur": bool(job.reprise_sans_curseur),
             })
             job.limites_debug = {
                 "inactivite_max_s": self.idle_timeout,
