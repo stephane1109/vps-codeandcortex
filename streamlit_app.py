@@ -1892,6 +1892,10 @@ with onglet_collecte:
                                     "Hashtag": "#" + ligne["hashtag"],
                                     "État": ligne["etat"].replace("_", " "),
                                     "Liens": ligne["liens"],
+                                    "Pages Research": ligne.get("pages_research", 0),
+                                    "Requêtes Research": ligne.get("requetes_tentees", 0),
+                                    "Arrêt Research": ligne.get("arret_research", ""),
+                                    "Cursor": ligne.get("cursor", ""),
                                     "Diagnostic": ligne["motif"],
                                 }
                                 for ligne in bilan_sources
