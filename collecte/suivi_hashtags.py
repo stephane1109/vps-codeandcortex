@@ -3,12 +3,21 @@ from __future__ import annotations
 
 import csv
 import io
+import json
+from datetime import date, datetime, timezone
 
 from collecte.hashtags import variantes_hashtag
 
 ETATS_REPRISE = frozenset({"non_commencee", "interrompue", "partielle", "echec"})
 ETATS_VALIDES = ETATS_REPRISE | {"traitee", "en_attente", "en_cours"}
-COLONNES = ("collecte_id", "hashtag", "etat", "liens", "motif")
+COLONNES_HISTORIQUES = ("collecte_id", "hashtag", "etat", "liens", "motif")
+COLONNES_PAGINATION = (
+    "date_debut", "date_fin", "source_pagination",
+    "indice_periode", "debut_periode", "fin_periode",
+    "cursor", "search_id", "pagination_invalide",
+    "positions_research_json", "exporte_le",
+)
+COLONNES = COLONNES_HISTORIQUES + COLONNES_PAGINATION
 
 
 def variantes_par_hashtag(hashtags, avec_accents=False):
@@ -50,7 +59,7 @@ def etats_variantes(hashtags, avec_accents, journal, *, source_en_cours=None,
                     if source_en_cours == "#" + variante
                     else ("non_commencee" if termine else "en_attente")
                 )
-                motif, liens = "", 0
+                motif, liens, position = "", 0, None
             else:
                 rapport = entree.get("rapport") or {}
                 etat = entree.get("statut_source")
@@ -62,16 +71,20 @@ def etats_variantes(hashtags, avec_accents, journal, *, source_en_cours=None,
                     etat = "interrompue"
                 motif = str(entree.get("message") or "")
                 liens = len(rapport.get("discovered_urls") or [])
+                position = rapport.get("reprise_pagination_research")
+                if etat == "traitee" or not isinstance(position, dict):
+                    position = None
             etats[variante.casefold()] = {
                 "etat": etat, "motif": motif, "liens": liens,
+                "position": position,
             }
     return etats
 
 
 def etablir_bilan_hashtags(hashtags, avec_accents, journal, *,
                            source_en_cours=None, termine=False,
-                           collecte_id=""):
-    """Renvoyer une ligne par hashtag demandé, sans confondre vidéos et requêtes."""
+                           collecte_id="", date_debut="", date_fin=""):
+    """Bilan réimportable incluant les curseurs pour chaque variante inachevée."""
     variantes = variantes_par_hashtag(hashtags, avec_accents)
     etats = etats_variantes(hashtags, avec_accents, journal,
                            source_en_cours=source_en_cours, termine=termine)
@@ -95,6 +108,17 @@ def etablir_bilan_hashtags(hashtags, avec_accents, journal, *,
             etat = "non_commencee"
         else:
             etat = "en_attente"
+        positions = {
+            "#" + graphie: observation["position"]
+            for graphie, observation in zip(graphies, observations)
+            if (observation["etat"] in ETATS_REPRISE | {"en_cours"}
+                and isinstance(observation["position"], dict)
+                and isinstance(observation["position"].get("indice_periode"), int)
+                and isinstance(observation["position"].get("debut_periode"), str)
+                and isinstance(observation["position"].get("fin_periode"), str))
+        }
+        source, position = next(
+            iter(positions.items()), ("", {}))
         bilan.append({
             "collecte_id": collecte_id,
             "hashtag": hashtag,
@@ -102,6 +126,23 @@ def etablir_bilan_hashtags(hashtags, avec_accents, journal, *,
             "liens": sum(o["liens"] for o in observations),
             "motif": " | ".join(dict.fromkeys(
                 o["motif"] for o in observations if o["motif"])),
+            "date_debut": date_debut or "",
+            "date_fin": date_fin or "",
+            "source_pagination": source,
+            "indice_periode": position.get("indice_periode", ""),
+            "debut_periode": position.get("debut_periode", ""),
+            "fin_periode": position.get("fin_periode", ""),
+            "cursor": (
+                position.get("cursor") if position.get("cursor") is not None
+                else ""),
+            "search_id": position.get("search_id") or "",
+            "pagination_invalide": (
+                "1" if position.get("pagination_invalide") else "0"
+                if position else ""),
+            "positions_research_json": (
+                json.dumps(positions, ensure_ascii=False,
+                           sort_keys=True, separators=(",", ":"))
+                if positions else ""),
         })
     return bilan
 
@@ -181,8 +222,10 @@ def exporter_bilan_hashtags_csv(bilan):
     writer = csv.DictWriter(tampon, fieldnames=COLONNES, delimiter=";",
                             extrasaction="ignore", lineterminator="\n")
     writer.writeheader()
+    horodatage = datetime.now(timezone.utc).isoformat()
     for ligne in bilan:
-        writer.writerow(ligne)
+        writer.writerow({**ligne, "exporte_le": (
+            ligne.get("exporte_le") or horodatage)})
     return ("\ufeff" + tampon.getvalue()).encode("utf-8")
 
 
@@ -196,7 +239,7 @@ def identifier_collecte_bilan_hashtags_csv(contenu):
     except UnicodeDecodeError as erreur:
         raise ValueError("Le CSV doit être encodé en UTF-8.") from erreur
     lecteur = csv.DictReader(io.StringIO(texte), delimiter=";")
-    if not lecteur.fieldnames or not set(COLONNES).issubset(lecteur.fieldnames):
+    if not lecteur.fieldnames or not set(COLONNES_HISTORIQUES).issubset(lecteur.fieldnames):
         raise ValueError("Le fichier n'est pas un bilan hashtags ScrapTikTok.")
     identifiants = {
         str(ligne.get("collecte_id") or "").strip()
@@ -219,7 +262,7 @@ def importer_bilan_hashtags_csv(contenu, *, collecte_id, hashtags_autorises):
     except UnicodeDecodeError as erreur:
         raise ValueError("Le CSV doit être encodé en UTF-8.") from erreur
     lecteur = csv.DictReader(io.StringIO(texte), delimiter=";")
-    if not lecteur.fieldnames or not set(COLONNES).issubset(lecteur.fieldnames):
+    if not lecteur.fieldnames or not set(COLONNES_HISTORIQUES).issubset(lecteur.fieldnames):
         raise ValueError("Le fichier n'est pas un bilan hashtags ScrapTikTok.")
     autorises = set(hashtags_autorises)
     vus, repris = set(), []
@@ -286,3 +329,135 @@ def importer_bilans_hashtags_csv(contenus, *, collecte_id, hashtags_autorises):
             hashtags_autorises=hashtags_autorises))
     return [tag for tag in dict.fromkeys(hashtags_autorises)
             if tag in candidats]
+
+
+def positions_pagination_bilans_csv(
+        contenus, *, collecte_id, hashtags_autorises,
+        avec_accents=False, date_debut=None, date_fin=None):
+    """Lire les curseurs sauvegardés dans les nouveaux bilans CSV.
+
+    Chaque position est validée contre les variantes et la période originelles
+    de la collecte PostgreSQL. Les anciens CSV à cinq colonnes restent valides,
+    mais ne possèdent aucune position exacte.
+    """
+    from collecte.researchapi import _dates
+
+    fichiers = list(contenus)
+    if identifier_collecte_bilans_hashtags_csv(fichiers) != collecte_id:
+        raise ValueError("Ces bilans ne correspondent pas au corpus d'origine.")
+    if not date_debut or not date_fin:
+        raise ValueError(
+            "La période initiale doit être retrouvée avant de restaurer un curseur.")
+    try:
+        fin = date.fromisoformat(str(date_fin))
+        periodes = list(_dates(date_debut, date_fin, aujourd_hui=fin))
+    except (ValueError, TypeError) as erreur:
+        raise ValueError("Période originale Research invalide.") from erreur
+    graphies = variantes_par_hashtag(hashtags_autorises, avec_accents)
+    positions = {}
+    dates = {}
+
+    for fichier in fichiers:
+        lecteur = csv.DictReader(
+            io.StringIO(fichier.decode("utf-8-sig")), delimiter=";")
+        if not set(COLONNES_HISTORIQUES).issubset(lecteur.fieldnames or []):
+            raise ValueError("Le CSV n'est pas un bilan hashtags ScrapTikTok.")
+        for ligne in lecteur:
+            hashtag = str(ligne.get("hashtag") or "").strip()
+            etat = str(ligne.get("etat") or "").strip()
+            if (hashtag not in graphies
+                    or etat not in ETATS_REPRISE | {"en_cours"}):
+                continue
+            fenetre_debut = str(ligne.get("date_debut") or "").strip()
+            fenetre_fin = str(ligne.get("date_fin") or "").strip()
+            if ((fenetre_debut and fenetre_debut != date_debut)
+                    or (fenetre_fin and fenetre_fin != date_fin)):
+                raise ValueError(
+                    "La période du bilan CSV diffère de la collecte PostgreSQL.")
+            texte_json = str(ligne.get("positions_research_json") or "").strip()
+            if texte_json:
+                try:
+                    candidates = json.loads(texte_json)
+                except (TypeError, ValueError) as erreur:
+                    raise ValueError(
+                        "Positions Research JSON illisibles dans le bilan.") from erreur
+                if not isinstance(candidates, dict):
+                    raise ValueError("Positions Research du bilan invalides.")
+            elif str(ligne.get("indice_periode") or "").strip():
+                source = str(ligne.get("source_pagination") or "")
+                candidates = {source: {
+                    "indice_periode": ligne.get("indice_periode"),
+                    "debut_periode": ligne.get("debut_periode"),
+                    "fin_periode": ligne.get("fin_periode"),
+                    "cursor": ligne.get("cursor"),
+                    "search_id": ligne.get("search_id"),
+                    "pagination_invalide": ligne.get("pagination_invalide"),
+                }}
+            else:
+                continue
+            # Export de référence : trier les versions chronologiquement,
+            # plutôt que selon l'ordre des fichiers envoyés dans Streamlit.
+            date_export = str(ligne.get("exporte_le") or "")
+            if date_export:
+                try:
+                    horodatage = datetime.fromisoformat(
+                        date_export.replace("Z", "+00:00"))
+                    if horodatage.tzinfo is None:
+                        horodatage = horodatage.replace(tzinfo=timezone.utc)
+                    horodatage = horodatage.astimezone(timezone.utc)
+                except ValueError as erreur:
+                    raise ValueError(
+                        "Horodatage d'export CSV invalide.") from erreur
+            else:
+                horodatage = datetime.min.replace(tzinfo=timezone.utc)
+            autorisees = {"#" + graphie for graphie in graphies[hashtag]}
+            for source, element in candidates.items():
+                if source not in autorisees or not isinstance(element, dict):
+                    raise ValueError(
+                        "Le curseur CSV ne correspond pas à un hashtag autorisé.")
+                try:
+                    indice = int(element["indice_periode"])
+                    curseur_brut = element.get("cursor")
+                    curseur = (None if curseur_brut in ("", None)
+                               else int(curseur_brut))
+                except (ValueError, TypeError, KeyError) as erreur:
+                    raise ValueError(
+                        "Indice ou curseur Research invalide dans le CSV.") from erreur
+                if (indice < 0 or indice >= len(periodes)
+                        or curseur is not None and curseur < 0):
+                    raise ValueError("Curseur Research hors de la pagination initiale.")
+                debut_attendu, fin_attendue = periodes[indice]
+                if (element.get("debut_periode") != debut_attendu
+                        or element.get("fin_periode") != fin_attendue):
+                    raise ValueError(
+                        "La période du curseur ne correspond pas aux dates "
+                        "initiales de la collecte.")
+                recherche = element.get("search_id") or None
+                if (curseur is not None
+                        and (not isinstance(recherche, str) or not recherche)):
+                    raise ValueError(
+                        "Le curseur TikTok nécessite son search_id d'origine.")
+                if recherche is not None and (
+                        not isinstance(recherche, str) or len(recherche) > 1024):
+                    raise ValueError("Identifiant de recherche Research invalide.")
+                invalide = str(element.get("pagination_invalide") or "").lower()
+                if invalide in ("1", "true"):
+                    raise ValueError(
+                        "Le bilan contient une pagination TikTok signalée invalide.")
+                position = {
+                    "indice_periode": indice,
+                    "debut_periode": debut_attendu,
+                    "fin_periode": fin_attendue,
+                    "cursor": curseur,
+                    "search_id": recherche,
+                    "pagination_invalide": False,
+                }
+                if (source in dates and horodatage == dates[source]
+                        and positions[source] != position):
+                    raise ValueError(
+                        "Deux bilans portent des curseurs divergents sans "
+                        "horodatage permettant de les départager.")
+                if source not in dates or horodatage >= dates[source]:
+                    positions[source] = position
+                    dates[source] = horodatage
+    return positions
