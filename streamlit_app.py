@@ -1883,6 +1883,19 @@ with onglet_collecte:
                         f"Suivi des hashtags : {len(bilan_sources)} hashtag(s) "
                         f"demandé(s), {len(a_reprendre)} restant à reprendre."
                     )
+                    if actuel.get("reprise"):
+                        # Les lignes « liens » du bilan reflètent la dernière
+                        # séquence, et non la totalité des publications déjà
+                        # archivées dans les collectes précédentes.
+                        anciennes = int(actuel.get("publications_avant_reprise") or 0)
+                        ajoutees = int(actuel.get("publications_ajoutees") or 0)
+                        st.caption(
+                            f"Corpus cumulé : {anciennes} publication(s) "
+                            f"avant la reprise, {ajoutees} ajoutée(s) pendant "
+                            f"cette reprise, {anciennes + ajoutees} au total. "
+                            "Le nombre de liens du bilan concerne uniquement "
+                            "la dernière exécution du hashtag."
+                        )
                     if a_reprendre:
                         with st.expander(
                                 f"Hashtags à reprendre : {len(a_reprendre)}",
@@ -1891,7 +1904,8 @@ with onglet_collecte:
                                 {
                                     "Hashtag": "#" + ligne["hashtag"],
                                     "État": ligne["etat"].replace("_", " "),
-                                    "Liens": ligne["liens"],
+                                    ("Liens dernière exécution"
+                                     if actuel.get("reprise") else "Liens"): ligne["liens"],
                                     "Pages Research": ligne.get("pages_research", 0),
                                     "Requêtes Research": ligne.get("requetes_tentees", 0),
                                     "Arrêt Research": ligne.get("arret_research", ""),
