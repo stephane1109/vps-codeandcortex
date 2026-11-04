@@ -4216,6 +4216,15 @@ def create_app(manager=None):
         contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
         # Inclure les fichiers auparavant disponibles via des boutons séparés.
         ajouts = {}
+        if job.settings.source_collecte == "hashtags" and job.journal:
+            # Une ancienne archive peut ne pas contenir le bilan CSV.
+            # Le reconstruire depuis le journal sans modifier les données
+            # originales ni exiger une importation pour reprendre la collecte.
+            bilan = etablir_bilan_hashtags(
+                job.settings.hashtags, job.settings.variantes_accents,
+                job.journal, source_en_cours=job.source_en_cours_id,
+                termine=True, collecte_id=job.id)
+            ajouts["bilan_hashtags.csv"] = exporter_bilan_hashtags_csv(bilan)
         if job.commentaires and job.settings.inclure_commentaires_txt:
             ajouts["commentaires.txt"] = texte_commentaires_collectes(job).encode("utf-8")
         diagnostic = job.snapshot().get("debug_collecte")
