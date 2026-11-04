@@ -72,6 +72,11 @@ def etats_variantes(hashtags, avec_accents, journal, *, source_en_cours=None,
                             else "traitee")
                 if etat == "en_cours" and termine:
                     etat = "interrompue"
+                # Une position de pagination à poursuivre prime sur un
+                # ancien statut « traitee » écrit avant l'arrêt du moteur.
+                if (termine and etat == "traitee"
+                        and isinstance(rapport.get("reprise_pagination_research"), dict)):
+                    etat = "partielle"
                 motif = str(entree.get("message") or "")
                 liens = len(rapport.get("discovered_urls") or [])
                 position = rapport.get("reprise_pagination_research")
@@ -310,7 +315,7 @@ def importer_bilan_hashtags_csv(contenu, *, collecte_id, hashtags_autorises):
         if tag not in autorises or tag in vus or etat not in ETATS_VALIDES:
             raise ValueError("Le bilan contient un hashtag ou un état invalide.")
         vus.add(tag)
-        if etat in ETATS_REPRISE:
+        if etat in ETATS_REPRISE | {"en_cours"}:
             repris.append(tag)
     if not vus:
         raise ValueError("Le bilan hashtags est vide.")
