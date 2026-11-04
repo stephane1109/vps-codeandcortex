@@ -4,8 +4,8 @@ import hashlib
 import streamlit as st
 
 from collecte.suivi_hashtags import (
-    hashtags_a_reprendre, identifier_collecte_bilan_hashtags_csv,
-    importer_bilan_hashtags_csv,
+    hashtags_a_reprendre, identifier_collecte_bilans_hashtags_csv,
+    importer_bilans_hashtags_csv,
 )
 
 
@@ -22,19 +22,21 @@ def afficher_reprise_hashtags(api, lancer, occupe):
         "puis cliquez sur « Rouvrir la collecte et l’analyse ». "
         "Le bilan_hashtags.csv est également présent dans le ZIP des résultats."
     )
-    fichier = st.file_uploader(
-        "Importation facultative d'un bilan de hashtags (CSV)",
-        type=["csv"], key="bilan_reprise_hashtags_csv", disabled=occupe,
-        help="Utilisez uniquement cette option pour sélectionner des hashtags "
-             "à partir d'un ancien bilan. Le CSV n'est pas requis pour "
-             "poursuivre la collecte affichée ou rouverte depuis l'historique.",
+    fichiers = st.file_uploader(
+        "Importer plusieurs bilans de hashtags (CSV, facultatif)",
+        type=["csv"], accept_multiple_files=True,
+        key="bilan_reprise_hashtags_csv", disabled=occupe,
+        help="Sélectionnez jusqu'à 20 bilans CSV d'une même collecte. "
+             "Leurs hashtags inachevés sont regroupés sans doublons ; "
+             "le journal actuel reste prioritaire. "
+             "Aucun CSV n'est requis pour une reprise depuis l'historique.",
     )
-    if fichier is None:
+    if not fichiers:
         st.session_state.pop("empreinte_bilan_hashtags", None)
     else:
-        contenu = fichier.getvalue()
+        contenus = [fichier.getvalue() for fichier in fichiers]
         try:
-            identifiant = identifier_collecte_bilan_hashtags_csv(contenu)
+            identifiant = identifier_collecte_bilans_hashtags_csv(contenus)
         except ValueError as erreur:
             st.error(str(erreur))
         else:
@@ -56,8 +58,8 @@ def afficher_reprise_hashtags(api, lancer, occupe):
                         st.rerun()
             else:
                 try:
-                    selection_csv = importer_bilan_hashtags_csv(
-                        contenu, collecte_id=collecte["id"],
+                    selection_csv = importer_bilans_hashtags_csv(
+                        contenus, collecte_id=collecte["id"],
                         hashtags_autorises=collecte.get("hashtags_saisis") or [])
                 except ValueError as erreur:
                     st.error(str(erreur))
@@ -71,15 +73,21 @@ def afficher_reprise_hashtags(api, lancer, occupe):
                             "dans le journal actuel : ils ne sont pas relancés."
                         )
                     cle = "reprendre_hashtags_selection_" + collecte["id"]
-                    empreinte = hashlib.sha256(contenu).hexdigest()
+                    # Un changement d'ordre des fichiers ne modifie pas la sélection.
+                    empreintes = sorted(
+                        hashlib.sha256(contenu).hexdigest()
+                        for contenu in contenus)
+                    empreinte = hashlib.sha256(
+                        "|".join(empreintes).encode("ascii")).hexdigest()
                     if (not occupe and st.session_state.get(
                             "empreinte_bilan_hashtags") != empreinte):
                         # Modifier les valeurs avant la construction du widget.
                         st.session_state[cle] = autorises
                         st.session_state["empreinte_bilan_hashtags"] = empreinte
                     st.success(
+                        f"{len(contenus)} bilan(s) importé(s) pour le même corpus ; "
                         f"{len(autorises)} hashtag(s) encore inachevé(s) "
-                        "présélectionné(s) pour la reprise."
+                        "présélectionné(s) pour la reprise, sans doublons."
                     )
     if not (
         collecte.get("source_collecte") == "hashtags"
@@ -90,7 +98,7 @@ def afficher_reprise_hashtags(api, lancer, occupe):
         return
     with st.expander(
             "Poursuivre la collecte hashtags",
-            expanded=fichier is not None or collecte.get("status") in (
+            expanded=bool(fichiers) or collecte.get("status") in (
                 "partial", "stopped")):
         st.caption(
             "La séquence précédente est terminée et sauvegardée. "
