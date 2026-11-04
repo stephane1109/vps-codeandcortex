@@ -401,7 +401,7 @@ def cocher_uniquement_medias(identifiants):
 
 
 onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_annotation_csv, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Base de données", "Annotation/analyse", "Annotation", "Analyse sociométrique", "Corpus fusionné", "Aide"]
+    ["Collecte", "Base de données", "Analyse", "Annotation", "Analyse sociométrique", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
