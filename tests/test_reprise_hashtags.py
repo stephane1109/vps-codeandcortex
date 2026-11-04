@@ -5,7 +5,8 @@ from pathlib import Path
 from collecte.suivi_hashtags import (
     etablir_bilan_hashtags, exporter_bilan_hashtags_csv,
     hashtags_a_reprendre, identifier_collecte_bilan_hashtags_csv,
-    importer_bilan_hashtags_csv, preparer_reprise_hashtags,
+    identifier_collecte_bilans_hashtags_csv, importer_bilan_hashtags_csv,
+    importer_bilans_hashtags_csv, preparer_reprise_hashtags,
 )
 from collecte.presse import charger_inventaire
 from webapp import StartRequest
@@ -83,6 +84,81 @@ class TestsRepriseHashtags(unittest.TestCase):
                 b"media_id;etat\nfrance_tv;interrompue\n",
                 collecte_id=self.identifiant,
                 hashtags_autorises=self.hashtags)
+
+    def test_importer_plusieurs_bilans_csv_du_meme_corpus(self):
+        """Regrouper les hashtags incomplets de deux fichiers sans doublons."""
+        premier = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "17octobre",
+             "etat": "traitee", "liens": 12, "motif": ""},
+            {"collecte_id": self.identifiant, "hashtag": "24octobre",
+             "etat": "partielle", "liens": 18, "motif": "Séquence interrompue"},
+        ])
+        second = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "24octobre",
+             "etat": "interrompue", "liens": 18, "motif": "Quota atteint"},
+            {"collecte_id": self.identifiant, "hashtag": "31octobre",
+             "etat": "non_commencee", "liens": 0, "motif": ""},
+        ])
+        self.assertEqual(
+            identifier_collecte_bilans_hashtags_csv([second, premier]),
+            self.identifiant)
+        attendu = ["24octobre", "31octobre"]
+        self.assertEqual(importer_bilans_hashtags_csv(
+            [premier, second], collecte_id=self.identifiant,
+            hashtags_autorises=self.hashtags), attendu)
+        self.assertEqual(importer_bilans_hashtags_csv(
+            [second, premier], collecte_id=self.identifiant,
+            hashtags_autorises=self.hashtags), attendu)
+        # La situation actuelle du journal reste prioritaire sur le CSV.
+        bilan_actuel = etablir_bilan_hashtags(
+            self.hashtags, False, self.journal,
+            collecte_id=self.identifiant, termine=True)
+        disponibles = set(hashtags_a_reprendre(bilan_actuel))
+        self.assertEqual([tag for tag in attendu if tag in disponibles],
+                         ["24octobre", "31octobre"])
+
+    def test_import_multiple_rejette_les_autres_corpus_et_fichiers_invalides(self):
+        """Ne jamais fusionner les journaux de deux collectes PostgreSQL."""
+        premier = exporter_bilan_hashtags_csv([
+            {"collecte_id": self.identifiant, "hashtag": "24octobre",
+             "etat": "partielle", "liens": 10, "motif": ""},
+        ])
+        autre = exporter_bilan_hashtags_csv([
+            {"collecte_id": "b" * 32, "hashtag": "24octobre",
+             "etat": "interrompue", "liens": 15, "motif": ""},
+        ])
+        with self.assertRaisesRegex(ValueError, "collectes différentes"):
+            identifier_collecte_bilans_hashtags_csv([premier, autre])
+        with self.assertRaisesRegex(ValueError, "collectes différentes"):
+            importer_bilans_hashtags_csv(
+                [premier, autre], collecte_id=self.identifiant,
+                hashtags_autorises=self.hashtags)
+        with self.assertRaisesRegex(ValueError, "autre collecte"):
+            importer_bilans_hashtags_csv(
+                [autre], collecte_id=self.identifiant,
+                hashtags_autorises=self.hashtags)
+        with self.assertRaisesRegex(ValueError, "maximum 20"):
+            identifier_collecte_bilans_hashtags_csv([premier] * 21)
+        with self.assertRaises(ValueError):
+            identifier_collecte_bilans_hashtags_csv([])
+        with self.assertRaises(ValueError):
+            importer_bilans_hashtags_csv(
+                [premier, b"fichier non valide"],
+                collecte_id=self.identifiant,
+                hashtags_autorises=self.hashtags)
+
+    def test_interface_charge_plusieurs_bilans_sans_remplacer_corpus(self):
+        """Le contrôle Streamlit accepte le multi-upload et préserve le bouton."""
+        interface = (
+            Path(__file__).resolve().parents[1] /
+            "interface" / "reprise_hashtags_ui.py").read_text("utf-8")
+        self.assertIn("accept_multiple_files=True", interface)
+        self.assertIn("identifier_collecte_bilans_hashtags_csv", interface)
+        self.assertIn("importer_bilans_hashtags_csv", interface)
+        self.assertIn("reprendre_hashtags_selection_", interface)
+        self.assertIn("st.multiselect(", interface)
+        self.assertNotIn('st.button("Poursuivre la collecte (séquence suivante)"',
+                         interface)
 
     def test_metriques_comptes_autorisees_pour_les_hashtags(self):
         variables = ["following_count", "follower_count",
