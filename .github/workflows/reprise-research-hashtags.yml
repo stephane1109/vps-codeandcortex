@@ -1,0 +1,37 @@
+name: ScrapTikTok - Reprise des sequences Research hashtags
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "collecte/researchapi.py"
+      - "collecte/suivi_hashtags.py"
+      - "connect_htag.py"
+      - "interface/reprise_hashtags_ui.py"
+      - "tests/test_sequence_research_hashtags.py"
+      - "tests/test_reprise_hashtags.py"
+      - "tests/test_presse_research.py"
+      - ".github/workflows/reprise-research-hashtags.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dependances de test
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verifier la syntaxe des composants de reprise
+        run: python -m compileall -q webapp.py streamlit_app.py collecte/researchapi.py collecte/suivi_hashtags.py connect_htag.py interface/reprise_hashtags_ui.py tests/test_sequence_research_hashtags.py
+      - name: Tester la pagination et la reprise des hashtags
+        run: |
+          python -m unittest discover -s tests -p test_sequence_research_hashtags.py -v
+          python -m unittest discover -s tests -p test_reprise_hashtags.py -v
+          python -m unittest discover -s tests -p test_presse_research.py -v
+          python -m unittest discover -s tests -p test_export_iramuteq.py -v
+          python -m unittest discover -s tests -p test_fin_collecte_sans_reinitialisation.py -v
