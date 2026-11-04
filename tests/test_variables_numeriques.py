@@ -548,9 +548,15 @@ class TestsVariablesNumeriques(unittest.TestCase):
                        side_effect=recherche):
                 with patch("stockage.collectes_research.etat_quota",
                            return_value=quota):
-                    execute_job(job, driver_factory=navigateur)
+                    # Reproduire l'autorisation de poursuite donnée après
+                    # le contrôle de la première page, sans attente réelle.
+                    with patch.object(job.continuer_research, "wait",
+                                      return_value=True) as validation:
+                        execute_job(job, driver_factory=navigateur)
+                    validation.assert_called_once()
 
             navigateur.assert_not_called()
+            self.assertFalse(job.attente_validation_research)
             self.assertEqual(
                 [(s["page"], s["traites"], s["textes"]) for s in suivis],
                 [(1, 1, 1), (2, 2, 2)])
@@ -558,6 +564,7 @@ class TestsVariablesNumeriques(unittest.TestCase):
             self.assertEqual(job.requetes_research_lot, 2)
             self.assertEqual(job.candidats_research_lot, 2)
             self.assertEqual(job.snapshot()["quota_research_local"], quota)
+            self.assertEqual(len(job.snapshot()["apercu_texte_research"]), 2)
             self.assertEqual(len(job.records), 2)
             self.assertEqual(len(job.publications), 2)
             contenu = job.path.read_text("utf-8")
