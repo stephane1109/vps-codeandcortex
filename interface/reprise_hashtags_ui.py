@@ -1,4 +1,5 @@
 """Interface de reprise des hashtags Research dans le corpus PostgreSQL existant."""
+import base64
 import hashlib
 
 import streamlit as st
@@ -9,7 +10,8 @@ from collecte.suivi_hashtags import (
 )
 
 
-def reprendre_depuis_bilans_csv(api, contenus, *, cle="", secret=""):
+def reprendre_depuis_bilans_csv(
+        api, contenus, *, cle="", secret="", archive_zip=None):
     """Restaurer le corpus des CSV puis reprendre ses pages inachevées.
 
     Aucun nouveau travail n'est créé par /api/jobs : la seule opération de
@@ -21,7 +23,21 @@ def reprendre_depuis_bilans_csv(api, contenus, *, cle="", secret=""):
         raise ValueError(
             "Renseignez ensemble Client key et Client secret Research, "
             "ou configurez les deux identifiants dans Coolify.")
-    historique = api(f"/api/historique/{identifiant}/ouvrir", {})
+    try:
+        historique = api(f"/api/historique/{identifiant}/ouvrir", {})
+    except RuntimeError as erreur:
+        if archive_zip is None:
+            raise ValueError(
+                str(erreur) + " Si l'historique a disparu, importez également "
+                "le ZIP original des résultats contenant publications.json "
+                "et journal.json, puis relancez la reprise. "
+                "Deux bilans CSV seuls ne permettent pas de restaurer "
+                "le curseur de pagination.") from erreur
+        if len(archive_zip) > 25_000_000:
+            raise ValueError("Le ZIP original ne doit pas dépasser 25 Mo.")
+        api(f"/api/historique/{identifiant}/restaurer-zip", {
+            "archive_base64": base64.b64encode(archive_zip).decode("ascii")})
+        historique = api(f"/api/historique/{identifiant}/ouvrir", {})
     if historique.get("id") != identifiant:
         raise ValueError("L'historique rouvert ne correspond pas au corpus des CSV.")
     if (historique.get("source_collecte") != "hashtags"
@@ -78,6 +94,20 @@ def afficher_reprise_hashtags(api, lancer, occupe):
     if not fichiers:
         st.session_state.pop("empreinte_bilan_hashtags", None)
     else:
+        st.caption(
+            "Si la reprise indique « Historique introuvable », importez "
+            "également le ZIP des résultats de la collecte d'origine. "
+            "Il contient le journal et les curseurs nécessaires. "
+            "La restauration n'efface pas les publications PostgreSQL."
+        )
+        sauvegarde_zip = st.file_uploader(
+            "ZIP original des résultats (si historique perdu)",
+            type=["zip"], key="reprise_hashtags_zip_origine",
+            disabled=occupe,
+            help="ZIP téléchargé à l'issue de la collecte d'origine, "
+                 "contenant publications.json et journal.json. "
+                 "Les fichiers bilan_hashtags.csv seuls ne suffisent pas.",
+        )
         contenus = [fichier.getvalue() for fichier in fichiers]
         try:
             groupes = regrouper_bilans_hashtags_csv(contenus)
@@ -154,7 +184,10 @@ def afficher_reprise_hashtags(api, lancer, occupe):
                     or "").strip()
                 try:
                     reprise, selection = reprendre_depuis_bilans_csv(
-                        api, contenus_corpus, cle=cle, secret=secret)
+                        api, contenus_corpus, cle=cle, secret=secret,
+                        archive_zip=(
+                            sauvegarde_zip.getvalue()
+                            if sauvegarde_zip is not None else None))
                 except (ValueError, RuntimeError) as erreur:
                     st.error(
                         "Reprise impossible : " + str(erreur)
