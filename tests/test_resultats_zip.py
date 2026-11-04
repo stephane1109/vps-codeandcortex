@@ -43,6 +43,54 @@ class TestsZipResultats(unittest.TestCase):
                 self.assertEqual(resultat.read("commentaires.txt"),
                                  b"*id_123\n@auteur\nCommentaire\n")
 
+    def test_ancienne_collecte_zip_reconstruit_bilan_hashtags_sans_csv_existant(self):
+        """Une ancienne archive sans bilan doit rester réimportable."""
+        from fastapi.testclient import TestClient
+        from webapp import Job, Manager, create_app, COOKIE
+        with tempfile.TemporaryDirectory() as dossier:
+            manager = Manager(data_dir=dossier)
+            with TestClient(create_app(manager)) as client:
+                client.get("/")
+                proprietaire = client.cookies[COOKIE]
+                options = StartRequest(
+                    nom_sauvegarde="Collecte historique deux hashtags",
+                    source_collecte="hashtags",
+                    hashtag_moteur="research",
+                    hashtags_saisis=["17octobre", "24octobre"],
+                    research_client_key="cle_test",
+                    research_client_secret="secret_test",
+                )
+                job = Job(proprietaire, options, Path(dossier))
+                job.journal = [{
+                    "source": "#17octobre",
+                    "statut_source": "partielle",
+                    "rapport": {"collecte_partielle": True,
+                                "discovered_urls": [
+                                    "https://www.tiktok.com/@exemple/video/7000000000000000123"
+                                ]},
+                }]
+                job.busy = False
+                job.status = "partial"
+                job.archive_prete = True
+                job.source_en_cours_id = "#17octobre"
+                with ZipFile(job.directory / "archive.zip", "w") as archive:
+                    archive.writestr("textes.txt", "Texte ancien")
+                    archive.writestr("publications.csv", "id;texte\\n123;ancien\\n")
+                manager.jobs[job.id] = job
+                reponse = client.get(f"/api/jobs/{job.id}/archive")
+                self.assertEqual(reponse.status_code, 200, reponse.text)
+                with ZipFile(io.BytesIO(reponse.content)) as archive:
+                    noms = archive.namelist()
+                    self.assertIn("bilan_hashtags.csv", noms)
+                    self.assertEqual(noms.count("bilan_hashtags.csv"), 1)
+                    bilan = archive.read("bilan_hashtags.csv").decode("utf-8-sig")
+                    self.assertIn("17octobre", bilan)
+                    self.assertIn("24octobre", bilan)
+                    self.assertIn(job.id, bilan)
+                    self.assertEqual(
+                        archive.read("publications.csv"),
+                        b"id;texte\\n123;ancien\\n")
+
     def test_zip_research_contient_la_base_sqlite_et_les_autres_formats(self):
         """Le ZIP programmé intègre les six anciens téléchargements."""
         with tempfile.TemporaryDirectory() as dossier:
