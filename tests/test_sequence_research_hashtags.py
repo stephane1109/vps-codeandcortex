@@ -155,6 +155,70 @@ class TestsSequencesHashtagsResearch(unittest.TestCase):
         self.assertEqual(resultat["discovery_stop"], "lot_termine")
         self.assertEqual(resultat["reprise_pagination_research"]["cursor"], 10)
 
+    def test_enchainement_automatique_avec_budget_disponible(self):
+        """Plusieurs séquences progressent sans clic ni retour au curseur initial."""
+        appels = []
+
+        def api(url, *, data, headers):
+            corps = json.loads(data)
+            appels.append(corps)
+            numero = len(appels)
+            attendu = None if numero == 1 else numero - 1
+            self.assertEqual(corps.get("cursor"), attendu)
+            if numero > 1:
+                self.assertEqual(corps["search_id"], "suite")
+            return {
+                "data": {
+                    "videos": [video(numero)],
+                    "has_more": numero < 5,
+                    "cursor": numero,
+                    "search_id": "suite",
+                }
+            }
+
+        rapport = {}
+        liens = interroger(
+            api, rapport, maximum_candidats=1000,
+            maximum_requetes=2, enchainement_automatique=True)
+        self.assertEqual(len(appels), 5)
+        self.assertEqual(len(liens), 5)
+        self.assertEqual(len(set(liens)), 5)
+        self.assertEqual(rapport["requetes_tentees"], 5)
+        self.assertEqual(rapport["sequences_terminees"], 2)
+        self.assertEqual(rapport["discovery_stop"], "fin_des_periodes")
+        self.assertFalse(rapport["collecte_partielle"])
+        self.assertIsNone(rapport["reprise_pagination_research"])
+
+    def test_enchainement_conserve_le_curseur_si_le_budget_refuse(self):
+        """Le quota peut arrêter une exécution sans supprimer les pages acquises."""
+        from collecte.researchapi import ResearchAccesRefuse
+        appels = []
+
+        def api(url, *, data, headers):
+            corps = json.loads(data)
+            appels.append(corps)
+            numero = len(appels)
+            if numero == 4:
+                raise ResearchAccesRefuse("Quota local quotidien atteint")
+            return {
+                "data": {
+                    "videos": [video(numero)],
+                    "has_more": True,
+                    "cursor": numero,
+                    "search_id": "suite",
+                }
+            }
+
+        rapport = {}
+        with self.assertRaises(ResearchAccesRefuse):
+            interroger(api, rapport, maximum_requetes=2,
+                       maximum_candidats=1000,
+                       enchainement_automatique=True)
+        self.assertEqual(len(rapport["discovered_urls"]), 3)
+        self.assertEqual(rapport["sequences_terminees"], 1)
+        self.assertEqual(rapport["reprise_pagination_research"]["cursor"], 3)
+        self.assertEqual(rapport["reprise_pagination_research"]["search_id"], "suite")
+
     def test_conservation_interface_et_limites_fixes(self):
         """Le contrôle intermédiaire n'est plus configurable ni affiché."""
         racine = Path(__file__).resolve().parents[1]
