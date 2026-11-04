@@ -288,7 +288,7 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                    hashtags_exclus=list(hashtags_exclus), exclus_hashtags_api=0,
                    ecartes_hashtags_api=0, ecartes_region_api=0,
                    filtre_region=filtre_region,
-                   liens_page_research=[])
+                   liens_page_research=[], apercu_ecartes_research=[])
     verifier()
     # Vérifier d'abord les dates ; aucune requête sur une période invalide.
     periodes = list(_dates(debut, fin, aujourd_hui=aujourd_hui))
@@ -372,6 +372,14 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     # Research peut utiliser une recherche approximative.
                     # Une vidéo hors France n'entre pas dans le corpus FR.
                     rapport["ecartes_region_api"] += 1
+                    if len(rapport["apercu_ecartes_research"]) < 20:
+                        rapport["apercu_ecartes_research"].append({
+                            "url": fiche["url"],
+                            "auteur": fiche["author"],
+                            "legende": fiche["description"][:350],
+                            "hashtags": fiche.get("hashtags") or [],
+                            "region": fiche.get("region_code") or "inconnue",
+                            "motif": "Compte non enregistré en France"})
                     continue
                 hashtags_observes = (
                     {str(tag).lstrip("#").casefold() for tag in fiche.get("hashtags", [])}
@@ -395,6 +403,14 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                     rapport["auteurs_ecartes"] += 1
                     if fiche and not valide:
                         rapport["ecartes_hashtags_api"] += 1
+                        if len(rapport["apercu_ecartes_research"]) < 20:
+                            rapport["apercu_ecartes_research"].append({
+                                "url": fiche["url"],
+                                "auteur": fiche["author"],
+                                "legende": fiche["description"][:350],
+                                "hashtags": fiche.get("hashtags") or [],
+                                "region": fiche.get("region_code") or "inconnue",
+                                "motif": "Hashtags recherchés non satisfaits"})
                 if not automatique and len(contenus) >= limite:
                     break
             # Publier immédiatement les nouveaux liens et leurs métadonnées,
