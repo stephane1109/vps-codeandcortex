@@ -1011,7 +1011,7 @@ with onglet_collecte:
                          "Avec Research, la pagination est automatique.")
             st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
                 key="rechercher_dans_texte", disabled=occupe,
-                help="Décoché : seuls les #hashtags exacts de la légende comptent. "
+                help="Décoché : seuls les hashtags officiels TikTok et les #hashtags écrits dans la légende comptent. "
                      "Coché : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
                      "Par exemple, #lyceen peut correspondre à « lycéen » et #17octobre à « 17 octobre ». "
                      "Une vidéo dont la légende contient le mot correspondant est donc retenue "
@@ -1955,13 +1955,14 @@ with onglet_collecte:
                 st.caption("Filtre appliqué : " + combinaison
                            + (" (hashtags et texte)" if actuel.get("rechercher_dans_texte")
                               else " (hashtags uniquement)")
-                           + (" · variantes accentuées incluses" if actuel.get("variantes_accents") else ""))
+                           + (" · variantes accentuées incluses" if actuel.get("variantes_accents") else "")
+                           + (" · région du compte FR" if actuel.get("region_fr_research") else ""))
                 if "bilan_hashtags" in actuel and actuel.get("processed", 0):
                     with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
                         st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. "
                                    + ("Hashtags ou mots entiers du texte, sans distinction d’accents."
                                       if actuel.get("rechercher_dans_texte") else
-                                      "Seuls les hashtags précédés de # sont pris en compte.")
+                                      "Seuls les hashtags officiels ou précédés de # sont pris en compte.")
                                    + (" Comparaison des hashtags avec et sans accents."
                                       if actuel.get("variantes_accents") else ""))
                         for hashtag, nombre in actuel["bilan_hashtags"].items():
