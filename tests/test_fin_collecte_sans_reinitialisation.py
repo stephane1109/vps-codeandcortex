@@ -69,12 +69,11 @@ class TestsFinCollecteSansReinitialisation(unittest.TestCase):
         debut = interface.index("def afficher_resultats():")
         fin = interface.index('if actuel.get("source_collecte") == "presse":', debut)
         transition = interface[debut:fin]
-        # Un rechargement reste autorisé uniquement après le clic explicite
-        # sur le bouton de poursuite, jamais au passage automatique à terminé.
-        self.assertEqual(transition.count("st.rerun()"), 1)
-        self.assertLess(
-            transition.index('"Poursuivre la collecte"'),
-            transition.index("st.rerun()"))
+        # Le fragment se rafraîchit tout seul. Aucun rechargement global
+        # n'est nécessaire, même après le clic sur la poursuite.
+        self.assertEqual(transition.count("st.rerun()"), 0)
+        self.assertIn('"Poursuivre la collecte"', transition)
+        self.assertIn("actuel = reprise", transition)
         self.assertIn('actuel.get("status") in ("completed", "partial", "stopped")',
                       transition)
         self.assertIn("Télécharger les résultats", interface)
