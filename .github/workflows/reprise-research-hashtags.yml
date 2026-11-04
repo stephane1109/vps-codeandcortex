@@ -17,6 +17,8 @@ on:
       - "tests/test_reprise_hashtags.py"
       - "tests/test_recuperation_hashtags.py"
       - "stockage/recuperation_hashtags.py"
+      - "stockage/postgres_consultation.py"
+      - "interface/client.py"
       - "tests/test_presse_research.py"
       - "tests/test_export_iramuteq.py"
       - "tests/test_fin_collecte_sans_reinitialisation.py"
@@ -34,7 +36,7 @@ jobs:
       - name: Installer les dependances de test
         run: python -m pip install -r requirements-dev.txt
       - name: Verifier la syntaxe des composants de reprise
-        run: python -m compileall -q webapp.py streamlit_app.py collecte/researchapi.py collecte/suivi_hashtags.py connect_htag.py interface/reprise_hashtags_ui.py tests/test_sequence_research_hashtags.py stockage/recuperation_hashtags.py tests/test_recuperation_hashtags.py
+        run: python -m compileall -q webapp.py streamlit_app.py collecte/researchapi.py collecte/suivi_hashtags.py connect_htag.py interface/reprise_hashtags_ui.py tests/test_sequence_research_hashtags.py stockage/recuperation_hashtags.py stockage/postgres_consultation.py interface/client.py tests/test_recuperation_hashtags.py
       - name: Tester la pagination et la reprise des hashtags
         run: |
           python -m unittest discover -s tests -p test_sequence_research_hashtags.py -v
