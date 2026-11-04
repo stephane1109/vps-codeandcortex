@@ -162,6 +162,9 @@ class StartRequest(BaseModel):
     limit: int | None = Field(default=50, ge=1, le=1000)
     collecte_research_complete: bool = False
     test_research_10_publications: bool = False
+    # Taille des lots de candidats API avant contrôle humain.
+    # Le max_count officiel reste fixé à 100 par requête.
+    lot_candidats_research: int = Field(default=1000, ge=100, le=5000)
     include_sources: bool = True
     inclure_metadonnees_txt: bool = False
     inclure_texte_genere_ia: bool = False
@@ -851,6 +854,9 @@ class Job:
         self.candidats_research_lot = 0
         self.ecartes_hashtags_research_lot = 0
         self.quota_research_local = None
+        self.attente_validation_research = False
+        self.continuer_research = threading.Event()
+        self.apercu_ecartes_research = []
         self.exclus_hashtags = 0
         self.cause_arret = None
         self.evenements_debug = []
@@ -1125,6 +1131,20 @@ class Job:
                     "candidats_research_lot": self.candidats_research_lot,
                     "ecartes_hashtags_research_lot": self.ecartes_hashtags_research_lot,
                     "quota_research_local": self.quota_research_local,
+                    "lot_candidats_research": self.settings.lot_candidats_research,
+                    "attente_validation_research": self.attente_validation_research,
+                    "apercu_ecartes_research": list(self.apercu_ecartes_research[-20:]),
+                    "apercu_texte_research": [{
+                        "url": p.get("url", ""), "auteur": p.get("author", ""),
+                        "legende": str(p.get("description") or "")[:450],
+                        "hashtags": list(p.get("hashtags") or [])[:25],
+                        "hashtags_correspondants": list(
+                            p.get("hashtags_correspondants") or []),
+                        "langue": p.get("langue_detection") or "non_evaluee",
+                        "region": p.get("region_code") or "indeterminee"}
+                        for p in self.records[-20:]]
+                        if self.settings.source_collecte == "hashtags"
+                        and self.settings.moteur_actif == "research" else [],
                     "archive_prete": self.archive_prete, "video_busy": self.video_busy,
                     "limit": self.settings.limit, "status": self.status, "busy": self.busy,
                     "message": self.message, "discovered": self.discovered,
@@ -2064,6 +2084,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         requetes_sources_terminees = 0
         candidats_sources_termines = 0
         ecartes_sources_termines = 0
+        # Premier contrôle après la première page, puis séquences de
+        # 1 000 candidats par défaut. Conserver le curseur Research en mémoire
+        # durant la pause évite de recommencer la recherche.
+        prochain_controle_research = 100
         for numero_source, source in enumerate(sources, 1):
             job.check()
             if job.settings.test_research_10_publications and len(unique_links) >= 10:
@@ -2103,6 +2127,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
             # plusieurs milliers de résultats accumulés dans la pagination.
             liens_verifies_source = {}
             def suivre_decouverte(nombre):
+                nonlocal prochain_controle_research
                 requete = rapport.get("requete_recherche") or etiquette
                 if (job.settings.source_collecte == "hashtags"
                         and moteur_actif == "research"
@@ -2157,6 +2182,39 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             f"{requetes_lot} requête(s) Research."))
                     if len(unique_links) > job.processed:
                         lire_decouvertes()
+                    if rapport.get("apercu_ecartes_research"):
+                        with job.lock:
+                            for element in rapport["apercu_ecartes_research"]:
+                                if len(job.apercu_ecartes_research) >= 20:
+                                    break
+                                if element not in job.apercu_ecartes_research:
+                                    job.apercu_ecartes_research.append(element)
+                    if (not job.settings.test_research_10_publications
+                            and candidats_lot >= prochain_controle_research):
+                        if prochain_controle_research == 100:
+                            prochain_controle_research = (
+                                job.settings.lot_candidats_research)
+                        else:
+                            prochain_controle_research += (
+                                job.settings.lot_candidats_research)
+                        job.continuer_research.clear()
+                        job.update(
+                            status="validation_research",
+                            attente_validation_research=True,
+                            message=(
+                                "Collecte suspendue pour contrôle : examinez "
+                                "les légendes, hashtags et régions dans le tableau "
+                                "ci-dessous, puis choisissez Poursuivre ou Arrêter. "
+                                f"{candidats_lot} candidat(s) API examinés."))
+                        # L'arrêt reste immédiatement utilisable pendant
+                        # l'attente de décision de l'utilisateur.
+                        while not job.continuer_research.wait(0.5):
+                            job.check()
+                        job.check()
+                        job.update(
+                            status="discovering",
+                            attente_validation_research=False,
+                            message="Pagination Research reprise après contrôle.")
                     return
                 job.actualiser_decouverte(rapport)
                 objectif = (f"{nombre}/{args.limit}" if args.limit is not None
@@ -2677,6 +2735,7 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_status = "completed"
                 final_message += " Toutes les sources prévues ont été parcourues."
     except Stopped:
+        job.attente_validation_research = False
         final_status, final_message = "stopped", "Collecte arrêtée. " + ((job.cause_arret or {}).get("explication") or "Cause de l’arrêt non renseignée.") + " Les textes déjà obtenus restent téléchargeables."
     except scraper.WebDriverException as erreur:
         code = "erreur_session" if scraper.est_erreur_session(erreur) else "erreur_navigateur"
@@ -4349,6 +4408,17 @@ def create_app(manager=None):
         if job.busy:
             job.demander_arret("utilisateur")
         return {"ok": True, "arret_demande": job.stop.is_set(), "busy": job.busy}
+
+    @app.post("/api/jobs/{job_id}/research/continuer")
+    def poursuivre_research(job_id: str, request: Request):
+        """Autoriser explicitement le lot de pagination suivant."""
+        job = manager.get(owner(request), job_id)
+        if not (job.busy and job.attente_validation_research
+                and job.settings.source_collecte == "hashtags"
+                and job.settings.moteur_actif == "research"):
+            raise HTTPException(409, "La collecte Research n'attend pas de validation.")
+        job.continuer_research.set()
+        return {"ok": True, "statut": "reprise_demandee"}
 
     def enqueue(job, command):
         with job.lock:
