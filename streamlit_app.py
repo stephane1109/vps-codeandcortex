@@ -1671,9 +1671,14 @@ with onglet_collecte:
                     actuel.get("bilan_hashtags_sources") or [])
                 if hashtags_inacheves:
                     st.caption(
-                        "Séquence terminée. Les fichiers sont sauvegardés. "
-                        "Vous pouvez vérifier les publications ci-dessous et "
+                        "Séquence terminée : le ZIP reste téléchargeable. "
+                        "La collecte n'est pas exhaustive ; vous pouvez "
                         "poursuivre dans le même corpus PostgreSQL.")
+                    st.caption(
+                        "Les identifiants Research ne sont pas conservés après "
+                        "la séquence précédente. Renseignez à nouveau les deux "
+                        "champs ci-dessous, sauf si Client key et Client secret "
+                        "sont déjà configurés dans les variables Coolify.")
                     with st.expander(
                             "Identifiants Research pour poursuivre la collecte",
                             expanded=False):
@@ -1704,24 +1709,55 @@ with onglet_collecte:
                             options_suite["research_client_key"] = cle_suite
                         if secret_suite:
                             options_suite["research_client_secret"] = secret_suite
-                        try:
-                            reprise = api(
-                                "/api/historique/" + actuel["id"]
-                                + "/reprendre-hashtags", options_suite)
-                        except RuntimeError as erreur:
-                            st.error("Poursuite impossible : " + str(erreur))
+                        erreur_reprise = None
+                        if not cookie_historique:
+                            erreur_reprise = (
+                                "Historique privé indisponible : rechargez "
+                                "la page d'accueil avant de poursuivre.")
+                        elif bool(cle_suite) != bool(secret_suite):
+                            erreur_reprise = (
+                                "Renseignez Client key ET Client secret, "
+                                "ou laissez les deux champs vides si les "
+                                "identifiants sont configurés dans Coolify.")
                         else:
-                            st.session_state["collecte"] = reprise
-                            st.session_state["_effacer_research_sequence_apres_reprise"] = True
-                            st.rerun()
-            # La fin de la collecte ne doit jamais relancer toute la page.
-            # Le fragment conserve les résultats et les boutons de téléchargement.
+                            try:
+                                reprise = api(
+                                    "/api/historique/" + actuel["id"]
+                                    + "/reprendre-hashtags", options_suite)
+                            except RuntimeError as erreur:
+                                erreur_reprise = str(erreur)
+                            else:
+                                st.session_state.pop("erreur_reprise_hashtags", None)
+                                st.session_state["collecte"] = reprise
+                                st.session_state["_effacer_research_sequence_apres_reprise"] = True
+                                st.rerun()
+                        if erreur_reprise:
+                            # Le fragment se réactualise toutes les secondes :
+                            # conserver le diagnostic jusqu'à la prochaine tentative.
+                            st.session_state["erreur_reprise_hashtags"] = {
+                                "collecte_id": actuel["id"],
+                                "message": erreur_reprise,
+                            }
+                    diagnostic_reprise = st.session_state.get("erreur_reprise_hashtags")
+                    if (isinstance(diagnostic_reprise, dict)
+                            and diagnostic_reprise.get("collecte_id") == actuel["id"]):
+                        st.error("Poursuite impossible : " + diagnostic_reprise["message"])
+            # Distinguer la fin d'une séquence de la fin du corpus entier.
+            # Les archives restent téléchargeables quel que soit le statut final.
             if (not actuel.get("busy") and not actuel.get("video_busy")
                     and actuel.get("status") in ("completed", "partial", "stopped")):
-                st.success(
-                    "Collecte terminée : les résultats restent affichés "
-                    "et les fichiers peuvent être téléchargés ci-dessous."
-                )
+                if actuel["status"] == "partial":
+                    st.info(
+                        "Séquence terminée : les résultats sont conservés et "
+                        "téléchargeables. La collecte peut encore être poursuivie.")
+                elif actuel["status"] == "stopped":
+                    st.warning(
+                        "Collecte interrompue : les résultats déjà obtenus "
+                        "restent téléchargeables.")
+                else:
+                    st.success(
+                        "Collecte terminée : les résultats restent affichés "
+                        "et les fichiers peuvent être téléchargés ci-dessous.")
             if actuel.get("source_collecte") == "presse":
                 if actuel.get("croiser_hashtag_presse"):
                     st.caption(
