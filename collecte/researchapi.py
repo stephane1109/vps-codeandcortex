@@ -344,6 +344,15 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
         curseurs_vus = set()
         while (automatique or (rapport["pages_research"] < MAX_PAGES
                                 and len(contenus) < limite)):
+            # Mémoriser la page à lire AVANT tout appel ou vérification.
+            # Un arrêt entre deux pages conserve le prochain curseur.
+            rapport["reprise_pagination_research"] = {
+                "indice_periode": indice_periode,
+                "debut_periode": borne_debut,
+                "fin_periode": borne_fin,
+                "cursor": curseur,
+                "search_id": search_id,
+            }
             verifier()
             conditions = []
             if compte is not None:
@@ -495,6 +504,23 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
             # maintenant enregistrer le curseur suivant. Si le traitement
             # lève Stopped ou une erreur, l'entrée de la page reste mémorisée.
             rapport["reprise_pagination_research"] = page_suivante
+            if donnees.get("has_more") and page_suivante is None:
+                # TikTok annonce une suite mais n’indique pas comment y accéder.
+                # Ne jamais repartir implicitement au début de la recherche,
+                # ni avancer vers une autre période en laissant celle-ci incomplète.
+                rapport["reprise_pagination_research"] = {
+                    "indice_periode": indice_periode,
+                    "debut_periode": borne_debut,
+                    "fin_periode": borne_fin,
+                    "cursor": curseur,
+                    "search_id": search_id,
+                    "pagination_invalide": True,
+                }
+                rapport["discovery_stop"] = "pagination_research_invalide"
+                rapport["collecte_partielle"] = True
+                rapport["plage_research"] = {
+                    "debut": periodes[-1][0], "fin": periodes[0][1]}
+                return list(rapport["discovered_urls"])
             # Stopper un segment après la dernière page intégralement lue.
             # Une dernière page qui termine tout le corpus n'a pas de suite.
             if (page_suivante is not None
