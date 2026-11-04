@@ -4040,6 +4040,7 @@ def create_app(manager=None):
         return {"status": "ok", "version_presse": VERSION_PRESSE,
                 "version_research": VERSION_RESEARCH,
                 "version_reprise_hashtags": "2026-11-04-csv-cursor-v2",
+                "version_groupes_hashtags": "2026-11-04-et-ou-v1",
                 "research_configuree": identifiants_disponibles()}
 
     @app.get("/")
