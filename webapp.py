@@ -2757,6 +2757,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         LOG.error("Échec de la collecte %s", job.id)
         final_message = "La connexion au navigateur a échoué. Les textes déjà obtenus sont conservés. Réessayez ou contactez l’administrateur."
     finally:
+        # Ne jamais laisser une validation de lot active après un arrêt,
+        # une erreur Research ou la finalisation du traitement.
+        job.attente_validation_research = False
+        job.continuer_research.set()
         contexte_mp4 = {}
         if (job.settings.telecharger_mp4 and job.records and connexion is not None
                 and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
