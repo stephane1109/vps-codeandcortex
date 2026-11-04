@@ -10,16 +10,24 @@ from collecte.suivi_hashtags import (
 
 
 def afficher_reprise_hashtags(api, lancer, occupe):
-    """Importer un bilan et sélectionner uniquement les hashtags inachevés."""
+    """Permettre une reprise sans CSV ; importation du bilan facultative."""
     collecte = st.session_state.get("collecte") or {}
     bilan = collecte.get("bilan_hashtags_sources") or []
     disponibles = (hashtags_a_reprendre(bilan)
                    if collecte.get("source_collecte") == "hashtags" else [])
+    st.caption(
+        "Aucun fichier CSV n'est nécessaire pour reprendre une collecte déjà "
+        "affichée. Si vous l'avez fermée, sélectionnez-la dans "
+        "« Historique temporaire — collectes et analyses » à gauche, "
+        "puis cliquez sur « Rouvrir la collecte et l’analyse ». "
+        "Le bilan_hashtags.csv est également présent dans le ZIP des résultats."
+    )
     fichier = st.file_uploader(
-        "Importer un bilan de hashtags CSV d'une collecte précédente",
+        "Importation facultative d'un bilan de hashtags (CSV)",
         type=["csv"], key="bilan_reprise_hashtags_csv", disabled=occupe,
-        help="Le bilan permet de retrouver la collecte d'origine et de "
-             "reprendre ses hashtags sans créer un deuxième corpus PostgreSQL.",
+        help="Utilisez uniquement cette option pour sélectionner des hashtags "
+             "à partir d'un ancien bilan. Le CSV n'est pas requis pour "
+             "poursuivre la collecte affichée ou rouverte depuis l'historique.",
     )
     if fichier is None:
         st.session_state.pop("empreinte_bilan_hashtags", None)
