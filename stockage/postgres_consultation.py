@@ -212,8 +212,13 @@ def archiver_collecte(job, *, a_partir_publications=0, a_partir_commentaires=0):
                     actualise_le=EXCLUDED.actualise_le,
                     traitees=EXCLUDED.traitees,
                     parametres=EXCLUDED.parametres,
-                    journal_research=EXCLUDED.journal_research,
-                    source_en_cours_id=EXCLUDED.source_en_cours_id
+                    journal_research=CASE
+                        WHEN jsonb_array_length(EXCLUDED.journal_research)>0
+                        THEN EXCLUDED.journal_research
+                        ELSE scraptiktok_collectes.journal_research END,
+                    source_en_cours_id=COALESCE(
+                        EXCLUDED.source_en_cours_id,
+                        scraptiktok_collectes.source_en_cours_id)
             """, (
                 identifiant, empreinte(job.owner_historique), nom, source,
                 moteur, statut, maintenant, maintenant, traitees,
