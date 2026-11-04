@@ -2209,6 +2209,10 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     connexion.maximum_candidats_segment = max(
                         100, job.settings.lot_candidats_research
                         - candidats_sources_termines)
+                    # Dix appels vidéo au plus par séquence, même lorsque
+                    # TikTok renvoie des pages nettement inférieures à 100.
+                    connexion.maximum_requetes_segment = max(
+                        1, 10 - requetes_sources_terminees)
                 found = connexion.decouvrir(source, rapport,
                     contexte=f"Source {numero_source}/{len(sources)} — {etiquette}",
                     progression=suivre_decouverte)
@@ -2427,8 +2431,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     and moteur_actif == "research"
                     and not job.settings.test_research_10_publications
                     and (rapport.get("discovery_stop") == "lot_termine"
-                         or (candidats_sources_termines >=
-                             job.settings.lot_candidats_research
+                         or ((candidats_sources_termines >=
+                              job.settings.lot_candidats_research
+                              or requetes_sources_terminees >= 10)
                              and numero_source < len(sources)
                              and not getattr(
                                  connexion, "_recherche_et_stricte", False)))):
