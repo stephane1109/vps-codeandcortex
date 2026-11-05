@@ -113,6 +113,15 @@ class TestSimilariteEngagement(unittest.TestCase):
         self.assertIsNone(convertir_nombre("inf"))
         self.assertIsNone(convertir_nombre("non disponible"))
 
+    def test_aucune_metrique_selectionnee_est_refusee(self):
+        """Une sélection vide ne réactive pas les quatre métriques en secret."""
+        donnees = importer_engagement([("engagement.csv", creer_csv([
+            "1;;100;10;1;1",
+            "2;;200;20;2;2",
+        ]))])
+        with self.assertRaisesRegex(ValueError, "au moins une métrique"):
+            construire_reseau_engagement(donnees, [])
+
     def test_trois_modes_historiques_restent_visibles(self):
         """La nouvelle origine n'efface aucun des trois graphes précédents."""
         self.assertEqual(NOMS, ("auteurs_videos", "videos_communes", "reponses"))
