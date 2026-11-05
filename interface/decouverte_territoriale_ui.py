@@ -1,9 +1,8 @@
 """Interface de découverte territoriale des @comptes TikTok.
 
-Seules les vidéos associées à des hashtags territoriaux servent à trouver
+Les hashtags et les descriptions servent à trouver
 des comptes candidats ; leur résidence réelle n'est jamais déduite.
 """
-import csv
 from datetime import date, timedelta
 
 import streamlit as st
@@ -12,17 +11,18 @@ import streamlit as st
 def afficher_decouverte_territoriale(api, *, occupe=False):
     """Créer, poursuivre et consulter un inventaire de comptes par territoire."""
     st.caption(
-        "Découvrez des @comptes à partir de vidéos portant des hashtags "
-        "territoriaux. Une mention de Toulouse, par exemple, ne prouve "
-        "pas que l'auteur réside à Toulouse. Les résultats sont dédupliqués "
-        "et sauvegardés dans votre historique privé.")
+        "Recherchez des @comptes grâce aux hashtags OU aux mots présents "
+        "dans les descriptions des vidéos. Par exemple, une publication "
+        "#manifestation #lyceen qui mentionne Toulouse dans sa description "
+        "peut être retrouvée. Il ne s'agit pas d'une preuve de résidence. "
+        "Les résultats sont dédupliqués et conservés dans l'historique privé.")
     c1, c2 = st.columns(2)
     with c1:
         ville = st.text_input(
             "Territoire (ville)", value="Toulouse",
             key="territoire_recherche_ville", disabled=occupe)
         variantes = st.text_input(
-            "Autres hashtags à rechercher (facultatifs)",
+            "Variantes du nom de ville (facultatives)",
             value="toulousain, toulousaine",
             key="territoire_recherche_variantes", disabled=occupe,
             help="Séparez les variantes par une virgule. Exemple : "
@@ -76,35 +76,49 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
         st.error("Inventaire inaccessible : " + str(erreur))
         return
     st.caption(
-        f"Hashtags : {', '.join('#'+h for h in inventaire['hashtags'])}. "
+        f"Mots recherchés dans les hashtags et les descriptions : "
+        f"{', '.join(inventaire['hashtags'])}. "
         f"Période : {inventaire['date_debut']} au {inventaire['date_fin']}.")
-    statistiques = st.columns(3)
+    statistiques = st.columns(4)
     statistiques[0].metric("Comptes distincts", inventaire["nombre_comptes"])
     statistiques[1].metric("Vidéos examinées", inventaire["candidats"])
     statistiques[2].metric("Pages API", inventaire["pages"])
+    statistiques[3].metric("Vidéos sans mention territoriale", inventaire.get("videos_ecartees", 0))
     if inventaire.get("erreur"):
         st.warning("Dernier diagnostic Research : " + inventaire["erreur"])
-    if not inventaire["terminee"]:
+    en_cours = inventaire.get("etat") == "en_cours"
+    if en_cours:
+        st.info(
+            "Recherche en cours : les pages sont lues automatiquement jusqu'à "
+            "la fin, à une interruption ou à la limite de requêtes officielle. "
+            "Les résultats sont enregistrés à chaque page.")
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=5000, limit=None, key="territoire_actualisation")
         if st.button(
-            "Rechercher / poursuivre la découverte (3 pages maximum)",
+            "Arrêter après la page en cours", key="territoire_arreter"):
+            try:
+                api(
+                    f"/api/decouverte-territoriale/{selection_id}/arreter", {})
+                st.rerun()
+            except RuntimeError as erreur:
+                st.error("Arrêt impossible : " + str(erreur))
+    elif not inventaire["terminee"]:
+        if st.button(
+            "Démarrer / reprendre la recherche complète",
             key="territoire_poursuivre", disabled=occupe):
             try:
-                resultat = api(
-                    f"/api/decouverte-territoriale/{selection_id}/poursuivre",
-                    {})
+                api(
+                    f"/api/decouverte-territoriale/{selection_id}/poursuivre", {})
+                st.rerun()
             except RuntimeError as erreur:
                 st.error("Découverte interrompue : " + str(erreur))
-            else:
-                st.session_state["territoire_dernier_bilan"] = (
-                    resultat["nombre_comptes"], resultat["pages"])
-                st.rerun()
     else:
         st.success("Période parcourue : recherche terminée.")
     comptes = inventaire["comptes"]
     if not comptes:
         st.info(
-            "Aucun compte découvert pour le moment. Poursuivez la recherche "
-            "ou essayez d'autres hashtags territoriaux.")
+            "Aucun compte découvert pour le moment. Lancez ou poursuivez la "
+            "recherche et consultez le diagnostic éventuel ci-dessus.")
         return
     page = st.number_input(
         "Page de résultats (100 comptes par page)",
@@ -122,9 +136,17 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
         key="territoire_comptes_selectionnes",
         help="Sélectionnez les comptes souhaités. Ils seront transférés "
              "par lots de 10, conformément au formulaire de collecte existant.")
-    st.link_button(
-        "Télécharger tous les comptes en CSV",
-        f"/api/decouverte-territoriale/{selection_id}/comptes.csv")
+    colonne_txt, colonne_csv = st.columns(2)
+    with colonne_txt:
+        st.link_button(
+            "Télécharger les @comptes en TXT",
+            f"/api/decouverte-territoriale/{selection_id}/comptes.txt",
+            use_container_width=True)
+    with colonne_csv:
+        st.link_button(
+            "Télécharger les @comptes en CSV",
+            f"/api/decouverte-territoriale/{selection_id}/comptes.csv",
+            use_container_width=True)
     if selection:
         lots = [selection[i:i+10] for i in range(0, len(selection), 10)]
         lot = st.number_input(
