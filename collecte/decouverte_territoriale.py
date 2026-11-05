@@ -101,7 +101,7 @@ def hashtags_publication(video):
                 continue
     # Si Research omet hashtag_names, lire seulement les hashtags #explicites.
     description = _normaliser_texte(video.get("video_description") or "")
-    for nom in re.findall(r"#([\\w]+)", description):
+    for nom in re.findall(r"#([\w]+)", description):
         try:
             trouves.add(nettoyer_terme(nom))
         except ValueError:
