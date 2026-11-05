@@ -857,6 +857,33 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@complementdenquete_off"
+    },
+    {
+      "id": "cedric_canton",
+      "nom": "Cédric Canton",
+      "compte": "cedric.canton",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@cedric.canton"
+    },
+    {
+      "id": "va_plus",
+      "nom": "VA Plus",
+      "compte": "va.plus",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@va.plus"
+    },
+    {
+      "id": "immersion_docs",
+      "nom": "Immersion Docs",
+      "compte": "immersion.docs",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@immersion.docs"
     }
   ]
 }
