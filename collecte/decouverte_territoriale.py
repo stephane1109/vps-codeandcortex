@@ -23,7 +23,7 @@ from collecte.researchapi import (
 from collecte.verification_comptes import normaliser_compte
 
 MAX_COMPTES = 30000
-VERSION_REQUETE = 2
+VERSION_REQUETE = 3
 _VERROU = threading.RLock()
 _TRAVAUX = {}
 
@@ -56,15 +56,58 @@ def correspond_territoire(video, termes):
                          + r"(?![a-z0-9_])", description) for mot in termes)
 
 
-def requete_territoriale(termes, debut, fin, curseur=None, search_id=None):
-    """Chercher dans les hashtags OU les mots de la légende."""
-    corps = {
-        "query": {"or": [
+def correspond_hashtags(video, hashtags, operateur="OR"):
+    """Contrôler les hashtags présents, indépendamment de la ville."""
+    if not hashtags:
+        return True
+    trouves = set()
+    for nom in (video.get("hashtag_names") or []):
+        if not isinstance(nom, str):
+            continue
+        try:
+            trouves.add(nettoyer_terme(nom))
+        except ValueError:
+            continue
+    # Certaines réponses Research ne fournissent que la description.
+    description = _normaliser_texte(video.get("video_description") or "")
+    for nom in re.findall(r"#([\\w]+)", description):
+        try:
+            trouves.add(nettoyer_terme(nom))
+        except ValueError:
+            continue
+    attendus = set(hashtags)
+    return attendus.issubset(trouves) if operateur == "AND" else bool(attendus & trouves)
+
+
+def requete_territoriale(termes, debut, fin, curseur=None, search_id=None,
+                        hashtags_croises=None, operateur="OR"):
+    """Croiser le mot-clé territorial avec les hashtags thématiques dans l'API."""
+    if hashtags_croises:
+        conditions = [{
+            "field_name": "keyword", "operation": "IN",
+            "field_values": list(termes),
+        }]
+        if operateur == "AND":
+            conditions.extend({
+                "field_name": "hashtag_name", "operation": "EQ",
+                "field_values": [nom],
+            } for nom in hashtags_croises)
+        else:
+            conditions.append({
+                "field_name": "hashtag_name", "operation": "IN",
+                "field_values": list(hashtags_croises),
+            })
+        query = {"and": conditions}
+    else:
+        # Compatibilité des inventaires créés avant le croisement.
+        query = {"or": [
             {"field_name": "hashtag_name", "operation": "IN",
              "field_values": list(termes)},
             {"field_name": "keyword", "operation": "IN",
              "field_values": list(termes)},
-        ]},
+        ]}
+    corps = {
+        "query": query,
         "start_date": debut, "end_date": fin,
         "max_count": 100, "is_random": False,
     }
@@ -208,18 +251,24 @@ def sauvegarder(chemin, contenu):
     os.replace(temporaire, chemin)
 
 
-def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin):
+def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, operateur="OR"):
     """Initialiser les périodes et les mots-clés de découverte."""
     ville = str(ville or "").strip()
     if not 2 <= len(ville) <= 80:
         raise ValueError("Précisez une ville entre 2 et 80 caractères.")
+    # La ville est un critère distinct des hashtags thématiques.
     termes = [nettoyer_terme(ville)]
-    for variante in variantes or []:
-        mot = nettoyer_terme(variante)
-        if mot not in termes:
-            termes.append(mot)
-    if len(termes) > 8:
-        raise ValueError("8 variantes de recherche au maximum.")
+    hashtags_croises = []
+    for valeur in variantes or []:
+        hashtag = nettoyer_terme(valeur)
+        if hashtag not in hashtags_croises:
+            hashtags_croises.append(hashtag)
+    if not hashtags_croises:
+        raise ValueError("Renseignez au moins un hashtag à croiser avec la ville.")
+    if len(hashtags_croises) > 10:
+        raise ValueError("10 hashtags au maximum.")
+    if operateur not in ("OR", "AND"):
+        raise ValueError("Opérateur de croisement invalide.")
     if not debut or not fin:
         raise ValueError("Choisissez une période de recherche.")
     periodes = list(_dates(debut, fin))
@@ -228,6 +277,7 @@ def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin):
     identifiant = uuid.uuid4().hex
     inventaire = {
         "id": identifiant, "ville": ville, "hashtags": termes,
+        "hashtags_croises": hashtags_croises, "operateur": operateur,
         "date_debut": debut, "date_fin": fin,
         "periodes": periodes, "indice_periode": 0,
         "cursor": None, "search_id": None,
@@ -254,7 +304,10 @@ def presenter(inventaire):
         key=lambda compte: (-compte["videos_trouvees"], compte["username"]))
     return {
         "id": inventaire["id"], "ville": inventaire["ville"],
-        "hashtags": inventaire["hashtags"], "date_debut": inventaire["date_debut"],
+        "hashtags": inventaire["hashtags"],
+        "hashtags_croises": inventaire.get("hashtags_croises", []),
+        "operateur": inventaire.get("operateur", "OR"),
+        "date_debut": inventaire["date_debut"],
         "date_fin": inventaire["date_fin"], "pages": inventaire["pages"],
         "candidats": inventaire["candidats"],
         "terminee": (inventaire["terminee"] and inventaire.get("version_requete", 1) >= VERSION_REQUETE),
@@ -298,7 +351,7 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
     # Les anciens inventaires utilisaient une requête limitée aux hashtags.
     # Leur curseur n'est pas réutilisable avec la requête keyword élargie.
     # Même les inventaires anciens marqués « terminés » doivent pouvoir repartir.
-    if inventaire.get("version_requete", 1) < VERSION_REQUETE:
+    if inventaire.get("version_requete", 1) < 2:
         inventaire["indice_periode"] = 0
         inventaire["cursor"] = None
         inventaire["search_id"] = None
@@ -347,7 +400,11 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
             for video in videos:
                 if not isinstance(video, dict):
                     continue
-                if not correspond_territoire(video, inventaire["hashtags"]):
+                # Une vidéo doit satisfaire les DEUX dimensions.
+                if (not correspond_territoire(video, inventaire["hashtags"])
+                        or not correspond_hashtags(
+                            video, inventaire.get("hashtags_croises", []),
+                            inventaire.get("operateur", "OR"))):
                     inventaire["videos_ecartees"] = inventaire.get("videos_ecartees", 0) + 1
                     continue
                 try:
