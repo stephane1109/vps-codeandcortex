@@ -482,13 +482,34 @@ invalides sont signalés. Le bouton de chargement remplace seulement la liste
 des comptes à examiner dans le formulaire, sans modifier les filtres, exports
 ou collectes déjà sauvegardés. Ce chargement lance une nouvelle collecte de
 profils : un CSV de comptes ne contient pas le curseur d'une collecte interrompue.
-La limite s’applique par compte, tous hashtags confondus. Au moins un hashtag est
-obligatoire ; le deuxième reste facultatif (ET/OU). Les modes Profils et
-Presse/médias ouvrent une recherche vidéo pour chaque couple compte + hashtag :
-par exemple `https://www.tiktok.com/search/video?q=manifestation%20lemondefr`.
-Le compte coché figure donc dans la requête, pas seulement dans un filtre appliqué
-à des résultats généraux. Le mode Hashtags conserve les pages `/tag/hashtag`.
-La page d’accueil du profil n’est pas utilisée pour découvrir les publications.
+
+**La découverte territoriale et la collecte de profils sont deux corpus distincts.**
+La première identifie les auteurs à partir de vidéos vérifiant territoire ET
+hashtags. Le CSV conserve les auteurs et la première preuve vidéo, mais il
+ne transfère pas automatiquement la sélection des cinq hashtags, l'opérateur
+ET/OU, la période ni le critère Toulouse à la collecte de profils.
+
+Dans **Autres comptes TikTok**, l'opérateur des hashtags est indépendant de
+celui du mode Hashtags, avec `OU` par défaut comme dans la découverte
+territoriale. `OU` signifie qu'au moins un hashtag doit être présent **dans
+chaque vidéo** ; `ET` exige la présence de tous les hashtags **dans cette même
+vidéo**, pas dans l'ensemble des publications du compte. L'utilisateur peut
+toujours sélectionner ET explicitement.
+
+Avec la **Research API officielle**, ScrapTikTok transmet à TikTok le compte
+et la combinaison exacte de hashtags dès la requête de découverte
+(`username EQ` ET `hashtag_name IN` pour OU, ou plusieurs `hashtag_name EQ`
+pour ET). Il revérifie ensuite les hashtags officiels et ceux de la légende
+à l'export, comme pour les autres modes. Il ne doit plus rechercher
+des milliers de publications du compte sans contrainte de hashtags puis
+les éliminer au moment de constituer le TXT. La période sélectionnée
+dans la seconde collecte doit être identique à celle de la découverte
+territoriale si l'on souhaite retrouver les vidéos de départ.
+
+Pour les autres moteurs, les hashtags restent vérifiés après la lecture
+des publications accessibles. La couverture d'un profil et l'exhaustivité
+de la Research API ne sont pas garanties, notamment lors d'erreurs 5xx.
+Le mode Hashtags conserve ses propres critères indépendants.
 
 Le moteur attend les liens chargés dynamiquement et fait défiler le conteneur
 des publications. Seuls les auteurs correspondant exactement à la sélection
