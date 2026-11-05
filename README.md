@@ -449,7 +449,10 @@ et restent dans les exports enrichis CSV/JSON/IRaMuTeQ.
 ## Comptes de presse, engagement et commentaires
 
 Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
-Sélectionner les médias, ou saisir jusqu’à dix identifiants séparés par des virgules.
+Sélectionner les médias, ou saisir des identifiants séparés par des virgules.
+En mode Collecte de compte, l'option All transmet tous les profils sélectionnés
+vers Collecte de profils sans découpage manuel en lots. Les comptes sont ensuite
+parcourus par le moteur choisi, sous réserve de ses contraintes d'accès et de quotas.
 La limite s’applique par compte, tous hashtags confondus. Au moins un hashtag est
 obligatoire ; le deuxième reste facultatif (ET/OU). Les modes Profils et
 Presse/médias ouvrent une recherche vidéo pour chaque couple compte + hashtag :
