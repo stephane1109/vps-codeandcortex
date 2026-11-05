@@ -84,6 +84,11 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
     statistiques[1].metric("Vidéos examinées", inventaire["candidats"])
     statistiques[2].metric("Pages API", inventaire["pages"])
     statistiques[3].metric("Vidéos sans mention territoriale", inventaire.get("videos_ecartees", 0))
+    if inventaire.get("relances_serveur", 0):
+        st.caption(
+            "Incidents TikTok HTTP 5xx : "
+            f"{inventaire.get('echecs_serveur', 0)} réponse(s) en erreur ; "
+            f"{inventaire.get('relances_serveur', 0)} relance(s) effectuée(s).")
     if inventaire.get("erreur"):
         st.warning("Dernier diagnostic Research : " + inventaire["erreur"])
     en_cours = inventaire.get("etat") == "en_cours"
