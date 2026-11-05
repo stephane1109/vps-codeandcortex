@@ -80,7 +80,7 @@ def recherche_active(identifiant):
         return bool(entree and entree["thread"].is_alive())
 
 
-def lancer_recherche(racine, proprietaire, identifiant):
+def lancer_recherche(racine, proprietaire, identifiant, *, credentiels=None):
     """Exécuter toutes les pages disponibles sans bloquer la requête HTTP."""
     charger(racine, proprietaire, identifiant)
     with _VERROU:
@@ -95,7 +95,7 @@ def lancer_recherche(racine, proprietaire, identifiant):
             try:
                 poursuivre_inventaire(
                     racine, proprietaire, identifiant, nombre_pages=None,
-                    arret=arret)
+                    arret=arret, credentiels=credentiels)
             except Exception as erreur:
                 # Ne pas exposer les réponses brutes de l'API ni les jetons.
                 chemin = chemin_inventaire(racine, proprietaire, identifiant)
@@ -243,7 +243,7 @@ def lister_inventaires(racine, proprietaire):
 
 
 def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete,
-                         nombre_pages=None, arret=None):
+                         nombre_pages=None, arret=None, credentiels=None):
     """Parcourir les pages jusqu'à la fin ou à l'arrêt, avec checkpoint."""
     if nombre_pages is not None and not 1 <= nombre_pages <= 100000:
         raise ValueError("Nombre de pages invalide.")
@@ -267,7 +267,7 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
     sauvegarder(chemin, inventaire)
     # Le jeton provient des variables Coolify ; il n'est jamais persisté.
     try:
-        token = _jeton(requete=requete)
+        token = _jeton(requete=requete, credentiels=credentiels)
     except ResearchErreur as erreur:
         inventaire["erreur"] = str(erreur)
         inventaire["etat"] = "interrompue"
@@ -293,7 +293,7 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                     headers={"Authorization": "Bearer " + token,
                              "Content-Type": "application/json"})
             except ResearchJetonInvalide:
-                token = _jeton(requete=requete, renouveler=True)
+                token = _jeton(requete=requete, credentiels=credentiels, renouveler=True)
                 resultat = requete(
                     _url_videos(), data=json.dumps(corps).encode("utf-8"),
                     headers={"Authorization": "Bearer " + token,
