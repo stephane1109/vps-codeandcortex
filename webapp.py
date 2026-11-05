@@ -4153,17 +4153,30 @@ def create_app(manager=None):
 
     @app.post("/api/decouverte-territoriale/{identifiant}/poursuivre")
     def poursuivre_decouverte_territoriale(identifiant: str, request: Request):
+        """Lancer la pagination Research sans limite artificielle de trois pages."""
         exiger_ticket(request)
         if any(tache.busy for tache in manager.jobs.values()):
             raise HTTPException(
                 409, "Une collecte est déjà en cours : terminez-la avant "
                 "de lancer une découverte territoriale.")
-        from collecte.decouverte_territoriale import poursuivre_inventaire
+        from collecte.decouverte_territoriale import lancer_recherche
         try:
-            return poursuivre_inventaire(
+            lancer_recherche(
                 manager.data_dir, owner_historique(request), identifiant)
-        except (ValueError, RuntimeError) as erreur:
-            raise HTTPException(422, str(erreur)) from None
+            return {"id": identifiant, "recherche_lancee": True}
+        except ValueError as erreur:
+            raise HTTPException(409, str(erreur)) from None
+
+    @app.post("/api/decouverte-territoriale/{identifiant}/arreter")
+    def arreter_decouverte_territoriale(identifiant: str, request: Request):
+        exiger_ticket(request)
+        from collecte.decouverte_territoriale import (
+            charger, arreter_recherche)
+        try:
+            charger(manager.data_dir, owner_historique(request), identifiant)
+        except ValueError as erreur:
+            raise HTTPException(404, str(erreur)) from None
+        return {"arret_demande": arreter_recherche(identifiant)}
 
     @app.get("/api/decouverte-territoriale/{identifiant}/comptes.csv")
     def exporter_decouverte_territoriale(identifiant: str, request: Request):
@@ -4178,6 +4191,20 @@ def create_app(manager=None):
             exporter_csv(inventaire), media_type="text/csv; charset=utf-8",
             headers=entete_telechargement(nom_fichier_telechargement(
                 inventaire["ville"], "comptes_territoire", "csv")))
+
+    @app.get("/api/decouverte-territoriale/{identifiant}/comptes.txt")
+    def exporter_decouverte_territoriale_txt(identifiant: str, request: Request):
+        owner(request)
+        from collecte.decouverte_territoriale import charger, exporter_txt
+        try:
+            inventaire = charger(
+                manager.data_dir, owner_historique(request), identifiant)
+        except ValueError as erreur:
+            raise HTTPException(404, str(erreur)) from None
+        return Response(
+            exporter_txt(inventaire), media_type="text/plain; charset=utf-8",
+            headers=entete_telechargement(nom_fichier_telechargement(
+                inventaire["ville"], "comptes_territoire", "txt")))
 
     @app.get("/api/annotation-csv")
     def liste_annotations_csv(request: Request):
