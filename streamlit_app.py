@@ -302,6 +302,13 @@ from collecte.profils_medias import (
 for variable in VARIABLES_PROFILS_MEDIAS:
     st.session_state.setdefault("profil_media_" + variable + "_brut", True)
     st.session_state.setdefault("profil_media_" + variable + "_classe", True)
+    # Une session Streamlit déjà ouverte doit également afficher les nouvelles
+    # cases CSV cochées par défaut, sans effacer les anciens choix explicites.
+    for destination in ("txt", "csv"):
+        for type_ in ("brut", "classe"):
+            st.session_state.setdefault(
+                "profil_media_" + variable + "_" + destination + "_" + type_,
+                True)
 st.session_state.setdefault("collecter_follower_count", True)
 st.session_state.setdefault("txt_collecter_follower_count", True)
 st.session_state.setdefault("txt_categorie_compte", True)
