@@ -1136,6 +1136,13 @@ with onglet_collecte:
                     "la pagination. Vous pourrez ensuite poursuivre dans le même "
                     "corpus, sans relancer les pages déjà traitées si le curseur "
                     "TikTok reste valide."
+                    + (
+                        " Les publications publiques des comptes sélectionnés sont "
+                        "parcourues en priorité. Les hashtags saisis sont appliqués "
+                        "aux légendes après découverte. La couverture du profil "
+                        "peut être incomplète."
+                        if source == "comptes" else ""
+                    )
                 )
         else:
             st.number_input(
@@ -1166,7 +1173,7 @@ with onglet_collecte:
                     f"(jusqu'à {st.session_state.get('limit',50)*nombre_medias} vidéos au total, "
                     "si elles sont accessibles)."
                 )
-        if source == "comptes":
+        if source == "comptes" and moteur_formulaire != "research":
             st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
         st.checkbox("Filtre français", key="french_only", disabled=occupe,
             help="Écarte uniquement les légendes identifiées avec une forte confiance "
