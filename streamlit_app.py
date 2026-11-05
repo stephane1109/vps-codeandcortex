@@ -919,8 +919,9 @@ with onglet_collecte:
             st.caption(resume_presse)
     elif source == "comptes":
         st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
-        st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés.")
-        st.caption("Jusqu’à 10 profils, séparés par des virgules ou des espaces. Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+        st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
+                   "Jusqu’à 10 profils, séparés par des virgules ou des espaces. "
+                   "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
     # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
     moteur_formulaire = st.session_state.get(
         {"presse": "presse_moteur", "comptes": "profil_moteur",
