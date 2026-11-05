@@ -109,6 +109,40 @@ def hashtags_publication(video):
     return trouves
 
 
+def preuve_localisation_video(video, termes, mode_territoire="texte",
+                             region_code=None, nom_territoire=""):
+    """Décrire le critère territorial effectivement observé dans la vidéo.
+
+    Le Place ID est seulement une référence de recherche, pas une preuve
+    de localisation de la publication. Region Code concerne le pays du compte.
+    """
+    if not isinstance(video, dict):
+        return {}
+    if mode_territoire == "region_code":
+        code = str(video.get("region_code") or "").strip().upper()
+        if not code or code != region_code:
+            return {}
+        return {
+            "localisation": code,
+            "source_localisation": "region_code_pays_du_compte",
+        }
+    if mode_territoire not in ("texte", "place_reference"):
+        return {}
+    nom = str(nom_territoire or "").strip()
+    if not nom or not termes:
+        return {}
+    tags = hashtags_publication(video)
+    if set(termes) & tags:
+        source = "hashtag_territorial"
+    elif correspond_territoire(video, termes):
+        source = "mention_dans_description"
+    else:
+        return {}
+    if mode_territoire == "place_reference":
+        source += "_place_id_non_verifie"
+    return {"localisation": nom, "source_localisation": source}
+
+
 def hashtags_correspondants(video, hashtags, operateur="OR"):
     """Retourner les hashtags demandés réellement présents dans la vidéo.
 
@@ -513,11 +547,10 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                     continue
                 # Une vidéo doit satisfaire les DEUX dimensions.
                 mode = inventaire.get("mode_territoire", "texte")
-                localisation_valide = (
-                    str(video.get("region_code") or "").upper()
-                    == inventaire.get("region_code")
-                    if mode == "region_code"
-                    else correspond_territoire(video, inventaire["hashtags"]))
+                preuve_territoriale = preuve_localisation_video(
+                    video, inventaire["hashtags"], mode,
+                    inventaire.get("region_code"), inventaire["ville"])
+                localisation_valide = bool(preuve_territoriale)
                 tags_demandes = inventaire.get("hashtags_croises", [])
                 tags_valides = hashtags_correspondants(
                     video, tags_demandes, inventaire.get("operateur", "OR"))
@@ -569,6 +602,9 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                             "hashtags_video": sorted(hashtags_publication(video)),
                             "description_video": str(
                                 video.get("video_description") or "")[:1500],
+                            "localisation": preuve_territoriale["localisation"],
+                            "source_localisation": (
+                                preuve_territoriale["source_localisation"]),
                         }
             inventaire["pages"] += 1
             pages_traitees += 1
@@ -623,7 +659,8 @@ def exporter_csv(inventaire):
     if avec_reference:
         entetes += ["place_id_reference", "statut_localisation"]
     entetes += [
-        "url_video_preuve", "hashtags_correspondants_preuve",
+        "url_video_preuve", "localisation_video_preuve",
+        "source_localisation_preuve", "hashtags_correspondants_preuve",
         "hashtags_video_preuve", "description_video_preuve", "statut_preuve"]
     writer.writerow(entetes)
     for compte in presenter(inventaire)["comptes"]:
@@ -641,6 +678,8 @@ def exporter_csv(inventaire):
             description = "'" + description
         valeurs += [
             preuve.get("url_video", ""),
+            preuve.get("localisation", ""),
+            preuve.get("source_localisation", ""),
             ", ".join(preuve.get("hashtags_correspondants", [])),
             ", ".join(preuve.get("hashtags_video", [])),
             description,
