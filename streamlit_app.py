@@ -1344,22 +1344,35 @@ with onglet_collecte:
             "restent dans engagement.csv et publications.csv. "
             "Valeur manquante : classe « indéterminé » (jamais zéro)."
         )
-        # Une grille continue supprime les espaces entre les lignes de variables.
-        # Les deux cases d'une même mesure occupent systématiquement la même ligne.
+        # Les variables TXT forment une liste compacte, sans ligne vide entre
+        # les cases à cocher. Les intitulés, les clés et les options sont conservés.
         with st.container(key="bloc_variables_txt"):
             st.html("""
             <style>
+            /* Réduire uniquement les espacements du bloc des variables TXT. */
             .st-key-bloc_variables_txt [data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 row-gap: 0 !important;
             }
             .st-key-bloc_variables_txt [data-testid="stHorizontalBlock"] {
-                gap: 0.65rem !important;
+                gap: 0.5rem !important;
+                row-gap: 0 !important;
                 align-items: flex-start !important;
             }
+            .st-key-bloc_variables_txt [data-testid="stElementContainer"],
             .st-key-bloc_variables_txt [data-testid="stCheckbox"] {
-                margin-top: 0 !important;
-                margin-bottom: 0 !important;
+                margin-block: 0 !important;
+                padding-block: 0 !important;
+                min-height: 0 !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"] label {
+                margin-block: 0 !important;
+                padding-block: 0 !important;
+                min-height: 0 !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"] p {
+                margin-block: 0 !important;
+                line-height: 1.25 !important;
             }
             </style>
             """)
@@ -1469,12 +1482,13 @@ with onglet_collecte:
                          "La valeur exacte reste dans engagement.csv et publications.csv ; les "
                          "données absentes sont codées « indéterminé ».")
 
-        # Cette option collecte les textes des commentaires ; elle est distincte
-        # de la variable numérique « Nombre de commentaires » du TXT.
-        st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
-            help="Récupère les commentaires dans commentaires.csv. "
-                 "L'ajout des textes au TXT est une option indépendante. "
-                 "La variable numérique « Nombre de commentaires » reste disponible.")
+            # Cette option collecte les textes des commentaires ; elle est distincte
+            # de la variable numérique « Nombre de commentaires » du TXT.
+            # La placer dans le même conteneur supprime le saut visuel final.
+            st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
+                help="Récupère les commentaires dans commentaires.csv. "
+                     "L'ajout des textes au TXT est une option indépendante. "
+                     "La variable numérique « Nombre de commentaires » reste disponible.")
         with st.expander("Options des commentaires", expanded=bool(
                 st.session_state.get("collecter_commentaires", False))):
             def respecter_choix_commentaires():
