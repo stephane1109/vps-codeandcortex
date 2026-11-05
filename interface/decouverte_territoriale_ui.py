@@ -79,10 +79,12 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
             key="territoire_recherche_debut", disabled=occupe)
     # Identifier une collecte existante avant de proposer une création.
     try:
-        existantes = api("/api/decouverte-territoriale").get("inventaires", [])
+        etat_serveur = api("/api/decouverte-territoriale")
     except RuntimeError as erreur:
         st.warning("État des collectes indisponible : " + str(erreur))
         return
+    existantes = etat_serveur.get("inventaires", [])
+    serveur_occupe = bool(etat_serveur.get("serveur_occupe"))
     actives = [
         entree for entree in existantes
         if entree.get("etat") == "en_cours"]
@@ -91,11 +93,16 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
             "Une collecte de comptes est en cours : "
             + ", ".join(entree["ville"] for entree in actives)
             + ". Arrêtez-la avant de démarrer une autre collecte.")
+    elif serveur_occupe:
+        st.warning(
+            "Une collecte de comptes est active dans une autre session. "
+            "Elle ne peut pas être arrêtée depuis cet historique privé. "
+            "Attendez sa fin ou revenez à la session qui l'a démarrée.")
 
     if st.button(
         "Collecte de compte",
         key="territoire_creer",
-        disabled=occupe or bool(actives), type="primary"):
+        disabled=occupe or serveur_occupe, type="primary"):
         cle = str(st.session_state.get("research_client_key") or "").strip()
         secret = str(st.session_state.get("research_client_secret") or "").strip()
         try:
@@ -256,7 +263,7 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
             else "Démarrer cette collecte enregistrée")
         if st.button(
             libelle_reprise, key="territoire_poursuivre",
-            disabled=occupe or bool(actives), type="secondary"):
+            disabled=occupe or serveur_occupe, type="secondary"):
             cle = str(st.session_state.get("research_client_key") or "").strip()
             secret = str(st.session_state.get("research_client_secret") or "").strip()
             try:
