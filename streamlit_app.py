@@ -1466,11 +1466,11 @@ with onglet_collecte:
                 aide="Valeur exacte de follower_count. La récupérer n'ajoute "
                      "pas une seconde fois la même variable dans le TXT.")
             ligne_variable(
-                "Abonnés : recoder la variable continue en variable catégorielle "
-                "(0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
-                "100 000–999 999 ; ≥1 000 000)",
+                "Abonnés : classe",
                 "abonnes_classe_illustratif", "csv_abonnes_classe",
-                seulement_research=True)
+                seulement_research=True,
+                aide="Codage : 0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
+                     "100 000–999 999 ; ≥1 000 000.")
             ligne_variable("ID vidéo", "txt_id", "csv_id")
             if source == "comptes":
                 ligne_variable(
@@ -1479,12 +1479,12 @@ with onglet_collecte:
                     aide="Variable de sélection du corpus, non résidence "
                          "du compte ou localisation vérifiée de la vidéo.")
             ligne_variable(
-                "Catégorie du compte : *presse_nationale, *presse_regio_dpt, "
-                "*presse_indep ou *presse_autre",
+                "Catégorie du compte (inventaire des médias)",
                 "txt_categorie_compte", "csv_categorie_compte",
-                aide="La catégorie est ajoutée uniquement si le compte "
-                     "figure dans l'inventaire des médias. CSV produit "
-                     "les quatre colonnes indicatrices correspondantes.")
+                aide="Modalités TXT : *presse_nationale, *presse_regio_dpt, "
+                     "*presse_indep, *presse_autre. CSV : quatre colonnes "
+                     "indicatrices. La catégorie est ajoutée uniquement "
+                     "lorsque le compte appartient à l'inventaire.")
             ligne_variable(
                 "Region Code (pays d'enregistrement du compte)",
                 "txt_region_code", "csv_region_code",
@@ -1507,19 +1507,19 @@ with onglet_collecte:
                     libelle + " : valeur numérique réelle",
                     "txt_" + nom, "csv_" + nom)
                 ligne_variable(
-                    libelle + " : recoder la variable continue en variable "
-                    "catégorielle (codage proposé : " + intervalles + ")",
+                    libelle + " : classe",
                     "txt_classe_" + nom, "csv_" + nom + "_classe",
-                    aide="La classe est indépendante de la valeur numérique. "
+                    aide="Recodage catégoriel : " + intervalles + ". "
+                         "La classe est indépendante de la valeur numérique. "
                          "Une donnée absente reste indéterminée.")
             ligne_variable(
                 "Taux d'engagement : valeur numérique réelle",
                 "txt_taux_engagement_brut", "csv_taux_engagement",
                 aide="(Likes + commentaires + partages + favoris) / vues × 100.")
             ligne_variable(
-                "Taux d'engagement : classe (< 1 % ; 1–3 % ; "
-                "3–5 % ; 5–10 % ; ≥ 10 %)",
-                "txt_taux_engagement_classe", "csv_classe_taux_engagement")
+                "Taux d'engagement : classe",
+                "txt_taux_engagement_classe", "csv_classe_taux_engagement",
+                aide="Codage : < 1 % ; 1–3 % ; 3–5 % ; 5–10 % ; ≥ 10 %.")
             # La collecte des textes est une action distincte des compteurs.
             st.checkbox(
                 "Collecter les textes des commentaires",
