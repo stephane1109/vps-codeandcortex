@@ -132,7 +132,7 @@ if "initialise" not in st.session_state:
     ancienne = ancienne or {}
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
-        "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
+        "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","OR"),
         "operator_comptes": (
             ancienne.get("operator", "OR")
             if ancienne.get("source_collecte") == "comptes" else "OR"),
@@ -298,9 +298,9 @@ for variable in VARIABLES_TXT:
 # Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
 # rester lançable sans ce widget.
-st.session_state.setdefault("operator", "AND")
-# Les comptes importés héritent d'une logique OU par défaut, comme
-# l'inventaire de découverte territoriale, sans modifier le mode Hashtags.
+st.session_state.setdefault("operator", "OR")
+# Les collectes par hashtags et par comptes sont en OU par défaut,
+# conformément à la découverte territoriale. ET reste un choix explicite.
 st.session_state.setdefault("operator_comptes", "OR")
 st.session_state.setdefault("rechercher_dans_texte", False)
 st.session_state.setdefault("variantes_accents", False)
@@ -805,7 +805,7 @@ with onglet_collecte:
                     + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags_presse)
                        if liste_hashtags_presse else "Saisissez au moins un hashtag."))
             st.radio(
-                "Combiner les hashtags de presse", ["AND", "OR"],
+                "Combiner les hashtags de presse", ["OR", "AND"],
                 format_func=lambda valeur: (
                     "ET — tous les hashtags" if valeur == "AND"
                     else "OU — au moins un hashtag"),
@@ -1133,7 +1133,7 @@ with onglet_collecte:
                     )
             if not (source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags")):
                 st.radio(
-                    "Combiner les hashtags", ["AND", "OR"],
+                    "Combiner les hashtags", ["OR", "AND"],
                     format_func=lambda valeur: (
                         "ET — tous les hashtags" if valeur == "AND"
                         else "OU — au moins un hashtag"),
@@ -1634,7 +1634,7 @@ with onglet_collecte:
                                st.session_state.get("utiliser_groupes_hashtags")))
                     else st.session_state.get("operator_comptes", "OR")
                     if source == "comptes"
-                    else st.session_state.get("operator", "AND"))
+                    else st.session_state.get("operator", "OR"))
                 valeurs["groupes_hashtags"] = (groupes_hashtags if source == "hashtags"
                     and st.session_state.get("utiliser_groupes_hashtags") else [])
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
