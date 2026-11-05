@@ -97,7 +97,8 @@ class ReprendreDecouverteTerritorialePayload(BaseModel):
 class CreerDecouverteTerritorialePayload(BaseModel):
     """Paramètres d'un inventaire territorial, sans secrets."""
     ville: str = Field(min_length=2, max_length=80)
-    variantes: list[str] = Field(default_factory=list, max_length=7)
+    variantes: list[str] = Field(default_factory=list, max_length=10)
+    operateur: Literal["OR", "AND"] = "OR"
     date_debut: str = Field(min_length=10, max_length=10)
     date_fin: str = Field(min_length=10, max_length=10)
 
@@ -4143,7 +4144,8 @@ def create_app(manager=None):
             return creer_inventaire(
                 manager.data_dir, owner_historique(request),
                 payload.ville, payload.variantes,
-                payload.date_debut, payload.date_fin)
+                payload.date_debut, payload.date_fin,
+                operateur=payload.operateur)
         except ValueError as erreur:
             raise HTTPException(422, str(erreur)) from None
 
