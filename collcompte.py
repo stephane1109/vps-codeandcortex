@@ -368,6 +368,11 @@ def afficher_collecte_de_compte(api, *, telecharger, occupe=False):
             key="territoire_envoyer_profils", disabled=occupe):
             # Transférer toute la sélection, sans découpage manuel en lots.
             st.session_state["comptes_territoire_en_attente"] = ", ".join(selection)
+            # Préremplir la variable du corpus seulement pour une recherche
+            # textuelle de ville : FR (region_code) ne désigne aucune ville.
+            st.session_state["ville_etude_en_attente"] = (
+                inventaire.get("ville", "")
+                if inventaire.get("mode_territoire") != "region_code" else "")
             st.session_state["territoire_transfert_nombre"] = len(selection)
             # La radio du mode source est configurée au prochain rendu.
             st.session_state["source_selection_en_attente"] = "comptes"
