@@ -10,7 +10,10 @@ def construire_legendes(publications, variables=None):
         if not publication.get("retenue", True):
             continue
         code = code_presse_publication(publication)
-        illustratives = {code: True} if code else {}
+        illustratives = (
+            {code: True}
+            if code and publication.get("inclure_categorie_compte_txt", True)
+            else {})
         documents.append({
             "id": publication["id"],
             "texte": publication.get("description", ""),
@@ -19,7 +22,9 @@ def construire_legendes(publications, variables=None):
                 "media": publication.get("media_id"),
                 "categorie": publication.get("categorie_media"),
                 **({"ville": publication["ville_etude"]}
-                   if publication.get("ville_etude") else {}),
+                   if (publication.get("ville_etude")
+                       and publication.get("inclure_ville_etude_txt", True))
+                   else {}),
                 **variables.get(publication["id"], {}),
                 **illustratives,
             },
