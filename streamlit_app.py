@@ -3752,15 +3752,43 @@ with onglet_sociometrie:
                         "identifiable à partir d'une page visible. Aucun réseau "
                         "d'auteurs ne peut être établi à partir de ces données.")
                 if graphe_csv["liens"]:
-                    visualisation_csv = apercu(graphe_csv)
-                    st.graphviz_chart(
-                        construire_dot(visualisation_csv),
-                        use_container_width=True)
+                    moteur_graphique_csv = st.radio(
+                        "Visualisation du réseau",
+                        ["PyVis (interactif)", "Graphviz (statique)"],
+                        key="sociometrie_csv_visualisation",
+                        horizontal=True,
+                    )
+                    if moteur_graphique_csv == "PyVis (interactif)":
+                        visualisation_csv = apercu(
+                            graphe_csv, max_noeuds=300, max_liens=600)
+                        try:
+                            from analyse_sociometrique.visualisation_pyvis import (
+                                html_reseau_pyvis)
+                            components.html(
+                                html_reseau_pyvis(visualisation_csv),
+                                height=640, scrolling=False)
+                        except (ImportError, ValueError, RuntimeError) as erreur:
+                            st.warning(
+                                "PyVis indisponible : affichage Graphviz. "
+                                + str(erreur))
+                            visualisation_csv = apercu(graphe_csv)
+                            st.graphviz_chart(
+                                construire_dot(visualisation_csv),
+                                use_container_width=True)
+                        st.caption(
+                            "PyVis : déplacez les nœuds, zoomez et survolez-les "
+                            "pour afficher leurs propriétés. Les auteurs "
+                            "identifiables restent pseudonymisés.")
+                    else:
+                        visualisation_csv = apercu(graphe_csv)
+                        st.graphviz_chart(
+                            construire_dot(visualisation_csv),
+                            use_container_width=True)
                     if visualisation_csv["partiel"]:
                         st.caption(
-                            "Aperçu limité à 75 nœuds et 150 liens. "
-                            "Les téléchargements contiennent le réseau complet.")
-                    with st.expander("Détail des liens"):
+                            "Aperçu partiel : tous les nœuds et liens restent "
+                            "disponibles dans les exports.")
+                    with st.expander("Détail des liens affichés"):
                         st.dataframe(
                             visualisation_csv["liens"], hide_index=True,
                             use_container_width=True)
@@ -3851,13 +3879,58 @@ with onglet_sociometrie:
                 for message in res_reseau["diagnostics"]:
                     st.warning(message)
                 if stats["liens"]:
-                    st.graphviz_chart(res_reseau["dot"], use_container_width=True)
-                    if res_reseau["apercu_partiel"]:
-                        st.caption("Visualisation limitée à 75 nœuds et 150 liens ; "
-                                   "les exports conservent tous les liens calculés.")
+                    moteur_graphique = st.radio(
+                        "Visualisation du réseau",
+                        ["PyVis (interactif)", "Graphviz (statique)"],
+                        key="sociometrie_collecte_visualisation",
+                        horizontal=True,
+                    )
+                    if moteur_graphique == "PyVis (interactif)":
+                        visualisation_collecte = res_reseau.get("apercu_pyvis")
+                        if visualisation_collecte:
+                            try:
+                                from analyse_sociometrique.visualisation_pyvis import (
+                                    html_reseau_pyvis)
+                                components.html(
+                                    html_reseau_pyvis(visualisation_collecte),
+                                    height=640, scrolling=False)
+                            except (ImportError, ValueError, RuntimeError) as erreur:
+                                st.warning(
+                                    "PyVis indisponible : affichage Graphviz. "
+                                    + str(erreur))
+                                st.graphviz_chart(
+                                    res_reseau["dot"], use_container_width=True)
+                        else:
+                            st.info(
+                                "Aperçu PyVis indisponible pour cette version "
+                                "du serveur : visualisation Graphviz conservée.")
+                            st.graphviz_chart(
+                                res_reseau["dot"], use_container_width=True)
+                        st.caption(
+                            "PyVis : déplacez les nœuds, zoomez et survolez-les "
+                            "pour afficher leurs propriétés. Les auteurs "
+                            "identifiables restent pseudonymisés.")
+                        apercu_partiel = (
+                            visualisation_collecte.get("partiel", False)
+                            if visualisation_collecte
+                            else res_reseau["apercu_partiel"])
+                        liens_affiches = (
+                            visualisation_collecte["liens"]
+                            if visualisation_collecte
+                            else res_reseau["apercu_liens"])
+                    else:
+                        st.graphviz_chart(
+                            res_reseau["dot"], use_container_width=True)
+                        apercu_partiel = res_reseau["apercu_partiel"]
+                        liens_affiches = res_reseau["apercu_liens"]
+                    if apercu_partiel:
+                        st.caption(
+                            "Aperçu partiel : tous les nœuds et liens restent "
+                            "disponibles dans les exports.")
                     with st.expander("Détail des liens affichés"):
-                        st.dataframe(res_reseau["apercu_liens"], hide_index=True,
-                                     use_container_width=True)
+                        st.dataframe(
+                            liens_affiches, hide_index=True,
+                            use_container_width=True)
                 elif not stats["commentaires_exploitables"]:
                     st.info("Aucun commentaire exploitable pour cette collecte.")
                 else:
