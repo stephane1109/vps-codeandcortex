@@ -758,13 +758,21 @@ def normaliser_commentaire_research(donnee, publication_id, *, identifiant_paren
         if parent is not None and parent != str(identifiant_parent):
             return None
         parent = str(identifiant_parent)
+    # TikTok ne propose pas de username stable dans l'endpoint Comments.
+    # Le display_name peut apparaître dans certaines réponses officielles,
+    # sans être un identifiant unique ni un champ demandable à coup sûr.
+    # Conserver ce nom d'affichage séparément, sans fabriquer un auteur.
+    nom_affiche = donnee.get("display_name")
+    if not isinstance(nom_affiche, str):
+        nom_affiche = ""
+    nom_affiche = nom_affiche.strip()
     brut = {cle: donnee[cle] for cle in (
         "id", "video_id", "text", "like_count", "reply_count",
-        "parent_comment_id", "create_time") if cle in donnee}
+        "parent_comment_id", "create_time", "display_name") if cle in donnee}
     return {
         "id": identifiant, "publication_id": str(publication_id),
         "parent_id": parent, "est_reponse": bool(parent),
-        "auteur": None, "texte": texte.strip(),
+        "auteur": None, "nom_affiche": nom_affiche, "texte": texte.strip(),
         "date_brute": _entier_non_negatif(donnee.get("create_time")),
         "observe_le": datetime.now(timezone.utc).isoformat(),
         "likes": convertir_compteur(_entier_non_negatif(donnee.get("like_count"))),
