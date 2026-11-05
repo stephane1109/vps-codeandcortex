@@ -11,18 +11,35 @@ import streamlit as st
 def afficher_decouverte_territoriale(api, *, occupe=False):
     """Créer, poursuivre et consulter un inventaire de comptes par territoire."""
     st.caption(
-        "Croisez la ville avec un ou plusieurs hashtags thématiques. "
-        "Exemple : Toulouse ET (#manifestation OU #lyceen). "
-        "Le territoire est recherché dans la description des vidéos et "
-        "ne démontre pas la résidence de leur auteur. "
-        "Les @comptes restent dédupliqués et exportables.")
+        "Croisez un pays d'enregistrement TikTok (region_code, par exemple FR) "
+        "avec vos hashtags pour identifier les @comptes des vidéos correspondantes. "
+        "Le mode Ville cherche plutôt une mention textuelle. "
+        "region_code ne permet pas de filtrer Toulouse ou un département.")
+    mode_territoire = st.radio(
+        "Mode de recherche territoriale",
+        ["region_code", "texte"],
+        format_func=lambda mode: (
+            "Pays d'enregistrement (Region Code)"
+            if mode == "region_code" else "Ville mentionnée dans les vidéos"),
+        horizontal=True, key="territoire_mode_recherche", disabled=occupe)
     c1, c2 = st.columns(2)
     with c1:
-        ville = st.text_input(
-            "Territoire (ville)", value="Toulouse",
-            key="territoire_recherche_ville", disabled=occupe)
+        if mode_territoire == "region_code":
+            code_region = st.text_input(
+                "Region Code — pays (ISO à deux lettres)",
+                value="FR", max_chars=2,
+                key="territoire_recherche_region_code",
+                help="FR = comptes enregistrés en France. "
+                     "Ce code ne renseigne pas la ville.",
+                disabled=occupe)
+            ville = ""
+        else:
+            ville = st.text_input(
+                "Ville mentionnée", value="Toulouse",
+                key="territoire_recherche_ville", disabled=occupe)
+            code_region = None
         variantes = st.text_input(
-            "Hashtags à croiser avec la ville",
+            "Hashtags à croiser avec le territoire",
             value="manifestation, lyceen",
             key="territoire_recherche_hashtags_croises", disabled=occupe,
             help="Un ou plusieurs hashtags séparés par des virgules, "
@@ -50,6 +67,8 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
                 "variantes": [
                     v.strip() for v in variantes.split(",") if v.strip()],
                 "operateur": operateur,
+                "mode_territoire": mode_territoire,
+                "region_code": code_region.strip().upper() if code_region else None,
                 "date_debut": date_debut.isoformat(),
                 "date_fin": date_fin.isoformat(),
             })
@@ -86,8 +105,12 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
     tags = inventaire.get("hashtags_croises", [])
     if tags:
         liaison = " ET " if inventaire.get("operateur") == "AND" else " OU "
+        territoire = (
+            f"region_code = {inventaire.get('region_code')}"
+            if inventaire.get("mode_territoire") == "region_code"
+            else f"mention textuelle : {inventaire['ville']}")
         st.caption(
-            f"Recherche : {inventaire['ville']} ET "
+            f"Recherche : {territoire} ET "
             f"({liaison.join('#' + h for h in tags)}). "
             f"Période : {inventaire['date_debut']} au {inventaire['date_fin']}.")
     else:
@@ -99,7 +122,7 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
     statistiques[0].metric("Comptes distincts", inventaire["nombre_comptes"])
     statistiques[1].metric("Vidéos examinées", inventaire["candidats"])
     statistiques[2].metric("Pages API", inventaire["pages"])
-    statistiques[3].metric("Vidéos sans mention territoriale", inventaire.get("videos_ecartees", 0))
+    statistiques[3].metric("Vidéos écartées par les critères", inventaire.get("videos_ecartees", 0))
     if inventaire.get("relances_serveur", 0):
         st.caption(
             "Incidents TikTok HTTP 5xx : "
