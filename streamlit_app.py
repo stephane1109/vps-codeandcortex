@@ -4012,6 +4012,165 @@ with onglet_sociometrie:
                     "les identifiants des commentaires et de leurs parents.")
         else:
             st.info("Importez et vérifiez les CSV pour construire les réseaux.")
+    elif mode_alimentation == "engagement":
+        st.subheader("Réseau de similarité de l'engagement des vidéos")
+        st.caption(
+            "Importer engagement.csv, publications.csv ou un fichier de métriques "
+            "équivalent. Chaque nœud est une vidéo. Deux vidéos sont reliées "
+            "lorsque leurs profils de vues, likes, commentaires et partages "
+            "sont suffisamment proches. Ce réseau ne décrit pas les relations "
+            "sociales ni les personnes qui ont interagi avec les vidéos.")
+        fichiers_mesures = st.file_uploader(
+            "Fichiers engagement.csv ou publications.csv",
+            type=["csv"], accept_multiple_files=True,
+            key="sociometrie_engagement_csv")
+        if st.button(
+                "Importer les métriques vidéo", type="primary",
+                key="sociometrie_engagement_importer"):
+            from analyse_sociometrique.similarite_engagement import (
+                importer_engagement)
+            try:
+                if not fichiers_mesures:
+                    raise ValueError("Sélectionnez au moins un CSV de métriques.")
+                if len(fichiers_mesures) > 20:
+                    raise ValueError("20 fichiers CSV au maximum.")
+                donnees_mesures = importer_engagement([
+                    (fichier.name, fichier.getvalue())
+                    for fichier in fichiers_mesures
+                ])
+            except (ValueError, UnicodeError, csv.Error) as erreur:
+                st.error("Import des métriques impossible : " + str(erreur))
+            else:
+                st.session_state["sociometrie_engagement_donnees"] = donnees_mesures
+                st.success(
+                    f"{len(donnees_mesures['videos'])} vidéo(s) distincte(s) importée(s).")
+        donnees_mesures = st.session_state.get(
+            "sociometrie_engagement_donnees")
+        if donnees_mesures:
+            for message in donnees_mesures["diagnostics"]:
+                st.warning(message)
+            choix_mesures = {
+                "vues": "View Count — vues",
+                "likes": "Like Count — likes",
+                "commentaires": "Comment Count — commentaires",
+                "partages": "Share Count — partages",
+            }
+            selection_mesures = st.multiselect(
+                "Métriques utilisées pour calculer la similarité",
+                options=list(choix_mesures),
+                default=list(choix_mesures),
+                format_func=lambda valeur: choix_mesures[valeur],
+                key="sociometrie_engagement_variables")
+            seuil_mesures = st.slider(
+                "Seuil minimal de similarité entre vidéos",
+                min_value=0.50, max_value=0.99, value=0.75, step=0.01,
+                key="sociometrie_engagement_seuil",
+                help="Un seuil plus élevé conserve uniquement les vidéos "
+                     "aux profils statistiques les plus proches.")
+            voisins_mesures = st.slider(
+                "Nombre maximal de voisins les plus proches par vidéo",
+                min_value=1, max_value=20, value=5, step=1,
+                key="sociometrie_engagement_voisins")
+            limite_mesures = st.slider(
+                "Nombre maximal de vidéos à comparer",
+                min_value=50, max_value=1000, value=500, step=50,
+                key="sociometrie_engagement_limite",
+                help="Calcul limité aux premières vidéos exploitables du CSV "
+                     "pour maîtriser le coût des comparaisons deux à deux. "
+                     "Un éventuel échantillon partiel sera signalé.")
+            st.caption(
+                "Méthode : log(1 + compteur), puis centrage-réduction "
+                "de chaque variable. Similarité = 1 / (1 + distance euclidienne "
+                "quadratique moyenne). Les valeurs manquantes ne sont pas "
+                "remplacées par zéro. Les quatre indicateurs représentent "
+                "des volumes de réactions, sans identification des utilisateurs.")
+            from analyse_sociometrique.similarite_engagement import (
+                construire_reseau_engagement)
+            from analyse_sociometrique.reseaux import (
+                apercu, construire_dot, exporter)
+            try:
+                reseau_mesures = construire_reseau_engagement(
+                    donnees_mesures, selection_mesures, seuil=seuil_mesures,
+                    voisins=voisins_mesures, limite=limite_mesures)
+            except ValueError as erreur:
+                st.warning("Réseau non calculable : " + str(erreur))
+            else:
+                metriques_reseau = reseau_mesures["statistiques"]
+                indicateurs = st.columns(4)
+                indicateurs[0].metric(
+                    "Vidéos importées", metriques_reseau["videos_importees"])
+                indicateurs[1].metric(
+                    "Vidéos analysées", metriques_reseau["videos_analysees"])
+                indicateurs[2].metric(
+                    "Liens de similarité", metriques_reseau["liens"])
+                indicateurs[3].metric(
+                    "Variables utilisées",
+                    len(metriques_reseau["metriques_actives"]))
+                for message in reseau_mesures["diagnostics"]:
+                    st.caption(message)
+                if reseau_mesures["liens"]:
+                    choix_affichage_mesures = st.radio(
+                        "Visualisation du réseau d'engagement",
+                        ["PyVis (interactif)", "Graphviz (statique)"],
+                        horizontal=True,
+                        key="sociometrie_engagement_visualisation")
+                    graphe_affiche = apercu(
+                        reseau_mesures, max_noeuds=300, max_liens=600)
+                    if choix_affichage_mesures == "PyVis (interactif)":
+                        try:
+                            from analyse_sociometrique.visualisation_pyvis import (
+                                html_reseau_pyvis)
+                            components.html(
+                                html_reseau_pyvis(graphe_affiche),
+                                height=640, scrolling=False)
+                        except (ImportError, ValueError, RuntimeError) as erreur:
+                            st.warning(
+                                "PyVis indisponible : Graphviz utilisé. "
+                                + str(erreur))
+                            st.graphviz_chart(
+                                construire_dot(graphe_affiche),
+                                use_container_width=True)
+                    else:
+                        st.graphviz_chart(
+                            construire_dot(graphe_affiche),
+                            use_container_width=True)
+                    if graphe_affiche["partiel"]:
+                        st.caption(
+                            "Aperçu limité à 300 nœuds et 600 liens ; "
+                            "les exports conservent le réseau calculé complet.")
+                    with st.expander("Liens de similarité affichés"):
+                        st.dataframe(
+                            graphe_affiche["liens"], hide_index=True,
+                            use_container_width=True)
+                else:
+                    st.info(
+                        "Aucune paire de vidéos n'atteint le seuil choisi. "
+                        "Réduisez le seuil ou sélectionnez d'autres métriques.")
+                st.subheader("Exporter le réseau de similarité")
+                for nom, libelle, mime in (
+                    ("noeuds.csv", "Nœuds CSV", "text/csv"),
+                    ("liens.csv", "Liens CSV", "text/csv"),
+                    ("graphml", "GraphML", "application/xml"),
+                    ("gexf", "GEXF", "application/xml"),
+                ):
+                    st.download_button(
+                        libelle, exporter(reseau_mesures, nom),
+                        file_name="similarite_engagement_" + nom,
+                        mime=mime,
+                        key="sociometrie_engagement_export_" + nom)
+                if len(reseau_mesures["noeuds"]) <= 250:
+                    st.download_button(
+                        "Matrice de similarité CSV",
+                        exporter(reseau_mesures, "matrice.csv"),
+                        file_name="similarite_engagement_matrice.csv",
+                        mime="text/csv",
+                        key="sociometrie_engagement_matrice")
+                else:
+                    st.caption(
+                        "Matrice limitée à 250 vidéos ; les liens CSV "
+                        "conservent tous les couples calculés.")
+        else:
+            st.info("Importez un CSV de métriques pour construire le réseau.")
     else:
         st.subheader("Analyse sociométrique des commentaires")
         st.caption(
