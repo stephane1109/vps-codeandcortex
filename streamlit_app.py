@@ -56,6 +56,13 @@ def api(chemin, donnees=None):
                       cookie_historique=cookie_historique)
 
 
+def telecharger_api(chemin):
+    """Télécharger un fichier privé avec les mêmes cookies que les requêtes API."""
+    return appeler_api(
+        chemin, session, autorisation, cookie_historique=cookie_historique,
+        contenu_binaire=True)
+
+
 def lancer(chemin, donnees):
     try:
         resultat = api(chemin, donnees)
@@ -943,7 +950,8 @@ with onglet_collecte:
         with onglet_profils_territoire:
             from interface.decouverte_territoriale_ui import (
                 afficher_decouverte_territoriale)
-            afficher_decouverte_territoriale(api, occupe=occupe)
+            afficher_decouverte_territoriale(
+                api, telecharger=telecharger_api, occupe=occupe)
     # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
     moteur_formulaire = st.session_state.get(
         {"presse": "presse_moteur", "comptes": "profil_moteur",
