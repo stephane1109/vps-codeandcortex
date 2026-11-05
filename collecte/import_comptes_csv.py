@@ -108,11 +108,6 @@ def lire_comptes_csv(contenu):
             invalides.append({
                 "ligne": position, "valeur": str(valeur)[:80]})
             continue
-        if compte in deja_vus:
-            doublons += 1
-            continue
-        deja_vus.add(compte)
-        comptes.append(compte)
         if indice_territoire is not None:
             ligne_source = lignes_completes[position - 1]
             territoire = (
@@ -122,6 +117,11 @@ def lire_comptes_csv(contenu):
                 territoires.add(territoire)
             else:
                 lignes_sans_territoire += 1
+        if compte in deja_vus:
+            doublons += 1
+            continue
+        deja_vus.add(compte)
+        comptes.append(compte)
 
     if not comptes:
         raise ValueError("Aucun compte TikTok valide n'a été trouvé dans le CSV.")
