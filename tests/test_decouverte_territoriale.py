@@ -11,6 +11,7 @@ from collecte.decouverte_territoriale import (
     creer_inventaire, charger, exporter_csv, exporter_txt, lister_inventaires,
     poursuivre_inventaire, correspond_territoire, correspond_hashtags,
     requete_territoriale, extraire_reference_lieu,
+    preuve_localisation_video,
     hashtags_publication, hashtags_correspondants,
     lancer_recherche, arreter_recherche, recherche_active,
     recherche_arret_demande, recherche_en_cours,
@@ -245,6 +246,14 @@ class TestDecouverteTerritoriale(unittest.TestCase):
                          "https://www.tiktok.com/@toulouse.media")
         self.assertEqual(export[0]["statut_localisation"],
                          "non_verifiee_recherche_textuelle")
+        self.assertEqual(export[0]["localisation_video_preuve"], "Toulouse")
+        self.assertEqual(export[0]["source_localisation_preuve"],
+                         "mention_dans_description_place_id_non_verifie")
+        self.assertEqual(export[0]["hashtags_correspondants_preuve"],
+                         "manifestation")
+        self.assertEqual(
+            export[0]["url_video_preuve"],
+            "https://www.tiktok.com/@toulouse.media/video/1234567891")
         self.assertEqual(exporter_txt(sauvegarde).decode("utf-8"),
                          "@toulouse.media\n")
 
@@ -313,6 +322,9 @@ class TestDecouverteTerritoriale(unittest.TestCase):
                          "video_conforme_enregistree")
         self.assertEqual(export[0]["hashtags_correspondants_preuve"],
                          "lyceen, manifestation")
+        self.assertEqual(export[0]["localisation_video_preuve"], "Toulouse")
+        self.assertEqual(export[0]["source_localisation_preuve"],
+                         "mention_dans_description")
 
     def test_un_compte_est_retenu_par_une_autre_video_conforme(self):
         """L'activité générale du profil ne remplace jamais la preuve vidéo."""
@@ -344,6 +356,52 @@ class TestDecouverteTerritoriale(unittest.TestCase):
         self.assertEqual(
             resultat["comptes"][0]["video_preuve"]["url_video"],
             "https://www.tiktok.com/@microbalade/video/7702191252325862178")
+        self.assertEqual(
+            resultat["comptes"][0]["video_preuve"]["localisation"], "Toulouse")
+        self.assertEqual(
+            resultat["comptes"][0]["video_preuve"]["source_localisation"],
+            "hashtag_territorial")
+
+    def test_preuve_region_code_nest_pas_un_place_id(self):
+        """Le Region Code du pays ne doit pas être présenté comme une ville."""
+        preuve = preuve_localisation_video(
+            {"region_code": "FR", "hashtag_names": ["manifestation"]},
+            [], "region_code", "FR", "FR")
+        self.assertEqual(preuve, {
+            "localisation": "FR",
+            "source_localisation": "region_code_pays_du_compte",
+        })
+        self.assertFalse(preuve_localisation_video(
+            {"region_code": "US"}, [], "region_code", "FR", "FR"))
+
+    def test_preuve_place_id_par_hashtag_territorial(self):
+        """L'URL Place ne prouve pas la position de la vidéo."""
+        preuve = preuve_localisation_video(
+            {"hashtag_names": ["toulouse", "manifestation"],
+             "video_description": "Une manifestation"},
+            ["toulouse"], "place_reference", None, "Toulouse")
+        self.assertEqual(preuve["localisation"], "Toulouse")
+        self.assertEqual(
+            preuve["source_localisation"],
+            "hashtag_territorial_place_id_non_verifie")
+
+    def test_export_ancien_inventaire_sans_preuve(self):
+        """Un ancien CSV reste exportable sans localisation inventée."""
+        ancien = charger(
+            self.racine, PROPRIETAIRE, self.inventaire["id"])
+        ancien["comptes"] = {"compte": {
+            "username": "@compte",
+            "videos_trouvees": 1,
+            "identifiants_videos": ["1234567890"],
+        }}
+        lignes = list(csv.DictReader(
+            io.StringIO(exporter_csv(ancien).decode("utf-8-sig")),
+            delimiter=";"))
+        self.assertEqual(lignes[0]["localisation_video_preuve"], "")
+        self.assertEqual(lignes[0]["url_video_preuve"], "")
+        self.assertEqual(
+            lignes[0]["statut_preuve"],
+            "historique_sans_preuve_enregistree")
 
     def test_seuls_les_hashtags_explicites_sont_retenus(self):
         """Le mot manifestation sans dièse n'est pas un hashtag."""
