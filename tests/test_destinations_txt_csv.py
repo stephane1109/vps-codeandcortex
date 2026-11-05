@@ -140,6 +140,51 @@ class TestDestinationsTxtCsv(unittest.TestCase):
         self.assertIn('valeurs["variables_csv"] = [', interface)
         self.assertIn('valeurs["ville_etude"] = (', interface)
 
+    def test_research_programmee_respecte_les_destinations_csv(self):
+        """Le second export des programmes doit utiliser le même filtre."""
+        import csv
+        import io
+        from stockage.collectes_research import texte_csv
+
+        publications = [
+            {"id": "12345", "author": "microbalade",
+             "ville_etude": "toulouse", "description": "Manifestation",
+             "engagement": {"vues": {"valeur": 2500, "brut": "2500"}},
+             "retenue": True}
+        ]
+        lignes = texte_csv(
+            publications, [], "publications",
+            variables_csv=["ville_etude", "vues_classe"])
+        tableau = csv.DictReader(io.StringIO(lignes))
+        self.assertIn("publication_id", tableau.fieldnames)
+        self.assertIn("ville_etude", tableau.fieldnames)
+        self.assertIn("vues_classe", tableau.fieldnames)
+        self.assertNotIn("vues", tableau.fieldnames)
+        self.assertNotIn("author", tableau.fieldnames)
+        premiere = next(tableau)
+        self.assertEqual(premiere["ville_etude"], "toulouse")
+
+    def test_commentaires_programmes_conservent_la_ville_du_corpus(self):
+        """Les commentaires gardent leur lien vidéo sans inventer une ville."""
+        import csv
+        import io
+        from stockage.collectes_research import texte_csv
+
+        videos = [{"id": "12345", "ville_etude": "toulouse"}]
+        commentaires = [{
+            "id": "999", "publication_id": "12345",
+            "texte": "Solidarité", "parent_id": "",
+            "est_reponse": False, "auteur": "",
+        }]
+        resultat = texte_csv(
+            videos, commentaires, "commentaires",
+            variables_csv=["ville_etude"])
+        lignes = list(csv.DictReader(io.StringIO(resultat)))
+        self.assertEqual(lignes[0]["ville_etude"], "toulouse")
+        self.assertEqual(lignes[0]["publication_id"], "12345")
+        ancien = texte_csv(videos, commentaires, "commentaires")
+        self.assertNotIn("ville_etude", ancien.splitlines()[0])
+
     def test_export_applique_reellement_les_colonnes(self):
         """Les deux tableaux principaux doivent invoquer le filtre CSV."""
         construction = (RACINE / "corpus" / "construction.py").read_text(
