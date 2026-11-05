@@ -903,7 +903,11 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
                           and record.get("inclure_ville_etude_txt", True))
                       else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
-        if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
+        # L'ID n'est ajouté au TXT que si sa case est sélectionnée.
+        # La jointure technique publication_id demeure dans les CSV/JSON.
+        if (record.get("video_id")
+                and (selection is None or "id" in selection)
+                and not re.search(r"(?:^| )\*id_", prefix)):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
         texte = texte_et_hashtags(record) if selection and "hashtags" in selection else record["description"]
         if inclure_texte_genere_ia:
@@ -1177,6 +1181,9 @@ class Job:
                     "french_only": self.settings.french_only, "include_sources": self.settings.include_sources,
                     "inclure_metadonnees_txt": self.settings.inclure_metadonnees_txt,
                     "variables_txt": self.settings.variables_txt,
+                    "variables_csv": self.settings.variables_csv,
+                    "categorie_compte_txt": self.settings.categorie_compte_txt,
+                    "ville_etude_txt": self.settings.ville_etude_txt,
                     "inclure_texte_genere_ia": self.settings.inclure_texte_genere_ia,
                     "inclure_hashtags_csv": self.settings.inclure_hashtags_csv,
                     "filtrer_texte_ia_tiktok": self.settings.filtrer_texte_ia_tiktok,
