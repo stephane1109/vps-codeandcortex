@@ -310,9 +310,9 @@ def presenter(inventaire):
         "date_debut": inventaire["date_debut"],
         "date_fin": inventaire["date_fin"], "pages": inventaire["pages"],
         "candidats": inventaire["candidats"],
-        "terminee": (inventaire["terminee"] and inventaire.get("version_requete", 1) >= VERSION_REQUETE),
+        "terminee": (inventaire["terminee"] and inventaire.get("version_requete", 1) >= 2),
         "erreur": inventaire.get("erreur", ""),
-        "ancienne_recherche": inventaire.get("version_requete", 1) < VERSION_REQUETE,
+        "ancienne_recherche": inventaire.get("version_requete", 1) < 2,
         "comptes": comptes, "nombre_comptes": len(comptes),
         "videos_ecartees": inventaire.get("videos_ecartees", 0),
         "echecs_serveur": inventaire.get("echecs_serveur", 0),
@@ -334,7 +334,7 @@ def lister_inventaires(racine, proprietaire):
                 "id": objet["id"], "ville": objet["ville"],
                 "nombre_comptes": len(objet["comptes"]),
                 "terminee": (objet.get("terminee", False)
-                             and objet.get("version_requete", 1) >= VERSION_REQUETE),
+                             and objet.get("version_requete", 1) >= 2),
             })
         except (KeyError, ValueError, OSError):
             continue
