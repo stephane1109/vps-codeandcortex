@@ -929,6 +929,7 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
                           and record.get("inclure_categorie_compte_txt", True))
                       or (record.get("ville_etude")
                           and record.get("inclure_ville_etude_txt", True))
+                      or record.get("balises_profils_txt")
                       else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         # L'ID n'est ajouté au TXT que si sa case est sélectionnée.
