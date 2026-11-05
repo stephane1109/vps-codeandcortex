@@ -4068,9 +4068,12 @@ with onglet_sociometrie:
                 help="Un seuil plus élevé conserve uniquement les vidéos "
                      "aux profils statistiques les plus proches.")
             voisins_mesures = st.slider(
-                "Nombre maximal de voisins les plus proches par vidéo",
+                "Nombre de voisins proposés par vidéo",
                 min_value=1, max_value=20, value=5, step=1,
-                key="sociometrie_engagement_voisins")
+                key="sociometrie_engagement_voisins",
+                help="Chaque vidéo propose ses voisins les plus proches. "
+                     "Les liens sont ensuite rendus non orientés : une vidéo "
+                     "peut recevoir d'autres liens depuis ses voisins.")
             limite_mesures = st.slider(
                 "Nombre maximal de vidéos à comparer",
                 min_value=50, max_value=1000, value=500, step=50,
