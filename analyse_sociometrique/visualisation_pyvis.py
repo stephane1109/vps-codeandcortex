@@ -46,11 +46,11 @@ def html_reseau_pyvis(reseau, hauteur=620):
         select_menu=True,
     )
     for noeud in noeuds:
-        identifiant = str(noeud["id"])
+        identifiant = escape(str(noeud["id"]))
         type_noeud = str(noeud.get("type", "commentaire"))
-        etiquette = str(noeud.get("label") or identifiant)
+        etiquette = escape(str(noeud.get("label") or noeud["id"]))
         lignes = [
-            f"<strong>{escape(etiquette)}</strong>",
+            f"<strong>{etiquette}</strong>",
             f"Type : {escape(type_noeud)}",
         ]
         for champ, titre in (
@@ -74,8 +74,8 @@ def html_reseau_pyvis(reseau, hauteur=620):
         )
     presents = {str(noeud["id"]) for noeud in noeuds}
     for lien in liens:
-        source = str(lien["source"])
-        cible = str(lien["cible"])
+        source = escape(str(lien["source"]))
+        cible = escape(str(lien["cible"]))
         if source not in presents or cible not in presents:
             continue
         try:
