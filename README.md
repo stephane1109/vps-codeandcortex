@@ -489,12 +489,15 @@ hashtags. Le CSV conserve les auteurs et la première preuve vidéo, mais il
 ne transfère pas automatiquement la sélection des cinq hashtags, l'opérateur
 ET/OU, la période ni le critère Toulouse à la collecte de profils.
 
-Dans **Autres comptes TikTok**, l'opérateur des hashtags est indépendant de
-celui du mode Hashtags, avec `OU` par défaut comme dans la découverte
-territoriale. `OU` signifie qu'au moins un hashtag doit être présent **dans
-chaque vidéo** ; `ET` exige la présence de tous les hashtags **dans cette même
-vidéo**, pas dans l'ensemble des publications du compte. L'utilisateur peut
-toujours sélectionner ET explicitement.
+Les collectes **Hashtags**, **Autres comptes TikTok**, **Presse et médias**
+(lorsque le croisement est activé) et **Collecte de compte** proposent désormais
+l'opérateur `OU` par défaut dans l'interface et les modèles de l'API. Le choix
+explicite `ET` reste disponible et est préservé lorsqu'on rouvre une collecte
+ayant ce paramètre. `OU` signifie qu'au moins un des hashtags demandés doit
+être présent **dans chaque vidéo** ; `ET` exige la présence de tous les hashtags
+**dans cette même vidéo**, pas dans l'ensemble des publications d'un compte.
+Le mode **Autres comptes TikTok** conserve un opérateur indépendant de celui
+du mode Hashtags pour éviter qu'un choix précédent soit réutilisé par erreur.
 
 Avec la **Research API officielle**, ScrapTikTok transmet à TikTok le compte
 et la combinaison exacte de hashtags dès la requête de découverte
