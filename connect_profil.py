@@ -16,6 +16,14 @@ class ConnexionProfil(ConnexionPresse):
         if not self.comptes_selectionnes:
             raise ValueError("Renseignez au moins un compte TikTok.")
         self.configurer_moteur(parametres, getattr(parametres, "profil_moteur", "navigateur"))
+        if self.moteur_collecte == "research":
+            # Contrairement au mode Presse sans croisement, les profils
+            # imposent des hashtags. Les transmettre à la Research API
+            # dès la découverte : username ET (hashtags OU/ET), au lieu
+            # de charger des milliers de vidéos hors sujet avant filtrage.
+            self.research_hashtags = list(self.hashtags)
+            self.research_hashtag = self.hashtags[0]
+            self.research_operateur = parametres.operator
         return [{"compte": compte, "id": None, "categorie": None}
                 for compte in self.comptes_selectionnes]
 
