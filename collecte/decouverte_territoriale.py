@@ -14,10 +14,11 @@ import re
 import unicodedata
 import uuid
 import threading
+import time
 
 from collecte.researchapi import (
     _dates, _jeton, _requete, _url_videos,
-    ResearchErreur, ResearchJetonInvalide,
+    ResearchErreur, ResearchJetonInvalide, ResearchErreurServeur,
 )
 from collecte.verification_comptes import normaliser_compte
 
@@ -130,6 +131,48 @@ def arreter_recherche(identifiant):
         return True
 
 
+def interroger_page_avec_reprises(
+        requete, corps, token, *, credentiels=None, pause=time.sleep,
+        arret=None, compteurs=None):
+    """Réessayer la même page sur HTTP 5xx, sans perdre cursor/search_id.
+
+    Les erreurs 401 hors jeton expiré, 403 et 429 sont propagées sans
+    répétition. Les relances 5xx comptent dans les requêtes Research.
+    """
+    compteurs = compteurs if compteurs is not None else {}
+    donnees = json.dumps(corps).encode("utf-8")
+    for tentative in range(4):
+        if arret is not None and arret.is_set():
+            return None, token
+        try:
+            try:
+                resultat = requete(
+                    _url_videos(), data=donnees,
+                    headers={"Authorization": "Bearer " + token,
+                             "Content-Type": "application/json"})
+            except ResearchJetonInvalide:
+                # Un seul renouvellement lors d'une invalidation avérée.
+                token = _jeton(
+                    requete=requete, credentiels=credentiels,
+                    renouveler=True)
+                resultat = requete(
+                    _url_videos(), data=donnees,
+                    headers={"Authorization": "Bearer " + token,
+                             "Content-Type": "application/json"})
+            return resultat, token
+        except ResearchErreurServeur:
+            compteurs["echecs_serveur"] = compteurs.get("echecs_serveur", 0) + 1
+            if tentative == 3:
+                raise
+            compteurs["relances_serveur"] = compteurs.get("relances_serveur", 0) + 1
+            # Attente progressive de 2, 4 puis 8 secondes.
+            for _ in range(2 ** (tentative + 1)):
+                if arret is not None and arret.is_set():
+                    return None, token
+                pause(1)
+    raise ResearchErreur("Nombre de tentatives Research inattendu.")
+
+
 def nettoyer_terme(texte):
     """Normaliser une ville ou une graphie de hashtag sans symbole #."""
     valeur = unicodedata.normalize("NFKD", str(texte or ""))
@@ -191,6 +234,7 @@ def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin):
         "comptes": {}, "pages": 0, "candidats": 0,
         "terminee": False, "erreur": "", "version_requete": VERSION_REQUETE,
         "videos_ecartees": 0, "etat": "en_attente",
+        "echecs_serveur": 0, "relances_serveur": 0,
     }
     sauvegarder(chemin_inventaire(racine, proprietaire, identifiant), inventaire)
     return presenter(inventaire)
@@ -218,6 +262,8 @@ def presenter(inventaire):
         "ancienne_recherche": inventaire.get("version_requete", 1) < VERSION_REQUETE,
         "comptes": comptes, "nombre_comptes": len(comptes),
         "videos_ecartees": inventaire.get("videos_ecartees", 0),
+        "echecs_serveur": inventaire.get("echecs_serveur", 0),
+        "relances_serveur": inventaire.get("relances_serveur", 0),
         "etat": ("en_cours" if recherche_active(inventaire["id"])
                  else inventaire.get("etat", "en_attente")
                  if inventaire.get("etat") != "en_cours" else "interrompue"),
@@ -287,17 +333,12 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
             inventaire["hashtags"], debut, fin,
             inventaire["cursor"], inventaire["search_id"])
         try:
-            try:
-                resultat = requete(
-                    _url_videos(), data=json.dumps(corps).encode("utf-8"),
-                    headers={"Authorization": "Bearer " + token,
-                             "Content-Type": "application/json"})
-            except ResearchJetonInvalide:
-                token = _jeton(requete=requete, credentiels=credentiels, renouveler=True)
-                resultat = requete(
-                    _url_videos(), data=json.dumps(corps).encode("utf-8"),
-                    headers={"Authorization": "Bearer " + token,
-                             "Content-Type": "application/json"})
+            resultat, token = interroger_page_avec_reprises(
+                requete, corps, token, credentiels=credentiels,
+                arret=arret, compteurs=inventaire)
+            if resultat is None:
+                inventaire["etat"] = "interrompue"
+                break
             donnees = resultat.get("data") or {}
             videos = donnees.get("videos")
             if not isinstance(videos, list):
@@ -355,7 +396,13 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
             if inventaire["terminee"]:
                 break
         except (ResearchErreur, ValueError) as erreur:
-            inventaire["erreur"] = str(erreur)
+            inventaire["erreur"] = (
+                str(erreur) + (
+                    " Après quatre tentatives sur la même page. "
+                    "La position de reprise a été conservée."
+                    if isinstance(erreur, ResearchErreurServeur) else ""
+                )
+            )
             inventaire["etat"] = "interrompue"
             sauvegarder(chemin, inventaire)
             break
