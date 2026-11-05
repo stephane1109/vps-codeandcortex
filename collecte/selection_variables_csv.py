@@ -22,7 +22,7 @@ VARIABLES_CSV = (
 COLONNES_PAR_VARIABLE = {
     "date": ("create_time", "created_at", "date_publication"),
     "profil": ("author", "profil", "auteur"),
-    "recuperer_abonnes": ("follower_count", "follower_count_statut"),
+    "recuperer_abonnes": ("follower_count_statut",),
     "follower_count": ("follower_count", "follower_count_statut"),
     "abonnes_classe": ("classe_abonnes",),
     "id": ("id",),
