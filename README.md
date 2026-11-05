@@ -418,19 +418,29 @@ La détection s’effectue localement sur le serveur avec
 service externe. Liens, mentions, hashtags et symboles sont exclus du texte utilisé
 pour la détection, mais l’export conserve la description originale intégrale.
 
-Le filtre ne retient que les légendes reconnues en français avec un score de modèle
-d’au moins 0,9. Ce score n’est pas une garantie de justesse. Moins de quatre mots ou
-quinze lettres, des hashtags seuls ou un score insuffisant donnent une langue
-indéterminée : la publication est exclue du TXT lorsque le filtre est activé.
-Cela exclut aussi certaines légendes françaises trop courtes pour être reconnues.
-Les textes mixtes peuvent être mal classés. Les compteurs distinguent les autres
-langues écartées des langues indéterminées écartées. La voix et le texte incrusté
-dans la vidéo ne sont pas analysés. Le tableau conserve les publications consultées,
-y compris celles marquées « Non » dans « Retenue dans le TXT ». L’export porte le suffixe `_fr.txt`.
-La langue ne peut être évaluée qu’après lecture de la légende : ce filtre ne constitue
-pas une recherche TikTok limitée à la langue française avant collecte. Une collecte
-sans texte retenu affiche l’explication au lieu de proposer un fichier vide.
-L’API conserve les langues par défaut ; envoyer `french_only: true` active le filtre.
+La même règle linguistique de `language_filter.py` s'applique aux collectes
+Hashtags, Presse et médias, et Autres comptes TikTok. Une légende détectée en
+français est conservée. Les légendes courtes, composées de hashtags, ambiguës ou
+bilingues restent également dans le TXT, avec la modalité
+`retenue_langue_indeterminee`. Une prédiction étrangère élevée ne suffit plus
+à exclure une publication : la légende doit comporter au moins dix mots et
+45 lettres, présenter une probabilité d'au moins 0,99, ne pas fournir plusieurs
+indices grammaticaux français et être classée dans la même langue étrangère
+dans ses deux moitiés, chacune avec une probabilité d'au moins 0,80.
+À défaut, la langue est indéterminée et la publication est conservée.
+
+Seules les légendes suffisamment étayées comme étrangères sont écartées sous
+le motif `autre_langue`. Les compteurs distinguent ces exclusions des légendes
+indéterminées conservées. La voix et le texte incrusté dans la vidéo ne sont
+pas analysés. Le tableau conserve toutes les publications consultées et leur
+décision ; l'export porte le suffixe `_fr.txt`. La langue ne peut être évaluée
+qu'après lecture de la légende : ce filtre ne constitue pas une recherche
+TikTok limitée à la langue française avant collecte. L'API conserve les langues
+par défaut ; envoyer `french_only: true` active le filtre.
+
+Le pays d'enregistrement du compte (`region_code`) n'établit pas la langue de
+la légende. Il n'autorise donc pas à contourner le filtre, même pour les comptes
+français importés depuis un CSV.
 
 Les résultats affichent les likes, vues, partages et nombres de commentaires observés.
 Le bouton « Télécharger les compteurs CSV » donne toutes les publications retenues,
