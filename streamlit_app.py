@@ -1735,7 +1735,8 @@ with onglet_collecte:
                     and st.session_state.get("txt_ville_etude", True))
                 valeurs["variables_csv"] = [
                     nom for nom in VARIABLES_CSV
-                    if st.session_state.get("csv_" + nom, True)
+                    if (source == "comptes" or nom != "ville_etude")
+                    and st.session_state.get("csv_" + nom, True)
                 ]
                 # La première ligne abonnés est également une sélection du
                 # compteur réel : pas de duplication des colonnes CSV.
