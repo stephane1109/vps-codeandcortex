@@ -191,6 +191,20 @@ class StartRequest(BaseModel):
     profils_medias_classes: list[Literal[
         "following_count", "follower_count", "likes_count", "video_count"
     ]] = Field(default_factory=list, max_length=4)
+    # None indique l'ancien schéma (CSV historique, pas de variables TXT).
+    # Les nouvelles collectes transmettent quatre sélections indépendantes.
+    profils_medias_txt_bruts: list[Literal[
+        "following_count", "follower_count", "likes_count", "video_count"
+    ]] | None = Field(default=None, max_length=4)
+    profils_medias_txt_classes: list[Literal[
+        "following_count", "follower_count", "likes_count", "video_count"
+    ]] | None = Field(default=None, max_length=4)
+    profils_medias_csv_bruts: list[Literal[
+        "following_count", "follower_count", "likes_count", "video_count"
+    ]] | None = Field(default=None, max_length=4)
+    profils_medias_csv_classes: list[Literal[
+        "following_count", "follower_count", "likes_count", "video_count"
+    ]] | None = Field(default=None, max_length=4)
     follower_count_illustratif: bool = False
     abonnes_classe_illustratif: bool = False
     variables_classes_txt: list[Literal["vues", "likes", "commentaires", "partages", "favoris", "duree"]] = Field(default_factory=list, max_length=6)
@@ -319,12 +333,21 @@ class StartRequest(BaseModel):
                 self.profils_medias_classes).issubset(self.profils_medias_variables):
             raise ValueError(
                 "Une segmentation de profil nécessite la collecte du compteur correspondant.")
+        for selection in (
+                self.profils_medias_txt_bruts, self.profils_medias_txt_classes,
+                self.profils_medias_csv_bruts, self.profils_medias_csv_classes):
+            if selection is not None and (
+                    len(selection) != len(set(selection))
+                    or not set(selection).issubset(self.profils_medias_variables)):
+                raise ValueError(
+                    "Les métriques de profil TXT/CSV doivent être demandées "
+                    "à la Research API avant leur export.")
         if (self.profils_medias_variables and
-                (self.source_collecte not in {"presse", "hashtags"}
+                (self.source_collecte not in {"presse", "hashtags", "comptes"}
                  or self.moteur_actif != "research")):
             raise ValueError(
-                "Les métriques des profils sont disponibles en modes Presse et "
-                "Hashtags avec la Research API officielle.")
+                "Les métriques des comptes sont disponibles dans les trois "
+                "modes de collecte avec la Research API officielle.")
         if (self.collecter_republications_research and
                 (self.source_collecte != "presse" or self.presse_moteur != "research")):
             raise ValueError(
@@ -809,6 +832,11 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
         from collecte.ville_etude import balise_ville_etude
         entete = (entete + " " if entete else "") + balise_ville_etude(
             publication["ville_etude"])
+    # Les métriques du profil sont ajoutées après la lecture du compte :
+    # elles caractérisent l'auteur et non le compteur de cette vidéo.
+    balises_profils = publication.get("balises_profils_txt") or []
+    if balises_profils:
+        entete = (entete + " " if entete else "") + " ".join(balises_profils)
     # La catégorie du média s'ajoute au profil sans dépendre des autres cases.
     from collecte.presse import code_presse_publication
     code_presse = code_presse_publication(publication)
@@ -1090,6 +1118,10 @@ class Job:
                     "collecter_republications_research": self.settings.collecter_republications_research,
                     "profils_medias_variables": self.settings.profils_medias_variables,
                     "profils_medias_classes": self.settings.profils_medias_classes,
+                    "profils_medias_txt_bruts": self.settings.profils_medias_txt_bruts,
+                    "profils_medias_txt_classes": self.settings.profils_medias_txt_classes,
+                    "profils_medias_csv_bruts": self.settings.profils_medias_csv_bruts,
+                    "profils_medias_csv_classes": self.settings.profils_medias_csv_classes,
                     "nombre_profils_medias": len(self.profils_medias),
                     "bilan_profils_medias": [
                         {"compte": p["compte"], "statut": p["statut_profil"]}
@@ -1320,7 +1352,13 @@ class Job:
         with self.lock:
             if supprimer_arobase_profil is None:
                 supprimer_arobase_profil = self.settings.supprimer_arobase_profil
-            return text_export(self.records if publications is None else publications, self.settings.include_sources,
+            from collecte.profils_medias import enrichir_publications_profils_txt
+            corpus = self.records if publications is None else publications
+            corpus = enrichir_publications_profils_txt(
+                corpus, self.profils_medias,
+                self.settings.profils_medias_txt_bruts or [],
+                self.settings.profils_medias_txt_classes or [])
+            return text_export(corpus, self.settings.include_sources,
                 self.settings.inclure_metadonnees_txt, self.settings.variables_txt,
                 self.commentaires if (self.settings.collecter_commentaires
                                      and self.settings.inclure_commentaires_txt) else None,
@@ -1815,8 +1853,8 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 raise ValueError("Aucune source inachevée à reprendre.")
         driver = connexion.ouvrir()
         if (job.settings.profils_medias_variables and moteur_actif == "research"
-                and job.settings.source_collecte == "presse"):
-            # Une ligne par média choisi, même s'il n'a aucune vidéo retenue.
+                and job.settings.source_collecte in {"presse", "comptes"}):
+            # Une ligne par compte sélectionné, même sans vidéo retenue.
             # La collecte est indépendante du nombre de publications et du
             # filtre de hashtags appliqué à leur description.
             from collecte.profils_medias import ligne_profil_media
@@ -3008,7 +3046,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                      profils_medias=(job.profils_medias if
                                      job.settings.profils_medias_variables else None),
                      profils_medias_variables=job.settings.profils_medias_variables,
-                     profils_medias_classes=job.settings.profils_medias_classes)
+                     profils_medias_classes=job.settings.profils_medias_classes,
+                     profils_medias_csv_bruts=job.settings.profils_medias_csv_bruts,
+                     profils_medias_csv_classes=job.settings.profils_medias_csv_classes)
                 if job.settings.source_collecte == "presse":
                     bilan = etablir_bilan_medias(
                         job.settings.sources, job.journal,
