@@ -1738,11 +1738,9 @@ with onglet_collecte:
                     if (source == "comptes" or nom != "ville_etude")
                     and st.session_state.get("csv_" + nom, True)
                 ]
-                # La première ligne abonnés est également une sélection du
-                # compteur réel : pas de duplication des colonnes CSV.
-                if (("recuperer_abonnes" in valeurs["variables_csv"])
-                        and "follower_count" not in valeurs["variables_csv"]):
-                    valeurs["variables_csv"].append("follower_count")
+                # Chaque case CSV est indépendante. La sélection de la
+                # récupération déclenche l'appel Research sans forcer la
+                # colonne de valeur réelle si sa propre case est décochée.
                 valeurs["variables_classes_txt"] = [
                     nom for nom in ("vues", "likes", "commentaires", "partages",
                                     "favoris", "duree")
