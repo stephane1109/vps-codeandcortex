@@ -216,6 +216,12 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
     statistiques[1].metric("Vidéos examinées", inventaire["candidats"])
     statistiques[2].metric("Pages API", inventaire["pages"])
     statistiques[3].metric("Vidéos écartées par les critères", inventaire.get("videos_ecartees", 0))
+    st.caption(
+        f"Vidéos conformes retenues : {inventaire.get('videos_retenues', 0)} ; "
+        f"vidéos hors territoire : {inventaire.get('videos_hors_territoire', 0)} ; "
+        f"vidéos sans hashtag demandé : {inventaire.get('videos_sans_hashtag', 0)}. "
+        "Une vidéo qui ne satisfait aucun des deux critères est comptée "
+        "dans les deux motifs d'exclusion.")
     if inventaire.get("relances_serveur", 0):
         st.caption(
             "Incidents TikTok HTTP 5xx : "
@@ -287,9 +293,23 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
         min_value=1, max_value=max(1, (len(comptes)+99)//100),
         value=1, step=1, key="territoire_page_resultats")
     tranche = comptes[(page-1)*100:page*100]
+    st.caption(
+        "Un compte est retenu si au moins une vidéo mentionne le territoire "
+        "ET contient le ou les hashtags demandés. La vidéo affichée en haut "
+        "du profil peut être différente de la vidéo justificative. "
+        "Les anciennes collectes sans trace détaillée sont signalées "
+        "« preuve non enregistrée ».")
     st.dataframe(
         [{"Compte": v["username"],
-          "Vidéos territoriales trouvées": v["videos_trouvees"]}
+          "Vidéos conformes": v["videos_trouvees"],
+          "Hashtags de la vidéo justificative": ", ".join(
+              (v.get("video_preuve") or {}).get(
+                  "hashtags_correspondants", [])),
+          "URL vidéo justificative": (
+              (v.get("video_preuve") or {}).get("url_video", "")),
+          "Justification": (
+              "Vidéo conforme enregistrée" if v.get("video_preuve")
+              else "Preuve non enregistrée dans cet historique")}
          for v in tranche],
         hide_index=True, use_container_width=True)
     selection = st.multiselect(
