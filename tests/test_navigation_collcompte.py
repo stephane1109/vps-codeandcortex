@@ -27,7 +27,7 @@ class TestNavigationCollecteCompte(unittest.TestCase):
         self.assertIn("territoire_inventaire_choix", code)
         self.assertIn("territoire_arreter", code)
         self.assertIn("territoire_poursuivre", code)
-        self.assertIn("url_video_preuve", code)
+        self.assertIn("URL vidéo justificative", code)
         self.assertIn("territoire_telecharger_csv", code)
         self.assertIn("territoire_telecharger_txt", code)
 
