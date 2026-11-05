@@ -11,22 +11,29 @@ import streamlit as st
 def afficher_decouverte_territoriale(api, *, occupe=False):
     """Créer, poursuivre et consulter un inventaire de comptes par territoire."""
     st.caption(
-        "Recherchez des @comptes grâce aux hashtags OU aux mots présents "
-        "dans les descriptions des vidéos. Par exemple, une publication "
-        "#manifestation #lyceen qui mentionne Toulouse dans sa description "
-        "peut être retrouvée. Il ne s'agit pas d'une preuve de résidence. "
-        "Les résultats sont dédupliqués et conservés dans l'historique privé.")
+        "Croisez la ville avec un ou plusieurs hashtags thématiques. "
+        "Exemple : Toulouse ET (#manifestation OU #lyceen). "
+        "Le territoire est recherché dans la description des vidéos et "
+        "ne démontre pas la résidence de leur auteur. "
+        "Les @comptes restent dédupliqués et exportables.")
     c1, c2 = st.columns(2)
     with c1:
         ville = st.text_input(
             "Territoire (ville)", value="Toulouse",
             key="territoire_recherche_ville", disabled=occupe)
         variantes = st.text_input(
-            "Variantes du nom de ville (facultatives)",
-            value="toulousain, toulousaine",
-            key="territoire_recherche_variantes", disabled=occupe,
-            help="Séparez les variantes par une virgule. Exemple : "
-                 "toulousain, toulousaine, hautegaronne.")
+            "Hashtags à croiser avec la ville",
+            value="manifestation, lyceen",
+            key="territoire_recherche_hashtags_croises", disabled=occupe,
+            help="Un ou plusieurs hashtags séparés par des virgules, "
+                 "avec ou sans #. Ex. : manifestation, lyceen.")
+        operateur = st.radio(
+            "Croisement entre les hashtags",
+            options=["OR", "AND"], horizontal=True,
+            format_func=lambda valeur: (
+                "OU (au moins un hashtag)" if valeur == "OR"
+                else "ET (tous les hashtags)"),
+            key="territoire_recherche_operateur", disabled=occupe)
     with c2:
         date_fin = st.date_input(
             "Fin des publications", value=date.today(),
@@ -42,6 +49,7 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
                 "ville": ville.strip(),
                 "variantes": [
                     v.strip() for v in variantes.split(",") if v.strip()],
+                "operateur": operateur,
                 "date_debut": date_debut.isoformat(),
                 "date_fin": date_fin.isoformat(),
             })
@@ -75,10 +83,18 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
     except RuntimeError as erreur:
         st.error("Inventaire inaccessible : " + str(erreur))
         return
-    st.caption(
-        f"Mots recherchés dans les hashtags et les descriptions : "
-        f"{', '.join(inventaire['hashtags'])}. "
-        f"Période : {inventaire['date_debut']} au {inventaire['date_fin']}.")
+    tags = inventaire.get("hashtags_croises", [])
+    if tags:
+        liaison = " ET " if inventaire.get("operateur") == "AND" else " OU "
+        st.caption(
+            f"Recherche : {inventaire['ville']} ET "
+            f"({liaison.join('#' + h for h in tags)}). "
+            f"Période : {inventaire['date_debut']} au {inventaire['date_fin']}.")
+    else:
+        st.caption(
+            "Ancien inventaire sans croisement thématique. "
+            "Pour une recherche ville + hashtags, créez un nouvel inventaire. "
+            f"Période : {inventaire['date_debut']} au {inventaire['date_fin']}.")
     statistiques = st.columns(4)
     statistiques[0].metric("Comptes distincts", inventaire["nombre_comptes"])
     statistiques[1].metric("Vidéos examinées", inventaire["candidats"])
