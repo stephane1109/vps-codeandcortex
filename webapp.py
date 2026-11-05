@@ -88,6 +88,12 @@ def texte_commentaires_collectes(job):
     return "\n\n".join(blocs) + ("\n" if blocs else "")
 
 
+class ReprendreDecouverteTerritorialePayload(BaseModel):
+    """Identifiants Research utilisés seulement pendant la recherche."""
+    research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
+
+
 class CreerDecouverteTerritorialePayload(BaseModel):
     """Paramètres d'un inventaire territorial, sans secrets."""
     ville: str = Field(min_length=2, max_length=80)
@@ -4152,7 +4158,9 @@ def create_app(manager=None):
             raise HTTPException(404, str(erreur)) from None
 
     @app.post("/api/decouverte-territoriale/{identifiant}/poursuivre")
-    def poursuivre_decouverte_territoriale(identifiant: str, request: Request):
+    def poursuivre_decouverte_territoriale(
+            identifiant: str, payload: ReprendreDecouverteTerritorialePayload,
+            request: Request):
         """Lancer la pagination Research sans limite artificielle de trois pages."""
         exiger_ticket(request)
         if any(tache.busy for tache in manager.jobs.values()):
@@ -4160,9 +4168,22 @@ def create_app(manager=None):
                 409, "Une collecte est déjà en cours : terminez-la avant "
                 "de lancer une découverte territoriale.")
         from collecte.decouverte_territoriale import lancer_recherche
+        from collecte.researchapi import identifiants_disponibles
+        cle = (payload.research_client_key.get_secret_value().strip()
+               if payload.research_client_key else "")
+        secret = (payload.research_client_secret.get_secret_value().strip()
+                  if payload.research_client_secret else "")
+        if bool(cle) != bool(secret):
+            raise HTTPException(
+                422, "Renseignez ensemble Client key et Client secret Research.")
+        if not cle and not identifiants_disponibles():
+            raise HTTPException(
+                422, "Renseignez les clés Research dans le formulaire ou "
+                "configurez-les dans Coolify.")
         try:
             lancer_recherche(
-                manager.data_dir, owner_historique(request), identifiant)
+                manager.data_dir, owner_historique(request), identifiant,
+                credentiels=(cle, secret) if cle else None)
             return {"id": identifiant, "recherche_lancee": True}
         except ValueError as erreur:
             raise HTTPException(409, str(erreur)) from None
