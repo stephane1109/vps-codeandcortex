@@ -302,6 +302,11 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
     st.dataframe(
         [{"Compte": v["username"],
           "Vidéos conformes": v["videos_trouvees"],
+          "Localisation vidéo justificative": (
+              (v.get("video_preuve") or {}).get("localisation", "")),
+          "Source de localisation": (
+              (v.get("video_preuve") or {}).get(
+                  "source_localisation", "")),
           "Hashtags de la vidéo justificative": ", ".join(
               (v.get("video_preuve") or {}).get(
                   "hashtags_correspondants", [])),
@@ -311,7 +316,18 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
               "Vidéo conforme enregistrée" if v.get("video_preuve")
               else "Preuve non enregistrée dans cet historique")}
          for v in tranche],
+        column_config={
+            "URL vidéo justificative": st.column_config.LinkColumn(
+                "URL vidéo justificative",
+                help="Lien vers la vidéo répondant à la fois au critère "
+                     "territorial et aux hashtags demandés.",
+                display_text="Ouvrir la vidéo"),
+        },
         hide_index=True, use_container_width=True)
+    st.caption(
+        "Localisation signifie ici une mention de ville dans la vidéo "
+        "ou le Region Code du compte. Un Place ID fourni dans le formulaire "
+        "n'est jamais une géolocalisation vérifiée par la Research API.")
     selection = st.multiselect(
         "Comptes à transmettre à une collecte de profils",
         options=[c["username"] for c in comptes],
