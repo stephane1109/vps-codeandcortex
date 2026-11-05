@@ -1079,6 +1079,38 @@ fonction de découverte TikTok utilise une mention de ville dans les
 vidéos et éventuellement une référence de lieu indirecte. La modalité
 ne doit pas être utilisée pour conclure à une localisation vérifiée.
 
+### Options distinctes TXT et CSV des variables de publication
+
+Les modes **Hashtags**, **Presse et médias** et **Autres comptes TikTok**
+utilisent une grille commune compacte : une ligne par variable avec deux
+cases indépendantes **TXT** et **CSV**. Les lignes comprennent la date, le
+profil, l'identifiant vidéo, les abonnés et leurs classes, la catégorie
+de compte, le pays d'enregistrement, le statut vérifié, les métriques
+(vues, likes, commentaires, partages, favoris et durée) et les classes
+correspondantes. Le taux d'engagement et sa classe conservent aussi
+leurs deux destinations. Les variables sont cochables dans les deux
+formats, dans un seul format ou dans aucun.
+
+La sélection TXT contrôle les métadonnées d'en-tête IRaMuTeQ, et la
+sélection CSV contrôle les colonnes descriptives des nouveaux
+`publications.csv` et `engagement.csv`. La colonne technique
+`publication_id` est conservée pour les jointures, même lorsque
+l'identifiant descriptif est décoché. Les fichiers JSON restent
+complets, afin de ne pas détruire des observations collectées. Les
+collectes anciennes sans `variables_csv` conservent leur schéma
+historique. Les colonnes `nom_affiche` et `auteur` des commentaires
+ne désignent pas les compteurs de vidéos et restent disponibles dans
+`commentaires.csv`.
+
+Dans **Autres comptes TikTok**, le champ facultatif **Ville associée
+au corpus** accepte Toulouse et produit `*ville_toulouse` dans les
+entêtes TXT si sa case est cochée. La case CSV ajoute `ville_etude`
+aux tableaux de publications. La ville peut être préremplie depuis
+l'inventaire territorial ou le CSV de comptes lorsque tous les comptes
+partagent un territoire unique. Ce codage désigne la constitution du
+corpus, non la résidence attestée du compte ni la géolocalisation
+prouvée des vidéos.
+
 ### Commentaires Research et analyse sociométrique
 
 L'endpoint Research API `/v2/research/video/comment/list/` ne donne pas
