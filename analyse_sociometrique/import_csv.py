@@ -60,12 +60,16 @@ def preparer_import(fichiers_commentaires, fichiers_videos=()):
     diagnostics = []
     doublons = 0
     sans_id = 0
+    lignes_lues = 0
+    lignes_par_fichier = []
     parents_absents = 0
     conflits = 0
     for nom, contenu in fichiers_commentaires:
         colonnes, lignes = lire_csv(contenu, nom)
         if "publication_id" not in colonnes or "id" not in colonnes:
             raise ValueError(f"{nom} : colonnes id et publication_id nécessaires.")
+        lignes_lues += len(lignes)
+        lignes_par_fichier.append((nom, len(lignes)))
         for ligne in lignes:
             vid, cid = premier(ligne, "publication_id"), premier(ligne, "id")
             if not vid or not cid:
@@ -129,7 +133,25 @@ def preparer_import(fichiers_commentaires, fichiers_videos=()):
         diagnostics.append(
             "Aucun identifiant d'auteur issu d'une page visible : seuls les réseaux de réponses sont interprétables.")
     if not commentaires:
-        raise ValueError("Aucun commentaire avec ID vidéo et ID commentaire.")
+        details = "; ".join(
+            f"{nom} : {nombre} ligne(s)" for nom, nombre in lignes_par_fichier)
+        if lignes_lues == 0:
+            raise ValueError(
+                "Le ou les fichiers commentaires.csv contiennent uniquement "
+                "les en-têtes : aucun commentaire n'a été exporté. "
+                "Vérifiez dans les résultats de collecte que l'option "
+                "Collecter les commentaires était activée et que TikTok "
+                "a réellement renvoyé des commentaires. "
+                f"Fichiers examinés : {details}. "
+                "engagement.csv contient des publications et des métriques, "
+                "mais ne permet pas de reconstruire les réponses entre commentaires.")
+        raise ValueError(
+            f"{lignes_lues} ligne(s) lue(s), mais aucune avec à la fois "
+            "id (commentaire) et publication_id (vidéo). "
+            f"{sans_id} ligne(s) sans ces identifiants. "
+            f"Fichiers : {details}. "
+            "Les identifiants manquants ne peuvent pas être inventés "
+            "pour construire un réseau de réponses.")
     return {
         "commentaires": list(commentaires.values()),
         "publications": list(videos.values()),
