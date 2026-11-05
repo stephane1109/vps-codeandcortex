@@ -153,6 +153,8 @@ class StartRequest(BaseModel):
     source_collecte: Literal["hashtags", "comptes", "presse"] = "hashtags"
     nom_sauvegarde: str = Field(default="", max_length=120)
     comptes: list[str] = Field(default_factory=list)
+    # Métadonnée d'échantillonnage facultative, jamais une localisation certifiée.
+    ville_etude: str = Field(default="", max_length=80)
     # Aucun plafond arbitraire de médias : l'inventaire valide les identifiants.
     # Les limites de requêtes et de pagination sont celles de la Research API.
     medias: list[str] = Field(default_factory=list)
@@ -271,6 +273,12 @@ class StartRequest(BaseModel):
     def valider_hashtags_saisis(cls, valeurs):
         return normaliser_liste_hashtags(valeurs)
 
+    @field_validator("ville_etude")
+    @classmethod
+    def valider_ville_etude(cls, valeur):
+        from collecte.ville_etude import normaliser_ville_etude
+        return normaliser_ville_etude(valeur)
+
     @field_validator("comptes")
     @classmethod
     def valider_comptes(cls, valeurs):
@@ -380,6 +388,9 @@ class StartRequest(BaseModel):
                 self.hashtags_saisis[1] if len(self.hashtags_saisis) > 1 else "")
         if self.source_collecte == "comptes" and not self.comptes:
             raise ValueError("Renseignez au moins un compte TikTok.")
+        # Une ville ne peut pas être propagée par erreur aux modes médias/hashtags.
+        if self.source_collecte != "comptes":
+            self.ville_etude = ""
         inclus = ({nom.casefold() for nom in self.hashtags_saisis}
                   if self.source_collecte != "presse" else
                   ({nom.casefold() for nom in self.hashtags_presse}
@@ -776,6 +787,12 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
                 classes.append("*" + classer_taux_engagement(taux))
         if classes:
             entete = " ".join(classes) + (" " + entete if entete else "")
+    # La ville est un attribut déclaré du corpus de comptes, jamais une
+    # géolocalisation déduite de region_code ou de la vidéo.
+    if publication.get("ville_etude"):
+        from collecte.ville_etude import balise_ville_etude
+        entete = (entete + " " if entete else "") + balise_ville_etude(
+            publication["ville_etude"])
     # La catégorie du média s'ajoute au profil sans dépendre des autres cases.
     from collecte.presse import code_presse_publication
     code_presse = code_presse_publication(publication)
@@ -864,7 +881,8 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             # Même sans métadonnées sélectionnées, le code du média est conservé.
             from collecte.presse import code_presse_publication
             prefix = (entete_publication(record, (), supprimer_arobase_profil)
-                      if code_presse_publication(record) else "")
+                      if code_presse_publication(record) or record.get("ville_etude")
+                      else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
             prefix = prefix.rstrip("\n") + (" " if prefix else "") + f"*id_{record['video_id']}\n"
@@ -1163,6 +1181,7 @@ class Job:
                     "profil_moteur": self.settings.profil_moteur,
                     "moteur_actif": self.settings.moteur_actif,
                     "comptes": self.settings.comptes,
+                    "ville_etude": self.settings.ville_etude,
                     "comptes_filtres": ([source["compte"] for source in self.settings.sources]
                                         if self.settings.source_collecte != "hashtags" else []),
                     "medias": self.settings.medias, "libelle": self.settings.libelle,
@@ -1910,6 +1929,11 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                             job.pause(args.delay)
                         record = connexion.lire_publication(url)
                     record["retenue"] = False
+                    # Ville déclarée par le chercheur pour l'échantillon de comptes.
+                    # Ce champ n'affirme ni résidence, ni géolocalisation vidéo.
+                    if (job.settings.source_collecte == "comptes"
+                            and job.settings.ville_etude):
+                        record["ville_etude"] = job.settings.ville_etude
                     # La case Htag dans le csv concerne uniquement les exports :
                     # garder intactes les données brutes et le corpus TXT.
                     record["inclure_hashtags_csv"] = job.settings.inclure_hashtags_csv
