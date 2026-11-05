@@ -67,7 +67,7 @@ class ConnexionHashtag(ConnexionPresse):
         # directement une requête ET : inutile de parcourir leur union.
         self._recherche_et_stricte = (
             self.moteur_collecte == "research"
-            and getattr(parametres, "operator", "AND") == "AND"
+            and getattr(parametres, "operator", "OR") == "AND"
             and len(demandes) > 1
             # En mode groupes, chaque source garde son curseur autonome ;
             # une requête ET sur les six graphies serait impossible.
