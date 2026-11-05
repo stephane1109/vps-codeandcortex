@@ -5,6 +5,7 @@ identité de spectateur, de commentateur ou de personne ayant partagé le conten
 """
 
 import math
+import heapq
 from statistics import mean, pstdev
 
 from .import_csv import lire_csv, premier
@@ -137,24 +138,43 @@ def construire_reseau_engagement(donnees, metriques=None, *,
         [(colonnes[j][i] - moyennes[j]) / ecarts[j] for j in actives]
         for i in range(len(videos))
     ]
+    # Ne conserver qu'un petit tas de voisins par vidéo. L'ancienne
+    # implémentation conservait jusqu'à n*(n-1) correspondances en mémoire,
+    # puis triait des listes potentiellement très importantes à chaque
+    # déplacement d'un curseur Streamlit.
     voisins_possibles = [[] for _ in videos]
     nombre_dimensions = len(actives)
-    # Un seul passage par paire évite les doublons et toute dépendance
-    # facultative à NumPy ou scikit-learn.
-    for i in range(len(videos)):
-        for j in range(i + 1, len(videos)):
-            distance = math.sqrt(
-                sum((a - b) ** 2
-                    for a, b in zip(vecteurs[i], vecteurs[j]))
-                / nombre_dimensions
-            )
+    paires_proches = 0
+    nombre_comparaisons = len(videos) * (len(videos) - 1) // 2
+
+    def ajouter_voisin(indice, voisin, similarite):
+        """Conserver les k meilleurs voisins, avec un ordre déterministe."""
+        candidats = voisins_possibles[indice]
+        # En cas d'égalité de similarité, privilégier le plus petit indice.
+        candidat = (similarite, -voisin)
+        if len(candidats) < voisins:
+            heapq.heappush(candidats, candidat)
+        elif candidat > candidats[0]:
+            heapq.heapreplace(candidats, candidat)
+
+    # Calculer chaque paire une seule fois, sans créer de liste quadratique.
+    for i, vecteur_i in enumerate(vecteurs):
+        for j in range(i + 1, len(vecteurs)):
+            vecteur_j = vecteurs[j]
+            somme_carres = 0.0
+            for dimension in range(nombre_dimensions):
+                ecart = vecteur_i[dimension] - vecteur_j[dimension]
+                somme_carres += ecart * ecart
+            distance = math.sqrt(somme_carres / nombre_dimensions)
             similarite = 1.0 / (1.0 + distance)
             if similarite >= seuil:
-                voisins_possibles[i].append((similarite, j))
-                voisins_possibles[j].append((similarite, i))
+                paires_proches += 1
+                ajouter_voisin(i, j, similarite)
+                ajouter_voisin(j, i, similarite)
     liens_uniques = set()
     for i, candidats in enumerate(voisins_possibles):
-        for _, j in sorted(candidats, reverse=True)[:voisins]:
+        for _, negatif_j in candidats:
+            j = -negatif_j
             liens_uniques.add((min(i, j), max(i, j)))
 
     noeuds = []
@@ -197,5 +217,7 @@ def construire_reseau_engagement(donnees, metriques=None, *,
             "metriques_actives": [choisies[i] for i in actives],
             "liens": len(liens), "noeuds": len(noeuds),
             "seuil": float(seuil), "voisins": voisins,
+            "comparaisons": nombre_comparaisons,
+            "paires_au_seuil": paires_proches,
         },
     }
