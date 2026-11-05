@@ -121,7 +121,7 @@ COLONNES_PUBLICATIONS_CSV = (
     "id", "url", "author", "create_time", "description", "region_code",
     "is_verified", "vues", "likes", "commentaires", "partages", "favoris",
     "date_premiere_collecte", "date_derniere_collecte",
-    "publication_id", "profil", "date_publication", "created_at",
+    "publication_id", "profil", "ville_etude", "date_publication", "created_at",
     "collected_at", "retenue", "motif_non_retenue", "langue_detection",
     "is_verified_statut", "follower_count", "follower_count_statut",
     "classe_abonnes", "video_duration", "duree_classe",
