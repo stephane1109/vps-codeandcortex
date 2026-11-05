@@ -103,7 +103,9 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
             st.error("Collecte impossible : " + str(erreur))
         else:
             st.session_state["territoire_inventaire_id"] = resultat["id"]
-            st.rerun()
+            st.success(
+                "Collecte de compte lancée : la recherche Research a démarré. "
+                "Consultez ci-dessous son état et les résultats progressifs.")
     try:
         inventaires = api("/api/decouverte-territoriale").get("inventaires", [])
     except RuntimeError as erreur:
