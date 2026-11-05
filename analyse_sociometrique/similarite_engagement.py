@@ -101,7 +101,7 @@ def construire_reseau_engagement(donnees, metriques=None, *,
     jamais traiter une valeur manquante comme zéro. Chaque vidéo conserve
     au plus ses `voisins` plus proches, puis les liens sont symétrisés.
     """
-    choisies = list(metriques or METRIQUES)
+    choisies = list(METRIQUES) if metriques is None else list(metriques)
     if not choisies or len(set(choisies)) != len(choisies):
         raise ValueError("Choisissez au moins une métrique sans doublon.")
     if any(nom not in METRIQUES for nom in choisies):
